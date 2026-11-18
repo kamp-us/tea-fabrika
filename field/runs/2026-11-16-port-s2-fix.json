@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-port-s2-fix",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null,
+  "started": "2026-11-16T00:11:40-08:00",
+  "ended": "2026-11-16T00:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round for slice S2 of docs/plan/quests/port-scripts-0113-PLAN.md (ticket 766, our tooling), after the review sent it back with two faults, on branch fabrikalfa/port-0113-s02 from 1dae5d1. origin/main merged in first, with no conflict. Fault 1: .agents/skills/lead/scripts/git/GitTest.ts now computes git's best common ancestors (common ancestors that are no ancestor of another common ancestor) and refuses with GitError unless there is exactly one, and its file diff answers only when the lines shared outside the trimmed start and end are none, so every smallest diff changes the same lines; a moved or swapped line, an empty file and a file without its last newline are refused with GitError. The integration law in .agents/skills/lead/scripts/git/git.integration.test.ts now builds each history step by step: after the first base, work and main commits, a walk reads each raw step against the history built so far and makes a commit on work, main or a side branch (append, insert, remove, replace, move, swap, drop the last newline, add or delete a file), a side branch, or a --no-ff merge of main into work, work into main, the side into work, or the commit before work's tip into main (a criss-cross); a merge is offered only when git would make a merge commit, so a merge of an ancestor is one. After every step both layers answer alike or the model refuses with GitError, and where real git names more than one merge base the model must refuse. Coverage is asserted once per property: an answer after a merge of an ancestor and after a merge of main into work, a moved-line edit, a history with several merge bases, an answer and a refusal. The review's two counterexamples are pinned in fast-check's examples with the bug named. Fault 2: a new law runs node governance.ts as a real process on the walked repository and asserts exit 0 with stdout equal to the in-process lines, exit 1 for an unknown base, and exit 2 for a bad command line. Merge task: GitProcess.ts and GitTest.ts make GitError with GitError.make (newSchemaClass); GitProcess.ts was committed on its own as the build step, as the coordinator assigned. The unstableApiUsage error the brief named for runsFor did not appear on the merged tree: main's next/packages/vitest/src/Depth.ts no longer carries a stability tag, so the test keeps runsFor unchanged, as the other tests on main do. Red first: against the old model the law failed on the pinned ancestor merge (the model's diff showed notes/main-only.md and Y's file as added where git's diff was empty), on the pinned swap (the model changed 4 lines where git changed 2), and on generated walks alone with no examples (a swap in a decision file).",
+  "plants": [
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: GitProcess and GitTest answer top and a three-dot diff alike, and both refuse an unknown ref",
+      "plant": "GitTest's merge base walked back from HEAD and took the first commit main also has",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: GitProcess and GitTest answer top and a three-dot diff alike, and both refuse an unknown ref",
+      "plant": "GitTest's file diff answered every shape (the shared-lines check never refused)",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: GitProcess and GitTest answer top and a three-dot diff alike, and both refuse an unknown ref",
+      "plant": "GitTest took the first of several best merge bases and did not refuse",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: node governance.ts exits 0 with the in-process lines, 1 when git cannot answer and 2 on a bad command line",
+      "plant": "governance.ts's edge mapped a clean run to exit 1 (Effect.as(1))",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: node governance.ts exits 0 with the in-process lines, 1 when git cannot answer and 2 on a bad command line",
+      "plant": "governance.ts's edge mapped a bad command line to exit 1",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: GitProcess and GitTest answer top and a three-dot diff alike, and both refuse an unknown ref",
+      "plant": "a coverage case the walk can never reach added to the reached counts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 41,
+  "note": "Cloud twin fix round, one session, no subagents. The date is the UTC day; the times are Pacific. Each plant ran once and was restored by copy; git status showed only the two tests-owned files before the commit. The first runs of the third plant and of the exit plant read red only as the 60 s test timeout, because fast-check shrank through real git and node; the law options now set endOnFailure: true, as the other real-IO laws do (next/apps/fabrika/src/door.integration.test.ts), and both reran red with the real counterexample. The .agents lint holds no-promises in tests, so law 1 checks its coverage in fast-check's reporter option rather than after an await. Timing: the integration file takes about 11 s at the fast depth and 48 s at FABRIKA_TEST_DEPTH=full (slowest law 23 s, under the 60 s limit). Ran: the integration file and governance.test.ts, git/ and flow/ tests (7 files, 51 tests, all green), pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144, under the shared lock, exit 0), the list ratchet (exit 0), and one pnpm typecheck on the merged tree under the lock (exit 0). The 0178 guard refused nothing. Committed with stepcommit.sh --commit-only, so nothing is signed.",
+  "step": "tests",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}

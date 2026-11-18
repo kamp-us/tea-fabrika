@@ -343,9 +343,9 @@ Read the header before you run one; this table only says what each is for.
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)), and close its tickets after the merge |
-| `governance.sh` | list the `.decisions/` files a diff touches; advice only |
+| `governance.ts` | list the `.decisions/` files a diff touches; advice only |
 | `sizecap.ts` | a diff's or a plan's size, as advice only ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)); run `diff` by hand, since nothing prints it at landing |
-| `fieldrow.py`, `clauderow.ts` | print one `field/runs/` row from a Codex run's events, or from a Claude subagent's transcript |
+| `fieldrow.ts`, `clauderow.ts` | print one `field/runs/` row from a Codex run's events, or from a Claude subagent's transcript |
 | `fieldfile.ts` | save each printed row as its own row file (0090) |
 
 Cleanup is the tooling's job: never ask the owner to free disk
@@ -504,7 +504,7 @@ visible, and never weaken the rules to hide this message.
    never on the owner's laptop ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)).
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
-   one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
+   one row file in `field/runs/` (`fieldrow.ts` for Codex, `clauderow.ts` for a Claude agent, a
    driver included, once it has finished, or drive's `BOXES/<quest>-rows.jsonl`, each saved with
    `fieldfile.ts runs`), and one note file in `field/notes/` for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file;
@@ -677,7 +677,7 @@ owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on gr
   asks of upstream. Then say what the code does, what breaks, each option with its cost, and your
   lean with how sure you are. An abstract question comes back to be asked again.
 - **Read what a diff touches.** Before a review and before a merge, run
-  `sh .agents/skills/lead/scripts/governance.sh` on the branch. It lists the decision files the
+  `node .agents/skills/lead/scripts/governance.ts` on the branch. It lists the decision files the
   diff's words touch. The review step and the lead read each one and say whether the diff walks it
   back. It only lists for now; it blocks later, once its false alarms are measured.
 

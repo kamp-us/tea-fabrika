@@ -512,7 +512,7 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
 /**
  * Dollars per million tokens (in, cached, out), standard tier, from OpenAI's pricing page
  * (https://developers.openai.com/api/docs/pricing), read 2026-11-09: the same table as
- * `fieldrow.py` and `packages/pipeline/src/stages/price.ts`. A model not here gets no dollars.
+ * `fieldrow.ts` and `packages/pipeline/src/stages/price.ts`. A model not here gets no dollars.
  */
 const CODEX_LIST: Readonly<Record<string, readonly [number, number, number]>> = {
   "gpt-6.1-sol": [2, 0.1, 10],
@@ -594,7 +594,7 @@ const FieldRow = Schema.Struct({
 
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(FieldRow));
 
-/** One `field/runs.jsonl` row for a turn, in the shape `fieldrow.py` and `clauderow.ts` write. */
+/** One `field/runs.jsonl` row for a turn, in the shape `fieldrow.ts` and `clauderow.ts` write. */
 export const stepRow = (r: RowAsk): string => {
   const local = (d: Date) => {
     const offset = -d.getTimezoneOffset();

@@ -1,0 +1,19 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-two-codex-price-tables-round-apart",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "duplicate",
+  "location": {
+    "path": ".agents/skills/lead/scripts/fieldrow.ts",
+    "line": 34
+  },
+  "says": "In today's lead tooling, the Codex price table and the pricing of a Codex run now live twice in TypeScript: fieldrow.ts (LIST at line 34, the dollars at line 180, rounded half to even with clauderow.ts's rounded) and agents.ts (CODEX_LIST at line 477, listUsd at line 513, Math.round, which rounds a tie up). The two give different dollars for the same usage. The approved plan for ticket 766 (docs/plan/quests/port-scripts-0113-PLAN.md, Existing tools) said the Codex row becomes a function beside stepRow in agents.ts and fieldrow.ts is only its command line; the S3 build kept fieldrow.py's own table in fieldrow.ts instead. fieldrow.py had its own copy too, so the count of copies did not grow, but the plan's merge did not happen.",
+  "proof": "At 8491d53, one turn of 15625 input tokens, 0 cached, 0 output on gpt-6.1-sol: node .agents/skills/lead/scripts/fieldrow.ts --model gpt-6.1-sol ... prints listUsd 0.0312 (fieldrow.py printed 0.0312 too), while agents.ts's listUsd('codex', 'gpt-6.1-sol', {counted: 'total', input: 15625, cached: 0, output: 0, ...}) returns 0.0313.",
+  "cost": "A price change has to be made in two files (three with packages/pipeline/src/stages/price.ts), and a drive row and a box row for the same run can disagree by a rounding step.",
+  "next": "One Codex pricing function, exported from agents.ts (or a small price module both import), with fieldrow.ts calling it, as the plan's Existing tools section says; pick one rounding rule and keep fieldrow.ts's law green.",
+  "head": "8491d530717778fe21794079ae940287c762fdef",
+  "ticket": null,
+  "pr": null
+}

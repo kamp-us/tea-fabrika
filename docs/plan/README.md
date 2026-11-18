@@ -55,6 +55,15 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-18:* [The leaf-script ports](https://github.com/kamp-us/tea-fabrika/pull/1517), ticket 766
+slices S1 to S4, in today's lead tooling: `governance.sh`, `fieldrow.py` and `keepruns.sh` become
+`governance.ts`, `fieldrow.ts` and `box/RunsFs.ts`, and `pnpm lint` refuses a new tracked shell or
+Python file outside a list that only shrinks (0113). The list now holds 16 scripts. S5 to S8, the
+commit-path ports, the box-runner port and the typecheck-wrapper port remain, so ticket 766 stays
+open. The review left three findings: the hold passes other shell extensions such as `.bash`, its
+"only shrinks" law lets a ported script come back, and `fieldrow.ts` differs from the old script
+on inputs `box.sh` never sends.
+
 *2026-11-18:* [The watcher save-law repair](https://github.com/kamp-us/tea-fabrika/pull/1542), ticket
 1122, in `next/`, fixes the L17/L18 flake. The save-driven law now checks every reply in order,
 accepts a `same` only for a hash that was already loaded, and finishes a save only on its own
