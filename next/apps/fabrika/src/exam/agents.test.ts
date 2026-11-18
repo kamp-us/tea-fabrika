@@ -317,8 +317,11 @@ const presence = <A extends Partial<Bridge>>(files: ReadonlySet<string>, law: La
   }
 
   const binding = load();
-  const methods: ReadonlyArray<keyof Bridge> =
-    law === "tools" ? ["tools", "hidden"] : law === "malformed" ? ["malformed", "missing"] : [law];
+  const methods: ReadonlyArray<keyof Bridge> = Match.value(law).pipe(
+    Match.when("tools", () => ["tools", "hidden"] as const),
+    Match.when("malformed", () => ["malformed", "missing"] as const),
+    Match.orElse((other) => [other]),
+  );
 
   for (const name of methods) {
     if (!Predicate.isFunction(binding[name])) {
