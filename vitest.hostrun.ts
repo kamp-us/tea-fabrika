@@ -33,7 +33,7 @@ type HostRun = { readonly _tag: "allow"; readonly reason: "ci" | "owner" | "box"
 
 /** The guard's decision, from the environment and the platform alone. */
 export const hostRun = (env: Readonly<Record<string, string | undefined>>, platform: NodeJS.Platform): HostRun => {
-  if (env.CI) {
+  if ((env.CI ?? "") !== "") {
     return { _tag: "allow", reason: "ci" };
   }
 

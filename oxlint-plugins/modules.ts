@@ -50,7 +50,7 @@
 //
 // `modules.test.ts` plants each of these at its real path, with the repo's own config.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
-import { Predicate } from "effect";
+import { Array as Arr, Option, Predicate } from "effect";
 import { pathIn } from "./match.ts";
 
 interface Lists {
@@ -64,7 +64,7 @@ interface Lists {
 const START = { line: 1, column: 0 };
 
 const words = (value: unknown): ReadonlySet<string> =>
-  new Set(Array.isArray(value) ? value.filter((word) => Predicate.isString(word)) : []);
+  new Set(Arr.isArray(value) ? Arr.filter(value, (word) => Predicate.isString(word)) : []);
 
 /** The config's lists, or `null` when the rule was given none. */
 const lists = (options: ReadonlyArray<unknown>): Lists | null => {
@@ -198,11 +198,12 @@ export const modules: CreateRule = {
     };
 
     const isTagged = (statement: ESTree.Node): boolean => {
-      const doc = context.sourceCode
-        .getCommentsBefore(statement)
-        .findLast((comment) => comment.type === "Block" && comment.value.startsWith("*"));
+      const doc = Arr.findLast(
+        context.sourceCode.getCommentsBefore(statement),
+        (comment) => comment.type === "Block" && comment.value.startsWith("*"),
+      );
 
-      return doc !== undefined && /@internal\b/.test(doc.value);
+      return Option.exists(doc, (comment) => /@internal\b/.test(comment.value));
     };
 
     const refuseHeld = (statement: ESTree.Node, root: ReadonlyArray<string>) => {
@@ -264,9 +265,14 @@ export const modules: CreateRule = {
                 : statement.source != null
                   ? otherModule(statement.source.value)
                   : statement.type === "ExportNamedDeclaration"
-                    ? statement.specifiers
-                        .map((spec) => (spec.local.type === "Identifier" ? fromOther.get(spec.local.name) : undefined))
-                        .find((found) => found !== undefined)
+                    ? Option.getOrUndefined(
+                        Arr.findFirst(
+                          Arr.map(statement.specifiers, (spec) =>
+                            spec.local.type === "Identifier" ? fromOther.get(spec.local.name) : undefined,
+                          ),
+                          (found) => found !== undefined,
+                        ),
+                      )
                     : undefined;
 
             if (other != null) {

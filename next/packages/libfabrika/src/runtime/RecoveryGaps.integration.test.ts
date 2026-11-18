@@ -4,8 +4,20 @@
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Layer, Schema, Predicate } from "effect";
-import { TestClock } from "effect/testing";
+import * as Arr from "effect/Array";
+import * as Config from "effect/Config";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+
 import {
   Activity,
   Mailbox,
@@ -397,10 +409,10 @@ describe("P34 interrupted recovery", () => {
                 }
 
                 const rows = yield* lives;
-                const exits = rows.filter((row) => row._tag === "exited");
-                expect(new Set(exits.map((row) => exitBody(row.body).process)).size).toBe(exits.length);
-                const restarts = rows.filter((row) => row._tag === "restarted");
-                expect(new Set(restarts.map((row) => restartBody(row.body).after)).size).toBe(restarts.length);
+                const exits = Arr.filter(rows, (row) => row._tag === "exited");
+                expect(new Set(Arr.map(exits, (row) => exitBody(row.body).process)).size).toBe(exits.length);
+                const restarts = Arr.filter(rows, (row) => row._tag === "restarted");
+                expect(new Set(Arr.map(restarts, (row) => restartBody(row.body).after)).size).toBe(restarts.length);
 
                 if (cut === "after_start") {
                   expect(restarts).toHaveLength(1);
@@ -408,7 +420,7 @@ describe("P34 interrupted recovery", () => {
 
                 if (cut === "after_checkpoint") {
                   expect((yield* r.open("new")).view).toMatchObject({ count: value });
-                  expect((yield* inbox).map((row) => row.id)).toEqual(["good"]);
+                  expect(Arr.map(yield* inbox, (row) => row.id)).toEqual(["good"]);
                 }
 
                 if (cut === "after_dead") {
@@ -447,7 +459,7 @@ describe("P34 interrupted recovery", () => {
         for (let n = 0; n < 2; n++) {
           yield* Effect.gen(function* () {
             yield* Effect.exit(ProgramRunner.use((r) => r.open("wake")));
-            expect((yield* lives).filter((row) => row._tag === "exited")).toHaveLength(1);
+            expect(Arr.filter(yield* lives, (row) => row._tag === "exited")).toHaveLength(1);
             expect(yield* read(`${A}/dead`)).toEqual([]);
             expect(w.controls.steps).toBe(0);
           }).pipe(Effect.provide(w.layer()));
@@ -469,7 +481,7 @@ describe("P34 interrupted recovery", () => {
         const answer = yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input("good", { type: "add", n: 1 }))));
         expect(Exit.isFailure(answer)).toBe(true);
         expect(yield* inbox).toEqual([]);
-        expect((yield* lives).filter((row) => row._tag === "restarted")).toEqual([]);
+        expect(Arr.filter(yield* lives, (row) => row._tag === "restarted")).toEqual([]);
       }).pipe(Effect.provide(w.layer()));
     }),
   );
@@ -488,9 +500,8 @@ describe("P34 interrupted recovery", () => {
         yield* Fiber.join(pending);
         expect((yield* r.open("new")).view).toMatchObject({ replies: 0 });
         expect(w.controls.commands).toBe(1);
-
-        const answers = [...(yield* read(A)), ...(yield* inbox)].filter((row) =>
-          JSON.stringify(row.body).includes('"type":"wait_ok"'),
+        const answers = Arr.filter([...(yield* read(A)), ...(yield* inbox)], (row) =>
+          Str.includes('"type":"wait_ok"')(JSON.stringify(row.body)),
         );
 
         expect(answers).toHaveLength(1);
@@ -520,7 +531,7 @@ describe("P34 interrupted recovery", () => {
                 process: A,
                 name: "queue",
                 personOnly: false,
-                digest: JSON.stringify(input.envelope.input),
+                digest: Formatter.formatJson(input.envelope.input),
                 traceId: from().traceId,
                 span: input.span,
                 arrivedAt: 0,
@@ -535,7 +546,7 @@ describe("P34 interrupted recovery", () => {
               expect(w.controls.owns).toBe(0);
               expect(w.controls.commits).toBe(0);
               expect(
-                (yield* inbox).filter((row) => JSON.stringify(row.body).includes('"type":"write_err"')),
+                Arr.filter(yield* inbox, (row) => Str.includes('"type":"write_err"')(JSON.stringify(row.body))),
               ).toMatchObject([{ body: { m: { reason: "not_delivered" } } }]);
             }).pipe(Effect.provide(w.layer()));
           }),
@@ -564,12 +575,15 @@ describe("P34 interrupted recovery", () => {
     );
   }
 
+  // The P12 driver's file URL, when the lead's machine sets one, read through Config.
+  const instanceDriver = Effect.runSync(Config.option(Config.String("P34_INSTANCE_DRIVER")));
+
   // P12 supplies its real local-instance test driver. This file stays in the tests role's paths.
   // Set P34_INSTANCE_DRIVER to that module's file URL on the lead's machine. Its open function
   // installs P34's trusted failure hook, never a public fault endpoint. waitForRecovery waits
   // for the real object's alarm; evict reconstructs the actual object with its durable storage.
   // scenario: the optional P12 driver runs real object alarms and reconstruction on the local instance.
-  it.skipIf(!process.env.P34_INSTANCE_DRIVER)(
+  it.skipIf(Option.isNone(instanceDriver))(
     "scenario: p80 real instance: durable poison, down resends and duplicate alarms survive object reconstruction",
     async () => {
       type Status = { process: string; state: string; until: number | null };
@@ -585,9 +599,7 @@ describe("P34 interrupted recovery", () => {
         executions: Effect.Effect<number, unknown>;
         close: Effect.Effect<void>;
       };
-
-      const modulePath = process.env.P34_INSTANCE_DRIVER!;
-
+      const modulePath = Option.getOrThrow(instanceDriver);
       const driver: { open: (errors: ReadonlyArray<string>) => Effect.Effect<Instance, unknown> } = await import(
         modulePath
       );

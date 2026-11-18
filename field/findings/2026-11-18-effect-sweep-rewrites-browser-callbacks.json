@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-effect-sweep-rewrites-browser-callbacks",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/apps/fabrika/e2e/tezgah.test-support.ts",
+    "line": 676
+  },
+  "says": "In next/, the Effect sweep's preferEffect* fixes rewrite code inside Playwright callbacks that run in the browser (page.evaluate and the like), where module imports do not exist, and no lint, type or plain test sees it; only the visual laws fail at run time. Seen twice on 2026-11-18: PR 1562 (Rec.fromEntries in tezgah.test-support.ts statusBar, Rec.values in tuval's key.laws.visual.test.ts) and PR 1593 (Predicate). The Effect diagnostics also flag native calls inside those callbacks, so they push the wrong fix.",
+  "proof": "CI run https://github.com/kamp-us/tea-fabrika/actions/runs/44244898620, job next (e2e-1): tezgah-focus.visual.test.ts fails at tezgah.test-support.ts:676 with `page.evaluate: ReferenceError: __vite_ssr_import_3__ is not defined`; at 6e753735880cb2692e3cd7c12ce6c337e9a9de31 line 677 reads `const tiles = Rec.fromEntries(` inside `on.evaluate(() => {`, where main had `Object.fromEntries`; the fix at a6cb7c62773a290b57446a795506fe0f34337c80 restores it and the law passes, and a planted Rec.fromEntries fails it again.",
+  "cost": "Each sweep slice that touches e2e helpers can break a visual law that only CI's visual legs run; a lint rule refusing imported bindings inside these callbacks, or an exception the Effect checks honor there, would catch it before review.",
+  "head": "a6cb7c62773a290b57446a795506fe0f34337c80",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1562"
+}

@@ -9,6 +9,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -21,13 +22,14 @@ import type { Access, Folded, Reason } from "./Access.ts";
 import { eventId, MemberEvent, members, signedBy, subject } from "./Access.ts";
 import { allows, EMPTY } from "./AccessFold.ts";
 
+import * as Arr from "effect/Array";
 import { ClientManager, Written, type Founder } from "./ClientManager.ts";
 
 const MEMBERS = "gateway/access";
 
 const tag = (word: string): string => `fab.access.${word}`;
 
-const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
+const known: ReadonlySet<string> = new Set(Rec.keys(MemberEvent.cases));
 
 const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
 
@@ -88,7 +90,7 @@ const view = (replayed: Replayed) => {
   return {
     [tag("events")]: rows.length,
     [tag("keys")]: keys.size,
-    [tag("live")]: [...keys.values()].filter((k) => k.live).length,
+    [tag("live")]: Arr.filter([...keys.values()], (k) => k.live).length,
     [tag("ignored")]: skipped.size,
   };
 };
@@ -194,7 +196,7 @@ export const layer = (
 
           // An event already in the log goes to the referee as it is: a resend gets its first
           // placing, and the answer is what the fold did with it then.
-          if (!before.rows.some(({ entry }) => entry.id === id)) {
+          if (!Arr.some(before.rows, ({ entry }) => entry.id === id)) {
             const verdict = allows(before.folded, event);
 
             if (Result.isFailure(verdict)) {

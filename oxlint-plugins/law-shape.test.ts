@@ -32,6 +32,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -63,7 +64,7 @@ const words = fc
     minLength: 1,
     maxLength: 5,
   })
-  .map((w) => w.join(" "));
+  .map((w) => Arr.join(w, " "));
 
 const alias = fc.constantFrom("fc", "check", "F");
 
@@ -210,49 +211,52 @@ const preamble = (a: string, star: boolean) => [
 
 // Every run plants one file per label, so each of the five labels meets every case line in each run,
 // whatever the seed draws.
-it("fires on exactly the tests that are neither a property nor labeled, and on each type: test whose body runs anything, in any order and spelling", async () => {
-  await fc.assert(
-    fc.asyncProperty(
-      fc.record({
-        a: alias,
-        id,
-        star: fc.boolean(),
-        title: words,
-        reason: words,
-        order: fc.shuffledSubarray(
-          cases.map((_, i) => i),
-          { minLength: cases.length },
-        ),
-      }),
-      async ({ a, id, star, title, reason, order }) => {
-        const head = preamble(a, star);
+it(
+  "fires on exactly the tests that are neither a property nor labeled, and on each type: test whose body runs anything, in any order and spelling",
+  () =>
+    fc.assert(
+      fc.asyncProperty(
+        fc.record({
+          a: alias,
+          id,
+          star: fc.boolean(),
+          title: words,
+          reason: words,
+          order: fc.shuffledSubarray(
+            Arr.map(cases, (_, i) => i),
+            { minLength: cases.length },
+          ),
+        }),
+        async ({ a, id, star, title, reason, order }) => {
+          const head = preamble(a, star);
 
-        const files = LABELS.map((label) => {
-          const lines = order.flatMap((i) => {
-            const make = cases[i];
+          const files = Arr.map(LABELS, (label) => {
+            const lines = Arr.flatMap(order, (i) => {
+              const make = cases[i];
 
-            return make === undefined ? [] : [make({ a, id, title, label, reason })];
+              return make === undefined ? [] : [make({ a, id, title, label, reason })];
+            });
+
+            const text = Arr.join([...head, ...Arr.map(lines, ([line]) => line)], "\n");
+
+            const expected = Arr.flatMap(lines, ([, fires], i): Fire[] =>
+              fires === null ? [] : [[head.length + i + 1, fires]],
+            );
+
+            return { path: `next/packages/libfabrika/src/${label}.test.ts`, text, expected };
           });
 
-          const text = [...head, ...lines.map(([line]) => line)].join("\n");
+          const result = await linted(Rec.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
 
-          const expected = lines.flatMap(([, fires], i): Fire[] =>
-            fires === null ? [] : [[head.length + i + 1, fires]],
-          );
-
-          return { path: `next/packages/libfabrika/src/${label}.test.ts`, text, expected };
-        });
-
-        const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
-
-        for (const { path, text, expected } of files) {
-          expect(result(path), text).toEqual(expected);
-        }
-      },
+          for (const { path, text, expected } of files) {
+            expect(result(path), text).toEqual(expected);
+          }
+        },
+      ),
+      runs,
     ),
-    runs,
-  );
-}, 120_000);
+  120_000,
+);
 
 /** Where a type law's check comes from, the statement that calls it, and whether the law fires. */
 const checks: readonly (readonly [string, string, boolean])[] = [
@@ -272,29 +276,39 @@ const checks: readonly (readonly [string, string, boolean])[] = [
   ["const expectTypeOf = () => ({ toEqualTypeOf: () => true });", "expectTypeOf<1>().toEqualTypeOf<1>();", true],
 ];
 
-it("counts expectTypeOf and assertType only from a value import of vitest or @effect/vitest, under any name or a namespace", async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.record({ reason: words, nested: fc.boolean() }), async ({ reason, nested }) => {
-      const files = checks.map(([source, call, fires], i) => {
-        const law = `it("type: ${reason}", () => { ${call} });`;
+it(
+  "counts expectTypeOf and assertType only from a value import of vitest or @effect/vitest, under any name or a namespace",
+  () =>
+    fc.assert(
+      fc.asyncProperty(fc.record({ reason: words, nested: fc.boolean() }), async ({ reason, nested }) => {
+        const files = Arr.map(checks, ([source, call, fires], i) => {
+          const law = `it("type: ${reason}", () => { ${call} });`;
 
-        const text = [
-          'import { describe, it } from "vitest";',
-          source,
-          nested ? `describe("${reason}", () => { ${law} });` : law,
-        ].join("\n");
+          const text = Arr.join(
+            [
+              'import { describe, it } from "vitest";',
+              source,
+              nested ? `describe("${reason}", () => { ${law} });` : law,
+            ],
+            "\n",
+          );
 
-        return { source, path: `next/packages/libfabrika/src/types/Check${i}.test.ts`, text, fires };
-      });
+          return { source, path: `next/packages/libfabrika/src/types/Check${i}.test.ts`, text, fires };
+        });
 
-      const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
-      const fired = Object.fromEntries(files.map(({ source, path }) => [source, result(path)]));
-      const expected = Object.fromEntries(files.map(({ source, fires }) => [source, fires ? [[3, TYPE_MESSAGE]] : []]));
-      expect(fired, files[0]?.text).toEqual(expected);
-    }),
-    { ...runs, numRuns: 2 },
-  );
-}, 120_000);
+        const result = await linted(Rec.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
+        const fired = Rec.fromEntries(Arr.map(files, ({ source, path }) => [source, result(path)]));
+
+        const expected = Rec.fromEntries(
+          Arr.map(files, ({ source, fires }) => [source, fires ? [[3, TYPE_MESSAGE]] : []]),
+        );
+
+        expect(fired, files[0]?.text).toEqual(expected);
+      }),
+      { ...runs, numRuns: 2 },
+    ),
+  120_000,
+);
 
 /** Where a law's `property` comes from, the call that names it, and whether the law fires. */
 const sources: readonly (readonly [string, string, boolean])[] = [
@@ -314,62 +328,74 @@ const sources: readonly (readonly [string, string, boolean])[] = [
   ["const property = (a: unknown, law: unknown, p: unknown) => 1;", "property", true],
 ];
 
-it("counts the shared runner, property from Testing.test-support.ts, as a property, and no other property", async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.record({ title: words, nested: fc.boolean() }), async ({ title, nested }) => {
-      const files = sources.map(([source, call, fires], i) => {
-        const run = `${call}(fc.nat(), () => Effect.void, { numRuns: 1 })`;
-        const body = nested ? `Effect.gen(function* () { yield* ${run}; })` : run;
+it(
+  "counts the shared runner, property from Testing.test-support.ts, as a property, and no other property",
+  () =>
+    fc.assert(
+      fc.asyncProperty(fc.record({ title: words, nested: fc.boolean() }), async ({ title, nested }) => {
+        const files = Arr.map(sources, ([source, call, fires], i) => {
+          const run = `${call}(fc.nat(), () => Effect.void, { numRuns: 1 })`;
+          const body = nested ? `Effect.gen(function* () { yield* ${run}; })` : run;
 
-        const text = [
-          'import { it } from "@effect/vitest";',
-          'import { Effect } from "effect";',
-          'import * as fc from "fast-check";',
-          source,
-          `it.effect("${title}", () => ${body});`,
-        ].join("\n");
+          const text = Arr.join(
+            [
+              'import { it } from "@effect/vitest";',
+              'import { Effect } from "effect";',
+              'import * as fc from "fast-check";',
+              source,
+              `it.effect("${title}", () => ${body});`,
+            ],
+            "\n",
+          );
 
-        return { source, path: `next/packages/libfabrika/src/processes/Shared${i}Test.ts`, text, fires };
-      });
+          return { source, path: `next/packages/libfabrika/src/processes/Shared${i}Test.ts`, text, fires };
+        });
 
-      const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
-      const fired = Object.fromEntries(files.map(({ source, path }) => [source, result(path)]));
-      const expected = Object.fromEntries(files.map(({ source, fires }) => [source, fires ? [[5, MESSAGE]] : []]));
-      expect(fired, files[0]?.text).toEqual(expected);
-    }),
-    { ...runs, numRuns: 2 },
-  );
-}, 120_000);
+        const result = await linted(Rec.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
+        const fired = Rec.fromEntries(Arr.map(files, ({ source, path }) => [source, result(path)]));
+        const expected = Rec.fromEntries(Arr.map(files, ({ source, fires }) => [source, fires ? [[5, MESSAGE]] : []]));
+        expect(fired, files[0]?.text).toEqual(expected);
+      }),
+      { ...runs, numRuns: 2 },
+    ),
+  120_000,
+);
 
-it("reads next/ and .agents/ tests and shared suites, and leaves today's tests and product files alone", async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.record({ title: words }), async ({ title }) => {
-      const text = [
-        'import { describe, expectTypeOf, it } from "vitest";',
-        ...LABELS.map((label) => `it("${label}: kept", () => ${ok(label)});`),
-        `export const suite = (sql: unknown) => describe("s", () => { it("${title}", () => {}); });`,
-      ].join("\n");
+it(
+  "reads next/ and .agents/ tests and shared suites, and leaves today's tests and product files alone",
+  () =>
+    fc.assert(
+      fc.asyncProperty(fc.record({ title: words }), async ({ title }) => {
+        const text = Arr.join(
+          [
+            'import { describe, expectTypeOf, it } from "vitest";',
+            ...Arr.map(LABELS, (label) => `it("${label}: kept", () => ${ok(label)});`),
+            `export const suite = (sql: unknown) => describe("s", () => { it("${title}", () => {}); });`,
+          ],
+          "\n",
+        );
 
-      const read = ["next/a.test.ts", "next/a.test.tsx", "next/a/SinkTest.ts", ".agents/skills/x/a.test.ts"];
-      const left = ["next/a.ts", "packages/a.test.ts", "apps/a.test.ts", "programs/a.test.ts", "docs/a.test.ts"];
-      const caller = "next/a/sink.test.ts";
+        const read = ["next/a.test.ts", "next/a.test.tsx", "next/a/SinkTest.ts", ".agents/skills/x/a.test.ts"];
+        const left = ["next/a.ts", "packages/a.test.ts", "apps/a.test.ts", "programs/a.test.ts", "docs/a.test.ts"];
+        const caller = "next/a/sink.test.ts";
 
-      const result = await linted({
-        ...Object.fromEntries([...read, ...left].map((path) => [path, text])),
-        [caller]: 'import * as SinkTest from "./SinkTest.ts";\nSinkTest.suite(nodeSql);\n',
-      });
+        const result = await linted({
+          ...Rec.fromEntries(Arr.map([...read, ...left], (path) => [path, text])),
+          [caller]: 'import * as SinkTest from "./SinkTest.ts";\nSinkTest.suite(nodeSql);\n',
+        });
 
-      for (const path of read) {
-        expect(result(path), path).toEqual([[LABELS.length + 2, MESSAGE]]);
-      }
+        for (const path of read) {
+          expect(result(path), path).toEqual([[LABELS.length + 2, MESSAGE]]);
+        }
 
-      for (const path of [...left, caller]) {
-        expect(result(path), path).toEqual([]);
-      }
-    }),
-    { ...runs, numRuns: 2 },
-  );
-}, 120_000);
+        for (const path of [...left, caller]) {
+          expect(result(path), path).toEqual([]);
+        }
+      }),
+      { ...runs, numRuns: 2 },
+    ),
+  120_000,
+);
 
 /** Runs `pnpm lint`'s own runner on one planted law at `next/unit.test.ts`, in a clean git checkout under `next/`. */
 const lintOne = (text: string) => {

@@ -3,6 +3,9 @@
 // succeeds. Nothing here reads a clock, a store or a service (0037, 0046).
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import { ExitReason } from "../../processes/ExitReason.ts";
 import { From } from "../../processes/Mailbox.ts";
 import { canRestart, Start } from "../../processes/Process.ts";
@@ -106,7 +109,7 @@ export const Supervision = Schema.Struct({
 
     if (j._tag === "stepping" && j.attempt.phase === "fresh") {
       return (
-        s.receipts.some((r) => r.letter === j.attempt.letter && r.input !== null) ||
+        Arr.some(s.receipts, (r) => r.letter === j.attempt.letter && r.input !== null) ||
         "fresh stepping keeps its admitted input"
       );
     }
@@ -114,8 +117,10 @@ export const Supervision = Schema.Struct({
     // Dead work names its exact fresh failure, so its terminal receipt must be that letter's own.
     if (j._tag === "writing_dead") {
       return (
-        s.receipts.some((r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null) ||
-        "dead work keeps its terminal receipt"
+        Arr.some(
+          s.receipts,
+          (r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null,
+        ) || "dead work keeps its terminal receipt"
       );
     }
 
@@ -266,7 +271,7 @@ const failed = (
     return [observe(s, failure, seen, exiting(failure, reason, from)), []];
   }
 
-  const old = s.receipts.find((r) => r.letter === failure.letter);
+  const old = Option.getOrUndefined(Arr.findFirst(s.receipts, (r) => r.letter === failure.letter));
 
   if (old === undefined) {
     return unchanged(s);
@@ -291,7 +296,7 @@ const failed = (
   return [
     {
       ...observe(s, failure, seen, journal),
-      receipts: s.receipts.map((r) => (r.letter === failure.letter ? receipt : r)),
+      receipts: Arr.map(s.receipts, (r) => (r.letter === failure.letter ? receipt : r)),
     },
     [],
   ];
@@ -348,15 +353,15 @@ export const supervisor = Machine.make({
     swapped: (s, m) =>
       s.journal._tag === "idle" && s.journal.process === m.process ? [{ ...s, build: m.build }, []] : unchanged(s),
     received: (s, m) =>
-      s.receipts.some((r) => r.letter === m.receipt.letter)
+      Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
         ? unchanged(s)
         : [{ ...s, receipts: [...s.receipts, m.receipt] }, []],
     compacted: (s, m) =>
-      s.receipts.some((r) => r.letter === m.letter && r.tries === 0 && r.input !== null)
+      Arr.some(s.receipts, (r) => r.letter === m.letter && r.tries === 0 && r.input !== null)
         ? [
             {
               ...s,
-              receipts: s.receipts.map((r) =>
+              receipts: Arr.map(s.receipts, (r) =>
                 r.letter === m.letter && r.tries === 0 ? { ...r, input: null, digest: m.digest } : r,
               ),
             },
@@ -399,8 +404,9 @@ export const supervisor = Machine.make({
         return unchanged(s);
       }
 
-      const receipts = s.receipts.some((r) => r.letter === m.receipt.letter) ? s.receipts : [...s.receipts, m.receipt];
-
+      const receipts = Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
+        ? s.receipts
+        : [...s.receipts, m.receipt];
       return [{ ...s, receipts, journal: Journal.cases.stepping.make({ attempt: j.attempt }) }, []];
     },
     refused: (s, m) => {
@@ -440,8 +446,9 @@ export const supervisor = Machine.make({
         return unchanged(s);
       }
 
-      const receipts = s.receipts.some((r) => r.letter === m.receipt.letter) ? s.receipts : [...s.receipts, m.receipt];
-
+      const receipts = Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
+        ? s.receipts
+        : [...s.receipts, m.receipt];
       return failed({ ...s, receipts }, j.attempt, m.error, m.reason, m.from);
     },
     finished: (s, m) =>
@@ -522,7 +529,10 @@ export const supervisor = Machine.make({
       }
 
       // The brake: N crashes in T. Down waits until the window has room again.
-      const times = m.restarts.filter((at) => at >= until - s.policy.periodMs).toSorted((a, b) => a - b);
+      const times = Arr.sort(
+        Arr.filter(m.restarts, (at) => at >= until - s.policy.periodMs),
+        Order.Number,
+      );
       const edge = times[times.length - s.policy.intensity];
       const held = edge === undefined ? until : Math.max(until, edge + s.policy.periodMs + 1);
       const recovery = { process: m.process, reason, crashes, until: held };
@@ -611,7 +621,7 @@ export const supervisor = Machine.make({
       const j = s.journal;
       const settled = j._tag === "idle" || (waitingFor(j) !== null && j._tag !== "writing_down");
 
-      if (!settled || s.requests.some((r) => r.id === m.id)) {
+      if (!settled || Arr.some(s.requests, (r) => r.id === m.id)) {
         return unchanged(s);
       }
 

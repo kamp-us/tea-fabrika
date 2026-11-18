@@ -1,4 +1,9 @@
-import { Equal, Predicate, Result } from "effect";
+import * as Equal from "effect/Equal";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 
 /** @internal */
 export type Path = ReadonlyArray<string | number>;
@@ -59,7 +64,8 @@ const same = (left: Path, right: Path): boolean => left.length === right.length 
 /** @internal */
 export const read = (value: Index["value"], path: Path): unknown =>
   path.reduce<unknown>(
-    (parent, key) => (Predicate.hasProperty(parent, key) && Object.hasOwn(parent, key) ? parent[key] : undefined),
+    (parent, key) =>
+      Predicate.hasProperty(parent, key) && Rec.has<string, unknown>(parent, String(key)) ? parent[key] : undefined,
     value,
   );
 
@@ -73,11 +79,10 @@ const equal = (left: unknown, right: unknown): boolean => {
   }
 
   if (Predicate.isObject(left) && Predicate.isObject(right)) {
-    const keys = Object.keys(left);
+    const keys = Rec.keys(left);
 
     return (
-      keys.length === Object.keys(right).length &&
-      keys.every((key) => Object.hasOwn(right, key) && equal(left[key], right[key]))
+      keys.length === Rec.keys(right).length && keys.every((key) => Rec.has(right, key) && equal(left[key], right[key]))
     );
   }
 
@@ -86,18 +91,25 @@ const equal = (left: unknown, right: unknown): boolean => {
 
 const ending = (text: string): string => /\r?\n/.exec(text)?.[0] ?? "\n";
 
-const lineStart = (text: string, at: number): number => text.lastIndexOf("\n", at - 1) + 1;
+/**
+ * Where the line holding offset `at` starts. The text before `at` holds that line's newline, so a
+ * line that starts at `at` itself is found.
+ *
+ * @internal
+ */
+export const lineStart = (text: string, at: number): number =>
+  Option.match(Str.lastIndexOf("\n")(Str.slice(0, at)(text)), { onNone: () => 0, onSome: (newline) => newline + 1 });
 
 const apply = (text: string, edits: ReadonlyArray<Splice>): string =>
   [...edits]
     .sort((a, b) => b.start - a.start || b.end - a.end)
-    .reduce((source, edit) => source.slice(0, edit.start) + edit.text + source.slice(edit.end), text);
+    .reduce((source, edit) => Str.slice(0, edit.start)(source) + edit.text + Str.slice(edit.end)(source), text);
 
 // Comments are parser ranges, including the #, never text guessed from a string's contents.
 const retained = (text: string, index: Index, range: Range): string =>
   index.comments
     .filter((comment) => comment.start >= range.start && comment.end <= range.end)
-    .map((comment) => text.slice(comment.start, comment.end) + ending(text))
+    .map((comment) => Str.slice(comment.start, comment.end)(text) + ending(text))
     .join("");
 
 /** @internal */
@@ -112,7 +124,7 @@ export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<
       index.sections.find((section) => same(section.path, at)) ??
       index.sections.find((section) => i > 0 && prefix(at, section.path));
 
-    if (entry) {
+    if (entry !== undefined) {
       line = entry.line;
     }
 
@@ -133,12 +145,12 @@ export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<
 const commentEdits = (text: string, index: Index, assignment: Assignment, removed: Range): Array<Splice> => {
   const comments = retained(text, index, removed);
 
-  if (!comments) {
+  if (comments === "") {
     return [];
   }
 
   // An inline member can follow a sibling's comments. Keep retained comments after that sibling.
-  const at = assignment.inline ? assignment.start : lineStart(text, assignment.start);
+  const at = assignment.inline !== undefined ? assignment.start : lineStart(text, assignment.start);
   const before = at > lineStart(text, at) ? ending(text) : "";
 
   return [{ start: at, end: at, text: before + comments }];
@@ -154,13 +166,13 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
 
   const assignment = index.assignments.find((candidate) => same(candidate.path, path));
 
-  if (!assignment) {
+  if (assignment === undefined) {
     return Result.succeed(text);
   }
 
   const edits: Array<Splice> = [{ ...assignment, text: "" }, ...commentEdits(text, index, assignment, assignment)];
 
-  if (assignment.inline) {
+  if (assignment.inline !== undefined) {
     const start = assignment.inline.start;
     const parent = index.inlines.find((inline) => inline.start === start);
 
@@ -168,7 +180,7 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
       parent?.commas.find((token) => token.start >= assignment.end) ??
       parent?.commas.findLast((token) => token.end <= assignment.start);
 
-    if (comma) {
+    if (comma !== undefined) {
       edits.push({ ...comma, text: "" });
     }
   }
@@ -176,14 +188,13 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
   const candidate = apply(text, edits);
 
   // Removing the last assignment must not turn its preceding separator into a final newline.
-  return Result.succeed(!text.endsWith("\n") && candidate.endsWith("\n") ? `${candidate} ` : candidate);
+  return Result.succeed(!Str.endsWith("\n")(text) && Str.endsWith("\n")(candidate) ? `${candidate} ` : candidate);
 };
 
 const insertLine = (text: string, at: number, content: string): string => {
   const eol = ending(text);
   const before = at > 0 && text[at - 1] !== "\n" ? eol : "";
-  const after = at < text.length || text.endsWith("\n") ? eol : "";
-
+  const after = at < text.length || Str.endsWith("\n")(text) ? eol : "";
   return apply(text, [{ start: at, end: at, text: before + content + after }]);
 };
 
@@ -204,7 +215,7 @@ export const set = (
 
   const assignment = index.assignments.find((candidate) => same(candidate.path, path));
 
-  if (assignment) {
+  if (assignment !== undefined) {
     if (equal(read(index.value, path), value)) {
       return Result.succeed(text);
     }
@@ -221,11 +232,10 @@ export const set = (
     .filter((inline) => prefix(inline.path, path))
     .sort((a, b) => b.path.length - a.path.length)[0];
 
-  if (parent) {
+  if (parent !== undefined) {
     const at = parent.end - 1;
     const last = parent.members.at(-1);
-    const separator = last && !parent.commas.some((comma) => comma.start >= last.end) ? ", " : "";
-
+    const separator = last !== undefined && !parent.commas.some((comma) => comma.start >= last.end) ? ", " : "";
     return Result.succeed(
       apply(text, [
         {

@@ -3,7 +3,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import { Predicate, Result } from "effect";
+import { Array as Arr, pipe, Option, Predicate, Record as Rec, Result } from "effect";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 
@@ -46,7 +46,7 @@ const targetResolver = resolver.cloneWithOptions({
 const resolvers = new Map<string, ResolverFactory>();
 
 const resolverFor = (conditions: readonly string[]) => {
-  const key = conditions.join("\0");
+  const key = Arr.join(conditions, "\0");
   let found = resolvers.get(key);
 
   if (found === undefined) {
@@ -64,10 +64,10 @@ const resolverFor = (conditions: readonly string[]) => {
 const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] =>
   Predicate.isString(x)
     ? [[...path]]
-    : Array.isArray(x)
-      ? x.flatMap((target) => conditionPaths(target, path))
+    : Arr.isArray(x)
+      ? Arr.flatMap(x, (target) => conditionPaths(target, path))
       : map(x)
-        ? Object.entries(x).flatMap(([condition, target]) =>
+        ? Arr.flatMap(Rec.toEntries(x), ([condition, target]) =>
             condition === "types" ? [] : conditionPaths(target, [...path, condition]),
           )
         : [];
@@ -76,10 +76,10 @@ const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] =>
 const targetStrings = (x: unknown): string[] =>
   Predicate.isString(x)
     ? [x]
-    : Array.isArray(x)
-      ? x.flatMap(targetStrings)
+    : Arr.isArray(x)
+      ? Arr.flatMap(x, targetStrings)
       : map(x)
-        ? Object.entries(x).flatMap(([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
+        ? Arr.flatMap(Rec.toEntries(x), ([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
         : [];
 
 // The platform's own import names, as decision 0042 lists them
@@ -94,7 +94,7 @@ const platform = ["cloudflare:", "miniflare", "workerd", "wrangler", "@cloudflar
 const runtimePackages = ["@alchemy.run/cloudflare-runtime", "@kampus/libfabrika/box", "@kampus/libfabrika/workers"];
 
 const worker = (name: string) =>
-  [...platform, ...runtimePackages].some((known) =>
+  Arr.some([...platform, ...runtimePackages], (known) =>
     known.endsWith(":") || known.endsWith("/")
       ? name.startsWith(known)
       : name === known || name.startsWith(`${known}/`),
@@ -113,7 +113,7 @@ type Names = {
 const aliasTargets = (names: Names, name: string): string[] =>
   !name.startsWith("#")
     ? []
-    : Object.entries(names.aliases).flatMap(([key, target]) => {
+    : Arr.flatMap(Rec.toEntries(names.aliases), ([key, target]) => {
         if (key === name) {
           return targetStrings(target);
         }
@@ -125,14 +125,14 @@ const aliasTargets = (names: Names, name: string): string[] =>
           name.length > before.length + after.length &&
           name.startsWith(before) &&
           name.endsWith(after)
-          ? targetStrings(target).map((path) =>
+          ? Arr.map(targetStrings(target), (path) =>
               path.replaceAll("*", name.slice(before.length, name.length - after.length)),
             )
           : [];
       });
 
 // A Worker runtime by its own name, or a `#` alias whose manifest entry names one anywhere.
-const runtimeName = (names: Names, name: string) => worker(name) || aliasTargets(names, name).some(worker);
+const runtimeName = (names: Names, name: string) => worker(name) || Arr.some(aliasTargets(names, name), worker);
 
 // A bare package name: no path, no `#` alias, no `scheme:`.
 const bare = (name: string) => !/^(?:[./#]|[a-z][a-z0-9+.-]*:)/i.test(name);
@@ -149,7 +149,7 @@ const known = (names: Names, name: string): boolean => {
   if (name.startsWith("#")) {
     const targets = aliasTargets(names, name);
 
-    return targets.length > 0 && targets.every((target) => !target.startsWith("#") && known(names, target));
+    return targets.length > 0 && Arr.every(targets, (target) => !target.startsWith("#") && known(names, target));
   }
 
   return name.startsWith("node:") || (bare(name) && names.dependencies.has(packageOf(name)));
@@ -163,7 +163,9 @@ const valueLink = (
     readonly importKind?: string;
     readonly exportKind?: string;
   }[],
-) => kind !== "type" && (specifiers.length === 0 || specifiers.some((s) => (s.importKind ?? s.exportKind) !== "type"));
+) =>
+  kind !== "type" &&
+  (specifiers.length === 0 || Arr.some(specifiers, (s) => (s.importKind ?? s.exportKind) !== "type"));
 
 // Cloudflare's own base classes for a Worker entrypoint, a Durable Object and a Workflow.
 const workerClass = (node: unknown): boolean =>
@@ -181,9 +183,9 @@ const literal = (node: unknown): string | undefined =>
         ? node.value
         : undefined
       : node.type === "TemplateLiteral" &&
-          Array.isArray(node.expressions) &&
+          Arr.isArray(node.expressions) &&
           node.expressions.length === 0 &&
-          Array.isArray(node.quasis) &&
+          Arr.isArray(node.quasis) &&
           map(node.quasis[0]) &&
           map(node.quasis[0].value) &&
           Predicate.isString(node.quasis[0].value.cooked)
@@ -228,8 +230,9 @@ const handlerObject = (
   seen.add(object);
 
   return (
-    Array.isArray(object.properties) &&
-    object.properties.some(
+    Arr.isArray(object.properties) &&
+    Arr.some(
+      object.properties,
       (p: unknown) =>
         map(p) &&
         ((p.type === "SpreadElement" && handlerObject(p.argument, named, seen)) ||
@@ -295,6 +298,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
     }
 
     const text = read.success;
+
     const parsed = parseSync(file, text);
 
     if (parsed.errors.length > 0) {
@@ -388,7 +392,8 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
         // `export {app as default};` names the default export too.
         if (
           node.source === null &&
-          node.specifiers.some(
+          Arr.some(
+            node.specifiers,
             (s) =>
               s.exportKind !== "type" &&
               s.exported.type === "Identifier" &&
@@ -492,7 +497,7 @@ const matchesOf = (root: string, exportValue: unknown): string[] => {
 
   return [
     ...new Set(
-      targetStrings(exportValue).flatMap((target) => {
+      Arr.flatMap(targetStrings(exportValue), (target) => {
         if (!target.includes("*")) {
           return ["_"];
         }
@@ -500,10 +505,10 @@ const matchesOf = (root: string, exportValue: unknown): string[] => {
         const [before = "", ...rest] = target.split("*");
         const folder = before.slice(0, before.lastIndexOf("/") + 1);
         const skip = /(?:^|\/)node_modules\//.test(folder) ? [] : ["node_modules"];
-        const files = listing(resolve(root, folder), skip).map((path) => `${folder}${path}`);
-        const pattern = new RegExp(`^${escape(before)}(.+)${rest.map(escape).join("\\1")}$`);
+        const files = Arr.map(listing(resolve(root, folder), skip), (path) => `${folder}${path}`);
+        const pattern = new RegExp(`^${escape(before)}(.+)${pipe(rest, Arr.map(escape), Arr.join("\\1"))}$`);
 
-        return files.flatMap((path) => {
+        return Arr.flatMap(files, (path) => {
           const match = pattern.exec(path)?.[1];
 
           return match === undefined ? [] : [match];
@@ -515,9 +520,11 @@ const matchesOf = (root: string, exportValue: unknown): string[] => {
 
 // Every window-shaped source file in the package, tests and dependencies aside.
 const windowFiles = (root: string) =>
-  sources(root)
-    .filter(windowFile)
-    .map((path) => resolve(root, path));
+  pipe(
+    sources(root),
+    Arr.filter(windowFile),
+    Arr.map((path) => resolve(root, path)),
+  );
 
 export const programPackageLayout: CreateRule = {
   create(context) {
@@ -525,7 +532,7 @@ export const programPackageLayout: CreateRule = {
     const matched = /^(.*\/next\/programs\/[^/]+)\//.exec(file);
 
     // A test file is judged like any other: it reports only when it is the '.' entry or pure code.
-    if (!matched?.[1]) {
+    if (matched?.[1] === undefined || matched[1] === "") {
       return {};
     }
 
@@ -541,6 +548,7 @@ export const programPackageLayout: CreateRule = {
     }
 
     const manifest = read.success;
+
     // The resolver finds the package by its own name, as Node's self-reference does (11.24.2
     // matches any string name). With no name the package's exports cannot be asked, and every
     // subpath a pattern matches counts as offered.
@@ -550,19 +558,19 @@ export const programPackageLayout: CreateRule = {
     const names: Names = {
       aliases: map(manifest) && map(manifest.imports) ? manifest.imports : {},
       dependencies: new Set(
-        ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].flatMap((field) => {
+        Arr.flatMap(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"], (field) => {
           const listed = map(manifest) ? manifest[field] : undefined;
 
-          return map(listed) ? Object.keys(listed) : [];
+          return map(listed) ? Rec.keys(listed) : [];
         }),
       ),
     };
 
-    const keys = map(raw) ? Object.keys(raw) : [];
+    const keys = map(raw) ? Rec.keys(raw) : [];
 
     // A string, an array, null, or an object of conditions is the '.' export alone.
     const exports: Record<string, unknown> =
-      map(raw) && Object.keys(raw).some((key) => key.startsWith(".")) ? raw : raw === undefined ? {} : { ".": raw };
+      map(raw) && Arr.some(Rec.keys(raw), (key) => key.startsWith(".")) ? raw : raw === undefined ? {} : { ".": raw };
 
     // Every target one export key names under a runtime condition, each resolved; a target that
     // names nothing real comes back as `undefined`. A pattern key gives its targets once per
@@ -573,22 +581,22 @@ export const programPackageLayout: CreateRule = {
       const target = (path: string) => targetResolver.sync(root, path).path;
 
       if (!key.includes("*")) {
-        return targets.map(target);
+        return Arr.map(targets, target);
       }
 
       const [before = "", after = ""] = key.split("*");
       const conditions = [options.conditionNames, ...conditionPaths(exportValue)];
 
-      return matchesOf(root, exportValue).flatMap((match) => {
-        const own = targets.map((path) => target(path.replaceAll("*", match)));
-        const real = new Set(own.flatMap((path) => (path === undefined ? [] : [realpathSync(path)])));
+      return Arr.flatMap(matchesOf(root, exportValue), (match) => {
+        const own = Arr.map(targets, (path) => target(path.replaceAll("*", match)));
+        const real = new Set(Arr.flatMap(own, (path) => (path === undefined ? [] : [realpathSync(path)])));
 
         // The subpath is this key's only if the package's exports answer with one of its own
         // targets: a null target or a more specific key takes it away. With no name to ask by,
         // it stays the key's.
         const offered =
           name === "" ||
-          conditions.some((set) => {
+          Arr.some(conditions, (set) => {
             const found = resolverFor(set).sync(root, `${name}${before.slice(1)}${match}${after}`).path;
 
             return found !== undefined && real.has(realpathSync(found));
@@ -600,7 +608,8 @@ export const programPackageLayout: CreateRule = {
 
     const dotTargets = resolveKey(".");
 
-    const entries = [...new Set(dotTargets.flatMap((path) => (path === undefined ? [] : [path])))].filter(
+    const entries = Arr.filter(
+      [...new Set(Arr.flatMap(dotTargets, (path) => (path === undefined ? [] : [path])))],
       (path) => !declaration(path),
     );
 
@@ -623,8 +632,8 @@ export const programPackageLayout: CreateRule = {
 
     // The package's findings are reported once, on its first '.' entry oxlint lints, or on every
     // file when no entry is one.
-    const first = entries.find((path) => isFile(path) && lined(path));
-    const report = first === undefined || first === file;
+    const first = Arr.findFirst(entries, (path) => isFile(path) && lined(path));
+    const report = Option.isNone(first) || first.value === file;
     const errors: string[] = [];
 
     const unjudged = (key: string, reasons: readonly string[]) => {
@@ -634,7 +643,7 @@ export const programPackageLayout: CreateRule = {
     };
 
     // Node refuses an exports object that mixes subpaths with conditions or other keys.
-    if (keys.some((key) => key.startsWith(".")) && keys.some((key) => key !== "." && !key.startsWith("./"))) {
+    if (Arr.some(keys, (key) => key.startsWith(".")) && Arr.some(keys, (key) => key !== "." && !key.startsWith("./"))) {
       errors.push("Every export key is '.' or a subpath starting with './'.");
     }
 
@@ -656,11 +665,11 @@ export const programPackageLayout: CreateRule = {
     }
 
     // './window' is judged for Worker code like every other subpath.
-    const subpaths = Object.keys(exports).filter((key) => key.startsWith("./"));
+    const subpaths = Arr.filter(Rec.keys(exports), (key) => key.startsWith("./"));
     const windowTargets = "./window" in exports ? resolveKey("./window") : [];
 
     const real = (paths: readonly (string | undefined)[]) =>
-      paths.flatMap((path) => (path === undefined || declaration(path) ? [] : [path]));
+      Arr.flatMap(paths, (path) => (path === undefined || declaration(path) ? [] : [path]));
 
     // A window behind another key is reported there, so it does not count as unexported too.
     const exported = new Set<string>();
@@ -680,7 +689,7 @@ export const programPackageLayout: CreateRule = {
         errors.push(`A program package has no Worker entry. libfabrika builds its box; '${key}' is one.`);
       }
 
-      if (key !== "./window" && [...loaded.files].some(windowFile)) {
+      if (key !== "./window" && Arr.some([...loaded.files], windowFile)) {
         errors.push(`The window is exported at './window', never at '${key}'.`);
       }
 
@@ -690,7 +699,7 @@ export const programPackageLayout: CreateRule = {
       }
     }
 
-    if (windowFiles(root).some((path) => !exported.has(path))) {
+    if (Arr.some(windowFiles(root), (path) => !exported.has(path))) {
       errors.push("Export the real window at './window'. A program without a window needs no stub.");
     }
 

@@ -15,7 +15,7 @@
 // and the step runs again: a step must be safe to run twice.
 
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Schema, Array as Arr, Option } from "effect";
 import { Flow } from "./Flow.ts";
 import { Answer, Outcome, Spent } from "./Outcome.ts";
 import { Step } from "./Step.ts";
@@ -64,7 +64,7 @@ const closed = (
   outcome: Outcome,
   spent: Answer["spent"],
 ): ReadonlyArray<Attempt> =>
-  history.map((a, i) => (i === history.length - 1 ? { ...a, endedAt: at, outcome, spent } : a));
+  Arr.map(history, (a, i) => (i === history.length - 1 ? { ...a, endedAt: at, outcome, spent } : a));
 
 /**
  * The flow machine. `lead` says whether this process was started by the lead session: a step marked
@@ -135,9 +135,9 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
         }
 
         if (outcome._tag === "send") {
-          const to = flow.steps.findIndex((step) => step.name === outcome.to);
+          const to = Arr.findFirstIndex(flow.steps, (step) => step.name === outcome.to);
 
-          return to === -1
+          return Option.isNone(to)
             ? stay(
                 Model.cases.stuck.make({
                   flow,
@@ -146,7 +146,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
                   reason: `${name} sent the flow to ${outcome.to}, which is no step of it: ${outcome.reason}`,
                 }),
               )
-            : enter(flow, history, to, m.at);
+            : enter(flow, history, to.value, m.at);
         }
 
         if (outcome._tag === "ask") {

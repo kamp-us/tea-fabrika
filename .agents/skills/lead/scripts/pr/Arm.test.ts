@@ -6,8 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 // step canceled the other nine, so the run's own conclusion reads `cancelled`.
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Layer, Schema, Match } from "effect";
-import { FileSystem } from "effect";
+import { Effect, FileSystem, Layer, Match, Schema } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import { type Job, type Run, Runs } from "../ci/Runs.ts";
 import * as RunsGh from "../ci/RunsGh.ts";

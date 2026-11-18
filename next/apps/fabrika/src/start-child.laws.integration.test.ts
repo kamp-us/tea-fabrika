@@ -1,8 +1,9 @@
-import { it as effectIt } from "@effect/vitest";
 // P42 slice 1 (ticket 770), next/: L9 and L10 on a real local instance, L11 on the public Project.
 // Outside only: real workerd,
 // sockets, object storage, alarms and the private local instance capability, set up as ticket 402's
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
+import { it as effectIt } from "@effect/vitest";
+
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Started } from "@kampus/libfabrika/processes/Children";
@@ -12,7 +13,25 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Match, Predicate, Result, Schema, Scope } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Clock,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Logger,
+  ManagedRuntime,
+  Match,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+  Duration,
+  Record as Rec,
+} from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -24,6 +43,11 @@ import {
   PROJECT,
   SENT,
 } from "./start-child.test-support.ts";
+
+/** A public call's rejection, kept whole in `cause`, so a law reads exactly what the caller got. */
+class Rejected extends Schema.TaggedError<Rejected, { readonly brand: unique symbol }>()("Rejected", {
+  cause: Schema.Defect(),
+}) {}
 
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = vi.hoisted(() => ({
@@ -55,7 +79,10 @@ type Fixture = Effect.Success<ReturnType<typeof childInstance>>;
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Fixture["instance"] & Record<string, any>;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
+
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 /**
  * A real 5 ms pause on Effect's live clock, whatever clock the law runs on: the test clock under
@@ -65,10 +92,10 @@ const realPause = Effect.sleep("5 millis").pipe(Effect.provideService(Clock.Cloc
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, ms = WAIT): Promise<A> => {
-  const end = Date.now() + ms;
+  const end = now() + ms;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -89,7 +116,7 @@ const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) 
 /** A real WebSocket client at the door; it keeps every pushed frame. `close` waits for the close. */
 const socketAt = (instance: Instance, key: Key, tab: string) => {
   const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
-  const socket = new WebSocket(String(instance.url).replace("http", "ws") + name);
+  const socket = new WebSocket(Str.replace("http", "ws")(String(instance.url)) + name);
   const frames: any[] = [];
   const pushed: any[] = [];
   let closeCode: number | undefined;
@@ -112,13 +139,13 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
-      const index = frames.findIndex(match);
+    while (now() < end) {
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -140,9 +167,9 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
 
   const close = async () => {
     socket.close();
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (closeCode === undefined && Date.now() < end) {
+    while (closeCode === undefined && now() < end) {
       await pause(20);
     }
   };
@@ -181,7 +208,7 @@ const hello = async (
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+        signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
       })
     ).error,
   ).toBeUndefined();
@@ -202,10 +229,12 @@ const world = (
       Effect.gen(function* () {
         const fixture = yield* childInstance(starts);
         const scope = yield* Effect.scope;
+        // `test` is a plain async function, so `connect` runs with this world's services.
+        const context = yield* Effect.context();
 
         const connect = (tab: string) =>
           // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
-          Effect.runPromise(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
+          Effect.runPromiseWith(context)(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
 
         yield* Effect.promise(() => test(fixture, connect));
       }),
@@ -226,10 +255,10 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
     },
     facts: async (stream: string) =>
       // SAFETY: the audit read answers the stream's rows as an array.
-      ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+      Arr.map((await project().read(stream, 0, "audit")) as Array<any>, (row) => ({ ...row.body, _tag: row._tag })),
     live: async (name: string): Promise<string | undefined> =>
       // SAFETY: info answers the project's process rows as an array.
-      ((await project().info()) as Array<any>).find((row) => row.name === name)?.process,
+      Option.getOrUndefined(Arr.findFirst((await project().info()) as Array<any>, (row) => row.name === name))?.process,
   };
 };
 
@@ -238,8 +267,7 @@ const Secret = fc
   .tuple(fc.stringMatching(/^sk-[A-Za-z0-9]{24}$/), fc.constantFrom('"', "/%? ", "\n"))
   .map(([word, suffix]) => word + suffix);
 
-const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
-
+const forms = (text: string) => [text, Str.slice(1, -1)(JSON.stringify(text)), encodeURIComponent(text)];
 // Effect Arbitrary has no command-walk generator or fast-check adapter.
 const SecretPick = fc.record({ point: fc.nat(), encoding: fc.integer({ min: 0, max: 2 }) });
 
@@ -270,7 +298,10 @@ const outputText = (value: unknown): Array<string> => {
   }
 
   if (Predicate.isObjectOrArray(value)) {
-    return Object.entries(value).flatMap(([key, entry]) => [key, ...outputText(entry)]);
+    return Arr.flatMap(
+      Arr.isArray(value) ? Arr.map(value, (entry, at): [string, unknown] => [`${at}`, entry]) : Rec.toEntries(value),
+      ([key, entry]) => [key, ...outputText(entry)],
+    );
   }
 
   return [];
@@ -329,11 +360,11 @@ const projectSecrets = Effect.fnUntraced(function* (
             return request;
           }).pipe(Effect.provide(logging)),
         ),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => Rejected.make({ cause: error }),
     }).pipe(Effect.result);
 
     if (Result.isFailure(outcome)) {
-      const error = outcome.failure;
+      const error = outcome.failure.cause;
       // This is the actual public call's rejection, not Cause.pretty on an in-memory Exit.
       outputs.reply.push(error instanceof Error ? error.message : String(error), String(error));
     } else {
@@ -345,9 +376,9 @@ const projectSecrets = Effect.fnUntraced(function* (
 
   const placed = Effect.fnUntraced(function* () {
     const starts = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
-    const saved = starts.filter((row) => row._tag === "started");
+    const saved = Arr.filter(starts, (row) => row._tag === "started");
     expect(saved, "L11: the failing path follows a committed child start").toHaveLength(1);
-    pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(saved[0]?.body).process;
+    pid = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(saved[0]?.body)).process;
   });
 
   const remaining = new Set<ChildFailure>(
@@ -460,12 +491,15 @@ const projectSecrets = Effect.fnUntraced(function* (
       });
       const rows = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
       expect(
-        rows.filter((row) => row._tag === "exited"),
+        Arr.filter(rows, (row) => row._tag === "exited"),
         "L11: retry writes one normal exit",
       ).toMatchObject([{ body: { process: pid, reason: { _tag: "normal" } } }]);
       const watches = yield* Effect.promise(() => runtime.runPromise(project.read("processes", 0, "audit")));
       expect(
-        watches.filter((row) => row._tag === "demonitored" && JSON.stringify(row.body).includes(`out-${reached.size}`)),
+        Arr.filter(
+          watches,
+          (row) => row._tag === "demonitored" && Str.includes(`out-${reached.size}`)(JSON.stringify(row.body)),
+        ),
       ).toHaveLength(1);
       inspectRows();
     }
@@ -476,9 +510,8 @@ const projectSecrets = Effect.fnUntraced(function* (
 
   yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), tape));
   expect(reached.size, "L11: every available failure operation was exercised").toBe(expected);
-  expect(fixture.configured.filter((c) => c.descriptor.name === child.name).length).toBeGreaterThan(0);
-
-  const recorded = fixture.recorded.flatMap((batch) =>
+  expect(Arr.filter(fixture.configured, (c) => c.descriptor.name === child.name).length).toBeGreaterThan(0);
+  const recorded = Arr.flatMap(fixture.recorded, (batch) =>
     Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) })))(
       batch,
     ),
@@ -491,7 +524,7 @@ const projectSecrets = Effect.fnUntraced(function* (
 
   for (const text of outputs[output]) {
     for (const form of secretForms) {
-      assert(!text.includes(form), `L11: ${path} leaked storage text or metadata into ${output}`);
+      assert(!Str.includes(form)(text), `L11: ${path} leaked storage text or metadata into ${output}`);
     }
   }
 });
@@ -525,7 +558,7 @@ const storageCall = Effect.fnUntraced(function* (
   path: StoragePath,
   inspect: (
     fixture: Effect.Success<ReturnType<typeof childProject>>,
-    call: Effect.Effect<unknown, unknown>,
+    call: Effect.Effect<unknown, Rejected>,
     reopen: Effect.Effect<void>,
   ) => Effect.Effect<void, unknown, Scope.Scope>,
 ) {
@@ -560,7 +593,7 @@ const storageCall = Effect.fnUntraced(function* (
 
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => Rejected.make({ cause: error }),
     }).pipe(Effect.result);
 
     prepared = Result.isFailure(failed) && fixture.hit();
@@ -570,7 +603,7 @@ const storageCall = Effect.fnUntraced(function* (
 
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => Rejected.make({ cause: error }),
     }).pipe(Effect.result);
 
     prepared = Result.isFailure(failed) && fixture.hit();
@@ -661,7 +694,7 @@ const storageCall = Effect.fnUntraced(function* (
 
   const invoke = Effect.tryPromise({
     try: () => runtime.runPromise(call.pipe(Effect.provide(logging))),
-    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    catch: (error) => Rejected.make({ cause: error }),
   });
 
   yield* inspect(fixture, invoke, reopen);
@@ -680,7 +713,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
           yield* call;
           const statements = fixture.observed();
           expect(statements.length, `L11: ${path} reached storage`).toBeGreaterThan(0);
-          statements.forEach((statement, operation) => {
+          Arr.forEach(statements, (statement, operation) => {
             remaining.push({ path, operation, statement });
           });
         }),
@@ -692,13 +725,15 @@ const storageSecrets = Effect.fnUntraced(function* () {
   const reached = new Set<string>();
   const leaks = new Set<string>();
   const perWalk = Math.max(4, Math.ceil(inventory.length / 100));
+  // fast-check calls back with plain Promises, so each walk and each move runs with this law's services.
+  const context = yield* Effect.context();
 
   const tape = fc
     .commands(
       [
         SecretPick.map((pick): fc.AsyncCommand<object, SecretWalk> => ({
           check: () => true,
-          run: (_model, real) => Effect.runPromise(real.step(pick)),
+          run: (_model, real) => Effect.runPromiseWith(context)(real.step(pick)),
           toString: () => JSON.stringify(pick),
         })),
       ],
@@ -738,7 +773,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
             expect(fixture.hit(), `L11: ${cut.path}/${cut.operation} ${cut.statement}`).toBe(true);
 
             if (Result.isFailure(outcome)) {
-              const error = outcome.failure;
+              const error = outcome.failure.cause;
               outputs.reply.push(error instanceof Error ? error.message : String(error), String(error));
             } else {
               outputs.reply.push(...outputText(outcome.success));
@@ -761,8 +796,8 @@ const storageSecrets = Effect.fnUntraced(function* () {
 
       outputs.log.push(...(printed ?? []));
 
-      for (const [output, texts] of Object.entries(outputs)) {
-        if (texts.some((text) => forms(secret).some((form) => text.includes(form)))) {
+      for (const [output, texts] of Rec.toEntries(outputs)) {
+        if (Arr.some(texts, (text) => Arr.some(forms(secret), (form) => Str.includes(form)(text)))) {
           leaks.add(`${cut.path}/${cut.operation} ${cut.statement} -> ${output}`);
         }
       }
@@ -782,7 +817,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
 
   yield* Effect.promise(() =>
     fc.assert(
-      fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromise(law(secret, commands))),
+      fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromiseWith(context)(law(secret, commands))),
       // Every storage operation in every flow must be cut once, which takes all 100 walks at this seed.
       { seed: 119120, numRuns: runsFor({ fast: 100, full: 100 }), endOnFailure: true },
     ),
@@ -848,11 +883,11 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           expect(fixture.hit(), "L10: the cut reached the descriptor write").toBe(true);
           expect(cut._tag).toBe("Failure");
           const starts = yield* Effect.promise(() => first.runPromise(project.read("processes/child:cut", 0, "audit")));
-          const committed = starts.filter((row) => row._tag === "started");
+          const committed = Arr.filter(starts, (row) => row._tag === "started");
           expect(committed, "L10: the child start committed before the descriptor failed").toHaveLength(1);
           const input = yield* Effect.promise(() => first.runPromise(project.read("child:cut/inbox", 0, "audit")));
           expect(input, "L10: the first letter committed with the start").toHaveLength(1);
-          expect(fixture.configured.filter((call) => call.descriptor.name === child.name)).toEqual([]);
+          expect(Arr.filter(fixture.configured, (call) => call.descriptor.name === child.name)).toEqual([]);
           yield* Scope.close(scope, Exit.void);
           const reopened = yield* fixture.acquire();
           const recovered = yield* Effect.promise(() => reopened.runPromise(ProjectService));
@@ -862,12 +897,13 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             value: { _tag: "started", name: child.name, rev: committed[0]?.rev },
           });
           expect(
-            fixture.configured.filter((call) => call.descriptor.name === child.name),
+            Arr.filter(fixture.configured, (call) => call.descriptor.name === child.name),
             "L10: recovery rebuilds the descriptor and wakes the first letter once",
           ).toEqual([
             {
               descriptor: {
-                id: Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(committed[0]?.body).process,
+                id: (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(committed[0]?.body))
+                  .process,
                 name: child.name,
                 program: "p42/child",
                 build: CODE.child.hash,
@@ -944,17 +980,15 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             (runtime: ManagedRuntime.ManagedRuntime<ProcessService, never>) => runtime.disposeEffect,
           );
 
-          yield* Effect.promise(async () => {
-            const first = await Effect.runPromise(Effect.result(configureProcess(ctx, descriptor, runtime, true)));
-            expect(first._tag).toBe("Failure");
-            const wake = await Effect.runPromise(savedAlarm(ctx));
-            expect(wake).toBeTypeOf("number");
-            expect(armed).toBeUndefined();
-            await Effect.runPromise(configureProcess(ctx, descriptor, runtime, true));
-            expect(armed, "L10: retry arms the first wake even though its saved value already exists").toBe(wake);
-            expect(values.get("descriptor")).toEqual(descriptor);
-            expect(await Effect.runPromise(savedAlarm(ctx))).toBe(wake);
-          });
+          const first = yield* Effect.result(configureProcess(ctx, descriptor, runtime, true));
+          expect(first._tag).toBe("Failure");
+          const wake = yield* savedAlarm(ctx);
+          expect(wake).toBeTypeOf("number");
+          expect(armed).toBeUndefined();
+          yield* configureProcess(ctx, descriptor, runtime, true);
+          expect(armed, "L10: retry arms the first wake even though its saved value already exists").toBe(wake);
+          expect(values.get("descriptor")).toEqual(descriptor);
+          expect(yield* savedAlarm(ctx)).toBe(wake);
         }),
       ),
     );
@@ -1001,7 +1035,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         ).toBe("Some");
         expect(told[n], `L1: ${ask.program} started fresh`).toMatchObject({ _tag: "started", name: ask.name });
         expect(await live(ask.name), `L1: ${ask.name} is live`).toBeDefined();
-        const lines = (await facts(`processes/${ask.name}`)).filter((fact) => fact._tag === "started");
+        const lines = Arr.filter(await facts(`processes/${ask.name}`), (fact) => fact._tag === "started");
         expect(lines, "L2: the start's requester is the starter's life, the program that asked").toMatchObject([
           { requester: { process: starter } },
         ]);
@@ -1012,7 +1046,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       // The starts were allowed because of this one row: no grant names either program.
       expect(
-        (await facts("permissions/relations")).map(({ _tag, subject, relation, object }) => ({
+        Arr.map(await facts("permissions/relations"), ({ _tag, subject, relation, object }) => ({
           _tag,
           subject,
           relation,
@@ -1052,13 +1086,15 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       await pause(1_000);
       const after = client.pushed.slice(quiet);
       expect(
-        after.filter(
-          (frame) => JSON.stringify(frame).includes(String(child)) || JSON.stringify(frame).includes("child:1"),
+        Arr.filter(
+          after,
+          (frame) =>
+            Str.includes(String(child))(JSON.stringify(frame)) || Str.includes("child:1")(JSON.stringify(frame)),
         ),
         "L9: no frame about the child reaches any client",
       ).toEqual([]);
       expect(
-        after.filter((frame) => /notify|view|focus|open/i.test(String(frame.method))),
+        Arr.filter(after, (frame) => /notify|view|focus|open/i.test(String(frame.method))),
         "L9: a code start opens, notifies and focuses nothing",
       ).toEqual([]);
     });
@@ -1148,7 +1184,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       const [restarted] = await until(
         "one restarted fact after the child's throw",
-        async () => (await facts("processes/child:1")).filter((fact) => fact._tag === "restarted"),
+        async () => Arr.filter(await facts("processes/child:1"), (fact) => fact._tag === "restarted"),
         (rows) => rows.length >= 1,
       );
 
@@ -1182,15 +1218,15 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "L10: another life of the child's program keeps its nonzero count",
       ).toEqual(peerView.result.view);
       expect(
-        (await facts("processes/starter:1")).filter((fact) => fact._tag === "restarted"),
+        Arr.filter(await facts("processes/starter:1"), (fact) => fact._tag === "restarted"),
         "L10: the starter's restarts are unchanged",
       ).toEqual([]);
       expect(
-        (await facts("processes/counter:1")).filter((fact) => fact._tag === "restarted"),
+        Arr.filter(await facts("processes/counter:1"), (fact) => fact._tag === "restarted"),
         "L10: another program's restarts are unchanged",
       ).toEqual([]);
       expect(
-        (await facts("processes/child:boot")).filter((fact) => fact._tag === "restarted"),
+        Arr.filter(await facts("processes/child:boot"), (fact) => fact._tag === "restarted"),
         "L10: another life of the child's program has no restart",
       ).toEqual([]);
     });

@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e78-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:59:30-08:00",
+  "ended": "2026-11-15T21:07:36-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of record for slice E78 of the Effect-check sweep (asyncFunction, judgment, next/), branch fabrikalfa/effect-e78 at b97b9e16af09e9e3a1f76eb5f2e0c190fd412200, one tests-step commit on origin/main 37db01aa. Merge-ready: no law lost or loosened, no behavior change, counts honest, nothing in pull request 1366's files touched. Read the whole diff (4 test files, 28 hand edits, plus the tests row). Every edit is one of three kinds: an async test callback whose only awaits were dynamic imports of modules the file can import statically, an async callback that awaited nothing, or Effect.promise(async () => ...) around a synchronous body turned into Effect.sync (a thrown expect is a defect in both, so a failing assertion still fails the test). Patch.test.ts keeps every binding: the local applicator, renamed independentApply, is used exactly where the old local apply was (the two p22 plant laws), and Patch.ts's own apply is used exactly where the old dynamic import shadowed it (L6, L7); the file's header rule, never patch's own apply for p22, still holds. Program.test.ts's dynamic Program import named the same module as its existing static import, so dropping the header line about imports inside each law is right. Recounted with only asyncFunction at error through effect-tsgo diagnostics --lspconfig over next/packages/libfabrika and next/apps/fabrika at the head: app:src top files 424, lib:runtime 181 (209 less the 28 fixed), lib:cloudflare 149; the five 1366 files hold 128 (Runner.integration 65, runtime-recovery.laws.integration 49, alarm.laws 10, local-instance.integration 2, ObjectService.test 2), and the other 53 of its 58 files hold none; 626 left outside them, as the tests row says. Spot check of the classes: class D is 18 Effect.promise(async ...) hits, all in .integration. files, exactly; same-line test-runner callbacks are 234 and the wrapped async lines bring class A near its 265; a parse of every remaining hit for an async function with no await or only dynamic-import awaits found only Promise-typed stand-ins (class B), real-instance harnesses (class C) and RecoveryStore.integration.test.ts:39, whose dynamic import is on purpose behind an existsSync guard, so no hit of the fixed kind was left behind. One wrong cite in the tests row: the class E hit is runtime/Program.test.ts:1015 at the head, not :1016. pull request 1366's 58 files (one page of get_files) include none of the four touched files. loosening.sh hits: four unrecognized changes are the new static import lines, and the removed expect in Patch.test.ts's wrong-path plant loop is the same assertion through the renamed independentApply; none is a loosening. governance.sh word matches walk back no decision; the slice follows 0565 (test-callback hits counted and reported, not bulk-fixed) and 0093 (no generator touched). Plants in a scratch worktree, never the branch: Patch.ts unsafe-segment check off, the __proto__ law went red; State.ts drops the first upgrade name from ran, both skip-an-upgrade laws went red; Program.ts step stops refusing an invalid admission, five laws went red, among them two that this slice turned to Effect.sync (settled bypass, async result schema). origin/main has moved to 9ca24b11; git merge-tree merges the branch with no conflict.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at head b97b9e16: vitest one file at a time on Patch.test.ts (14 passed), State.test.ts (11), Program.test.ts (44), BrainLife.laws.test.ts (3), TYPESAFE_API_KEY unset; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed; one pnpm typecheck passed. No .integration. law reaches the four files. No pull request opened, by owner ruling.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

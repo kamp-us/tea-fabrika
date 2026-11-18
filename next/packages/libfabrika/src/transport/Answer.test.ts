@@ -1,13 +1,28 @@
 // p23/p82: answerFrame(text, attachment, admit, route). A failed route stays retryable; a parked
 // wait is data. Plants: answer a notification; route before initialize; turn a failure into err.
 import { assert, describe, expect, it, vi } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { answerFrame } from "./Answer.ts";
 import { Answer, Attached, type Who } from "./Wire.ts";
 import * as Wire from "./Wire.ts";
+
+/** Any JSON text, as the wire carries it. */
+const Json = Schema.fromJsonString(Schema.Unknown);
+/** Reads a frame the door sent; a frame that is not JSON fails the law. */
+const readJson = Schema.decodeUnknownEffect(Json);
+
+/** The parts of a JSON-RPC reply these laws read. */
+const Reply = Schema.Struct({
+  jsonrpc: Schema.String,
+  id: Schema.Union([Schema.String, Schema.Finite]),
+  result: Schema.optionalKey(Schema.Unknown),
+  error: Schema.optionalKey(Schema.Struct({ data: Schema.Unknown })),
+});
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
@@ -119,14 +134,13 @@ describe("P10 JSON-RPC", () => {
         const reply = yield* answerFrame(frame({ id }), attached, admit, () => Effect.succeed(answer)).pipe(
           Effect.withTracer(tracer),
         );
-
-        expect(JSON.parse(reply.send!)).toEqual({
+        expect(yield* readJson(reply.send!)).toEqual({
           jsonrpc: "2.0",
           id: id === 0 ? 0 : id, // JSON encodes negative zero as zero.
           error: { code: -32000, message: "rate_limited", data: { reason: "rate_limited", retryAfter } },
         });
         expect(reply.attached).toEqual(attached);
-        const span = spans.find((s) => s.name === "transport.answerFrame")!;
+        const span = Option.getOrThrow(Arr.findFirst(spans, (s) => s.name === "transport.answerFrame"));
         expect(span.status._tag).toBe("Ended");
         expect(span.attributes.get("fab.gateway.refused")).toBe("rate_limited");
       }),
@@ -156,8 +170,7 @@ describe("P10 JSON-RPC", () => {
       const result = yield* answerFrame(frame({ id: 0 }), online(), admit, () =>
         Effect.succeed(Answer.cases.ok.make({ result: null })),
       );
-
-      expect(JSON.parse(result.send!)).toEqual({ jsonrpc: "2.0", id: 0, result: null });
+      expect(yield* readJson(result.send!)).toEqual({ jsonrpc: "2.0", id: 0, result: null });
     }),
   );
 
@@ -174,9 +187,9 @@ describe("P10 JSON-RPC", () => {
               const route = vi.fn(() => Effect.succeed(answer));
               const result = yield* answerFrame(frame(), online(), admit, route);
               expect(result.send).not.toBeNull();
-              const reply = JSON.parse(result.send!);
+              const reply = yield* Schema.decodeEffect(Schema.fromJsonString(Reply))(result.send!);
               expect(reply).toMatchObject({ jsonrpc: "2.0", id: "r1" });
-              expect(mode === "ok" ? reply.result : reply.error.data).toEqual(
+              expect(mode === "ok" ? reply.result : reply.error?.data).toEqual(
                 mode === "ok"
                   ? { rows: [1] }
                   : { reason: value.reason, ...("retryAfter" in value ? { retryAfter: value.retryAfter } : {}) },
@@ -205,7 +218,7 @@ describe("P10 JSON-RPC", () => {
         const failed = yield* answerFrame(frame(), attached, admit, route);
         expect(failed).toEqual({ send: null, attached });
         const retried = yield* answerFrame(frame(), failed.attached, admit, route);
-        expect(JSON.parse(retried.send!)).toMatchObject({ id: "r1", result: "recovered" });
+        expect(yield* readJson(retried.send!)).toMatchObject({ id: "r1", result: "recovered" });
         expect(route).toHaveBeenCalledTimes(2);
       }),
     );
@@ -231,8 +244,8 @@ describe("P10 JSON-RPC", () => {
   // is a waiting client's gateway.knock: its handler runs once with the params, and its answer is
   // the one reply. Plants: drop the request silently; let waiting reach any method; answer
   // no_hello to a waiting knock; pass a third argument to the knock handler.
-  it("d2: for any unauthenticated state, method and id, only a waiting gateway.knock is routed", async () => {
-    await fc.assert(
+  it("d2: for any unauthenticated state, method and id, only a waiting gateway.knock is routed", () =>
+    fc.assert(
       fc.asyncProperty(
         unauthenticated,
         fc.oneof(fc.constant("gateway.knock"), fc.constantFrom(...METHODS), fc.string()),
@@ -253,14 +266,14 @@ describe("P10 JSON-RPC", () => {
 
               if (attached._tag === "waiting" && method === "gateway.knock") {
                 expect(route.mock.calls).toEqual([["gateway.knock", wire(params)]]);
-                expect(JSON.parse(result.send!)).toEqual({
+                expect(yield* readJson(result.send!)).toEqual({
                   jsonrpc: "2.0",
                   id,
                   result: wire(answer),
                 });
               } else {
                 expect(route).not.toHaveBeenCalled();
-                expect(JSON.parse(result.send!)).toEqual({
+                expect(yield* readJson(result.send!)).toEqual({
                   jsonrpc: "2.0",
                   id,
                   error: { code: -32000, message: "no_hello", data: { reason: "no_hello" } },
@@ -270,12 +283,11 @@ describe("P10 JSON-RPC", () => {
           ),
       ),
       { seed: SEED, endOnFailure: true, numRuns: 300 },
-    );
-  });
+    ));
   // d2: a waiting knock whose handler parks sends nothing and the client stays waiting, as it
   // was. Only an online client keeps a parked wait. Plant: treat every parked answer as online.
-  it("d2: for any waiting state, a knock that parks sends nothing and leaves it waiting", async () => {
-    await fc.assert(
+  it("d2: for any waiting state, a knock that parks sends nothing and leaves it waiting", () =>
+    fc.assert(
       fc.asyncProperty(
         unauthenticated.filter((a) => a._tag === "waiting"),
         fc.oneof(fc.string(), fc.integer()),
@@ -293,8 +305,7 @@ describe("P10 JSON-RPC", () => {
           ),
       ),
       { seed: SEED, endOnFailure: true, numRuns: 100 },
-    );
-  });
+    ));
 
   for (const id of ["r1", 0]) {
     it.effect(`p23: parked wait retains reply id ${id} and cursor, with no unresolved work`, () =>
@@ -306,7 +317,7 @@ describe("P10 JSON-RPC", () => {
         expect(result.send).toBeNull();
         assert(result.attached._tag === "online");
         expect(result.attached.waits).toEqual([{ id, stream: "x", after: 8 }]);
-        expect(JSON.parse(JSON.stringify(result.attached))).toEqual(result.attached);
+        expect(yield* readJson(yield* Schema.encodeEffect(Json)(result.attached))).toEqual(result.attached);
       }),
     );
   }
@@ -319,7 +330,7 @@ describe("P10 JSON-RPC", () => {
 
       const attached = online();
       const result = yield* answerFrame(frame({ future: { by: "forged" } }), attached, admit, route);
-      expect(JSON.parse(result.send!)).toMatchObject({ id: "r1", result: null });
+      expect(yield* readJson(result.send!)).toMatchObject({ id: "r1", result: null });
       expect(route.mock.calls[0]?.[2]).toEqual(attached.identity);
     }),
   );

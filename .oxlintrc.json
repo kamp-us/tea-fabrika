@@ -2480,29 +2480,6 @@
       "rules": { "fabrika/no-stability-tag": "error" }
     },
     {
-      // The 16 tagged files of pull request 1366 wait for it to land: E60 deletes them and this
-      // block with them (the plan's "What waits").
-      "files": [
-        "next/packages/libfabrika/src/cloudflare/runtime.ts",
-        "next/packages/libfabrika/src/gateway/Gateway.ts",
-        "next/packages/libfabrika/src/ledger/LedgerTransactionSql.ts",
-        "next/packages/libfabrika/src/ledger/Log.ts",
-        "next/packages/libfabrika/src/ledger/Referee.ts",
-        "next/packages/libfabrika/src/ledger/RefereeSql.ts",
-        "next/packages/libfabrika/src/processes/ProcessManager.ts",
-        "next/packages/libfabrika/src/processes/ProgramMail.ts",
-        "next/packages/libfabrika/src/processes/ProgramMailLedger.ts",
-        "next/packages/libfabrika/src/runtime/ProcessStore.ts",
-        "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
-        "next/packages/libfabrika/src/runtime/RepliesSql.ts",
-        "next/packages/libfabrika/src/runtime/Runner.ts",
-        "next/packages/libfabrika/src/settings/Declarations.ts",
-        "next/packages/libfabrika/src/settings/JsonSchema.ts",
-        "next/packages/libfabrika/src/telemetry/Sink.ts"
-      ],
-      "rules": { "fabrika/no-stability-tag": "off" }
-    },
-    {
       // E2 of the Effect-check sweep (0577): a library imports each Effect module by its path, and
       // `pnpm format` writes the form (`oxlint-plugins/prefer-namespace-import.ts`). On for the
       // folders libfabrika's and tuval's tsconfig hold at error for the same check; each later
@@ -2791,6 +2768,7 @@
     {
       // 0563: no function returns `unknown`.
       "files": [
+        ".agents/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/client/**",

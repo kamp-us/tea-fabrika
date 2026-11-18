@@ -1,7 +1,19 @@
 // L17's scan of an instance's home (P14 slice 2, ticket 828), in a file of its own so its law in
 // `stored.test.ts` can run it on a folder that a writer changes under it.
 import { Row as LedgerRow } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, type PlatformError, Predicate, Schema } from "effect";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Record as Rec,
+  Effect,
+  FileSystem,
+  Formatter,
+  Path,
+  Predicate,
+  Schema,
+} from "effect";
+import type { PlatformError } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
@@ -67,18 +79,18 @@ const scan = (
         const bytes = yield* fs.readFile(file).pipe(Effect.catchIf(gone, () => Effect.void));
 
         if (bytes !== undefined) {
-          const label = `home${pass === "running" ? " (running)" : ""} ${file.slice(dir.length)}`;
+          const label = `home${pass === "running" ? " (running)" : ""} ${pipe(file, Str.slice(dir.length))}`;
           read.push({ file, label, bytes: Buffer.from(bytes).toString("latin1") });
         }
       }
 
-      const raw = read.map(({ label, bytes }): readonly [string, string] => [label, bytes]);
-      const files = read.map(({ file }) => file.slice(dir.length));
+      const raw = Arr.map(read, ({ label, bytes }): readonly [string, string] => [label, bytes]);
+      const files = Arr.map(read, ({ file }) => pipe(file, Str.slice(dir.length)));
       const outputs: Array<readonly [string, string]> = [];
       const retained = new Map<string, Map<string, string>>();
 
       for (const { file, label, bytes } of read) {
-        if (!bytes.startsWith("SQLite format 3\0")) {
+        if (!pipe(bytes, Str.startsWith("SQLite format 3\0"))) {
           continue;
         }
 
@@ -92,13 +104,16 @@ const scan = (
         );
 
         for (const { name } of tables) {
-          const table = `"${name.replaceAll('"', '""')}"`;
-
-          const keys = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
-            db.prepare(`PRAGMA table_info(${table})`).all(),
-          )
-            .filter((column) => column.pk > 0)
-            .map((column) => column.name);
+          const table = `"${pipe(name, Str.replaceAll('"', '""'))}"`;
+          const keys = Arr.map(
+            Arr.filter(
+              Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
+                db.prepare(`PRAGMA table_info(${table})`).all(),
+              ),
+              (column) => column.pk > 0,
+            ),
+            (column) => column.name,
+          );
 
           const select = db.prepare(`SELECT * FROM ${table}`);
           // The runtime's own tables hold 64-bit integers, such as an alarm's time in nanoseconds.
@@ -106,16 +121,21 @@ const scan = (
 
           for (const [at, read] of select.all().entries()) {
             // An integer a JavaScript number holds exactly is read as one, as before; a larger one stays whole.
-            const row = Object.fromEntries(
-              Object.entries(read).map(([column, value]) => [
+            const row = Rec.fromEntries(
+              Arr.map(Rec.toEntries(read), ([column, value]) => [
                 column,
                 Predicate.isBigInt(value) && value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
                   ? Number(value)
                   : value,
               ]),
             );
-
-            const key = keys.length === 0 ? `row ${at}` : `key ${keys.map((column) => String(row[column])).join(" ")}`;
+            const key =
+              keys.length === 0
+                ? `row ${at}`
+                : `key ${Arr.join(
+                    Arr.map(keys, (column) => String(row[column])),
+                    " ",
+                  )}`;
             let cells = row;
 
             if (
@@ -124,7 +144,7 @@ const scan = (
               ["granted", "revoked"].includes(String(row._tag))
             ) {
               const entry = Schema.decodeUnknownSync(LedgerRow)(row);
-              const body = JSON.stringify(entry.body);
+              const body = Formatter.formatJson(entry.body);
               const replacement = Schema.decodeUnknownSync(Schema.String)(accessBodies.get(body));
               allowed.set(body, replacement);
               cells = { ...row, body: replacement };
@@ -146,13 +166,13 @@ const scan = (
               )(value);
 
               if (Predicate.isString(armored) && proofs.includes(armored)) {
-                const replacement = JSON.stringify(rest);
+                const replacement = Formatter.formatJson(rest);
                 allowed.set(value, replacement);
                 cells = { ...row, value: replacement };
               }
             }
 
-            for (const [column, value] of Object.entries(cells)) {
+            for (const [column, value] of Rec.toEntries(cells)) {
               outputs.push([
                 `${label} table ${name} ${key} column ${column}`,
                 value instanceof Uint8Array ? Buffer.from(value).toString("latin1") : String(value),
@@ -166,11 +186,11 @@ const scan = (
         // SQLite's journal repeats the same cells. No other file gets this exception. The raw bytes are
         // still scanned: only the exact text of an omitted cell is swapped for its checked form, so a
         // signature anywhere else in the file, under another key or in another table, is still found.
-        const database = file.replace(/-(?:wal|shm|journal)$/, "");
+        const database = pipe(file, Str.replace(/-(?:wal|shm|journal)$/, ""));
         let checked = bytes;
 
         for (const [body, replacement] of retained.get(database) ?? []) {
-          checked = checked.replaceAll(body, replacement);
+          checked = pipe(checked, Str.replaceAll(body, replacement));
         }
 
         outputs.push([label, checked]);

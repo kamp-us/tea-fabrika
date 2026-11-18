@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Predicate } from "effect";
+import { Array as Arr, Predicate, Record as Rec, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -88,7 +88,7 @@ const counts = (w: Workflow) => ({ main: Number(w.env!["MAIN_SLOTS"]), proof: Nu
 
 /** Each leg's pin: the first `count` legs take groups 1 to `count` in order, the others `tail`'s group. */
 const pinned = (shards: readonly string[], count: number, tail: readonly number[]) =>
-  Object.fromEntries(shards.map((shard, i) => [shard, i < count ? String(i + 1) : String((tail[i]! % count) + 1)]));
+  Rec.fromEntries(Arr.map(shards, (shard, i) => [shard, i < count ? String(i + 1) : String((tail[i]! % count) + 1)]));
 
 /** The `tests` group as the real file writes it, from a main map and a proof map. */
 const groupOf = (main: unknown, proof: unknown, gap = " ", upper = false) =>
@@ -103,7 +103,7 @@ const pinsIn = (w: Workflow): [Record<string, unknown>, Record<string, unknown>]
 
 /** The `changed` group's closed identity lookup over the proof groups. */
 const rotationSlots = (count: number): Record<string, string> =>
-  Object.fromEntries(upTo(count).map((slot) => [slot, slot]));
+  Rec.fromEntries(Arr.map(upTo(count), (slot) => [slot, slot]));
 
 const rotationGroup = (slots: unknown, gap = " ", upper = false) =>
   `${upper ? "SCHEDULED-PROOF-" : "scheduled-proof-"}\${{${gap}fromJSON('${JSON.stringify(slots)}')[fromJSON(needs.select.outputs.slots)[matrix.shard]]${gap}||${gap}'1'${gap}}}`;
@@ -141,13 +141,13 @@ const scheduled = fc
 
     const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
 
-    const asValue = (pins: Record<string, string>) =>
-      numeric ? Object.fromEntries(Object.entries(pins).map(([leg, group]) => [leg, Number(group)])) : pins;
+    const asValue = (pins: Record<string, string>): Record<string, string | number> =>
+      numeric ? Rec.fromEntries(Arr.map(Rec.toEntries(pins), ([leg, group]) => [leg, Number(group)])) : pins;
 
     const pins = (count: number, tail: readonly number[]) => {
       const all = asValue(pinned(shards, count, tail));
 
-      return upper ? Object.fromEntries(Object.entries(all).toReversed()) : all;
+      return upper ? Rec.fromEntries(Arr.reverse(Rec.toEntries(all))) : all;
     };
 
     w.jobs["tests"]!.concurrency!["group"] = spaced(
@@ -157,13 +157,13 @@ const scheduled = fc
 
     w.jobs["changed"]!.concurrency!["group"] = rotationGroup(rotationSlots(proof), gap, upper);
 
-    for (const job of Object.values(w.jobs)) {
+    for (const job of Rec.values(w.jobs)) {
       if (upper && typeof job.concurrency?.["group"] === "string") {
-        job.concurrency["group"] = job.concurrency["group"].replace(/^scheduled-/, "SCHEDULED-");
+        job.concurrency["group"] = Str.replace(/^scheduled-/, "SCHEDULED-")(job.concurrency["group"]);
       }
     }
 
-    for (const job of Object.values(w.jobs)) {
+    for (const job of Rec.values(w.jobs)) {
       if ("if" in job) {
         job["if"] = spaced(job["if"], gap);
       }
@@ -1417,7 +1417,7 @@ it("SC1 and SC16 property: a cron at any minute from 1 to 59 every hour, and any
     options,
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });

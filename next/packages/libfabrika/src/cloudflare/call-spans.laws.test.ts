@@ -4,17 +4,22 @@
 // Loader transport and the Record stub are doubled. The laws count the sink's transactions that landed spans
 // on the object a call entered, the span rows the object still holds after the call (`unsent`), and the span
 // rows the Record stub received: they never read the sink's state, only what it commits and ships.
-import { createHash, generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor, Stub } from "@kampus/vitest";
-import { Deferred, Effect, Option, Predicate, Schema } from "effect";
+import * as Digest from "effect/crypto/Digest";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
 import { InputId } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
+import * as SshsigTest from "../transport/Sshsig.test-support.ts";
 import { programBox } from "./box.ts";
 import {
   configureProcess,
@@ -31,7 +36,17 @@ vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 const NAME = "counter:1";
 const PROGRAM = "test/counter";
-const CODE = { hash: createHash("sha256").update("call-spans").digest("hex"), source: "call-spans" };
+
+const CODE = {
+  // The code's SHA-256 in hex, through Effect's Digest on the platform's WebCrypto.
+  hash: await Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode("call-spans"))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  ),
+  source: "call-spans",
+};
+
 const PERSON = "test-person";
 const SENT = "2026-11-18T00:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -58,16 +73,19 @@ const counter = {
   wake: () => null,
 } as const;
 
-const START = StartsTest.fixture(
-  {
-    name: "project-test",
-    person: PERSON,
-    founder: generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x ?? "",
-    window: null,
-    port: 18787,
-    build: CODE.hash,
-  },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+const START = await Effect.runPromise(
+  Effect.gen(function* () {
+    const founder = yield* SshsigTest.identity;
+
+    return yield* StartsTest.fixture({
+      name: "project-test",
+      person: PERSON,
+      founder: founder.raw,
+      window: null,
+      port: 18787,
+      build: CODE.hash,
+    });
+  }),
 );
 
 /** An object's platform handles over in-memory SQLite. `landings` is the number of spans each sink

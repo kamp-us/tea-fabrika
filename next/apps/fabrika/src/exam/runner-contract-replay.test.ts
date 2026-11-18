@@ -12,9 +12,10 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
+import { String as Str, pipe, Array as Arr, Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence";
+
 import {
   Body,
   build,
@@ -47,15 +48,20 @@ const failedAs = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 
 type World = Effect.Success<ReturnType<typeof world>>;
 
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
 // The real Gateway in front of a world's runner, for the delivery law below. Moved out of the
 // world unchanged; it reads the world's SQL and ledger.
 const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRunner.Service) {
   const { sql, ledger } = w;
   // Ephemeral signing material only. This helper reads no key file.
-  const web = <A>(f: () => Promise<A>) => Effect.tryPromise({ try: f, catch: () => new Error("test crypto failed") });
+  const web = <A>(f: () => Promise<A>) =>
+    Effect.tryPromise({ try: f, catch: () => WebCryptoError.make({ message: "test crypto failed" }) });
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const raw = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
-  const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
+  const fingerprint = `SHA256:${pipe(Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))), Str.replace(/=+$/, ""))}`;
   const blob = new Uint8Array(51);
   new DataView(blob.buffer).setUint32(0, 11);
   blob.set(new TextEncoder().encode("ssh-ed25519"), 4);
@@ -170,7 +176,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
   return {
     connect,
     deliveries: () => deliveries,
-    bindings: () => sql.exec("SELECT value FROM gateway_bindings").map((r) => JSON.parse(String(r.value))),
+    bindings: () => Arr.map(sql.exec("SELECT value FROM gateway_bindings"), (r) => JSON.parse(String(r.value))),
   };
 });
 
@@ -376,7 +382,7 @@ it.effect.prop(
       unchanged(before, yield* w.rows());
       expect(w.dead()).toEqual([]);
       expect(w.down()).toEqual([]);
-      expect(w.receipts().every((r) => r.tries === 0)).toBe(true);
+      expect(Arr.every(w.receipts(), (r) => r.tries === 0)).toBe(true);
     }),
   opts,
 );

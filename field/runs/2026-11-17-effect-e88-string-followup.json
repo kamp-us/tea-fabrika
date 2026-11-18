@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-effect-e88-string-followup",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-17T02:11:00-08:00",
+  "parent": "2026-11-17-effect-e88-main-integration",
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Complete four narrow String conversions identified in the earlier E88 source check. Preserve the existing Digest flow and independent fingerprint checks.",
+  "note": "Two app fingerprint helpers now use Str.replace. The moved SSHSIG property uses Str.slice and Str.replace. The existing String imports are reused; no assertion, encoder, case count or resource behavior changes. Scoped format and lint passed on the3 files. Only the affected safe SSHSIG suite was rerun:28 passed, no failures or skips. The2 app integration files were not run locally. Earlier495-test results remain attached to their checked main-merge source, not relabeled as a new whole run. Exact model, usage and billing are unavailable.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "checkedHead": "ce62584a76de034bb5d4660380e9151c697aa0cc",
+  "mergeReady": false,
+  "scratchPreserved": true,
+  "guardedLawsRun": false,
+  "changes": [
+    {
+      "path": "next/apps/fabrika/src/door.integration.test.ts",
+      "sites": 1,
+      "sha256": "da737d0af0a6300a58f5557761ac32c850fdd64cdbdc70baa3b8f17c4ff536f2"
+    },
+    {
+      "path": "next/apps/fabrika/src/hands-launcher.integration.test.ts",
+      "sites": 1,
+      "sha256": "a6b4cf90dd432e0c239b6f3c35f1fa852521e583c371c98e05b483a85bacf00f"
+    },
+    {
+      "path": "next/packages/libfabrika/src/transport/Sshsig.test.ts",
+      "sites": 2,
+      "sha256": "f796cfd2bfa18c805bca2c338961820d133253d3aacb58ae65d56c89d152e025"
+    }
+  ],
+  "checks": {
+    "formatExit": 0,
+    "scopedLintExit": 0,
+    "safeFile": "next/packages/libfabrika/src/transport/Sshsig.test.ts",
+    "passed": 28,
+    "failed": 0,
+    "skipped": 0,
+    "compilerRun": false,
+    "fullTypedApiRun": false,
+    "ciDispatch": false
+  },
+  "pending": [
+    "Exact-head joined compiler and full typed API",
+    "All39 remote whole files, including the2 changed app integration files",
+    "R5 and R6 baseline, intended-failure and restoration",
+    "Fresh formal whole-diff review",
+    "Lead publication and landing"
+  ]
+}

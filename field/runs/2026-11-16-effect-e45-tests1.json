@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e45-tests1",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-15T22:25:16-08:00",
+  "ended": "2026-11-15T22:50:26-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Effect sweep, judgment slice E45 (strictBooleanExpressions), tests step, branch fabrikalfa/effect-e45, in next/ and tooling; no pull request (one per sweep). Count: effect-tsgo diagnostics over the 13 plan tsconfigs with only this check at error through --lspconfig, joined by file and offset, gave 312 hits (.agents 44, .github/ci 24, next/apps/fabrika 71, libfabrika 104, tuval 4, checklist 2, pipeline 8, oxlint-plugins 55). A tsc run per project from a scratch tsconfig that extends the project's own and sets only this check at error found 12 more that diagnostics missed, in files reached by import: .agents/skills/lead/scripts/pr/BranchesTest.ts:23, .agents/skills/lead/scripts/quest.ts:65 (2) and :81, vitest.config.ts:110, :122 and :186 (2), vitest.shards.ts:114 (2) and :115 (2). Met 324. Fixed by hand 285, with explicit comparisons that keep what each truthiness test meant (!== undefined, !== null, !== \"\", .length > 0, % n !== 0, === true for an optional boolean or a boolean | undefined chain, !== false for postcss-value-parser's Dimension | false); no quick fix, no codemod, no disable comment, no lock line. Split: exam paths and test files, and tooling (.agents, .github, oxlint-plugins, and the root vitest.config.ts and vitest.shards.ts that .github/ci reaches) are this step's; every other file is product, left for build. Left 33: 26 in product files (libfabrika client/WindowMachine.ts 1, client/WindowStart.ts 2, node/build/build.ts 2, node/dev/local-dev.ts 1, settings/TomlParser.ts 3, settings/internal/edit.ts 9, tezgah/Fold.ts 3; tuval src/window/main.tsx 4; programs/checklist src/window.tsx 1) and 7 in oxlint-plugins/effect-jsdocs.ts (lines 238, 573, 654, 786 x4), excluded by path (rulings 0026). Waiting on 1366, 6: next/packages/libfabrika/src/runtime/Runner.integration.test.ts:450, :467, :1788, :1789, and next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts:539 (2). The four .github/ci files that run before install are .github/ci/changes.mjs, .github/ci/gate.mjs, .github/ci/required.mjs and .github/ci/scheduled.mjs; hits in changes.mjs (4), gate.mjs (6) and scheduled.mjs (3) were fixed in plain JS with no import added, and required.mjs had none. Recount after: diagnostics 39 (26 product, 7 effect-jsdocs, 6 in 1366 files), and the per-project tsc runs show the same 39 and no other error.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 25,
+  "note": "No law was added or changed in meaning, so no plant ran: each fix keeps the condition's old answer, and the laws in the touched files are unchanged and green. Tests run at base 623e161f7 plus this diff, under nice -n 15 vitest --maxWorkers=3: 20 tooling files (451 passed, 1 skipped), 21 touched next/ plain test files (211 passed, 1 skipped), 15 plain files that read the touched suites and test-support files (104 passed), and 6 oxlint-plugins files that reach lint.ts (267 passed). Not run: 0178 guard (this base has no PR 1508): every .integration. and .visual. file touched or reached, such as next/apps/fabrika/src/door.integration.test.ts (refused when tried), next/apps/fabrika/src/instance-wire.integration.test.ts, next/apps/fabrika/src/instance-one-file.integration.test.ts, next/apps/fabrika/src/instance-records.integration.test.ts, next/packages/libfabrika/src/node/build/build-assets.integration.test.ts and next/apps/fabrika/e2e/electron-launchd.visual.test.ts. --changed origin/main was not run: vitest.config.ts changed, which makes it the full suite, and it reaches integration files. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the list ratchet passed.",
+  "step": "tests"
+}

@@ -23,19 +23,39 @@
 //
 // Plants, each run once and undone (recorded in the tests step's field row): E2, open a fresh key
 // file on every start. S2, print the stored JWK in the `online` line.
-import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Node crypto makes the test person's key; it never touches a file or an account
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import type { DevProject } from "@kampus/libfabrika/node/dev";
 import { Task } from "@kampus/libfabrika/tasks/Task";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Option, Path, Predicate, Queue, Schema, Stream } from "effect";
-import { SecureRandom } from "effect/crypto";
+import {
+  Effect,
+  FileSystem,
+  Option,
+  Path,
+  Predicate,
+  Queue,
+  Schema,
+  Stream,
+  Array as Arr,
+  String as Str,
+  Config,
+  ConfigProvider,
+  Formatter,
+  Record as Rec,
+} from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
+import { Base64, Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
+
+import { FetchHttpClient, HttpBody, HttpClient } from "effect/http";
+
 import * as fc from "fast-check";
+import { keptEnv } from "./env.test-support.ts";
 import type { Project as LauncherProject } from "./hands-launcher.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -70,58 +90,17 @@ const Stored = Schema.fromJsonString(
   Schema.Struct({ jwk: Schema.Struct({ kty: Schema.String, crv: Schema.String, d: Schema.String, x: Schema.String }) }),
 );
 
-const field = (v: string | Uint8Array) => {
-  const b = Buffer.from(v);
-  const n = Buffer.alloc(4);
-  n.writeUInt32BE(b.length);
+/** `SHA256:` and the unpadded base64 SHA-256 of a JWK's `x`, worked out here, not by the launcher. */
+const keyFingerprint = Effect.fnUntraced(
+  function* (x: string) {
+    const bytes = yield* Effect.fromResult(Base64Url.decode(x));
+    const hashed = yield* Digest.Digest.use((digest) => digest.digest(Digest.sha256, bytes));
 
-  return Buffer.concat([n, b]);
-};
-
-/** The test person's key: a generated Ed25519 pair, as `tasks-wire.integration.test.ts` makes it. */
-const person = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    sign: (value: string) => {
-      const body = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(value).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, body, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packed
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-const keyFingerprint = (x: string) =>
-  `SHA256:${createHash("sha256").update(Buffer.from(x, "base64url")).digest("base64").replace(/=+$/, "")}`;
+    return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(hashed))}`;
+  },
+  Effect.provide(Digest.layerWebCrypto),
+  Effect.orDie,
+);
 
 /** A call on the brain's own local handle, by its method name on the fixture's Project. */
 const method = (project: DevProject, name: Exclude<keyof LauncherProject, keyof DevProject>) => {
@@ -130,8 +109,13 @@ const method = (project: DevProject, name: Exclude<keyof LauncherProject, keyof 
   return picked;
 };
 
+class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
 const call = <A>(label: string, invoke: () => Promise<A>) =>
-  Effect.tryPromise({ try: invoke, catch: (cause: unknown) => new Error(label, { cause }) });
+  Effect.tryPromise({ try: invoke, catch: (cause: unknown) => CallError.make({ message: label, cause }) });
 
 /** What one launch of the flow saw: every line, the key's two halves, the task, and every stored row. */
 type Seen = {
@@ -154,11 +138,15 @@ const launcher = Effect.fnUntraced(function* (
   errors: Seen["stderr"],
 ) {
   const lines = yield* Queue.unbounded<Line>();
+  // This process's PATH through Config, read when the child starts; an empty one stays empty.
+  const path = yield* Config.String("PATH")
+    .pipe(Config.withDefault(""))
+    .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
 
   const handle = yield* ChildProcess.make(process.execPath, [script], {
     cwd,
     extendEnv: false,
-    env: { FABRIKA_HOME: home, HOME: home, PATH: process.env.PATH ?? "" },
+    env: { FABRIKA_HOME: home, HOME: home, PATH: path },
   });
 
   yield* handle.stdout.pipe(
@@ -207,17 +195,20 @@ const flow = Effect.fnUntraced(
     const hands = path.join(home, "hands-home");
     yield* fs.makeDirectory(hands);
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-    const root = person();
+    const root = yield* SshsigTest.identity;
     const app = path.resolve(import.meta.dirname, "..");
     const entry = path.join(home, "hands-entry.ts");
     yield* fs.symlink(path.join(app, "node_modules"), path.join(home, "node_modules"));
     yield* fs.writeFileString(
       entry,
-      [
-        `export { default, Connection, Process, RecordPart, IsolateTail } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
-        // The fixture's Control lets the three test calls past the control door's closed list.
-        `export { Project, Control } from ${JSON.stringify(path.join(app, "src/hands-launcher.test-support.ts"))};`,
-      ].join("\n"),
+      Arr.join(
+        [
+          `export { default, Connection, Process, RecordPart, IsolateTail } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
+          // The fixture's Control lets the three test calls past the control door's closed list.
+          `export { Project, Control } from ${Formatter.formatJson(path.join(app, "src/hands-launcher.test-support.ts"))};`,
+        ],
+        "\n",
+      ),
     );
 
     const built = yield* build({
@@ -229,20 +220,12 @@ const flow = Effect.fnUntraced(
       files: [],
     });
 
-    const oldHome = process.env.ALCHEMY_HOME;
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        if (oldHome === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = oldHome;
-        }
-      }),
-    );
+    // localInstance sets ALCHEMY_HOME; it goes back as it was when the scope closes.
+    yield* keptEnv(["ALCHEMY_HOME"]);
 
     const running = yield* localInstance(
       built,
-      RecordWireTest.startupFixture({
+      yield* RecordWireTest.startupFixture({
         home,
         name: NAME,
         person: PERSON,
@@ -287,8 +270,10 @@ const flow = Effect.fnUntraced(
         const one = yield* launcher(script, app, hands, lines, stderr);
         const waiting = yield* one.next("waiting");
         expect(waiting._tag).toBe("waiting");
-        const stored = Schema.decodeSync(Stored)(yield* fs.readFileString(path.join(hands, "hands", "key.json")));
-        expect(keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
+        const stored = yield* Schema.decodeEffect(Stored)(
+          yield* fs.readFileString(path.join(hands, "hands", "key.json")),
+        );
+        expect(yield* keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
           waiting.fingerprint,
         );
 
@@ -309,26 +294,21 @@ const flow = Effect.fnUntraced(
           },
         });
 
-        const reply = yield* call("grant failed", () =>
-          fetch(`${url}/grant`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: value, armored: root.sign(value) }),
-          }),
-        );
+        const armored = yield* root.proof(value);
 
-        expect(reply.ok, "E2: the person key's grant is accepted").toBe(true);
+        const reply = yield* HttpClient.post(`${url}/grant`, { body: HttpBody.jsonUnsafe({ text: value, armored }) });
+
+        expect(reply.status >= 200 && reply.status < 300, "E2: the person key's grant is accepted").toBe(true);
         const online = yield* one.next("online");
         expect(online.fingerprint, "E2: online is the same key").toBe(waiting.fingerprint);
         yield* call("task request failed", () => method(project, "requestHandsTask")(waiting.fingerprint));
-
-        let task = Schema.decodeUnknownSync(Task)(
+        let task = yield* Schema.decodeUnknownEffect(Task)(
           yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
 
         for (let i = 0; i < 120 && task.state._tag !== "finished"; i++) {
           yield* Effect.sleep("500 millis");
-          task = Schema.decodeUnknownSync(Task)(
+          task = yield* Schema.decodeUnknownEffect(Task)(
             yield* call("task read failed", () => method(project, "readHandsTask")()),
           );
         }
@@ -348,8 +328,7 @@ const flow = Effect.fnUntraced(
         const online = yield* two.next("online");
         // Time for a client that would take or run the task again to do so.
         yield* Effect.sleep("5 seconds");
-
-        const task = Schema.decodeUnknownSync(Task)(
+        const task = yield* Schema.decodeUnknownEffect(Task)(
           yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
 
@@ -367,11 +346,12 @@ const flow = Effect.fnUntraced(
         const db = yield* TestDatabase.open(path.join(hands, "hands", "journal.sqlite"), { readOnly: true }).pipe(
           Effect.orDie,
         );
-        const tables = db
-          .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-          .all()
-          .map((row) => String(row["name"]));
-        return Object.fromEntries(tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]));
+        const tables = Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) =>
+          String(row["name"]),
+        );
+        return Rec.fromEntries(
+          Arr.map(tables, (t) => [t, db.prepare(`SELECT * FROM "${Str.replace(/"/g, '""')(t)}"`).all()]),
+        );
       }),
     );
     const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
@@ -388,7 +368,7 @@ const flow = Effect.fnUntraced(
     } satisfies Seen;
   },
   Effect.scoped,
-  Effect.provide(SecureRandom.layerWebCrypto),
+  Effect.provide([SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
   Effect.provide(NodeServices.layer),
 );
 
@@ -398,18 +378,21 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
     () =>
       Effect.gen(function* () {
         const seen = yield* flow();
-        expect(seen.task.state._tag, `E2: the task ends finished: ${JSON.stringify(seen.task.state)}`).toBe("finished");
+        expect(seen.task.state._tag, `E2: the task ends finished: ${Formatter.format(seen.task.state)}`).toBe(
+          "finished",
+        );
         const result = seen.task.state._tag === "finished" ? seen.task.state.result : null;
         expect(result?._tag, "E2: real git exits").toBe("exited");
         expect(result?._tag === "exited" ? result.code : null, "E2: with code 0").toBe(0);
-        expect(result?._tag === "exited" && result.version.startsWith("git version "), "E2: its version line").toBe(
-          true,
-        );
+        expect(
+          result?._tag === "exited" && Str.startsWith("git version ")(result.version),
+          "E2: its version line",
+        ).toBe(true);
         const [first, second] = seen.fingerprints;
         expect(second, "E2: a new start keeps the same key").toBe(first);
         expect(seen.taskAfterRestart, "E2: the restart runs nothing again").toEqual(seen.task);
         expect(
-          seen.task.events.map((e) => e.event),
+          Arr.map(seen.task.events, (e) => e.event),
           "E2: the task was taken, started and finished once",
         ).toEqual(["requested", "taken", "started", "finished"]);
         expect(seen.task.state._tag === "finished" && seen.task.state.request.id).toBe(TASK);
@@ -450,11 +433,15 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
 
                   expect(seen.lines.length, `S2 (${launch}): the scan read real lines`).toBeGreaterThan(0);
 
-                  for (const [name, value] of Object.entries(outputs)) {
-                    const text = JSON.stringify(value, (_k, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v));
+                  for (const [name, value] of Rec.toEntries(outputs)) {
+                    const text = yield* Schema.encodeEffect(
+                      Schema.fromJsonString(Schema.Unknown, {
+                        replacer: (_k, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
+                      }),
+                    )(value);
 
                     for (const form of forms) {
-                      expect(text.includes(form), `S2: [secrets] the private half is not in ${name}`).toBe(false);
+                      expect(Str.includes(form)(text), `S2: [secrets] the private half is not in ${name}`).toBe(false);
                     }
                   }
                 }),
@@ -462,7 +449,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
             ),
             { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), includeErrorInReport: true },
           ),
-        catch: (cause) => new Error("S2 failed", { cause }),
+        catch: (cause) => CallError.make({ message: "S2 failed", cause }),
       }),
     1_800_000,
   );

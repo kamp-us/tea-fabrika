@@ -4,7 +4,19 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import * as CodeHost from "@kampus/libfabrika/codehost/CodeHost";
 import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
-import { Cause, Context, Effect, Exit, Layer, Redacted, Schema, Match } from "effect";
+import {
+  Record as Rec,
+  String as Str,
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Match,
+  Redacted,
+  Schema,
+} from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
 
@@ -21,7 +33,7 @@ describe("L12: handlers map faults", () => {
         }),
         (cell) => {
           expect.hasAssertions();
-          const head = Schema.decodeSync(CodeHost.Commit)("a".repeat(40));
+          const head = Schema.decodeSync(CodeHost.Commit)(Str.repeat(40)("a"));
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
 
@@ -72,7 +84,7 @@ describe("L12: handlers map faults", () => {
 
             if (Exit.isSuccess(exit)) {
               expect(exit.value).toEqual({ _tag: "Err", error: { _tag: reason } });
-              expect(exit.value._tag === "Err" && Object.keys(exit.value.error as object)).toEqual(["_tag"]);
+              expect(exit.value._tag === "Err" && Rec.keys(exit.value.error as object)).toEqual(["_tag"]);
             }
           } else {
             expect(Exit.isFailure(exit)).toBe(true);
@@ -88,7 +100,7 @@ describe("L12: handlers map faults", () => {
 
                 if (reason._tag === "Fail") {
                   expect(reason.error).toMatchObject({ _tag: "HandlerDefect", cmd: cell.method });
-                  expect(Object.hasOwn(Object(reason.error), "cause")).toBe(false);
+                  expect(Rec.has(Object(reason.error), "cause")).toBe(false);
                 }
               }
             }
@@ -116,11 +128,14 @@ it.effect.prop(
 
       yield* Context.get(services, CodeHostTest.Control).fail("update", { kind: "fault", reason });
 
-      const outcome = yield* handlers.update!({ type: "update", attempt: 1, change: 1, head: "a".repeat(40) }).pipe(
-        Effect.provide(services),
-      );
+      const outcome = yield* handlers.update!({
+        type: "update",
+        attempt: 1,
+        change: 1,
+        head: Str.repeat(40)("a"),
+      }).pipe(Effect.provide(services));
 
-      RepliesTest.unleaked([JSON.stringify(outcome)], [token]);
+      RepliesTest.unleaked([Formatter.formatJson(outcome)], [token]);
       expect(outcome).toEqual({ _tag: "Err", error: { _tag: reason } });
     }),
   { arbitrary: { seed: 119120, runs: 40 } },

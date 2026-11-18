@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e36-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-15T22:54:41-08:00",
+  "parent": "2026-11-15-effect-e36-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Review of record of slice E36 of the Effect-checker sweep (preferEffectRecord, ticket 1075) at cee38c56: changes 3, findings 1. Every swap is behavior-preserving (in effect 4.1.3, Record.keys is Object.keys, has is Object.hasOwn, fromEntries is Object.fromEntries, toEntries and values walk Object.keys, and Predicate.isObject is non-null, typeof object and not an array), and the NodeSqlite.ts and quest.ts Result.try rewrites keep the rollback and the rethrow. Three classes go back. (1) Build: 11 library files in next/packages add Record to the effect barrel, which breaks 0577 (libraries import by namespace) and adds one preferNamespaceImport hit each, proven with effect-tsgo on WindowMachine.ts:12 and tuval main.tsx:29. The tests step's 32 library test files and the build's NodeSqlite.ts use effect/Record correctly. (2) Tests: 72 tooling files (6 in .agents, 30 in .github/ci, 36 in oxlint-plugins, 16 of them scripts such as oxlint-plugins/advice.ts and parallel.ts) import Record or Struct from the barrel, against the merge session's ruling that tooling imports by subpath. The build's .agents files follow that ruling. (3) Tests: 42 exam hits in 11 files were left because an effect import turns on no-raw-try-catch. The later ruling says to use Result.try or Effect.try, as the build did, so these leftovers no longer hold. The other 20 leftovers hold: 9 in the three .mjs files, plus 11 where the types do not fit, though apt.test.ts:87 takes the explicit type arguments Rebac.ts uses. Counts recounted with only preferEffectRecord at error over the 13 tsconfigs: 0 product hits and 62 exam hits in the slice's folders, as both rows say. The build row's 63 product hits in E83's folders does not match the recount of 84 (61 outside PR 1366's files). No disable or @effect-diagnostics line was added, no lock was added, no PR 1366 file was touched. landing.test.ts and walk.test.ts are not exam paths, so the build was allowed to change them.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only on the branch apart from this row. started is null because the clock was not read at the start. Ran at cee38c56: loosening.sh on merge-base..HEAD (195 lines; every removed expect is the same assertion rewritten, so no law is loosened), 12 plain test files one at a time (all green), 21 integration files (19 the diff changes, plus Ledger.integration and commits-git-chain.integration with ssh-keygen present, all green), pnpm typecheck green, leakgrep clean. A merge of origin/main (20 commits ahead) conflicts in 7 files, among them .github/ci/workflow-lint/scheduled.test.ts and next/apps/fabrika/src/exam/edge-comment.integration.test.ts.",
+  "step": "review"
+}

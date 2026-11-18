@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e48-tests3",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:24:17-08:00",
+  "ended": "2026-11-15T23:31:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Third tests step for judgment slice E48 (globalDate and globalDateInEffect), in today's CI tooling. Merged origin/main into the branch first; it brought .github/ci/proof.ts from pull request 1496, with one new globalDate hit at line 239. Before: 2 hits in .github/ci (gate.mjs:238, proof.ts:239), counted with only the two checks at error through --lspconfig on .github/ci/tsconfig.json. Both fixed by hand edits. gate.mjs:238: the gate runs on the runner's own Node with no install, so it cannot import effect; read now keeps GitHub's own started_at text of the earliest job start (the one whose parsed time equals last.at) and main prints that text, so no Date is built. The text is kept beside last, as a started field on read's answer (typedef Read = Seen & { started }), not inside last: the G1 property in .github/ci/gate.test.ts compares seen.last with toEqual against { id, sha, at }, so a field inside last would change that law. decide still takes a plain Seen. The summary line now shows GitHub's form (14:00:00Z, not 14:00:00.000Z); no test, workflow or script reads that text (searched the repo). A last run with no parsable job start used to throw a RangeError out of main; it now prints that GitHub gave no time. proof.ts:239: proof.ts runs after an install and already imports packages, so its record time is DateTime.formatIso(DateTime.nowUnsafe()), the same ISO text as before. After: 0 hits. No product-file hit is left, so the build has nothing to do. No lock line, no disable comment, no law changed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "No new or changed law. Tests ran at the merge of origin/main plus this change: .github/ci/gate.test.ts 7 of 7 passed, .github/ci/proof.test.ts 8 of 8 passed. A scratch run of main on a made-up GitHub answer (a gate job at 14:00:00Z and a test leg at 14:05:00Z) printed started 2026-11-15T14:00:00Z, the earliest. Plant, run once and undone: gate.mjs picks the text of a start other than the earliest; gate.test.ts stayed green, so no law reads the time text in the log line; that text is a human log line, and a format law for it was not in this step's brief. pnpm format clean, pnpm lint green (NODE_OPTIONS=--max-old-space-size=6144), ratchet exit 0. No typecheck run here; CI runs it.",
+  "step": "tests",
+  "plants": [
+    {
+      "law": "G1 to G7, .github/ci/gate.test.ts",
+      "plant": ".github/ci/gate.mjs read keeps the started_at text of a job start other than the earliest",
+      "result": "green"
+    }
+  ]
+}

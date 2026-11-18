@@ -15,7 +15,17 @@
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -38,7 +48,7 @@ export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`,
 );
 
 const ids = (...values: ReadonlyArray<string>) => {
@@ -120,7 +130,7 @@ const CODE = { program: "mail", hash: "build-a" };
 /** The host's closed grant: each source reaches only the names listed for it. */
 const GRANTS: Grants = { [REQUESTER]: [RESPONDER, HELPER, GHOST], [RESPONDER]: [REQUESTER] };
 
-const granted = (source: string, to: string) => Object.hasOwn(GRANTS, source) && GRANTS[source]?.includes(to) === true;
+const granted = (source: string, to: string) => Rec.has(GRANTS, source) && GRANTS[source]?.includes(to) === true;
 
 type Delivery = Parameters<ProgramMail["Service"]["deliver"]>[0];
 
@@ -181,7 +191,7 @@ type Move =
 const said = (cell: Cell, over: Partial<From> = {}): From =>
   from({
     by: "SHA256:program-writer",
-    sentAt: new Date(Date.UTC(2026, 10, 11) + cell.clock).toISOString(),
+    sentAt: DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 11) + cell.clock)),
     build: cell.build,
     traceId: cell.trace,
     ...over,
@@ -219,7 +229,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
 
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const layer = (sql: Sql, next: Effect.Effect<string>) =>
@@ -598,11 +608,11 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 40 }),
@@ -659,13 +669,13 @@ const pair = (a: string, b: string) => JSON.stringify([a, b].sort());
 
 /** The model's mail rule: the host grant lists the pair, or one is the other's first requester. */
 const mayMail = (family: Family, source: string, to: string) =>
-  (Object.hasOwn(HOST, source) && HOST[source]?.includes(to) === true) ||
+  (Rec.has(HOST, source) && HOST[source]?.includes(to) === true) ||
   family.first.get(to) === source ||
   family.first.get(source) === to;
 
 /** Why a pair may or may not mail, for the walk's tally of what it reached. */
 const relation = (family: Family, source: string, to: string): string => {
-  if (Object.hasOwn(HOST, source) && HOST[source]?.includes(to) === true) {
+  if (Rec.has(HOST, source) && HOST[source]?.includes(to) === true) {
     return "host";
   }
 
@@ -1275,12 +1285,13 @@ const capLaw = (
     name,
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const done = new Set<string>();
         const law = capWalk(open, moves, done);
         const scoped = (cap: number, tape: Iterable<fc.AsyncCommand<object, CapWalk>>) => Effect.scoped(law(cap, tape));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each walk
-        const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => Effect.runPromise(scoped(cap, tape)));
-
+        const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => runPromise(scoped(cap, tape)));
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 50 }),
@@ -1350,12 +1361,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "L14: a child and the program that started it mail each other with no grant, across restarts; nobody else gains a right",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const seen = new Set<string>();
           const done = new Set<FamilyMove>();
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-          const property = fc.asyncProperty(FamilyTape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-
+          const property = fc.asyncProperty(FamilyTape, (tape) => runPromise(Effect.scoped(law(tape))));
           const checks = {
             seed: SEED,
             // Every relation the law names must be mailed across: 60 walks miss some at this seed.

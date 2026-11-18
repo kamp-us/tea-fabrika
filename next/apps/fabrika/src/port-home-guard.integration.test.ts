@@ -12,7 +12,19 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Effect, FileSystem, Match, Path, Schema } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Arbitrary,
+  Effect,
+  FileSystem,
+  Formatter,
+  Match,
+  Option,
+  Path,
+  Schema,
+  Record as Rec,
+} from "effect";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -67,8 +79,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
   const plant = input.plant;
 
   const planted =
-    plant === null ? null : { root: roots[plant.kind], full: [roots[plant.kind], ...plant.tail].join("/") };
-
+    plant === null ? null : { root: roots[plant.kind], full: Arr.join([roots[plant.kind], ...plant.tail], "/") };
   // The plant as it lands in a text or a cell, in its generated form.
   const text =
     plant === null || planted === null
@@ -76,19 +87,19 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
       : plant.form === "plain"
         ? planted.full
         : plant.form === "json"
-          ? JSON.stringify(planted.full).slice(1, -1)
+          ? Str.slice(1, -1)(Formatter.formatJson(planted.full))
           : (yield* path.toFileUrl(planted.full)).href;
 
   let expected: typeof Hit.Type | null = null;
 
   for (const [n, file] of input.texts.entries()) {
     const name = `${file.name}-${n}.txt`;
-    let words = file.words.join(" ");
+    let words = Arr.join(file.words, " ");
 
     if (plant !== null && planted !== null && plant.place === "text" && plant.pick % input.texts.length === n) {
       const before = file.words.slice(0, plant.at % (file.words.length + 1));
-      const prefix = before.length === 0 ? "" : `${before.join(" ")} `;
-      words = [...before, text, ...file.words.slice(before.length)].join(" ");
+      const prefix = before.length === 0 ? "" : `${Arr.join(before, " ")} `;
+      words = Arr.join([...before, text, ...file.words.slice(before.length)], " ");
       expected = {
         file: name,
         place: Place.cases.byte.make({ offset: encoder.encode(prefix).length }),
@@ -104,18 +115,18 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     const hit = plant !== null && planted !== null && plant.place === "json" && plant.pick % input.jsons.length === n;
     // A JSON file holds the path as a value, so its file holds it JSON-escaped; a URL stays a URL.
     const value = hit ? (plant.form === "url" ? text : planted.full) : file.value;
-
-    const body = JSON.stringify(
-      file.keys.reduceRight<unknown>((inner, key) => ({ [key]: inner, _note: file.value }), value),
-      null,
-      2,
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown, { space: 2 }))(
+      Arr.reduceRight<(typeof file.keys)[number], unknown>(file.keys, value, (inner, key) => ({
+        [key]: inner,
+        _note: file.value,
+      })),
     );
 
     if (hit) {
-      const at = body.indexOf(JSON.stringify(value).slice(1, -1));
+      const at = Option.getOrElse(Str.indexOf(Str.slice(1, -1)(Formatter.formatJson(value)))(body), () => -1);
       expected = {
         file: name,
-        place: Place.cases.byte.make({ offset: encoder.encode(body.slice(0, at)).length }),
+        place: Place.cases.byte.make({ offset: encoder.encode(Str.slice(0, at)(body)).length }),
         root: planted.root,
       };
     }
@@ -135,8 +146,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
       const insert = db.prepare(`INSERT INTO "${tableName}" (note, body, data) VALUES (?, ?, ?)`);
 
       for (const [row, word] of table.rows.entries()) {
-        const long = `${word} `.repeat(Math.ceil((PAGE + table.long * 8) / (word.length + 1)));
-
+        const long = Str.repeat(Math.ceil((PAGE + table.long * 8) / (word.length + 1)))(`${word} `);
         const target =
           here && plant !== null && planted !== null && plant.at % file.tables.length === t
             ? plant.at % table.rows.length === row
@@ -144,7 +154,8 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
 
         const cut = ((plant?.at ?? 0) * 37) % long.length;
         const note = target && plant?.place === "cell" ? `${word} ${text}` : word;
-        const body = target && plant?.place === "overflow" ? `${long.slice(0, cut)}${text}${long.slice(cut)}` : long;
+        const body =
+          target && plant?.place === "overflow" ? `${Str.slice(0, cut)(long)}${text}${Str.slice(cut)(long)}` : long;
         const data = encoder.encode(target && plant?.place === "blob" ? `${word} ${text}` : word);
         insert.run(note, body, data);
 
@@ -164,7 +175,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     }
   }
 
-  return { roots: Object.values(roots), expected };
+  return { roots: Rec.values(roots), expected };
 });
 
 /** Every file's name and bytes, to see the guard changed nothing. */
@@ -176,7 +187,9 @@ const snapshot = Effect.fnUntraced(function* (folder: string) {
   return yield* Effect.forEach(
     files,
     (file) =>
-      fs.readFile(path.join(folder, file)).pipe(Effect.map((bytes) => [file, Array.from(bytes).join(",")] as const)),
+      fs
+        .readFile(path.join(folder, file))
+        .pipe(Effect.map((bytes) => [file, Arr.join(Arr.map(Array.from(bytes), String), ",")] as const)),
     { concurrency: 1 },
   );
 });

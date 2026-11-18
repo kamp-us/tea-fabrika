@@ -9,6 +9,8 @@ import type { Fetcher } from "@alchemy.run/cloudflare/Fetcher";
 import type { WorkerEvent } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Predicate, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
@@ -82,9 +84,11 @@ export const rejected = <E>(error: E): E | Error => {
     return error;
   }
 
-  const at = error.message.indexOf(": ");
-
-  return at < 0 ? error : Object.assign(new Error(error.message.slice(at + 2)), { name: error.message.slice(0, at) });
+  const message = error.message;
+  return Option.match(Str.indexOf(": ")(message), {
+    onNone: () => error,
+    onSome: (at) => Object.assign(new Error(Str.slice(at + 2)(message)), { name: Str.slice(0, at)(message) }),
+  });
 };
 
 /**
@@ -351,9 +355,9 @@ export class StorageClient extends Context.Service<
     readonly get: <A>(key: string) => Effect.Effect<A | undefined, LedgerError>;
     readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
     readonly delete: (key: string) => Effect.Effect<boolean, LedgerError>;
-    readonly sync: () => Effect.Effect<void, LedgerError>;
+    readonly sync: Effect.Effect<void, LedgerError>;
     readonly setAlarm: (at: number) => Effect.Effect<void, LedgerError>;
-    readonly deleteAlarm: () => Effect.Effect<void, LedgerError>;
+    readonly deleteAlarm: Effect.Effect<void, LedgerError>;
   }
 >()("@kampus/libfabrika/cloudflare/platform.StorageClient") {
   static make(storage: DurableObjectStorage): StorageClient["Service"] {
@@ -367,15 +371,14 @@ export class StorageClient extends Context.Service<
       delete: (key) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object storage delete enters Effect
         Effect.tryPromise({ try: () => storage.delete(key), catch: unreachable }),
-      sync: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object storage sync enters Effect
-        Effect.tryPromise({ try: () => storage.sync(), catch: unreachable }),
+      // A value, not a call: tryPromise runs its `try` afresh each time the Effect runs.
+      // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object storage sync enters Effect
+      sync: Effect.tryPromise({ try: () => storage.sync(), catch: unreachable }),
       setAlarm: (at) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object alarm set enters Effect
         Effect.tryPromise({ try: () => storage.setAlarm(at), catch: unreachable }),
-      deleteAlarm: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object alarm delete enters Effect
-        Effect.tryPromise({ try: () => storage.deleteAlarm(), catch: unreachable }),
+      // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object alarm delete enters Effect
+      deleteAlarm: Effect.tryPromise({ try: () => storage.deleteAlarm(), catch: unreachable }),
     };
   }
 }

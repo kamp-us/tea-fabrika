@@ -11,6 +11,7 @@
  * `deleteContent`.
  */
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import type { Sql } from "../Sql.ts";
 import { type Chain, Content, partName, Rolled, SinkError, SpanRow, sinkError } from "./Trace.ts";
 
@@ -111,10 +112,9 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
   return {
     write: (rows: ReadonlyArray<Sent>): Written =>
       store.atomic(() => {
-        const held = store.holds(rows.map((row) => row.span.spanId));
+        const held = store.holds(Arr.map(rows, (row) => row.span.spanId));
         const seen = new Set(held);
-
-        const left = rows.filter((row) => {
+        const left = Arr.filter(rows, (row) => {
           if (seen.has(row.span.spanId)) {
             return false;
           }
@@ -128,8 +128,10 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
           return Written.cases.written.make({});
         }
 
-        const had = rows.map((row) => row.span.spanId).filter((id) => held.has(id));
-
+        const had = Arr.filter(
+          Arr.map(rows, (row) => row.span.spanId),
+          (id) => held.has(id),
+        );
         const rolled = Option.getOrElse(store.rolled(), () => {
           const bytes = store.size();
 
@@ -335,7 +337,7 @@ const sqlStore = (sql: Sql): Store => {
       const last = rows.at(-1);
 
       return {
-        spans: rows.map((row) => {
+        spans: Arr.map(rows, (row) => {
           const { ok, ...span } = decodeSpan(row);
 
           return { ...span, ok: ok === 1 };
@@ -404,7 +406,7 @@ const memoryStore = (): Store => {
 
   return {
     atomic: (step) => step(),
-    holds: (ids) => new Set(ids.filter((id) => spans.has(id))),
+    holds: (ids) => new Set(Arr.filter(ids, (id) => spans.has(id))),
     rolled: () => rolled,
     roll: (made) => {
       rolled = Option.some(made);

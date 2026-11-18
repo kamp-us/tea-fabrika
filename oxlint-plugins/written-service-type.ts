@@ -28,7 +28,7 @@
 //
 // `.oxlintrc.json` turns it on for `next/` and off for tests: a test's stand-in is not a contract.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
-import { Predicate } from "effect";
+import { Array as Arr, Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 /** The import an identifier is bound to: its source and the name it imports (`*` for a namespace). */
@@ -82,7 +82,7 @@ function* parts(node: Node): Generator<Node> {
     }
 
     // Only a node has a string `type`: a primitive, null or a plain list of numbers has none.
-    for (const part of Array.isArray(value) ? value : [value]) {
+    for (const part of Arr.isArray(value) ? value : [value]) {
       if (Predicate.isString(part?.type)) {
         yield part;
       }

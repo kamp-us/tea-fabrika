@@ -16,11 +16,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { it, beforeAll } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Schema } from "effect";
+import { String as Str, pipe, Array as Arr, Clock, DateTime, Effect, Formatter, Schema } from "effect";
+
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import { build } from "../src/build.ts";
 
 const SEED = 119120;
@@ -76,22 +78,24 @@ type Assets = { readonly page: string; readonly script: string };
 
 let assets: Assets;
 
-beforeAll(async () => {
-  assets = await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const folder = yield* Effect.acquireRelease(
-          Effect.sync(() => mkdtempSync(join(tmpdir(), "page-runtime-"))),
-          (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
-        );
+beforeAll(
+  () =>
+    Effect.gen(function* () {
+      assets = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const folder = yield* Effect.acquireRelease(
+            Effect.sync(() => mkdtempSync(join(tmpdir(), "page-runtime-"))),
+            (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+          );
 
-        const built = yield* build({ out: join(folder, "dist"), ledger: [] });
+          const built = yield* build({ out: join(folder, "dist"), ledger: [] });
 
-        return { page: built.assets["/index.html"]!.body, script: built.assets["/window.js"]!.body };
-      }),
-    ).pipe(Effect.provide(NodeServices.layer)),
-  );
-}, 120_000);
+          return { page: built.assets["/index.html"]!.body, script: built.assets["/window.js"]!.body };
+        }),
+      ).pipe(Effect.provide(NodeServices.layer));
+    }),
+  120_000,
+);
 
 const browser = (options: LaunchOptions = {}) =>
   Effect.acquireRelease(
@@ -132,7 +136,7 @@ const profile = (b: Browser, init?: { readonly script: (arg: string) => void; re
     );
     yield* playwright("routeWebSocket", () =>
       context.routeWebSocket(/^ws:\/\/127\.0\.0\.1\//, (ws) => {
-        const dial: Dial = { at: Date.now(), from: ws.url(), closed: false };
+        const dial: Dial = { at: DateTime.toEpochMillis(DateTime.nowUnsafe()), from: ws.url(), closed: false };
         seen.dials.push(dial);
         ws.onClose(() => {
           dial.closed = true;
@@ -164,19 +168,19 @@ const tab = (context: BrowserContext, seen: Seen) =>
 const children = (page: Page) =>
   playwright("children", () => page.evaluate(() => document.getElementById("root")?.childElementCount ?? -1));
 
-const open = (seen: Seen) => seen.dials.filter((d) => !d.closed).length;
+const open = (seen: Seen) => Arr.filter(seen.dials, (d) => !d.closed).length;
 
 /** Waits until `check` holds or `within` ms pass, and answers whether it held. */
 const until = <E>(check: Effect.Effect<boolean, E>, within: number) =>
   Effect.gen(function* () {
-    const end = Date.now() + within;
+    const end = (yield* Clock.currentTimeMillis) + within;
 
     for (;;) {
       if (yield* check) {
         return true;
       }
 
-      if (Date.now() >= end) {
+      if ((yield* Clock.currentTimeMillis) >= end) {
         return false;
       }
 
@@ -194,8 +198,7 @@ const up = (context: BrowserContext, seen: Seen) =>
   Effect.gen(function* () {
     const page = yield* tab(context, seen);
     yield* playwright("goto /", () => page.goto(`${ORIGIN}/`));
-    expect(yield* until(isUp(page, seen), 30_000), `the tab came up: ${JSON.stringify(seen)}`).toBe(true);
-
+    expect(yield* until(isUp(page, seen), 30_000), `the tab came up: ${Formatter.format(seen)}`).toBe(true);
     return page;
   });
 
@@ -206,7 +209,7 @@ const pagehide = (page: Page, persisted: boolean) =>
     }, persisted),
   );
 
-const reported = (seen: Seen) => seen.lines.filter((line) => line.includes("ERROR"));
+const reported = (seen: Seen) => Arr.filter(seen.lines, (line) => pipe(line, Str.includes("ERROR")));
 
 /** Runs in each page before its script: the page program's first DOM read throws `word`. */
 const failQuery = (word: string) => {
@@ -231,15 +234,17 @@ const recordShows = () => {
 };
 
 describe("Tuval's page runs on Effect's browser runtime", () => {
-  it("L2: for generated pagehide events, the page stays up while each is persisted and stops at the first that is not, reporting nothing", async () => {
-    await Effect.runPromise(
+  it.live(
+    "L2: for generated pagehide events, the page stays up while each is persisted and stops at the first that is not, reporting nothing",
+    () =>
       Effect.scoped(
         Effect.gen(function* () {
+          const services = yield* Effect.context<never>();
           const b = yield* browser();
           yield* property(() =>
             fc.assert(
               fc.asyncProperty(fc.array(fc.boolean(), { minLength: 1, maxLength: 4 }), (flags) =>
-                Effect.runPromise(
+                Effect.runPromiseWith(services)(
                   Effect.scoped(
                     Effect.gen(function* () {
                       const { context, seen } = yield* profile(b);
@@ -259,22 +264,22 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                           yield* Effect.sleep(`${QUIET} millis`);
                           expect(
                             yield* isUp(page, seen),
-                            `event ${i}, persisted: still up ${JSON.stringify(seen)}`,
+                            `event ${i}, persisted: still up ${Formatter.format(seen)}`,
                           ).toBe(true);
                           continue;
                         }
 
                         expect(
                           yield* until(isStopped(page, seen), WITHIN),
-                          `event ${i}, not persisted: stopped within ${WITHIN} ms ${JSON.stringify(seen)}`,
+                          `event ${i}, not persisted: stopped within ${WITHIN} ms ${Formatter.format(seen)}`,
                         ).toBe(true);
-                        stoppedAt = Date.now();
+                        stoppedAt = yield* Clock.currentTimeMillis;
                       }
 
                       if (stoppedAt !== null) {
                         yield* Effect.sleep(`${QUIET} millis`);
                         expect(
-                          seen.dials.filter((d) => d.at > stoppedAt!),
+                          Arr.filter(seen.dials, (d) => d.at > stoppedAt!),
                           "no socket is dialed after the stop",
                         ).toEqual([]);
                         expect(yield* isStopped(page, seen), "the page stays stopped").toBe(true);
@@ -290,11 +295,12 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
           );
         }),
       ),
-    );
-  }, 300_000);
+    300_000,
+  );
 
-  it("L3 scenario: one real back/forward cache round trip keeps the window mounted, and it dials again; Chromium hands the listener the same persisted event on every trip, so more trips add no case", async () => {
-    await Effect.runPromise(
+  it.live(
+    "L3 scenario: one real back/forward cache round trip keeps the window mounted, and it dials again; Chromium hands the listener the same persisted event on every trip, so more trips add no case",
+    () =>
       Effect.scoped(
         Effect.gen(function* () {
           // The full Chromium, with Playwright's own `--disable-back-forward-cache` taken off: the
@@ -328,18 +334,20 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
           expect(yield* children(page), "the window is still mounted once it dialed").toBeGreaterThan(0);
         }),
       ),
-    );
-  }, 120_000);
+    120_000,
+  );
 
-  it("L4: a generated failure of the page program is reported on the console", async () => {
-    await Effect.runPromise(
+  it.live(
+    "L4: a generated failure of the page program is reported on the console",
+    () =>
       Effect.scoped(
         Effect.gen(function* () {
+          const services = yield* Effect.context<never>();
           const b = yield* browser();
           yield* property(() =>
             fc.assert(
               fc.asyncProperty(fc.stringMatching(/^[a-z]{6,16}$/), (word) =>
-                Effect.runPromise(
+                Effect.runPromiseWith(services)(
                   Effect.scoped(
                     Effect.gen(function* () {
                       const { context, seen } = yield* profile(b, { script: failQuery, arg: word });
@@ -347,10 +355,10 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                       yield* playwright("goto /", () => page.goto(`${ORIGIN}/`));
                       expect(
                         yield* until(
-                          Effect.sync(() => reported(seen).some((line) => line.includes(word))),
+                          Effect.sync(() => Arr.some(reported(seen), (line) => pipe(line, Str.includes(word)))),
                           WITHIN,
                         ),
-                        `a console line with ERROR and "${word}" within ${WITHIN} ms: ${JSON.stringify(seen.lines)}`,
+                        `a console line with ERROR and "${word}" within ${WITHIN} ms: ${Formatter.format(seen.lines)}`,
                       ).toBe(true);
                     }),
                   ),
@@ -361,6 +369,6 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
           );
         }),
       ),
-    );
-  }, 300_000);
+    300_000,
+  );
 });
