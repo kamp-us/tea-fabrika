@@ -2890,6 +2890,7 @@
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
+        "next/programs/fabsh/**",
         "next/programs/inbox/**"
       ],
       "rules": { "anti-slop-effect/no-manual-tagged-type": "error" }
