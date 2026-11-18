@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-four-decisions-frontmatter-is-not-yaml",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".decisions/0099-no-number-caps-a-pull-request.md",
+    "line": 3
+  },
+  "says": "The records: four decisions, 0099, 0105, 0255 and 0582, have a title with an unquoted colon and space, so their frontmatter is not valid YAML, and @kalfa/records' status check reports each as a status finding that no status edit clears. No cleanup slice of the rules and records build lists quoting them, so slice 9's first check on main would not print nothing.",
+  "proof": "The yaml package (the catalog's 2.9.1) refuses the frontmatter of each with 'Nested mappings are not allowed in compact mappings at line 3, column 8'; node kalfa/records/src/bin.ts check status on the branch of https://github.com/kamp-us/tea-fabrika/pull/1634 lists the four among its findings.",
+  "cost": "Slice 9 cannot turn the check on until the four titles are quoted, and a decision written later with the same title shape fails pnpm lint once it is on.",
+  "head": "6e9275a98d9bfd1659a2c67c5189c57f99547f23",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1634"
+}

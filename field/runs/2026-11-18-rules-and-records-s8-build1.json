@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-rules-and-records-s8-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1634",
+  "started": "2026-11-18T10:50:00-08:00",
+  "ended": "2026-11-18T11:15:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Slice 8 of docs/plan/quests/rules-and-records-build-PLAN.md, today's tooling (kalfa/records): built @kalfa/records so the 13 laws L1 to L8 are green (every file one at a time, fast depth and FABRIKA_TEST_DEPTH=full): package.json and its pnpm-lock.yaml importer, README.md, and src/{Status,Frontmatter,Finding,Patches,Links,MapSize,Settings,cli,bin}.ts, with Tracked.ts (the git ls-files service the laws import) and two small helpers, Prose.ts (lines outside fenced code, inline code removed) and Comments.ts (the comments of a code file) that Patches.ts and Links.ts share. Each law's plant was made once on the real product and seen red, then undone (L1 to L8, plus the id-as-number plant of the L2 scenario). Two things stay open and are in the report: the two laws that fail the package's tsc with an Effect-language-service error (Frontmatter.test.ts:178, Patches.test.ts:268), and Records.test-support.ts's unused export Entry, which lint:dead names. The boundary entry for kalfa/records is added with kalfa-config only, as briefed; the laws also import @kampus/vitest, so lint:boundaries is red until the lead decides.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Started is approximate, ended is an estimate written just before the commit; usage and cost are not recorded. Node here is v22 and every node, pnpm and vitest command ran on a Node 26.13.0 outside the repo. The brief's check command `vitest run kalfa/records/` is refused by the test config as a broad run, so each test file ran by its own path.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "49562989fd3369b1ddfab198626bd5320a82c556",
+  "plants": [
+    {
+      "law": "L1, kalfa/records/src/Status.test.ts:18",
+      "plant": "kalfa/records/src/Status.ts, an amended-in-part status decodes as accepted",
+      "result": "red"
+    },
+    {
+      "law": "L2, kalfa/records/src/Frontmatter.test.ts:36",
+      "plant": "kalfa/records/src/Frontmatter.ts, the successor lookup dropped",
+      "result": "red"
+    },
+    {
+      "law": "L2, kalfa/records/src/Frontmatter.test.ts:127",
+      "plant": "kalfa/records/src/Frontmatter.ts, id read as any string",
+      "result": "red"
+    },
+    {
+      "law": "L2, kalfa/records/src/Frontmatter.test.ts:167",
+      "plant": "kalfa/records/src/Frontmatter.ts, the frontmatter read with YAML's core schema, so id 0605 becomes the number 605",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:195",
+      "plant": "kalfa/records/src/Prose.ts, fenced code never opens",
+      "result": "red"
+    },
+    {
+      "law": "L4, kalfa/records/src/Patches.test.ts:254",
+      "plant": "kalfa/records/src/Patches.ts, the forms matched on the raw lines, fenced and inline code included",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:92",
+      "plant": "kalfa/records/src/Links.ts, docs/direction/ read as in scope",
+      "result": "red"
+    },
+    {
+      "law": "L6, kalfa/records/src/MapSize.test.ts:38",
+      "plant": "kalfa/records/src/MapSize.ts, each folder file compared alone, without the root",
+      "result": "red"
+    },
+    {
+      "law": "L7, kalfa/records/src/Settings.test.ts:33",
+      "plant": "kalfa/records/src/MapSize.ts, the limit hard-coded to 32,768",
+      "result": "red"
+    },
+    {
+      "law": "L8, kalfa/records/src/cli.test.ts:85",
+      "plant": "kalfa/records/src/cli.ts, check keeps only the first check that has findings",
+      "result": "red"
+    }
+  ]
+}

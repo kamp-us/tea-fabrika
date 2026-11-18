@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-rules-and-records-s8-build2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1634",
+  "started": "2026-11-18T11:18:00-08:00",
+  "ended": "2026-11-18T11:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Slice 8 of docs/plan/quests/rules-and-records-build-PLAN.md, today's tooling (kalfa/records), build round 2, in two parts. Part 1, the map as advice: the byte limit and its setting are gone. Finding's map case is {path, lines, max}; MapSize.ts exports maxLines (200, citing https://code.claude.com/docs/en/memory) and check(root), one finding for each tracked non-symlink AGENTS.md at the root or one folder down with more than 200 lines, counted as wc -l counts; cli.ts prints a map block ending in (advice), counts only the non-zero parts (\"3 findings, 1 advice\"), and fails only on a status, patch or link finding; Settings.ts is git rm'd, @kalfa/config leaves package.json and the pnpm-lock.yaml importer, bin.ts drops the TOML parser and the Digest, the README loses its setting section. Part 2, the patch check reads blocks: Patches.ts joins consecutive prose lines into one text with single spaces (a blank line, a heading, a list item's start or a fence ends a block), replaces each Markdown link by its text keeping the file line of every character, and matches the still-holds and carried-forward patterns there; a finding's line is the file line that holds rest or carried; ## Amendments stays a per-line match. MapSize.test.ts (2), cli.test.ts (3) and Patches.test.ts (3, with the 0414 scenario) are green at fast and full depth; Status, Frontmatter and Links stay green. Plants seen red once and undone: L6 (>= for >), L7 (maxLines 199), L8 (only the first finding printed, and advice failing the command), L3 (blocks of one line).",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Started is approximate, ended is an estimate written just before the commit; usage and cost are not recorded. Node here is v22 and every node, pnpm and vitest command ran on a Node 26.13.0 outside the repo. lint:reach is red once kalfa/records/package.json is tracked: no root or reached package names @kalfa/records as a dependency (decision 0003), which is the root package.json's, outside this slice.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "d052ed55bb9f38c0de545cf7ddf7c2d3ef32d3ce",
+  "plants": [
+    {
+      "law": "L6, kalfa/records/src/MapSize.test.ts:38",
+      "plant": "kalfa/records/src/MapSize.ts, a file of exactly 200 lines is over (>= for >)",
+      "result": "red"
+    },
+    {
+      "law": "L7, kalfa/records/src/MapSize.test.ts",
+      "plant": "kalfa/records/src/MapSize.ts, maxLines set to 199",
+      "result": "red"
+    },
+    {
+      "law": "L8, kalfa/records/src/cli.test.ts",
+      "plant": "kalfa/records/src/cli.ts, only the first finding is printed",
+      "result": "red"
+    },
+    {
+      "law": "L8, kalfa/records/src/cli.test.ts",
+      "plant": "kalfa/records/src/cli.ts, the command fails on advice too",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts",
+      "plant": "kalfa/records/src/Patches.ts, each prose line is a block of its own",
+      "result": "red"
+    }
+  ]
+}
