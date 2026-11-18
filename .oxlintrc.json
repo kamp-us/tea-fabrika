@@ -3090,6 +3090,66 @@
       }
     },
     {
+      // 0555, 0579: no test makes a stand-in or watches a call with vi. A folder joins `files` in the
+      // slice that takes it to zero; the last one makes the list next/ and the three tooling folders.
+      // The lock is a pair: oxlint's `vitest/no-restricted-vi-methods` does not refuse a call chained
+      // onto the `vi` call (`vi.fn().mockReturnValue(1)`), so `eslint/no-restricted-properties` holds
+      // the member access itself (oxc#29656). The vitest rule keeps what only it sees, `v.fn()` after
+      // `import { vi as v }`. An override replaces a rule's options, so this block writes out again
+      // the five entries the block above holds (L2 in plants.test.ts), then adds the `vi` entries.
+      // It sits after that block, since a file takes the last block that matches it.
+      "files": ["oxlint-plugins/**"],
+      "rules": {
+        "vitest/no-restricted-vi-methods": [
+          "error",
+          {
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
+            "mock": "Give the code a service and provide a test layer (0555).",
+            "doMock": "Give the code a service and provide a test layer (0555).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ],
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          },
+          {
+            "object": "vi",
+            "property": "fn",
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+          },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          {
+            "object": "vi",
+            "property": "doMock",
+            "message": "Give the code a service and provide a test layer (0555)."
+          },
+          {
+            "object": "vi",
+            "property": "spyOn",
+            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+          },
+          {
+            "object": "vi",
+            "property": "stubEnv",
+            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ]
+      }
+    },
+    {
       // Each glob keeps the rule's own file kinds, so a warn line never turns it on for other files.
       "files": [
         ".agents/skills/lead/scripts/*.test.ts",

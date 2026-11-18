@@ -1,8 +1,8 @@
 import { it } from "@effect/vitest";
-import type { Context, ESTree } from "@oxlint/plugins";
+import type { Context, Diagnostic, ESTree } from "@oxlint/plugins";
 import { Array as Arr, Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, vi } from "vitest";
+import { expect } from "vitest";
 import { noQuestionWordKey } from "./no-question-word-key.ts";
 import { plant } from "./plant.ts";
 
@@ -290,9 +290,10 @@ it.live("format: quoted, escaped, shorthand and computed spellings", () =>
 // format: the user-facing diagnostic names all five words, asks for the value's noun, assumes no
 // replacement and offers no autofix.
 it("format: diagnostic names the five words and offers no autofix", () => {
-  const report = vi.fn();
+  // The test owns a plain list of what the rule reported (0579); `report` takes one diagnostic.
+  const reports: Array<Diagnostic> = [];
   // This diagnostic check supplies only the Context method this rule calls.
-  const context: Pick<Context, "report"> = { report };
+  const context: Pick<Context, "report"> = { report: (diagnostic) => void reports.push(diagnostic) };
   // SAFETY: the rule calls only `context.report`, which this stand-in has, so the rest of Context is never read.
   const visitor = noQuestionWordKey.create(context as Context);
   const keys = Arr.map(WORDS, (word) => ({ type: "Literal", value: word, raw: JSON.stringify(word) }));
@@ -306,13 +307,11 @@ it("format: diagnostic names the five words and offers no autofix", () => {
     } as ESTree.ObjectProperty);
   }
 
-  expect(report.mock.calls).toEqual(
-    Arr.map(keys, (key) => [
-      {
-        node: key,
-        message:
-          "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names (0081).",
-      },
-    ]),
+  expect(reports).toEqual(
+    Arr.map(keys, (key) => ({
+      node: key,
+      message:
+        "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names (0081).",
+    })),
   );
 });
