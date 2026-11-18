@@ -79,6 +79,15 @@ After successful CI and landing, another project installs the tested archive wit
 `npm install ./kalfa-config-0.0.0.tgz effect@4.1.3`.
 The prerequisite settings and spacing pair lands first.
 
+Today's CI, serving both versions, adds automatic related integration and tooling checks for
+ready pull requests and queue groups, ticket 1155. Related visual tests join the existing next
+matrix without requiring a label. Global triggers select every file, and selected laws run at
+full depth. All test jobs share the existing nine groups and one control group. The original
+regression suite remains intact. The [automatic checklist fault runner](../../field/notes/2026-11-17-automatic-checklist-faults.json)
+assigns the ten existing cases once across the existing integration legs, after each leg's ordinary files. The fixture's full100 suite stays in its one owning leg. It binds the catalog
+source and actual tested merge separately while preserving exact image and dependency checks.
+Actual runtime, fault evidence and final review remain due.
+
 In `next/`, ticket 1153 reuses the Node quota fixture's admission services within one World
 and one limits generation. Every input still sends; each limits setter creates a fresh cache key,
 and failed setup remains retryable. Existing laws, workloads, SQL operations, seeds and timeouts
@@ -128,8 +137,15 @@ in `next/`, and [host pinning and discovery](../../field/notes/2026-11-17-host-r
 The [three remaining host faults](../../field/notes/2026-11-17-host-remaining-fault-exercises.json) now have the same actual observations:
 ignoring the requested pin, omitting the native pnpm directory and reversing prepared-environment precedence.
 Each accepted exercise passed before the deliberate break, failed at its intended assertion, then passed after restoration.
-The watcher case and six other checklist fault or probe groups still need their own evidence.
+Each product change records its own source-bound fault evidence separately from these tooling fixtures.
 These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
+
+[Checklist L13's fixture repair](https://github.com/kamp-us/tea-fabrika/pull/1543), ticket 1126,
+replaces fixed waits in `next/` with completion of the real Process alarm call, publication and
+notification. It includes newly due work, leaves future alarms pending and waits for started calls
+before cleanup. The existing cases, seed, generator limits and test deadline stay the same.
+It changes test support, not product behavior. The PR records source-bound CI, fault checks and
+independent review; a passing ordinary run does not stand in for those separate checks.
 
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its

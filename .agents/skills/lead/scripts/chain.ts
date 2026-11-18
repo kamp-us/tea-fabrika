@@ -1476,7 +1476,7 @@ const handlers = (s: Setup) => {
             model: env.CODEX_MODEL,
             effort: env.CODEX_EFFORT,
             outcome: move._tag === "step" ? "pass" : "parked",
-            reason: `chain.ts judgment for ${s.quest} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}`,
+            reason: `chain.ts judgment for ${s.quest} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}. Requested coordination profile: model ${env.CODEX_MODEL}, effort ${env.CODEX_EFFORT}; effective API context unknown.`,
             started,
             ended: new Date(),
             spent: turned.spent,

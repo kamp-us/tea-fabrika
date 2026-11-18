@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-17-automatic-related-checks",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1155"],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "Today's CI serves both versions. Ready pull requests and queue groups previously ran the next project alone, while integration and tooling coverage needed a separate scheduled or manual run. Visual tests required a label even when related to the change.",
+  "cause": "The earlier schedule-only policy left automatic checks unable to cover every related resource project or global trigger. The quota regression already belongs to the ordinary next project and had no missing route.",
+  "person": false,
+  "primitive": null,
+  "fix": "Select integration and tooling files automatically from the tested commit and actual base. Keep each project in its own bounded legs and record the selection. Run related visual files through the existing next matrix. Global triggers select all files. Every selected law runs at full depth, and next, visual and related jobs share the existing nine test groups and one control group. Reject historical ready records that lack the new coverage jobs.",
+  "test": "The original real Vitest reader and partition regression suite is retained unchanged. New generated laws cover selection, shared groups, full depth and required-check skips. Only formatting ran locally. CI validation and source review remain due. No existing product branch or completed proof was changed, repeated or canceled.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/blob/main/.github/workflows/check.yaml", "https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0595-scheduled-runs-share-slots.md"]
+}

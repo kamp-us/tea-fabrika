@@ -5,7 +5,7 @@ import { Effect, FileSystem, Option, Path, RegExp as Regex, Result, Schema } fro
 import { Digest } from "effect/crypto";
 import { describe } from "vitest";
 import { argv, cases, decodeRequest, derive, prepare, Request } from "./plant-cases.ts";
-import { failure } from "./plant-errors.ts";
+import { failure, Issue, issue } from "./plant-errors.ts";
 import { Model, Observation } from "./plant-machine.ts";
 import PlantReporter from "./plant-reporter.ts";
 import {
@@ -14,6 +14,7 @@ import {
   exercise,
   ExerciseError,
   observation,
+  report as receipt,
   unchanged,
   Workspace,
   type Snapshot,
@@ -408,6 +409,201 @@ it.prop(
 
     expect(observation(key, root, JSON.stringify(red), 0, 12)._tag).toBe("incomplete");
     expect(observation(key, root, JSON.stringify(report(key, "passed")), 1, 12)._tag).toBe("incomplete");
+  },
+  options,
+);
+
+// Plant: copy a raw error name, message, stack or nested cause into the public receipt.
+it.prop(
+  "incomplete phase receipts retain verdict facts and only closed causal error details",
+  {
+    key: Request.fields.case,
+    content: Schema.String,
+    line: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10000 })),
+    column: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+    name: Schema.Literals(["AssertionError", "SyntaxError", "ReferenceError", "TypeError", "RangeError", "Error"]),
+  },
+  ({ key, content, line, column, name }) => {
+    const marker = `private-value-${JSON.stringify(content)}-end`;
+
+    const error = {
+      name,
+      message: marker,
+      stack: `at selected (/private/${encodeURIComponent(marker)}/${cases[key].test}:${line}:${column})`,
+      actual: marker,
+      expected: marker,
+    };
+
+    const detail = issue(key, {
+      name: "Error",
+      message: marker,
+      cause: { name: "Error", message: marker, cause: error },
+    });
+
+    expect(detail).toEqual({ kind: name, frame: { line, column } });
+    expect(Schema.is(Issue)(detail)).toBe(true);
+    expect(issue(key, { ...error, name: marker })).toEqual({ kind: "unknown", frame: { line, column } });
+    expect(
+      issue(key, { ...error, stack: `/private/${encodeURIComponent(marker)}/unrelated.test.ts:${line}:${column}` }),
+    ).toEqual({ kind: name, frame: null });
+    expect(issue(key, { ...error, name: "Error", message: `Test timed out in 60000ms: ${marker}` }).kind).toBe(
+      "timeout",
+    );
+    expect(issue(key, marker)).toEqual({ kind: "unknown", frame: null });
+
+    const cyclic = { name: "Error", message: marker, cause: {} };
+    cyclic.cause = cyclic;
+    expect(issue(key, cyclic)).toEqual({ kind: "unknown", frame: null });
+
+    const raw = report(key, "failed", [marker]);
+
+    const target = raw.testResults[0]!.assertionResults[0]!;
+
+    const extended = {
+      ...raw,
+      testResults: [
+        {
+          ...raw.testResults[0]!,
+          assertionResults: [
+            { ...target, meta: { plant: null, plantErrors: [detail], plantUnhandled: [detail], private: marker } },
+          ],
+        },
+      ],
+    };
+
+    const actual = receipt(key, root, JSON.stringify(extended));
+    expect(actual).toMatchObject({
+      state: "decoded",
+      success: false,
+      counts: { total: 1, passed: 0, failed: 1, pending: 0, todo: 0 },
+      suites: { total: 2, passed: 0, failed: 2, pending: 0, results: 1 },
+      targets: [
+        {
+          status: "failed",
+          message: false,
+          assertions: 1,
+          active: 1,
+          results: [
+            { status: "failed", duration: 12, failures: 1, plant: false, errors: [detail], unhandled: [detail] },
+          ],
+        },
+      ],
+    });
+
+    expect(observation(key, root, JSON.stringify(extended), 1, 12)).toEqual({ _tag: "incomplete", reason: "unclear" });
+    expect(JSON.stringify(actual)).not.toContain(marker);
+    expect(JSON.stringify(actual)).not.toContain("/private/");
+    expect(JSON.stringify(actual)).not.toContain(cases[key].title);
+    expect(JSON.stringify(actual)).not.toContain(cases[key].test);
+
+    const passed = report(key, "passed");
+
+    const malformed = {
+      ...passed,
+      testResults: [
+        {
+          ...passed.testResults[0]!,
+          assertionResults: [
+            { ...passed.testResults[0]!.assertionResults[0]!, meta: { plant: null, plantErrors: [marker] } },
+          ],
+        },
+      ],
+    };
+
+    expect(observation(key, root, JSON.stringify(malformed), 0, 12)).toEqual(
+      observation(key, root, JSON.stringify(passed), 0, 12),
+    );
+    expect(receipt(key, root, "")).toEqual({ state: "missing" });
+    expect(receipt(key, root, marker)).toEqual({ state: "malformed" });
+  },
+  options,
+);
+
+// Plant: treat any PID failure, matcher value or nearby frame as the current missing-field witness.
+it.prop(
+  "current missing-PID proof requires the exact zero-view assertion and causal frame",
+  { content: Schema.String, offset: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })) },
+  ({ content, offset }) => {
+    const key = "checklist-pid";
+    const selected = cases[key];
+    const marker = `private-value-${JSON.stringify(content)}-end`;
+
+    const generated = Result.match(
+      Result.try(() => expect(0, "the client heard the checklist's views").toBeGreaterThan(0)),
+      {
+        onSuccess: () => Matcher.make({ name: "Error", message: "matcher did not fail" }),
+        onFailure: (error) => Schema.decodeUnknownSync(Matcher)(error),
+      },
+    );
+
+    const error = { ...generated, stack: `at selected (${root}/${selected.test}:824:80)` };
+
+    const expected = {
+      diagnostic: "AssertionError: the client heard the checklist's views",
+      assertion: { line: 824, column: 80 },
+    };
+
+    expect(generated.actual).toBe(0);
+    expect(generated.expected).toBe(0);
+    expect(failure(key, [error])).toEqual(expected);
+    expect(failure(key, [{ name: "Error", message: marker, cause: error }])).toEqual(expected);
+
+    const invalid: readonly unknown[] = [
+      { ...error, name: "Error" },
+      { ...error, name: "TypeError" },
+      { ...error, name: "SyntaxError" },
+      { ...error, cause: error },
+      { name: "Error", message: marker, cause: [error] },
+      { ...error, message: "another assertion: expected 0 to be greater than 0" },
+      { ...error, message: "the client heard the checklist's views: expected 0 to be greater than or equal to 0" },
+      { ...error, message: "the client heard the checklist's views: expected 0 to be 1 // Object.is equality" },
+      { ...error, message: `${marker}${generated.message}` },
+      { ...error, message: `${generated.message}${marker}` },
+      { ...error, message: `${generated.message}\n` },
+      { ...error, actual: offset },
+      { ...error, actual: -offset },
+      { ...error, expected: offset },
+      { ...error, actual: "0" },
+      { ...error, expected: "0" },
+      { ...error, actual: null },
+      { ...error, expected: null },
+      { ...error, actual: undefined },
+      { ...error, expected: undefined },
+      { ...error, actual: false },
+      { ...error, expected: false },
+      { ...error, stack: `at selected (${root}/${selected.test}:${824 + offset}:80)` },
+      { ...error, stack: `at selected (${root}/${selected.test}:824:${80 + offset})` },
+      { ...error, stack: `at selected (${root}/unrelated.test.ts:824:80)` },
+      { ...error, stack: `at selected (${root}/not-${selected.test}:824:80)` },
+      { ...error, stack: `at selected (${root}/${selected.test}:824:80private)` },
+      { ...error, stack: `at selected (${root}/${selected.test}:828:68)` },
+      { ...error, stack: undefined },
+      { ...error, message: "Test timed out in 60000ms" },
+      marker,
+      null,
+      {},
+    ];
+
+    for (const value of invalid) {
+      expect(failure(key, [value])).toBeNull();
+    }
+
+    expect(failure(key, [error, error])).toBeNull();
+    expect(failure(key, [])).toBeNull();
+
+    for (const other of Request.fields.case.literals.filter((other) => other !== key)) {
+      expect(failure(other, [error])).toBeNull();
+    }
+
+    const raw = report(key, "failed", [marker]);
+    raw.testResults[0]!.assertionResults[0]!.meta.plant = failure(key, [error]);
+    const observed = observation(key, root, JSON.stringify(raw), 1, 12);
+
+    expect(observed).toMatchObject({ _tag: "failed", ...expected });
+    expect(JSON.stringify(observed)).not.toContain(marker);
+    expect(JSON.stringify(observed)).not.toContain("actual");
+    expect(JSON.stringify(observed)).not.toContain("expected");
+    expect(JSON.stringify(observed)).not.toContain(root);
   },
   options,
 );
