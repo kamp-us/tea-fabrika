@@ -60,6 +60,8 @@ read `AGENTS.md` through `@AGENTS.md`.
 
 The lead session decided this on 2026-11-18, in place of the owner call slice 6 had stopped for.
 It supersedes 0129 and 0608 whole and holds what of them is still live.
+[0180](0180-instruction-files-take-quick-edits.md) still holds: a cut lands with no test first, and
+the table it names is the one below.
 
 ## Decision
 
