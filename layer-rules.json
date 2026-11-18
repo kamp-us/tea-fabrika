@@ -393,7 +393,7 @@
     },
     {
       "name": "next-crypto-test-support",
-      "paths": ["next/packages/libfabrika/src/crypto.test-support.ts"],
+      "paths": ["next/packages/libfabrika/src/telemetry/Crypto.test-support.ts"],
       "imports": ["next-vitest"]
     },
     {

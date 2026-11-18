@@ -8,8 +8,8 @@ import { Cause, Effect, Exit, Match, Option, Schema } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import { WebCrypto } from "effect/crypto";
 import * as fc from "fast-check";
-import { rejecting } from "../crypto.test-support.ts";
 import { Archive, type BucketCalls, sha256 } from "./Archive.ts";
+import { rejecting } from "./Crypto.test-support.ts";
 import { type RecordCalls, RecordManager } from "./Records.ts";
 import { Chain, SinkError, sinkError } from "./Trace.ts";
 
