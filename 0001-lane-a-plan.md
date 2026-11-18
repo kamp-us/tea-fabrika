@@ -19,8 +19,8 @@ Doubts first:
   about 22 to 26 s from the related legs' start in those runs. Experiment 299 puts the tail in
   runner wait (median 24 s, worst 357 s on the critical path), which lane A does not touch. 85%
   sure of the 22 to 26 s; the doubt is the relay job's own pickup wait, measured only as `select`'s
-  (1 to 11 s). Whether 25 s is worth this pull request now is a priority call for the lead, not a
-  design call.
+  (1 to 11 s). The lead's priority for this lane is CI cost first: about 25 s off every ready run
+  and queue group, and about 30 runner-seconds.
 - **The fallback path is held by lint alone.** No ready run will take it unless `changes` fails to
   hand over a set, so CI exercises only the relay path. Its steps are today's steps, unchanged.
 
@@ -344,9 +344,30 @@ Host-only laws: none. Nothing here needs launchd, Electron, a real OS process or
   number is caught.
 - No other new choice.
 
+## Records: the relay's pickup wait
+
+The relay's own wait is the one number this plan guesses at, and experiment 299's open question
+(does the merge line's tail come from runner supply?) needs it. So the build owes one week of it.
+
+- **What:** for every ready pull request run and queue group in the 7 days after merge, `select`'s
+  wait (`started_at - created_at`) and run time (`completed_at - started_at`), `changes`'
+  `completed_at`, and the earliest related leg's `created_at`, from the GitHub jobs API.
+- **Where it is recorded:** one experiment write-up, `experiments/NN-related-relay-wait.md` with the
+  number `records.ts next experiments` gives, written on day 7 by one measuring step with experiment
+  299's script on its branch (`fabrikalfa/ci-related-tooling-legs-script`, `experiments/299-related-legs.ts`)
+  extended by these four fields. Its raw rows go to the private archive (0027), and the build's
+  field run row names the write-up as owed.
+- **Why not a new field in CI:** the jobs API keeps these times with each run, so waiting 7 days
+  loses nothing, well inside the 90-day log and artifact retention. A recorder inside `select` would
+  need a checkout on the relay path, about 7 s, which takes back a quarter of the saving. `time-table.ts`
+  reads only its own job's steps, and teaching it another job's would change a guarded file outside
+  this lane.
+- **What it settles:** whether the relay's pickup wait stays at the 1 to 11 s `select` showed, or
+  carries the 209 to 357 s tail; if the tail, the direct read in "Calls taken" comes back to fabrikaa.
+
 ## What fact is lost if it is not recorded now
 
-None. Which job computed a run's set is in the jobs API (`select`'s `set` step skipped or run) for
+None beyond the relay's wait, above. Which job computed a run's set is in the jobs API (`select`'s `set` step skipped or run) for
 as long as GitHub keeps the run, and the `related-set` artifact keeps its 90 days. Adding a "by"
 field to the record would change `related.ts` and the record's content, which this lane keeps
 exactly.
@@ -394,11 +415,13 @@ Then three more ready or queue runs after merge, to replace the 22 to 26 s estim
 
 1. One pull request: about 105 lines of workflow and guard code and about 150 lines of laws: 255
    lines.
+2. The week's measuring step and its write-up (Records): 0 lines of CI code, one experiment file.
 
 About 2 agent hours, 75% sure. Priced from 1589's plan's roughly $5 per step for steps on these same
-files: tests, build, review, and one likely send-back.
+files: tests, build, review, and one likely send-back, plus the measuring step, priced at about $10 from
+experiment 299's $11 for the same kind of read.
 
-Estimate: 4 steps, $20
+Estimate: 5 steps, $30
 
 ## What this cannot tell us
 
@@ -416,10 +439,12 @@ Estimate: 4 steps, $20
   differently from `select`'s fresh install was not tested. Both use the same lockfile and
   `--frozen-lockfile`; the first ready run's record is the check.
 
-## Open questions
+## Calls taken
 
-- **For fabrikaa: should `related` take the set from `changes` directly, with `select` running
-  only as the fallback?** That drops the relay hop: the relay's pickup wait (1 to 11 s measured for
+- **Answered by fabrikaa: keep the relay.** The question was whether `related` should take the set
+  from `changes` directly, with `select` running only as the fallback. The answer is no, as the lean
+  below said; it walks back nothing in 1589's plan. The week of relay waits (Records) is the check
+  on it. The original question: That drops the relay hop: the relay's pickup wait (1 to 11 s measured for
   `select`) and its about 5 s, so about 6 to 16 s more per ready run. It walks back what 1589's
   plan kept fixed: `select` would skip on most ready runs while `related` is true, so
   `required.mjs`'s `gates.select` and `empty` rules, R1's `related` `needs` and `if`, and the
@@ -427,6 +452,10 @@ Estimate: 4 steps, $20
   no, keep the relay, 70%. The doubt: if the relay's pickup wait turns out to carry experiment
   299's runner-wait tail (209 to 357 s in the slowest runs), the hop costs minutes, not seconds;
   the first week of relay runs settles it.
+
+## Open questions
+
+None.
 
 ## Findings
 
