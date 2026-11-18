@@ -114,18 +114,23 @@ const prefixMoved = (
   }
 
   const top = selection.layers.at(-1);
+
   const pinsMatchViews =
     prefix.length > 0 &&
     prefix.length === current.length &&
     prefix.every((pin, index) => pin.number === current[index]?.number && pin.oid === current[index]?.oid);
+
   const expected = selection.layers
     .filter((layer) => layer.state === "OPEN")
     .map(({ number, oid }) => ({ number, oid }));
+
   const actual = current.filter((layer) => layer.state === "OPEN").map(({ number, oid }) => ({ number, oid }));
+
   const sameOpenPrefix =
     expected.length > 0 &&
     actual.length === expected.length &&
     expected.every((pin, index) => pin.number === actual[index]?.number && pin.oid === actual[index]?.oid);
+
   const endsAtSelectedTop = top !== undefined && prefix.at(-1)?.number === top.number;
 
   return pinsMatchViews && sameOpenPrefix && endsAtSelectedTop
@@ -445,6 +450,7 @@ export const layer = (
           ],
           { concurrency: "unbounded" },
         );
+
         const rules = rulesOut.split("\n").filter((line) => line !== "");
 
         if (rules.length > 1) {
@@ -454,6 +460,7 @@ export const layer = (
         }
 
         const rule = rules[0];
+
         const ruledQueue =
           rule === undefined
             ? null
@@ -462,6 +469,7 @@ export const layer = (
                   PullRequestsError.make({ reason: `the merge_queue rule on ${branch} has a shape we do not read` }),
                 ),
               );
+
         const branchQueue = yield* Schema.decodeEffect(BranchQueueRow)(branchQueueOut).pipe(
           Effect.mapError(() =>
             PullRequestsError.make({
@@ -536,9 +544,11 @@ export const layer = (
         }
 
         const prefix = held.value.prs.slice(0, topAt + 1);
+
         const heldLayers = yield* Effect.forEach(prefix, (layer) => view(layer.number), {
           concurrency: "unbounded",
         });
+
         const offPin = prefix.filter((pin, index) => heldLayers[index]?.oid !== pin.oid);
 
         if (offPin.length > 0) {
@@ -556,6 +566,7 @@ export const layer = (
         const current = yield* Effect.forEach(selection.layers, (layer) => view(layer.number), {
           concurrency: "unbounded",
         });
+
         const changed = selection.layers.filter((layer, index) => {
           const actual = current[index];
 
@@ -629,9 +640,11 @@ export const layer = (
         }
 
         const finalPrefix = finalHeld.value.prs.slice(0, finalTopAt + 1);
+
         const finalPrefixViews = yield* Effect.forEach(finalPrefix, (layer) => view(layer.number), {
           concurrency: "unbounded",
         });
+
         const finalOffPin = finalPrefix.filter((pin, index) => finalPrefixViews[index]?.oid !== pin.oid);
 
         if (finalOffPin.length > 0) {
@@ -649,6 +662,7 @@ export const layer = (
         const finalLayers = yield* Effect.forEach(selection.layers, (layer) => view(layer.number), {
           concurrency: "unbounded",
         });
+
         const finalChanged = selection.layers.filter((layer, index) => {
           const actual = finalLayers[index];
 
@@ -663,6 +677,7 @@ export const layer = (
 
         const request = mergeRequest(repo, top, action);
         const raw = yield* gh(request.args, { stdin: JSON.stringify(request.body) });
+
         const reply = yield* Schema.decodeEffect(MergeReply)(raw).pipe(
           Effect.mapError(() =>
             PullRequestsError.make({ reason: "GitHub answered the stack merge request in a shape we do not read" }),
@@ -725,6 +740,7 @@ export const layer = (
         const after = yield* Effect.forEach(selection.layers, (layer) => view(layer.number), {
           concurrency: "unbounded",
         });
+
         const notMerged = selection.layers.filter((layer, index) => {
           const actual = after[index];
 
