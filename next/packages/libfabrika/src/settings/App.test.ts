@@ -18,7 +18,7 @@
 //   and `Print` keep the signatures they have today, and read the app from the declarations.
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder, runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, PlatformError, Schema } from "effect";
+import { Effect, Exit, FileSystem, Layer, Match, Path, PlatformError, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as App from "./App.ts";
 import * as Files from "./Files.ts";
@@ -317,14 +317,15 @@ const isolation = Effect.fnUntraced(function* (
   const loaded = exit.value;
   list.forEach((path, n) => {
     const [place, value] = picks[n]!;
-    const want =
-      place === "a-repo"
-        ? { value, origin: { _tag: "file", file: a.repo, line: texts["a-repo"].at[path] } }
-        : place === "a-person"
-          ? { value, origin: { _tag: "file", file: own.person.name, line: texts["a-person"].at[path] } }
-          : place === "a-env"
-            ? { value, origin: { _tag: "env", name: envName(a.prefix, path) } }
-            : { value: DEFAULT, origin: { _tag: "default" } };
+    const want = Match.value(place).pipe(
+      Match.when("a-repo", () => ({ value, origin: { _tag: "file", file: a.repo, line: texts["a-repo"].at[path] } })),
+      Match.when("a-person", () => ({
+        value,
+        origin: { _tag: "file", file: own.person.name, line: texts["a-person"].at[path] },
+      })),
+      Match.when("a-env", () => ({ value, origin: { _tag: "env", name: envName(a.prefix, path) } })),
+      Match.orElse(() => ({ value: DEFAULT, origin: { _tag: "default" } })),
+    );
     expect({ value: loaded.snapshot.values[path], origin: loaded.snapshot.origins[path] }).toEqual(want);
   });
   // The other app's files are never opened.
@@ -556,16 +557,13 @@ const hidden = Effect.fnUntraced(function* (
   const s = JSON.stringify(word);
   const env: Record<string, string> = place === "b-env" ? { [envName(b.prefix, first)]: word } : {};
   const files: Record<string, string> = {
-    [own.repo.path]:
-      place === "a-table"
-        ? `[${first}]\nnested = ${s}\n`
-        : place === "a-array"
-          ? `[${table}]\n${rest.join(".")} = [${s}]\n`
-          : place === "a-scalar"
-            ? `${table} = ${s}\n`
-            : place === "a-unknown"
-              ? `[zz9zz]\nk = ${s}\n`
-              : "",
+    [own.repo.path]: Match.value(place).pipe(
+      Match.when("a-table", () => `[${first}]\nnested = ${s}\n`),
+      Match.when("a-array", () => `[${table}]\n${rest.join(".")} = [${s}]\n`),
+      Match.when("a-scalar", () => `${table} = ${s}\n`),
+      Match.when("a-unknown", () => `[zz9zz]\nk = ${s}\n`),
+      Match.orElse(() => ""),
+    ),
     [own.person.path]: "",
     [other.repo.path]: place === "b-repo" ? `[${table}]\n${rest.join(".")} = ${s}\n` : "",
     [other.person.path]: place === "b-person" ? `[${table}]\n${rest.join(".")} = ${s}\n` : "",
@@ -858,13 +856,13 @@ it.effect.prop(
         expect(said).toContain(first);
         expect(said).toContain(source === "repo" || source === "person" ? JSON.stringify(word) : word);
         expect(said).toContain(
-          source === "repo"
-            ? a.repo
-            : source === "person"
-              ? a.person
-              : source === "env"
-                ? envName(a.prefix, first)
-                : `--${first}`,
+          Match.value(source).pipe(
+            Match.when("repo", () => a.repo),
+            Match.when("person", () => a.person),
+            Match.when("env", () => envName(a.prefix, first)),
+            Match.when("flag", () => `--${first}`),
+            Match.exhaustive,
+          ),
         );
 
         if (source === "repo" || source === "person") {
