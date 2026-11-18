@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1170-tests",
+  "ticket": "kamp-us/tea-fabrika#1170",
+  "pr": null,
+  "started": "2026-11-18T06:49:00-08:00",
+  "ended": "2026-11-18T06:58:00-08:00",
+  "parent": null,
+  "active": null,
+  "driver_caused": false,
+  "role": "tests",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": null,
+  "outcome": "pass",
+  "head": "f26637277cf214c89a8cdb156ae31992bd151382",
+  "base": "2288cf8d",
+  "why": "Today's CI tooling, .github/ci. Fixed the P8 kill race in .github/ci/progress-reporter.integration.test.ts: only the cutoff child's generated config now sets testTimeout: 0, so its blocked test has no deadline and Vitest cannot write final JSON before the SIGKILL; normal and timeout config bytes are unchanged. The parent's wait for the journal acknowledgement has a fixed safety bound. The plan said 60 seconds, but the project's test deadline (vitest.config.ts testTimeout) is also 60 seconds and fired first (plant b: outer timeout at 61128 ms, not the not-null check), so the bound is 30 seconds, which makes the not-null check fail first. No product file changed.",
+  "note": "Node 26.13.0, nice 15, one worker, Linux cloud box. Plants run once each, restored with sha256 checked and git diff empty. (a) race: default deadline back on the cutoff child and a 6 s sleep before the first journal read, P8 red at :312 expect(before).not.toBeNull() after 6843 ms; a variant with the sleep just before the kill was red at the isRunning check after 6965 ms. (b) recording buffers event writes until end: with the 60 s bound P8 hit the outer 60 s test timeout (61128 ms, not wanted); with the 30 s bound red at :312 after 31908 ms. P8 passed 10 of 10 runs in a row (wall 11.3 to 12.2 s each). The whole integration file passed 2 of 2 in 26.8 s and time-table.test.ts 11 of 11. Plan gap: the 60 s bound named in the amendment equals the project test deadline and cannot fail first. Served model and usage not reported.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "plants": [
+    {
+      "law": "scenario: P8 installed callbacks survive a ready-observed SIGKILL before final JSON, while normal and timed-out verdicts stay real",
+      "plant": ".github/ci/progress-reporter.integration.test.ts probe: cutoff child gets Vitest's default deadline back (no testTimeout: 0) and the parent sleeps 6 s before its first journal read",
+      "result": "red"
+    },
+    {
+      "law": "scenario: P8 installed callbacks survive a ready-observed SIGKILL before final JSON, while normal and timed-out verdicts stay real",
+      "plant": ".github/ci/progress-reporter.ts recording: buffer every event write until end",
+      "result": "red"
+    }
+  ]
+}

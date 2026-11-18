@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1067-mock-fold-1-app-src-s1-docs-build",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:10:24-08:00",
+  "ended": "2026-11-16T01:11:12-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Mock sweep fold 1, stack layer 7 (decision 0555), one merge only, on fabrikalfa/mock-fold-1 from its head 299c2819b. Merged fabrikalfa/mock-app-src-s1 at ab9dd3cff with git merge --no-ff, giving merge commit 2c635642b. The slice's earlier head d821377bb was already in the fold, so the merge brought only docs: two cases in .patterns/a-law-watches-calls-with-a-recorder.md, the finding row field/findings/2026-11-16-mock-app-src-s1-plant-comments.json, and the run rows field/runs/2026-11-16-t1067-mock-app-src-s1-build1.json and field/runs/2026-11-16-t1067-mock-app-src-s1-review2.json. The merge had no conflict.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 1,
+  "note": "loosening.sh from 299c2819b to the merge commit: 0 hits in 0 exam files. The clone was not shallow. Not run by this step, as briefed: pnpm lint, pnpm typecheck and every test, which the coordinator runs; the merge changes no code.",
+  "step": "build"
+}

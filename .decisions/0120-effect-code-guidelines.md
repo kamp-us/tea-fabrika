@@ -1,7 +1,7 @@
 ---
 id: 0120
 title: Effect code in next/ follows eight guidelines, from using what Effect and Alchemy ship to saying why we differ, and the Alchemy port goes first
-status: amended-in-part by [0575](0575-deterministic-keys-is-the-service-id-form.md), [0577](0577-libraries-namespace-programs-barrel-imports.md)
+status: accepted
 date: 2026-11-11
 tags: [effect, guidelines, style, errors, layers, alchemy, doc-comments, imports, lint, next]
 ---
@@ -60,8 +60,11 @@ after code for each, is in
   service file holds only its contract (0095).
 - **E6. A public export has a doc, and a comment says why.** No plan codes and no history in
   comments.
-- **E7. Imports and service ids read like Effect's.** Namespace imports in libraries, and an id
-  with its package and folder. The ID form is whatever the checker's `deterministicKeys` holds
+- **E7. Imports and service ids read like Effect's.** Libraries use namespace imports, held by the
+  Effect checker's `preferNamespaceImport`; programs and apps use the barrel, held by
+  `preferBarrelImport`; each is an error in the package's own tsconfig
+  ([0577](0577-libraries-namespace-programs-barrel-imports.md)). A service id has its package and
+  folder, and its form is whatever the checker's `deterministicKeys` holds, with no rule of ours
   ([0575](0575-deterministic-keys-is-the-service-id-form.md)).
 - **E8. Where we differ from Effect, the file says why,** at the code, with the record that decided
   it.
@@ -88,8 +91,3 @@ after code for each, is in
   the splits and about 2,000 lines of doc comments.
 - Not decided here: the gateway's dispatch shape (experiment 174), and which reasons each service
   error has (0055, 0119).
-
-## Amendments
-
-- 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) says the service ID form in E7 is whatever the Effect checker's `deterministicKeys` holds, and deletes our rule `service-id`.
-- 2026-11-15: [0577](0577-libraries-namespace-programs-barrel-imports.md) says the import form in E7 is checked: libraries use namespace imports, held by the Effect checker's `preferNamespaceImport`, and programs and apps use the barrel, held by `preferBarrelImport`, each an error in the package's own tsconfig.

@@ -1,0 +1,67 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1135-lead-final-checks",
+  "ticket": "kamp-us/tea-fabrika#1135",
+  "pr": null,
+  "started": "2026-11-17T10:52:05.589Z",
+  "ended": "2026-11-17T10:53:54.674Z",
+  "parent": "2026-11-17-t1135-lead-executor",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling for next/ L11 passed its authorized final checks at af5becba03a83b2f7ac0fad7f9a46f31188f02e3 after both same readers passed the exact type-only correction. Normal format passed, all 30 packages completed typecheck, and all 18 normal lint parts passed. Head, index, all 5221 tracked source hashes and modes, and shared protected files stayed unchanged. The earlier e501 compiler failure remains in its immutable row. No extra test, protected law, actual adapter, push or CI operation ran.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 1.818083,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "driver_caused": false,
+  "head": "af5becba03a83b2f7ac0fad7f9a46f31188f02e3",
+  "plan": "eeb73b2ae95fc798e6f527635deee4f12a70ba959b65bca66051c0cb7b89d333",
+  "checks": {
+    "node": "26.13.0",
+    "pnpm": "12.16.1",
+    "paidKeyUnset": true,
+    "lockOverrides": false,
+    "format": {
+      "exit": 0,
+      "started": "2026-11-17T10:52:05.589Z",
+      "ended": "2026-11-17T10:52:38.337Z"
+    },
+    "typecheck": {
+      "exit": 0,
+      "packages": 30,
+      "started": "2026-11-17T10:52:53.389Z",
+      "ended": "2026-11-17T10:53:07.759Z"
+    },
+    "fullLint": {
+      "exit": 0,
+      "parts": 18,
+      "started": "2026-11-17T10:53:19.033Z",
+      "ended": "2026-11-17T10:53:54.674Z"
+    },
+    "trackedSourcesPreserved": 5221,
+    "headPreserved": true,
+    "indexPreserved": true,
+    "modesPreserved": true,
+    "sharedFilesPreserved": true,
+    "noLingeringCompiler": true,
+    "extraTests": 0,
+    "realAdapters": null
+  },
+  "limits": [
+    "row mapping missing",
+    "initialization and recovery attribution missing",
+    "Runner mapping missing",
+    "CPU profile missing",
+    "real adapter proof missing"
+  ]
+}

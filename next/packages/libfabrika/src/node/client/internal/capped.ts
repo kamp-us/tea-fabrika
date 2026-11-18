@@ -1,6 +1,13 @@
-import { Clock, Effect, Option, Stream } from "effect";
-import { ChildProcess } from "effect/process";
-import type { ChildProcessSpawner } from "effect/process";
+import * as Arr from "effect/Array";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
+import * as ChildProcess from "effect/process/ChildProcess";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import { Result } from "../../../tasks/Task.ts";
 
 /** What one child has printed so far: its stdout's chunks in order, and each stream's byte count. */
@@ -16,11 +23,13 @@ const add = (printed: Printed, chunk: Chunk): Printed =>
     : { ...printed, errBytes: printed.errBytes + chunk.bytes.length };
 
 const joined = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
-  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-  chunks.reduce((at, c) => {
+  const out = new Uint8Array(Arr.reduce(chunks, 0, (n, c) => n + c.length));
+  Arr.reduce(chunks, 0, (at, c) => {
     out.set(c, at);
+
     return at + c.length;
-  }, 0);
+  });
+
   return out;
 };
 
@@ -29,7 +38,7 @@ const utf8 = new TextDecoder("utf-8", { fatal: true });
 /** stdout as UTF-8 with one trailing newline dropped, or "" when it is not UTF-8. */
 const version = (chunks: ReadonlyArray<Uint8Array>) =>
   Effect.try(() => utf8.decode(joined(chunks))).pipe(
-    Effect.map((text) => (text.endsWith("\n") ? text.slice(0, -1) : text)),
+    Effect.map((text) => (Function.pipe(text, Str.endsWith("\n")) ? Function.pipe(text, Str.slice(0, -1)) : text)),
     Effect.orElseSucceed(() => ""),
   );
 
@@ -55,12 +64,14 @@ export const capped = Effect.fnUntraced(function* (
 ) {
   const started = yield* Clock.currentTimeMillis;
   const over = (printed: Printed) => printed.outBytes + printed.errBytes > cap;
+
   const ran = yield* Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* spawner.spawn(
         // A child that ignores the stop signal is killed outright two seconds later.
         ChildProcess.make(argv[0], [...argv[1]], { env: { ...env }, extendEnv: false, forceKillAfter: "2 seconds" }),
       );
+
       const last = yield* Stream.merge(
         handle.stdout.pipe(Stream.map((bytes): Chunk => ({ out: true, bytes }))),
         handle.stderr.pipe(Stream.map((bytes): Chunk => ({ out: false, bytes }))),
@@ -69,6 +80,7 @@ export const capped = Effect.fnUntraced(function* (
         Stream.takeUntil(over),
         Stream.runLast,
       );
+
       const printed = Option.getOrElse(last, () => nothing);
 
       if (over(printed)) {
@@ -76,13 +88,13 @@ export const capped = Effect.fnUntraced(function* (
       }
 
       const code = yield* handle.exitCode;
+
       return { printed, result: Result.cases.exited.make({ code, version: yield* version(printed.out) }) };
     }),
   ).pipe(
-    Effect.catch(() =>
-      Effect.succeed({ printed: nothing, result: Result.cases.failed.make({ reason: "spawn_failed" }) }),
-    ),
+    Effect.orElseSucceed(() => ({ printed: nothing, result: Result.cases.failed.make({ reason: "spawn_failed" }) })),
   );
+
   const ended = yield* Clock.currentTimeMillis;
   yield* Effect.annotateCurrentSpan({
     exit: ran.result._tag === "exited" ? ran.result.code : ran.result.reason,
@@ -91,5 +103,6 @@ export const capped = Effect.fnUntraced(function* (
     capped: over(ran.printed),
     duration_ms: ended - started,
   });
+
   return ran.result;
 });

@@ -13,6 +13,7 @@ export const layer = (c: Count, failing?: string): Layer.Layer<Sweeps> =>
     Sweeps.of({
       kick: Effect.suspend(() => {
         c.kicks += 1;
+
         return failing === undefined ? Effect.void : Effect.fail(new SweepsError({ reason: failing }));
       }),
     }),

@@ -15,17 +15,21 @@
 // delivery; let a second finished reply settle a settled one again.
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+
 import * as fc from "fast-check";
 import { fcResult } from "../../tasks/TasksTest.ts";
 import { Reply } from "../HandsTasks.ts";
-import { handsDelivery, State } from "./handsDelivery.ts";
+import { handsDelivery, Replied, State } from "./handsDelivery.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
 
 type Msg = (typeof handsDelivery)["msg"]["Type"];
 
 const rev = fc.integer({ min: 1, max: 1_000_000 });
+
 const arrivedAt = fc.integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 });
 
 const reply = fc.oneof(
@@ -47,7 +51,7 @@ const ctx = stubCtxThrowingProxy<unknown>();
 const lists = arbGuidedSequence(
   handsDelivery,
   ctx,
-  { outside: { replied: fc.record({ type: fc.constant("replied" as const), reply }) } },
+  { outside: { replied: fc.record({ reply }).map((fields) => Replied.make(fields)) } },
   { maxLength: 30 },
 );
 
@@ -89,9 +93,12 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
 
         if (r._tag === "waiting") {
           return prev._tag === "waiting"
-            ? same(prev, next) || "D1: waiting stays waiting, at its first receipt, on another waiting reply"
-            : (next._tag === "waiting" && next.rev === r.rev && next.arrivedAt === r.arrivedAt) ||
-                "D1: pending moves to waiting with the request's receipt";
+            ? same(prev, next)
+              ? true
+              : "D1: waiting stays waiting, at its first receipt, on another waiting reply"
+            : next._tag === "waiting" && next.rev === r.rev && next.arrivedAt === r.arrivedAt
+              ? true
+              : "D1: pending moves to waiting with the request's receipt";
         }
 
         if (r._tag === "finished") {
@@ -99,7 +106,7 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
             (next._tag === "result" &&
               next.answer._tag === "ok" &&
               same(next.answer.result, r.result) &&
-              Object.keys(next.answer).sort().join() === "_tag,result") ||
+              Arr.join(Rec.keys(next.answer).sort(), ",") === "_tag,result") ||
             "D1: a finished reply settles the delivery with that result"
           );
         }
@@ -109,7 +116,7 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
             (next._tag === "result" &&
               next.answer._tag === "err" &&
               next.answer.reason === r.reason &&
-              Object.keys(next.answer).sort().join() === "_tag,reason") ||
+              Arr.join(Rec.keys(next.answer).sort(), ",") === "_tag,reason") ||
             `D1: a ${r.reason} refusal settles a ${prev._tag} delivery with that reason`
           );
         }

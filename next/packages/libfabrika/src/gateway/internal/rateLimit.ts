@@ -18,14 +18,17 @@ export const Model = Schema.TaggedUnion({
   Schema.makeFilter((s) => s._tag === "fresh" || (s.until > s.at && (s._tag === "full" || s.used < s.policy.limit))),
 );
 
-const Msg = Schema.Struct({ type: Schema.Literal("take"), at: Integer, policy: Policy });
+/** @internal The one Msg: take from the budget at `at` under `policy`. */
+export const Take = Schema.TaggedStruct("take", { at: Integer, policy: Policy });
+
 const report = Cmd.make("report", { input: Schema.Struct({ decision: Decision }), ok: Schema.Null, err: [] });
+
 const times = Schema.decodeUnknownResult(Schema.Struct({ at: Integer, until: Integer, ttl: Positive }));
 
 /** @internal One sender's saved budget. Time and policy enter only in a take message. */
 export const machine = Machine.make({
   model: Model,
-  msg: Msg,
+  msg: Take,
   cmds: [report],
   init: (loaded) => [loaded ?? Model.cases.fresh.make({}), []],
   update: {
@@ -51,10 +54,12 @@ export const machine = Machine.make({
       }
 
       const used = continuing && s._tag === "open" ? s.used + 1 : 1;
+
       const next =
         used === m.policy.limit
           ? Model.cases.full.make({ policy: m.policy, until, at })
           : Model.cases.open.make({ policy: m.policy, until, at, used });
+
       return [next, [report({ decision: Decision.cases.allowed.make({ count: used, ttl }) })]];
     },
     report_ok: (s) => [s, []],

@@ -107,7 +107,9 @@ const run = (dir: string) =>
   });
 
 const name = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
+
 const states = ["relative", "absolute", "missing", "copy", "dangling", "wrong", "cycle"] as const;
+
 type State = (typeof states)[number];
 
 describe("skillscheck, today's tooling", () => {
@@ -149,6 +151,7 @@ describe("skillscheck, today's tooling", () => {
   it("T300 generated source trees require links resolving to their own source", () => {
     let clean = 0,
       refused = 0;
+
     fc.assert(
       fc.property(
         fc.record({
@@ -181,8 +184,10 @@ describe("skillscheck, today's tooling", () => {
               for (const [i, n] of names.entries()) {
                 const state = chosen[i] ?? "relative";
                 actual.push(state);
+
                 const source = join(sources, n),
                   alias = join(aliases, n);
+
                 rmSync(alias, { recursive: true, force: true });
 
                 switch (state) {
@@ -213,12 +218,14 @@ describe("skillscheck, today's tooling", () => {
               mkdirSync(join(sources, "_not-a-skill"));
               mkdirSync(join(aliases, "_claude-only"));
               writeFileSync(join(aliases, "_claude-only/SKILL.md"), "# Local\n");
+
               const ran = spawnSync("sh", [script], {
                 cwd: dir,
                 encoding: "utf8",
                 timeout: 5_000,
                 env: { ...process.env, TYPESAFE_API_KEY: undefined },
               });
+
               expect(ran.error).toBeUndefined();
               expect(ran.signal).toBeNull();
               const bad = actual.flatMap((s, i) => (s === "relative" || s === "absolute" ? [] : [names[i]!]));
@@ -254,6 +261,7 @@ describe("skillscheck, today's tooling", () => {
   it("T318 wrapped clauses pass and each missing or misplaced clause fails independently", () => {
     let accepted = 0,
       refused = 0;
+
     fc.assert(
       fc.property(
         fc.record({
@@ -412,7 +420,7 @@ const slice1bClauses = [
         skill,
         "Go easy on the machine",
         "K9",
-        "The test config and typecheck.sh hold worker, home and typecheck limits.",
+        "The test config and typecheck.ts hold worker, home and typecheck limits.",
       ] as const,
   ),
   [
@@ -474,6 +482,7 @@ const clauseTree = (f: (dir: string) => void, program = script) => {
     f(dir);
     const ran = spawnSync("sh", [program, dir], { encoding: "utf8", timeout: 5_000 });
     expect(ran.error).toBeUndefined();
+
     return { code: ran.status, text: ran.stdout + ran.stderr };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -490,9 +499,11 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
             const retired = old
               ? "Never rebase, force-push or update-branch.\nRun draft check; every exam path in the files table.\n"
               : "";
+
             writeFileSync(join(dir, ".agents/skills", n, "SKILL.md"), skillText(n, -1, wrap) + retired);
           }
         });
+
         expect(got.code, got.text).toBe(0);
       }),
       { seed: 321, numRuns: 6 },
@@ -532,6 +543,7 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
                 );
               }
             });
+
             expect(got.code, `${check}: ${got.text}`).toBe(1);
             expect(got.text).toContain(`${skill}/SKILL.md: ${check}`);
           }
@@ -555,6 +567,7 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
         expect(source).toContain(before);
         const planted = join(dir, "skillscheck.sh");
         writeFileSync(planted, source.replace(before, after));
+
         const got = clauseTree((tree) => {
           if (plant === "wrong section") {
             writeFileSync(
@@ -563,6 +576,7 @@ describe("T321 required clauses, today's tooling, slice 1a", () => {
             );
           }
         }, planted);
+
         expect(got.code).toBe(plant === "retired clause" ? 1 : 0);
         // The law expects the opposite result for this same input.
         expect(() => expect(got.code).toBe(plant === "retired clause" ? 0 : 1)).toThrow();
@@ -590,9 +604,12 @@ describe("T325 slice 1b required clauses, today's tooling", () => {
           try {
             // T318's files (review, tests) come from its own tree.
             tree(dir);
+
             const sources = join(dir, ".agents/skills"),
               aliases = join(dir, ".claude/skills");
+
             mkdirSync(aliases, { recursive: true });
+
             const wrap = (text: string) =>
               text
                 .split(" ")
@@ -624,6 +641,7 @@ describe("T325 slice 1b required clauses, today's tooling", () => {
             for (const [skill, heading, , clause] of slice1bClauses) {
               const file = join(sources, skill, "SKILL.md"),
                 text = readFileSync(file, "utf8");
+
               writeFileSync(file, text.replace(wrap(clause), ""));
               const absent = run();
               expect(absent.status).toBe(1);

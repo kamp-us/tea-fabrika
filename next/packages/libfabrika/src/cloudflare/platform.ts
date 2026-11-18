@@ -2,8 +2,6 @@
  * The Cloudflare clients the runtime calls through: each Durable Object stub, Durable Object storage
  * and the R2 bucket, wrapped once so a rejected platform call becomes a `LedgerError` with reason
  * `unreachable`.
- *
- * @stability unstable
  */
 import type { RpcCallError } from "@alchemy.run/cloudflare/Bridge";
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
@@ -11,6 +9,8 @@ import type { Fetcher } from "@alchemy.run/cloudflare/Fetcher";
 import type { WorkerEvent } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Predicate, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
@@ -20,7 +20,6 @@ import { reach } from "./reach.ts";
 /**
  * Reads only call metadata, including workerd's prototype getters.
  *
- * @stability unstable
  * @category combinators
  */
 export const isolateUsage = Effect.fnUntraced(function* (
@@ -32,6 +31,7 @@ export const isolateUsage = Effect.fnUntraced(function* (
       const event = item.event;
       const method = Predicate.hasProperty(event, "rpcMethod") ? event.rpcMethod : undefined;
       const outcome = item.outcome;
+
       return {
         process,
         method: Schema.is(IsolateUsage.Method)(method) ? method : "other",
@@ -77,16 +77,19 @@ type Calls<S> = {
  * Any other error, and an `unreachable` one with no message or no `<class>: <text>` form, is
  * returned as it is.
  *
- * @stability unstable
  * @category error handling
  */
-export const rejected = (error: unknown): unknown => {
+export const rejected = <E>(error: E): E | Error => {
   if (!(error instanceof LedgerError) || error.reason !== "unreachable" || error.message === undefined) {
     return error;
   }
 
-  const at = error.message.indexOf(": ");
-  return at < 0 ? error : Object.assign(new Error(error.message.slice(at + 2)), { name: error.message.slice(0, at) });
+  const message = error.message;
+
+  return Option.match(Str.indexOf(": ")(message), {
+    onNone: () => error,
+    onSome: (at) => Object.assign(new Error(Str.slice(at + 2)(message)), { name: Str.slice(0, at)(message) }),
+  });
 };
 
 /**
@@ -97,7 +100,6 @@ export const rejected = (error: unknown): unknown => {
  * `ProjectClient.make` wraps a stub. A rejected call fails with a `LedgerError` of reason
  * `unreachable` that keeps the thrown value as its cause.
  *
- * @stability unstable
  * @category services
  */
 export class ProjectClient extends Context.Service<
@@ -259,7 +261,6 @@ export class ProjectClient extends Context.Service<
  * `ProcessClient.make` wraps a stub. The object's own `LedgerError` crosses as itself, and a call
  * that got no answer fails with reason `unreachable`, keeping Alchemy's `RpcCallError` as its cause.
  *
- * @stability unstable
  * @category services
  */
 export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<ProcessShape, "alarm">>>()(
@@ -268,6 +269,7 @@ export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<Pro
   static make(stub: ProcessBinding): ProcessClient["Service"] {
     // The object's own LedgerError crosses as itself; a call that got no answer is `unreachable`.
     const process = makeRpcStub<ProcessClient["Service"]>(stub, { errors: [LedgerError] });
+
     return {
       swap: (...args) => reach(process.swap(...args), lost),
       usage: (...args) => reach(process.usage(...args), lost),
@@ -294,7 +296,6 @@ export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<Pro
  * `GatewayClient.make` wraps a stub. A rejected call fails with a `LedgerError` of reason
  * `unreachable` that keeps the thrown value as its cause.
  *
- * @stability unstable
  * @category services
  */
 export class GatewayClient extends Context.Service<
@@ -307,6 +308,7 @@ export class GatewayClient extends Context.Service<
     const calls = makeRpcStub<Pick<ConnectionShape, "ring" | "notify" | "probe"> & Pick<Fetcher, "fetch">>(stub, {
       errors: [LedgerError],
     });
+
     return {
       // A lost object is `unreachable` with what the platform threw as its cause. Alchemy's fetcher
       // made a rejected platform fetch a defect; our Alchemy patch makes it fail typed, as an
@@ -328,7 +330,6 @@ export class GatewayClient extends Context.Service<
 /**
  * Service for calls on the Record Durable Object. `RecordClient.make` hands the stub back as it is.
  *
- * @stability unstable
  * @category services
  */
 export class RecordClient extends Context.Service<RecordClient, RecordShape>()(
@@ -347,7 +348,6 @@ export class RecordClient extends Context.Service<RecordClient, RecordShape>()(
  * `StorageClient.make` wraps the storage. A rejected call fails with a `LedgerError` of reason
  * `unreachable` that keeps the thrown value as its cause.
  *
- * @stability unstable
  * @category services
  */
 export class StorageClient extends Context.Service<
@@ -356,9 +356,9 @@ export class StorageClient extends Context.Service<
     readonly get: <A>(key: string) => Effect.Effect<A | undefined, LedgerError>;
     readonly put: (key: string, value: unknown) => Effect.Effect<void, LedgerError>;
     readonly delete: (key: string) => Effect.Effect<boolean, LedgerError>;
-    readonly sync: () => Effect.Effect<void, LedgerError>;
+    readonly sync: Effect.Effect<void, LedgerError>;
     readonly setAlarm: (at: number) => Effect.Effect<void, LedgerError>;
-    readonly deleteAlarm: () => Effect.Effect<void, LedgerError>;
+    readonly deleteAlarm: Effect.Effect<void, LedgerError>;
   }
 >()("@kampus/libfabrika/cloudflare/platform.StorageClient") {
   static make(storage: DurableObjectStorage): StorageClient["Service"] {
@@ -372,15 +372,14 @@ export class StorageClient extends Context.Service<
       delete: (key) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object storage delete enters Effect
         Effect.tryPromise({ try: () => storage.delete(key), catch: unreachable }),
-      sync: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object storage sync enters Effect
-        Effect.tryPromise({ try: () => storage.sync(), catch: unreachable }),
+      // A value, not a call: tryPromise runs its `try` afresh each time the Effect runs.
+      // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object storage sync enters Effect
+      sync: Effect.tryPromise({ try: () => storage.sync(), catch: unreachable }),
       setAlarm: (at) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object alarm set enters Effect
         Effect.tryPromise({ try: () => storage.setAlarm(at), catch: unreachable }),
-      deleteAlarm: () =>
-        // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object alarm delete enters Effect
-        Effect.tryPromise({ try: () => storage.deleteAlarm(), catch: unreachable }),
+      // oxlint-disable-next-line fabrika/no-promises -- edge: Durable Object alarm delete enters Effect
+      deleteAlarm: Effect.tryPromise({ try: () => storage.deleteAlarm(), catch: unreachable }),
     };
   }
 }
@@ -393,7 +392,6 @@ export class StorageClient extends Context.Service<
  * `BucketClient.make` wraps the bucket. A rejected call fails with a `LedgerError` of reason
  * `unreachable` that keeps the thrown value as its cause.
  *
- * @stability unstable
  * @category services
  */
 export class BucketClient extends Context.Service<

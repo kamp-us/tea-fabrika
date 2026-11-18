@@ -20,6 +20,7 @@
 // `// oxlint-disable-next-line fabrika/no-cause-squash -- edge: <why>` on its line. `.oxlintrc.json`
 // leaves tests, shared suites and test support out: a test reads a failed `Exit` to assert on it.
 import type { CreateRule, Scope, Variable } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 const MESSAGE =
@@ -53,7 +54,7 @@ const written = (key: Node, computed: boolean): string | null => {
     return key.name;
   }
 
-  return key.type === "Literal" && typeof key.value === "string" ? key.value : null;
+  return key.type === "Literal" && Predicate.isString(key.value) ? key.value : null;
 };
 
 export const noCauseSquash: CreateRule = {
@@ -80,6 +81,7 @@ export const noCauseSquash: CreateRule = {
 
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return (
           at !== null &&
           ((at.from === "effect" && at.name === "Cause") || (at.from === "effect/Cause" && at.name === "*"))
@@ -92,6 +94,7 @@ export const noCauseSquash: CreateRule = {
         node.object.type === "Identifier"
       ) {
         const at = imported(resolve(node.object));
+
         return at !== null && at.from === "effect" && at.name === "*";
       }
 

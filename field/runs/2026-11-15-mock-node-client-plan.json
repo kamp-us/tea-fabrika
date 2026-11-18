@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-node-client-plan",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null,
+  "started": "2026-11-15T20:31:05-08:00",
+  "ended": "2026-11-15T20:37:51-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for the mock sweep in next/packages/libfabrika/src/node/client (docs/plan/quests/mock-node-client-PLAN.md): the folder's three vi.spyOn calls all sit in the S2 secrets law; the hands start gives tea an onError that logs through Effect, the hands entry ends the process through Effect when the run fails, the law reads an in-memory Console beside its Logger, and the folder joins vitest/no-restricted-vi-methods. plancheck --draft passes. No open questions.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Run in a cloud box by a step session with no subagents. The model, tokens and tool calls were not recorded here, so they stay unknown. The pull request number is filled by the lead.",
+  "step": "plan"
+}

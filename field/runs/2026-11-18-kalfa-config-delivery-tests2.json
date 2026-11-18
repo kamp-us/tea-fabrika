@@ -1,0 +1,92 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-kalfa-config-delivery-tests2",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": "kamp-us/tea-fabrika#1589",
+  "started": "2026-11-17T17:46:38-08:00",
+  "ended": "2026-11-17T18:23:24-08:00",
+  "parent": "2026-11-18-kalfa-config-delivery-tests1",
+  "active": null,
+  "driver_caused": false,
+  "role": "step",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Second round, a fix round after review, on 2a8bae603, which merges decision 0598's build. The delivery diff was re-made on 1590's lines: slots, the run number, mapped and the select run parameter are gone, select prints seven outputs, and every law 1590 added is as 1590 has it, extended only for archive and consumer. Review fixes: D5 holds a rerun that exits non-zero with P1 shown passed (not_green); the size-step law is a Schema property with the exact reader filter pinned as scenarios on a readable and an unreadable change; the four new property laws are Schema it.prop laws; the --fault mode logs a reason before exiting 1.",
+  "note": "Every changed test file was run narrowly and is green: related-selection 22, legs 27, changes 61, related 120, proof 12, plant-related 1, record 33, guard related 54, guard changes 72, merge-line 89, scheduled 282, next-job 181. Plants: D5 (drop the rerun status check) and O2 (scope always all, no filter as readers, any other filter as readers) are red, and so are the O1 positional next/ and the three O3 plants on the rewritten laws. The spawn-based legs property keeps 12 runs because each run starts a process (about a second) and 100 would pass the 60 s test limit; the routes are pinned as scenarios. pnpm lint exit 0, pnpm typecheck exit 0, ratchet exit 0. Not run: P2's real install and the real --fault run. Usage and cost are unknown.",
+  "base": "2a8bae60387fed96792db19a2a77ff4ab1a0d902",
+  "head": "2a8bae60387fed96792db19a2a77ff4ab1a0d902",
+  "sourceHashes": {
+    ".github/ci/changes.mjs": "91c2750c31376b2e52a5d9ea2ddfa85d0945f79a3cf2ce22a1b15cbba719a50f",
+    ".github/ci/changes.test.ts": "65d29ac6b140c04a518f94efde5c5add19b46a8d83054b7c5acef611496b3e85",
+    ".github/ci/legs.test.ts": "349e75c897134fdec77190285e0f14fc589f1d4774f633acba808c65cbbc72ee",
+    ".github/ci/legs.ts": "a7ddef67c7b0fba1f12acbd2332c2f8f3bf665563fcd7462e201618989045df2",
+    ".github/ci/related-selection.test.ts": "b96056657a0b70b5f63fff5bffe947aceb98baacb069e51af6d0387f9e5bca6d",
+    ".github/ci/related.test.ts": "44bcbf6a6a0ccb6a1e5d58fcf3defb4bcf2c8755c8b5598cca28dc53676e96ed",
+    ".github/ci/related.ts": "acc6d3a54796f2ab25f884feba79eb202357607f7640fca35155290418a18447",
+    ".github/ci/workflow-lint/changes.test.ts": "834f4806af79a3a9e856974b1cf866df2f06cad14d842ad54aea0bf4da9adad8",
+    ".github/ci/workflow-lint/changes.ts": "5bae754ff218eb471fc2078734cd971dafc20398c353dc5c30801ce7ed810835",
+    ".github/ci/workflow-lint/merge-line.test.ts": "ad5bca903a541f57f38b9b0bda319191183d42dcc1f5caf19d8cc4ed332122df",
+    ".github/ci/workflow-lint/merge-line.ts": "f2fa835576534929431c70e800a989a3031e18fc1867680a07cdb5f61bb2b9cd",
+    ".github/ci/workflow-lint/next-job.test.ts": "7363b2758b99d033a852d76531117189ef60bc342b172b330c24cf2b3a7a3a4f",
+    ".github/ci/workflow-lint/next-job.ts": "237f552b30126497029b9749f717a74cd4c45a0f233d99aee435c7c93821d8e6",
+    ".github/ci/workflow-lint/record.ts": "996b30cf099a4a65b8790c63a99d3cef83aee5f5c602e51064e4fe73b140e10c",
+    ".github/ci/workflow-lint/related.test.ts": "d9d2e8dfe49b25375acd0eac9630805cfbd9b6bf523ed4a6bf482455cdf37fd4",
+    ".github/ci/workflow-lint/related.ts": "f6c2343e26cc91ea71c4f6d58a4460591a23439dcd06f689da45d462c7427d65",
+    ".github/ci/workflow-lint/wiring.test-support.ts": "497a6f80d5900bd6ad06aa443f70145889958436bd094a96a7c78021dab632ff",
+    ".github/workflows/check.yaml": "11b45e69b4079610728b275966372508c31a186b520936e245524f0f8a116c28"
+  },
+  "plants": [
+    {
+      "law": "D5 fault check",
+      "plant": "accept a second run that exits non-zero while its report shows P1 passed",
+      "result": "red"
+    },
+    {
+      "law": "O2 reader narrowing",
+      "plant": "scope is always all",
+      "result": "red"
+    },
+    {
+      "law": "O2 reader narrowing",
+      "plant": "no filter at all means the readers",
+      "result": "red"
+    },
+    {
+      "law": "O2 reader narrowing",
+      "plant": "any filter that is not the two roots narrows to the readers",
+      "result": "red"
+    },
+    {
+      "law": "O1 ordinary discovery",
+      "plant": "restore the positional next/ in list",
+      "result": "red"
+    },
+    {
+      "law": "O3 record",
+      "plant": "decode the legacy next/ as all",
+      "result": "red"
+    },
+    {
+      "law": "O3 first pass",
+      "plant": "print the legacy next/ as the full filter",
+      "result": "red"
+    },
+    {
+      "law": "O3 same program",
+      "plant": "let the parser's pass offer a Kalfa path",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 36.8,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billed": null,
+  "billing": null
+}

@@ -1,9 +1,7 @@
 /**
  * Instance starts recorded and read through RPC calls to the object that keeps them.
- *
- * @stability unstable
  */
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Match, Schema } from "effect";
 import * as Start from "../settings/Start.ts";
 import {
   Decode,
@@ -20,7 +18,6 @@ import * as SettingsInput from "./SettingsInput.ts";
 /**
  * The two RPC calls the layer makes. The Project object's binding has this shape.
  *
- * @stability unstable
  * @category models
  */
 export interface Calls {
@@ -39,7 +36,6 @@ const unreachable = (cause: unknown) => new StartsError({ reason: new Unreachabl
  * for the asked start, and on `record` must match the input. A call that throws fails with
  * `Unreachable`. A failed reply fails with the same reason here.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (calls: Calls) =>
@@ -68,6 +64,7 @@ const call = Effect.fnUntraced(function* (
     Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
   );
   const raw = yield* work;
+
   const reply = yield* Schema.decodeUnknownEffect(Start.Reply)(raw, { onExcessProperty: "error" }).pipe(
     Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
   );
@@ -84,15 +81,13 @@ const call = Effect.fnUntraced(function* (
     return saved;
   }
 
-  const reason =
-    reply._tag === "Missing"
-      ? new Missing({ target: MissingTarget.cases.instance.make({ start }) })
-      : reply._tag === "Decode"
-        ? new Decode({ cause: reply })
-        : reply._tag === "Refused"
-          ? new Refused({ cause: reply })
-          : reply._tag === "Storage"
-            ? new Storage({ cause: reply })
-            : new Unreachable({ cause: reply });
+  const reason = Match.valueTags(reply, {
+    Missing: () => new Missing({ target: MissingTarget.cases.instance.make({ start }) }),
+    Decode: (reply) => new Decode({ cause: reply }),
+    Refused: (reply) => new Refused({ cause: reply }),
+    Storage: (reply) => new Storage({ cause: reply }),
+    Unreachable: (reply) => new Unreachable({ cause: reply }),
+  });
+
   return yield* new StartsError({ reason });
 });

@@ -3,7 +3,7 @@
 // mutant of that line survives. `unit` is there for a mutant the typecheck
 // rejects (a compile error), and the error text for one the ignorer takes out.
 
-export type Unit = "n";
+type Unit = "n";
 
 /** `n` held between `low` and `high`. */
 export function clamp(n: number, low: number, high: number): number {
@@ -14,6 +14,6 @@ export function clamp(n: number, low: number, high: number): number {
 }
 
 /** The unit `clamp` works in. */
-export function unit(): Unit {
+function unit(): Unit {
 	return "n";
 }

@@ -1,0 +1,25 @@
+diff --git a/dist/NodeHttpServer.js b/dist/NodeHttpServer.js
+index 9cf04c399fd5a329808a9375a7f1ab8578d6e5b1..f0672bf615b0bc5e35f5a9df4c32efdbd504bac1 100644
+--- a/dist/NodeHttpServer.js
++++ b/dist/NodeHttpServer.js
+@@ -649,6 +649,7 @@ export const layerConfig = (evaluate, options) => Layer.mergeAll(Layer.effect(Ht
+ export const layerTest = /*#__PURE__*/HttpServer.layerTestClient.pipe(/*#__PURE__*/Layer.provide(/*#__PURE__*/Layer.fresh(FetchHttpClient.layer).pipe(/*#__PURE__*/Layer.provide(/*#__PURE__*/Layer.succeed(FetchHttpClient.RequestInit)({
+   keepalive: false
+ })))), /*#__PURE__*/Layer.provideMerge(/*#__PURE__*/layer(http.createServer, {
++  host: "127.0.0.1",
+   port: 0
+ })));
+ // -----------------------------------------------------------------------------
+diff --git a/src/NodeHttpServer.ts b/src/NodeHttpServer.ts
+index 6e7842df7b135f0189c47805e2a7c2d94d2cf9d4..ece20991499012c2a2f625ada1ab28a74d575888 100644
+--- a/src/NodeHttpServer.ts
++++ b/src/NodeHttpServer.ts
+@@ -921,7 +921,7 @@ export const layerTest: Layer.Layer<
+       Layer.provide(Layer.succeed(FetchHttpClient.RequestInit)({ keepalive: false }))
+     )
+   ),
+-  Layer.provideMerge(layer(http.createServer, { port: 0 }))
++  Layer.provideMerge(layer(http.createServer, { host: "127.0.0.1", port: 0 }))
+ )
+ 
+ // -----------------------------------------------------------------------------

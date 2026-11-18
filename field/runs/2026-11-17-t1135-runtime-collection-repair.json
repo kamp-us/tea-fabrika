@@ -1,0 +1,74 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1135-runtime-collection-repair",
+  "ticket": "kamp-us/tea-fabrika#1135",
+  "pr": null,
+  "started": "2026-11-17T13:04:12Z",
+  "ended": "2026-11-17T13:06:56Z",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling for next/ L11 now asks Vitest to collect test definitions at runtime. Only the list branch gains --staticParse=false. The existing request property uses the installed public parseCLI entry point and failed before the fix because staticParse was undefined. All 24 existing pure laws pass after the fix. Run arguments, all 23 known names, 17 required targets, source pins and collection checks are unchanged. This is parser compatibility proof only; actual repaired collection remains owed on eligible CI.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "driver_caused": true,
+  "head": "23a17202c46bfb102bb7362735ac3abcc456f3a8",
+  "plan": "b5252222cb408a8e998c42c3c1b98ae2299797f876d3b1f16d2bd416d9eacc09",
+  "checks": {
+    "executorLaws": 20,
+    "machineLaws": 2,
+    "workflowLaws": 2,
+    "format": true,
+    "scopedLint": true,
+    "workflowLint": true,
+    "compilerRun": false,
+    "fullLintRun": false,
+    "protectedCollectionRun": false,
+    "guardOverride": false,
+    "ciDispatch": false,
+    "sourceHashes": {
+      ".github/ci/l11-cases.ts": "a3f63327c71c0e87a8fc7b4c61d2f7a03cf0b5b39208d36b71a5bec20083c6c0",
+      ".github/ci/l11-exercise.test.ts": "a14544c611fcd956d7f85185e7ca0809be5f15597eab7892d09738d9b592067b"
+    }
+  },
+  "plants": [
+    {
+      "law": "strict requests reject caller additions and every unsupported case or source",
+      "plant": "Run the extended law before adding the runtime collection flag.",
+      "result": "red",
+      "failure": "expected undefined to be false"
+    }
+  ],
+  "firstActualAttempt": {
+    "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44086970814",
+    "trusted": "ad9082bc34bf32a21aa7a30e1b00e10f68cc6170",
+    "cached": "collection_mismatch",
+    "uncached": "collection_mismatch",
+    "testsEach": 0,
+    "collector": "missing_report",
+    "cleanupEach": true,
+    "collectedRowCount": null,
+    "testTimings": null
+  },
+  "constructionIssues": [
+    "The machine test ran for less than one second while the executor test was still running. Both used nice 19 and maxWorkers 1. The next test waited for the executor's actual exit.",
+    "The first scoped lint could not resolve oxc-resolver through the reused dependencies. Linking the matching workspace dependency directory fixed resolution; the next scoped lint passed. No source or dependency version changed."
+  ],
+  "limits": [
+    "No standalone child-process fixture or protected source was collected locally.",
+    "Actual repaired collection and test observations require the next eligible CI comparison.",
+    "No cache benefit, input equality, output fault or ten-slot batch result is claimed."
+  ]
+}

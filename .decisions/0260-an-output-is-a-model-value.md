@@ -1,12 +1,12 @@
 ---
 id: 0260
-title: In next/, a program's output is a value picked from its model and sent when it changes, never a Cmd, and null means nothing to send
+title: In next/, a program's output is never a Cmd and is kept nowhere
 status: accepted
 date: 2026-11-08
 tags: [programs, program-shape, outputs, pipes, next]
 ---
 
-# 0260: In next/, a program's output is a value picked from its model and sent when it changes, never a Cmd, and null means nothing to send
+# 0260: In next/, a program's output is never a Cmd and is kept nowhere
 
 **What this decides:** what a program's output is, so "output" and "Cmd" keep one meaning each.
 
@@ -14,17 +14,18 @@ tags: [programs, program-shape, outputs, pipes, next]
 
 Decided by the owner in [a program's shape](../docs/direction/program-shape.md). It walks back
 tea-program's "outputs are events" for `next/`; [tea-program](../docs/direction/tea-program.md)
-keeps that rule for today's version only.
+keeps that rule for today's version only. How an output is made, from the program's state by
+`Program.outputs`, is decided in [0601](0601-program-make-with-optional-pipes.md), the home of a
+program's shape.
 
 ## Decision
 
-**An output is a selector of the model, sent each time its value changes.**
+**An output is made from the program's state, is never a Cmd and is kept nowhere.**
 
-- tsc checks the picked value against the output's schema.
-- `null` means nothing to send.
-- An output is never a Cmd: it has no answer. It is not an event either: it is kept nowhere.
+- An output is never a Cmd: it has no answer.
+- An output is not an event either: it is kept nowhere.
 
 ## Consequences
 
-- A source sends after each change (C8 in the five layers), with no output Cmd to keep in step.
-- Not known yet: whether every output can be a model selector.
+- No output Cmd is kept in step with the state.
+- Not decided here: whether an output is sent only when it changes, and what `null` means.

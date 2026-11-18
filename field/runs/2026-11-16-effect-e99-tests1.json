@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e99-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:38:40-08:00",
+  "ended": "2026-11-16T00:14:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for Effect sweep slice E99, a judgment slice, in next/: the checker's lazyEffect over next/packages/libfabrika/src/{cloudflare, gateway, runtime}. Counted on origin/main 701a6511d with effect-tsgo diagnostics on next/packages/libfabrika/tsconfig.json and only lazyEffect at error through --lspconfig: 11 hits, all in this row's folders, none in exam paths (the plan said 8: cloudflare 9, gateway 1, runtime 1 now). Every hit is in a product file, so this step fixed none. Folders with a hit: lib:cloudflare (SettingsStartsLedger.ts:67 fromLedger, bindings.ts:168 GatewayCalls.connect, platform.ts:353 StorageClient.sync and StorageClient.deleteAlarm, runtime.ts:347 ProjectDoorOptions.nextProcess, runtime.ts:2016 ProjectService.connect, runtime.ts:2505 ProcessService.init, alarm and recover), lib:gateway (Gateway.ts:1997 Gateway.connect), lib:runtime (Runner.ts:471 ProgramRunner.init). To see where each fix reaches, every member was planted in its value form, types only, and tsc run on libfabrika and the app, then undone: 87 and 356 type errors. For the build, 3 hits: StorageClient.sync and deleteAlarm (an Effect value in place of a call that takes nothing; callers cloudflare/runtime.ts:2404, and runtime.ts:2295 hands the client to ProcessStore.layer, whose storage option at runtime/ProcessStore.ts:164 still takes a call, so the build adapts there or keeps ProcessStore's option as it is), and fromLedger (callers cloudflare/runtime.ts:871 and SettingsStartsLedger.ts:162; it must stay a fresh layer each time it is used: Layer.fresh around one value keeps the new law L18 green, a plain shared value turns it red). Left, 8 hits, because the fix reaches test or product callers outside this row's folders (judgment brief, step 2): GatewayCalls.connect, ProjectService.connect and Gateway.connect move together (callers in next/apps/fabrika/src/brain.ts:59, door.integration.test.ts, door-spans.test.ts, door-recovery.integration.test.ts, hands-client.test.ts, runtime-quotas.laws.test.ts, runtime-recovery.laws.integration.test.ts, runtime.laws.integration.test.ts, start-member.laws.integration.test.ts, checklist-instance.laws.integration.test.ts, exam/agent-may.test.ts, exam/runner-contract-replay.test.ts); ProjectDoorOptions.nextProcess (callers in next/apps/fabrika/src/runtime.ts:58, e2e/chaos-revoke.worker.test-support.ts:42, door-spans.test.ts:251, door.integration.test.ts:434, door-recovery.integration.test.ts:378, hands-client.test.ts:217, exam/agent-may.test.ts:137, exam/runner-contract-replay.test.ts:111, and lib:node node/RunnerAdmission.integration.test.ts:145); ProcessService.init, alarm and recover (callers in next/apps/fabrika/src/start-child.laws.integration.test.ts:875, runtime-quotas.laws.test.ts:544, runtime-recovery.laws.integration.test.ts:122 and 124); ProgramRunner.init (callers in lib:node node/Chaos.test-support.ts:207 and the app's start-child law above). None waits on 1366, which is merged. Laws: two existing laws walk every StorageClient member by calling it, so they were changed to run a member that is an Effect as it is and to call one that is a function, asserting the same thing; one new law, L18, holds what fromLedger answers today. No lock line, no tsconfig override, no LOCKED row was added.",
+  "laws": [
+    {
+      "law": "L18 two ledgers keep their own starts, even when one is built inside the other's context",
+      "file": "next/packages/libfabrika/src/cloudflare/SettingsStarts.test.ts",
+      "red": "none now: it holds behavior the code has today, and turns red if the build makes fromLedger one shared layer value"
+    },
+    {
+      "law": "a rejected platform call fails with LedgerError unreachable, carrying the thrown error's name and text (changed: an Effect member runs as it is)",
+      "file": "next/packages/libfabrika/src/cloudflare/platform.test.ts",
+      "red": "none now: before the change it went red on StorageClient.sync and deleteAlarm in their value form"
+    },
+    {
+      "law": "C5: a generated rejection on any client call is `unreachable` and keeps that very value (changed: a member is a call or an Effect)",
+      "file": "next/packages/libfabrika/src/cloudflare/error-cause.test.ts",
+      "red": "none now: before the change it went red on StorageClient.sync and deleteAlarm in their value form"
+    }
+  ],
+  "plants": [
+    {
+      "law": "L18 two ledgers keep their own starts, even when one is built inside the other's context",
+      "plant": "fromLedger answers one shared Layer.effect value, used by layer(sql) too",
+      "result": "red"
+    },
+    {
+      "law": "L18 two ledgers keep their own starts, even when one is built inside the other's context",
+      "plant": "fromLedger as Layer.fresh around one Layer.effect value (the fix the build may take; runtime.ts:871 left calling it, so L5 in the same file went red for that reason only)",
+      "result": "green"
+    },
+    {
+      "law": "a rejected platform call fails with LedgerError unreachable (the law before this change)",
+      "plant": "StorageClient.sync and deleteAlarm as Effect values, the build's fix",
+      "result": "red"
+    },
+    {
+      "law": "C5 (the law before this change)",
+      "plant": "StorageClient.sync and deleteAlarm as Effect values, the build's fix",
+      "result": "red"
+    },
+    {
+      "law": "a rejected platform call fails with LedgerError unreachable (changed)",
+      "plant": "StorageClient.sync and deleteAlarm as Effect values, the build's fix",
+      "result": "green"
+    },
+    {
+      "law": "C5 (changed)",
+      "plant": "StorageClient.sync and deleteAlarm as Effect values, the build's fix",
+      "result": "green"
+    },
+    {
+      "law": "a rejected platform call fails with LedgerError unreachable (changed)",
+      "plant": "value-form deleteAlarm whose catch ignores its argument",
+      "result": "red"
+    },
+    {
+      "law": "C5 (changed)",
+      "plant": "value-form deleteAlarm whose catch ignores its argument",
+      "result": "red"
+    },
+    {
+      "law": "the checker's lazyEffect at error over next/packages/libfabrika/tsconfig.json (the lock comes later)",
+      "plant": "none needed: origin/main 701a6511d has 11 hits",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 35,
+  "note": "Tests run at origin/main 701a6511d plus this step's three test edits, under nice -n 15 with maxWorkers 3 and TYPESAFE_API_KEY unset: cloudflare/SettingsStarts.test.ts 13 passed, cloudflare/platform.test.ts 9 passed, cloudflare/error-cause.test.ts 12 passed, and --changed origin/main 3 files, 34 passed. No .integration. or .visual. law is reached by these files, so the 0178 guard did not come up. pnpm format applied nothing more; the list ratchet exited 0. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144): the first run caught two fabrika(no-expect-in-if) lines in L18, fixed by making its one assertion unconditional. Two later full runs failed only in parts that start a TypeScript API child (lint:promise-types, lint:kind, lint:dead) with EPIPE or an unexpected EOF: dmesg shows the box's memory cgroup killing a tsc while another agent's build ran tsgo, code-graph and oxlint; each part, run again alone, passed (promise-types 0 findings, test-kind clean, unreachable ledger PASS, none new). The type-only plant ran tsc on libfabrika and the app once each, to find each fix's callers; no pnpm typecheck ran. The build proves zero with pnpm typecheck and a recount.",
+  "step": "tests"
+}

@@ -49,7 +49,7 @@ All of this is about `next/`. Today's version keeps its words until that code go
 The owner decided both on 2026-11-10, after the words were crossed against the industry's. Lead
 ticket 570 records them. They ride in the libfabrika folder move (ticket 477), whose layout is
 [0043](0043-rooms-on-floors.md). This record **amends 0043 in part**: its room list names `door/`,
-and that room is now `gateway/`. The rest of 0043 holds.
+and that room is now `gateway/`.
 
 - **The door does a gateway's job.** It admits a client (the challenge, sign-in, the waiting room),
   routes each message and stamps each entry's `by`. That is what an API gateway does: it
@@ -65,7 +65,6 @@ and that room is now `gateway/`. The rest of 0043 holds.
   splits `platform-node` and `platform-browser`. "Workers" names one Cloudflare product; the code
   also runs Durable Objects and R2. This **amends [0032](0032-libraries-take-effects-file-layout.md)
   in part**: its platform prefix for a platform's file, `WorkersGateway.ts`, becomes `Cloudflare`.
-  [0042](0042-platform-pieces-go-through-alchemy.md) still holds whole.
 
 ## Decision
 
@@ -127,8 +126,8 @@ and that room is now `gateway/`. The rest of 0043 holds.
   `workers/record` and `workers/control` get a note that the folder becomes `cloudflare/`.
 - Not changed: the code names in those rows, `GatewayBinding`, `GatewayService`, `gatewayRuntime`
   and `DoorCalls`. They are code names on main and change with the code rename.
-- [0032](0032-libraries-take-effects-file-layout.md) and [0043](0043-rooms-on-floors.md) are
-  amended in part, each with a one-line pointer here.
+- [0032](0032-libraries-take-effects-file-layout.md) and [0043](0043-rooms-on-floors.md) are the
+  records this one changes in part; Context says how.
 - [A local-first sync engine](../docs/direction/a-local-first-sync-engine.md),
   [brain, hands, window, agent](../docs/direction/brain-hands-window-agent.md) and
   [the ledger goes to Cloudflare](../docs/direction/the-ledger-goes-to-cloudflare.md) each get a

@@ -7,9 +7,14 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@kalfa/quality": "workspace:*",
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/instrumenter": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
     "effect": "4.1.3"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "oxc-parser": "catalog:",
     "yaml": "catalog:"
   },

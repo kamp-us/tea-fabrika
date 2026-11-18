@@ -2,6 +2,7 @@
 // Match only the returned chain. A span yielded inside a generator covers part of
 // its work, and Stream.withSpan measures consumption, so both stay valid.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import { dotted, type Node } from "./match.ts";
 
 type FunctionNode = ESTree.ArrowFunctionExpression | ESTree.Function;
@@ -37,16 +38,20 @@ const returned = (node: FunctionNode): Node | null => {
   }
 
   const [only] = body.body;
+
   return body.body.length === 1 && only?.type === "ReturnStatement" ? only.argument : null;
 };
 
 export const effectFunctions: CreateRule = {
   create(context) {
     const effects = new Set<string>();
+
     const isSpan = (node: Node): boolean => {
       const name = dotted(node);
-      return [...effects].some((effect) => name === `${effect}.withSpan`);
+
+      return Arr.some([...effects], (effect) => name === `${effect}.withSpan`);
     };
+
     const wrapper = (node: Node): Node | null => {
       if (node.type !== "CallExpression") {
         return null;
@@ -75,6 +80,7 @@ export const effectFunctions: CreateRule = {
 
       return wrapper(callee.object);
     };
+
     const check = (node: FunctionNode) => {
       if (!named(node)) {
         return;
@@ -93,6 +99,7 @@ export const effectFunctions: CreateRule = {
           "Use named Effect.fn for a function's span. Keep recovery and recording flushes outside the failed span. Inner Effect.withSpan and consumed Stream.withSpan stay valid.",
       });
     };
+
     return {
       ImportDeclaration(node) {
         for (const spec of node.specifiers) {

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-mock-gateway-s1-steps-read-old-plan",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": null,
+  "rule": "rule_break",
+  "location": {
+    "path": "field/runs/2026-11-16-mock-gateway-processes-telemetry-s1-tests2.json",
+    "line": 14
+  },
+  "says": "All three steps of this slice built against docs/plan/quests/mock-gateway-processes-telemetry-PLAN.md at 14e9b3134, while the signed plan is c28109626; the 2026-11-16 pair-lock amendment was missed. The rows are field/runs/2026-11-15-mock-gateway-processes-telemetry-s1-tests1.json, -build1.json and 2026-11-16-mock-gateway-processes-telemetry-s1-tests2.json.",
+  "proof": "Each row's why says 'plan ... at 14e9b3134'; git diff 14e9b3134 c28109626 on the plan adds the pair amendment.",
+  "cost": "Step briefs name the signed plan commit, and the steps cite it in their rows. Until then a step can build on a plan the lead has since amended, and the review sends the slice back for a fault the plan already named.",
+  "head": "84e80580c0e59939ffd656e2fa4b44a2c9534056",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null
+}

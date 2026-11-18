@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-rest-loads-count-kalfa-rows",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "vitest.shards.ts",
+    "line": 141
+  },
+  "says": "In today's CI tooling, restLoads, documented as the rest step's load excluding next/, now counts the two kalfa/config rows, which the next vitest legs run, not the rest step.",
+  "proof": "vitest.shards.ts:141 keeps a row when !path.startsWith(\"next/\"), while vitest.config.ts:39 puts kalfa/*/src/**/*.test.{ts,tsx} in the next project's NEXT globs and vitest.shards.json:327,329 hold kalfa/config/src/Toml.types.test.ts and TomlParser.test.ts; the same next/-only filter is repeated at vitest.shards.test.ts:1310, 1321 and 1333.",
+  "cost": "Lane machines start from loads 0.2 s too high today, and the error grows with every kalfa row added; the four filters must be found and changed together.",
+  "head": "6a1282785be61911c22083c300a128504ab496af",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1583"
+}

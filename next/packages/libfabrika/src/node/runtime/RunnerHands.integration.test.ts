@@ -4,8 +4,12 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { Effect, Layer } from "effect";
+import type { DatabaseSync } from "node:sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import * as ScopedRef from "effect/ScopedRef";
 import * as Id from "../../Id.ts";
 import { Doorbell } from "../../ledger/Ledger.ts";
 import * as LedgerSql from "../../ledger/LedgerSql.ts";
@@ -38,41 +42,34 @@ const folder = Effect.acquireRelease(
   (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
 );
 
-// No rollback journal and no disk sync on each commit, as next/'s other test stores: no law here
-// cuts the power, and a close keeps every commit.
-const connect = (path: string) => {
-  const db = new DatabaseSync(path);
-  db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-  return db;
-};
-
 /** One database file per part, each opened on first use; `reopen` closes and reopens every one. */
 const databases = Effect.gen(function* () {
   const path = yield* folder;
-  const held = new Map<string, { db: DatabaseSync; sql: Sql }>();
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      for (const { db } of held.values()) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
-    }),
-  );
+  // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
+  // journal in memory; a close still keeps every commit. A part is opened from a plain call, so its
+  // handle is acquired into this scope, which closes it.
+  const scope = yield* Effect.scope;
+  const held = new Map<string, ScopedRef.ScopedRef<{ db: DatabaseSync; sql: Sql }>>();
+
+  const connect = (part: string) =>
+    TestDatabase.make(join(path, `${part}.db`)).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
+
   const handle = (part: string) => {
     const found = held.get(part);
 
     if (found !== undefined) {
-      return found;
+      return ScopedRef.getUnsafe(found);
     }
 
-    const db = connect(join(path, `${part}.db`));
-    const made = { db, sql: nodeSql(db) };
+    const made = Effect.runSync(Scope.provide(scope)(ScopedRef.fromAcquire(connect(part))));
     held.set(part, made);
-    return made;
+
+    return ScopedRef.getUnsafe(made);
   };
+
   // One Sql per part across reopens: each call goes to the database open now.
   const sqls = new Map<string, Sql>();
+
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -85,16 +82,17 @@ const databases = Effect.gen(function* () {
       transaction: (step) => handle(part).sql.transaction(step),
       size: () => handle(part).sql.size(),
     };
+
     sqls.set(part, made);
+
     return made;
   };
-  const reopen = Effect.sync(() => {
-    for (const [part, { db }] of held) {
-      db.close();
-      const fresh = connect(join(path, `${part}.db`));
-      held.set(part, { db: fresh, sql: nodeSql(fresh) });
-    }
+
+  const reopen = Effect.forEach(held, ([part, ref]) => ScopedRef.set(ref, connect(part)), {
+    discard: true,
+    concurrency: 1,
   });
+
   return { sql, reopen };
 });
 

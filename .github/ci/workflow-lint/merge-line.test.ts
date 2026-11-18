@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
+import { isIntegration } from "../../../oxlint-plugins/test-names.ts";
 import { projects } from "../../../vitest.config.ts";
 import { lintWorkflow as lint } from "../workflow-lint.ts";
 import { lintNoTooling } from "./merge-line.ts";
@@ -209,6 +210,85 @@ const plants: Plant[] = [
   ],
 ];
 
+// T1076 O4. Each new fault goes through the existing whole-workflow acceptance path alone, on the
+// generated valid workflow, whose fallback is the two roots of the `next` project.
+plants.push(
+  [
+    "O4 legacy next-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 fallback without the literal separator",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 Kalfa-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 quoted two-root fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || '"next/ kalfa/"' }}`,
+      });
+    },
+  ],
+  [
+    "O4 reversed two-root fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'kalfa/ next/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 extra project in the fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/ kalfa/ --project tooling' }}`,
+      });
+    },
+  ],
+  [
+    "O4 wrong precedence, the classifier first",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.filter || needs.changes.outputs.files || 'next/ kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 ordinary command receives another changed restriction",
+    (w) => {
+      step(w, "next", "vitest").run += " --changed=HEAD";
+    },
+  ],
+  [
+    "O4 ordinary command adds a project",
+    (w) => {
+      step(w, "next", "vitest").run += " --project tooling";
+    },
+  ],
+  [
+    "O4 ordinary step receives an extra env input",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, { CHANGED: "--changed=HEAD" });
+    },
+  ],
+);
+
 rejects(plants);
 
 // T1, T2 and T6 on the checked-in check.yaml: each plant puts back one piece of how today's tests
@@ -275,26 +355,74 @@ for (const [name, plant, error] of [
   });
 }
 
-it("T1 (0536): the tooling project, the schedule's tooling job's one project, holds no glob of today's trees or of next/", () => {
-  // A project ignores `--exclude`, so the project's own globs are what keeps today's tests and next/'s
-  // out of scheduled.yaml's tooling job (SC8). Plant, run once on vitest.config.ts and restored: add
-  // "apps/*/src/**/*.test.ts" to the tooling project (red).
-  const tooling = projects.find((project) => project.test.name === "tooling");
-  expect(tooling).toBeDefined();
-  expect(tooling!.test.include.length).toBeGreaterThan(0);
-  expect(tooling!.test.include.filter((glob) => /^(?:apps|packages|programs|next)\//.test(glob))).toEqual([]);
+/** A project's test settings by its name, as vitest.config.ts gives them. */
+const projectNamed = (name: string) => projects.find((project) => project.test.name === name)?.test;
+
+it("T1 (0536): the tooling projects, the schedule's tooling legs' projects, hold no glob of today's trees or of next/", () => {
+  // A project ignores `--exclude`, so the projects' own globs are what keeps today's tests and next/'s
+  // out of scheduled.yaml's tooling legs (SC8). Plant, run once on vitest.config.ts and restored: add
+  // "apps/*/src/**/*.test.ts" to TOOLING, which both projects are made from (red, on each).
+  for (const name of ["tooling", "tooling-integration"]) {
+    const tooling = projectNamed(name);
+    expect(tooling, name).toBeDefined();
+    expect(tooling!.include.length, name).toBeGreaterThan(0);
+    expect(
+      tooling!.include.filter((glob) => /^(?:apps|packages|programs|next)\//.test(glob)),
+      name,
+    ).toEqual([]);
+  }
 });
 
-// T1 (0539) holds every workflow a pull request or the merge queue starts, host.yaml among them: its
-// one vitest call runs inside next/ with no `--project`, which only `working-directory` makes safe.
+it("0602: tooling-integration holds the tooling laws that start a process, and tooling none of them", () => {
+  // A tooling law that starts a process is an `.integration.` law (0584), and only main's full run
+  // runs it, on the `tooling-integration` project (SC8). Plants, each run once on vitest.config.ts and
+  // restored: drop TOOLING_INTEGRATION from tooling's `exclude` (red: tooling holds them); map
+  // TOOLING_INTEGRATION's globs to plain names (red: tooling-integration holds plain laws).
+  const tooling = projectNamed("tooling");
+  const real = projectNamed("tooling-integration");
+  expect(real?.include.length).toBeGreaterThan(0);
+  expect(real?.include.every((glob) => isIntegration(glob))).toBe(true);
+  expect(real?.include.every((glob) => tooling?.exclude.includes(glob) === true)).toBe(true);
+});
+
+// T1 (0539) holds every PR-reachable job, including L13 in host.yaml. The fixed box job is
+// dispatch-only; its tooling laws run on no pull request or merge group.
 const hostPath = ".github/workflows/host.yaml";
+
 const hostYaml = () => parse(readFileSync(new URL("../../workflows/host.yaml", import.meta.url), "utf8"));
+
 const l13 = (w: Parsed) => step(w, "launchd", "L13");
+
 const hostError = `${hostPath}: T1: launchd runs no tooling test (0539)`;
 
 it("scenario: the checked-in host.yaml runs no tooling test", () => {
   expect(lintNoTooling(hostPath, JSON.stringify(hostYaml()))).toEqual([]);
 });
+
+for (const [condition, dispatch] of [
+  ["github.event_name == 'workflow_dispatch'", true],
+  ["github.event_name == 'workflow_dispatch' && inputs.suite == 'box'", true],
+  [`\${{ github.event_name == 'workflow_dispatch' }}`, true],
+  [`\${{ github.event_name == 'workflow_dispatch' && inputs.suite == 'box' }}`, true],
+  ["github.event_name == 'pull_request'", false],
+  ["github.event_name == 'merge_group'", false],
+  ["github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'", false],
+  ["github.event_name == 'workflow_dispatch' && inputs.suite == 'box' || github.event_name == 'merge_group'", false],
+  [`\${{ github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' }}`, false],
+  ['contains(fromJSON(\'["workflow_dispatch","pull_request"]\'), github.event_name)', false],
+  ["inputs.suite == 'box'", false],
+  ["github.event_name != 'pull_request'", false],
+  ["github.event_name == 'workflow_dispatch' && inputs.suite == github.event.inputs.suite", false],
+  [undefined, false],
+] as const) {
+  it(`scenario: host tooling condition ${condition ?? "missing"} is ${dispatch ? "proved dispatch-only" : "rejected"}`, () => {
+    const workflow: Parsed = hostYaml();
+    Object.assign(workflow.jobs["box"]!, { if: condition });
+    expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual(
+      dispatch ? [] : [`${hostPath}: T1: box runs no tooling test (0539)`],
+    );
+  });
+}
 
 for (const [name, plant] of [
   [
@@ -327,4 +455,24 @@ it("scenario: a workflow that no pull request or merge queue starts is no merge 
   expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([]);
   workflow["on"] = ["merge_group"];
   expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([hostError]);
+});
+
+it("scenario: O4 the legacy filter is rejected by the merge-line guard itself, whatever another guard says", () => {
+  // scenario: the real checked-in workflow with only the next job's fallback put back to next/. The
+  // merge-line guard (T1) must name it, so another rule's error cannot stand in for it.
+  const workflow: Parsed = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
+  expect(lint(JSON.stringify(workflow))).toEqual([]);
+
+  const found = workflow.jobs["next"]!.steps.find(
+    (candidate) =>
+      typeof candidate["run"] === "string" &&
+      candidate["run"].startsWith("pnpm exec vitest run --project next $FILTER "),
+  );
+
+  expect(found).toBeDefined();
+
+  Object.assign(found!["env"]!, {
+    FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}`,
+  });
+  expect(lint(JSON.stringify(workflow)).some((error) => error.includes("T1:"))).toBe(true);
 });

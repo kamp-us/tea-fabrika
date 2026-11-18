@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-effect-e88-fix3",
+  "ticket": "1075",
+  "pr": "1562",
+  "started": "2026-11-18T01:22:40+00:00",
+  "ended": "2026-11-18T02:33:58+00:00",
+  "parent": "2026-11-18-effect-e88-review2",
+  "active": null,
+  "role": "hand",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Fix round for the second review's four classes, next/ and lead tooling, 93ba850a to bea5b9f5. T708 now ends a held call's 35 s bound on the walk's counted clock (law change, no product change); 3 of 3 pass at full depth in 12.5 s. 16 real-resource files pass at the head here in a disposable container. R5 bind, R5 outbound and R6 wrong-tree plants went red and back. 41 added barrel imports became namespace imports. Nine optional env readers became Config.withDefault(undefined); environment.ts and step-env.ts share what remains; Existing tools lines added. Claude Code subagent transcript: 150 model calls; tokens in 300 uncached, 992,312 5-minute and 0 1-hour cache writes, 32,164,121 cache reads; out 115,777. Dollars are list price (https://platform.claude.com/docs/en/about-claude/pricing, read 2026-11-08). Billing `subscription` as the caller gave it; the transcript does not record it.",
+  "tokens": 331526,
+  "tools": 154,
+  "minutes": 71.3,
+  "note": null,
+  "costUsd": null,
+  "listUsd": 6.8556,
+  "billed": 33272510,
+  "inputTokens": 33156733,
+  "cachedTokens": 32164121,
+  "outputTokens": 115777,
+  "billing": "subscription",
+  "step": "build",
+  "plants": [
+    {
+      "law": "T708 dev-control laws",
+      "plant": "settled bound removed in dev.ts",
+      "result": "red"
+    },
+    {
+      "law": "R5 bind",
+      "plant": "host removed from the platform-node patch",
+      "result": "red"
+    },
+    {
+      "law": "R5 outbound",
+      "plant": "globalOutbound: null removed; instance-one-file 3 of 7 red, instance-records stays green",
+      "result": "red"
+    },
+    {
+      "law": "R6 wrong tree",
+      "plant": "tree returns every process, with an owned decoy workerd",
+      "result": "red"
+    }
+  ]
+}

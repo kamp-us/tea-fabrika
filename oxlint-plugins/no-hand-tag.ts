@@ -38,8 +38,10 @@ export const noHandTag: CreateRule = {
           "A hand-written `_tag`: Effect Schema writes it. Use `Schema.TaggedUnion`, `Schema.TaggedStruct` or `Schema.TaggedError`, and make a value with its maker (`X.cases.a.make(...)`).",
       });
     };
+
     return {
       Property(node) {
+        // SAFETY: a Property always sits inside an object expression or pattern, which oxlint gives as its `parent`.
         const { parent } = node as Node & { readonly parent: Node };
 
         if (parent.type === "ObjectExpression") {

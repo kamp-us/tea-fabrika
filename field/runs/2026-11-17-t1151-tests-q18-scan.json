@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1151-tests-q18-scan",
+  "ticket": "kamp-us/tea-fabrika#1151",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-17T17:01:58.412Z",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "driver_caused": false,
+  "billed": null,
+  "why": "In next/, ticket 1151 rewrites only the existing Q18 final entries assertion. One local Set collects stepped IDs per entries snapshot; every expected message still requires an exact step: ID with the stepped tag. All 40 generated histories, seed 119120, size 100, history/message bounds, timeout, input, drain, restart, reopen, entries, checkpoint, quota and clock calls remain unchanged. The commit changes one file, with eight added and three removed lines.",
+  "note": "Temporary differential proof evaluates blocks extracted from actual baseline and candidate source. Forty generated inputs and eleven fixed cases pass, with one verdict per expected message. Old and candidate blocks reject a selected missing exact stepped ID and pass after its restoration. All three deliberate faults were caught and removed; restored candidate bytes match the extracted source hash. Scoped format/lint pass with zero blocking or advice, diff whitespace checks pass, all three shrinking-list checks pass and one-commit leak check passes. First scoped lint found missing braces, fixed before final proof; first-pass records remain private. This proves only the assertion transformation. The separate build check passed without changes at the same source, independently verifying 24 proof files, actual extraction and 231 per-message outcomes. Actual SQL/Q18 on eligible disposable Linux CI, compiler, full lint and final review are not yet credited. No elapsed-time gain is claimed. No new permanent test, helper, export, schema or product behavior is added.",
+  "base": "703ff6a1d5bcd71bb341812bb97d5370ffdc3df5",
+  "head": "01dd9bf7a83d6f700c20b50687555bcede093bbd",
+  "sourceHashes": {
+    "next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts": "67e696036f5b2e131ff53a8c1a6f375dc360cc9dcef5d2b7c74b021c30368d6a"
+  },
+  "plants": [
+    {
+      "law": "Q18 exact stepped-ID existence; temporary extracted-source differential proof",
+      "plant": "Drop the stepped tag condition; wrong-tag witness",
+      "result": "red"
+    },
+    {
+      "law": "Q18 exact stepped-ID existence; temporary extracted-source differential proof",
+      "plant": "Check only the first expected message; first valid and second missing witness",
+      "result": "red"
+    },
+    {
+      "law": "Q18 exact stepped-ID existence; temporary extracted-source differential proof",
+      "plant": "Accept a partial ID match; prefix-collision witness",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}

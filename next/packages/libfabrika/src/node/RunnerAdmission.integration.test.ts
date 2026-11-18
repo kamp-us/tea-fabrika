@@ -1,10 +1,17 @@
 // P13 slice 2, next/. Real SQLite files and ledger services for runtime's admission laws (0062).
-import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for referee transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Predicate, type Scope } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as RateLimiter from "effect/persistence/RateLimiter";
-import { TestClock } from "effect/testing";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import type { Envelope } from "../access/SessionManager.ts";
@@ -26,7 +33,17 @@ import * as RunnerAdmissionTest from "../runtime/RunnerAdmissionTest.ts";
 import { BRAIN, type Harness } from "../runtime/RunnerRepliesTest.ts";
 import { Written } from "../telemetry/Records.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
+
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
 // T843: the gateway needs a sender budget; this one is far above what the audit laws send.
 const RATE_LIMIT = { limit: 100_000, window: 60_000 };
 
@@ -34,11 +51,8 @@ const files = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p13-admission-" });
-  return (name: string) =>
-    Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(folder, `${name}.sqlite`))),
-      (db) => Effect.sync(() => db.close()),
-    ).pipe(Effect.map(nodeSql));
+
+  return (name: string) => TestDatabase.make(path.join(folder, `${name}.sqlite`)).pipe(Effect.map(nodeSql));
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 const services: Harness["services"] = (inbox, manager) =>
@@ -64,17 +78,20 @@ const register = <A>(
   reached: Set<string>,
   required: ReadonlyArray<string>,
 ) => {
-  it(
+  it.live(
     name,
-    async () => {
-      await fc.assert(
-        fc.asyncProperty(tape, (cells: Array<A>) =>
-          Effect.runPromise(Effect.scoped(check(cells)).pipe(Effect.provide(TestClock.layer()))),
-        ),
-        options,
-      );
-      expect([...reached]).toEqual(expect.arrayContaining([...required]));
-    },
+    () =>
+      Effect.gen(function* () {
+        yield* promised(() =>
+          fc.assert(
+            fc.asyncProperty(tape, (cells: Array<A>) =>
+              Effect.runPromise(Effect.scoped(check(cells)).pipe(Effect.provide(TestClock.layer()))),
+            ),
+            options,
+          ),
+        );
+        expect([...reached]).toEqual(expect.arrayContaining([...required]));
+      }),
     600_000,
   );
 };
@@ -90,7 +107,8 @@ const environment: ProjectAuditTest.Harness["environment"] = (
   const unused = vi.fn((): never => {
     throw new Error("unused platform call");
   });
-  const namespace = <Get extends (...args: never[]) => unknown>(getByName: Get) => ({
+
+  const namespace = <Get extends (...args: never[]) => void>(getByName: Get) => ({
     getByName,
     newUniqueId: unused,
     idFromName: unused,
@@ -98,34 +116,37 @@ const environment: ProjectAuditTest.Harness["environment"] = (
     get: unused,
     jurisdiction: unused,
   });
+
   return {
     PROJECT: namespace(unused),
     CONNECTION: namespace(unused),
     LOADER: {
       get: (key: string, code: Parameters<ReturnType<ProjectAuditTest.Harness["environment"]>["LOADER"]["get"]>[1]) => {
         loaded(key, code());
+
         return { getEntrypoint: vi.fn().mockReturnValue(box), getDurableObjectClass: unused };
       },
       load: unused,
     },
     PROCESS: namespace(
       vi.fn().mockImplementation((object: string) => ({
-        configure: async () => undefined,
-        usage: async (rows: Parameters<typeof usage>[1]) => usage(object, rows),
+        configure: () => Promise.resolve(undefined),
+        usage: (rows: Parameters<typeof usage>[1]) => Promise.resolve(usage(object, rows)),
         msg: async (input: Incoming) => {
           const message = input.envelope.input;
           const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
 
-          if (!(await box.admit(stamped))) {
+          if ((await box.admit(stamped)) !== true) {
             return Sent.cases.refused.make({ reason: "bad_msg" });
           }
 
           const rev = accept();
+
           return Sent.cases.accepted.make({ rev, pos: rev });
         },
       })),
     ),
-    RECORD: namespace(vi.fn().mockReturnValue({ write: async () => Written.cases.written.make({}) })),
+    RECORD: namespace(vi.fn().mockReturnValue({ write: () => Promise.resolve(Written.cases.written.make({})) })),
     MEASUREMENTS: {
       head: unused,
       get: unused,
@@ -165,7 +186,7 @@ const door: ProjectAuditTest.Harness["door"] =
             schema: input,
             raw: [],
             personOnly: [],
-            name: (m: typeof input.Type) => m.type,
+            name: (m: typeof input.Type) => Option.getOrUndefined(Schema.decodeUnknownOption(Schema.String)(m["_tag"])),
           },
           events: { personOnly: [] },
         }).pipe(

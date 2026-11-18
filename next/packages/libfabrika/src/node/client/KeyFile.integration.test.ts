@@ -12,7 +12,10 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import { property } from "../../Testing.test-support.ts";
 import { ClientKey } from "../../transport/ClientKey.ts";
@@ -35,13 +38,16 @@ describe("P39 slice 4b: the hands key file on a real disk", () => {
             Effect.gen(function* () {
               const fs = yield* FileSystem.FileSystem,
                 path = yield* Path.Path;
+
               const home = yield* fs.makeTempDirectoryScoped({ prefix: "p39-k3-" });
               const folder = path.join(home, "hands");
               const file = path.join(folder, "key.json");
+
               const [first, second] = yield* Effect.all(
                 [open(file), Effect.sleep(`${delay} millis`).pipe(Effect.andThen(open(file)))],
                 { concurrency: 2 },
               );
+
               expect(second.fingerprint, "K3: two hands starting at once agree on one key").toBe(first.fingerprint);
               expect([first.found, second.found].sort(), "K3: one made the key and the other read it").toEqual([
                 "created",

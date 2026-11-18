@@ -1,7 +1,7 @@
 ---
 id: 0581
 title: Main's full run starts on a push to main if none started in the last hour and on an hourly catch-up, never on a 3-hour clock, and a law that can run on a stand-in runs on every pull request
-status: accepted
+status: amended-in-part by [0590](0590-a-branch-proof-run-runs-only-what-its-change-reaches.md), [0595](0595-scheduled-runs-share-slots.md)
 date: 2026-11-15
 tags: [ci, schedule, full-run, main, integration, memory-layer, tests]
 ---

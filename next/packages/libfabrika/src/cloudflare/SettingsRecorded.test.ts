@@ -1,6 +1,6 @@
 // T753, next/, L4 and L14. RecordedStart is granted only after the checked append succeeds.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Match } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { RecordedStart } from "../settings/RecordedStart.ts";
@@ -24,10 +24,12 @@ describe("recorded settings dependency, next/", () => {
         let constructed = 0;
         let called = 0;
         let reason: Starts.Refused | Starts.Storage | Starts.Unreachable = new Starts.Refused({ cause: detail });
+
         const starts = Layer.succeed(Starts.Starts, {
           record: () =>
             Effect.suspend(() => {
               called++;
+
               return Effect.fail(new Starts.StartsError({ reason }));
             }),
           read: () =>
@@ -39,29 +41,33 @@ describe("recorded settings dependency, next/", () => {
               }),
             ),
         });
+
         const recorded = SettingsRecorded.layer(input).pipe(Layer.provide(starts));
+
         const consumer = Layer.effect(
           Consumer,
           Effect.gen(function* () {
             const checked = yield* RecordedStart;
             constructed++;
+
             return { port: checked.values.port };
           }),
         ).pipe(Layer.provide(recorded));
 
         for (const choice of choices) {
           // Each new build is an attempted entry; failure cuts target its next record call.
-          reason =
-            choice % 3 === 0
-              ? new Starts.Refused({ cause: detail })
-              : choice % 3 === 1
-                ? new Starts.Storage({ cause: detail })
-                : new Starts.Unreachable({ cause: detail });
+          reason = Match.value(choice % 3).pipe(
+            Match.when(0, () => new Starts.Refused({ cause: detail })),
+            Match.when(1, () => new Starts.Storage({ cause: detail })),
+            Match.orElse(() => new Starts.Unreachable({ cause: detail })),
+          );
+
           const exits = yield* Effect.forEach(
             Array.from({ length: 1 + (choice % 5) }),
             () => Effect.scoped(Effect.exit(Layer.build(consumer))),
             { concurrency: "unbounded" },
           );
+
           expect(exits.every(Exit.isFailure)).toBe(true);
           expect(constructed).toBe(0);
           expect(called).toBeGreaterThan(0);
@@ -78,24 +84,30 @@ describe("recorded settings dependency, next/", () => {
         const reached = yield* Deferred.make<void>();
         const acknowledgement = yield* Deferred.make<never, Starts.StartsError>();
         let constructed = 0;
+
         const starts = Layer.succeed(Starts.Starts, {
           record: () => Deferred.succeed(reached, undefined).pipe(Effect.andThen(Deferred.await(acknowledgement))),
           read: () => Deferred.await(acknowledgement),
         });
+
         const recorded = SettingsRecorded.layer(input).pipe(Layer.provide(starts));
+
         const ready = Layer.effect(
           Consumer,
           Effect.gen(function* () {
             const checked = yield* RecordedStart;
             constructed++;
+
             return { port: checked.values.port };
           }),
         ).pipe(Layer.provide(recorded));
+
         const fibers = yield* Effect.forEach(
           Array.from({ length: total }),
           () => Effect.scoped(Layer.build(ready)).pipe(Effect.forkChild),
           { concurrency: 1 },
         );
+
         yield* Deferred.await(reached);
         expect(constructed).toBe(0);
 

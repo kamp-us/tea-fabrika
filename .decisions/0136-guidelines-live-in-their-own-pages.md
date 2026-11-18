@@ -43,7 +43,7 @@ set. The owner decided on 2026-11-11 that guidelines get their own home.
 This amends two decisions in part. It adds a sixth kind to 0130, a guideline, with its own home,
 and a guideline note under `docs/direction/` moves there instead of being split and removed. It
 changes 0115 for guidelines only: a guideline's principles live in its page, not in one decision
-file each. The rest of both holds.
+file each.
 
 The known way agrees. Design systems keep guidelines as docs read whole and edited in place:
 [Apple's Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines)
@@ -107,7 +107,7 @@ date, and links it.**
   a decision note and a guideline page synced from `@kampus/fabrika-design`, never written by hand.
   This reads 0450's page as one part's reference page in the design system, and leaves it alone.
   The page here is an area's principles, written by hand. If the owner reads 0450 as covering both,
-  0450 needs an amended-in-part line.
+  0450's own text changes, with a new record that says why.
 - Not decided here: where the private pressable pages and canvases are linked from, and whether a
   proposed guideline study lives in `docs/guidelines/` too. The lean is yes, marked **proposed** on
   line one as notes are today (70%; the doubt is that an undecided page beside approved ones may be

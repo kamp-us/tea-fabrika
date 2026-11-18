@@ -16,7 +16,12 @@
 // Plant, run once and undone (recorded in the tests step's field row): leave out the `PRIMARY KEY`,
 // so an overwrite adds a second row.
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Effect, Exit, Layer } from "effect";
+import * as Arr from "effect/Array";
+import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as fc from "fast-check";
 import { Journal, type Entry, Entry as EntrySchema } from "../../client/Journal.ts";
@@ -56,10 +61,12 @@ const side = (store: Layer.Layer<KeyValueStore.KeyValueStore>) =>
   Effect.gen(function* () {
     const context = yield* Layer.build(store);
     const kv = Context.get(context, KeyValueStore.KeyValueStore);
+
     const journal = yield* Journal.use((j) => Effect.succeed(j)).pipe(
       Effect.provide(JournalStore.layer),
       Effect.provideContext(context),
     );
+
     return { journal, store: kv } satisfies Side;
   });
 
@@ -90,8 +97,10 @@ const agree = (m: Model, r: Real, task: string, label: string) =>
     ]);
   });
 
-const written = (m: Readonly<Model>, r: Real) => r.pool.filter((task) => m.saved.has(task));
-const unwritten = (m: Readonly<Model>, r: Real) => r.pool.filter((task) => !m.saved.has(task));
+const written = (m: Readonly<Model>, r: Real) => Arr.filter(r.pool, (task) => m.saved.has(task));
+
+const unwritten = (m: Readonly<Model>, r: Real) => Arr.filter(r.pool, (task) => !m.saved.has(task));
+
 const pick = <A>(from: ReadonlyArray<A>, n: number): A | undefined => from[n % Math.max(from.length, 1)];
 
 /** A write of a new task, or with `over` of a task already written. */
@@ -102,12 +111,15 @@ const writeStep = (over: boolean, n: number, entry: Entry): Step => ({
   step: (m, r) =>
     Effect.gen(function* () {
       const task = pick(over ? written(m, r) : unwritten(m, r), n) ?? pick(r.pool, n) ?? "task";
+
       const both = yield* Effect.all([r.sql.journal.write(task, entry), r.memory.journal.write(task, entry)], {
         concurrency: 1,
       }).pipe(Effect.exit);
+
       expect(Exit.isSuccess(both), `J1: a write succeeds on both stores: ${String(both)}`).toBe(true);
       m.saved.set(task, entry);
       yield* agree(m, r, task, `after ${over ? "overwrite" : "write"} of ${task}`);
+
       return over ? "overwrite" : "write";
     }),
 });
@@ -126,6 +138,7 @@ const readStep = (missing: boolean, n: number): Step => ({
       }
 
       yield* agree(m, r, task, `read of ${task}`);
+
       return missing ? "read:missing" : `read:${m.saved.get(task) === "not-an-entry" ? "bad_entry" : "entry"}`;
     }),
 });
@@ -143,12 +156,14 @@ const garbageStep = (n: number, value: string): Step => ({
       );
       m.saved.set(task, "not-an-entry");
       yield* agree(m, r, task, `after a value that is no entry under ${task}`);
+
       return "garbage";
     }),
 });
 
 const Text = fc.string({ minLength: 1, maxLength: 24 });
-const At = fc.integer({ min: 0, max: 4_102_444_800_000 }).map((ms) => new Date(ms).toISOString());
+
+const At = fc.integer({ min: 0, max: 4_102_444_800_000 }).map((ms) => DateTime.formatIso(DateTime.makeUnsafe(ms)));
 
 // fast-check: unsupported Effect -- fc.commands draws every step from fast-check arbitraries, and Effect's Arbitrary is another engine
 const AResult = fc.oneof(
@@ -160,6 +175,7 @@ const AResult = fc.oneof(
 );
 
 const Started = fc.option(At, { nil: undefined }).map((startedAt) => (startedAt === undefined ? {} : { startedAt }));
+
 const E = EntrySchema.cases;
 
 /** Each of the five entries the 4a journal saves, with generated fields. */
@@ -218,6 +234,7 @@ describe("P39 slice 4b: the journal file", () => {
                 memory: yield* side(KeyValueStore.layerMemory),
                 next: null,
               };
+
               const m: Model = { saved: new Map() };
 
               // fast-check's own model walk: a step runs only when the state it reached allows it.

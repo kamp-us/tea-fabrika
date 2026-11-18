@@ -60,20 +60,31 @@ const readTable = (path: string): Record<string, number> => {
 export const measured: Readonly<Record<string, number>> = readTable(join(import.meta.dirname, "vitest.shards.json"));
 
 /**
- * Seconds per next/ test file at full depth, which only the schedule runs (0535): the same file takes
- * longer there, and the rows above cannot say so. At full depth a law runs its full case count and a
- * file of the `next` project runs its real layer beside its memory one (0538), and the integration
- * files run only there (0536). RepositoriesGit.test.ts takes 28 s on a pull request and 160 to 311 s
- * on the schedule, and watch.laws.integration.test.ts, 363 to 395 s, had no row at all. Split by the
- * rows above, one leg of scheduled runs 43723335863 and 43771306886 got about 2100 s of files where
- * the others had 1000 to 1500 s, started watch.laws last, and ran into the job's limit.
+ * Seconds per test file at full depth, which every CI test leg runs at, on a pull request and on the
+ * schedule alike: the same file takes longer there than at fast depth, and the rows above cannot say
+ * so. At full depth a law runs its full case count and a file of the `next` project runs its real
+ * layer beside its memory one (0538), and the integration files run only there (0536). That was
+ * not always so. In the past, when only the schedule ran full depth (0535),
+ * RepositoriesGit.integration.test.ts took 28 s on a pull request and 160 to 311 s on the schedule,
+ * and watch.laws.integration.test.ts, 363 to 395 s, had no row at all. Split by the rows above, one
+ * leg of scheduled runs 43723335863 and 43771306886 got about 2100 s of files where the others had
+ * 1000 to 1500 s, started watch.laws last, and ran into the job's limit.
  *
- * Each row is the median of the file's seconds in attempt 1 of the three green scheduled runs on
- * main 43726565395 (at 27512b5f7), 43734956911 (at d795d772e) and 43765797242 (at f3313803f), or the
- * larger of those in hand when a run did not hold the file, rounded to one decimal, read from each
- * leg's Vitest report (the `results-next-1` to `-5` artifacts) as `shard-times` reads one. A file
- * with no row here falls back to its row above, then to the median. Refresh a row from the report a
- * scheduled run's leg uploads, or from the leg's time table, which lists its slowest files.
+ * Each row is the median of the file's seconds in attempt 1 of three runs, or the larger of those in
+ * hand when a run did not hold the file, rounded to one decimal. The runs are the pull request check
+ * run 44201566907 (the related legs and the two end-to-end legs) and the scheduled full runs on main
+ * 44155250216 and 44077224612 (the five next legs, the two tooling legs and the two end-to-end legs).
+ * A sample is the file's seconds in its leg's time table, which lists the leg's ten slowest files and
+ * prints the report's `(endTime - startTime) / 1000` to one decimal, as `shard-times` reads it. The
+ * 93 files that were among a leg's ten slowest in at least one run are set here: next/ files,
+ * end-to-end (visual) files and tooling files alike, since every test leg runs at full depth. Each
+ * sample's run, leg and job id are kept in `fullSamples` in vitest.shards.test.ts, which holds each
+ * row to this rule, because GitHub drops job logs after 90 days. A file that was in no leg's ten
+ * slowest keeps the row an older run gave it, which may be stale, and a file seen in one run only
+ * leans heavy. The two Toml settings files under next/packages/libfabrika/src/settings are in no
+ * sample and keep their rows, which pull request 1583 moves. A file with no row here falls back to
+ * its row above, then to the median. Refresh a row from the report a scheduled run's leg uploads, or
+ * from the leg's time table.
  */
 export const full: Readonly<Record<string, number>> = readTable(join(import.meta.dirname, "vitest.shards.full.json"));
 
@@ -109,11 +120,13 @@ export const assign = (
     x.path < y.path ? -1 : x.path > y.path ? 1 : 0;
   const order = files
     .map((file, at) => ({ path: file.path, seconds: file.seconds, at }))
-    .toSorted((x, y) =>
-      x.seconds === undefined || y.seconds === undefined
-        ? Number(x.seconds === undefined) - Number(y.seconds === undefined) || byPath(x, y)
-        : y.seconds - x.seconds || byPath(x, y),
-    );
+    .toSorted((x, y) => {
+      const bySeconds =
+        x.seconds === undefined || y.seconds === undefined
+          ? Number(x.seconds === undefined) - Number(y.seconds === undefined)
+          : y.seconds - x.seconds;
+      return bySeconds !== 0 ? bySeconds : byPath(x, y);
+    });
   const load = Array.from({ length: count }, (_, i) => start[i] ?? 0);
   const machines = files.map(() => 0);
 

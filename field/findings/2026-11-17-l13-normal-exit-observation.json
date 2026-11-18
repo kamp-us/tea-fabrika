@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-17-l13-normal-exit-observation",
+  "date": "2026-11-17",
+  "by": "lead",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": "next/apps/fabrika/e2e/node/P19Launchd.test-support.ts",
+    "line": 662
+  },
+  "says": "The remote L13 scenario reported a changed fixture-ready file during its normal-exit observation.",
+  "proof": "Host run https://github.com/kamp-us/tea-fabrika/actions/runs/44188025103 at 086df1ff52466e144dafa99a99636a130a05e43e failed launchd job 134409643018, L13 step 8, with inner HostError reason normal-exit-restarted at line 662. The pinned bundle law passed. The same host workflow passed at f863e7589151b6e6c269ba351a8ee08a5215d977 in https://github.com/kamp-us/tea-fabrika/actions/runs/44187000025. The only repository difference between those heads is the consumer integration test's Effect API correction; host code, workflow and lockfile are identical. The failure cause is unresolved, and neither a flaky classification nor a package-regression cause is established. Failed-run cleanup reported no remaining loaded jobs; no artifact was retained for that failure.",
+  "cost": "The failing head has no passing L13 receipt. The host workflow is advisory under the current main rules, which require ci-required, but final review must retain this failed host result and its unresolved cause.",
+  "head": "086df1ff52466e144dafa99a99636a130a05e43e",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": "kamp-us/tea-fabrika#1583"
+}

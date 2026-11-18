@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-kalfa-quality-stryker-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1603",
+  "started": "2026-11-18T03:39:43+00:00",
+  "ended": "2026-11-18T03:59:34+00:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Build for @kalfa/quality/stryker (0600), our tooling and the hourly mutation scope in today's lead tooling. Requested model sonnet, effort high; effective context unknown. Every law green (Q1 to Q18), pnpm typecheck exit 0, pnpm lint clean but for the known workflow-lint kalfa cache line PR 1583 brings, loosening.sh 0 hits. The five catalog plants ran once each with real Stryker 10.1.1 on Node 22.23.5 in the disposable cloud box, each answering killed by its named law; checklist-pid ran in place. Head 40e77436366720e4aeaa952410d344e5550f5e27. Claude Code subagent transcript: 94 model calls; tokens in 188 uncached, 273,061 5-minute and 0 1-hour cache writes, 23,221,029 cache reads; out 79,742. Dollars are list price (https://platform.claude.com/docs/en/about-claude/pricing, read 2026-11-08). Billing `subscription` as the caller gave it; the transcript does not record it.",
+  "tokens": 322209,
+  "tools": 100,
+  "minutes": 19.9,
+  "note": null,
+  "costUsd": null,
+  "listUsd": 3.8026,
+  "billed": 23574020,
+  "inputTokens": 23494278,
+  "cachedTokens": 23221029,
+  "outputTokens": 79742,
+  "billing": "subscription",
+  "step": "build",
+  "driver_caused": false,
+  "plants": [
+    {
+      "law": "L13: notices name their process > each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
+      "plant": "checklist-pid: ObjectLiteral { ...update, pid: active } -> {} at next/packages/libfabrika/src/cloudflare/runtime.ts:2404",
+      "result": "red"
+    },
+    {
+      "law": "the host step's outcomes > scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+      "plant": "host-env-order: ObjectLiteral { ...process.env, ...env } -> {} at .agents/skills/lead/scripts/flow/host.ts:247",
+      "result": "red"
+    },
+    {
+      "law": "the host step's outcomes > scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+      "plant": "host-pin: ConditionalExpression node === null -> true at .agents/skills/lead/scripts/flow/host.ts:247",
+      "result": "red"
+    },
+    {
+      "law": "the host step's outcomes > scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+      "plant": "host-pnpm-path: ConditionalExpression pnpm === null -> true at .agents/skills/lead/scripts/boxnode.ts:133",
+      "result": "red"
+    },
+    {
+      "law": "the host step's outcomes > scenario: an explicit pin keeps direct and nested pnpm on that Node, even when the manifest differs",
+      "plant": "host-requested-pin: LogicalOperator requested ?? (yield* repoNode(main)) -> requested && (yield* repoNode(main)) at .agents/skills/lead/scripts/boxnode.ts:109",
+      "result": "red"
+    }
+  ]
+}

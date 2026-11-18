@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-trusted-rules-0573-review2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1498",
+  "started": "2026-11-15T23:18:55-08:00",
+  "ended": "2026-11-15T23:24:30-08:00",
+  "parent": "2026-11-15-trusted-rules-0573-fix",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "next/ and our tooling, the recheck of 43e962058 after the fix round, against the plan as amended and re-signed at e2cd8981b: merge-ready. Fault 1 is fixed. oxlint-plugins/no-data-taggederror.ts is byte-identical to main, and its index.ts name and root .oxlintrc.json line are back. Its plant DATA_TAGGEDERROR in plants.test.ts refuses both type-position lines, both in process and in L1 in every folder. TAGGED_ERROR no longer lists typeof Data.TaggedError as passing. So the deleted rule's reach is whole again, with no-restricted-properties beside it as extra cover, and L2 holds 8 of 8. Fault 2 is fixed: L4 loops over all 8 modules in every run, and a coverage expect counts them, so skipping only bare fs turns it red. Fault 3 is fixed: L3 now fails on diagnostics false and on ignoreEffectErrorsInTscExitCode true. Both were replanted in a scratch copy and both are red. The README 0573 section and the cause pattern match the code. The pattern doc's .oxlintrc.json line numbers were checked at review 1 and moved here by 2; this recheck did not re-read them. The plan amendment matches the change. The branch is level with origin/main at b510ed2.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Read-only apart from this row, at 43e962058, Node 26.13.0, each check run alone. Tests one at a time under nice -n 15 --maxWorkers=3: plants.test.ts 238, effect-checks-held.test.ts 1, no-node-imports.test.ts 3, modules.test.ts 16, ledger.test.ts 7, advice.test.ts 16, and next/apps/fabrika/src/exam/edge-comment.integration.test.ts 4 (PR 1508 is merged in, so the guard allowed it); all green. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint exit 0. One pnpm typecheck exit 0. loosening.sh: the same planned hits as review 1, with no-data-taggederror's deletion gone; no law of a kept rule is loosened. Scratch replants on L3: ignoreEffectErrorsInTscExitCode red, diagnostics false red, ignoreEffectWarningsInTscExitCode green (it does not touch errors). L1 and L4 plants checked by reading. plancheck.sh is not at .agents/skills/lead/scripts/ in this checkout, so the re-sign was not rechecked here; the coordinator ran plancheck --approved at the head (exit 0), and the plan's body hash b8d3c1248c16 matches its header.",
+  "step": "review"
+}

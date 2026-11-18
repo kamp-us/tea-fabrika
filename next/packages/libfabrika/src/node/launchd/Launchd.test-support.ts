@@ -1,22 +1,26 @@
 import { readlinkSync, symlinkSync } from "node:fs"; // edge: Effect's FileSystem takes and gives a link's target as text, and a target that is not valid UTF-8 needs bytes
 // P19 next/. Scoped real disk, controlled process edge. This never executes launchctl or plutil.
 import { NodeServices } from "@effect/platform-node";
-import {
-  Context,
-  Deferred,
-  Effect,
-  FileSystem,
-  Layer,
-  Option,
-  Path,
-  PlatformError,
-  Schema,
-  Sink,
-  Stream,
-} from "effect";
-import { Digest } from "effect/crypto";
-import type { ChildProcess } from "effect/process";
-import { ChildProcessSpawner } from "effect/process";
+import * as Arr from "effect/Array";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
+import type * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
 import * as ServiceTest from "../../desktop/BrainServiceTest.ts";
@@ -56,23 +60,28 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const temporary = yield* fs.makeTempDirectoryScoped({ prefix: "p19-unit-" });
   const folder = directoryName === "" ? temporary : path.join(temporary, directoryName);
   yield* fs.makeDirectory(folder, { recursive: true });
   const home = yield* fs.realPath(folder);
   const plist = path.join(home, "brain.plist");
+
   const competing = yield* replacement === undefined
     ? Effect.succeed(null)
     : fs.makeTempDirectoryScoped({ directory: home, prefix: ".competing-" });
+
   let swapped: BrainFilesTest.Dirent | null = null;
   // The competing writer writes once. A later removal races nobody.
   let raced = false;
   let failing = true;
   let directoryFault = fault === "directory-sync";
+
   const events: Array<string> = [],
     seen: Array<Seen> = [],
     jobs: Array<unknown> = [];
-  const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
+
+  const spec = yield* Schema.decodeEffect(BrainSpec)({
     home,
     executable: path.join(home, "Electron"),
     args: [path.join(home, "brain.mjs"), "spaces & <angles> 雪"],
@@ -80,6 +89,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     ...input,
     url: "http://127.0.0.1:18787",
   });
+
   const spawner = Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) =>
@@ -92,34 +102,40 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
           return yield* failure("spawn");
         }
 
-        const args = command.args.map((arg) => String(arg));
+        const args = Arr.map(command.args, (arg) => String(arg));
         seen.push({ executable: command.command, args, options: command.options });
-        const supplied = typeof answer === "function" ? yield* answer(args, spec) : answer;
+        const supplied = Predicate.isFunction(answer) ? yield* answer(args, spec) : answer;
+
         let response: Response = {
           ...supplied,
-          stderr: supplied.stderr.replace("test.p19.brain", (args.at(-1) ?? "").split("/").at(-1) ?? ""),
+          stderr: Function.pipe(
+            supplied.stderr,
+            Str.replace("test.p19.brain", Str.split(args.at(-1) ?? "", "/").at(-1) ?? ""),
+          ),
         };
 
-        if (command.command.endsWith("launchctl") && !args.includes("print")) {
+        if (Function.pipe(command.command, Str.endsWith("launchctl")) && !args.includes("print")) {
           response = { code: 0, stdout: "", stderr: "" };
         }
 
-        if (command.command.endsWith("id")) {
+        if (Function.pipe(command.command, Str.endsWith("id"))) {
           response = { code: 0, stdout: "501\n", stderr: "" };
         }
 
-        if (command.command.endsWith("plutil")) {
+        if (Function.pipe(command.command, Str.endsWith("plutil"))) {
           if (fault === "compile") {
             return yield* failure("compile");
           }
 
           const input = args.at(-1) ?? "";
+
           const data = yield* fs.readFileString(input).pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))),
             Effect.mapError(() => failure("compile")),
           );
+
           jobs.push(data);
-          const body = JSON.stringify(data);
+          const body = Formatter.formatJson(data);
           const output = args[args.indexOf("-o") + 1];
 
           if (output !== undefined && output !== "-") {
@@ -132,6 +148,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
         const bytes = (text: string) => Stream.make(new TextEncoder().encode(text));
         const stubborn = supplied.stubborn;
         const killed = yield* Deferred.make<void>();
+
         const signaled = (signal: string) =>
           Effect.fail(
             PlatformError.systemError({
@@ -139,14 +156,16 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
               _tag: "Unknown",
               module: "ChildProcess",
               method: "exitCode",
-              pathOrDescriptor: `${command.command} ${args.join(" ")}`,
+              pathOrDescriptor: `${command.command} ${Arr.join(args, " ")}`,
               // The installed platform-node 4.1.2 exposes termination signals only in this cause.
               cause: new Error(`Process interrupted due to receipt of signal: '${signal}'`),
             }),
           );
+
         return yield* Effect.acquireRelease(
           Effect.suspend(() => {
             events.push("spawn");
+
             return stubborn?.started ?? Effect.void;
           }).pipe(
             Effect.map(() =>
@@ -197,6 +216,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       }),
     ),
   );
+
   // Reads an entry as it is on disk: lstat and readLink, so a symlink is never followed.
   const dirent = Effect.fnUntraced(function* (file: string) {
     const stat = yield* fs
@@ -226,14 +246,19 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     yield* fs.chmod(file, 0o600);
     const bytes = yield* fs.readFileString(file);
     yield* fs.chmod(file, mode);
+
     return BrainFilesTest.Dirent.cases.file.make({ bytes, mode });
   });
+
   // A link's target as the bytes on disk. `readLink` gives text, which loses what is not UTF-8.
   const linkBytes = (file: string) => Effect.sync(() => Array.from(readlinkSync(file, "buffer")));
+
   const links = Effect.gen(function* () {
     const held: Array<ReadonlyArray<number>> = [];
 
-    for (const folder of (yield* fs.readDirectory(home)).filter((name) => name.startsWith(".brain-"))) {
+    for (const folder of Arr.filter(yield* fs.readDirectory(home), (name) =>
+      Function.pipe(name, Str.startsWith(".brain-")),
+    )) {
       for (const name of yield* fs.readDirectory(path.join(home, folder))) {
         const file = path.join(home, folder, name);
 
@@ -246,8 +271,10 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     const stat = yield* fs
       .lstat(plist)
       .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(null)));
+
     return { path: stat?.type === "SymbolicLink" ? yield* linkBytes(plist) : null, held };
   });
+
   const replace = Effect.fnUntraced(function* (
     checkpoint: BrainFilesTest.Replacement["checkpoint"],
     // Our plist's bytes, read right before the capture took it.
@@ -265,7 +292,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       yield* Effect.sync(() => symlinkSync(Buffer.from(entry.target), staged));
 
       // A file system that refuses these bytes throws above. One that changes them stops here.
-      if ((yield* linkBytes(staged)).join() !== entry.target.join()) {
+      if (Arr.join(Arr.map(yield* linkBytes(staged), String), ",") !== Arr.join(Arr.map(entry.target, String), ",")) {
         return yield* Effect.die("this file system did not keep the link's target bytes");
       }
     } else if (entry._tag === "file" || entry._tag === "private" || entry._tag === "copy") {
@@ -291,34 +318,42 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     swapped = yield* dirent(plist);
     events.push(`replace:${checkpoint}`);
   });
+
   const disk = Layer.succeed(FileSystem.FileSystem, {
     ...fs,
     open: (file, options) =>
       fs.open(file, options).pipe(
         Effect.map(
-          (handle) =>
-            new Proxy(handle, {
-              get(target, key, receiver) {
-                if (key === "sync") {
-                  return Effect.sync(() => {
-                    if (file === home) {
-                      events.push("directory-sync");
-                    }
-
-                    events.push("sync");
-                    events.push(`sync:${file}`);
-                  }).pipe(
-                    Effect.andThen(
-                      (failing && fault === "sync") || (directoryFault && file === home)
-                        ? Effect.fail(failure("sync"))
-                        : target.sync,
-                    ),
-                  );
+          // The node handle keeps its members on its prototype, so each one is forwarded by name.
+          (handle): FileSystem.File => ({
+            [FileSystem.FileTypeId]: FileSystem.FileTypeId,
+            get stat() {
+              return handle.stat;
+            },
+            // A getter, as on the handle, so each sync reads the fault switches when it is taken.
+            get sync() {
+              return Effect.sync(() => {
+                if (file === home) {
+                  events.push("directory-sync");
                 }
 
-                return Reflect.get(target, key, receiver);
-              },
-            }),
+                events.push("sync");
+                events.push(`sync:${file}`);
+              }).pipe(
+                Effect.andThen(
+                  (failing && fault === "sync") || (directoryFault && file === home)
+                    ? Effect.fail(failure("sync"))
+                    : handle.sync,
+                ),
+              );
+            },
+            seek: (offset, from) => handle.seek(offset, from),
+            read: (buffer, options) => handle.read(buffer, options),
+            readAlloc: (size, options) => handle.readAlloc(size, options),
+            truncate: (length) => handle.truncate(length),
+            write: (buffer) => handle.write(buffer),
+            writeAll: (buffer) => handle.writeAll(buffer),
+          }),
         ),
       ),
     link: (from, to) =>
@@ -341,10 +376,13 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
         yield* replace("after-capture", ours);
       }),
   });
+
   const settings = yield* ServiceTest.timing(flags);
+
   const context = yield* Layer.build(
     Launchd.layer(spec, settings).pipe(Layer.provide(Layer.mergeAll(disk, spawner, Digest.layerWebCrypto))),
   );
+
   return {
     recover: Effect.sync(() => {
       failing = false;

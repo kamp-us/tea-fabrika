@@ -1,0 +1,162 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1076-fix1",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": "kamp-us/tea-fabrika#1427",
+  "started": "2026-11-16T19:27:25-08:00",
+  "ended": "2026-11-16T19:35:54-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "gpt-6",
+  "effort": null,
+  "outcome": "stopped",
+  "why": "Tests/fix round for next/, ticket 1076, under the approved kalfa-config-repair-PLAN.md amendment, body 79cc605e5cae. Seven property declarations now use the installed it.prop/it.effect.prop Schema runner. All original input bounds, independent path sections, source choices, output assertions and explicit examples remain. Companion pinned cases retain the captured original plant counterexamples, including a_ and running 0.0.0 / wanted 0.1.0. Every original plant failed before conversion, and after conversion both its generated law and captured-input companion failed. K4 also calls generic Load.load with newer and malformed own minima ahead of an unknown key and an unreadable person file, checks its Recorder read list, and exercises both home branches. Equal, older and absent minima still open the person file. K5 retains all seven placements, each readable and unreadable, and adds declared scalar display coverage for repo, person, environment and flag inputs, following settings S5. No product file, old F1/F2 body, layer rule or dependency changed. Publication stopped at the required step-commit helper, which reported not_formatted for valid staged source because pnpm exec from its temporary folder has no workspace package. Tracker 1123 already covers that verified helper fault. No commit, push or bypass occurred.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8.5,
+  "note": "Direct in-memory checks on pinned Node 26.13.0, nice 19 and one worker. Baseline App.test.ts: 20/20 green. Repaired App.test.ts: 39/39 green at fast depth; full-depth App.test.ts: 39/39 green at 100 runs, 2.57 seconds. Format passed and list ratchet passed. Final lint passed all 18 parts in 75.5 seconds; the field checker and diff/row leak checks passed. A direct formatter check passed. Commit-helper refusal was reproduced as ERR_PNPM_RECURSIVE_EXEC_NO_PACKAGE. HEAD remains 037c7466683fa67a931690afce4b3029ad21cbbb. The lead-owned amendment was preserved. Committed-range loosening and leak scans await an actual commit. Shared setup configures fast-check and Effect Arbitrary from seed 119120, retaining its existing home setup. App.Name is private at the reviewed head, so test Schemas retain that pattern and the original bounds without changing product exports. The Hostile Schema includes the entire old generated domain and also independent three-character suffixes. All plants were restored by saved copy, and git status showed no product path. Original examples and captured counterexamples are checked through the same assertion functions as the generated laws; there is no hand property runner. Final typecheck belongs to the lead's single global slot. No host law, real resource, paid call, remote proof dispatch or CI wait ran.",
+  "plants": [
+    {
+      "law": "K1",
+      "plant": "before runner conversion: generic loader reads .fabrika/fabrika.toml for every app",
+      "result": "red"
+    },
+    {
+      "law": "K1",
+      "plant": "before runner conversion: Sources.env always nests under fabrika",
+      "result": "red"
+    },
+    {
+      "law": "K1",
+      "plant": "before runner conversion: generic loader uses FABRIKA_HOME for every app",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "before runner conversion: Files.refused always names fabrika settings",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "before runner conversion: Snapshot.read only accepts $FABRIKA_HOME",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "before runner conversion: App.make permits underscores in names",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "before runner conversion: Setting.group omits its mixed-app check",
+      "result": "red"
+    },
+    {
+      "law": "K4",
+      "plant": "before runner conversion: Files.supported always reads fabrika-version",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "before runner conversion: generic loader prints the whole environment on a person-file read error",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "before runner conversion: Files prints array/table contents at refused declared leaves",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "before runner conversion: Files prints the scalar refused at a settings-table path",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "before runner conversion: Files prints an unknown key value",
+      "result": "red"
+    },
+    {
+      "law": "K1",
+      "plant": "after runner conversion: generic loader reads .fabrika/fabrika.toml for every app",
+      "result": "red"
+    },
+    {
+      "law": "K1",
+      "plant": "after runner conversion: Sources.env always nests under fabrika",
+      "result": "red"
+    },
+    {
+      "law": "K1",
+      "plant": "after runner conversion: generic loader uses FABRIKA_HOME for every app",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "after runner conversion: Files.refused always names fabrika settings",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "after runner conversion: Snapshot.read only accepts $FABRIKA_HOME",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "after runner conversion: App.make permits underscores in names",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "after runner conversion: Setting.group omits its mixed-app check",
+      "result": "red"
+    },
+    {
+      "law": "K4",
+      "plant": "after runner conversion: Files.supported always reads fabrika-version",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "after runner conversion: generic loader prints the whole environment on a person-file read error",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "after runner conversion: Files prints array/table contents at refused declared leaves",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "after runner conversion: Files prints the scalar refused at a settings-table path",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "after runner conversion: Files prints an unknown key value",
+      "result": "red"
+    },
+    {
+      "law": "K4",
+      "plant": "after runner conversion: remove only Files.supported from generic Load.load, retaining Files.validate",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "after runner conversion: Files.refused replaces the declared scalar with a placeholder",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "after runner conversion: Print.warnings always names fabrika",
+      "result": "red"
+    }
+  ],
+  "step": "tests",
+  "costUsd": null,
+  "listUsd": null,
+  "billing": null,
+  "driver_caused": false,
+  "billed": null
+}

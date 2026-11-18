@@ -4,17 +4,21 @@
 // the queue, `brain.records.sqlite`, delete it (`send` in `telemetry/Sink.ts`). A read that took
 // the records before the queue lost a span to a flush between the two: that turned L17 red on CI
 // run 43766158547. Each race here is certain, not timed.
-import { DatabaseSync } from "node:sqlite"; // edge: real SQLite files, as the brain and its records keep them
+import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { String as Str, pipe, Array as Arr, Effect, FileSystem, Option, Order } from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { rebuildSpans, spanOutputs } from "./reload.test-support.ts";
 
 const SEED = 119120;
+
 const QUEUE = "brain.records.sqlite";
+
 // One sorts before the queue's file and one after, so no law leans on the listing's order.
 const RECORDS = [".alchemy/record.sqlite", "records/record.sqlite"] as const;
 
@@ -43,14 +47,22 @@ const rebuild = (spanId: string): SpanRow => ({
   ok: true,
 });
 
-/** Runs `work` on the SQLite file at `file`, made with its folder when it is not there yet. */
+/**
+ * Runs `work` on the SQLite file at `file`, made with its folder when it is not there yet. The file
+ * stands for one the brain or a record owns, so `TestDatabase.open` sets nothing and each writer sets
+ * its owner's pragmas itself.
+ */
 const withDatabase = Effect.fnUntraced(function* (file: string, work: (db: DatabaseSync) => void) {
   const fs = yield* FileSystem.FileSystem;
-  yield* fs.makeDirectory(file.slice(0, file.lastIndexOf("/")), { recursive: true });
-  yield* Effect.acquireUseRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => work(db)),
-    (db) => Effect.sync(() => db.close()),
+  yield* fs.makeDirectory(
+    pipe(file, Str.lastIndexOf("/"), Option.match({ onNone: () => ".", onSome: (at) => pipe(file, Str.slice(0, at)) })),
+    { recursive: true },
+  );
+  yield* Effect.scoped(
+    TestDatabase.open(file).pipe(
+      Effect.orDie,
+      Effect.flatMap((db) => Effect.sync(() => work(db))),
+    ),
   );
 });
 
@@ -96,8 +108,8 @@ const flush = Effect.fnUntraced(function* (home: string, record: string, row: Sp
 const ids = fc.stringMatching(/^[a-f0-9]{16}$/);
 
 describe("spanOutputs", () => {
-  it("every queue's rows are read before any record's rows, wherever the record's file sorts", async () => {
-    await fc.assert(
+  it("every queue's rows are read before any record's rows, wherever the record's file sorts", () =>
+    fc.assert(
       fc.asyncProperty(fc.uniqueArray(ids, { minLength: 3, maxLength: 3 }), ([waiting = "", early = "", late = ""]) =>
         Effect.runPromise(
           Effect.scoped(
@@ -109,20 +121,20 @@ describe("spanOutputs", () => {
               yield* deliver(home, RECORDS[1], rebuild(late));
 
               const outputs = yield* spanOutputs(home);
-              const order = outputs.map((output) => (output as { readonly spanId: string }).spanId);
+              // SAFETY: this home holds only the `unsent` and `spans` tables the law made above, and both have a text `spanId` column.
+              const order = Arr.map(outputs, (output) => (output as { readonly spanId: string }).spanId);
 
               expect(order[0], "the queue is read first").toBe(waiting);
-              expect(order.slice(1).toSorted()).toEqual([early, late].toSorted());
+              expect(Arr.sort(order.slice(1), Order.String)).toEqual(Arr.sort([early, late], Order.String));
             }),
           ).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
+    ));
 
-  it("a flush that lands under a listing never hides the span, wherever its record's file sorts and whether or not that file was there", async () => {
-    await fc.assert(
+  it("a flush that lands under a listing never hides the span, wherever its record's file sorts and whether or not that file was there", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({
           spanId: ids,
@@ -146,6 +158,7 @@ describe("spanOutputs", () => {
                 }
 
                 let listings = 0;
+
                 const fs: FileSystem.FileSystem = {
                   ...real,
                   glob: (pattern, options) =>
@@ -162,11 +175,12 @@ describe("spanOutputs", () => {
                       return yield* real.glob(pattern, options);
                     }),
                 };
+
                 const outputs = yield* spanOutputs(home).pipe(Effect.provideService(FileSystem.FileSystem, fs));
 
                 expect(listings, "the flush landed during the read").toBeGreaterThanOrEqual(at);
                 expect(
-                  rebuildSpans(outputs).filter((span) => span.spanId === spanId),
+                  Arr.filter(rebuildSpans(outputs), (span) => span.spanId === spanId),
                   "the flushed span is found once",
                 ).toHaveLength(1);
               }),
@@ -174,6 +188,5 @@ describe("spanOutputs", () => {
           ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 8, full: 40 }) },
-    );
-  });
+    ));
 });

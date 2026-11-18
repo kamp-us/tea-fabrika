@@ -1,0 +1,112 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-a-tests2",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T00:16:20-08:00",
+  "ended": "2026-11-16T00:40:37-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice A of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md), the last part of its tests step, on fabrikalfa/exam-to-lint-a at 2621967. M1's side-by-side for all twelve lint rows, which the 0178 guard had kept from the first tests row (2026-11-16-591-a-tests): each old exam file was put back at next/apps/fabrika/src/exam/<name>.integration.test.ts from the parent of its removal commit with the Write tool, byte for byte (git hash-object equal to git rev-parse <parent>:<path>), and needed no other helper (edges.ts and rows.ts are at the head, plant.ts and promise-types.ts are in oxlint-plugins/). Each row's four results: (1) the moved law green on the real code; (2) it and the old file red together under the row's break; (3) the old file green on the same head; (4) the old file deleted again, never committed. Old files green: no-hand-tag 3, ledger-sql 1, no-effect-run-outside-edge 4, edge-comment 9, effect-functions 6, one-store-hook 14, no-of 4, object-imports 1, clock 3, react-rules 2, no-promises 15, layers 18. Moved laws green: no-hand-tag 3, no-ledger-sql 1, no-effect-run-outside-edge 4, edge-comment 4, effect-functions 5, one-store-hook 14, no-of 10, no-clock-in-view 2, no-promises 4, promise-types 11, layers 18, plants.test.ts 239; exam/edges.integration.test.ts 12 and exam/edge-config.test.ts 5. Two faults the slice B tests step found are fixed. lint:kind: next/apps/fabrika/src/settings-generated.integration.test.ts reaches no real thing since L9 moved to oxlint-plugins/settings-imports.test.ts, so it moved back with git mv to settings-generated.test.ts, and every path that named it follows (.oxlintrc.json's law-20 block, oxlint-plugins/settings-imports.test.ts's generated callers, vitest.shards.json, vitest.shards.full.json, vitest.shards.test.ts's pinned sample, .github/ci/changes.mjs's readers list and .github/ci/changes.test.ts); pnpm -s lint:kind is green. vitest.shards.test.ts F2 and L18: both build a vitest leg and expect heaviest first, but read the local results cache, where vitest's sort starts a file that failed last run first; CI keeps no cache. A locally failed next/ test (here edge-config.test.ts under the config break) made leg 2 start a 0.4 s file. Both now create their vitest with cache: false, as CI has none (0052); L19 still holds failed-first through its stub. With edge-config.test.ts failed in the cache on purpose, the file is 34/34 green; before the fix the same cache turned F2 and L18 red.",
+  "plants": [
+    {
+      "law": "M1 oxlint-plugins/no-hand-tag.test.ts with the old no-hand-tag exam file",
+      "plant": "the PropertyDefinition visitor emptied in oxlint-plugins/no-hand-tag.ts; first failure in both: expected [ 2, 3, 4, 5, 7 ] to deeply equal [ 2, 3, 4, 5, 6, 7 ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-ledger-sql.test.ts with the old ledger-sql exam file",
+      "plant": "the [ dropped from the quote class, so main.[entries] is not read, in oxlint-plugins/no-ledger-sql.ts; first failure in both: expected [ 1, 2, 4, 5, 6, 7 ] to deeply equal [ 1, 2, 3, 4, 5, 6, 7 ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-effect-run-outside-edge.test.ts with the old exam file",
+      "plant": "makeRuntimePromise dropped from the run set in oxlint-plugins/no-effect-run-outside-edge.ts; first failure in both: expected [ 4, 5, 6, 7, 8, 9, 11 ] to deeply equal [ 4, 5, 6, 7, 8, 9, 11, 12 ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/edge-comment.test.ts with the old edge-comment exam file",
+      "plant": "EDGE_WHY made case-blind, so Edge: passes as edge:, in oxlint-plugins/edge-comment.ts; first failure in both: expected [ 'edge-capital', [] ] to deeply equal [ 'edge-capital', [ 1 ] ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/edge-comment.test.ts, exam/edge-config.test.ts and the old edge-comment exam file",
+      "plant": "next/packages/libfabrika/src/data/** added to the next/ test override that turns fabrika/no-promises off, in .oxlintrc.json; first failure: edge-comment.test.ts and the old file, speaks alone: expected [ 'promises-no-edge', '', [ 3 ] ] to deeply equal [ 'promises-no-edge', '', [] ]; edge-config.test.ts and the old file, turns an edge rule off only for next/'s tests: expected [ Array(1) ] to deeply equal [] (main had moved the config laws to edge-config.test.ts)",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/effect-functions.test.ts with the old effect-functions exam file",
+      "plant": "named() answers false under an arrow, so a curried wrapper is skipped, in oxlint-plugins/effect-functions.ts; first failure in both: expected [ 3, 4, 5, 6, 8, 9 ] to deeply equal [ 3, 4, 5, 6, 7, 8, 9 ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/one-store-hook.test.ts with the old one-store-hook exam file",
+      "plant": "the void call branch dropped in oxlint-plugins/one-store-hook.ts; first failure in both: expected [ 4, 6 ] to deeply equal [ 4, 5, 6, 7 ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-of.test.ts with the old no-of exam file",
+      "plant": "a named import of of not reported in oxlint-plugins/no-of.ts; first failure in both: expected [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 ] to deeply equal [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, …(2) ], and L3 in no-of.test.ts: Should have 1 error but had 0",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/plants.test.ts, object contracts load only Alchemy, with the old object-imports exam file",
+      "plant": "allowTypeImports set to false in the cloudflare/objects.ts block of .oxlintrc.json (the first tests row replaced the pattern group with one that bans nothing; this is a different break); first failure in both: expected [ 1, 2, 4, 5, 6 ] to deeply equal [ 1, 6 ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-clock-in-view.test.ts with the old clock exam file",
+      "plant": "performance.now dropped from no-clock-in-view's reads in oxlint-plugins/no-clock-in-view.ts; first failure in both: expected [ 2, 3, 11, 15, 16 ] to deeply equal [ 2, 3, 5, 11, 15, 16 ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/plants.test.ts, built in, on in next/'s .tsx files: react(purity), with the old clock exam file",
+      "plant": "react/purity off in the next/**/*.tsx block of .oxlintrc.json; first failure: old file expected [] to deeply equal [ 2, 3, 11 ]; plants.test.ts expected [ 'react(purity)', …(2) ] to deeply equal [ 'react(purity)', …(2) ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/plants.test.ts, built in, on in next/'s .tsx files: react(refs), react(immutability), react(display-name), with the old react-rules exam file",
+      "plant": "react/immutability off in the next/**/*.tsx block of .oxlintrc.json; first failure: old file expected [] to deeply equal [ 8 ]; plants.test.ts expected [ 'react(immutability)', …(2) ] to deeply equal [ 'react(immutability)', …(2) ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-promises.test.ts with the old no-promises exam file",
+      "plant": "Stream.toAsyncIterable dropped from oxlint-plugins/no-promises.ts; first failure in both: expected [ 3, 4, 6, 6, 7, 8, 9, 10, 11, …(16) ] to deeply equal [ 3, 4, 6, 6, 7, 8, 9, 10, 11, …(17) ]",
+      "result": "red"
+    },
+    {
+      "law": "M2 oxlint-plugins/promise-types.test.ts with the old no-promises exam file",
+      "plant": "a marker covers the five lines under it, not only the next, in oxlint-plugins/promise-types.ts; 4 laws red in each; first failure in both: expected [] to deeply equal [ { file: 'next/rpc.ts', line: 8 } ]",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/layers.test.ts with the old layers exam file",
+      "plant": "next-node moved to layer 11 in layer-rules.json; first failure in both: expected { 'next-node': 11, …(23) } to deeply equal { 'next-node': 10, …(23) }",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/layers.test.ts with the old layers exam file",
+      "plant": "roots dropped from the patched code-graph's reading (const roots = [] in its dist/index.js); the file is one inode with 14 hard links shared with other worktrees, so the shared link was moved aside, a private copy edited, and the shared link moved back (same inode, 14 links, same size); 3 laws red in each; first failure in both: P21 L12 desktop rules, expected { Object (edges, unclaimed, ...) } to match object { edges: [ …(3) ], …(1) }",
+      "result": "red"
+    },
+    {
+      "law": "vitest.shards.test.ts F2 and L18, before the cache: false fix",
+      "plant": "next/apps/fabrika/src/exam/edge-config.test.ts left failed in the local results cache; first failure: F2 leg 2: expected [ 0.4, 380.2, 203.9, 159.8, …(58) ] to deeply equal [ 380.2, 203.9, 159.8, 100.1, …(58) ]",
+      "result": "red"
+    },
+    {
+      "law": "vitest.shards.test.ts F2 and L18, after the cache: false fix",
+      "plant": "the same cache state: edge-config.test.ts failed on purpose under the .oxlintrc.json config break, then restored",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "note": "Every break ran once on the real file and was restored with the Edit tool; git status --short then showed only the twelve untracked old exam files, which were deleted and never committed. The 0178 guard allowed the old .integration. files here (CLAUDE_CODE_REMOTE=true on Linux, PR 1508's narrowed guard is on this head). oxlint-plugins/plants.test.ts alone on a quiet machine (load about 5, no tsgo running): 239/239 in 49.3 s, no timeout, so the earlier 60 s timeout at load 22 has no proof of a flake. settings-generated.test.ts 4/4 and settings-imports.test.ts 1/1 after the rename. Not run: .github/ci/changes.test.ts. Its path holds the word git, and one run that named it was refused by the worktree check; the name filter ci/changes.test was refused by the test config as a broad local run (Local broad test run refused), so nothing else ran in its place. No product line changed: no build step is needed for slice A.",
+  "step": "tests"
+}

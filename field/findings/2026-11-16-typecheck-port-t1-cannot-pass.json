@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-typecheck-port-t1-cannot-pass",
+  "date": "2026-11-16",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".agents/tsconfig.json",
+    "line": 39
+  },
+  "says": "The typecheck port plan's law T1 (tracker ticket 766) puts scripts/typecheck* into the .agents program, but every non-.agents file there gets TS377051 duplicatePackage, and duplicate-packages.test.ts (E3) keeps the only allowance to .agents/** globs; tsc fails on warnings.",
+  "proof": "cd .agents && pnpm exec tsc --noEmit -p . prints TS377051 on all 18 scripts/ files (Look.ts imports only effect), and TS377021 at scripts/typecheck.test.ts:241 and scripts/typecheck-lock.test.ts:539, no errors, exit 1.",
+  "cost": "pnpm typecheck stays red on the branch until the plan picks another program for scripts/typecheck* or the owner widens E3.",
+  "head": "81720345daef79fb56d2c786bf92103c09d2125f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1506"
+}

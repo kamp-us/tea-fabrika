@@ -1,10 +1,15 @@
 /**
  * Source folders for an opened repository: a path from a settings file, resolved to the commit or
  * to disk.
- *
- * @stability unstable
  */
-import { Effect, FileSystem, Path, Redacted } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Str from "effect/String";
+
 import type { ObjectId } from "../../repositories/Repositories.ts";
 import {
   MissingPath,
@@ -17,14 +22,14 @@ import {
 type Entry = { readonly mode: string; readonly type: string; readonly id: string };
 
 const failed = (cause: unknown) =>
-  new RepositoriesError({
-    reason: new ReadFailed({ cause: Redacted.make(cause) }),
+  RepositoriesError.make({
+    reason: ReadFailed.make({ cause: Redacted.make(cause) }),
     message: "Selected repository: source read failed.",
   });
 
 const missing = (cause: unknown) =>
-  new RepositoriesError({
-    reason: new MissingPath({ cause: Redacted.make(cause) }),
+  RepositoriesError.make({
+    reason: MissingPath.make({ cause: Redacted.make(cause) }),
     message: "Selected repository: source folder is missing.",
   });
 
@@ -40,7 +45,6 @@ const missing = (cause: unknown) =>
  * that does not exist fails as `MissingPath`; a link cycle, an empty link, a parent that is not a
  * folder or a source that is not a folder fails as `ReadFailed`.
  *
- * @stability unstable
  * @category constructors
  */
 export const resolver = Effect.fn("repositorySources.resolver")(function* (options: {
@@ -52,13 +56,18 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 }) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const contains = (base: string, location: string) => {
     const relative = path.relative(base, location);
+
     return (
-      relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+      relative === "" ||
+      (!Function.pipe(relative, Str.startsWith(`..${path.sep}`)) && relative !== ".." && !path.isAbsolute(relative))
     );
   };
+
   type Location = { readonly location: string; readonly committed: boolean; readonly directory: boolean };
+
   const target: (
     base: string,
     name: string,
@@ -72,10 +81,10 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
   ) {
     let location = path.isAbsolute(name) ? path.parse(name).root : base;
     let directory = true;
-    const pending = name.split(path.sep).filter((part) => part !== "");
+    const pending = Arr.filter(Str.split(name, path.sep), (part) => part !== "");
 
     // A trailing separator requires a directory, just like a following dot segment.
-    if (name.endsWith(path.sep)) {
+    if (Function.pipe(name, Str.endsWith(path.sep))) {
       pending.push(".");
     }
 
@@ -122,7 +131,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 
         link = yield* fs.readLink(next).pipe(Effect.mapError(failed));
       } else {
-        const relative = path.relative(options.root, next).split(path.sep).join("/");
+        const relative = Arr.join(Str.split(path.relative(options.root, next), path.sep), "/");
         const entry = yield* options.entry(relative);
 
         if (entry === null) {
@@ -151,7 +160,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
         return yield* failed("symlink cycle");
       }
 
-      if (link === "" || link.includes("\0")) {
+      if (link === "" || Function.pipe(link, Str.includes("\0"))) {
         return yield* failed("invalid symlink");
       }
 
@@ -162,6 +171,7 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
 
     return { location, committed: committed && contains(options.root, location), directory };
   });
+
   const readAt = Effect.fnUntraced(function* (base: string, file: string, committed: boolean) {
     const located = yield* target(base, file, committed).pipe(
       Effect.catchReason("RepositoriesError", "MissingPath", () => Effect.succeed(null)),
@@ -172,13 +182,18 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     }
 
     if (located.committed) {
-      const bytes = yield* options.read(path.relative(options.root, located.location).split(path.sep).join("/"));
+      const bytes = yield* options.read(
+        Arr.join(Str.split(path.relative(options.root, located.location), path.sep), "/"),
+      );
+
       return bytes === null ? null : { ...SourceMetadata.cases.committed.make({ commit: options.commit }), bytes };
     }
 
     const bytes = yield* fs.readFile(located.location).pipe(Effect.mapError(failed));
+
     return { ...SourceMetadata.cases.disk.make({}), bytes };
   });
+
   return Effect.fnUntraced(function* (
     from: string,
     file: "repo" | "person",
@@ -189,10 +204,11 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
         : yield* fs
             .realPath(options.person)
             .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause))));
+
     const located = yield* target(base, from, file === "repo");
 
     if (located.committed) {
-      const relative = path.relative(options.root, located.location).split(path.sep).join("/");
+      const relative = Arr.join(Str.split(path.relative(options.root, located.location), path.sep), "/");
       const entry = relative === "" ? null : yield* options.entry(relative);
 
       if (relative !== "" && entry === null) {

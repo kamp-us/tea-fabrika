@@ -15,8 +15,9 @@
 // to fast-check's `sample` or `statistics` is how many values to draw, so it stays. It is refused when
 // it is a number literal, or a name the same file declares only as `const NAME = <number>`.
 //
-// Real IO is a name imported from a module in `IO` below (SQLite, a child process, a socket, a
-// bundler, workerd, Alchemy's local state, a browser), a `node:fs` function that writes (`WRITES`),
+// Real IO is a name imported from a module in `IO` below (SQLite, the test primitives' SQLite module
+// `@kampus/vitest/TestDatabase`, a child process, a socket, a bundler, workerd, Alchemy's local
+// state, a browser; `runsFor` from the root `@kampus/vitest` is not), a `node:fs` function that writes (`WRITES`),
 // a dynamic `import()` of such a module, or, in a file that imports Effect's Node services
 // (`@effect/platform-node`), a call of a FileSystem method that writes (`EFFECT_WRITES`). Reading a
 // file or asking whether it exists is not real IO here: a law that checks a module is built before it
@@ -37,11 +38,12 @@
 // - a count passed as a plain argument to a helper (`prop(name, ..., 200)`, `runs(25)`);
 // - a count built by an expression (`numRuns: n * 2`) or read from another file.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { Array as Arr, Option, Predicate } from "effect";
 import { ancestors, below, pathIn, type Node } from "./match.ts";
 
 /** Modules whose every name is real IO. */
 const IO =
-  /^(?:(?:node:)?(?:sqlite|child_process|net|http|https|worker_threads)|@effect\/sql-sqlite-node(?:\/.*)?|effect\/(?:unstable\/)?process(?:\/.*)?|rolldown(?:\/.*)?|miniflare|workerd|wrangler|@alchemy\.run\/cloudflare-runtime(?:\/.*)?|alchemy\/State(?:\/.*)?|playwright(?:-core)?(?:\/.*)?|@playwright\/test|@kampus\/libfabrika\/sqlite|.*\/NodeSqlite(?:\.ts)?)$/;
+  /^(?:(?:node:)?(?:sqlite|child_process|net|http|https|worker_threads)|@effect\/sql-sqlite-node(?:\/.*)?|effect\/(?:unstable\/)?process(?:\/.*)?|rolldown(?:\/.*)?|miniflare|workerd|wrangler|@alchemy\.run\/cloudflare-runtime(?:\/.*)?|alchemy\/State(?:\/.*)?|playwright(?:-core)?(?:\/.*)?|@playwright\/test|@kampus\/libfabrika\/sqlite|@kampus\/vitest\/TestDatabase|.*\/NodeSqlite(?:\.ts)?)$/;
 
 /** The file system: only a write is real IO, so reads and `existsSync` stay out. */
 const FS = /^(?:node:)?fs(?:\/promises)?$/;
@@ -62,10 +64,11 @@ const MESSAGE = `A law over real IO reads its case count from the test depth (de
 
 type Parented = Node & { readonly parent?: Node | null };
 
+// SAFETY: oxlint sets `parent` on each node it visits, and on the Program it is null, which `?? null` keeps.
 const parentOf = (node: Node): Node | null => (node as Parented).parent ?? null;
 
 const numberIn = (node: Node | null | undefined): number | null =>
-  node?.type === "Literal" && typeof node.value === "number" ? node.value : null;
+  node?.type === "Literal" && Predicate.isNumber(node.value) ? node.value : null;
 
 /** A key and its value as the parser hands it: in an object literal, a pattern or an assignment target. */
 type Pair = Extract<Node, { readonly type: "Property" }>;
@@ -75,13 +78,13 @@ const keyName = (property: Pair): string | null =>
     ? null
     : property.key.type === "Identifier"
       ? property.key.name
-      : property.key.type === "Literal" && typeof property.key.value === "string"
+      : property.key.type === "Literal" && Predicate.isString(property.key.value)
         ? property.key.value
         : null;
 
 /** The written module name of an import's source, or null when it is built at run time. */
 const moduleName = (source: Node | null | undefined): string | null =>
-  source?.type === "Literal" && typeof source.value === "string"
+  source?.type === "Literal" && Predicate.isString(source.value)
     ? source.value
     : source?.type === "TemplateLiteral" && source.expressions.length === 0
       ? (source.quasis[0]?.value.cooked ?? null)
@@ -130,8 +133,10 @@ const overridden = (node: Node): boolean => {
     return false;
   }
 
+  // SAFETY: the check above found `spread`'s type is SpreadElement, which TypeScript does not narrow from `parentOf`.
   const after = object.properties.slice(object.properties.indexOf(spread as ESTree.SpreadElement) + 1);
-  return after.some((property) => property.type === "Property" && keyName(property) === "numRuns");
+
+  return Arr.some(after, (property) => property.type === "Property" && keyName(property) === "numRuns");
 };
 
 /** fast-check's `sample` and `statistics` take `numRuns` as how many values to draw, not a law's cases. */
@@ -144,6 +149,7 @@ const isDraw = (property: Node): boolean => {
   }
 
   const callee = call.callee.type === "MemberExpression" ? call.callee.property : call.callee;
+
   return callee.type === "Identifier" && (callee.name === "sample" || callee.name === "statistics");
 };
 
@@ -151,6 +157,7 @@ const isDraw = (property: Node): boolean => {
 const inArbitrary = (property: Node): boolean => {
   const object = parentOf(property);
   const holder = object === null ? null : parentOf(object);
+
   return holder?.type === "Property" && holder.value === object && keyName(holder) === "arbitrary";
 };
 
@@ -178,7 +185,7 @@ export const runsFromDepth: CreateRule = {
     return {
       "Program:exit"(program) {
         const nodes = [...below(program)];
-        const inTest = (node: Node): boolean => [...ancestors(node)].some((above) => isTestCall(above));
+        const inTest = (node: Node): boolean => Arr.some([...ancestors(node)], (above) => isTestCall(above));
 
         // The variables that are real IO: the file's imports from an IO module.
         const io = new Set<Variable>();
@@ -203,9 +210,13 @@ export const runsFromDepth: CreateRule = {
                   ? specifier.imported.name
                   : String(specifier.imported.value)
                 : null;
+
             const variable = resolve(specifier.local);
 
-            if (variable && (IO.test(from) || (FS.test(from) && (imported === null || WRITES.test(imported))))) {
+            if (
+              variable !== undefined &&
+              (IO.test(from) || (FS.test(from) && (imported === null || WRITES.test(imported))))
+            ) {
               io.add(variable);
             }
           }
@@ -226,13 +237,14 @@ export const runsFromDepth: CreateRule = {
           if (id?.type === "Identifier" && !inTest(node)) {
             const variable = resolve(id);
 
-            if (variable) {
+            if (variable !== undefined) {
               declared.set(variable, node);
             }
           }
         }
 
         const uses = new Map<Node, { readonly through: ReadonlySet<Variable>; readonly direct: boolean }>();
+
         const usesOf = (root: Node) => {
           const known = uses.get(root);
 
@@ -263,6 +275,7 @@ export const runsFromDepth: CreateRule = {
 
           const found = { through, direct };
           uses.set(root, found);
+
           return found;
         };
 
@@ -275,7 +288,7 @@ export const runsFromDepth: CreateRule = {
           for (const [variable, node] of declared) {
             const { through, direct } = usesOf(node);
 
-            if (!reaching.has(variable) && (direct || [...through].some((used) => reaching.has(used)))) {
+            if (!reaching.has(variable) && (direct || Arr.some([...through], (used) => reaching.has(used)))) {
               reaching.add(variable);
               grew = true;
             }
@@ -284,7 +297,8 @@ export const runsFromDepth: CreateRule = {
 
         const reaches = (root: Node): boolean => {
           const { through, direct } = usesOf(root);
-          return direct || [...through].some((used) => reaching.has(used));
+
+          return direct || Arr.some([...through], (used) => reaching.has(used));
         };
 
         /** The declarations a node uses, followed through the declarations they use. */
@@ -304,7 +318,7 @@ export const runsFromDepth: CreateRule = {
           return seen;
         };
 
-        const tests = nodes.filter((node) => isTestCall(node) && !inTest(node));
+        const tests = Arr.filter(nodes, (node) => isTestCall(node) && !inTest(node));
 
         // The number a name holds when the file declares it as `const NAME = <number>` and never as
         // anything else.
@@ -313,6 +327,7 @@ export const runsFromDepth: CreateRule = {
 
         for (const node of nodes) {
           if (node.type === "VariableDeclarator" && node.id.type === "Identifier") {
+            // SAFETY: a VariableDeclarator's `parent` is always its VariableDeclaration, which holds `kind`.
             const constant = (node as Node & { readonly parent: ESTree.VariableDeclaration }).parent.kind === "const";
             const value = numberIn(node.init);
 
@@ -332,21 +347,26 @@ export const runsFromDepth: CreateRule = {
         /** Whether the law around a count reaches real IO. */
         const held = (count: Node): boolean => {
           const around = [...ancestors(count)];
-          const test = around.findLast((node) => isTestCall(node));
+          const test = Arr.findLast(around, (node) => isTestCall(node));
 
-          if (test !== undefined) {
-            return reaches(test);
+          if (Option.isSome(test)) {
+            return reaches(test.value);
           }
 
           // Outside a test call: the declarations around the count (`const CHECK = {...}`, a helper
           // function), or else the helper call it is handed to.
-          const enclosing = [...declared].filter(([, node]) => around.includes(node));
-          const call = around.find((node) => node.type === "CallExpression");
+          const enclosing = Arr.filter([...declared], ([, node]) => around.includes(node));
+          const call = Arr.findFirst(around, (node) => node.type === "CallExpression");
+
           const own =
-            enclosing.length > 0 ? enclosing.some(([, node]) => reaches(node)) : call !== undefined && reaches(call);
+            enclosing.length > 0 ? Arr.some(enclosing, ([, node]) => reaches(node)) : Option.exists(call, reaches);
+
           return (
             own ||
-            tests.some((call) => reaches(call) && enclosing.some(([variable]) => usedThrough(call).has(variable)))
+            Arr.some(
+              tests,
+              (call) => reaches(call) && Arr.some(enclosing, ([variable]) => usedThrough(call).has(variable)),
+            )
           );
         };
 

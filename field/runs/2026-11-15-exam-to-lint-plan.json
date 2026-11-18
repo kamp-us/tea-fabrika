@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-exam-to-lint-plan",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T21:41:33-08:00",
+  "ended": "2026-11-15T22:07:41-08:00",
+  "parent": null,
+  "active": null,
+  "role": "planner",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The plan for decision 0591 in next/ and our tooling (docs/plan/quests/exam-to-lint-PLAN.md). Of the 47 files in next/apps/fabrika/src/exam/: 22 lint (existing rules' plants move to oxlint-plugins/, plus a typed lint command, node-kinds.ts, next-manifests.ts, a new fabrika/package-deps rule, and fabrika/machine-has-laws for laws-scan), 0 already held whole (one twin law is, by pnpm lint's lint:twin at 0 findings), 16 keep a reads: declaration, 0 open, and 9 check no code shape and read no file as text. laws-scan looked for defineMachine(, which no next/ file calls; its rule on Machine.make( has exactly 30 hits on main (14 machines with no laws file, 16 with no sync test), fixed first in slice E. build.test.ts and settings-generated's L9 go to lint; the generated-files law keeps reads:. Each lint row names its plants, the law that runs them and a break that turns it red, and an exam file is deleted only after both. reads: feeds a Vite plugin that calls addWatchFile, and the readers list goes once 0580's slice 1 and pull request 1496 land.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 26,
+  "note": "Run in a cloud box with no step keys, so the commits are plain and unsigned: stepcommit.sh refuses the plan step, ticketed by the merge session. plancheck --draft passes. Amended twice on the laptop lead's notes, which applied rules in force; no open question is left. 0591 and pull request 1499 name no ticket, so the commits use 591.",
+  "step": "plan"
+}

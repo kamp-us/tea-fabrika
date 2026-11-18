@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-fix5",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-16T21:13:46-08:00",
+  "ended": "2026-11-16T21:15:52-08:00",
+  "parent": "2026-11-16-t766-port-typecheck-fix4",
+  "active": null,
+  "role": "step",
+  "step": "build",
+  "model": "gpt-6",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling. Replaced the typed Predicate guard and manual reason comparison with Effect.catchReason at the four recovery sites named by the source audit, following decision 0567. The recovery handlers and unmatched-error mapping remain unchanged. No lock sequence, polling, compiler wait, process, install or exit contract changed.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 2.1,
+  "note": "Read decision 0567 and the installed Effect 4.1.3 reason matcher before editing. All 48 in-memory reason controls passed across link, stat, readFileString and lstat, including unmatched errors and preserved causes. The existing scoped unit checks passed: anti-slop 27, in-memory lock 4, cache wiring 18. No new test was needed for this form-only correction. No typecheck compilation, real process adapter, integration or signal test ran. The lead owns the conflicting plan wording and the same auditor's source recheck."
+}

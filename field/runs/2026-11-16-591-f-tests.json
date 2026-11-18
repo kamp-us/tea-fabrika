@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-f-tests",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-15T22:24:53-08:00",
+  "ended": "2026-11-15T22:45:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice F of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md at 262d4dc), on fabrikalfa/exam-to-lint-f from origin/fabrikalfa/exam-to-lint. M7: the new rule fabrika/one-page-runtime (oxlint-plugins/one-page-runtime.ts), registered in oxlint-plugins/index.ts and on in .oxlintrc.json for next/apps/fabrika/src/entry/browser.tsx only, with its law oxlint-plugins/one-page-runtime.test.ts: a fast-check property through RuleTester over the program's name and the three start spellings (pipe, direct, curried) with the four planted entries of the plants table (no runMain import from @kampus/tuval/browser, runMain only inside a component, a second start, another run function), and a scenario run of oxlint with the real config proving the rule is on at the entry and off at a sibling path. M8: T730's L9 moved whole to oxlint-plugins/settings-imports.test.ts, same generators and seed 119120, at the plan's 100 runs (the old law ran 10). M5: pnpm lint exits 0 with the new rule on; the real entry has 0 fires of fabrika/one-page-runtime and 0 diagnostics in all. The deletion came last, per row: (1) each new law green on the real code at 0f27970; (2) each red under its break; (3) the old laws green on the same head (build.test.ts 1 passed; settings-generated.test.ts L9 passed); (4) build.test.ts removed with git rm in 010b611, and L9 removed from settings-generated.test.ts in f49d911. Deleting build.test.ts also took its entry out of .github/ci/changes.mjs readers, the expected list in .github/ci/changes.test.ts, the plant-import exemption in .oxlintrc.json, and its rows in vitest.shards.json, vitest.shards.full.json and vitest.shards.test.ts's sample snapshot, whose laws refuse a row for a file that is not in the repo.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: refuses each planted entry with its own reports and passes the entry in every start spelling",
+      "plant": "count a runMain inside a function as the module's start (read every statement through below(program), not only program.body)",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: scenario: the repo's config turns the rule on for the page entry and for no other file",
+      "plant": "the same break as above",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/settings-imports.test.ts: L9: oxlint refuses each import of the TOML adapter or its parser a caller may not make, in every spelling, and passes the rest",
+      "plant": "drop next/apps/fabrika/src/settings-start.integration.test.ts from the adapter's allowed files in .oxlintrc.json",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/settings-generated.test.ts: L9 (the old law, 10 runs), before its removal",
+      "plant": "the same break as above",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "Each plant ran once on a saved copy in the scratchpad and was restored by copy, checked with cmp. The new L9 law is red under its break at run 17 of 100 (the start test file imports the adapter by package name); at the old 10 runs seed 119120 draws the start test file once, with a parser import, so the old L9 stayed green under the same break: the plan's 100 runs are what make the break visible. The 100-run law took 41 s here. Tests ran under nice -n 19 with --maxWorkers=1, narrow paths only, at f49d911 or its parents: oxlint-plugins/one-page-runtime.test.ts, oxlint-plugins/settings-imports.test.ts, oxlint-plugins/plants.test.ts (238 passed with one-page-runtime on its elsewhere list), next/apps/fabrika/src/settings-generated.test.ts (4 passed after L9 left), .github/ci/changes.test.ts and vitest.shards.test.ts (91 passed). vitest --changed origin/main was refused by the config as a broad run, since .oxlintrc.json is a rerun trigger. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144, 17 parts passed) and the list ratchet pass; one pnpm typecheck at the end, started when pgrep -x tsgo found none, exit 0. The second commit (010b611) was made with plain git add and git commit, as the step rules allow: the session's worktree guard refused stepcommit.sh twice when its path list named a .github/ file. The other two used stepcommit.sh --commit-only. No .integration. or .visual. law was run, so none met the 0178 guard. No product file changed, so no build step is needed.",
+  "step": "tests"
+}

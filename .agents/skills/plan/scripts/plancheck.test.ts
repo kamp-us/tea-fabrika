@@ -22,9 +22,11 @@ describe("plancheck, today's tooling", () => {
           const lines = [first, "", "", ""];
           lines[position] = "Plancheck-Version: 3";
           const example = "Approved by the lead agent, builds a different plan.";
+
           const body = complete(
             `${approval ? (fenced ? `${fence}\n${example}\n${fence.slice(0, 3)}` : example) : ""}\n`,
           );
+
           const got = handoff(`${lines.join("\n")}\n${body}`, true);
           const pass = first === "" && position === 1 && (!approval || fenced);
           expect(got.code, got.text).toBe(pass ? 0 : 1);
@@ -99,6 +101,7 @@ describe("plancheck, today's tooling", () => {
               Generator: generator,
               Plant: "write the pass",
             };
+
             const body = `${table(heads, [heads.map((h) => row[h]!)])}\n\n${laws("scenario: supplemental outside run")}`;
             const got = handoff(`\nPlancheck-Version: 2\n${body}\n`);
             expect(got.code, got.text).toBe(!marked || family ? 0 : 1);
@@ -140,6 +143,7 @@ describe("plancheck, today's tooling", () => {
               rows.map(([law, generator]) => [law, generator, "break"]),
             )}\n`,
           );
+
           expect(got.code, got.text).toBe(0);
         },
       ),
@@ -174,15 +178,18 @@ describe("plancheck, today's tooling", () => {
         fc.boolean(),
         (parts, heads, valid) => {
           const description = parts.map(([text, n]) => `${text}${"\\".repeat(n * 2 + 1)}|tail`).join(" ");
+
           const row: Record<string, string> = {
             Law: description,
             Generator: valid ? "fc.array: Markdown cells" : "TBD",
             Plant: "split pipes",
             Note: "",
           };
+
           // Two backslashes leave a real column boundary, then an empty cell.
           const even =
             "| Law | Note | Generator | Plant |\n| --- | --- | --- | --- |\n| slash\\\\| | fc.string | break |";
+
           const body = `${table(heads, [heads.map((head) => row[head]!)])}\n\n\`\`\`md\n${laws("TBD")}\n\`\`\`\n\n${even}`;
           const got = check(body);
           expect(got.code, got.text).toBe(valid ? 0 : 1);
@@ -263,6 +270,7 @@ describe("plancheck, today's tooling", () => {
             "./exam-paths.json",
             "edit package.json after install",
           ].includes(path);
+
           const body = `A bare \`${mention}\` mention is prose.\n\n${table(["File", "Why", "Owner step"], [[`\`${path}\``, `mentions ${mention}`, owner]])}`;
           const got = check(body);
           // Amendment A9 lists every exam path named anywhere, so a prose mention is listed; it still
@@ -293,42 +301,51 @@ describe("plancheck, today's tooling", () => {
   // and a word also matches with its leading dots removed. Plant: split on a named list of marks, as
   // f9f57901 does, or strip a dotfile's leading `.`.
   it("every exam path anywhere in the plan is listed, in any context and any wrapping", () => {
+    // SAFETY: exam-paths.json is the repo's list of exam rows, each an object with a `glob` string.
     const globs = (
       JSON.parse(readFileSync(join(import.meta.dirname, "../../../../exam-paths.json"), "utf8")) as { glob: string }[]
     ).map((row) => row.glob);
+
     const literal = globs.filter((glob) => !glob.includes("*"));
     const starred = globs.filter((glob) => glob.includes("*"));
     expect(literal).toContain("package.json");
     expect(starred).toContain("next/apps/fabrika/src/exam/**");
     // A path under a glob: "**" becomes one or more segments, each "*" one word.
     const segments = fc.array(word, { minLength: 1, maxLength: 3 }).map((w) => w.join("/"));
+
     const under = fc
       .tuple(fc.constantFrom(...starred), segments, fc.array(word, { minLength: 2, maxLength: 2 }))
       .map(([glob, deep, [a, b]]) => glob.replaceAll("**", deep).replace("*", a!).replace("*", b!));
+
     // Dotfile exam paths, so a leading `.` must survive the stripping (A12).
     const dotfile = fc.oneof(
       fc.constantFrom(".oxlintrc.json", ".oxfmtrc.json"),
       word.map((w) => `.github/${w}.yaml`),
     );
+
     const examPath = fc.oneof(fc.constantFrom(...literal), under, dotfile);
     // Amendment A12: the wrapping is any character outside the path alphabet `A-Z a-z 0-9 . _ / -`,
     // drawn from all of Unicode, so no named mark is special. A few marks are weighted in.
     const pathChar = /^[A-Za-z0-9._/-]$/;
+
     const codePoint = (min: number, max: number) =>
       fc
         .integer({ min, max })
         .filter((c) => c < 0xd800 || c > 0xdfff)
         .map((c) => String.fromCodePoint(c))
         .filter((c) => !pathChar.test(c));
+
     const outside = fc.oneof(
       fc.constantFrom("“", "”", "‘", "’", "~", "!", "#", "`", "<", ">", "|", " ", " ", "😀"),
       codePoint(0, 0x7f),
       codePoint(0x80, 0x10ffff),
     );
+
     const marks = fc.string({ unit: outside, maxLength: 4 });
     // Runs A12 strips from a word: leading `_` and `-`, trailing `_`, `-` and `.`.
     const leadRun = fc.string({ unit: fc.constantFrom("_", "-"), maxLength: 3 });
     const trailRun = fc.string({ unit: fc.constantFrom("_", "-", "."), maxLength: 3 });
+
     // How the wrapped word stands: a link's text, target or title, emphasis, an HTML comment.
     const forms = {
       plain: (t: string) => t,
@@ -345,8 +362,11 @@ describe("plancheck, today's tooling", () => {
       doubleUnderscore: (t: string) => `__${t}__`,
       comment: (t: string) => `<!-- ${t} -->`,
     };
+
     type Form = keyof typeof forms;
+
     const fileTable = (cells: string[]) => table(["File", "Why", "Owner step"], [cells]);
+
     const place = {
       prose: (t: string) => `Before the build, ${t} changes once.`,
       bullet: (t: string) => `- ${t} keeps its owner.`,
@@ -359,7 +379,9 @@ describe("plancheck, today's tooling", () => {
       fence: (t: string, lang: string) => `\`\`\`${lang}\ncat ${t}\n\`\`\``,
       tildeFence: (t: string, lang: string) => `~~~${lang}\n  "glob": ${t}\n~~~`,
     };
+
     type Place = keyof typeof place;
+
     // A pinned case's defaults: no wrapping at all.
     const bare = {
       ticks: false,
@@ -371,6 +393,7 @@ describe("plancheck, today's tooling", () => {
       after: "",
       lang: "",
     };
+
     fc.assert(
       fc.property(
         fc.record({
@@ -382,7 +405,9 @@ describe("plancheck, today's tooling", () => {
           dots: fc.nat({ max: 2 }),
           trail: trailRun,
           after: marks,
+          // SAFETY: `Object.keys` of the literal `forms` lists exactly its own keys, the Form type.
           form: fc.constantFrom(...(Object.keys(forms) as Form[])),
+          // SAFETY: `Object.keys` of the literal `place` lists exactly its own keys, the Place type.
           location: fc.constantFrom(...(Object.keys(place) as Place[])),
           lang: fc.oneof(fc.constantFrom("", "md", "sh", "json", "ts", "text"), word),
         }),
@@ -472,13 +497,16 @@ describe("plancheck, today's tooling", () => {
   // repository does not trigger the exception.
   it("every exam path in a path cell counts unless a possessive names another package", () => {
     // Extensionless exam paths come from the exam list itself: every glob with no "." and no "/".
+    // SAFETY: exam-paths.json is the repo's list of exam rows, each an object with a `glob` string.
     const globs = (
       JSON.parse(readFileSync(join(import.meta.dirname, "../../../../exam-paths.json"), "utf8")) as {
         glob: string;
       }[]
     ).map((row) => row.glob);
+
     const bare = globs.filter((glob) => !/[./]/.test(glob));
     expect(bare).toContain("allowed_signers");
+
     const exam = [
       "package.json",
       "vitest.config.ts",
@@ -487,6 +515,7 @@ describe("plancheck, today's tooling", () => {
       "oxlint-plugins/laws.ts",
       ...bare,
     ];
+
     const plainPaths = [
       "src/plain.ts",
       "README.md",
@@ -495,8 +524,10 @@ describe("plancheck, today's tooling", () => {
       "Makefile",
       "LICENSE",
     ];
+
     // Generated plain words cannot be an exam path: no ".", "/", "_" or "'".
     const term = fc.oneof(fc.constantFrom(...exam, ...plainPaths), word);
+
     // A9's punctuation, each kind put around one word.
     const wraps = {
       none: (w: string) => w,
@@ -515,18 +546,25 @@ describe("plancheck, today's tooling", () => {
       linkText: (w: string) => `[text](${w})`,
       linkDot: (w: string) => `[\`${w}\`](./${w})`,
     };
+
     type Wrap = keyof typeof wraps;
+
+    // SAFETY: `Object.keys` of the literal `wraps` lists exactly its own keys, the Wrap type.
     const wrap = fc.constantFrom(...(Object.keys(wraps) as Wrap[]));
+
     // Any letter case, as a plan writer might type it.
     const anyCase = (base: fc.Arbitrary<string>) =>
       fc
         .tuple(base, fc.array(fc.boolean(), { minLength: 12, maxLength: 12 }))
         .map(([w, ups]) => [...w].map((c, i) => (ups[i] ? c.toUpperCase() : c.toLowerCase())).join(""));
+
     const thisRepo = ["repository", "repo", "root", "project", "workspace", "monorepo", "top-level"];
+
     const ownerName = fc.oneof(
       anyCase(fc.constantFrom("Counter", "Libfabrika", "pipeline")),
       anyCase(word.filter((w) => !thisRepo.includes(w))),
     );
+
     fc.assert(
       fc.property(
         fc.record({
@@ -671,18 +709,23 @@ describe("plancheck, today's tooling", () => {
   // old plan whose package.json is another package's own, must pass (amendment A8).
   it("pinned: ticket 520's real path cells", () => {
     const head = "| File | Why | Lines | Owner step |\n| --- | --- | --- | --- |";
+
     const makefile = check(
       "| File | Lines | Owner step |\n| --- | --- | --- |\n| Makefile and package.json | 20 | build |",
     );
+
     expect(makefile.code, makefile.text).toBe(1);
     expect(makefile.text).toContain("package.json is an exam path owned by build, not tests");
+
     // Review round 5's cell: at 2e25c4e7 it printed "no exam paths named" and exited 0.
     const link = check(
       "| File | Lines | Owner step |\n| --- | --- | --- |\n| [`package.json`](package.json) | 20 | build |",
     );
+
     expect(link.code, link.text).toBe(1);
     expect(link.text).toContain("exam path named: package.json\t");
     expect(link.text).toContain("package.json is an exam path owned by build, not tests");
+
     const old = check(
       [
         head,
@@ -690,6 +733,7 @@ describe("plancheck, today's tooling", () => {
         "| Libfabrika's `package.json`, `pnpm-lock.yaml` | `.` and `./testing`, tea dependency | 20 | build |",
       ].join("\n"),
     );
+
     expect(old.code, old.text).toBe(0);
     expect(old.text).not.toContain("is an exam path owned by");
   });
@@ -721,7 +765,9 @@ describe("plancheck, today's tooling", () => {
               ),
               marker,
             );
+
             expect(got.code, got.text).toBe(bad ? 1 : 0);
+
             const missing = check(
               table(
                 ["File", "Lines"],
@@ -729,6 +775,7 @@ describe("plancheck, today's tooling", () => {
               ),
               marker,
             );
+
             expect(missing.code, missing.text).toBe(1);
           }
         },

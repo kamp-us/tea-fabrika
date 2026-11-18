@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-port-s3-tests",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null,
+  "started": "2026-11-15T22:39:37-08:00",
+  "ended": "2026-11-15T23:03:33-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice S3 of docs/plan/quests/port-scripts-0113-PLAN.md, the port of .agents/skills/lead/scripts/fieldrow.py to fieldrow.ts, on branch fabrikalfa/port-0113-s03 (the plan branch, S1 and origin/main merged in). New law file .agents/skills/lead/scripts/fieldrow.test.ts: the plan's one S3 law, a fast-check property over 100 generated cases that runs fieldrow.ts's exported effect/cli command `fieldrow` in memory (FileSystem.layerNoop, TestClock, TestConsole, ConfigProvider.fromEnv, a named zone) and compares its row with an oracle that restates fieldrow.py's rules, plus a scenario that the generator reaches the 13 cases the law must hold on. Before writing it, the oracle was run against fieldrow.py itself on 300 generated events files with given times, and agreed on every field, key order included; that check found that fieldrow.py rounds minutes half to even (15 seconds is 0.25 minutes), so the oracle does too. The old law 'K3 fieldrow sums usage across completed turns and ignores partial events' in .agents/skills/lead/scripts/box.test.ts keeps its title, generator, run count and assertions; only its entry point moved from python3 fieldrow.py to node fieldrow.ts, since the build deletes the .py. Both are red now because fieldrow.ts does not exist: the new file fails to import './fieldrow.ts', the K3 law fails with 'Cannot find module .../fieldrow.ts'. Plants ran on a scratch port of fieldrow.ts copied in and removed again, never committed; on that port both laws and the scenario were green first.",
+  "plants": [
+    {
+      "law": ".agents/skills/lead/scripts/fieldrow.test.ts: The Codex row's fields, sums and list price match fieldrow.py's for the same events file",
+      "plant": "cachedTokens billed at the input rate: (input * in + output * out) / 1e6",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/fieldrow.test.ts: The Codex row's fields, sums and list price match fieldrow.py's for the same events file",
+      "plant": "usage totals reset at each completed turn, keeping only the last turn",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/box.test.ts: K3 fieldrow sums usage across completed turns and ignores partial events",
+      "plant": "usage totals reset at each completed turn, keeping only the last turn",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/fieldrow.test.ts: scenario: the Codex row law's generator reaches every case the plan names",
+      "plant": "the generator never makes a .redacted receipt",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "note": "Cloud twin tests step, one session, no subagents. The date is the UTC day; the times are Pacific. Gap in the plan: its Files table lists box.test.ts for S14 only, but S3 deletes fieldrow.py, which that file's K3 fieldrow law starts, so this step changed that one entry point. No .integration. or .visual. law is reached by these files; origin/main (with PR 1508) is merged in. pnpm format passes; pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passed every part but lint:promise-types, which printed '0 findings' and then died in its dispose with EPIPE while the shared box was short of memory; the ratchet exits 0. Committed with stepcommit.sh --commit-only, so nothing is signed.",
+  "step": "tests",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}

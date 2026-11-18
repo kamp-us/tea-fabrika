@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-dead-amendments-anchors-after-folds",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/README.md",
+    "line": 229
+  },
+  "says": "Ten links point at a decision's #amendments heading that slices 1 to 3 folded away: docs/plan/README.md:229, docs/plan/tier-1.md:29 and :55, docs/plan/tiers.md:35 (all 0159), .glossary/TERMS.md:147, :158 and :190 (0076), .patterns/doc-comments.md:91 and docs/direction/effect-code-guidelines.md:413 (0023), docs/direction/patch-upstream-locally.md:31 (0042).",
+  "proof": "for each link '<decision>.md#amendments', `grep -q '^## Amendments' <decision>.md` fails; 0159's headings are only Context, Decision and Consequences (grep -n '^#' .decisions/0159-fabsh-pipes-summon-join-first.md)",
+  "cost": "a reader sent to an owner's amendment lands on the top of the record with no pointer to the folded text, and slice 8's link check reads superseded records, not anchors, so nothing catches these",
+  "head": "50266396c7c8d538722bf333fef384d6d4e8a19d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1633"
+}

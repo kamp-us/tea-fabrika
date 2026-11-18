@@ -1,8 +1,6 @@
 /**
  * The Cloudflare runtime of a brain: the Project and Process Durable Objects' services and layers, the
  * stubs and RPC replies they talk through, and the bucket and recording layers they share.
- *
- * @stability unstable
  */
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import { applyCell } from "@demlik/tea";
@@ -16,6 +14,7 @@ import {
   Fiber,
   Layer,
   Option,
+  Predicate,
   Result,
   Schema,
   Semaphore,
@@ -23,7 +22,10 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Formatter from "effect/Formatter";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Str from "effect/String";
 import { admitted } from "../access/Access.ts";
 import { ClientManager } from "../access/ClientManager.ts";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -46,6 +48,7 @@ import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { type Appended, type Entry, fromHere, Line, lineFor, valueFor, type Waited } from "../ledger/Log.ts";
 import { Referee } from "../ledger/Referee.ts";
 import * as RefereeSql from "../ledger/RefereeSql.ts";
+import { WritePolicy } from "../ledger/WritePolicy.ts";
 import { Model } from "../permissions/Model.ts";
 import * as Relation from "../permissions/Relation.ts";
 import { Relations } from "../permissions/Relations.ts";
@@ -82,11 +85,12 @@ import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessManager, remoteProcessManager, type ProcessCalls } from "../processes/ProcessManager.ts";
 import { ProgramMail, type ProgramMailError, type Delivery, type Grants } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
+import { Quotas, type QuotasError } from "../processes/Quotas.ts";
 import * as Audit from "../runtime/Audit.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { BuiltProgram } from "../runtime/Built.ts";
 import type { Selected } from "../runtime/Code.ts";
-import { code as codeMachine, CodeEvent, Install, Installed } from "../runtime/Code.ts";
+import { code as codeMachine, CodeEvent, CodeMsg, Install, Installed } from "../runtime/Code.ts";
 import { CodeStore, type CodeStoreError } from "../runtime/CodeStore.ts";
 import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, type Incoming } from "../runtime/Entry.ts";
@@ -95,8 +99,10 @@ import { type Ask, HandsTasks, type HandsTasksError, type Reply as HandsReply } 
 import * as HandsTasksLive from "../runtime/HandsTasksLive.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { MailWakeups } from "../runtime/MailWakeups.ts";
+import { type News, Published } from "../runtime/News.ts";
 import { Checkpoint, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
+import * as QuotaRunner from "../runtime/QuotaRunner.ts";
 import type { RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import type { RepliesError } from "../runtime/Replies.ts";
 import type { Descriptor, Opened, RunnerError, Swapped } from "../runtime/Runner.ts";
@@ -138,6 +144,7 @@ import { mailLayer, wakeups } from "./mail.ts";
 import type { RecordShape } from "./objects.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 import * as Publish from "./Publish.ts";
+import * as ProjectQuotas from "./quotas.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsRuntime from "./SettingsRuntime.ts";
@@ -148,7 +155,7 @@ import * as WatcherManagerRemote from "./WatcherManagerRemote.ts";
 
 const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
   (value): value is Parameters<typeof lineFor>[1] =>
-    Schema.is(Schema.JsonObject)(value) && typeof value._tag === "string",
+    Schema.is(Schema.JsonObject)(value) && Predicate.isString(value._tag),
 );
 
 const SavedDescriptor = Schema.Struct({
@@ -163,7 +170,6 @@ const SavedDescriptor = Schema.Struct({
  * The bindings a brain's Worker and objects read: the start's `INSTANCE` JSON, the four Durable Object
  * namespaces, the Worker Loader and the measurements bucket.
  *
- * @stability unstable
  * @category models
  */
 export interface Env {
@@ -179,7 +185,6 @@ export interface Env {
 /**
  * The start's input a brain is configured with, as `SettingsStart.Input`.
  *
- * @stability unstable
  * @category models
  */
 export type BrainOptions = SettingsStart.Input;
@@ -188,7 +193,6 @@ export type BrainOptions = SettingsStart.Input;
  * Decodes the `INSTANCE` binding's JSON as a start's input and checks its settings. Returns the
  * input, the decoded values and the snapshot in its canonical encoding. It records nothing.
  *
- * @stability unstable
  * @category decoding
  */
 export const settings = (env: Pick<Env, "INSTANCE">) => SettingsInput.decode(env.INSTANCE);
@@ -208,7 +212,6 @@ type CheckedSettings = Effect.Success<ReturnType<typeof settings>>;
  * records it over RPC with the Project object the input names. The Project object does not use
  * this layer: it records the start in its own ledger.
  *
- * @stability unstable
  * @category layers
  */
 export function recordedLayer(env: Env): Layer.Layer<RecordedStart, Starts.StartsError>;
@@ -233,7 +236,6 @@ export {
   /**
    * A runtime for one layer whose build can be tried again after it fails.
    *
-   * @stability unstable
    * @category constructors
    */
   SettingsRuntime,
@@ -243,7 +245,6 @@ export {
  * Converts a `Starts` answer into the reply sent over RPC: `ok` with the receipt, or the failure's
  * reason by its tag alone. The effect no longer fails with `StartsError`.
  *
- * @stability unstable
  * @category error handling
  */
 export const settingsReply = <R>(work: Effect.Effect<SettingsStart.Receipt, Starts.StartsError, R>) =>
@@ -267,7 +268,6 @@ export const settingsReply = <R>(work: Effect.Effect<SettingsStart.Receipt, Star
  * Use when a failure leaves the Worker or an object. A cause may hold the start's input, and this
  * keeps it inside.
  *
- * @stability unstable
  * @category error handling
  */
 export const settingsFailure = <A, E, R>(work: Effect.Effect<A, E | Starts.StartsError, R>) =>
@@ -310,13 +310,13 @@ export const settingsFailure = <A, E, R>(work: Effect.Effect<A, E | Starts.Start
  * `runPromise` gets the context, provides it to the work and runs it. When the context fails to
  * build, a `StartsError` becomes `Start.Failure`, and a `LedgerError` keeps only its `reason`.
  *
- * @stability unstable
  * @category constructors
  */
 export const settingsWire = <R, E>(context: Effect.Effect<Context.Context<R>, E>) => {
   const contextEffect = settingsFailure(context).pipe(
     Effect.mapError((error) => (error instanceof LedgerError ? new LedgerError({ reason: error.reason }) : error)),
   );
+
   return {
     contextEffect,
     runPromise: <A, E2>(work: Effect.Effect<A, E2, R>) =>
@@ -329,7 +329,6 @@ export const settingsWire = <R, E>(context: Effect.Effect<Context.Context<R>, E>
  * What the Project hands its door: the SQL handle, the founder, the write turn and the process
  * calls the door needs.
  *
- * @stability unstable
  * @category models
  */
 export interface ProjectDoorOptions {
@@ -341,8 +340,14 @@ export interface ProjectDoorOptions {
   readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
   readonly audit: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError>;
   readonly nextProcess: () => Effect.Effect<string>;
-  readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
+  readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError>;
   readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
+  /**
+   * Whether the program behind `process` has room for this input, asked before it is saved (0147).
+   * `before` counts the entries the door writes ahead of the message, so the trial measures the
+   * message at the place it will land.
+   */
+  readonly admit: (process: string, input: Incoming, before: number) => Effect.Effect<boolean, LedgerError>;
   readonly open: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError>;
   /** Watches `pid` for one window session, `to`, in the Project's turn. */
   readonly monitor: (
@@ -355,13 +360,13 @@ export interface ProjectDoorOptions {
 }
 
 type Boot = { readonly name: string; readonly id: string; readonly program: string };
+
 type Boots = readonly [Boot, ...ReadonlyArray<Boot>];
 
 /**
  * What a Project object is built with: its built-in programs, the processes it boots, the door it
  * serves, and optionally its start's input, mail grants, configuration and start grants.
  *
- * @stability unstable
  * @category models
  */
 export interface ProjectOptions {
@@ -395,7 +400,6 @@ export interface ProjectOptions {
 /**
  * Returns the stub of the Project object of the given name.
  *
- * @stability unstable
  * @category constructors
  */
 export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(name);
@@ -404,7 +408,6 @@ export const projectStub = (env: Env, name: string) => env.PROJECT.getByName(nam
  * Returns the stub of the Process object for a registered name in a project. One object holds
  * every process ID of that name, the first and each successor.
  *
- * @stability unstable
  * @category constructors
  */
 export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: string) =>
@@ -413,7 +416,6 @@ export const processStub = (env: Pick<Env, "PROCESS">, project: string, name: st
 /**
  * Returns the RPC stub of the Record object for a name in a project; a `SinkError` crosses it typed.
  *
- * @stability unstable
  * @category constructors
  */
 export const recordStub = (env: Env, project: string, name: string) =>
@@ -423,7 +425,6 @@ export const recordStub = (env: Env, project: string, name: string) =>
 /**
  * Runs a binding call that already entered Effect, under its own `runtime.rpc` span.
  *
- * @stability unstable
  * @category combinators
  */
 export const rpc = Effect.fn("runtime.rpc")(function* <A, E>(work: Effect.Effect<A, E>) {
@@ -449,7 +450,6 @@ const checkedReply = Effect.fnUntraced(function* <A, B>(work: Effect.Effect<A, u
  * Converts a signing call into its RPC reply: `ok` with the `Session`, or a `SigningRefused` or
  * `NotGranted` refusal as data. Any other failure still fails the call.
  *
- * @stability unstable
  * @category error handling
  */
 export const signingReply = Effect.fn("project.signingReply")(function* (work: Effect.Effect<Session, unknown>) {
@@ -460,7 +460,6 @@ export const signingReply = Effect.fn("project.signingReply")(function* (work: E
  * Converts a commit into its RPC reply: `ok` with the `Appended` entry, or a `SigningRefused` or
  * `NotGranted` refusal as data. Any other failure still fails the call.
  *
- * @stability unstable
  * @category error handling
  */
 export const commitReply = Effect.fn("project.commitReply")(function* (work: Effect.Effect<Appended, unknown>) {
@@ -471,7 +470,6 @@ export const commitReply = Effect.fn("project.commitReply")(function* (work: Eff
  * Converts a `ProcessManager` call into its RPC reply: `ok` with the value, or a `ProcessError`
  * refusal as data. Any other failure still fails the call.
  *
- * @stability unstable
  * @category error handling
  */
 export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Effect.Effect<ProcessReply<A>, E> =>
@@ -489,6 +487,7 @@ const projectStorage = Effect.fnUntraced(function* <A, E, R>(
   work: Effect.Effect<A, E, R>,
 ): Effect.fn.Return<A, E | LedgerError, R> {
   const tracer = yield* Tracer.Tracer;
+
   const safe = Tracer.make({
     context: tracer.context,
     span(options) {
@@ -499,12 +498,15 @@ const projectStorage = Effect.fnUntraced(function* <A, E, R>(
           attribute(key, key === "error.type" ? "LedgerError" : value);
         }
       };
+
       const end = span.end.bind(span);
       span.end = (time, exit) =>
         end(time, Exit.isSuccess(exit) ? exit : Exit.fail(new LedgerError({ reason: "storage" })));
+
       return span;
     },
   });
+
   return yield* work.pipe(
     Effect.withTracer(safe),
     Effect.mapError((error) => (Schema.is(LedgerError)(error) ? new LedgerError({ reason: error.reason }) : error)),
@@ -555,6 +557,7 @@ const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
   const refused = yield* Schema.decodeUnknownEffect(ProcessReplies.cases.ProcessError)(reply).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
+
   return yield* new ProcessError({ reason: refused.reason });
 });
 
@@ -588,7 +591,6 @@ const checkedValue = Effect.fnUntraced(function* <A>(
  * that letter with no client call. A saved wake time is kept; with none, the alarm is set for now
  * and saved.
  *
- * @stability unstable
  * @category constructors
  */
 export const configureProcess = Effect.fn("process.configure")(function* <E>(
@@ -618,7 +620,6 @@ export const configureProcess = Effect.fn("process.configure")(function* <E>(
 /**
  * Returns the wake time a Process object saved, or `undefined` when none is saved.
  *
- * @stability unstable
  * @category getters
  */
 export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: DurableObjectState) {
@@ -634,15 +635,17 @@ export const savedAlarm = Effect.fn("process.savedAlarm")(function* (ctx: Durabl
  * A descriptor or checkpoint that does not decode fails with a `LedgerError` of reason `bad_row`, and
  * a failed read with reason `storage`.
  *
- * @stability unstable
  * @category getters
  */
 export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx: DurableObjectState, pid?: string) {
   const raw = yield* rpc(StorageClient.make(ctx.storage).get("descriptor"));
+
   const descriptor = yield* Schema.decodeUnknownEffect(SavedDescriptor)(raw).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
+
   const sql = cloudflareSql(ctx.storage);
+
   const saved = yield* Effect.try({
     try: () =>
       sql.exec("SELECT name FROM sqlite_master WHERE name='process_state'").length === 0
@@ -658,10 +661,12 @@ export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx:
   const checkpoint = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Checkpoint))(saved.checkpoint).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
+
   return { ...descriptor, id: pid ?? descriptor.id, build: checkpoint.saved.build };
 });
 
-const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (n) => n.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: ArrayBuffer) =>
+  Array.from(new Uint8Array(bytes), (n) => Str.padStart(2, "0")(n.toString(16))).join("");
 
 // R2 refuses a body whose SHA-256 differs from the one sent. The local bucket does not check,
 // so the adapter checks first and both places fail the same way.
@@ -669,7 +674,6 @@ const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (n) => n.t
  * Puts a body in the bucket after checking its SHA-256 against `sha256`, as R2 itself does; a
  * mismatch fails with a `LedgerError` of reason `bad_row`, before anything is written.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkedPut = Effect.fnUntraced(function* (
@@ -684,7 +688,7 @@ export const checkedPut = Effect.fnUntraced(function* (
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", copy), catch: fail });
   const digest = yield* work;
 
-  if (hex(digest) !== sha256.toLowerCase()) {
+  if (hex(digest) !== Str.toLowerCase(sha256)) {
     return yield* new LedgerError({ reason: "bad_row" });
   }
 
@@ -694,18 +698,17 @@ export const checkedPut = Effect.fnUntraced(function* (
 /**
  * Returns a bucket object's SHA-256 as hex, or `null` when the object or its checksum is absent.
  *
- * @stability unstable
  * @category getters
  */
 export const bucketHead = Effect.fn(function* (bucket: R2Bucket, key: string) {
   const row = yield* BucketClient.make(bucket).head(key);
+
   return row?.checksums.sha256 === undefined ? null : { sha256: hex(row.checksums.sha256) };
 });
 
 /**
  * Returns the bucket's `put` and `head` as the Promise calls the archive takes.
  *
- * @stability unstable
  * @category constructors
  */
 export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
@@ -720,6 +723,7 @@ export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
 const recordLayer = (env: Env, project: string) => RecordManager.remote((name) => recordStub(env, project, name));
 
 const archiveLayer = (env: Env) => Archive.bucket(bucketCalls(env.MEASUREMENTS));
+
 const flushed = SpanSink.use((sink) => sink.flush);
 
 /**
@@ -728,10 +732,9 @@ const flushed = SpanSink.use((sink) => sink.flush);
  * **Details**
  *
  * The flush is skipped when the call failed with a `RateCountFailure`, when `counted` is true of its
- * value, or when it answered a `reserved` or `rate_limited` refusal. A failed flush fails a call that
+ * value, or when it answered a `reserved`, `rate_limited` or `quota` refusal. A failed flush fails a call that
  * succeeded; a call that failed keeps its own failure.
  *
- * @stability unstable
  * @category combinators
  */
 export const complete = Effect.fn(function* <A, E, R>(
@@ -749,7 +752,8 @@ export const complete = Effect.fn(function* <A, E, R>(
       if (
         Exit.isSuccess(exit) &&
         (counted(exit.value) ||
-          (Schema.is(Answer.cases.refused)(exit.value) && ["reserved", "rate_limited"].includes(exit.value.reason)))
+          (Schema.is(Answer.cases.refused)(exit.value) &&
+            ["reserved", "rate_limited", "quota"].includes(exit.value.reason)))
       ) {
         return exit;
       }
@@ -766,17 +770,19 @@ export const complete = Effect.fn(function* <A, E, R>(
  * Layer that provides an object's recording: the remote Record calls, the archive and the span sink
  * on its own SQL, with every span tagged with the start's settings hash and build.
  *
- * @stability unstable
  * @category layers
  */
 export const recordingLayer = (sql: Sql, env: Env, project: string, object: string) =>
   Layer.effectContext(
     Effect.gen(function* () {
       const start = yield* RecordedStart;
+
       const services = yield* Layer.build(
         Layer.mergeAll(recordLayer(env, project), archiveLayer(env), SpanSink.layer(sql, { object })),
       );
+
       const tracer = yield* Tracer.Tracer.pipe(Effect.provideContext(services));
+
       return Context.add(
         services,
         Tracer.Tracer,
@@ -786,6 +792,7 @@ export const recordingLayer = (sql: Sql, env: Env, project: string, object: stri
             const span = tracer.span(options);
             span.attribute("fab.settings", start.snapshot.hash);
             span.attribute("fab.build", start.input.build);
+
             return span;
           },
         }),
@@ -794,8 +801,8 @@ export const recordingLayer = (sql: Sql, env: Env, project: string, object: stri
   );
 
 const fingerprint = Effect.fnUntraced(function* (value: string) {
-  const ssh = value.startsWith("ssh-");
-  const blob = ssh ? Base64.decode(value.trim().split(/\s+/)[1] ?? "") : Base64Url.decode(value);
+  const ssh = Str.startsWith("ssh-")(value);
+  const blob = ssh ? Base64.decode(Str.split(Str.trim(value), /\s+/)[1] ?? "") : Base64Url.decode(value);
 
   if (Result.isFailure(blob)) {
     return yield* new LedgerError({ reason: "bad_row", cause: blob.failure });
@@ -807,18 +814,27 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const hash = yield* work;
-  return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+
+  return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
 });
 
-const projectLedger = (ctx: DurableObjectState, env: Env, name: string) => {
+const projectLedger = (
+  ctx: DurableObjectState,
+  env: Env,
+  name: string,
+  input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError>,
+) => {
   const sql = cloudflareSql(ctx.storage);
   const turn = Semaphore.makeUnsafe(1);
+
   const notifications = Context.Reference<Array<Effect.Effect<void, LedgerError>> | null>(
     "@kampus/libfabrika/cloudflare/runtime.WriteNotifications",
     { defaultValue: () => null },
   );
+
   const write = Effect.fnUntraced(function* <A, E, R>(work: Effect.Effect<A, E, R>) {
     const pending: Array<Effect.Effect<void, LedgerError>> = [];
+
     return yield* work.pipe(
       Effect.provideService(notifications, pending),
       turn.withPermit,
@@ -830,9 +846,11 @@ const projectLedger = (ctx: DurableObjectState, env: Env, name: string) => {
       ),
     );
   });
+
   const ring = Effect.fn("project.ring")(function* (to: string, stream: string, rev: number) {
     yield* rpc(GatewayClient.make(env.CONNECTION.getByName(to)).ring(stream, rev));
   });
+
   const bell = Layer.succeed(Doorbell, {
     ring: Effect.fnUntraced(function* (to, stream, rev) {
       const send = ring(to, stream, rev);
@@ -846,13 +864,16 @@ const projectLedger = (ctx: DurableObjectState, env: Env, name: string) => {
       pending.push(send.pipe(Effect.provideContext(context)));
     }),
   });
+
   const ledgerLayer = Layer.mergeAll(
     LedgerSql.layer(sql, { reader: `project:${name}` }),
     LedgerTransactionSql.layer(sql),
     RefereeSql.layer(sql),
     LedgerStreamsSql.layer(sql),
-  ).pipe(Layer.provide(bell));
-  const starts = SettingsStartsLedger.fromLedger().pipe(Layer.provide(ledgerLayer));
+  ).pipe(Layer.provideMerge(ProjectQuotas.project(sql, `brain:${name}`, input)), Layer.provide(bell));
+
+  const starts = SettingsStartsLedger.fromLedger.pipe(Layer.provide(ledgerLayer));
+
   return { sql, turn, write, ledgerLayer, starts };
 };
 
@@ -865,13 +886,14 @@ const projectLogic = Effect.fn("project.init")(function* (
   const checked = yield* RecordedStart;
   const config = { ...checked.input, ...checked.input.founding, port: checked.values.port };
   const { programs } = options;
-  const bootstrap = typeof options.bootstrap === "function" ? options.bootstrap(config.person) : options.bootstrap;
+  const bootstrap = Predicate.isFunction(options.bootstrap) ? options.bootstrap(config.person) : options.bootstrap;
   const name = ctx.id.name ?? config.name;
   const { sql, turn, write, ledgerLayer } = local;
   // Installs stay ordered while a Process finishes a turn that may write back to the Project.
   const installs = yield* Semaphore.make(1);
   const by = `brain:${name}`;
   const ids = yield* ProcessIdGenerator;
+
   const founder = {
     name,
     person: config.person,
@@ -880,7 +902,9 @@ const projectLogic = Effect.fn("project.init")(function* (
     by: yield* fingerprint(config.founder),
     build: config.build,
   };
+
   const base = Layer.mergeAll(ledgerLayer, recordingLayer(sql, env, name, `project:${name}`));
+
   const processManager = ProcessManager.layer(
     {
       by,
@@ -889,6 +913,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     },
     ids.next,
   );
+
   const managers = Layer.mergeAll(
     TasksLedger.layer,
     ClientManagerLedger.layer(founder),
@@ -896,6 +921,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     RelationsLedger.layer({ by }),
     processManager,
   ).pipe(Layer.provideMerge(base));
+
   // The door wakes a task's requester after a finish with the same wake mail uses.
   const services = Context.add(
     Context.add(
@@ -906,6 +932,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     MailWakeups,
     yield* MailWakeups.pipe(Effect.provide(wakeups(env, name))),
   );
+
   // A program's hands Cmd targets the person's hands key, and its request records this start's settings.
   const hands = yield* HandsTasks.pipe(
     Effect.provide(
@@ -914,8 +941,10 @@ const projectLogic = Effect.fn("project.init")(function* (
       ),
     ),
   );
+
   // `mail.unread`, read at the brain's edge with the start's other settings (0086).
   const cap = checked.values.mailUnread;
+
   const mail = yield* ProgramMail.pipe(
     Effect.provide(
       ProgramMailLedger.layer({ grants: options.mail?.grants ?? checked.input.mail?.grants ?? {}, cap }).pipe(
@@ -923,17 +952,20 @@ const projectLogic = Effect.fn("project.init")(function* (
       ),
     ),
   );
+
   const ledger = Context.get(services, Ledger),
     referee = Context.get(services, Referee),
     members = Context.get(services, ClientManager),
     processes = Context.get(services, ProcessManager);
+
   // Each window session's own ProcessManager, so its watches deliver to that session (P18). Its
   // owner is the session's own pid, which registered no name, so an owner-gated call through it is
   // `not_parent`. Built at the session's first monitor and kept until its leave, so its folded
   // table lives as long as the session, never folded again from rev 0 for each call.
   const windows = new Map<string, { readonly session: string; readonly manager: typeof ProcessManager.Service }>();
+
   const windowManager = Effect.fnUntraced(function* (to: typeof Recipient.cases.client.Type) {
-    const key = JSON.stringify([to.client, to.session]);
+    const key = Formatter.formatJson([to.client, to.session]);
     const kept = windows.get(key);
 
     if (kept !== undefined) {
@@ -941,13 +973,17 @@ const projectLogic = Effect.fn("project.init")(function* (
     }
 
     const caller = { by, owner: Owner.cases.process.make({ process: to.session }), recipient: to };
+
     const manager = yield* ProcessManager.pipe(
       Effect.provide(ProcessManager.layer(caller, ids.next)),
       Effect.provideContext(services),
     );
+
     windows.set(key, { session: to.session, manager });
+
     return manager;
   });
+
   const windowsLeave = (session: string) => {
     for (const [key, kept] of windows) {
       if (kept.session === session) {
@@ -955,9 +991,10 @@ const projectLogic = Effect.fn("project.init")(function* (
       }
     }
   };
+
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
 
-  for (const source of Object.values(programs)) {
+  for (const source of Rec.values(programs)) {
     const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(source);
     yield* codes.put(built);
   }
@@ -966,14 +1003,21 @@ const projectLogic = Effect.fn("project.init")(function* (
   const moved = new Map<string, string>();
   const code = (hash: string) => codes.get(moved.get(hash) ?? hash).pipe(Effect.map(Option.getOrNull));
   const loader = workerLoader(env.LOADER, programs, code);
+
   const from = Effect.fn(function* (parent: string | null = null) {
     return yield* fromHere({ by, for: config.person, seen: 0, parent, build: config.build }).pipe(Effect.orDie);
   });
+
   let selected: typeof Selected.Type = codeMachine.init(null, {})[0];
   const folded = yield* Stream.runCollect(ledger.read("gateway/code", 0));
   const decodeCode = Schema.decodeUnknownOption(CodeEvent);
+
   const select = (fact: (typeof CodeEvent.cases)["code.loaded"]["Type"], id: string) => {
-    selected = applyCell(codeMachine, selected, { type: "loaded", id, program: fact.program, hash: fact.hash })[0];
+    selected = applyCell(
+      codeMachine,
+      selected,
+      CodeMsg.cases.loaded.make({ id, program: fact.program, hash: fact.hash }),
+    )[0];
 
     // An open fact is the move of a home saved before the code store: its old build, and the code
     // that took that build's place (0529).
@@ -1002,13 +1046,15 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     for (const process of yield* processes.info) {
       const [row] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", process.process);
+
       const recorded =
         row === undefined
           ? undefined
           : (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(row.value).pipe(
               Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
             )).build;
-      const target = Object.hasOwn(programs, process.program) ? programs[process.program] : undefined;
+
+      const target = Rec.has(programs, process.program) ? programs[process.program] : undefined;
 
       for (const was of new Set([process.build, ...(recorded === undefined ? [] : [recorded])])) {
         if (target === undefined || moved.has(was) || Option.isSome(yield* codes.get(was))) {
@@ -1016,12 +1062,14 @@ const projectLogic = Effect.fn("project.init")(function* (
         }
 
         const id = `code.open:${process.program}:${target.hash}:${was}`;
+
         const fact = CodeEvent.cases["code.loaded"].make({
           program: process.program,
           hash: target.hash,
           was,
           from: "open",
         });
+
         const placed = yield* ledger.append("gateway/code", id, lineFor(yield* from(), fact));
 
         if (placed._tag === "refused") {
@@ -1038,10 +1086,12 @@ const projectLogic = Effect.fn("project.init")(function* (
     bootstrap,
     Effect.fnUntraced(function* (entry) {
       const program = yield* loader.load(entry.program, `project:${name}`, undefined, selected[entry.program]?.hash);
+
       return { entry, program };
     }),
     { concurrency: 1 },
   );
+
   sql.exec(
     "CREATE TABLE IF NOT EXISTS dev_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
   );
@@ -1062,8 +1112,10 @@ const projectLogic = Effect.fn("project.init")(function* (
     const descriptor = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
+
     return { descriptor, drain: saved.pending === 2 };
   });
+
   // The object's init may call back into this Project, so the build never waits on a delivery.
   const deliver = Effect.fnUntraced(function* (
     pid: string,
@@ -1072,6 +1124,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     yield* rpc(ProcessClient.make(processStub(env, name, descriptor.name)).configure(descriptor, drain));
     sql.exec("UPDATE dev_descriptors SET pending=0 WHERE process=?", pid);
   });
+
   const configure = Effect.fnUntraced(function* (pid: string) {
     const saved = yield* decodePending(pid);
 
@@ -1079,25 +1132,32 @@ const projectLogic = Effect.fn("project.init")(function* (
       yield* deliver(pid, saved);
     }
   });
+
   /** A process ID's life from history, first or successor; an unknown ID is refused. */
   const resolved = (pid: string) =>
     processes
       .resolve(pid)
       .pipe(Effect.catchTag("ProcessError", (cause) => Effect.fail(new LedgerError({ reason: "refused", cause }))));
+
   /** The registered name whose object stores this process ID. */
   const processObject = (pid: string) => Effect.map(resolved(pid), (life) => life.name);
+
   type InputPolicy = { inputs: Array<string>; events: Array<string> };
+
   const policies = new Map<string, InputPolicy>();
+
   const remember = (owner: string, declaration: Declaration): InputPolicy => {
     const policy = {
-      inputs: Object.entries(declaration.inputs)
+      inputs: Rec.toEntries(declaration.inputs)
         .filter(([, p]) => p.personOnly)
         .map(([name]) => name),
-      events: Object.entries(declaration.writes)
+      events: Rec.toEntries(declaration.writes)
         .filter(([, p]) => p.personOnly)
         .map(([name]) => name),
     };
+
     policies.set(owner, policy);
+
     return policy;
   };
 
@@ -1109,16 +1169,20 @@ const projectLogic = Effect.fn("project.init")(function* (
       const life = yield* Context.get(services, LedgerTransaction).transact((turn) =>
         processes.table(turn).life(process.process),
       );
+
       const requester =
         Option.isSome(life) && life.value.request._tag === "first" ? life.value.request.requester : undefined;
+
       // A child's start may have committed before its descriptor. Its object has never been
       // configured, so rebuild from the saved life and its requester's recorded owner.
       const descriptor = yield* requester?._tag === "process"
         ? Effect.gen(function* () {
             const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", requester.process);
+
             const { owner } = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(
               saved?.value,
             ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+
             return {
               id: process.process,
               name: process.name,
@@ -1128,11 +1192,12 @@ const projectLogic = Effect.fn("project.init")(function* (
             };
           })
         : rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor(process.process));
+
       // Its pending row is delivered after the build, with the other starts.
       sql.exec(
         "INSERT INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
         process.process,
-        JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
+        Formatter.formatJson({ ...descriptor, id: process.process, build: process.build }),
         requester?._tag === "process" ? 2 : 0,
       );
     }
@@ -1140,9 +1205,11 @@ const projectLogic = Effect.fn("project.init")(function* (
     // A start not yet delivered has no descriptor in its object: its saved row is what it will get.
     // It also cannot take a swap yet, so its delivery below brings it to the selected code.
     const undelivered = yield* decodePending(process.process);
+
     const recorded =
       undelivered?.descriptor ??
       (yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor(process.process)));
+
     // A process moved at an open runs the code that took its build's place.
     const descriptor = { ...recorded, build: moved.get(recorded.build) ?? recorded.build };
 
@@ -1153,13 +1220,14 @@ const projectLogic = Effect.fn("project.init")(function* (
     const tail = yield* bindTail(ctx, { project: name, name: process.name, process: process.process }).pipe(
       Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     );
+
     const program = yield* loader.load(process.program, process.process, tail, descriptor.build);
     remember(process.name, program.declaration);
 
     sql.exec(
       "INSERT INTO dev_descriptors (process,value) VALUES (?,?) ON CONFLICT(process) DO UPDATE SET value=excluded.value",
       process.process,
-      JSON.stringify(descriptor),
+      Formatter.formatJson(descriptor),
     );
   }
 
@@ -1173,21 +1241,26 @@ const projectLogic = Effect.fn("project.init")(function* (
     }
 
     const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, life.name)).descriptor(life.state.process));
+
     const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process }).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
+
     const program = yield* loader
       .load(life.state.code.program, life.state.process, tail, descriptor.build)
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+
     return remember(life.name, program.declaration);
   });
-  const publish = Publish.make(sql, (connection, client, news) =>
+
+  const clients = Publish.make(sql, (connection, client, news) =>
     rpc(GatewayClient.make(env.CONNECTION.getByName(connection)).notify(client, news)),
   );
-  const notify = (client: string, news: unknown) => publish(client, news).pipe(Effect.asVoid);
+
   sql.exec(
     "CREATE TABLE IF NOT EXISTS dev_clients (client TEXT PRIMARY KEY, connection TEXT NOT NULL, session TEXT NOT NULL)",
   );
+
   const door = yield* options
     .door({
       sql,
@@ -1203,20 +1276,25 @@ const projectLogic = Effect.fn("project.init")(function* (
           const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process });
           // A swap moves the saved descriptor's build, so a message is checked by the code that will step it.
           const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", life.state.process);
+
           const running =
             saved === undefined
               ? undefined
               : (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value)).build;
+
           return yield* loader.load(life.state.code.program, life.state.process, tail, running);
         }).pipe(
           Effect.mapError(
             (cause) => new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
           ),
         );
+
         return yield* program.execution.audit(message);
       }),
       nextProcess: () => ids.next,
-      notify,
+      notify: clients.notify,
+      admit: (pid, incoming, before) =>
+        ProjectQuotas.admitsInput(Context.get(services, Quotas), processes, pid, incoming, config.build, before),
       deliver: (pid, incoming) =>
         processObject(pid).pipe(
           Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).msg(incoming))),
@@ -1236,6 +1314,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       wait: referee.wait,
     })
     .pipe(Effect.provideContext(services));
+
   // P42 and 0170: a child start decides in the turns of the manager that writes it, checked against
   // the member the door says sent its cause. Only `child` below uses it, after the door exists.
   const children = yield* Children.pipe(
@@ -1254,6 +1333,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       ),
     ),
   );
+
   // A program's watch decides in the same manager's turns, checked against the same member (0170,
   // 0531), and writes as the watcher through the trusted argument only this side holds.
   const monitors = yield* Monitors.pipe(
@@ -1269,6 +1349,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       ),
     ),
   );
+
   const gateways = yield* Connections.pipe(
     Effect.provide(
       Connections.layer(sql, {
@@ -1295,6 +1376,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     ),
     Effect.provideContext(services),
   );
+
   sql.exec("CREATE TABLE IF NOT EXISTS dev_starts (id TEXT PRIMARY KEY, request TEXT NOT NULL, hash TEXT NOT NULL)");
   // The founding person owns this fabrika (0290). Every boot writes the same row under one id, so
   // the referee keeps it once, and a ledger founded before the row existed gets it at its next boot.
@@ -1313,19 +1395,21 @@ const projectLogic = Effect.fn("project.init")(function* (
       yield* from(),
     ),
   ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "refused", message: "the owner row", cause })));
+
   /** Places the process and records its descriptor; a first start's row stays pending until delivered. */
   const place = Effect.fnUntraced(function* (raw: Start, origin: From) {
     const request = yield* Schema.decodeUnknownEffect(Start)(raw).pipe(
       Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
     );
 
-    if (!Object.hasOwn(programs, request.code.program)) {
+    if (!Rec.has(programs, request.code.program)) {
       return yield* new LedgerError({ reason: "refused" });
     }
 
     return yield* write(
       Effect.gen(function* () {
         let chosen = request;
+
         const row =
           request._tag === "first"
             ? sql.exec("SELECT request, hash FROM dev_starts WHERE id=?", request.id)[0]
@@ -1363,7 +1447,7 @@ const projectLogic = Effect.fn("project.init")(function* (
           sql.exec(
             "INSERT OR IGNORE INTO dev_starts (id,request,hash) VALUES (?,?,?)",
             request.id,
-            JSON.stringify(request),
+            Formatter.formatJson(request),
             chosen.code.hash,
           );
         }
@@ -1390,18 +1474,21 @@ const projectLogic = Effect.fn("project.init")(function* (
           build: chosen.code.hash,
           owner: Writer.cases.person.make({ key: founder.by, for: config.person }),
         };
+
         // Only a first start configures its name's object. A successor shares that object, which
         // may be the caller awaiting this start, so it is recorded here and never called back.
         sql.exec(
           "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
           result.process,
-          JSON.stringify(descriptor),
+          Formatter.formatJson(descriptor),
           request._tag === "first" ? 1 : 0,
         );
+
         return result;
       }),
     );
   });
+
   const start = Effect.fnUntraced(function* (request: Start, origin: From) {
     const result = yield* place(request, origin);
 
@@ -1411,6 +1498,7 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     return result;
   });
+
   const running = Effect.fnUntraced(function* (pid: string, program: string, hash: string) {
     const [row] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", pid);
 
@@ -1428,8 +1516,13 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     const current = yield* loader.load(program, "check", undefined, hash);
     remember(descriptor.name, current.declaration);
-    sql.exec("UPDATE dev_descriptors SET value=? WHERE process=?", JSON.stringify({ ...descriptor, build: hash }), pid);
+    sql.exec(
+      "UPDATE dev_descriptors SET value=? WHERE process=?",
+      Formatter.formatJson({ ...descriptor, build: hash }),
+      pid,
+    );
   });
+
   // A swap publishes its running build before releasing the Process permit. Its durable fact
   // also repairs a lost reply; re-reading the newest fact cannot undo a later swap on a retry.
   const append = Effect.fnUntraced(function* (stream: string, id: string, input: unknown) {
@@ -1449,11 +1542,13 @@ const projectLogic = Effect.fn("project.init")(function* (
       const fact = yield* Schema.decodeUnknownEffect(RuntimeRecord.cases["code.swapped"])(valueFor(latest.value)).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
       );
+
       yield* running(stream, fact.program, fact.hash);
     }
 
     return answer;
   });
+
   /** A child start (P42): one write turn starts it and saves its descriptor, then its name's object is
    *  configured. A retry of a saved start configures only what is still pending. */
   const child = Effect.fnUntraced(function* (input: Child, origin: From) {
@@ -1464,9 +1559,11 @@ const projectLogic = Effect.fn("project.init")(function* (
         if (answer._tag === "started") {
           // The child acts for the person its requester acts for, as the boot's child does.
           const [requester] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", input.requester.process);
+
           const { owner } = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ owner: Writer })))(
             requester?.value,
           ).pipe(Effect.mapError(() => new LedgerError({ reason: "bad_row" })));
+
           const descriptor = {
             id: answer.process,
             name: answer.name,
@@ -1474,10 +1571,11 @@ const projectLogic = Effect.fn("project.init")(function* (
             build: input.code.hash,
             owner,
           };
+
           sql.exec(
             "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,2)",
             answer.process,
-            JSON.stringify(descriptor),
+            Formatter.formatJson(descriptor),
           );
         }
 
@@ -1491,6 +1589,7 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     return answer;
   });
+
   /** Wakes each process that watches `pid`, after the turn that ended it: the exit wrote a `DOWN`
    *  into each watcher's inbox, and a name's object reads its inbox only once woken, as for mail. A
    *  watch stays live after its `DOWN`, so a repeated exit wakes again, and a wake that failed fails
@@ -1499,27 +1598,32 @@ const projectLogic = Effect.fn("project.init")(function* (
   const wakeWatchers = Effect.fnUntraced(function* (pid: string) {
     const names = yield* Context.get(services, LedgerTransaction).transact((turn) => {
       const table = processes.table(turn);
+
       return table
         .inbound(pid)
         .flatMap(({ to }) => (to._tag === "process" ? Option.toArray(table.life(to.process)) : []))
         .map((life) => life.name);
     });
+
     const wakeups = Context.get(services, MailWakeups);
     yield* Effect.forEach(new Set(names), (name) => wakeups.wake(name), { concurrency: 1, discard: true }).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
     );
   });
+
   // Project RPC input is untrusted: the reason is decoded before the turn or the retirement.
   const exit = Effect.fnUntraced(function* (pid: string, input: ExitReason, origin: From) {
     const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
       Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
     );
+
     yield* Effect.gen(function* () {
       yield* processes.exit(pid, reason, origin);
       yield* door.retire(pid);
     }).pipe(write);
     yield* wakeWatchers(pid);
   });
+
   /** A child stop, OTP's terminate_child: one write turn ends the requester's own child with
    *  `shutdown`, and its session can no longer sign, as an exit's cannot. */
   const stopChild = Effect.fnUntraced(function* (input: ChildStop, origin: From) {
@@ -1538,6 +1642,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       yield* wakeWatchers(child.process);
     }
   });
+
   const failed = Effect.fn("code.failed")(function* (raw: unknown, id?: string) {
     const fields = yield* Schema.decodeUnknownEffect(
       Schema.Struct({
@@ -1548,21 +1653,25 @@ const projectLogic = Effect.fn("project.init")(function* (
         line: Schema.optionalKey(Schema.Int),
       }),
     )(raw).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+
     const fact = CodeEvent.cases["code.failed"].make(fields);
     // Only repo-relative paths cross the control boundary into permanent facts.
     const { path, line, ...body } = fact;
+
     const safe =
       path !== undefined &&
-      !path.startsWith("/") &&
-      !path.includes("..") &&
-      !path.includes("\\") &&
+      !Str.startsWith("/")(path) &&
+      !Str.includes("..")(path) &&
+      !Str.includes("\\")(path) &&
       !/^[A-Za-z]:/.test(path);
+
     yield* ledger.append(
       "gateway/code",
       id ?? `code.failed:${yield* ids.next}`,
       lineFor(yield* from(), { ...body, ...(safe ? { path, ...(line === undefined ? {} : { line }) } : {}) }),
     );
   });
+
   const push = Effect.fn("code.swap")(function* (load: string, program: string, hash: string, only?: string) {
     const answers: Array<{ name: string; outcome: Swapped }> = [];
 
@@ -1592,17 +1701,19 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     return answers;
   });
+
   /** A candidate that passed its checks: the Code machine's `checked`, with its Cmds run here. */
   const accept = Effect.fn("code.checked")(function* (input: typeof Install.Type) {
     const [, cmds] = applyCell<
       typeof selected,
       Parameters<typeof codeMachine.update.checked>[1],
       ReturnType<typeof codeMachine.update.checked>[1][number]
-    >(codeMachine, selected, { type: "checked", ...input });
+    >(codeMachine, selected, CodeMsg.cases.checked.make({ ...input }));
+
     const swaps: Array<{ load: string; program: string; hash: string }> = [];
 
     for (const cmd of cmds) {
-      if (cmd.type === "append") {
+      if (cmd._tag === "append") {
         const placed = yield* ledger.append("gateway/code", cmd.id, lineFor(yield* from(), cmd.event));
 
         if (placed._tag === "refused") {
@@ -1621,20 +1732,25 @@ const projectLogic = Effect.fn("project.init")(function* (
         const fact = yield* Schema.decodeUnknownEffect(CodeEvent.cases["code.loaded"])(valueFor(entry.value)).pipe(
           Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
         );
+
         const [next, commands] = applyCell<
           typeof selected,
           Parameters<typeof codeMachine.update.loaded>[1],
           ReturnType<typeof codeMachine.update.loaded>[1][number]
-        >(codeMachine, selected, {
-          type: "loaded",
-          id: cmd.id,
-          program: fact.program,
-          hash: fact.hash,
-        });
+        >(
+          codeMachine,
+          selected,
+          CodeMsg.cases.loaded.make({
+            id: cmd.id,
+            program: fact.program,
+            hash: fact.hash,
+          }),
+        );
+
         selected = next;
 
         for (const swap of commands) {
-          if (swap.type === "swap") {
+          if (swap._tag === "swap") {
             swaps.push(swap);
           }
         }
@@ -1643,10 +1759,12 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     return swaps;
   });
+
   const inspect = Effect.fn("code.inspect")(function* (input: typeof Install.Type) {
     const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(input).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
+
     const prior = yield* ledger.read("gateway/code", 0).pipe(
       Stream.filter((entry) => entry.id === input.id),
       Stream.runHead,
@@ -1679,18 +1797,22 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     return null;
   });
+
   const install = Effect.fn("code.install")(
     function* (raw: unknown) {
       const input = yield* Schema.decodeUnknownEffect(Install)(raw).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
       );
+
       yield* Effect.annotateCurrentSpan({
         program: input.program,
         bytes: new TextEncoder().encode(input.source).byteLength,
       });
+
       const prepared = yield* write(
         Effect.gen(function* () {
           const answer = yield* inspect(input);
+
           return answer ?? (yield* accept(input));
         }),
       );
@@ -1711,13 +1833,14 @@ const projectLogic = Effect.fn("project.init")(function* (
     Effect.tap((answer) => Effect.annotateCurrentSpan("outcome", answer._tag)),
   );
 
-  for (const [program, built] of Object.entries(programs)) {
+  for (const [program, built] of Rec.toEntries(programs)) {
     if (selected[program] === undefined) {
       yield* accept({ id: `code.boot:${program}:${built.hash}`, program, ...built, from: "boot" });
     }
   }
 
   const Bootstrap = Schema.Struct({ process: Schema.String });
+
   const boots = yield* Effect.forEach(
     loaded,
     Effect.fnUntraced(function* ({ entry, program }) {
@@ -1726,6 +1849,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         Stream.runHead,
         Effect.map(Option.getOrUndefined),
       );
+
       return original !== undefined
         ? {
             process: (yield* Schema.decodeUnknownEffect(Bootstrap)(original.body).pipe(
@@ -1744,6 +1868,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     }),
     { concurrency: 1 },
   );
+
   const boot = boots[0];
 
   if (boot === undefined) {
@@ -1761,12 +1886,14 @@ const projectLogic = Effect.fn("project.init")(function* (
       );
     }
   });
+
   // A malformed pending row still fails the build; only the deliveries run after it, as handle_continue.
   const pending = yield* Effect.forEach(
     sql.exec("SELECT process FROM dev_descriptors WHERE pending>0"),
     (row) => Effect.map(decodePending(String(row.process)), (saved) => [String(row.process), saved] as const),
     { concurrency: 1 },
   );
+
   yield* Effect.forkScoped(
     Effect.forEach(
       pending,
@@ -1784,20 +1911,25 @@ const projectLogic = Effect.fn("project.init")(function* (
       { concurrency: 1, discard: true },
     ),
   );
+  // The call's spans land in one commit before the call answers (0122); `complete` then flushes them.
+  const batched = <A, E, R>(effect: Effect.Effect<A, E, R>) => SpanSink.use((sink) => sink.batch(effect));
+
   const wrapped = <A, E>(effect: Effect.Effect<A, E>) =>
-    complete(effect).pipe(projectStorage, Effect.provideContext(services));
+    complete(batched(effect)).pipe(projectStorage, Effect.provideContext(services));
+
   const own = Effect.fn("project.own")(function* (pid: string, id: string, stream: string, event: unknown) {
     if (!(yield* processes.isLive(pid))) {
       return yield* new LedgerError({ reason: "refused" });
     }
 
-    if (stream.startsWith("gateway/") || stream.startsWith("processes")) {
+    if (Str.startsWith("gateway/")(stream) || Str.startsWith("processes")(stream)) {
       return yield* new LedgerError({ reason: "refused" });
     }
 
     const body = yield* Schema.decodeUnknownEffect(Event)(event).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
+
     const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", pid);
 
     if (saved === undefined) {
@@ -1807,6 +1939,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     const descriptor = yield* Schema.decodeUnknownEffect(
       Schema.fromJsonString(Schema.Struct({ owner: Writer, build: Schema.String })),
     )(saved.value).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+
     const origin = yield* fromHere({
       by: descriptor.owner.key,
       for: descriptor.owner.for,
@@ -1814,8 +1947,10 @@ const projectLogic = Effect.fn("project.init")(function* (
       parent: null,
       build: descriptor.build,
     });
+
     return yield* ledger.append(stream, id, lineFor(origin, body));
   });
+
   const brain = Effect.fn("project.brain")(function* (event: typeof BrainEvent.Type) {
     return yield* ledger.append("gateway/brain", event.id, lineFor(yield* from(), event));
   });
@@ -1837,6 +1972,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   );
 
   yield* flushed.pipe(Effect.provideContext(services));
+
   return {
     code,
     codeInstall: (raw: unknown) => wrapped(install(raw)),
@@ -1858,11 +1994,14 @@ const projectLogic = Effect.fn("project.init")(function* (
           );
         }),
       );
+
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
     hands: (ask: typeof Ask.Type, origin: From, trace?: { traceId: string; spanId: string }) => {
       // Under the shared write turn, as every task call is: a read and its request or collect are one step.
-      const work = write(hands.ask(ask, origin));
+      // The request, its pointer and the collect are the asking program's own writes, charged to it.
+      const work = write(ProjectQuotas.own(ask.process, hands.ask(ask, origin)));
+
       return wrapped(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace))));
     },
     target: door.target,
@@ -1875,15 +2014,20 @@ const projectLogic = Effect.fn("project.init")(function* (
           session,
         );
       }),
-    publish,
+    // Project RPC input is untrusted: a Process object on another build may send another shape.
+    publish: (client: string, update: Published) =>
+      Schema.decodeUnknownEffect(Published)(update).pipe(
+        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+        Effect.flatMap((checked) => clients.publish(client, checked)),
+      ),
     connect: () => wrapped(door.connect()),
     challenge: (client: ConnectionId) => wrapped(door.challenge(client)),
     initialize: (
       client: ConnectionId,
-      input: unknown,
+      input: Schema.Json | undefined,
       trusted: { url: string; tab: string; name: string; session?: string },
     ) => wrapped(door.initialize(client, input, trusted)),
-    route: (client: ConnectionId, method: string, params: unknown, reader?: string) =>
+    route: (client: ConnectionId, method: string, params: Schema.Json | undefined, reader?: string) =>
       wrapped(
         door.route(client, method, params, reader).pipe(
           // Invalid target messages answer as checked refusals so the connection stays open.
@@ -1921,10 +2065,11 @@ const projectLogic = Effect.fn("project.init")(function* (
     exit: (pid: string, reason: ExitReason, origin: From) => wrapped(exit(pid, reason, origin)),
     read: (stream: string, after: number, reader: string) => wrapped(referee.read(stream, after, reader)),
     wait: referee.wait,
-    append: (stream: string, id: string, input: unknown) => wrapped(write(append(stream, id, input))),
+    append: (stream: string, id: string, input: unknown) =>
+      wrapped(write(ProjectQuotas.runtimeAppend(stream, processes.resolve(stream), append(stream, id, input)))),
     sign: (pid: string, id: string, parent: string, kind: string) => wrapped(door.sign(pid, id, parent, kind)),
     commit: (pid: string, input: Omit<Parameters<typeof door.append>[0], "process">) =>
-      wrapped(door.append({ ...input, process: pid })),
+      wrapped(ProjectQuotas.ownWrite(pid, door.append({ ...input, process: pid }))),
     inbox: (pid: string, input: Incoming) =>
       wrapped(
         Effect.gen(function* () {
@@ -1942,27 +2087,13 @@ const projectLogic = Effect.fn("project.init")(function* (
           return yield* ledger.append(
             `${row.name}/inbox`,
             input.id,
-            lineFor(
-              {
-                by: input.envelope.by.key,
-                for: input.envelope.by.for,
-                sentAt: input.sentAt,
-                seen: input.seen,
-                parent: input.envelope.id,
-                traceId: input.span.traceId,
-                build: config.build,
-              },
-              Schema.TaggedStruct("send", { m: Schema.Json }).make({
-                m: yield* Schema.decodeUnknownEffect(Schema.Json)(input.envelope.input).pipe(
-                  Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-                ),
-              }),
-            ),
+            yield* ProjectQuotas.inboxLine(input, config.build),
           );
         }).pipe(write),
       ),
     own: (pid: string, id: string, stream: string, event: unknown, trace?: { traceId: string; spanId: string }) => {
-      const work = own(pid, id, stream, event);
+      const work = ProjectQuotas.ownWrite(pid, own(pid, id, stream, event));
+
       return wrapped(write(trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace)))));
     },
     brain: (event: typeof BrainEvent.Type) => wrapped(brain(event)),
@@ -2005,7 +2136,6 @@ type ProjectFailure = LedgerError | SinkError;
  * Service for the Project object's calls: the ledger, the door, code install, processes, mail and its
  * boot.
  *
- * @stability unstable
  * @category services
  */
 export class ProjectService extends Context.Service<
@@ -2027,17 +2157,12 @@ export class ProjectService extends Context.Service<
     ) => Effect.Effect<typeof HandsReply.Type, HandsTasksError | ProjectFailure>;
     readonly target: GatewayCalls["target"];
     readonly register: (client: string, gateway: string, session: string) => Effect.Effect<void>;
-    readonly publish: (client: string, update: unknown) => Effect.Effect<typeof Publication.Type, LedgerError>;
+    readonly publish: (client: string, update: Published) => Effect.Effect<typeof Publication.Type, LedgerError>;
     // The door's calls. A door fails with `unknown`, which takes in every other failure.
     readonly connect: () => Effect.Effect<ConnectionId, ProjectFailure>;
     readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
     readonly initialize: GatewayCalls["initialize"];
-    readonly route: (
-      client: ConnectionId,
-      method: string,
-      params: unknown,
-      reader?: string,
-    ) => Effect.Effect<typeof Answer.Type, unknown>;
+    readonly route: GatewayCalls["route"];
     readonly knock: (client: ConnectionId, input: { label: string }) => Effect.Effect<typeof Answer.Type, unknown>;
     readonly grant: GatewayCalls["grant"];
     readonly disconnect: (client: ConnectionId) => Effect.Effect<void, unknown>;
@@ -2155,16 +2280,21 @@ export class ProjectService extends Context.Service<
  * Layer that provides `ProjectService` for one Project object, after its start's input is decoded and
  * recorded in its own ledger.
  *
- * @stability unstable
  * @category layers
  */
 export const projectLayer = (
   ctx: DurableObjectState,
   env: Env,
   options: ProjectOptions,
-  local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project"),
+  local = projectLedger(
+    ctx,
+    env,
+    ctx.id.name ?? options.config?.name ?? "project",
+    options.input ?? checkedSettings(env),
+  ),
 ) => {
   const input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = options.input ?? checkedSettings(env);
+
   return Layer.unwrap(
     input.pipe(
       Effect.map(({ input }) => {
@@ -2177,7 +2307,9 @@ export const projectLayer = (
             })),
           ),
         ).pipe(Layer.provide(local.starts));
+
         const recorded = SettingsRecorded.layer(input).pipe(Layer.provide(starts));
+
         return Layer.effect(ProjectService, projectLogic(ctx, env, options, local)).pipe(
           Layer.provide(Layer.merge(ProcessIdGenerator.layer, Id.Generator.layer)),
           Layer.provide(recorded),
@@ -2191,12 +2323,18 @@ export const projectLayer = (
  * Creates the Project object's runtime: the full `ProjectService`, plus `settingsStart` and
  * `settingsRead`, which run on a smaller runtime of its ledger and starts alone.
  *
- * @stability unstable
  * @category constructors
  */
 export const projectRuntime = (ctx: DurableObjectState, env: Env, options: ProjectOptions) => {
-  const local = projectLedger(ctx, env, ctx.id.name ?? options.config?.name ?? "project");
+  const local = projectLedger(
+    ctx,
+    env,
+    ctx.id.name ?? options.config?.name ?? "project",
+    options.input ?? checkedSettings(env),
+  );
+
   const minimal = SettingsRuntime.runtime(local.starts.pipe(Layer.provideMerge(local.ledgerLayer)));
+
   const ready = Layer.unwrap(
     minimal.contextEffect.pipe(
       Effect.map((services) =>
@@ -2207,14 +2345,19 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
             Layer.succeed(LedgerTransaction, Context.get(services, LedgerTransaction)),
             Layer.succeed(Referee, Context.get(services, Referee)),
             Layer.succeed(LedgerStreams, Context.get(services, LedgerStreams)),
+            // The same accounts the ledger admits with, so a manager's trusted call charges them.
+            Layer.succeed(Quotas, Context.get(services, Quotas)),
+            Layer.succeed(WritePolicy, Context.get(services, WritePolicy)),
           ),
           starts: Layer.succeed(Starts.Starts, Context.get(services, Starts.Starts)),
         }),
       ),
     ),
   );
+
   const runtime = SettingsRuntime.runtime(ready);
   const dispose = Effect.all([runtime.disposeEffect, minimal.disposeEffect], { discard: true, concurrency: 1 });
+
   return {
     ...runtime,
     disposeEffect: dispose,
@@ -2230,7 +2373,6 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
  * Layer that provides durable task storage on the Project's own database, for trusted startup code.
  * A task's doorbell rings the Connection object it names.
  *
- * @stability unstable
  * @category layers
  */
 export const projectTasksLayer = (ctx: DurableObjectState, env: Env) =>
@@ -2260,27 +2402,43 @@ const processLogic = Effect.fnUntraced(function* (
   programs: Readonly<Record<string, ProgramSource>>,
 ) {
   const checked = yield* RecordedStart;
+
   // The object is its registered name's; its first process's descriptor names its storage.
   const [project] = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
   )(ctx.id.name).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+
   const stub = projectStub(env, project),
     p = ProjectClient.make(stub),
     storage = StorageClient.make(ctx.storage),
     sql = cloudflareSql(ctx.storage),
     loader = workerLoader(env.LOADER, programs, (hash) => rpc(p.code(hash)));
+
   const saved = yield* processDescriptor(ctx);
+  // The name's own accounts and fault slot, kept beside its data in this object's SQLite (0147).
+  const accounting = yield* ProjectQuotas.process(sql, saved.name, checked.values);
   const ledger = LedgerRemote.layer(stub, { reader: saved.id });
   const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, saved.id));
-  const all = Layer.mergeAll(ProcessStore.layer(sql, { process: saved.id, storage }), Mailbox.layer).pipe(
-    Layer.provideMerge(base),
-  );
+
+  // ProcessStore takes `sync` as a call, so each runtime and its tests can hand it their own.
+  const all = Layer.mergeAll(
+    ProcessStore.layer(sql, {
+      process: saved.id,
+      storage: { put: storage.put, sync: () => storage.sync, get: storage.get },
+      accounting,
+    }),
+    Mailbox.layer,
+  ).pipe(Layer.provideMerge(base));
+
   const services = yield* Layer.build(all).pipe(Effect.provideService(RecordedStart, checked));
+
   const store = Context.get(services, ProcessStore),
     sink = Context.get(services, SpanSink);
+
   // The name's live process, as the manager's status last answered it. Writes, loading and span
   // attribution follow it, so a successor signs and appends as itself.
   let active = saved.id;
+
   // Every manager call is idempotent by its own IDs, so an answer the transport lost is asked again,
   // a bounded number of times. A refusal is an answer and is never asked again.
   const asked = <A, E>(work: Effect.Effect<A, E>) =>
@@ -2290,6 +2448,7 @@ const processLogic = Effect.fnUntraced(function* (
         while: (error) => error instanceof LedgerError && error.reason === "unreachable",
       }),
     );
+
   const manager: ProcessCalls = {
     start: (request, from) => asked(rpc(p.processStart(request, from))).pipe(Effect.flatMap(processValue)),
     exit: (process, reason, from) =>
@@ -2317,6 +2476,7 @@ const processLogic = Effect.fnUntraced(function* (
     down: (process, policy, from) =>
       asked(rpc(p.processDown(process, policy, from))).pipe(Effect.flatMap(processValue)),
   };
+
   // A child start is decided in the project, in its ledger's turns; this side asks, as for a start.
   const children = Children.of({
     start: (input, from) =>
@@ -2337,6 +2497,7 @@ const processLogic = Effect.fnUntraced(function* (
         ),
       ),
   });
+
   // A watch is decided in the project too, whose manager writes it as this object's process.
   const monitors = Monitors.of({
     monitor: (watch, from) =>
@@ -2352,6 +2513,7 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.mapError((cause) => new MonitorsError({ reason: "storage", cause })),
       ),
   });
+
   const dependencies = Layer.mergeAll(
     mailLayer(env, project),
     handsLayer(env, project),
@@ -2373,6 +2535,7 @@ const processLogic = Effect.fnUntraced(function* (
         ),
       own: Effect.fn("process.own")(function* (id: string, stream: string, event: unknown) {
         const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+
         return yield* rpc(p.own(active, id, stream, event, { traceId: span.traceId, spanId: span.spanId }));
       }),
     }),
@@ -2381,7 +2544,7 @@ const processLogic = Effect.fnUntraced(function* (
       // Keep the program's wake; the platform requires a positive alarm time.
       set: (at) =>
         (at === null
-          ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm())))
+          ? rpc(storage.delete("wake")).pipe(Effect.andThen(rpc(storage.deleteAlarm)))
           : rpc(storage.put("wake", at)).pipe(Effect.andThen(rpc(storage.setAlarm(Math.max(1, at)))))
         ).pipe(Effect.orDie),
     }),
@@ -2392,6 +2555,7 @@ const processLogic = Effect.fnUntraced(function* (
     Layer.succeed(Children, children),
     Layer.succeed(Monitors, monitors),
   );
+
   // P34 on the Worker: receipts and pending recovery live in this object's own SQLite, beside
   // ProcessStore, under the registered name every successor shares.
   const runnerLayer = ProgramRunner.withLoader(
@@ -2400,23 +2564,32 @@ const processLogic = Effect.fnUntraced(function* (
       load: (name, hash) =>
         Effect.gen(function* () {
           const process = active;
+
           const tail = yield* bindTail(ctx, { project, name: saved.name, process }).pipe(
             Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
           );
+
           return yield* loader.load(name, process, tail, hash);
         }),
     },
     {
       policy: defaultPolicy,
-      recovery: { sql, name: saved.name, capacity: 1024 ** 3 },
+      recovery: { sql, name: saved.name, capacity: 1024 ** 3, accounting },
       // `mail.chunk`, read at the brain's edge with the start's other settings (0086).
       chunk: checked.values.mailChunk,
     },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
-  const runner = yield* ProgramRunner.pipe(Effect.provide(runnerLayer));
+
+  // A name stopped under its reserve does no work until a person restarts it.
+  const runner = QuotaRunner.guard(yield* ProgramRunner.pipe(Effect.provide(runnerLayer)), accounting);
   yield* sink.flush.pipe(Effect.provideContext(services));
+
   const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
-    Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
+    Effect.suspend(() =>
+      // One batch for the whole call, inside the runner's own flush, which commits it first (0122).
+      sink.batch(work).pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)),
+    );
+
   return {
     usage: Effect.fnUntraced(
       function* (rows: unknown) {
@@ -2431,11 +2604,13 @@ const processLogic = Effect.fnUntraced(function* (
       const work = attributed(runner.msg(input));
       // The door's input span is in another object, so its trace crosses the call as data.
       const sent = Schema.decodeUnknownOption(Delivered)(input);
+
       return Option.isSome(sent) ? work.pipe(Effect.withParentSpan(Tracer.externalSpan(sent.value.span))) : work;
     },
     swap: (request: Parameters<typeof runner.swap>[0]) => attributed(runner.swap(request)),
     mailed: (trace?: { traceId: string; spanId: string }) => {
       const work = attributed(complete(runner.mailed));
+
       return trace === undefined ? work : work.pipe(Effect.withParentSpan(Tracer.externalSpan(trace)));
     },
     open: (client: string) => attributed(runner.open(client)),
@@ -2444,7 +2619,10 @@ const processLogic = Effect.fnUntraced(function* (
     restart: (request: unknown) =>
       Schema.decodeUnknownEffect(RestartRequest)(request).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-        Effect.flatMap((checked) => attributed(runner.restart(checked))),
+        // The control door is the person's gate: only the instance's own token reaches this call,
+        // and it carries no checked requester. So a restart here is the person's, and it may clear
+        // the name's saved reserve fault.
+        Effect.flatMap((checked) => attributed(QuotaRunner.personRestart(runner, accounting, checked))),
       ),
     // A platform alarm delivers the saved due time, so a repeated alarm is the same letter.
     alarm: () =>
@@ -2452,8 +2630,8 @@ const processLogic = Effect.fnUntraced(function* (
         Effect.flatMap((at) => (at === undefined ? Effect.void : attributed(runner.due(at)))),
       ),
     activity: store.activity,
-    recover: () =>
-      rpc(storage.get("activity")).pipe(Effect.flatMap((value) => Effect.fromResult(recoverActivity(value)))),
+    // The marker the store keeps in this object's own storage, where the wake rule reads it.
+    recover: () => store.readActivity.pipe(Effect.flatMap((value) => Effect.fromResult(recoverActivity(value)))),
   };
 });
 
@@ -2468,13 +2646,13 @@ type RunnerFailure =
   | ProcessError
   | NotGranted
   | RepliesError
+  | QuotasError
   | WatchersError;
 
 /**
  * Service for a Process object's calls: its runner's turns, its code swap, its alarm and its saved
  * activity.
  *
- * @stability unstable
  * @category services
  */
 export class ProcessService extends Context.Service<
@@ -2493,7 +2671,7 @@ export class ProcessService extends Context.Service<
     readonly init: () => Effect.Effect<void, RunnerFailure>;
     readonly restart: (request: unknown) => Effect.Effect<void, RunnerFailure>;
     readonly alarm: () => Effect.Effect<void, RunnerFailure>;
-    readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError>;
+    readonly activity: (value: typeof Activity.Type) => Effect.Effect<void, LedgerError | QuotasError>;
     /** The saved activity marker after a wake: `idle`, or `interrupted` with the step that was cut short. */
     readonly recover: () => Effect.Effect<typeof Recovered.Type, LedgerError>;
   }
@@ -2507,7 +2685,6 @@ export class ProcessService extends Context.Service<
  * `input` is the instance's checked settings, read as the app reads them. Without it the layer
  * reads the `INSTANCE` binding itself, and a bad setting fails with `StartsError`.
  *
- * @stability unstable
  * @category layers
  */
 export const processLayer = (
@@ -2524,7 +2701,6 @@ export const processLayer = (
  * Creates a Process object's runtime: `ProcessService` over its built-in programs, with the start
  * recorded with the Project.
  *
- * @stability unstable
  * @category constructors
  */
 export const processRuntime = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>

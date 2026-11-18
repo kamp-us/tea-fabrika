@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T20:59:13-08:00",
+  "ended": "2026-11-15T21:23:18-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step, tracker ticket 1075, for judgment slice E27 of the Effect-checker sweep, in next/: preferEffectString in lib:node, app:exam, app:e2e, lib:client, lib:packs, lib:tasks and lib:presence, fixes only, no lock line and no pull request (owner ruling: one pull request per sweep). An earlier tests session pushed 57d1b216d40db6741025456c12229a195ff987a0 (fixes in 93 exam-path files) and was stopped during its test run with no field row; this run continued from that head. Recount with only preferEffectString at error through --lspconfig (all other 134 checks off, includeSuggestionsInTsc true, barrel import list), libfabrika and next/apps/fabrika tsconfigs, joined by file and offset, nothing written to a tsconfig: 166 hits in the row's folders at the start (the plan counted 800 at 82296f5), 28 in exam paths, 138 in product files, 0 in pull request 1366's 58 files. This run fixed 4 exam-path hits by hand: first-window.visual.test.ts:583 (startsWith to Str.startsWith) and the three last-character flips in TasksTest.ts (a replacer callback on /.$/ to a flipLast helper of Str.slice and Str.endsWith, the same answer for every non-empty process id). It also put back the doc block of next/apps/fabrika/src/exam/rows.ts, whose first line the earlier session had joined onto its new effect import. Left in exam paths, 24: 21 inside Playwright evaluate bodies that run in the browser, where no effect import exists (instance.visual.test.ts:167 x3, 168, 190, 219; reload.visual.test.ts:105 x3, 106, 124, 151; p14.test-support.ts:512, 534, 538; tezgah.test-support.ts:161, 162, 172, 176, 703, 704), and 3 replacer callbacks Effect's String.replace does not take (first-window.visual.test.ts:719 decodes each escape; commits-git-signatures.integration.test.ts:115 uses a callback so generated $ patterns are not read; Git.test.ts:40 names each commit id as it is met). Left for the build, 138 in 20 product files, all lib:node, lib:client and lib:tasks: gitMemory.ts 37, RepositoriesGit.ts 23, build.ts 19, LaunchdStatus.ts 13, Sources.ts 7, OpenRepository.ts 6, css.ts 5, Keys.ts 5, HandsMachine.ts 4, BrainControlLaunchd.ts 3, watch.ts 3, WindowMachine.ts 3, dev.ts 2, capped.ts 2, TasksLedger.ts 1, Command.ts 1, local-dev.ts 1, CommandsNode.ts 1, bundle.ts 1, dial.ts 1. No law was added or changed in meaning: a fixes-only slice, so no plant was run. Checks: pnpm format, pnpm lint with a 6 GB heap (17 parts passed), the ratchet (exit 0), and one pnpm typecheck (exit 0). Tests: vitest --changed origin/main on the next and next-integration projects, 103 files: 97 passed and 5 failed only because ssh-keygen was missing in the box; after installing openssh-client the five (commits-git-chain, -person, -signatures, -steps and instance-wire integration files) passed, 110 tests. Visual tests were not run, by the step rules.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "note": "Recount: 162 hits left in the row's folders after this run (24 exam, 138 product, 0 in 1366's files). The 21 browser-side hits are false alarms for this check: code serialized by page.evaluate cannot import effect. The 3 callback hits have no Effect String form; whether they stay as checker exceptions or are rewritten is the review's call.",
+  "step": "tests"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-18-t753-l16-new-names-missed-test-exports",
+  "date": "2026-11-18",
+  "quests": ["kamp-us/tea-fabrika#1591"],
+  "stage": "driver",
+  "kind": "failure",
+  "what": "In PR 1591 (next/), the lead wrote the description's New names section from the product diff only and said every new name was private to its file. The test modules RunnerLifecycleTest.ts and SinkBatchTest.ts export Table, Exit, Move, World and suite to their driver files. The merger's first arm was refused by the New names check (decision 0587), and the merger added one line per name before arming again.",
+  "cause": "The lead listed names by reading the three product files' diffs and did not list the exports of the new test files, which 0587 counts too.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Before a description is pushed, run the same New names check that land.ts queue and arm run (.agents/skills/lead/scripts/pr/Names.ts) on the body file, so a missing exported name is caught by the writer, not at the arm.",
+  "test": "Replay PR 1591's first body against Names.ts at head e0fdb194c65001117a2eaf58b09252462093fc4f: it should name Table, Exit, Move, World and suite as missing.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1591"]
+}

@@ -1,12 +1,12 @@
 ---
 id: 0215
-title: In next/, make and decodeSync take trusted input only, and saved state, the wire and disk go through makeEffect or decodeUnknownEffect, never the throwing one
-status: amended-in-part by [0576](0576-schema-sync-error-result-in-plain-code.md)
+title: In next/, make takes trusted input only, and saved state, the wire and disk go through makeEffect or decodeUnknownEffect, never a throwing call
+status: accepted
 date: 2026-11-08
 tags: [schema, effect-schema, errors, decode, saved-state, next]
 ---
 
-# 0215: In next/, make and decodeSync take trusted input only, and saved state, the wire and disk go through makeEffect or decodeUnknownEffect, never the throwing one
+# 0215: In next/, make takes trusted input only, and saved state, the wire and disk go through makeEffect or decodeUnknownEffect, never a throwing call
 
 **What this decides:** which Schema call `next/` code picks, by where its input came from.
 
@@ -33,17 +33,16 @@ a thrown `Error`." See [schema classes, not Of helpers](../docs/direction/schema
 **In `next/`, a Schema class or a parser picks by where its input came from: the throwing call for
 trusted input, the typed error for untrusted input.**
 
-- `make` and `decodeSync` throw, and take trusted input only.
+- `make` throws, and takes trusted input only. `decodeSync`, `decodeUnknownSync`, `encodeSync` and
+  `encodeUnknownSync` are not used, even for trusted input: the Effect checker's `schemaSync` is an
+  error in `next/` and our tooling ([0576](0576-schema-sync-error-result-in-plain-code.md)).
 - `makeEffect`, `decodeEffect` and `decodeUnknownEffect` keep the failure in the error channel.
-- `decodeResult` and `decodeUnknownResult` are used only where plain code needs the failure's
-  details.
+- A plain function decodes and encodes with `Schema.decodeUnknownResult`, `Schema.decodeResult`,
+  `Schema.encodeResult` and `Schema.encodeUnknownResult` and handles the failure. Its home is
+  [0576](0576-schema-sync-error-result-in-plain-code.md).
 - Saved state, anything off the wire and anything read from disk never take the throwing one.
 
 ## Consequences
 
 - `runtime/State.ts` still throws `ProgramDown` when a saved row does not fit. Making it a typed
   error is its own ticket.
-
-## Amendments
-
-- 2026-11-15: [0576](0576-schema-sync-error-result-in-plain-code.md) makes the Effect checker's `schemaSync` an error in `next/` and our tooling, so `decodeSync`, `decodeUnknownSync`, `encodeSync` and `encodeUnknownSync` no longer pass, even for trusted input. A plain function uses `decodeResult`, `decodeUnknownResult` or `encodeResult` and handles the failure; Effect code uses the Effect form. The rest holds.

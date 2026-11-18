@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589 and 0594; body cb3200faff08
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/transport`, in next/ (ticket 1067)
@@ -208,7 +208,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <A exten
 
 ```ts
 // next/packages/libfabrika/src/transport/internal/binary.ts, the one changed line. A sketch.
-import { WebCrypto } from "effect/crypto";
+import * as WebCrypto from "effect/crypto/WebCrypto";
 
 export const subtle = Effect.fn("transport.crypto")(function* <M extends CryptoMethod>(method: M, ...args: CryptoArgs[M]) {
   const api: CryptoApi = (yield* WebCrypto.WebCrypto).subtle;
@@ -257,9 +257,10 @@ counter sees also change with the signatures: they are listed too.
 | `ErrorCause.test.ts:47` (`vi.spyOn(crypto.subtle, method)`) | a rejection injected into one WebCrypto call | `WebCrypto.layer(Rejecting.crypto(method, failure))` |
 | `node/client/KeyFile.laws.test.ts:296` (plain `consume`, `admit`) | nothing | a `Layer.mock(Admissions, ...)` (slice 2) |
 
-The `fc.assert` laws here (d2 in both files, p82 agreement, T737 D1, C5, C3) keep their runner in
-this sweep, 80%: moving them to `it.effect.prop` is 0579's other sweep, and doing both in one diff
-makes the loosening read harder. Each is only changed where it reads a mock.
+The source read found `fc.assert` in d2 in both files, p82 agreement, T737 D1, C5 and C3.
+When those laws are rewritten here, move them to `it.prop` or `it.effect.prop` with Schema
+inputs and the package setup seed (0579). Keep their input bounds, run counts, checks and first
+failing case; replacing a mock does not exempt a rewritten law from that rule.
 
 ## One value traced: a refused signed hello (law d2)
 
@@ -277,6 +278,13 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | A1. A request on an online connection reaches the route once, with its method, its params and the connection's identity, and an `ok` or `refused` answer becomes its one reply | test | Effect Arbitrary: Answer.cases.refused | pass `null` as the identity on an online connection: A1 red | next/packages/libfabrika/src/transport/Answer.test.ts |
@@ -286,21 +294,22 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 | A5. Fields a request adds do not reach the route's identity: the third argument is the attached identity | test | scenario: one request with a forged `future.by` | read the identity from the request's params: A5 red | next/packages/libfabrika/src/transport/Answer.test.ts |
 | A6. `answerFrame`'s environment is exactly `Routes`, so it cannot reach admission | type | type | make `answerFrame` also `yield* Admissions`: the type law's `@ts-expect-error` goes unused, red in a typecheck | next/packages/libfabrika/src/transport/Answer.test.ts |
 | C5. A rejection on any WebCrypto call through the edge is `WebCryptoError` with that very value as its cause | test | fc.record: steps of a method and a rejection, 100 runs | `const fail = () => new WebCryptoError({ cause: undefined })` in `internal/binary.ts`: C5 red | next/packages/libfabrika/src/transport/ErrorCause.test.ts |
-| C6. The edge reads the provided `WebCrypto`, not the global: with a stand-in that rejects `digest`, `checkHello` on a well-formed hello fails with `WebCryptoError` | test | scenario: one signed hello and a rejecting `digest` | read `globalThis.crypto.subtle` in `internal/binary.ts` again: C6 red (C5 stays green there only by luck of no spy, so C6 is the plant's law) | next/packages/libfabrika/src/transport/ErrorCause.test.ts |
+| C6. The edge reads the provided `WebCrypto`, not the global: with a stand-in that rejects `digest`, `checkHello` on a well-formed hello fails with `WebCryptoError` | test | scenario: one signed hello and a rejecting `digest` | read `globalThis.crypto.subtle` in `internal/binary.ts` again: C6 red. Wrong, the first guess kept: "C5 stays green there only by luck of no spy, so C6 is the plant's law". Amendment (2026-11-16, merge session ruling on transport-s1's review): C5 is red under this plant too, since C5 and C6 both inject their rejection through `WebCrypto.layer`, and an edge that reads the global never meets it; slice 1's review ran the plant and saw both red (`field/runs/2026-11-16-mock-transport-s1-review1.json` on `fabrikalfa/mock-transport-s1`) | next/packages/libfabrika/src/transport/ErrorCause.test.ts |
 | H1. A signed hello that admission refuses names its own fingerprint, and the record is exactly one admit with that fingerprint | test | fc.webUrl: the url, with `fc.string` tab and nonce, 40 runs | return the refusal without the fingerprint, or consume before admitting: H1 red | next/packages/libfabrika/src/transport/Hello.test.ts |
 | H2. A hello whose tab, nonce or trusted value differs, or whose signature, key or version is bad, records no call | test | Effect Arbitrary: Admission.cases.refused | admit before the signature check: H2 red | next/packages/libfabrika/src/transport/Hello.test.ts |
 | H3. A checked hello goes online, and the record is admit with its fingerprint, then consume, in that order | test | scenario: the `setup` hello | consume before admitting: H3 red | next/packages/libfabrika/src/transport/Hello.test.ts |
 | H4. A failing admission fails `checkHello` with that very `AdmissionError`, and consume is never run | test | Effect Arbitrary: Schema.String | catch the admission error and answer `refused`: H4 red | next/packages/libfabrika/src/transport/Hello.test.ts |
 | H5. The gateway's admission error reaches `door.initialize`'s caller as `AdmissionError`, its cause the gateway's own error | test | scenario: a store that fails inside admission | map the error to a new `AdmissionError` with no cause: H5 red | next/packages/libfabrika/src/gateway/GatewayCauseTest.ts |
 | K2. The key file's hello is admitted by the door, as today | test | fc.record: the law's own nonce and tab, 60 runs | as today | next/packages/libfabrika/src/node/client/KeyFile.laws.test.ts |
-| L1. In the transport folder, `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` and `vi.stubEnv` are refused, and so is every `toHaveBeenCalled*` matcher, with `.not` too | lint | lint | delete the transport folder from the block's `files`: L1's planted lines are not refused | next/packages/libfabrika/src/transport/Hello.test.ts |
+| L1. In the transport folder, `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` and `vi.stubEnv` are refused, and so is every `toHaveBeenCalled*` matcher, with `.not` too. Amendment 2026-11-15 (merge session ruling 2): this is node's M1 run in the transport folder, its lines node's shared `VI_METHODS` set, with this plan's matcher and renamed-import lines added to it | lint | lint | delete the transport folder from the block's `files`: L1's planted lines are not refused. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | next/packages/libfabrika/src/transport/Hello.test.ts |
 
 - A1 to A5 are today's p23 and d2 laws in `Answer.test.ts`, kept under their own titles; the A
   numbers are only this plan's. H1 to H3 are d2 and the p26 laws in `Hello.test.ts`, the same way.
   Each keeps every value the old law compared, and most get stronger: one equality on the whole
   record holds the count, the args and the order where the old law held only a count.
-- C5 keeps its title. C6 is new, since without the spy C5 alone no longer proves the edge reads
-  the reference.
+- C5 keeps its title. C6 is new: it proves the edge reads the provided reference on `checkHello`'s
+  own path, a signed hello, where C5 drives the edge alone. Under the plant that reads the global
+  again, both C5 and C6 go red (amendment 2026-11-16, C6's row), so neither stands only by luck.
 - H4 and H5 are new: `AdmissionError` is new, and 0043's "with its cause kept" needs a law.
 - L1's lines are planted in `oxlint-plugins/builtin-plants.ts`, and `plants.test.ts` runs them in
   every folder the block lists, as it does `REFLECT`'s. The Where cell names the folder's first
@@ -316,6 +325,7 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 | next/packages/libfabrika/src/transport/Routes.ts | build | 22 | slice 1, new: `Routes` and `RouteError`, the contract only |
 | next/packages/libfabrika/src/transport/Answer.ts | build | 15 | slice 1: `answerFrame(text, attached)` asks for `Routes`; `Frame`, `Incoming` and `isOnline` go; the doc says so |
 | next/packages/libfabrika/src/transport/internal/binary.ts | build | 2 | slice 1: `subtle` reads `WebCrypto.WebCrypto` |
+| tsconfig.base.json | tests | 1 | slice 1. Amendment (2026-11-16, merge session ruling on transport-s1's review), an exam path, so the tests step writes it, as `plancheck.sh` holds: the one `allowedUnstableApis` list, in the override that sets `unstableApiUsage` to error, gains `"effect/crypto/WebCrypto"` in its sorted place after `effect/crypto/SecureRandom`. Pull request 1462 (`b490a32`) put the transport folder in that override, and `internal/binary.ts` and `ErrorCause.test.ts` read the module. The reason, which goes into the pull request that adds the entry, as [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-an-error.md) asks: this plan chose Effect's own `WebCrypto` reference on purpose, because it is the swap point Effect ships for a WebCrypto test double (`WebCrypto.ts:37`, `:68`), so the edge needs no service of ours and the law spies on nothing. It is a chosen part, not an entry that lets a hit pass |
 | next/packages/libfabrika/src/transport/Answer.test.ts | tests | tests | slice 1: A1 to A6 on `Recorder.layer(Routes, ...)` and `Layer.mock(Routes, ...)` |
 | next/packages/libfabrika/src/transport/ErrorCause.test.ts | tests | tests | slice 1: C5 on `WebCrypto.layer`, and C6 |
 | next/packages/libfabrika/src/transport/internal/rejecting.test-support.ts | tests | tests | slice 1, new: `crypto(method, failure)`, a stand-in `Crypto` |
@@ -326,12 +336,13 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 | next/packages/libfabrika/src/transport/Hello.test.ts | tests | tests | slice 2: H1 to H4 on `Recorder.layer(Admissions, ...)` |
 | next/packages/libfabrika/src/gateway/GatewayCauseTest.ts | tests | tests | slice 2: H5, beside the T695 cause laws |
 | next/packages/libfabrika/src/node/client/KeyFile.laws.test.ts | tests | tests | slice 2: K2 provides `Layer.mock(Admissions, ...)` |
+| next/packages/libfabrika/src/transport/ErrorCause.test.ts | tests | tests | slice 2. Amendment (2026-11-16, merge session ruling on transport-s1's review): C6 moves onto `Layer.mock(Admissions, ...)`, since slice 2's `checkHello` asks for `Admissions`. Until then C6 hands `checkHello` plain `consume` and `admit` callbacks, which is right for slice 1 |
 | next/packages/libfabrika/src/node/ErrorCause.test.ts | tests | tests | slice 2: runs `GatewayCauseTest`'s suite, H5 included; no change expected |
 | .oxlintrc.json | tests | 25 | slice 2: the lock block for the transport folder, below; an exam path, so the tests step writes it with L1's plants |
-| oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: the `MOCKS` plant lines of L1 |
-| oxlint-plugins/plants.test.ts | tests | tests | slice 2: runs `MOCKS` in every folder of the lock block |
+| oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: L1's lines, in node's `VI_METHODS` set (amended 2026-11-15; first a `MOCKS` plant); and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
+| oxlint-plugins/plants.test.ts | tests | tests | slice 2: node's M1 scenario runs `VI_METHODS` in every folder of the lock block |
 | .glossary/TERMS.md | build | docs | slice 1: a `Routes` row; slice 2: an `Admissions` row |
-| docs/plan/quests/recorder-PLAN.md | build | docs | slice 2: the transport row reads "done", with both pull requests |
+| docs/plan/quests/recorder-PLAN.md | build | docs | slice 2: the transport row reads "done", with both slices and the sweep's one pull request (amended 2026-11-15) |
 
 - Each new file is a front file of the `transport` module, beside `ClientKey.ts`, the same shape,
   and in libfabrika: a client written from scratch needs the door's hello and frame logic.
@@ -380,6 +391,73 @@ makes the loosening read harder. Each is only changed where it reads a mock.
   plants, not assumed: the tests step plants both forms, and the build adds a `not.` key only if a
   plant shows it is needed.
 
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; one block; `vitest/no-restricted-matchers` stays as above.
+{
+  "files": ["next/packages/libfabrika/src/transport/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "warn",
+      // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`), of the Reflect ban's warn block.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main the folder takes the Reflect ban's `warn` block (`JSON.parse` and the four Reflect entries), so the lock is one block, as the sketch shows. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, the `process.stdout` and `process.stderr` entries of the cloudflare plan's M13 (on these files but `*.test.ts`, the way M13 leaves test files out), or any new set.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+
+## Existing tools
+
+Amendment 2026-11-16: these searches confirm the two contracts already chosen above; the existing callbacks remain their implementations.
+
+- `next/packages/libfabrika/src/transport/Admissions.ts`: searched `transport/Hello.ts`, `gateway/Gateway.ts` and the transport service definitions; found `checkHello`'s `admit` and `consume` callbacks and the gateway's per-attempt implementations. There is no provided service for those two calls. Reuse the callbacks through the planned contract, with Effect's `Layer.mock` and the existing Recorder supplying the test layer.
+- `next/packages/libfabrika/src/transport/Routes.ts`: searched `transport/Answer.ts`, the transport service definitions and `Recorder.ts`; found `answerFrame`'s route callback and its tuple types, not a service the Recorder can wrap. Reuse the same route behavior behind the planned contract. Effect's `Context.Service` and `Layer.mock` provide the service mechanism; no second frame router is added.
+
 ## Calls taken
 
 - **Two slices, `Answer` and WebCrypto first, `Hello` after 1366,** 90%: the step rules forbid a
@@ -395,15 +473,23 @@ makes the loosening read harder. Each is only changed where it reads a mock.
 - **`answerFrame` drops `_admit`,** 85%, see "The shape".
 - **Effect's `WebCrypto` reference, not a service of ours,** 95%: Effect ships it for exactly this
   (`WebCrypto.ts:37`, `:68`).
-- **The `fc.assert` laws keep their runner,** 80%, see "Every site".
+- **Rewritten property laws follow 0579,** as required under "Every site". Their behavior and
+  generated coverage stay the same.
 - **Is this a setting?** No, for each choice. The services and the lock are code and lint config,
   nothing a person running fabrika picks (0069).
 - **What fact is lost if not recorded now?** None. A call record lives inside one test run.
 
 ## Validation
 
+Every local test selection first needs the lead to read its actual code, helpers and cleanup under 0594. A listed filename or an old no-host-only statement is not local clearance. Protected resource laws run only on an eligible disposable CI runner; preserve the guard and obtain their actual proof before the first review.
+
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
 - The tests step: `pnpm format`, then `pnpm lint` with `NODE_OPTIONS=--max-old-space-size=6144`,
-  then `nice -n 15 pnpm exec vitest run --maxWorkers=3` on the slice's test files. Slice 1:
+  then `nice -n 19 pnpm exec vitest run --maxWorkers=1` on the slice's test files. Slice 1:
   `next/packages/libfabrika/src/transport/Answer.test.ts` and
   `next/packages/libfabrika/src/transport/ErrorCause.test.ts`. Slice 2:
   `next/packages/libfabrika/src/transport/Hello.test.ts`, `next/packages/libfabrika/src/node/ErrorCause.test.ts` (which runs `GatewayCauseTest`'s suite),
@@ -420,8 +506,13 @@ Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price
 plan priced them: a tests step about $6, a build about $5, a review about $3, a fix round about $4.
 Confidence in the line counts: 70%; the doubt is slice 2's gateway change, which 1366 may move.
 
-1. Slice 1, `Routes`, `answerFrame` and the WebCrypto edge: 39 product lines, about 120 test lines
-   changed. Tests $5, build $4, review $3. 39 lines.
+Both slices land on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in its one pull
+request (amendment 2026-11-15, merge session ruling 1); neither opens a pull request of its own.
+Each still runs its own tests, build and review steps, one fresh agent each, in its own box.
+
+1. Slice 1, `Routes`, `answerFrame` and the WebCrypto edge: 40 product lines (the files table's 22, 15, 2 and 1), about 120 test lines
+   changed. Tests $5, build $4, review $3. 40 lines. Amendment (2026-11-16, lead at re-sign): was
+   39, which missed `tsconfig.base.json`'s one line.
 2. Slice 2, after 1366: `Admissions`, `checkHello`, the gateway's provide and the folder's lock: 67
    product lines (25 of them the lint config the tests step writes), about 150 test lines changed. Tests $6, build $5, review
    $3, and one likely send-back on the gateway's error readers, $4. 67 lines.

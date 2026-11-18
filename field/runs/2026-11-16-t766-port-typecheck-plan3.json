@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-plan3",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-16T01:16:40-08:00",
+  "ended": "2026-11-16T01:20:18-08:00",
+  "parent": "2026-11-16-t766-port-typecheck-review",
+  "active": null,
+  "role": "plan",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "A fix-round amendment to the typecheck port's plan, in today's tooling (docs/plan/quests/port-typecheck-PLAN.md, step 4 of 'The lock' and the section 'Amendment, 2026-11-16 (fix round)'). The review proved one dead breaker is enough for two live holders, so step 4's sentence that a dead .break is removed directly ('that only races if two breakers both died inside a few milliseconds') is kept, marked Wrong, and replaced by the lead's ruling: a dead .break is broken the same way, under <lock>.break.break. Mercurial 7.2.4's mercurial/lock.py _testlock (lines 374-386) takes .break as a lock with timeout=0, and that lock's own _trylock (lines 297-343) breaks a dead .break under its own .break. The amendment adds law N7 (a dead .break plus two live takers, in the review's order, red on today's code) and law L3 (the scripts/typecheck files join the 0567 no-manual-tag-comparison lint block), and says what the tests step (N7, 16 test comparisons, the lint block) and the build (breakStale(breaker) in place of fs.remove(breaker), never remove a live .break not its own, 8 product comparisons) do next.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Read Mercurial 7.2.4's lock.py from a copy already in the scratchpad from the first plan round. records.ts resolve 0567 0033 0410 printed all three accepted (0033 amended by 0070 and 0113). plancheck --draft passed on an unsigned copy in the scratchpad. The signed first line was left as it was for the lead to sign again. No test or pnpm typecheck ran; pnpm install --frozen-lockfile --prefer-offline ran for the lint.",
+  "step": "plan"
+}

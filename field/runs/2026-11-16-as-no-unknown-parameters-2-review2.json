@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-as-no-unknown-parameters-2-review2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:55:27-08:00",
+  "ended": "2026-11-16T00:04:00-08:00",
+  "parent": "2026-11-15-as-no-unknown-parameters-2-review1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of anti-slop judgment slice AS-no-unknown-parameters-2 (ticket 1057, anti-slop/no-unknown-parameters, in next/ and our tooling) at 6f08315ba, after the fix round (tests2 7815de216, a merge of origin/main 83a63398d, build2 6f08315ba): merge-ready, findings 0, done. Review1's fault is fixed: next/apps/fabrika/src/brain.ts is byte for byte origin/main's, so its six parameters (lines 66, 73, 83, 138, 153, 173) read unknown in sight and are listed as left; memory-replace.laws.integration.test.ts:263 reads unknown and is listed. The rule forced on in a scratch config reports all seven, and the whole diff against origin/main adds no other indexed type that resolves to unknown: the three left (settings/Files.ts at and leaf, settings/internal/edit.ts read) resolve to Readonly<Record<string, unknown>>, a table. Every type parameter the slice still adds appears in two positions or the return. Count at 6f08315ba: 256 hits, 20 in product files, as the build2 row says. Snapshot.read now takes Schema.Json; its one unknown caller, cloudflare/QuotaSettings.ts read, decodes with Schema.Json first and fails with a SnapshotError as before, with its own message for an input that is not JSON. The build2 row now states the 1e400 behavior change plainly, which settles review1's first finding row. tests2's runtime-recovery change at 1656 (pid: next ?? null) only differs when the law's own assertion fails either way. loosening.sh on the merge base to HEAD: four removed-expect hits, each the same assertion reformatted, or with a non-null mark, or the 1656 change above; no law is loosened. A merge of origin/main at b490a3203 is clean.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "Run here at 6f08315ba on Node 26.13.0, one file at a time with nice -n 19 pnpm exec vitest run --maxWorkers=1, all green: libfabrika settings/Snapshot (10), settings/Files (9), settings/QuotaSettings (3), cloudflare/quotas (3), Id (29); .agents clauderow (15), flow/host (16); .github/ci/program (10); apps worker-quotas.integration (3, the guard allows it now that the branch holds pull request 1508). next/packages/libfabrika tsc --noEmit -p . passes. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 17 of 18 parts passed; lint:promise-types failed with an EPIPE when its type-checker process was killed for memory while the package typecheck ran beside it, then passed alone with 0 findings. Plants by reading: the brain.ts form with Parameters<ContextProject[...]> drops the rule's count by 6 (review1's counts, 6 against 0), so the rule's report of the seven lines is what holds them now.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

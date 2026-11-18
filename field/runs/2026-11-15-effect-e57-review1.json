@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e57-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-15T21:25:00-08:00",
+  "parent": "2026-11-15-effect-e57-tests1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of record for judgment slice E57 of the Effect-checker sweep (globalFetch and globalFetchInEffect, in next/ and our tooling), head 3853a99e6, against origin/main 37db01a: merge-ready, no findings. Recount at this head with only the two checks at error through --lspconfig: 0 hits in .github/ci and next/packages/libfabrika, 18 in next/apps/fabrika, all in app:src, which the plan gives to E96 (after 1366); the three fixed files each show 0 when checked by --file. Hits met 3, fixed 3 by hand, 0 by quick fix, 0 ignore or disable lines, no lock line (judgment slice), no tsconfig or LOCKED change, no file of pull request 1366 touched (63 files read with get_files, no overlap). time-table.ts keeps its contract: any non-2xx answer, bad JSON, network failure or no answer within 5 s is the same Unread, checked by running it against a local server for 200, 403, bad JSON and a 7 s answer (all exit 0; reasons name the status and URL, never the token). The e2e readiness poll keeps response.ok as status 200 to 299 and a failure as not yet. The four dev laws files keep every assertion; they swap vi.spyOn(globalThis, 'fetch') for a vi.fn handed in as FetchHttpClient.Fetch, which follows 0555. Reach is kept: in scratch copies that count every call reaching the real global fetch, dev, dev-errors, dev-secrets and dev-control send 0 requests past the stand-in, including the binding proxy's Effect.runPromise calls (dev-control's first law met 5 live calls, each seen by the stand-in).",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from this row. Start time not read at the start, so null. Ran at 3853a99e6, one file at a time under nice -n 19 --maxWorkers=1: .github/ci/time-table.test.ts 7 passed; dev-errors 8, dev.laws 5, dev-secrets 3, dev-control 3 passed (all .integration., process.kill stubbed, no real signal). Not run: next/apps/fabrika/e2e/instance.visual.test.ts (a .visual. test, judged by reading). tsc --noEmit -p for .github/ci, next/packages/libfabrika and next/apps/fabrika, each exit 0; pnpm lint with the heap setting, 17 parts passed; leakgrep clean; loosening.sh exits 1 with 7 'unrecognized change' hits, one per changed code file at its new import line, none loosens a law. E1's allowedUnstableApis names effect/http/FetchHttpClient, HttpClient and HttpClientResponse, so the new imports add no unstableApiUsage hit once E1 folds. git merge-tree with origin/main d3a444e: clean. For the integrator: conflicts with effect-e2 in all five libfabrika dev files (E2 moves lib:node to namespace imports, so the four new `import { FetchHttpClient } from \"effect/http\"` lines take E2's `import * as FetchHttpClient from \"effect/http/FetchHttpClient\"` form in the fold), with effect-e3 in time-table.ts and dev-secrets, and with effect-e33 and effect-e47 in time-table.ts; effect-e54 merges clean.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "dev-control.laws: calls go only to a listener with no pending replacement",
+      "plant": "scratch copy, the stand-in echoes a fixed name in place of body.name",
+      "result": "red"
+    },
+    {
+      "law": "dev-errors.laws: instance json exit has its exact ControlError reason",
+      "plant": "scratch copy, the json-mode stand-in answers valid JSON",
+      "result": "red"
+    },
+    {
+      "law": "dev.laws: L7, L8, L13",
+      "plant": "scratch copy, replaced() drops Effect.provideService(FetchHttpClient.Fetch, fetch)",
+      "result": "red"
+    },
+    {
+      "law": "dev-errors.laws: instance unreachable exit has its exact ControlError reason",
+      "plant": "scratch copy, the unreachable-mode stand-in answers in place of throwing; an equivalent change, since the fallback answer's reason is the mode's own name, and the law is the same on main",
+      "result": "green"
+    }
+  ],
+  "step": "review"
+}

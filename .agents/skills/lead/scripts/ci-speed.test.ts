@@ -24,6 +24,7 @@ import {
 } from "./ci/Speed.ts";
 
 const T0 = Date.parse("2026-11-14T00:00:00Z");
+
 /** The ISO time `m` minutes after T0. */
 const t = (m: number) => new Date(T0 + m * 60_000).toISOString();
 
@@ -57,6 +58,7 @@ const pull = (o: Partial<Pull> & { readonly merged: string }): Pull => ({
 
 /** The PR entered the queue at minute `m`. */
 const added = (m: number) => ({ _tag: "added", at: t(m) }) as const;
+
 /** The queue let the PR go at minute `m`, for `reason` (GitHub's words). */
 const removed = (m: number, reason: string) => ({ _tag: "removed", at: t(m), reason }) as const;
 
@@ -103,6 +105,7 @@ describe("the three stages of one merged pull request, today's tooling", () => {
       [run(1, { at: 1000 })],
       [job(1, 1000, 1002), job(1, 1001, 1004)],
     );
+
     expect(numbers(r)).toEqual({ pr: [1, 4, true], queue: [1, 4, true], merge: [1, 9, true] });
   });
 
@@ -113,6 +116,7 @@ describe("the three stages of one merged pull request, today's tooling", () => {
       [run(1, { at: 990 })],
       [job(1, 990, 992)],
     );
+
     expect(numbers(r)).toEqual({ pr: [1, 2, false], queue: [0, null, false], merge: [1, 138, true] });
   });
 
@@ -123,6 +127,7 @@ describe("the three stages of one merged pull request, today's tooling", () => {
       [run(1, { at: 990 })],
       [job(1, 990, 992)],
     );
+
     expect(numbers(r).queue).toEqual([1, 4, true]);
   });
 
@@ -147,6 +152,7 @@ describe("the three stages of one merged pull request, today's tooling", () => {
       run(4, { at: 1020, sha: "after" }),
       run(5, { at: 1000, sha: "new", branch: "fabrikalfa/other" }),
     ];
+
     const jobs = [job(1, 900, 990), job(2, 1000, 1002), job(3, 1001, 1003), job(4, 1020, 1060)];
     const queue = [added(1004), removed(1006, "manual"), added(1010), removed(1012, "merged")];
     const r = day([pull({ merged: t(1012), queue })], runs, jobs);
@@ -159,6 +165,7 @@ describe("the three stages of one merged pull request, today's tooling", () => {
       [run(1, { at: 1000, conclusion: "failure" })],
       [job(1, 1000, 1002)],
     );
+
     expect(r.pulls).toBe(1);
     expect(numbers(r)).toEqual({ pr: [0, null, false], queue: [0, null, false], merge: [1, 3, false] });
   });
@@ -172,7 +179,9 @@ describe("the runners' use, today's tooling", () => {
       const list = jobs.map((j, i) =>
         job(i, j.from % 2000, (j.from % 2000) + Math.abs(j.length % 300), j.machine ? "r" : null),
       );
+
       const used = busyMinutes(list, T0, T0 + 1440 * 60_000);
+
       const inside = list
         .filter((j) => j.runner !== null)
         .map((j) =>
@@ -182,6 +191,7 @@ describe("the runners' use, today's tooling", () => {
               Math.max(0, (Date.parse(j.started ?? "") - T0) / 60_000),
           ),
         );
+
       expect(used).toBeCloseTo(
         inside.reduce((a, b) => a + b, 0),
         6,
@@ -231,9 +241,11 @@ describe("the day's issue, today's tooling", () => {
     Effect.gen(function* () {
       const writes = yield* Ref.make<ReadonlyArray<HistoryTest.Write>>([]);
       const asked = yield* Ref.make<ReadonlyArray<number>>([]);
+
       const move = yield* sync(r).pipe(
         Effect.provide(HistoryTest.layer({ runs: [], jobs: [], pulls: [], issues }, writes, asked)),
       );
+
       return { move, writes: yield* Ref.get(writes) };
     });
 
@@ -245,6 +257,7 @@ describe("the day's issue, today's tooling", () => {
           { ...other, label: LABEL_NAME },
           { ...ours, label: "bug" },
         ]);
+
         expect(writes).toEqual([{ _tag: "create", title: TITLE, body: markdown(over), label: LABEL_NAME }]);
       }),
   );
@@ -268,6 +281,7 @@ describe("measure reads only what it needs, today's tooling", () => {
     () =>
       Effect.gen(function* () {
         const now = T0 + 1440 * 60_000;
+
         const runs = [
           run(1, { at: -LOOKBACK * 60 + 10 }), // the ready run of a PR merged in the window, pushed long before
           run(2, { at: -SPILL * 60 - 5, branch: "x" }), // before the spill hour: not read
@@ -275,6 +289,7 @@ describe("measure reads only what it needs, today's tooling", () => {
           run(4, { at: 600, branch: "y", workflow: "mutation", event: "workflow_dispatch" }),
           run(5, { at: -LOOKBACK * 60 - 10, branch: "z" }), // before the lookback: never listed
         ];
+
         const jobs = [job(1, 0, 4), job(3, -30, 30), job(4, 600, 640)];
         const writes = yield* Ref.make<ReadonlyArray<HistoryTest.Write>>([]);
         const asked = yield* Ref.make<ReadonlyArray<number>>([]);
@@ -309,6 +324,7 @@ describe("gh's answers, today's tooling", () => {
           ],
         }),
       );
+
       expect(runs).toEqual([
         {
           id: 9,
@@ -321,6 +337,7 @@ describe("gh's answers, today's tooling", () => {
           updated: t(1),
         },
       ]);
+
       const jobs = yield* HistoryGh.jobsIn(
         JSON.stringify({
           jobs: [
@@ -351,7 +368,9 @@ describe("gh's answers, today's tooling", () => {
           ],
         }),
       );
+
       expect(jobs.map((j) => j.runner)).toEqual([null, null, "GitHub Actions 3"]);
+
       const page = yield* HistoryGh.pullsIn(
         JSON.stringify({
           data: {
@@ -376,6 +395,7 @@ describe("gh's answers, today's tooling", () => {
           },
         }),
       );
+
       expect(page).toEqual({
         pulls: [
           {
@@ -389,12 +409,14 @@ describe("gh's answers, today's tooling", () => {
       });
       expect(HistoryGh.MERGED).toContain("REMOVED_FROM_MERGE_QUEUE_EVENT");
       expect(HistoryGh.MERGED).toContain("... on RemovedFromMergeQueueEvent { createdAt reason }");
+
       const issues = yield* HistoryGh.issuesIn(
         JSON.stringify([
           { number: 41, title: TITLE },
           { number: 43, title: "a pull request", pull_request: { url: "x" } },
         ]),
       );
+
       expect(issues).toEqual([{ number: 41, title: TITLE }]);
     }),
   );

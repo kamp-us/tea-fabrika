@@ -1,5 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { Effect } from "effect";
+import * as Rec from "effect/Record";
 import * as Audit from "../runtime/Audit.ts";
 import { Declaration, type Execution, executionFailure, nodeExecution, Reply } from "../runtime/Execution.ts";
 import { ProgramDown, stepper } from "../runtime/Program.ts";
@@ -24,6 +25,7 @@ const reply = Effect.fnUntraced(function* (execution: Pick<Execution, "reply">, 
 
 export const programBox = (declared: unknown, build: string) => {
   const program = nodeExecution(declared, build);
+
   const execution = {
     ...program,
     audit: (msg: unknown) =>
@@ -34,27 +36,30 @@ export const programBox = (declared: unknown, build: string) => {
         }),
       ),
   };
+
   const declaration = Effect.fromResult(stepper(declared)).pipe(
-    Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
-    Effect.map((pure) =>
-      Declaration.make({
-        name: pure.program.name,
-        v: pure.program.state.v,
-        ...(pure.program.maxDeliveries === undefined ? {} : { maxDeliveries: pure.program.maxDeliveries }),
-        ...(pure.program.policy === undefined ? {} : { policy: pure.program.policy }),
-        writes: Object.fromEntries(
-          Object.entries(pure.program.writes).map(([name, p]) => [name, { personOnly: p.personOnly }]),
-        ),
-        inputs: Object.fromEntries(
-          Object.entries(pure.program.inputs).map(([name, p]) => [
-            name,
-            { write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly },
-          ]),
-        ),
-        cmds: (pure.program.machine.cmds ?? []).map((d) => d.cmdType),
-      }),
-    ),
+    Effect.mapBoth({
+      onFailure: (cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause }),
+      onSuccess: (pure) =>
+        Declaration.make({
+          name: pure.program.name,
+          v: pure.program.state.v,
+          ...(pure.program.maxDeliveries === undefined ? {} : { maxDeliveries: pure.program.maxDeliveries }),
+          ...(pure.program.policy === undefined ? {} : { policy: pure.program.policy }),
+          writes: Rec.fromEntries(
+            Rec.toEntries(pure.program.writes).map(([name, p]) => [name, { personOnly: p.personOnly }]),
+          ),
+          inputs: Rec.fromEntries(
+            Rec.toEntries(pure.program.inputs).map(([name, p]) => [
+              name,
+              { write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly },
+            ]),
+          ),
+          cmds: (pure.program.machine.cmds ?? []).map((d) => d.cmdType),
+        }),
+    }),
   );
+
   return class ProgramBox extends WorkerEntrypoint {
     describe() {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Worker Loader RPC must answer a Promise

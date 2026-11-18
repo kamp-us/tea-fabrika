@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-judgment-fold-1-fix1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T19:19:22-08:00",
+  "ended": "2026-11-16T19:36:39-08:00",
+  "parent": "2026-11-16-effect-judgment-fold-1-review1",
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "gpt-6",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round for the Effect judgment fold in next/ and lead tooling. Joined the duplicate plugin blocks in the app, libfabrika and tuval, preserving every prior plugin key and all 7, 19 and 2 override entries, respectively. Fixed the errors those blocks hid, restored the lost E31/E36/E79 Array, Record and String lines, and merged all nine named reviewed heads without merging main. Recounted the imported tooling files with the patched compiler, including the E37 String gaps. No new checker directive, allow-list entry, gate change or narrowed law. The existing L2 reader now rejects duplicate config keys.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 17.28,
+  "note": "89 plain test files passed, one at a time with one worker, 1140 tests; the separate gcloop template replacement property also passed after its split/map rewrite. Scratch effect-tsgo tsc projects: all 13 clean, with preferEffectString and preferEffectArray active across the tooling import graph. Full pnpm typecheck passed. The first full run correctly rejected an unused directive; it was removed before the passing run. The broad --changed origin/main run was refused because package manifests, the lockfile and Vitest config differ from main; no bypass. No .integration., .visual., launchd, Electron, process-signal or real-instance test ran in this fix round. The three configs were compared as parsed data with both original plugin blocks. Test and expect call counts did not decrease in any changed test file. Fresh whole review is still owed.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "L2: each locked folder still ends at error, with unique config keys",
+      "plant": "Add a second compilerOptions.plugins key in the app tsconfig; the existing lock reader fails with config keys must be unique. Restore the config and the law passes.",
+      "result": "red"
+    }
+  ]
+}

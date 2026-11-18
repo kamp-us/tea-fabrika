@@ -1,7 +1,5 @@
 /**
  * The Process object's Layer: Alchemy's Effect object around `ProcessService`.
- *
- * @stability unstable
  */
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
@@ -47,7 +45,6 @@ const called = <A, E>(call: Effect.Effect<A, E>): Effect.Effect<A, LedgerError> 
  * and any other failure of a call dies too. `abort` resets the instance, as the platform's own
  * abort does.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: {
@@ -58,6 +55,7 @@ export const layer = (options: {
     Effect.gen(function* () {
       const state = yield* ObjectState;
       const env = yield* WorkerEnvironment;
+
       const bindings: Env = {
         INSTANCE: env.INSTANCE,
         PROJECT: env.PROJECT,
@@ -67,17 +65,21 @@ export const layer = (options: {
         LOADER: env.LOADER,
         MEASUREMENTS: env.MEASUREMENTS,
       };
+
+      // SAFETY: Alchemy's `fromDurableObjectState` stores workerd's own state object as `raw`, typed through its import of the `@cloudflare/workers-types` module rather than the global `DurableObjectState` this file uses.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw state until S5 and S6; not reported, 0042 amendment 2026-11-09
       const raw = state.raw as unknown as DurableObjectState;
+
       const service = ObjectService.make(
         ProcessService,
         processLayer(raw, bindings, options.programs, options.input(bindings)),
       );
+
       // `configure` saves the descriptor first, then runs the service's first turn from a context.
       const context = { contextEffect: service.pipe(Effect.map((process) => ProcessService.context(process))) };
       const use = <A, E>(call: (process: Service) => Effect.Effect<A, E>) => called(service.pipe(Effect.flatMap(call)));
 
-      return Effect.succeed({
+      return {
         alarm: () =>
           service.pipe(
             Effect.flatMap((process) => process.alarm()),
@@ -96,6 +98,6 @@ export const layer = (options: {
         recover: () => use((process) => process.recover()),
         savedAlarm: () => called(savedAlarm(raw)),
         abort: () => state.abort("storage wake"),
-      } satisfies ProcessShape);
-    }),
+      } satisfies ProcessShape;
+    }).pipe(Effect.map((shape) => Effect.succeed(shape))),
   );

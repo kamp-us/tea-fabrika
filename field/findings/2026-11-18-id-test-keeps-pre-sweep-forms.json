@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-id-test-keeps-pre-sweep-forms",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/Id.test.ts",
+    "line": 1093
+  },
+  "says": "Two spots in the mock sweep's Id.test.ts keep forms main's collections and services sweep (ticket 1075) changed elsewhere: the shared-fibers law provides its generator, TestClock and Recorder with three chained Effect.provide calls, where main had merged the old chain into one Layer.provideMerge, and the slice's layout helper slices its bit string with native slice and padStart, where main's matching line uses Str.slice and Str.padStart.",
+  "proof": "On fabrikalfa/mock-fold-1, Id.test.ts:1093 to 1097 is Effect.provide(generatorWith(...)), Effect.provide(TestClock.layer()), Effect.provide(Recorder.layer(Front.Validation, validation)); origin/main's same law uses Id.Generator.layer.pipe(Layer.provideMerge(TestClock.layer())). Id.test.ts:184 and :186 use at.toString(2).padStart(48, \"0\"), field.slice and bits.slice, which main changed to the Str forms in Id.test-support.ts.",
+  "cost": "No behavior is wrong today, and the three provides are a judgment edit because their order decides which service each layer sees. When decision 0565's lock for these checks reaches this folder it meets these lines again.",
+  "head": "798654945025524820f59a037ac2600714de6d46",
+  "ticket": "1067",
+  "pr": "kamp-us/tea-fabrika#1526"
+}

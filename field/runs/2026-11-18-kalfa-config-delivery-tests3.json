@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-kalfa-config-delivery-tests3",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": "kamp-us/tea-fabrika#1589",
+  "started": "2026-11-17T18:23:24-08:00",
+  "ended": "2026-11-17T19:35:45-08:00",
+  "parent": "2026-11-18-kalfa-config-delivery-tests2",
+  "active": null,
+  "driver_caused": false,
+  "role": "step",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Third round, from a real CI red: the consumer fault printed not_red because the tooling step had just run P1 and filled Vitest 5.0.5's file-system module cache, so the faulted run reused the cached resolution of @kalfa/config/App. The fault runner's two P1 runs now take their arguments from an exported consumerArgs that passes --fsModuleCache=false, and a D5 property pins it. The not_red refusal is unchanged.",
+  "note": "The flag spelling was checked against the installed cac chunk, which lists fsModuleCache at top level; in a warm-cache tree both --fsModuleCache=false and --experimental.fsModuleCache=false made the faulted P1 fail, and the top-level one is used. Reproduction in a scratch git worktree with CI=true GITHUB_ACTIONS=true FABRIKA_TEST_DEPTH=full after one plain P1 run: HEAD's related.ts gave not_red with the manifest restored; the fixed one gave faulted exit 1, rerun exit 0, restored digest equal, proven. The worktree was removed. No unit test warms the cache (it needs a package.json rewrite in a real install), so the reproduction is the evidence. related-selection 23 tests pass, pnpm lint exit 0, pnpm typecheck exit 0 (a pgrep -x tsgo seen right after lint was a transient; typecheck takes its own lock).",
+  "base": "eca46d16eaeed602da26617ec1efeda5dd8584e5",
+  "head": "eca46d16eaeed602da26617ec1efeda5dd8584e5",
+  "sourceHashes": {
+    ".github/ci/related-selection.test.ts": "a1f43d4fb1985e45f30d3df1f0c907031adc534c8d15a579c7506888393fa56f",
+    ".github/ci/related.ts": "206307ed853e475629d1eda1e25442ddfc2316be786f6c1e46f81822c27ff59d"
+  },
+  "plants": [
+    {
+      "law": "D5 each P1 run of the fault mode turns the module cache off",
+      "plant": "remove --fsModuleCache=false from consumerArgs",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 72.4,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billed": null,
+  "billing": null
+}

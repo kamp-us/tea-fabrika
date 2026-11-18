@@ -6,13 +6,12 @@
  * stale sender, a name outside the host's grant or a missing name writes nothing at all, and a send
  * never registers or starts a name. Besides the host's grant, a child and the program that started
  * it reach each other, and nobody else does.
- *
- * @stability unstable
  */
 import { Effect, Equal, Layer, Option, Result, Schema } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
+import { QuotaRefused } from "../ledger/WritePolicy.ts";
 import { short } from "../telemetry/Trace.ts";
 import { full, granted, mailId, businessRef, unread } from "./internal/programMail.ts";
 import { inbox, letterBody, letterLine } from "./Mailbox.ts";
@@ -26,6 +25,7 @@ import {
   ProgramMailError,
   type Receipt,
 } from "./ProgramMail.ts";
+import { Quotas } from "./Quotas.ts";
 
 const tag = (word: string): string => `fab.mail.${word}`;
 
@@ -39,11 +39,13 @@ const Mailed = Schema.TaggedStruct("mailed", {
 });
 
 const decodeMailed = Schema.decodeUnknownOption(Mailed);
+
 const decodeSent = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Json }));
 
 const outbox = (name: string): string => `${name}/outbox`;
 
 const refuse = (reason: typeof MailRefusal.Type) => ProgramMailError.refused(reason);
+
 const storage = (cause: LedgerError) => ProgramMailError.storage(cause);
 
 /** The saved receipt for this delivery's ID, or a refusal when the ID was first used otherwise. */
@@ -76,6 +78,7 @@ const saved = (
 
   const { command, source, to, ref, grant } = mailed.value;
   const l = letter.value;
+
   return Option.some(
     Result.succeed({
       id,
@@ -106,6 +109,7 @@ const saved = (
 const capped = (turn: LedgerTurn, manager: typeof ProcessManager.Service, to: string, cap: number) => {
   const end = Option.getOrElse(turn.end(inbox(to)), () => 0);
   const acked = manager.ackedPos(turn, to);
+
   return full(end, acked, cap) ? Option.some(ProgramMailError.full(unread(end, acked))) : Option.none();
 };
 
@@ -128,7 +132,6 @@ const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
  * saved letter answers its first receipt before the cap is looked at, so a full inbox never hides
  * a receipt.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (config: {
@@ -139,23 +142,37 @@ export const layer = (config: {
     ProgramMail,
     Effect.gen(function* () {
       const tx = yield* LedgerTransaction;
+      const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
       const manager = yield* ProcessManager;
+
       const transact = <A>(step: (turn: LedgerTurn) => A) =>
         tx
           .transact(step)
-          .pipe(Effect.mapError((error) => (error.reason === "refused" ? refuse("bad_message") : storage(error))));
+          .pipe(
+            Effect.mapError((error) =>
+              error.cause instanceof QuotaRefused
+                ? refuse("quota")
+                : error.reason === "refused"
+                  ? refuse("bad_message")
+                  : storage(error),
+            ),
+          );
+
       const lookup = (failure: ProcessError | LedgerError, refusal: typeof MailRefusal.Type) =>
         failure instanceof ProcessError ? refuse(refusal) : storage(failure);
+
       /** A child and the program that started it may mail each other with no host grant. The
        *  right is read by name from the first life's requester, so a restart under the name keeps it. */
       const related = (source: string, to: string) =>
         transact((turn) => {
           const table = manager.table(turn);
+
           return (
             Option.exists(table.starter(to), (name) => name === source) ||
             Option.exists(table.starter(source), (name) => name === to)
           );
         });
+
       const deliver = Effect.fn("program_mail.deliver")(
         function* (delivery: Delivery) {
           yield* Effect.annotateCurrentSpan({
@@ -183,6 +200,7 @@ export const layer = (config: {
 
           for (;;) {
             const seen = yield* transact((turn) => heads(turn, names));
+
             const source = yield* manager
               .resolve(delivery.source.process)
               .pipe(Effect.mapError((e) => lookup(e, "stale_sender")));
@@ -203,41 +221,47 @@ export const layer = (config: {
             }
 
             const target = yield* manager.status(delivery.to).pipe(Effect.mapError((e) => lookup(e, "no_name")));
+
             const committed = yield* transact((turn) => {
-              // A lifecycle write since the checks above: check again before anything is written.
-              if (heads(turn, names) !== seen) {
-                return Option.none();
-              }
+              const commit = () => {
+                // A lifecycle write since the checks above: check again before anything is written.
+                if (heads(turn, names) !== seen) {
+                  return Option.none();
+                }
 
-              const prior = saved(turn, delivery, m.value);
+                const prior = saved(turn, delivery, m.value);
 
-              if (Option.isSome(prior)) {
-                return prior;
-              }
+                if (Option.isSome(prior)) {
+                  return prior;
+                }
 
-              const over = capped(turn, manager, delivery.to, config.cap);
+                const over = capped(turn, manager, delivery.to, config.cap);
 
-              if (Option.isSome(over)) {
-                return Option.some(Result.fail(over.value));
-              }
+                if (Option.isSome(over)) {
+                  return Option.some(Result.fail(over.value));
+                }
 
-              const id = mailId(delivery.command);
-              turn.append(inbox(delivery.to), id, letterLine(delivery.from, m.value));
-              turn.append(
-                outbox(delivery.source.name),
-                id,
-                lineFor(
-                  delivery.from,
-                  Mailed.make({
-                    command: delivery.command,
-                    source: { name: delivery.source.name, process: delivery.source.process },
-                    to: { name: delivery.to, state: target.state },
-                    ref: businessRef(m.value),
-                    grant: { source: delivery.source.name, to: delivery.to },
-                  }),
-                ),
-              );
-              return saved(turn, delivery, m.value);
+                const id = mailId(delivery.command);
+                turn.append(inbox(delivery.to), id, letterLine(delivery.from, m.value));
+                turn.append(
+                  outbox(delivery.source.name),
+                  id,
+                  lineFor(
+                    delivery.from,
+                    Mailed.make({
+                      command: delivery.command,
+                      source: { name: delivery.source.name, process: delivery.source.process },
+                      to: { name: delivery.to, state: target.state },
+                      ref: businessRef(m.value),
+                      grant: { source: delivery.source.name, to: delivery.to },
+                    }),
+                  ),
+                );
+
+                return saved(turn, delivery, m.value);
+              };
+
+              return quotas === undefined ? commit() : quotas.ordinary(delivery.source.process, commit);
             });
 
             if (Option.isSome(committed)) {
@@ -260,6 +284,7 @@ export const layer = (config: {
           ),
         ),
       );
+
       return ProgramMail.of({ deliver });
     }),
   );

@@ -10,7 +10,8 @@ import {
   type Env as Bindings,
 } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Layer, Predicate, Schema } from "effect";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
+
 import { programs } from "virtual:fabrika-built";
 import { Gateway } from "./door.ts";
 
@@ -25,6 +26,7 @@ const checkedSettings = (env: Pick<Env, "INSTANCE">) =>
 
 export const settings = Effect.fn("instance.settings")(function* (env: Pick<Env, "INSTANCE">) {
   const checked = yield* checkedSettings(env);
+
   return { ...checked.input, ...checked.input.founding, port: checked.values.port };
 });
 
@@ -48,11 +50,13 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
     door: (options) =>
       Effect.gen(function* () {
         const checked = yield* RecordedStart;
+
         const config = {
           ...checked.input,
           port: checked.values.port,
           rateLimit: { limit: checked.values.gatewayLimit, window: checked.values.gatewayWindow },
         };
+
         return yield* Gateway.pipe(
           Effect.provide(
             Gateway.layer({
@@ -74,8 +78,8 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
                 raw: [],
                 personOnly: [],
                 name: (m) =>
-                  Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "type") && Predicate.isString(m.type)
-                    ? m.type
+                  Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "_tag") && Predicate.isString(m._tag)
+                    ? m._tag
                     : undefined,
               },
               events: { personOnly: [] },

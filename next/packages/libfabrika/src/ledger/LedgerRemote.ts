@@ -1,7 +1,5 @@
 /**
  * The `Ledger` in any object but the project's: the project's stub, across an object call (0095).
- *
- * @stability unstable
  */
 import { Effect, Layer, Schema } from "effect";
 import { short } from "../telemetry/Trace.ts";
@@ -20,7 +18,6 @@ import { Appended, Entry, Waited } from "./Log.ts";
  * call ends one `ledger.call` span on the caller's side. `caller.reader` is the object's own name,
  * such as `connection:t1`: the name the referee rings after a parked wait.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (stub: LedgerCalls, caller: { readonly reader: string }): Layer.Layer<Ledger> => {
@@ -37,6 +34,7 @@ export const layer = (stub: LedgerCalls, caller: { readonly reader: string }): L
     const fail = (cause: unknown) => new LedgerError({ reason: "unreachable", cause });
     // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
     const io = Effect.tryPromise({ try: () => Reflect.apply(stub[name], stub, args), catch: fail });
+
     return yield* io.pipe(
       Effect.flatMap((raw) =>
         Schema.decodeUnknownEffect(answer)(raw).pipe(
@@ -46,7 +44,9 @@ export const layer = (stub: LedgerCalls, caller: { readonly reader: string }): L
       Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
     );
   });
+
   const page = Schema.Array(Entry);
+
   return Layer.succeed(Ledger, {
     append: (stream, id, line) => call("append", stream, Appended, stream, id, line),
     read: (stream, after) => pages(after, (from) => call("read", stream, page, stream, from, caller.reader)),

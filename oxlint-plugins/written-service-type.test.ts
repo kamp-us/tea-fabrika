@@ -1,18 +1,31 @@
+import { join } from "node:path";
+import { it } from "@effect/vitest";
 // Ticket 908, law 5 of docs/plan/effect-rules-small.md. `fabrika/written-service-type` fires exactly
 // when a service's type holds `ReturnType`, `Effect.Success` or a `typeof` query (decision 0095).
 // Each generated file runs in process through oxlint's RuleTester; one oxlint run over the first
 // file that fires then proves the repo's own .oxlintrc.json turns the rule on for next/ product
 // code and leaves tests out.
-import { join } from "node:path";
+import { Array as Arr, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { expect } from "vitest";
+import { plant } from "./plant.ts";
 import { writtenServiceType } from "./written-service-type.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so the rule reads each path as oxlint gives it there.
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 
@@ -310,7 +323,7 @@ const file = (
   const body: string[] = own ? ["type ReturnType<T> = { readonly made: T };"] : [];
   const fires: number[] = [];
 
-  drawn.forEach((pick, n) => {
+  Arr.forEach(drawn, (pick, n) => {
     const success = successes[pick.success % successes.length]!(n);
     const d: Drawn = { n, name: `${pick.name}${n}`, success: success.text, effects: success.effects, own };
     const form = forms[pick.form % forms.length]!(d);
@@ -327,7 +340,8 @@ const file = (
 
   // Each import is written once: two services may ask for the same line.
   const head = [...new Set(imports)];
-  return { text: `${[...head, ...body].join("\n")}\n`, fires: fires.map((at) => head.length + at + 1) };
+
+  return { text: `${Arr.join([...head, ...body], "\n")}\n`, fires: Arr.map(fires, (at) => head.length + at + 1) };
 };
 
 const Name = fc.stringMatching(/^[a-z]{2,6}$/).map((w) => `${w[0]!.toUpperCase()}${w.slice(1)}Svc`);
@@ -339,45 +353,59 @@ const services = fc.array(fc.record({ name: Name, success: fc.nat(), form: fc.na
 
 const product = "next/packages/libfabrika/src/unit/Unit.ts";
 
-it("fires exactly on a read service whose type holds ReturnType, Effect.Success or a typeof query", async () => {
-  // The generated files with a fire: the first is for the oxlint run below.
-  const fired: Array<ReturnType<typeof file>> = [];
-  fc.assert(
-    fc.property(services, fc.boolean(), (drawn, own) => {
-      const made = file(drawn, own);
+it.live("fires exactly on a read service whose type holds ReturnType, Effect.Success or a typeof query", () =>
+  Effect.gen(function* () {
+    // The generated files with a fire: the first is for the oxlint run below.
+    const fired: Array<ReturnType<typeof file>> = [];
+    fc.assert(
+      fc.property(services, fc.boolean(), (drawn, own) => {
+        const made = file(drawn, own);
 
-      if (made.fires.length > 0) {
-        fired.push(made);
-      }
+        if (made.fires.length > 0) {
+          fired.push(made);
+        }
 
-      tester.run("written-service-type", writtenServiceType, {
-        valid: made.fires.length === 0 ? [{ code: made.text, filename: product }] : [],
-        invalid:
-          made.fires.length === 0
-            ? []
-            : [{ code: made.text, filename: product, errors: made.fires.map((line) => ({ line, message: OURS })) }],
-      });
-    }),
-    { seed: 119120, numRuns: 100 },
-  );
+        tester.run("written-service-type", writtenServiceType, {
+          valid: made.fires.length === 0 ? [{ code: made.text, filename: product }] : [],
+          invalid:
+            made.fires.length === 0
+              ? []
+              : [
+                  {
+                    code: made.text,
+                    filename: product,
+                    errors: Arr.map(made.fires, (line) => ({ line, message: OURS })),
+                  },
+                ],
+        });
+      }),
+      { seed: 119120, numRuns: 100 },
+    );
 
-  // Case 8, and the config's wiring: the same file fires in next/ product code and nowhere else.
-  expect(fired).not.toHaveLength(0);
-  const planted = fired[0]!;
-  const off = [
-    "next/packages/libfabrika/src/unit/Unit.test.ts",
-    "next/apps/fabrika/src/unit/Unit.test.tsx",
-    "next/packages/libfabrika/src/unit/UnitTest.ts",
-    "next/packages/libfabrika/src/unit/Unit.test-support.ts",
-    "packages/fabrika/src/unit/Unit.ts",
-  ];
-  const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
-  const linted = await plant(Object.fromEntries([product, tsx, ...off].map((path) => [path, planted.text])));
-  expect(linted(CODE, product)).toEqual(planted.fires);
-  // The same text as a `.tsx` product file fires, so the `.test.tsx` path below is quiet by the config.
-  expect(linted(CODE, tsx)).toEqual(planted.fires);
+    // Case 8, and the config's wiring: the same file fires in next/ product code and nowhere else.
+    expect(fired).not.toHaveLength(0);
+    const planted = fired[0]!;
 
-  for (const path of off) {
-    expect(linted(CODE, path), path).toEqual([]);
-  }
-});
+    const off = [
+      "next/packages/libfabrika/src/unit/Unit.test.ts",
+      "next/apps/fabrika/src/unit/Unit.test.tsx",
+      "next/packages/libfabrika/src/unit/UnitTest.ts",
+      "next/packages/libfabrika/src/unit/Unit.test-support.ts",
+      "packages/fabrika/src/unit/Unit.ts",
+    ];
+
+    const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
+
+    const linted = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([product, tsx, ...off], (path) => [path, planted.text]))),
+    );
+
+    expect(linted(CODE, product)).toEqual(planted.fires);
+    // The same text as a `.tsx` product file fires, so the `.test.tsx` path below is quiet by the config.
+    expect(linted(CODE, tsx)).toEqual(planted.fires);
+
+    for (const path of off) {
+      expect(linted(CODE, path), path).toEqual([]);
+    }
+  }),
+);

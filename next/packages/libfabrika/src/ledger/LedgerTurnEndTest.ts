@@ -10,6 +10,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -34,20 +38,21 @@ const line = (n: number, pad: number): Line =>
       traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
       build: "writer-build",
     },
-    Fact.make({ n, pad: "x".repeat(pad) }),
+    Fact.make({ n, pad: Str.repeat(pad)("x") }),
   );
 
 /** The store's Sql, counting the bytes of the values every query returns while `on` is set. */
 const counted = (sql: Sql) => {
   const state = { on: false, bytes: 0 };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       const rows = sql.exec(query, ...params);
 
       if (state.on) {
         for (const row of rows) {
-          for (const value of Object.values(row)) {
-            state.bytes += typeof value === "string" ? encoder.encode(value).length : 8;
+          for (const value of Rec.values(row)) {
+            state.bytes += Predicate.isString(value) ? encoder.encode(value).length : 8;
           }
         }
       }
@@ -57,10 +62,12 @@ const counted = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, state };
 };
 
 const STREAMS = ["a", "b/inbox", "c/outbox"] as const;
+
 const EMPTY = "never";
 
 /** One append: its stream, an id from a small set so resends and refusals happen, and a body size
@@ -70,7 +77,9 @@ const Append = fc.record({
   id: fc.nat({ max: 5 }),
   pad: fc.oneof(fc.integer({ min: 0, max: 64 }), fc.integer({ min: 4_096, max: 1_024 * 1_024 })),
 });
+
 type Append = typeof Append extends fc.Arbitrary<infer A> ? A : never;
+
 const Log = fc.array(Append, { minLength: 1, maxLength: 24, size: "max" });
 
 export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
@@ -80,9 +89,11 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
       () =>
         Effect.gen(function* () {
           const reached = new Set<string>();
+
           const law = (log: ReadonlyArray<Append>) =>
             Effect.gen(function* () {
               const { sql, state } = counted(yield* open);
+
               const tx = yield* LedgerTransaction.pipe(
                 Effect.provide(
                   LedgerTransactionSql.layer(sql).pipe(
@@ -90,19 +101,23 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                   ),
                 ),
               );
+
               // Bytes one `end` call returns, by stream, for streams that hold entries.
               const sizes: Array<{ readonly stream: string; readonly newest: number; readonly bytes: number }> = [];
+
               // What one turn saw, judged after the turn: a throw inside a turn is the turn's own
               // failure, which the walk would read as a refused append.
               const look = (turn: LedgerTurn, moment: string) =>
-                [...STREAMS, EMPTY].map((stream) => {
+                Arr.map([...STREAMS, EMPTY], (stream) => {
                   const last = [...turn.read(stream, 0)].at(-1);
                   state.bytes = 0;
                   state.on = true;
                   const end = turn.end(stream);
                   state.on = false;
+
                   return { moment, stream, end, last, bytes: state.bytes };
                 });
+
               const judge = (seen: ReadonlyArray<ReturnType<typeof look>[number]>) => {
                 for (const { moment, stream, end, last, bytes } of seen) {
                   expect(end, `${moment}: end(${stream}) is the pos of read's last entry, or none`).toEqual(
@@ -118,6 +133,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                   }
                 }
               };
+
               const pads = new Map<string, number>();
 
               judge(yield* tx.transact((turn) => look(turn, "an empty log")));
@@ -127,12 +143,15 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 const id = `id-${append.id}`;
                 // A reused id keeps its first body, so a resend is the same line and a change is refused.
                 const pad = pads.get(`${stream}/${id}`) ?? append.pad;
+
                 const inside = yield* Effect.exit(
                   tx.transact((turn) => {
                     turn.append(stream, id, line(append.id, append.id % 2 === 0 ? pad : append.pad));
+
                     return look(turn, `inside the turn that appended ${stream}/${id}`);
                   }),
                 );
+
                 reached.add(Exit.isSuccess(inside) ? "appended" : "refused");
 
                 if (Exit.isSuccess(inside)) {
@@ -143,10 +162,10 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 judge(yield* tx.transact((turn) => look(turn, `after ${stream}/${id}`)));
               }
 
-              const least = Math.min(...sizes.map((s) => s.bytes));
-              const most = Math.max(...sizes.map((s) => s.bytes));
-              const big = sizes.some((s) => s.newest > 4_096);
-              const small = sizes.some((s) => s.newest < 4_096);
+              const least = Math.min(...Arr.map(sizes, (s) => s.bytes));
+              const most = Math.max(...Arr.map(sizes, (s) => s.bytes));
+              const big = Arr.some(sizes, (s) => s.newest > 4_096);
+              const small = Arr.some(sizes, (s) => s.newest < 4_096);
 
               if (big && small) {
                 reached.add("both_sizes");
@@ -154,9 +173,13 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
               expect(
                 most - least,
-                `end returns the same bytes whatever the newest body: ${sizes.map((s) => `${s.newest} B -> ${s.bytes}`).join(", ")}`,
+                `end returns the same bytes whatever the newest body: ${Arr.join(
+                  Arr.map(sizes, (s) => `${s.newest} B -> ${s.bytes}`),
+                  ", ",
+                )}`,
               ).toBe(0);
             });
+
           yield* property(Log, law, { numRuns: runsFor({ fast: 5, full: 50 }), endOnFailure: true });
           // An empty walk cannot pass: appends landed, ids were refused, a stream held several
           // entries, and small and large newest bodies were both read past.

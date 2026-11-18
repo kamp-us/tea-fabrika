@@ -40,6 +40,7 @@ export const noEffectRunOutsideEdge: CreateRule = {
     return {
       CallExpression(node) {
         const callee = node.callee;
+
         const name =
           callee.type === "Identifier"
             ? callee.name

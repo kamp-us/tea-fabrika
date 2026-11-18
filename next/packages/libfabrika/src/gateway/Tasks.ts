@@ -1,9 +1,8 @@
 /**
  * Task methods over an authenticated connection, called inside the shared write turn.
- *
- * @stability unstable
  */
 import { Effect, Result, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Task, Result as TaskResult, type Recorded } from "../tasks/Task.ts";
@@ -12,13 +11,19 @@ import { Answer, type Attached } from "../transport/Wire.ts";
 import * as TaskAccess from "./TaskAccess.ts";
 
 const Meta = { sentAt: Schema.String, seen: Rev };
+
 const Take = Schema.Struct({ process: ProcessId, ...Meta });
+
 const Read = Schema.Struct({ process: ProcessId, task: Schema.NonEmptyString });
+
 const Started = Schema.Struct({ ...Read.fields, execution: Schema.NonEmptyString, ...Meta });
+
 const Finish = Schema.Struct({ ...Started.fields, result: TaskResult });
+
 /** `tasks.list` takes nothing: the stream it reads comes from the caller's own key. An empty
  *  `Struct` lets any field through even when strict, so no field at all is a record of nothing. */
 const List = Schema.Record(Schema.String, Schema.Never);
+
 /** `tasks.wait` takes only the rev it waits past, never a stream or a key. */
 const Wait = Schema.Struct({ after: Rev });
 
@@ -49,12 +54,11 @@ const refusal = (attached: typeof Attached.cases.online.Type): string | null =>
  * refused. The stream comes from the authenticated key, never from the params, which hold `after`
  * and nothing else. The gateway parks it outside the write turn, on the path `ledger.wait` takes.
  *
- * @stability unstable
  * @category routing
  */
 export const waitOn = (
   attached: typeof Attached.cases.online.Type,
-  input: unknown,
+  input: Schema.Json | undefined,
 ): Result.Result<{ readonly stream: string; readonly after: Rev }, string> => {
   const refused = refusal(attached);
 
@@ -63,6 +67,7 @@ export const waitOn = (
   }
 
   const decoded = Schema.decodeUnknownResult(Wait, strict)(input);
+
   return Result.isFailure(decoded)
     ? Result.fail("bad_input")
     : Result.succeed({ stream: targetStream(attached.identity.key), after: decoded.success.after });
@@ -77,11 +82,15 @@ const ok = (result: Schema.Json, wake: string | null = null): Routed => ({
  * Routes one task call after fresh authentication inside the Project's shared write turn. A taken
  * finish names its requester to wake; the caller wakes it after the turn and before it answers.
  *
- * @stability unstable
  * @category routing
  */
 export const route = Effect.fn("gateway.tasks")(
-  function* (tasks: Tasks["Service"], attached: typeof Attached.cases.online.Type, method: string, input: unknown) {
+  function* (
+    tasks: Tasks["Service"],
+    attached: typeof Attached.cases.online.Type,
+    method: string,
+    input: Schema.Json | undefined,
+  ) {
     const { identity, has, build, client } = attached;
     const refused = refusal(attached);
 
@@ -96,16 +105,20 @@ export const route = Effect.fn("gateway.tasks")(
 
       // Pointers only: the command stays behind `tasks.take`, the one door work reaches a machine by.
       const listed = yield* tasks.forTarget(identity.key);
-      const pointers = listed.tasks.flatMap(({ state }) =>
+
+      const pointers = Arr.flatMap(listed.tasks, ({ state }) =>
         state._tag === "absent" ? [] : [{ id: state.request.id, process: state.request.process }],
       );
+
       return ok({ tasks: pointers, rev: listed.rev });
     }
 
     const subject = { key: identity.key };
+
     const record = Effect.fnUntraced(function* (task: Task, meta: typeof Take.Type): Effect.fn.Return<Recorded> {
       // `route` is a named `Effect.fn`, so a span is always here: its absence is a defect.
       const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+
       return {
         by: identity.key,
         for: identity.person,
@@ -144,7 +157,7 @@ export const route = Effect.fn("gateway.tasks")(
         return no("not_allowed");
       }
 
-      if (!task.state.request.needs.every((need) => has.includes(need))) {
+      if (!Arr.every(task.state.request.needs, (need) => has.includes(need))) {
         return no("lacks_capability");
       }
 
@@ -153,6 +166,7 @@ export const route = Effect.fn("gateway.tasks")(
         { key: identity.key, connection: client, has, build },
         yield* record(task, params),
       );
+
       return ok(TakeReply.cases.assigned.make({ task: yield* tasks.read(task.state.request.id) }));
     }
 
@@ -165,6 +179,7 @@ export const route = Effect.fn("gateway.tasks")(
 
       const params = decoded.success;
       const task = yield* tasks.read(params.task);
+
       return TaskAccess.owns(task, { ...subject, process: params.process }) ? ok(task) : no("not_allowed");
     }
 
@@ -189,7 +204,7 @@ export const route = Effect.fn("gateway.tasks")(
         return no("not_allowed");
       }
 
-      if (!task.state.request.needs.every((need) => has.includes(need))) {
+      if (!Arr.every(task.state.request.needs, (need) => has.includes(need))) {
         return no("lacks_capability");
       }
 

@@ -251,6 +251,9 @@ def run_box():
             except PermissionError: live.append(p)
         if pid in live or len(live) >= 8: refuse("running slot limit")
         pid.write_text(str(os.getpid()) + "\n")
+    profile = "REVIEW" if step == "review" else "BUILD"
+    os.environ["CODEX_MODEL"] = os.environ["CODEX_" + profile + "_MODEL"]
+    os.environ["CODEX_EFFORT"] = os.environ["CODEX_" + profile + "_EFFORT"]
     run = name + "-" + step + "-" + uuid.uuid4().hex
     started = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
     status, interrupted, runner = 1, [None], [None]
@@ -282,7 +285,7 @@ def run_box():
                     for left in (pathlib.Path(out), events): left.unlink(missing_ok=True)
                     status = status or 1
             ended = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
-            row = call([sys.executable, str(here / "fieldrow.py"), "--step", step, "--started", started, "--ended", ended, "--start", state.get("run-start", state["base"]), "--end", state["run-end"], "--status", str(status), str(events), run, ticket, "done" if status == 0 else "stuck", "runner exit " + str(status)])
+            row = call(["node", str(here / "fieldrow.ts"), "--step", step, "--started", started, "--ended", ended, "--start", state.get("run-start", state["base"]), "--end", state["run-end"], "--status", str(status), str(events), run, ticket, "done" if status == 0 else "stuck", "runner exit " + str(status)])
             if row.returncode:
                 status = status or 1
                 print("stuck run_row_failed", file=sys.stderr)

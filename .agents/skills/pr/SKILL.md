@@ -78,6 +78,7 @@ Three of its six bullets, two of its seven lines of shape and two of its six fil
 | `## Why this change` | The ticket, the plan row, and the decision or note it builds. One or two lines |
 | `## How it works` | The shape in code, for a reader about to open the diff |
 | `## What a reader should know` | What other code or stored data will feel |
+| `## New names` | One line per new name: what the industry calls it, with the source |
 | `## Laws and checks` | The laws by name, what ran, and the loosening check |
 | `## Not in this pull request` | What waits for a later slice, and what was found and left |
 | `## How it looks` | Only for a change to a program's window: the shots |
@@ -106,6 +107,13 @@ one line of checks.
 - **What a reader should know.** New or removed public exports, settings, a stored shape (a fact
   recorded from now on, and whether older rows still read), and anything that makes other code
   change. When there is none, say "Nothing." in one line.
+- **New names.** Each name the diff adds, a type, a service, a function, a file, a setting or a
+  record field, gets one line: the name, what the industry calls it, and a link to a source that
+  says so, such as a maker's docs or `.glossary/TERMS.md`. A name we coined says what it was
+  searched against and why no industry word fits
+  ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md)).
+  `land.ts queue` and `land.ts arm` refuse a pull request whose diff exports a name this part does
+  not name (`.agents/skills/lead/scripts/pr/Names.ts`).
 - **Laws and checks.** Each law by its exact test title, with what it protects in a few words. Then
   what ran, at which head, and what ran it. Say what could not run and why, and what is not known
   yet: a check nobody ran is said as plainly as a green one. Then `loosening.sh`'s output and, when
@@ -117,7 +125,8 @@ one line of checks.
   the head they were taken at. Say what looks broken, empty or wrong in each. The shots are attached
   with `gh`'s `--attach` and never committed
   ([0160](../../../.decisions/0160-pr-shots-are-never-committed.md), and "Show it running" and
-  "Shoot more than one layout" in [AGENTS.md](../../../AGENTS.md#changing-the-product)).
+  "Shoot more than one layout" in
+  [the changing-the-product reference](../guidelines/references/changing-the-product.md)).
 - **Steps.** Keep the table the tooling wrote: step, box, outcome, list dollars, total. One line
   above it says which parts were the pipeline's steps and which were the lead's. Work done by hand
   after the last step (a type fix, a merge of main) gets its own honest line there.

@@ -1,10 +1,8 @@
 /**
  * A task: work a program asks one selected set of hands to do. Its request, the executor that takes
  * it, the checked result and each writer's record, as values only (0095).
- *
- * @stability unstable
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { TraceId } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
 import { ParentText, Rev } from "../Rev.ts";
@@ -17,16 +15,15 @@ const Capability = Text;
 /**
  * Schema for the one supported command. A closed union: no shell text, no caller-chosen executable.
  *
- * @stability unstable
  * @category models
  */
 export const Command = Schema.TaggedUnion({
   git_version: {},
 });
+
 /**
  * The one supported command: `git_version`.
  *
- * @stability unstable
  * @category models
  */
 export type Command = typeof Command.Type;
@@ -34,7 +31,6 @@ export type Command = typeof Command.Type;
 /**
  * The capabilities a command needs: a fact about the command, never a caller's choice.
  *
- * @stability unstable
  * @category models
  */
 export const needs = (command: Command): ReadonlyArray<string> => NEEDS[command._tag];
@@ -45,7 +41,6 @@ const NEEDS: Record<Command["_tag"], ReadonlyArray<string>> = { git_version: ["g
 /**
  * Schema for the checked terminal answer. `unknown` is a crash between start and a saved result.
  *
- * @stability unstable
  * @category models
  */
 export const Result = Schema.TaggedUnion({
@@ -53,11 +48,11 @@ export const Result = Schema.TaggedUnion({
   failed: { reason: Schema.Literals(["unavailable", "spawn_failed", "output_limit"]) },
   unknown: { reason: Schema.Literal("interrupted") },
 });
+
 /**
  * The checked terminal answer: `exited` with a code and version, `failed` with a reason, or
  * `unknown` after a crash between start and a saved result.
  *
- * @stability unstable
  * @category models
  */
 export type Result = typeof Result.Type;
@@ -65,7 +60,6 @@ export type Result = typeof Result.Type;
 /**
  * Schema for what a program asked for, with every fact that exists only when it asked.
  *
- * @stability unstable
  * @category models
  */
 export const Request = Schema.Struct({
@@ -91,10 +85,10 @@ export const Request = Schema.Struct({
   /** Trace correlation, never authority. */
   traceId: TraceId,
 });
+
 /**
  * What a program asked for, with every fact that exists only when it asked.
  *
- * @stability unstable
  * @category models
  */
 export type Request = typeof Request.Type;
@@ -103,7 +97,6 @@ export type Request = typeof Request.Type;
  * Schema for the hands that take a task: their key, the connection they came on, what they
  * advertise and their build.
  *
- * @stability unstable
  * @category models
  */
 export const Executor = Schema.Struct({
@@ -112,11 +105,11 @@ export const Executor = Schema.Struct({
   has: Schema.Array(Capability),
   build: Text,
 });
+
 /**
  * The hands that take a task: their key, the connection they came on, what they advertise and their
  * build.
  *
- * @stability unstable
  * @category models
  */
 export type Executor = typeof Executor.Type;
@@ -125,7 +118,6 @@ export type Executor = typeof Executor.Type;
  * Schema for what a writer says about one call: who, for whom, its own clock, what it had seen, why
  * and its build.
  *
- * @stability unstable
  * @category models
  */
 export const Recorded = Schema.Struct({
@@ -142,11 +134,11 @@ export const Recorded = Schema.Struct({
   connection: Schema.optionalKey(Text),
   has: Schema.optionalKey(Schema.Array(Capability)),
 });
+
 /**
  * What a writer says about one call: who, for whom, its own clock, what it had seen, why and its
  * build.
  *
- * @stability unstable
  * @category models
  */
 export type Recorded = typeof Recorded.Type;
@@ -154,7 +146,6 @@ export type Recorded = typeof Recorded.Type;
 /**
  * Schema for the one execution a take allocated, and who holds it. Not a lease: it never moves.
  *
- * @stability unstable
  * @category models
  */
 export const Assignment = Schema.Struct({ execution: Text, executor: Executor });
@@ -163,7 +154,6 @@ export const Assignment = Schema.Struct({ execution: Text, executor: Executor })
  * Schema for who took a finished task's result: the exact process generation that asked, and the id
  * of the answer letter the result went in.
  *
- * @stability unstable
  * @category models
  */
 export const Collection = Schema.Struct({ process: ProcessId, letter: Text });
@@ -172,7 +162,6 @@ export const Collection = Schema.Struct({ process: ProcessId, letter: Text });
  * Schema for a task's control state: `absent`, `requested`, `assigned`, `started`, `finished` or
  * `collected`. Neither `finished` nor `collected` has a way back to execution.
  *
- * @stability unstable
  * @category models
  */
 export const State = Schema.TaggedUnion({
@@ -183,11 +172,11 @@ export const State = Schema.TaggedUnion({
   finished: { request: Request, assignment: Assignment, result: Result },
   collected: { request: Request, assignment: Assignment, result: Result, collection: Collection },
 });
+
 /**
  * A task's control state: `absent`, `requested`, `assigned`, `started`, `finished` or `collected`.
  * Neither `finished` nor `collected` has a way back to execution.
  *
- * @stability unstable
  * @category models
  */
 export type State = typeof State.Type;
@@ -196,7 +185,6 @@ export type State = typeof State.Type;
  * Schema for one accepted call as the ledger kept it: the writer's record, and where and when it
  * arrived.
  *
- * @stability unstable
  * @category models
  */
 export const Event = Schema.Struct({
@@ -206,10 +194,10 @@ export const Event = Schema.Struct({
   /** The referee's clock, in ms since 1970. */
   arrivedAt: Schema.Int,
 });
+
 /**
  * One accepted call as the ledger kept it: the writer's record, and where and when it arrived.
  *
- * @stability unstable
  * @category models
  */
 export type Event = typeof Event.Type;
@@ -217,14 +205,13 @@ export type Event = typeof Event.Type;
 /**
  * Schema for a task as `read` answers it: its state, and every accepted event in order.
  *
- * @stability unstable
  * @category models
  */
 export const Task = Schema.Struct({ state: State, events: Schema.Array(Event) });
+
 /**
  * A task as `read` answers it: its state, and every accepted event in order.
  *
- * @stability unstable
  * @category models
  */
 export type Task = typeof Task.Type;

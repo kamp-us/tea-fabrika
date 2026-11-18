@@ -2,7 +2,9 @@
 import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, Layer, Match, Schema, Stream } from "effect";
+import * as Formatter from "effect/Formatter";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
@@ -18,14 +20,33 @@ import { ProgramRunner } from "../runtime/Runner.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
 
+/** The rejection a stand-in RPC answers with, as a lost call to another object rejects. */
+class RpcFault extends Schema.TaggedError<RpcFault, { readonly brand: unique symbol }>()("RpcFault", {
+  message: Schema.String,
+}) {}
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+  work: {},
+  work_err: {},
+});
+
 const SEED = 119120;
+
 // Only the platform base class is fake. Every RPC method runs the real programBox.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
 const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
 const NAME = "reply:1";
+
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" });
+
 const Model = Schema.Struct({ replies: Schema.Int, reason: Schema.NullOr(Schema.String) });
-const Msg = Schema.Struct({ type: Schema.Literal("work"), n: Schema.Int });
+
+const Msg = Schema.TaggedStruct("work", { n: Schema.Int });
 
 const work = Cmd.make("work", {
   input: Schema.Struct({ n: Schema.Int }),
@@ -58,8 +79,9 @@ const program = {
 
 const input = fc.record({ n: fc.integer(), letter: fc.uuid() });
 
-const AuditInput = Schema.Struct({ type: Schema.Literal("save"), base: Schema.Int, body: Schema.String });
-const AuditMetadata = Schema.Struct({ type: Schema.Literal("save"), base: Schema.Int });
+const AuditInput = Schema.TaggedStruct("save", { base: Schema.Int, body: Schema.String });
+
+const AuditMetadata = Schema.TaggedStruct("save", { base: Schema.Int });
 
 const auditThrow = (body: string): never => {
   throw new Error(body);
@@ -73,6 +95,7 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
         Effect.scoped(
           Effect.gen(function* () {
             let mode = "ok";
+
             const p = {
               ...program,
               machine: Machine.make({
@@ -88,15 +111,17 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
               audit: {
                 data: AuditMetadata,
                 select: (m: typeof AuditInput.Type) =>
-                  mode === "throw"
-                    ? auditThrow(m.body)
-                    : mode === "output"
-                      ? { type: "save", base: m.body }
-                      : { type: m.type, base: m.base },
+                  Match.value(mode).pipe(
+                    Match.when("throw", () => auditThrow(m.body)),
+                    Match.when("output", () => ({ ...Tag.cases.save.make({}), base: m.body })),
+                    Match.orElse(() => AuditMetadata.make({ base: m.base })),
+                  ),
               },
             };
+
             const Box = programBox(p, "audit-build");
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+
             const remote = workerExecution({
               init: (s) => box.init(s),
               step: (s, m) => box.step(s, m),
@@ -107,6 +132,7 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
               upgrade: (s) => box.upgrade(s),
               audit: (m) => box.audit(m),
             });
+
             let base = 0;
 
             for (const [n, entropy] of tape.entries()) {
@@ -114,22 +140,22 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
               mode = modes[entropy % modes.length]!;
               reached.add(mode);
               const body = `BODY-${entropy}-${n} "/雪\n`;
-              const input = AuditInput.make({ type: "save", base, body });
+              const input = AuditInput.make({ base, body });
               const submitted = mode === "decode" ? { ...input, base: body } : input;
               const raw = yield* Effect.promise(() => box.audit(submitted));
               const answer = yield* Effect.exit(remote.audit(submitted));
               expect(answer._tag).toBe(mode === "ok" ? "Success" : "Failure");
-              const shown = Exit.isFailure(answer) ? Cause.pretty(answer.cause) : JSON.stringify(answer.value);
-              const outputs = [JSON.stringify(raw), String(raw), shown];
+              const shown = Exit.isFailure(answer) ? Cause.pretty(answer.cause) : Formatter.formatJson(answer.value);
+              const outputs = [Formatter.formatJson(raw), String(raw), shown];
 
               for (const output of outputs) {
-                for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+                for (const form of [body, Str.slice(1, -1)(Formatter.formatJson(body)), encodeURIComponent(body)]) {
                   expect(output).not.toContain(form);
                 }
               }
 
               if (mode === "ok") {
-                expect(raw).toEqual({ _tag: "ok", value: { type: "save", base } });
+                expect(raw).toEqual({ _tag: "ok", value: { ...Tag.cases.save.make({}), base } });
                 base++;
               } else if (Exit.isFailure(answer)) {
                 expect(Cause.hasDies(answer.cause)).toBe(false);
@@ -158,6 +184,7 @@ const replyCase = (
   adapter: "node" | "worker" = "worker",
 ) =>
   Effect.gen(function* () {
+    const services = yield* Effect.context<never>();
     const inputId = yield* Id.Generator.use((ids) => ids.next(Id.Input)).pipe(Effect.provide(Id.Generator.layer));
     const db = new DatabaseSync(":memory:");
     // Ticket 402: the brain's process table lives in its own ledger.
@@ -169,6 +196,7 @@ const replyCase = (
       let before: unknown;
       let handlerCalls = 0;
       let replyCalls = 0;
+
       const loaded = yield* ProgramLoader.use((loader) => loader.load(program.name)).pipe(
         Effect.provide(
           ProgramLoader.layer(
@@ -178,6 +206,7 @@ const replyCase = (
                 Effect.sync(() => {
                   handlerCalls++;
                   expect(cmd).toEqual(work({ n }));
+
                   return mode === "refused"
                     ? Outcome.err({ _tag: "disk" })
                     : Outcome.ok(mode === "checked" ? "invalid integer" : n);
@@ -186,10 +215,12 @@ const replyCase = (
           ),
         ),
       );
+
       const node = loaded.execution;
       const Box = programBox(program, "test");
       // Cloudflare owns context construction. The real box never reads it in these calls.
       const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+
       const remote = workerExecution({
         init: (saved) => box.init(saved),
         step: (model, msg) => box.step(model, msg),
@@ -204,7 +235,7 @@ const replyCase = (
           replyCalls++;
 
           if (mode === "rpc" && replyCalls === 1) {
-            return Effect.runPromise(Effect.fail(new Error("reply RPC lost")));
+            return Effect.runPromiseWith(services)(Effect.fail(RpcFault.make({ message: "reply RPC lost" })));
           }
 
           if (mode === "decode" && replyCalls === 1) {
@@ -214,6 +245,7 @@ const replyCase = (
           return box.reply(cmd, outcome);
         },
       });
+
       const execution =
         adapter === "node"
           ? {
@@ -222,14 +254,18 @@ const replyCase = (
                 Effect.suspend(() => {
                   before = checkpoint();
                   replyCalls++;
+
                   return node.reply(cmd, outcome);
                 }),
             }
           : remote;
+
       const ledger = LedgerSql.layer(sql, { reader: PID }).pipe(
         Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
       );
+
       const mail = Mailbox.layer.pipe(Layer.provideMerge(ledger));
+
       const dependencies = Layer.mergeAll(
         ProcessStore.layer(sql, { process: PID }),
         Layer.succeed(Alarm, { set: () => Effect.void }),
@@ -253,6 +289,7 @@ const replyCase = (
           })),
         ),
       ).pipe(Layer.provideMerge(mail));
+
       // Ticket 402: every runner is supervised. The real manager's first start names PID, and
       // receipts live in the same Sql as ProcessStore.
       const manager = Layer.effectDiscard(
@@ -291,27 +328,31 @@ const replyCase = (
           ),
         ),
       );
+
       const layer = ProgramRunner.withLoader(
         { id: PID, name: NAME, program: program.name, build: "test", owner },
         { load: () => Effect.succeed({ ...loaded, execution }) },
         { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, chunk: mailChunk.default },
       ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
+
       yield* Effect.gen(function* () {
         const runner = yield* ProgramRunner;
         const store = yield* ProcessStore;
         const ledger = yield* Ledger;
-        const incoming = Schema.decodeUnknownSync(Incoming)({
+
+        const incoming = yield* Schema.decodeUnknownEffect(Incoming)({
           id: letter,
           envelope: {
             id: inputId,
             by: owner,
             arrivedAt: 1794099600000,
-            input: { type: "work", n },
+            input: { ...Tag.cases.work.make({}), n },
           },
           sentAt: "2026-11-08T00:00:00Z",
           seen: 0,
           span: { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" },
         });
+
         const result = yield* Effect.exit(runner.msg(incoming));
         const rows = yield* Stream.runCollect(ledger.read(`${NAME}/inbox`, 0));
 
@@ -348,7 +389,7 @@ const replyCase = (
           expect(rows).toHaveLength(2);
           expect(rows[1]).toMatchObject({
             id: `${PID}/1/0/answer`,
-            body: { m: { type: "work_err", cmd: work({ n }), reason: reason, error: { _tag: reason } } },
+            body: { m: { ...Tag.cases.work_err.make({}), cmd: work({ n }), reason: reason, error: { _tag: reason } } },
           });
           expect(yield* store.load).toMatchObject({
             saved: { after: rows[1]!.rev, model: { replies: 1, reason } },

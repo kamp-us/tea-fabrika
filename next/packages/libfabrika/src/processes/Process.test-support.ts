@@ -4,9 +4,17 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { afterAll } from "@effect/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -20,8 +28,11 @@ import { ProcessManager } from "./ProcessManager.ts";
 
 // Independently encoded and decoded UUIDv7s: 00000000-0000-7000-8000-000000000000 through ...003.
 export const A = "process_0000000000e008000000000000";
+
 export const B = "process_0000000000e008000000000001";
+
 export const W = "process_0000000000e008000000000002";
+
 export const X = "process_0000000000e008000000000003";
 
 /** A, B, W, X, then 36 more: enough for a world that restarts past the brake or a 32-try limit. */
@@ -30,12 +41,14 @@ export const PIDS: ReadonlyArray<string> = [
   B,
   W,
   X,
-  ...Array.from({ length: 36 }, (_, n) => `process_0000000000e00800${String(n + 4).padStart(10, "0")}`),
+  ...Array.from({ length: 36 }, (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n + 4))}`),
 ];
 
 export const CODE = { program: "counter", hash: "build-a" };
+
 /** The brain's own writer key: the `by` on every process event, and the only one the fold trusts. */
 export const BRAIN = "SHA256:brain";
+
 /** A client's own key: what it asks with, never an event the fold trusts. */
 export const CLIENT = "SHA256:window-a";
 
@@ -72,7 +85,9 @@ export const watcher = (process: string): Caller => ({
  * An error class keeps the 256-character text bound.
  */
 export const ERROR_CLASS_MAX = 256;
+
 const ErrorClass = Schema.NonEmptyString.check(Schema.isMaxLength(ERROR_CLASS_MAX));
+
 export const PHASES = ["step", "saved_letter", "interrupted"] as const;
 
 export const ExitReason = Schema.TaggedUnion({
@@ -81,16 +96,24 @@ export const ExitReason = Schema.TaggedUnion({
   kill: {},
   crashed: { phase: Schema.Literals(PHASES), error: Schema.optionalKey(ErrorClass) },
 });
+
 export type ExitReason = typeof ExitReason.Type;
+
 /** What a DOWN carries: an exit reason, or `noproc` when the target was never live. */
 const NoProc = Schema.TaggedStruct("noproc", {});
+
 export const DownReason = Schema.Union([ExitReason, NoProc]);
 
 export const NORMAL = ExitReason.cases.normal.make({});
+
 export const SHUTDOWN = ExitReason.cases.shutdown.make({});
+
 export const KILL = ExitReason.cases.kill.make({});
+
 export const CRASHED = ExitReason.cases.crashed.make({ phase: "step", error: "Error" });
+
 export const INTERRUPTED = ExitReason.cases.crashed.make({ phase: "interrupted" });
+
 export const NOPROC = NoProc.make({});
 
 /** An error class as a program could throw it: an identifier, from one character to the bound. */
@@ -107,7 +130,7 @@ export const fcExitReason: fc.Arbitrary<ExitReason> = fc.oneof(
         phase: fc.constantFrom(...PHASES),
         error: fc.oneof(
           fcErrorClass,
-          fc.integer({ min: 1, max: ERROR_CLASS_MAX }).map((n) => "E".repeat(n)),
+          fc.integer({ min: 1, max: ERROR_CLASS_MAX }).map((n) => Str.repeat(n)("E")),
         ),
       },
       { requiredKeys: ["phase"] },
@@ -131,23 +154,26 @@ export const fcBadReason = (reason: ExitReason): fc.Arbitrary<unknown> =>
     fc.constant(raw("noproc", reason)),
     fc
       .stringMatching(/^[a-z_]{1,20}$/)
-      .filter((tag) => !Object.hasOwn(ExitReason.cases, tag))
+      .filter((tag) => !Rec.has<string, unknown>(ExitReason.cases, tag))
       .map((tag) => raw(tag, reason)),
     fc.constant(raw("crashed")),
     fc.constant(raw("crashed", { error: "Error" })),
     fc
       .string({ minLength: 1, maxLength: 20 })
-      .filter((phase) => !(PHASES as ReadonlyArray<string>).includes(phase))
+      .filter(
+        // SAFETY: PHASES is a string tuple; widened here only so `includes` can test any generated phase.
+        (phase) => !(PHASES as ReadonlyArray<string>).includes(phase),
+      )
       .map((phase) => raw("crashed", { phase })),
     fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: "" })),
     fc
       .integer({ min: ERROR_CLASS_MAX + 1, max: ERROR_CLASS_MAX + 64 })
-      .chain((n) => fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: "E".repeat(n) }))),
+      .chain((n) => fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: Str.repeat(n)("E") }))),
     fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: 42 })),
   );
 
 /** A raw client value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
-const raw = (tag: string, fields: object = {}): unknown =>
+const raw = (tag: string, fields: object = {}): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
   ({ ...fields, _tag: tag });
 
@@ -157,38 +183,54 @@ export const first = (id = "start:counter:1", name = "counter:1", code = CODE) =
 export const again = (after: string, id = `restart:${after}`, code = CODE) =>
   Start.cases.again.make({ id, name: "counter:1", after, reason: "crashed", code });
 
-const folder = mkdtempSync(join(tmpdir(), "p33-"));
-const opened: Array<DatabaseSync> = [];
+// The temp folder is made on the first `storage()` call, never on import, so a plain test that
+// imports this file for its builders and never calls `storage()` touches no disk (0584).
+let folder: string | null = null;
+
+// A storage opens and reopens its file with plain calls, so each connection is acquired into this
+// one scope, which the file's last hook closes before it removes the folder.
+const stores = Scope.makeUnsafe();
+
 let files = 0;
 
 afterAll(() => {
-  for (const db of opened) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
+  // The connections close first, then the folder goes, if one was made. Closing hundreds of them
+  // may yield, so the hook hands Vitest the run as a Promise.
+  const teardown = Scope.close(stores, Exit.void).pipe(
+    Effect.andThen(
+      Effect.sync(() => {
+        if (folder !== null) {
+          rmSync(folder, { recursive: true, force: true });
+        }
+      }),
+    ),
+  );
 
-  rmSync(folder, { recursive: true, force: true });
+  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest's afterAll hook is a plain callback
+  return Effect.runPromise(teardown);
 });
 
 // A real SQLite file, reopened without manager memory. Faults interrupt real INSERTs.
 export const storage = () => {
+  folder ??= mkdtempSync(join(tmpdir(), "p33-"));
   const path = join(folder, `${++files}.db`);
-  const open = () => {
-    const db = new DatabaseSync(path);
-    // A test process never loses power, so it skips the sync and keeps the rollback journal in memory.
-    // Every byte a law reads stays in the file and survives reopen (ticket 585, decision 0052).
-    db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
-    opened.push(db);
-    return db;
-  };
+
+  // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
+  // journal in memory. Every byte a law reads stays in the file and survives reopen (ticket 585,
+  // decision 0052).
+  const open = () =>
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the suites call storage() and reopen() as plain functions
+    Effect.runSync(Scope.provide(stores)(TestDatabase.make(path)));
+
   let db = open();
   let backend = nodeSql(db);
+
   const fault: { after: number | null; writes: number; error: Error | null } = {
     after: null,
     writes: 0,
     error: null,
   };
+
   const sql: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i.test(query)) {
@@ -202,6 +244,7 @@ export const storage = () => {
 
         const answer = backend.exec(query, ...params);
         fault.writes++;
+
         return answer;
       }
 
@@ -210,8 +253,9 @@ export const storage = () => {
     transaction: (step) => backend.transaction(step),
     size: () => backend.size(),
   };
+
   const rows = (): ReadonlyArray<Entry> => {
-    if (!db.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get()) {
+    if (db.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get() === undefined) {
       return [];
     }
 
@@ -220,6 +264,7 @@ export const storage = () => {
       .all()
       .map((row) => Schema.decodeUnknownSync(Row)(row));
   };
+
   return {
     sql,
     fault,
@@ -234,6 +279,7 @@ export const storage = () => {
 };
 
 export type Storage = ReturnType<typeof storage>;
+
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 export const data = (sql: Sql, bell = quiet) =>
@@ -243,6 +289,7 @@ export const data = (sql: Sql, bell = quiet) =>
 
 export const ids = (...values: ReadonlyArray<string>) => {
   let calls = 0;
+
   return {
     next: Effect.sync(() => {
       const value = values[calls++];

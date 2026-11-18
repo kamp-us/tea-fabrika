@@ -1,7 +1,7 @@
 ---
 id: 0079
 title: A change's size sets how many people must look at it and its governed paths set who, both read from fabrika's own settings and never from the code host, as a trial
-status: amended-in-part by [0082](0082-approvals-is-a-floor-for-every-run.md)
+status: accepted
 date: 2026-11-10
 tags: [risk-tier, review, attention, person, governed, settings, next, trial]
 ---
@@ -27,7 +27,7 @@ flowchart LR
 {
   _tag: "tiered",
   change: "sha256:…",
-  looks: 1,                          // how many people must look: set by size alone
+  looks: 1,                          // how many must look: the human-approvals floor, moved by size
   who: ["owner of .github/"],        // who must be among them: set by governed paths alone
   set: {
     size: { lines: 312, cut: "51 to 400" },
@@ -90,7 +90,9 @@ Related, and not changed by this record:
 must be among them, both read by fabrika from its own settings and never from the code host, as a
 trial (owner, 2026-11-10).**
 
-- **Size sets the count.** A bigger change gets more people's looks.
+- **Size sets the count.** The count starts from the repo's `review.human-approvals` setting, a
+  floor no run goes under ([0082](0082-approvals-is-a-floor-for-every-run.md)), and a bigger change
+  gets more people's looks from there. How size moves it is this trial's.
 - **Governed paths set who.** When a change touches a governed path, an owner of those rules is one
   of the people who look. Touching a governed path does not raise the count by itself.
 - **Both come from fabrika's own settings.** fabrika reads the governed list and its owners from the
@@ -103,7 +105,7 @@ trial (owner, 2026-11-10).**
   its false alarms are measured. 0071 already says a blocking check needs that, and AGENTS.md asks
   about 0% to block and up to 10% to only advise.
 
-**Binding constraints** (0071's, kept as they are):
+**Binding constraints** (the same as 0071's):
 
 - Nothing about the writer feeds the risk tier: not the person, the agent, its model or its past
   record. Size and paths are both read from the change.
@@ -120,10 +122,9 @@ trial (owner, 2026-11-10).**
 - What must be recorded from day one stays as 0071 says. The sketch adds what set the risk tier:
   the size and its cut, and the governed paths it touched.
 - Not decided here:
-  - The size cuts, and the count of people for each cut.
-    *2026-11-10: [0082](0082-approvals-is-a-floor-for-every-run.md) names the base count, the repo
-    setting `approvals`, a floor no run goes under; size moves the count from there.*
-    *2026-11-10, later: 0082's amendment renames that setting `review.human-approvals`.*
+  - The size cuts, and the count of people for each cut. The base count is the repo setting
+    `review.human-approvals`, a floor no run goes under
+    ([0082](0082-approvals-is-a-floor-for-every-run.md)); size moves the count from there.
   - How the settings name a governed path's owners. That is a design for the settings study and
     Tier 1's row P38 ([the Tier 1 plan](../docs/plan/tier-1.md#the-pull-requests-one-at-a-time)).
   - Whether today's `[ship] approval = codeowners` stays as one option.

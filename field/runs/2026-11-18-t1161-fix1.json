@@ -1,0 +1,107 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1161-fix1",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623",
+  "started": "2026-11-18T05:50:00-08:00",
+  "ended": "2026-11-18T06:35:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "fix",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Fix round for the five faults of review 1 of ticket 1161, in today's tooling (.github/, CI serving both versions). After the merge of origin/main (279f97ee0), SC21's read check reads every form of the inputs (a bracket index as a dot, a whole github or github.event as bare name, .* or index, in any case), SC17 holds SCOPE and LAW to exactly the ${{ inputs.scope }} and ${{ inputs.law }} expressions, the law input's description has its plant, P6, P8 to P11 and S9 are it.prop with Schema generators and no seed, and the hand start's values are called inputs (Inputs, inputsOf, the inputs field and record key) in place of ask. proof.test.ts 21 and scheduled.test.ts 313 green with CI=1; pnpm format, pnpm lint, the list ratchet and one pnpm typecheck passed.",
+  "note": "Started time is approximate; usage and cost are not recorded. Model and effort are the requested values. This container has Node 22 where the pin is Node 26, so the two law files ran with CI=1. botpush.mjs cannot read its key here, so each stepcommit.sh push was refused after the commit and a plain git push was used. The merge of origin/main auto-merged to a proof.ts with two bindings named asked (main's listings and our inputsOf); fixed in the merge commit by naming main's reach. The first pnpm typecheck failed on two test lines (Schema.Struct with a _tag, tsgo schemaStructWithTag); the generator now uses Schema.TaggedStruct and the second pnpm typecheck passed. The P12 type law plant ran through one narrow tsc over .github/ci. The coverage checks of the new it.prop laws run in each file's one afterAll, since the vitest/no-duplicate-hooks rule allows one.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "head": "4fea019ab83788a9390192bae7af74f05846b238",
+  "base": "009de85bcf5e7a785bc1e912c6ff970807477f16",
+  "plants": [
+    {
+      "law": "S9 a read of the hand start's inputs anywhere but select's set step is named by SC21, in every form",
+      "plant": "READS_INPUTS's inputs pattern drops its i flag (INPUTS.SCOPE passes)",
+      "result": "red"
+    },
+    {
+      "law": "S9 a read of the hand start's inputs anywhere but select's set step is named by SC21, in every form",
+      "plant": "READS_INPUTS's bare-github pattern drops its i flag (TOJSON(GITHUB) passes)",
+      "result": "red"
+    },
+    {
+      "law": "S9 a read of the hand start's inputs anywhere but select's set step is named by SC21, in every form",
+      "plant": "READS_INPUTS's github.* pattern drops its i flag (TOJSON(GITHUB.*) passes)",
+      "result": "red"
+    },
+    {
+      "law": "S9 a read of the hand start's inputs anywhere but select's set step is named by SC21, in every form",
+      "plant": "READS_INPUTS's github.event pattern drops its i flag (TOJSON(GITHUB.EVENT) passes)",
+      "result": "red"
+    },
+    {
+      "law": "S9 a read of the hand start's inputs anywhere but select's set step is named by SC21, in every form",
+      "plant": "readsInputs is the reviewed head's one regex over the text, with no dot rewrite (toJSON(github.*) and the other new forms pass)",
+      "result": "red"
+    },
+    {
+      "law": "S9 a read of another property of github or of its event is not named by SC21",
+      "plant": "an index with a quoted name is not written as a dot first (github.event['schedule'] reads as the whole github context)",
+      "result": "red"
+    },
+    {
+      "law": "S8 SC21: the law has no description",
+      "plant": "SC21 takes described(law) as true",
+      "result": "red"
+    },
+    {
+      "law": "S10 SC17: SCOPE is the bare text inputs.scope and LAW is the bare text inputs.law",
+      "plant": "SC17 compares SCOPE and LAW through compact alone, as the reviewed head did",
+      "result": "red"
+    },
+    {
+      "law": "P6 the run tests the full set exactly when a rerun trigger is touched or the scope is full",
+      "plant": "choose reads only the triggers",
+      "result": "red"
+    },
+    {
+      "law": "P8 inputsOf accepts exactly changed with no law, and full with a law isLaw holds",
+      "plant": "inputsOf reads a missing SCOPE as changed",
+      "result": "red"
+    },
+    {
+      "law": "P9 a law with a leading dash or whitespace is refused before isLaw is called",
+      "plant": "the dash check is dropped",
+      "result": "red"
+    },
+    {
+      "law": "P10 inProjects asks the lister for exactly the three projects and the path",
+      "plant": "includes becomes a substring match",
+      "result": "red"
+    },
+    {
+      "law": "P11 a full start's summary names its law and says it was chosen by hand",
+      "plant": "summary drops the law",
+      "result": "red"
+    },
+    {
+      "law": "P13 the records keep their keys, inputs among them",
+      "plant": "the full record drops inputs",
+      "result": "red"
+    },
+    {
+      "law": "fault 5 rename: every renamed law in proof.test.ts on the reviewed head's proof.ts",
+      "plant": "proof.ts as at the reviewed head, with no inputsOf and no inputs field",
+      "result": "red"
+    },
+    {
+      "law": "P12 a changed record cannot carry the full inputs (type law)",
+      "plant": "the changed variant's inputs is typed as Inputs (tsc: TS2578, the ts-expect-error line is unused)",
+      "result": "red"
+    }
+  ]
+}

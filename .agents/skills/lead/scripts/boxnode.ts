@@ -10,10 +10,10 @@
 // had to write `volta run --node 26.13.0` (field note 2026-11-10-22). So the agents start with two
 // folders first on that PATH: the pinned Node's own `bin`, found through `volta run --node <pin>`
 // with the pin read from the repo's root package.json (`repoNode`), and pnpm's own `bin`, found
-// with `volta which pnpm`. That pnpm starts `#!/usr/bin/env node`, so it runs on the pinned Node,
-// and so does every command it starts. The box opens both folders, as the toolchain of what is
-// first on its PATH (`toolchain`), and drops Volta's shim folder from it: a brief writes a plain
-// `node` and `pnpm`.
+// with `volta which pnpm`. pnpm may be native or start through `#!/usr/bin/env node`; its own bin
+// bypasses Volta's package shim, and the Node bin supplies its children. The box opens both folders
+// as the toolchain of what is first on its PATH (`toolchain`), and drops Volta's shim folder from
+// it: a brief writes a plain `node` and `pnpm`.
 //
 // With no Volta, no pin or an answer that is not the pin, the PATH stays as it is, and one line on
 // stderr says why. A PATH here is split on `:`; this tooling runs on macOS and Linux only.
@@ -24,15 +24,15 @@
 // shell is never a login shell (the `codex-exec` rows), and `NODE_PROBE` asks the box's own shell which
 // Node it finds before a step starts: `holdsPin` reads the answer.
 
-import { layer as nodeServices } from "@effect/platform-node/NodeServices";
-import { Effect, FileSystem, Option, Schema } from "effect";
+import { String as Str, pipe, Option, Array as Arr, Effect, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 /** The repo's Node: the root package.json's `volta.node`, else its `engines.node`; `null` when neither. */
 export const repoNode = Effect.fn("boxnode.repoNode")(function* (dir: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(`${dir}/package.json`).pipe(Effect.orElseSucceed(() => ""));
-  const pinned = Schema.decodeUnknownOption(Schema.fromJsonString(Pins))(text);
+  const pinned = Schema.decodeOption(Schema.fromJsonString(Pins))(text);
+
   return Option.isNone(pinned) ? null : (pinned.value.volta?.node ?? pinned.value.engines?.node ?? null);
 });
 
@@ -46,15 +46,17 @@ const Pins = Schema.Struct({
 
 /** `path` with `dirs` first, in their order, and each of them gone from the rest. */
 export const firstOnPath = (path: string, dirs: readonly string[]): string => {
-  const front = [...new Set(dirs.filter((dir) => dir !== ""))];
-  const rest = path.split(":").filter((dir) => dir !== "" && !front.includes(dir));
-  return [...front, ...rest].join(":");
+  const front = [...new Set(Arr.filter(dirs, (dir) => dir !== ""))];
+  const rest = Arr.filter(pipe(path, Str.split(":")), (dir) => dir !== "" && !front.includes(dir));
+
+  return Arr.join([...front, ...rest], ":");
 };
 
 /** The folder above a program's absolute path, or `null` for a path that is not one. */
 const holder = (program: string): string | null => {
-  const at = program.lastIndexOf("/");
-  return program.startsWith("/") && at > 0 ? program.slice(0, at) : null;
+  const at = Option.getOrElse(pipe(program, Str.lastIndexOf("/")), () => -1);
+
+  return pipe(program, Str.startsWith("/")) && at > 0 ? pipe(program, Str.slice(0, at)) : null;
 };
 
 /**
@@ -62,8 +64,9 @@ const holder = (program: string): string | null => {
  * `process.execPath`, then its `process.version`. `null` unless that version is the pin.
  */
 export const pinnedBin = (said: string, pin: string): string | null => {
-  const [execPath = "", version = ""] = said.trim().split("\n");
-  return version.trim() === `v${pin}` && execPath.endsWith("/node") ? holder(execPath.trim()) : null;
+  const [execPath = "", version = ""] = pipe(Str.trim(said), Str.split("\n"));
+
+  return Str.trim(version) === `v${pin}` && pipe(execPath, Str.endsWith("/node")) ? holder(Str.trim(execPath)) : null;
 };
 
 /**
@@ -71,9 +74,10 @@ export const pinnedBin = (said: string, pin: string): string | null => {
  * anything else, a Volta shim folder (`.volta/bin`) included, since the shim picks its own Node.
  */
 export const pnpmBin = (said: string): string | null => {
-  const program = said.trim();
-  const dir = program.includes("\n") || !program.endsWith("/pnpm") ? null : holder(program);
-  return dir === null || dir.endsWith("/.volta/bin") ? null : dir;
+  const program = Str.trim(said);
+  const dir = pipe(program, Str.includes("\n")) || !pipe(program, Str.endsWith("/pnpm")) ? null : holder(program);
+
+  return dir === null || pipe(dir, Str.endsWith("/.volta/bin")) ? null : dir;
 };
 
 /** What a box's shell runs to show its Node: the bare `node`, then the one `pnpm exec` finds. */
@@ -81,8 +85,9 @@ export const NODE_PROBE = "node -v; pnpm exec node -v";
 
 /** Whether `NODE_PROBE` printed the pin on both lines, and nothing else: no line, no Node. */
 export const holdsPin = (said: string, pin: string): boolean => {
-  const lines = said.trim().split("\n");
-  return lines.length === 2 && lines.every((line) => line.trim() === `v${pin}`);
+  const lines = pipe(Str.trim(said), Str.split("\n"));
+
+  return lines.length === 2 && Arr.every(lines, (line) => Str.trim(line) === `v${pin}`);
 };
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -91,16 +96,21 @@ type Env = Readonly<Record<string, string | undefined>>;
 const said = (cwd: string, command: string, args: readonly string[]) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    return yield* spawner.string(ChildProcess.make(command, args, { cwd, extendEnv: true, stdin: "ignore" }));
+
+    return yield* spawner.string(
+      ChildProcess.make(command, args, { cwd, extendEnv: true, stdin: "ignore", forceKillAfter: "10 seconds" }),
+    );
   }).pipe(Effect.orElseSucceed(() => ""));
 
-/** `parent` with the pinned Node's and pnpm's own folders first on its PATH (see the top). */
-export const boxEnv = (main: string, parent: Env) =>
+/** `parent` with the requested Node's and pnpm's bins first; defaults to the root manifest's pin. */
+export const boxEnv = (main: string, parent: Env, requested?: string) =>
   Effect.gen(function* () {
-    const pin = yield* repoNode(main);
+    const pin = requested ?? (yield* repoNode(main));
+
     const keep = (reason: string) =>
       Effect.sync(() => {
         console.error(`boxnode: ${reason}, so a box keeps the host's PATH as it is`);
+
         return parent;
       });
 
@@ -118,5 +128,6 @@ export const boxEnv = (main: string, parent: Env) =>
     }
 
     const pnpm = pnpmBin(yield* said(main, "volta", ["which", "pnpm"]));
+
     return { ...parent, PATH: firstOnPath(parent.PATH ?? "", pnpm === null ? [node] : [node, pnpm]) };
-  }).pipe(Effect.provide(nodeServices));
+  });

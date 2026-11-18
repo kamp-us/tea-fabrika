@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e77-build",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T21:15:31-08:00",
+  "ended": "2026-11-15T21:44:26-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Build step for judgment slice E77 (preferEffectArray in app:src, lib:telemetry and lib:gateway), in next/, after the tests step's row 2026-11-16-effect-e77-tests. The owner's rulings for judgment slices hold: code fixes only, no lock line, no tsconfig overrides entry, no LOCKED row, and no pull request (an integrator folds the branch later). The 40 product hits the tests step left, in 9 files, are fixed by hand edits; none was left. Every fix keeps what the code answers. The two finds in gateway/internal/waiting.ts (knock and leave) became Arr.findFirst with the Option followed in place: Option.isSome / Option.isNone guards the branch and the row is read from found.value, so no undefined is left to compare; both stay inside the machine's update, so no caller outside the file changes. The rest are one-for-one rewrites: map, filter, flatMap, every, some, join and one reduce with its initial value first, as Arr.reduce takes it. The 48 hits in pull request 1366's files were not touched and wait on it.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 29,
+  "report": "preferEffectArray, product files of E77's folders: 40 hits met, fixed by the checker's quick fix 0 (the check offers none), by a codemod 0, by hand edits 40, left 0. Per file: next/apps/fabrika/src/build.ts 3 (filter 2, map 1); next/apps/fabrika/src/local-instance.ts 1 (some); next/packages/libfabrika/src/gateway/TaskAccess.ts 1 (filter); gateway/Tasks.ts 3 (flatMap 1, every 2); gateway/internal/waiting.ts 10 (map 4, filter 4, find 2 to Arr.findFirst with Option guards); telemetry/Archive.ts 1 (join); telemetry/Records.ts 6 (map 3, filter 3); telemetry/Trace.ts 1 (flatMap); telemetry/internal/measurements.ts 14 (map 9, flatMap 2, filter 1, reduce 1, join 1). Each file gained the import Array as Arr (and waiting.ts Option) in its existing effect import line. Waiting on 1366, 48 hits, untouched: next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts 28, next/apps/fabrika/src/local-instance.integration.test.ts 2 (lines 30, 159), next/packages/libfabrika/src/gateway/Gateway.ts 7 (lines 79, 83, 729, 866, 1048, 1049, 1295), next/packages/libfabrika/src/telemetry/Sink.ts 11 (lines 132, 235, 236, 245, 250, 255, 279, 284, 526, 549, 574). Recount with effect-tsgo diagnostics, only preferEffectArray at error through --lspconfig, over the libfabrika and app tsconfigs: E77's folders (app:src without src/exam, which is E28's, plus gateway and telemetry) hold 48, all in the 1366 files, and 0 elsewhere; the whole app plus libfabrika fell from 4192 to 4152, exactly the 40 fixed. No new hit appeared, the native sort kept after Arr.map in measurements.ts summarize included.",
+  "note": "Checks at the tree committed on top of 36b5ff2 (merge base with main 37db01a): pnpm format; tsc --noEmit -p . in next/packages/libfabrika and next/apps/fabrika, both clean; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passes; ratchet.ts --base 37db01a exits 0; one pnpm typecheck passes; loosening.sh 36b5ff2 HEAD shows 0 hits. Narrow laws, one file at a time, all green: gateway/internal/waiting.test.ts, gateway/TaskAccess.test.ts, node/gateway/Tasks.integration.test.ts, gateway/GatewayRevocation.integration.test.ts, telemetry/Records.integration.test.ts, telemetry/Sink.integration.test.ts, telemetry/internal/measurements.integration.test.ts, telemetry/internal/sums.test.ts, telemetry/internal/sink.test.ts, telemetry/P12Readers.laws.test.ts, telemetry/Trace.types.test.ts, telemetry/ErrorCause.test.ts, ledger/TraceId.test.ts, cloudflare/connection.test.ts, access/Authorization.integration.test.ts, processes/ProcessSpans.integration.test.ts (all under next/packages/libfabrika/src), and next/apps/fabrika/src build.integration, door.integration, door-spans, door-recovery.integration and local-instance.integration (its process.kill is a spy; no real signal). vitest --changed origin/main covered 213 files: 203 passed, 10 failed with 23 tests, all from this box, not the change: 17 from spawn ssh-keygen ENOENT (instance-wire.integration and visual suites) and the rest because Playwright's Chromium headless shell is not installed. The --changed run reached 9 .visual. files under next/apps/fabrika/e2e, which the step rules say not to run; they failed at browser launch, so no browser started. Those and the 19 integration files that start workerd or send signals run on CI.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/gateway/internal/waiting.test.ts, P10 waiting rows",
+      "plant": "gateway/internal/waiting.ts leave: the guard Option.isNone(found) turned into Option.isSome(found)",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/telemetry/internal/measurements.integration.test.ts, archive laws",
+      "plant": "telemetry/internal/measurements.ts due: the Arr.reduce for last takes Math.min in place of Math.max",
+      "result": "red"
+    }
+  ],
+  "step": "build"
+}

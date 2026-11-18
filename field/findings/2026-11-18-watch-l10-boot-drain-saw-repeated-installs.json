@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-watch-l10-boot-drain-saw-repeated-installs",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": null,
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts",
+    "line": 956
+  },
+  "says": "The next/ watcher law L10 assumes exactly one install per program at boot, but the real watcher may rebuild unchanged bytes on repeated Rolldown notifications, so its boot drain saw each program's boot install followed by three watch installs and failed; the same law also failed once with no install inside its 3 s quiet window.",
+  "proof": "Cloud box, Linux, Node 26.13.0, FABRIKA_TEST_DEPTH=full nice -n 15 pnpm exec vitest run --project next-integration --maxWorkers=1 on the watcher law file at 85246a120286b74ab8404739bc9a6694667d1dcc with no plant. Run 2 of a repeat series: L10 property failed after 4 tests, seed 119120, path 3, at line 956: expected [[p15/one, boot], [p15/two, boot]], received each program's boot install plus three watch installs. Run 3: L10 failed after 9 tests, seed 119120, path 8, at line 956: expected the two boot installs, received [] within the 3000 ms drain; that run's worker was then killed by the kernel's memory limit. Both runs overlapped a concurrent pnpm lint (tsgo, code-graph, oxlint) on the same 4-CPU, 16 GB box. Run 1, the baseline and the whole-file restore run passed L10 on an idle box, and so did 12 more idle runs at the merged head 47b4d13409ffe6187624942dc5fc849d8057200a (259.7 to 264.1 s each), so the failure needs load to show. L10 is unchanged by PR 1542.",
+  "cost": "L10 can go red on scheduled CI or a busy machine for a file-event timing reason, not a broken watcher, and the drain-for-quiet pattern cannot tell a late repeat from a missing install. It shares the cause PR 1542 fixed in the save-driven L17/L18 law: one install assumed per notification.",
+  "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+  "ticket": "kamp-us/tea-fabrika#1122",
+  "pr": "kamp-us/tea-fabrika#1542"
+}

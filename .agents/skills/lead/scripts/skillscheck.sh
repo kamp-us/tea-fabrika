@@ -16,7 +16,7 @@ bad = []
 # No spelling aliases or legacy phrase list. Source: approved skills-friction plan, Amendment 1,
 # required clauses. K20's source is the dated addition to five-steps-for-every-check.md.
 leak = "leakgrep.sh checks added text; private words stay outside the repo."
-caps = "The test config and typecheck.sh hold worker, home and typecheck limits."
+caps = "The test config and typecheck.ts hold worker, home and typecheck limits."
 outside = "Something wrong that your task does not cover is one finding row with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole."
 effect = "For a new property, use @effect/vitest's it.prop or it.effect.prop with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases."
 clauses = [

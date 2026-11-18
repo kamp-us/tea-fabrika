@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-lint-dead-test-support-review3",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-16T00:30:59-08:00",
+  "ended": "2026-11-16T00:35:08-08:00",
+  "parent": "2026-11-16-lint-dead-test-support-tests3",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of fix round 2 for lead tooling slice lint-dead-test-support, head aa022685b392a8a98bde0f04a6b783fd276e953b: the round-2 fault is fixed, nothing else is open on this round; review1's class 1 (an export of a .test-support.ts file that nothing uses is withheld, loosening 0006) still waits on the owner and is not judged here. Segment in next/apps/fabrika/src/exam/unreachable.integration.test.ts now rejects NEVER_JUDGED: index (isBarrel, dist/index.js:8310) and the union of WALK_PRUNE (dist/chunk-HQJ7I5LA.js:365-376) and EXCLUDED_SEGMENTS (chunk-HQJ7I5LA.js:432, read by isSourceFile at 435). I checked both lists against the installed source and the set matches them exactly. The fix agent is right that the list I cited in round 2 (index.js:10778) belongs to checkDirectory, which only checkLayout calls (index.js:10782-10795); I withdraw that citation. The fault stands on the chunk file's lists, which hold the same names, and my round-2 plants (law 2's tree at base index, or under next/dist or next/vendor, reports no dead export) still show it. The pattern ^[a-z][a-z0-9]{0,6}$ can draw only index, dist and vendor from the set, and all three are now rejected. The fix row records three plants that each turned law 2 red.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at aa02268: nice -n 15 pnpm exec vitest run --maxWorkers=3 on next/apps/fabrika/src/exam/unreachable.integration.test.ts and next/apps/fabrika/src/exam/node-kinds.test.ts: 2 files, 4 tests passed, at the fast depth. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint:dead: exit 0, 'PASS, 3 recorded finding(s), none new'; unreachable-ledger.json md5 unchanged, no prune. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: exit 0, 18 parts passed. loosening.sh 701a651..HEAD: the same one hit, 'node-kinds.json: unrecognized change: line 7', which is class 1 and waits on the owner. No new plant run this round: the change is one filter, checked by reading against the two lists in the installed code-graph.",
+  "step": "review"
+}

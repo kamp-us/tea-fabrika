@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-error-cause-audit-lines-point-elsewhere",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "next/packages/libfabrika/src/telemetry/ErrorCause.test.ts",
+    "line": 3
+  },
+  "says": "The error-cause laws' comments cite lines in Webauthn.ts and Archive.ts that now hold other code: transport/ErrorCause.test.ts:3 and :237 cite Webauthn.ts:176, and telemetry/ErrorCause.test.ts:3, :4, :142, :188 and :205 cite Archive.ts:21, :58 and :68. These were already wrong on both parents of the mock fold's main merge; the merge's own drift, in transport/ErrorCause.types.test.ts and transport/ErrorCause.test.ts, was fixed on the branch.",
+  "proof": "On fabrikalfa/mock-fold-1, grep -n 'catch: (cause) => BadAssertion' next/packages/libfabrika/src/transport/Webauthn.ts prints 276, and line 176 is a closing brace. grep -n 'const fail|mapError' next/packages/libfabrika/src/telemetry/Archive.ts prints 47 (the digest's fail), 100 (the R2 call's fail) and 113 (the head decode's mapError), while lines 21 and 68 are doc comments and 58 is decodeHead.",
+  "cost": "A reader who plants a break at the cited line edits the wrong code, so the plant would not hit what the comment means until the numbers become Webauthn.ts:276 and Archive.ts:47, :100 and :113.",
+  "head": "798654945025524820f59a037ac2600714de6d46",
+  "ticket": "1067",
+  "pr": "kamp-us/tea-fabrika#1526"
+}

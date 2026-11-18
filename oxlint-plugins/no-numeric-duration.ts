@@ -24,6 +24,7 @@
 // A genuine exception is a per-line
 // `// oxlint-disable-next-line fabrika/no-numeric-duration -- <reason>`.
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { grouped, type Node, plainCall } from "./match.ts";
 
 /** For each API, by its number of arguments, which argument is the duration. */
@@ -37,7 +38,7 @@ const POSITION: Readonly<Record<string, Readonly<Record<number, number>>>> = {
   "Schedule.exponential": { 1: 0, 2: 0 },
 };
 
-const isNumber = (node: Node): boolean => node.type === "Literal" && typeof node.value === "number";
+const isNumber = (node: Node): boolean => node.type === "Literal" && Predicate.isNumber(node.value);
 
 export const noNumericDuration: CreateRule = {
   create(context) {

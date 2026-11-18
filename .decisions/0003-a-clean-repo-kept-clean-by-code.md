@@ -1,7 +1,7 @@
 ---
 id: 0003
 title: The repo is cut down to what today's app needs, then lint and format checks keep it clean, never discipline
-status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
+status: accepted
 date: 2026-11-09
 tags: [cleanup, lint, format, repo]
 ---
@@ -14,6 +14,10 @@ tags: [cleanup, lint, format, repo]
 
 The repo has grown many folders, drafts and old parts. A rule that asks every agent to keep it tidy
 is a rule nobody can check, so the mess comes back.
+
+[0525](0525-todays-version-is-frozen.md) dropped "today's app passes its tests" as a goal, since it
+removed those tests, and [0533](0533-today-keeps-its-tests-off-ci.md) put them back: they stay in the
+repo and run on the laptop, not in CI.
 
 ## Decision
 

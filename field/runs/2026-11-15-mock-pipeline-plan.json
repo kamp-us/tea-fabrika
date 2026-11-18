@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-pipeline-plan",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-15T20:31:11-08:00",
+  "ended": "2026-11-15T20:39:02-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for the mock sweep in next/programs/pipeline (docs/plan/quests/mock-pipeline-PLAN.md), a later slice of the Recorder plan. Counted on main: 0 vi.fn, 0 toHaveBeenCalled*, 1 vi.spyOn (the S2 secrets law's console spy in QueueRunnerTest.ts), and the hand call log CodeHostTest.Control.calls read 7 times by the two runner suites. The spy moves to Effect's TestConsole; CodeHostTest.layer builds on Recorder.layer inside Layer.unwrap and keeps its fault queue; the suites read h.host.calls(method). The lock is vitest/no-restricted-vi-methods at error in a new .oxlintrc.json block for the folder, with a plant law beside the Reflect ban's L1. All files are owned by the tests step; no product line changes.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "A scratch oxlint 1.90.0 run in the scratchpad showed the rule refuses vi.spyOn, a renamed vi import, vi[\"spyOn\"] and vi.fn, and misses a namespace import of vitest and a destructured vi. TestConsole reads back only log and error lines; Effect's loggers write only those two. One open question: tea 0.25.0's own console.warn calls reach the global console, past TestConsole. No test ran: the plan step only reads. The model is left out of this row on purpose.",
+  "step": "plan"
+}

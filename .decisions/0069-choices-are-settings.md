@@ -113,9 +113,10 @@ today's version.**
 
 **Binding constraints:**
 
-- Every limit of [one fabrika.toml per repo](../docs/direction/one-fabrika-toml-per-repo.md) still
-  holds: an empty file changes nothing, an unknown key fails, a value out of range fails and names
-  the key, the step order stays in code, and a run copies its settings when it is filed.
+- A setting keeps every limit of
+  [one fabrika.toml per repo](../docs/direction/one-fabrika-toml-per-repo.md): an empty file changes
+  nothing, an unknown key fails, a value out of range fails and names the key, the step order stays
+  in code, and a run copies its settings when it is filed.
 - No machine reads the file. The file is read once at the edge, and each machine is handed its
   values, as that note says.
 - A setting has exactly one default, in its `Config`, so the code, the test and the person never

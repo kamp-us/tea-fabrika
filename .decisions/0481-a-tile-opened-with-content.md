@@ -1,7 +1,7 @@
 ---
 id: 0481
 title: A tile opened with content takes half the focused tile's share after it, folding its row's others under 220px, and takes focus on the same selection
-status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
+status: accepted
 date: 2026-11-02
 tags: [ui, tiles, focus, inbox, today]
 ---
@@ -9,7 +9,7 @@ tags: [ui, tiles, focus, inbox, today]
 # 0481: A tile opened with content takes half the focused tile's share after it, folding its row's others under 220px, and takes focus on the same selection
 
 **What this decides:** where a tile lands when a program opens it with content, and where focus
-goes, in today's app first.
+goes, in `next/`.
 
 ## Context
 
