@@ -109,10 +109,9 @@ const experiment = (path) => path.startsWith("experiments/") && !read.some((fold
  * promise checks and its e2e run on no event (0525, 0533). A file that reruns every test, such as
  * the lockfile or a root config, is not one.
  * @param {string} path
- * @param {readonly string[]} shown
  */
-const todays = (path, shown) =>
-  (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path, shown);
+const todays = (path) =>
+  (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path, []);
 
 /**
  * An event whose jobs follow its changed paths, because it can read them: a pull request, a merge
@@ -230,7 +229,7 @@ export const classify = (paths, event, _proven = [], shown = []) => {
     return { ...all };
   }
 
-  const touched = paths.some((path) => todays(path, shown));
+  const touched = paths.some(todays);
 
   if (paths.some(reads)) {
     return { ...all, field: paths.some(rows), build: touched };
@@ -340,7 +339,7 @@ const linguist = /^[-!]?linguist-[a-z-]+(?:=\S+)?$/;
 
 /**
  * A `.gitattributes` line that changes nothing a job reads: blank, a comment, or a pattern whose
- * attributes are all `linguist-*`. A quoted pattern with a space splits into words that are no
+ * attributes are all `linguist-*`. A macro definition (`[attr]name ...`) is never one. A quoted pattern with a space splits into words that are no
  * attribute, so it reads as a change that matters.
  * @param {string} line
  */
@@ -351,16 +350,45 @@ const display = (line) => {
     return true;
   }
 
+  // A macro line defines or redefines a name that other lines then use.
+  if (text.startsWith("[attr]")) {
+    return false;
+  }
+
   const [, ...words] = text.split(/\s+/);
 
   return words.length > 0 && words.every((word) => linguist.test(word));
 };
 
 /**
+ * Whether the attributes file at `rev` defines a macro, or git cannot say. A macro makes any
+ * `linguist-*` word on a line a possible alias for `eol` or `text`, so a file that has one is never
+ * proven.
+ * @param {string} rev
+ * @param {Runner} run
+ */
+const defines = (rev, run) => {
+  const listed = run(["ls-tree", "--name-only", rev, "--", attributes]);
+
+  if (listed.status !== 0 || typeof listed.stdout !== "string") {
+    return true;
+  }
+
+  if (listed.stdout.trim() === "") {
+    return false;
+  }
+
+  const shown = run(["show", `${rev}:${attributes}`]);
+
+  return shown.status !== 0 || typeof shown.stdout !== "string" || /^\s*\[attr\]/m.test(shown.stdout);
+};
+
+/**
  * The changed paths that only change how GitHub shows a diff: today the root `.gitattributes`, when
  * every added and removed line, from `git diff -U0`, is blank, a comment or `linguist-*` attributes
  * (checked-in `eol`, `text`, `filter` and `diff` change the bytes tests read, so any other attribute
- * keeps the file loud). Any doubt is none: a diff git cannot read, or a binary one.
+ * keeps the file loud), and neither version of the file defines a macro. Any doubt is none: a diff
+ * git cannot read, or a binary one.
  * @param {string} from
  * @param {string} head
  * @param {readonly string[] | null} paths
@@ -368,7 +396,7 @@ const display = (line) => {
  * @returns {string[]}
  */
 export const displayOnly = (from, head, paths, run) => {
-  if (paths === null || !paths.includes(attributes)) {
+  if (paths === null || !paths.includes(attributes) || defines(from, run) || defines(head, run)) {
     return [];
   }
 
@@ -851,6 +879,11 @@ export const outputs = async ({
   // "true" runs the full set, so a value we cannot read never skips a job.
   const from = start(base, head, event, run);
   const shown = from === null ? [] : displayOnly(from, head, paths, run);
+
+  if (!same && shown.length > 0) {
+    note(`${shown.join(", ")} changes only how GitHub shows a diff, so no heavy job reads it`);
+  }
+
   const changed = jobs(paths, event, env["DRAFT"] === "true", [], shown);
   const first = scope(paths, event, [], shown);
 

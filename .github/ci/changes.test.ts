@@ -2078,7 +2078,8 @@ it("property: a green historical partial run cannot skip the new automatic proje
 
 // A change to .gitattributes that only edits `linguist-*` attributes changes how GitHub shows a diff
 // and no byte any job reads, so it runs only what Markdown runs. `eol`, `text`, `filter` and `diff`
-// change checked-out bytes, so any other line keeps every job on.
+// change checked-out bytes, so any other line keeps every job on, and so does a macro: a name
+// defined with `[attr]` can stand for any attribute, even one that looks like linguist's.
 const attributesDiff = (...lines: string[]) =>
   [
     "diff --git a/.gitattributes b/.gitattributes",
@@ -2088,8 +2089,22 @@ const attributesDiff = (...lines: string[]) =>
     ...lines,
   ].join("\n");
 
-const attributesJobs = async (event: string, diff: string, paths: readonly string[] = [".gitattributes"]) => {
-  const printed = await ci.outputs({ same: false, env: envOf(event, false), run: git(paths, diff) });
+/** A fake git that also serves the attributes file at the run's base and at its head. */
+const attributesGit =
+  (diff: string, base: string | null, head: string | null): Runner =>
+  (args) => {
+    const rev = args[0] === "ls-tree" ? args[3] : args[0] === "show" ? args[1]?.split(":")[0] : undefined;
+    const text = rev === sha.head ? head : base;
+
+    if (args[0] === "ls-tree") {
+      return { status: 0, stdout: text === null ? "" : ".gitattributes\n" };
+    }
+
+    return args[0] === "show" ? { status: 0, stdout: text ?? "" } : git([".gitattributes"], diff)(args);
+  };
+
+const attributesJobs = async (event: string, diff: string, base: string | null = "", head: string | null = "") => {
+  const printed = await ci.outputs({ same: false, env: envOf(event, false), run: attributesGit(diff, base, head) });
 
   return { check: printed["check"], typecheck: printed["typecheck"], next: printed["next"], build: printed["build"] };
 };
@@ -2099,58 +2114,186 @@ const fullRun = { check: "true", typecheck: "true", next: "true", build: "false"
 
 const quietRun = { check: "false", typecheck: "false", next: "false", build: "false" };
 
-it("scenario: a .gitattributes edit of only linguist attributes, comments or blank lines runs no heavy job", async () => {
-  for (const event of ["pull_request", "merge_group", "push"]) {
-    for (const lines of [
-      ["+field/** linguist-generated=true"],
-      ["-field/** linguist-generated=true", "+field/** linguist-generated=true linguist-vendored"],
-      ["+docs/** -linguist-detectable !linguist-language"],
-      ["+# the field rows are generated", "+"],
-      ["-# old comment", "-   "],
-    ]) {
-      expect(await attributesJobs(event, attributesDiff(...lines)), `${event} ${lines.join(" | ")}`).toEqual(quietRun);
-    }
-  }
+// Git's attribute grammar: a pattern, then words that each set (`name`), unset (`-name`), leave
+// unspecified (`!name`) or give a value to (`name=value`) one attribute.
+const pattern = fc.oneof(
+  word.map((s) => `${s}/**`),
+  word.map((s) => `*.${s}`),
+  word.map((s) => `docs/${s}`),
+);
+
+const linguistName = fc
+  .constantFrom("generated", "vendored", "documentation", "detectable", "language")
+  .map((name) => `linguist-${name}`);
+
+const otherName = fc.constantFrom("text", "eol", "filter", "diff", "merge", "binary", "ident", "export-ignore");
+
+const forms = (name: fc.Arbitrary<string>) =>
+  fc
+    .tuple(name, fc.constantFrom("", "-", "!", "="), word)
+    .map(([n, mark, value]) => (mark === "=" ? `${n}=${value}` : `${mark}${n}`));
+
+const gap = fc.constantFrom(" ", "  ", "\t");
+
+const attributeLine = (attributes: fc.Arbitrary<string[]>) =>
+  fc.tuple(pattern, gap, attributes).map(([p, sep, list]) => `${p}${sep}${list.join(sep)}`);
+
+const linguistWords = fc.array(forms(linguistName), { minLength: 1, maxLength: 3 });
+
+/** A line no job can feel: only linguist attributes, a comment, or blank. */
+const quietLine = fc.oneof(
+  attributeLine(linguistWords),
+  word.map((s) => `# ${s}`),
+  fc.constantFrom("", "  ", "\t"),
+);
+
+/** A line that can change a checked-out byte: another attribute, alone or with linguist ones, or a macro. */
+const loudLine = fc.oneof(
+  attributeLine(
+    fc
+      .tuple(linguistWords, forms(otherName), fc.nat(3))
+      .map(([lingo, other, at]) => lingo.toSpliced(Math.min(at, lingo.length), 0, other)),
+  ),
+  attributeLine(fc.array(forms(otherName), { minLength: 1, maxLength: 3 })),
+  fc
+    .tuple(word, fc.array(fc.oneof(forms(linguistName), forms(otherName)), { minLength: 1, maxLength: 3 }))
+    .map(([name, list]) => `[attr]${name} ${list.join(" ")}`),
+);
+
+const mark = fc.constantFrom("+", "-");
+
+const edit = (line: fc.Arbitrary<string>) => fc.tuple(mark, line).map(([m, text]) => `${m}${text}`);
+
+it("property: a .gitattributes edit of only linguist attributes, comments or blank lines runs no heavy job", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.array(edit(quietLine), { minLength: 1, maxLength: 6 }), scopedEvent, async (lines, event) => {
+      expect(await attributesJobs(event, attributesDiff(...lines))).toEqual(quietRun);
+    }),
+    {
+      ...options,
+      examples: [
+        // pinned: pull request 1595 added this line and started every job, the bug this fixes.
+        [["+field/** linguist-generated=true"], "pull_request"],
+        [["-field/** linguist-generated=true", "+field/** linguist-generated=true linguist-vendored"], "push"],
+        [["+docs/** -linguist-detectable !linguist-language"], "merge_group"],
+        [["+# the field rows are generated", "+"], "pull_request"],
+      ],
+    },
+  );
 });
 
-it("scenario: a .gitattributes edit that touches any other attribute runs every job", async () => {
-  for (const event of ["pull_request", "merge_group", "push"]) {
-    for (const lines of [
-      ["+* text=auto eol=lf"],
-      ["-* eol=lf", "+field/** linguist-generated=true"],
-      ["+field/** linguist-generated=true", "+*.sh eol=lf"],
-      ["+field/** linguist-generated=true text"],
-      ["+*.ts diff=ts linguist-generated"],
-      ["+[attr]gen linguist-generated", "+field/** gen"],
-      ['+"my file" linguist-generated'],
-    ]) {
-      expect(await attributesJobs(event, attributesDiff(...lines)), `${event} ${lines.join(" | ")}`).toEqual(fullRun);
-    }
-  }
+// Plants, each run once on changes.mjs and restored, each red: `display` returning true first
+// fails the loud law; `display` returning false for linguist words fails the quiet law and the two
+// scenarios that need quiet; dropping the `[attr]` line check and `defines` fails the loud and macro
+// laws; dropping only `defines` fails the macro law and the unreadable-file scenario.
+it("property: a .gitattributes edit with any other attribute or a macro line runs every job", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(edit(quietLine), { maxLength: 4 }),
+      edit(loudLine),
+      fc.array(edit(quietLine), { maxLength: 4 }),
+      scopedEvent,
+      async (before, loud, after, event) => {
+        expect(await attributesJobs(event, attributesDiff(...before, loud, ...after))).toEqual(fullRun);
+      },
+    ),
+    {
+      ...options,
+      examples: [
+        [[], "+* text=auto eol=lf", [], "pull_request"],
+        [["+field/** linguist-generated=true"], "+*.sh eol=lf", [], "push"],
+        [[], '+"my file" linguist-generated', [], "merge_group"],
+        // pinned: a macro redefining git's own `binary`.
+        [[], "+[attr]binary linguist-generated", [], "pull_request"],
+      ],
+    },
+  );
+});
+
+it("property: a linguist-looking line is loud when the file defines a macro at its base or at its head", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(edit(attributeLine(linguistWords)), { minLength: 1, maxLength: 4 }),
+      word,
+      fc.constantFrom("eol=crlf", "text", "binary", "filter=lfs"),
+      fc.constantFrom("base", "head"),
+      scopedEvent,
+      async (lines, name, body, where, event) => {
+        const defined = `*.md linguist-vendored\n[attr]linguist-${name} ${body}\n`;
+
+        const run = attributesJobs(
+          event,
+          attributesDiff(...lines),
+          where === "base" ? defined : "",
+          where === "head" ? defined : "",
+        );
+
+        expect(await run).toEqual(fullRun);
+      },
+    ),
+    {
+      ...options,
+      examples: [
+        // pinned: the base defines `linguist-gen` as `eol=crlf`, and a new line uses it.
+        [["+*.sh linguist-gen"], "gen", "eol=crlf", "base", "pull_request"],
+      ],
+    },
+  );
+});
+
+it("scenario: a new or deleted .gitattributes of only linguist lines is quiet", async () => {
+  const diff = attributesDiff("+field/** linguist-generated=true");
+  expect(await attributesJobs("pull_request", diff, null, "field/** linguist-generated=true\n")).toEqual(quietRun);
+  expect(await attributesJobs("pull_request", diff, "field/** linguist-generated=true\n", null)).toEqual(quietRun);
 });
 
 it("scenario: a linguist-only .gitattributes edit beside any other path changes nothing for that path", async () => {
   const diff = attributesDiff("+field/** linguist-generated=true");
 
-  expect(await attributesJobs("pull_request", diff, [".gitattributes", "pnpm-lock.yaml"])).toEqual(fullRun);
-  expect(await attributesJobs("pull_request", diff, [".gitattributes", "docs/a.md"])).toEqual(quietRun);
-  // Only the root file is read as attributes; another folder's is not proven.
-  expect(await attributesJobs("pull_request", diff, ["fixtures/toy/.gitattributes"])).toMatchObject({ check: "true" });
+  for (const [paths, expected] of [
+    [[".gitattributes", "pnpm-lock.yaml"], fullRun],
+    [[".gitattributes", "docs/a.md"], quietRun],
+    // Only the root file is read as attributes; another folder's is not proven.
+    [["fixtures/toy/.gitattributes"], { ...fullRun, build: "true" }],
+  ] as const) {
+    const run: Runner = (args) =>
+      args[0] === "ls-tree" || args[0] === "show" ? attributesGit(diff, "", "")(args) : git(paths, diff)(args);
+
+    const printed = await ci.outputs({ same: false, env: envOf("pull_request", false), run });
+    expect({
+      check: printed["check"],
+      typecheck: printed["typecheck"],
+      next: printed["next"],
+      build: printed["build"],
+    }).toEqual(expected);
+  }
 });
 
-it("scenario: a .gitattributes diff that cannot be read or is binary runs every job", async () => {
-  const paths = [".gitattributes"];
+it("scenario: a .gitattributes diff or file git cannot read, a binary diff and unreadable history run every job", async () => {
+  const diff = attributesDiff("+field/** linguist-generated=true");
   const env = envOf("pull_request", false);
 
-  const failing: Runner = (args) =>
-    args[0] === "diff" && !args.includes("--name-only") ? { status: 128, stdout: "" } : git(paths, "")(args);
+  const failing =
+    (command: string): Runner =>
+    (args) =>
+      args[0] === command ? { status: 128, stdout: "" } : attributesGit(diff, "", "")(args);
 
-  expect((await ci.outputs({ same: false, env, run: failing }))["next"]).toBe("true");
+  for (const command of ["diff", "ls-tree", "show"]) {
+    const run: Runner = (args) =>
+      command === "diff" && args.includes("--name-only")
+        ? attributesGit(diff, "", "")(args)
+        : command === "show"
+          ? args[0] === "show"
+            ? { status: 128, stdout: "" }
+            : attributesGit(diff, "x", "x")(args)
+          : failing(command)(args);
+
+    expect((await ci.outputs({ same: false, env, run }))["next"], command).toBe("true");
+  }
 
   const binary = attributesDiff().replace("@@ -1 +1 @@", "Binary files a/.gitattributes and b/.gitattributes differ");
   expect(await attributesJobs("pull_request", binary)).toEqual(fullRun);
 
-  // Unreadable history runs everything, as for any path.
   const broken: Runner = () => ({ status: 128, stdout: "" });
   const printed = await ci.outputs({ same: false, env, run: broken });
   expect(printed).toMatchObject({ check: "true", typecheck: "true", next: "true", build: "true" });
