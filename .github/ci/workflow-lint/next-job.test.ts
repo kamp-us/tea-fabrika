@@ -11,6 +11,7 @@ import {
   nextLegs,
   onE2e,
   options,
+  type Parsed,
   place,
   type Plant,
   rejects,
@@ -630,6 +631,85 @@ const plants: Plant[] = [
   ],
 ];
 
+// T1076 O4. Each new fault goes through the existing whole-workflow acceptance path alone, on the
+// generated valid workflow, whose fallback is the two roots of the `next` project.
+plants.push(
+  [
+    "O4 legacy next-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 fallback without the literal separator",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 Kalfa-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 quoted two-root fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || '"next/ kalfa/"' }}`,
+      });
+    },
+  ],
+  [
+    "O4 reversed two-root fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'kalfa/ next/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 extra project in the fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/ kalfa/ --project tooling' }}`,
+      });
+    },
+  ],
+  [
+    "O4 wrong precedence, the classifier first",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.filter || needs.changes.outputs.files || 'next/ kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 ordinary command receives another changed restriction",
+    (w) => {
+      step(w, "next", "vitest").run += " --changed=HEAD";
+    },
+  ],
+  [
+    "O4 ordinary command adds a project",
+    (w) => {
+      step(w, "next", "vitest").run += " --project tooling";
+    },
+  ],
+  [
+    "O4 ordinary step receives an extra env input",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, { CHANGED: "--changed=HEAD" });
+    },
+  ],
+);
+
 rejects(plants);
 
 it("names the next command whose step or condition is wrong", () => {
@@ -745,4 +825,26 @@ it.each(faults)("LE2: names %s when it alone is planted", (_fault, mutate, error
     }),
     options,
   );
+});
+
+it("scenario: O4 the legacy filter is rejected by the next job's guard itself, whatever another guard says", () => {
+  // scenario: the real checked-in workflow with only the next job's fallback put back to next/. The
+  // next job's own filter rule must name it, so another rule's error cannot stand in for it.
+  const workflow: Parsed = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
+  expect(lint(JSON.stringify(workflow))).toEqual([]);
+
+  const found = workflow.jobs["next"]!.steps.find(
+    (candidate) =>
+      typeof candidate["run"] === "string" &&
+      candidate["run"].startsWith("pnpm exec vitest run --project next $FILTER "),
+  );
+
+  expect(found).toBeDefined();
+
+  Object.assign(found!["env"]!, {
+    FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}`,
+  });
+  expect(
+    lint(JSON.stringify(workflow)).some((error) => error.includes("next's vitest step takes changes' files")),
+  ).toBe(true);
 });

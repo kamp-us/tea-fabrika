@@ -1,9 +1,14 @@
+import { readFileSync } from "node:fs";
+import { expect, it } from "vitest";
+import { parse } from "yaml";
+import { lintWorkflow as lint } from "../workflow-lint.ts";
 import {
   changedOnPullRequests,
   env,
   guard,
   nextLegs,
   place,
+  type Parsed,
   type Plant,
   probe,
   rejects,
@@ -294,4 +299,104 @@ const plants: Plant[] = [
   ],
 ];
 
+// T1076 O4. Each new fault goes through the existing whole-workflow acceptance path alone, on the
+// generated valid workflow, whose fallback is the two roots of the `next` project.
+plants.push(
+  [
+    "O4 legacy next-only fallback",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, {
+        FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 fallback without the literal separator",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, {
+        FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 Kalfa-only fallback",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, {
+        FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 quoted two-root fallback",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, {
+        FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || '"next/ kalfa/"' }}`,
+      });
+    },
+  ],
+  [
+    "O4 reversed two-root fallback",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, {
+        FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'kalfa/ next/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 extra project in the fallback",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, {
+        FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/ kalfa/ --project tooling' }}`,
+      });
+    },
+  ],
+  [
+    "O4 wrong precedence, the classifier first",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, {
+        FILTER: `\${{ steps.diff.outputs.filter || steps.same.outputs.filter || 'next/ kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 sizing receives a second narrowing input",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, { CHANGED: "--changed=HEAD" });
+    },
+  ],
+  [
+    "O4 sizing adds a project",
+    (w) => {
+      step(w, "changes", "size").run += " --project tooling";
+    },
+  ],
+  [
+    "O4 sizing adds an unlisted env value",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, { PROJECT: "tooling" });
+    },
+  ],
+  [
+    "O4 sizing is told the readers instead of the fallback",
+    (w) => {
+      Object.assign(step(w, "changes", "size").env!, {
+        FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/apps/fabrika/src/exam/' }}`,
+      });
+    },
+  ],
+);
+
 rejects(plants);
+
+it("scenario: O4 the legacy filter is rejected by the sizing guard itself, whatever another guard says", () => {
+  // scenario: the real checked-in workflow with only the size step's fallback put back to next/. The
+  // S1 guard must name it, so another rule's error cannot stand in for it.
+  const workflow: Parsed = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
+  expect(lint(JSON.stringify(workflow))).toEqual([]);
+  const found = workflow.jobs["changes"]!.steps.find((candidate) => candidate["id"] === "size");
+  expect(found).toBeDefined();
+  Object.assign(found!["env"]!, {
+    FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
+  });
+  expect(lint(JSON.stringify(workflow)).some((error) => error.includes("S1:") && error.includes("FILTER"))).toBe(true);
+});

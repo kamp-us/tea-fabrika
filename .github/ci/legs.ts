@@ -243,7 +243,8 @@ if (import.meta.main) {
 
   const run: Run = {
     event: process.env["EVENT"] ?? "",
-    scope: (process.env["FILTER"] ?? "next/") === "next/" ? "all" : "readers",
+    // Only the exact reader filter narrows; a missing or unknown filter keeps full coverage.
+    scope: process.env["FILTER"] === readers.join(" ") ? "readers" : "all",
     base: process.env["BASE"] ?? "",
     visual: process.env["VISUAL"] === "true",
   };
@@ -257,7 +258,8 @@ if (import.meta.main) {
   const sized = sizes(run);
   // The reader tests are listed whole, with no `--changed`: Vitest's own match of changes' paths.
   // The existing matrix keeps next and visual files separate; related.ts adds other projects.
-  const picked = sized && (run.scope === "all" || force) ? list(root, ["--project", "next", "next/", ...changed]) : [];
+  // `--project next` holds next/'s ordinary tests and Kalfa's, so no path argument narrows the list.
+  const picked = sized && (run.scope === "all" || force) ? list(root, ["--project", "next", ...changed]) : [];
   const readerFiles = sized ? list(root, ["--project", "next", ...readers]) : [];
 
   const selected: Selected = sized

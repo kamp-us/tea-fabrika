@@ -27,7 +27,7 @@ const VITEST_VARS: Record<string, (value: unknown) => boolean> = {
     new RegExp(
       `^${SHARD_OF}/(?:${denominator("vitest", String.raw`\d+`)}|${denominator("e2e", String.raw`\d+`)})$`,
     ).test(value),
-  FILTER: (value) => compact(value) === "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'",
+  FILTER: (value) => compact(value) === "needs.changes.outputs.files||needs.changes.outputs.filter||'next/ kalfa/'",
   CHANGED: (value) => compact(value) === compact(CHANGED_FROM_BASE),
 };
 

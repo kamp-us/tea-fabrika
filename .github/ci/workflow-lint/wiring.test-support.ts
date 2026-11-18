@@ -134,8 +134,8 @@ const changedFromBase = `\${{ needs.changes.outputs.base && format('--changed={0
 export const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
 // The vitest step's paths: changes' size step's list on a sized run, reader tests included, else changes'
-// filter (the plan for CI paths, slice 2), else all of next/.
-const vitestFilter = `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}`;
+// filter (the plan for CI paths, slice 2), else both roots of the `next` project, next/ and kalfa/ (O4).
+const vitestFilter = `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/ kalfa/' }}`;
 
 export const nextLegs = (count: number) => [
   ...Array.from({ length: count }, (_, i) => `e2e-${i + 1}`),
@@ -311,7 +311,7 @@ const valid = (label: string, extra: string) => ({
           "continue-on-error": true,
           env: {
             EVENT: `\${{ github.event_name }}`,
-            FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
+            FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/ kalfa/' }}`,
             BASE: env.BASE,
             VISUAL: `\${{ ${visualLabel} }}`,
             BUDGET: 240,

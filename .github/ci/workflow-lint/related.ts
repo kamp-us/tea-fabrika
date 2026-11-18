@@ -22,7 +22,7 @@ const groupOf = (job: Record<string, unknown>): string => {
   return typeof group === "string" ? group : "";
 };
 
-const OUTPUTS = ["run", "legs", "files", "projects", "plants"];
+const OUTPUTS = ["run", "legs", "files", "projects", "plants", "archive", "consumer"];
 
 const selector = (workflow: Record<string, unknown>) => {
   const job = map(map(workflow["jobs"])["select"]);
@@ -40,6 +40,94 @@ const selector = (workflow: Record<string, unknown>) => {
     env["HEAD"] === `\${{ github.sha }}` &&
     Object.keys(outputs).length === OUTPUTS.length &&
     OUTPUTS.every((key) => outputs[key] === `\${{ steps.set.outputs.${key} }}`)
+  );
+};
+
+const RECEIPT = "node .github/ci/related.ts --receipt";
+
+const FAULT = "node .github/ci/related.ts --fault";
+
+const READY =
+  "(github.event_name=='merge_group'||(github.event_name=='pull_request'&&!github.event.pull_request.draft))";
+
+const RECEIPT_IF = `success()&&${READY}&&needs.select.outputs.archive==matrix.shard&&steps.integration.outcome=='success'`;
+
+const FAULT_IF = "success()&&needs.select.outputs.consumer==matrix.shard";
+
+const UPLOAD_IF = `success()&&${READY}&&needs.select.outputs.archive==matrix.shard&&steps.receipt.outcome=='success'`;
+
+/** The three delivery steps of the related job, in one predicate the record guard reuses. */
+export const deliveryUpload = (
+  workflow: Record<string, unknown>,
+  name: string,
+  job: Record<string, unknown>,
+  step: Record<string, unknown>,
+): boolean => {
+  const all = steps(job);
+
+  const receipts = all.filter((candidate) => candidate["id"] === "receipt");
+
+  const receipt = receipts[0];
+
+  const integration = all.find((candidate) => candidate["run"] === INTEGRATION);
+
+  const tooling = all.find((candidate) => candidate["run"] === TOOLING);
+
+  const fault = all.find((candidate) => candidate["run"] === FAULT);
+
+  const env = map(receipt?.["env"]);
+
+  const given = map(step["with"]);
+
+  const paths =
+    typeof given["path"] === "string"
+      ? given["path"]
+          .trim()
+          .split(/\r?\n/)
+          .map((path) => path.trim())
+      : [];
+
+  return (
+    name === "related" &&
+    selector(workflow) &&
+    ungrouped(job) &&
+    receipts.length === 1 &&
+    receipt !== undefined &&
+    integration !== undefined &&
+    tooling !== undefined &&
+    fault !== undefined &&
+    integration["id"] === "integration" &&
+    receipt["name"] === "package receipt" &&
+    receipt["run"] === RECEIPT &&
+    Object.keys(receipt).length === 5 &&
+    compact(receipt["if"]) === RECEIPT_IF &&
+    Object.keys(env).length === 4 &&
+    env["EVENT"] === `\${{ github.event_name }}` &&
+    env["DRAFT"] === `\${{ github.event.pull_request.draft }}` &&
+    env["HEAD"] === `\${{ github.sha }}` &&
+    env["REQUESTED"] ===
+      `\${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}` &&
+    fault["name"] === "consumer fault" &&
+    Object.keys(fault).length === 5 &&
+    compact(fault["if"]) === FAULT_IF &&
+    fault["timeout-minutes"] === 30 &&
+    JSON.stringify(map(fault["env"])) === JSON.stringify({ FABRIKA_TEST_DEPTH: "full" }) &&
+    all.indexOf(integration) < all.indexOf(receipt) &&
+    all.indexOf(tooling) < all.indexOf(fault) &&
+    all.indexOf(receipt) < all.indexOf(step) &&
+    all.indexOf(fault) < all.indexOf(step) &&
+    step["name"] === "package archive" &&
+    uses(step, "actions/upload-artifact") &&
+    Object.keys(step).length === 4 &&
+    compact(step["if"]) === UPLOAD_IF &&
+    Object.keys(given).length === 4 &&
+    given["name"] === `kalfa-config-\${{ github.sha }}-attempt-\${{ github.run_attempt }}` &&
+    paths.length === 2 &&
+    paths[0] === `\${{ runner.temp }}/kalfa-config-package/kalfa-config-0.0.0.tgz` &&
+    paths[1] === `\${{ runner.temp }}/kalfa-config-package/receipt.json` &&
+    given["if-no-files-found"] === "error" &&
+    typeof given["retention-days"] === "number" &&
+    given["retention-days"] >= 1
   );
 };
 
@@ -109,8 +197,10 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
     JSON.stringify([
       "pnpm install --frozen-lockfile",
       INTEGRATION,
+      RECEIPT,
       "node .github/ci/plant-related.ts",
       TOOLING,
+      FAULT,
       "node .github/ci/time-table.ts",
     ]), "R1: only the declared integration and tooling workloads run");
 
@@ -152,6 +242,16 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
       map(step["with"])["filter"] === "blob:none" &&
       !("ref" in map(step["with"])),
   ), "R1: related tests use the tested commit with complete ancestry and blobless history");
+
+  const uploads = steps(related).filter((step) => step["name"] === "package archive");
+  require(uploads.length === 1 &&
+    uploads[0] !== undefined &&
+    deliveryUpload(
+      workflow,
+      "related",
+      related,
+      uploads[0],
+    ), "R1: one receipt, one consumer fault and one exact archive upload follow the owning legs' tests");
 
   const next = map(jobs["next"]);
 

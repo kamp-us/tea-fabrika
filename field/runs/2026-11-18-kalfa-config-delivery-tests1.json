@@ -1,0 +1,317 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-kalfa-config-delivery-tests1",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": "kamp-us/tea-fabrika#1589",
+  "started": "2026-11-17T16:17:41-08:00",
+  "ended": "2026-11-17T17:46:38-08:00",
+  "parent": null,
+  "active": null,
+  "driver_caused": false,
+  "role": "step",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Today's CI tooling. Ticket 1076's delivery layer, tests step. Laws D1 to D5 and O1 to O4 of the approved plan are written, and all 18 paths of its Files table are written: the nine test paths and the nine product paths (related.ts with delivered, confirmed, checkDelivery, checkFault, the archive and consumer outputs and the --receipt and --fault modes; changes.mjs; legs.ts; check.yaml; and the five guard modules), because every path under .github is an exam path the build step may not own. Before the product was written each new law was red against today's code for the reason the plan gives.",
+  "note": "No older law was removed or narrowed. Existing changes.test.ts cases that spelled the full filter as next/ now spell next/ kalfa/. With the real product files every changed test file is green: record 33, plant-related 1, related-selection 22, legs 23, related 120, changes 61, guard related 54, guard changes 72, merge-line 89, next-job 181. The 53 plants were run against the real files, one at a time and each restored, and every one was red (one needed its edit text updated to the formatted guard and was then red). pnpm lint exits 0, pnpm typecheck exits 0, the list ratchet exits 0, oxfmt is clean. The --fault runner follows the plan's five steps with the restore in a scope finalizer and is not run here: outside CI it refuses with reason environment and touches nothing. Not run here: P2's real install, the real --fault red and green run. Recorded start is the session's first observed timestamp; usage and cost are unknown.",
+  "base": "3f3c12965e86791e4f5ee1194e9d39f38321fdc0",
+  "head": "3f3c12965e86791e4f5ee1194e9d39f38321fdc0",
+  "sourceHashes": {
+    ".github/ci/changes.mjs": "91c2750c31376b2e52a5d9ea2ddfa85d0945f79a3cf2ce22a1b15cbba719a50f",
+    ".github/ci/changes.test.ts": "2696227504181a4c20c491a10f9714eeec0bdd1a060416ff174d23750cc5667e",
+    ".github/ci/legs.test.ts": "26111a57eb9b1281a48947a736ea69007e42df171ad05290d3f2b31f921de606",
+    ".github/ci/legs.ts": "a7ddef67c7b0fba1f12acbd2332c2f8f3bf665563fcd7462e201618989045df2",
+    ".github/ci/related-selection.test.ts": "f9102db6a99fda44f3720142102f4209982f097e61f5595c08fa1be491dee247",
+    ".github/ci/related.test.ts": "44bcbf6a6a0ccb6a1e5d58fcf3defb4bcf2c8755c8b5598cca28dc53676e96ed",
+    ".github/ci/related.ts": "68e866e3bdb1ba18ca481e472972d96602a331e8ee38fed4cb8bc4097d25d7c9",
+    ".github/ci/workflow-lint/changes.test.ts": "834f4806af79a3a9e856974b1cf866df2f06cad14d842ad54aea0bf4da9adad8",
+    ".github/ci/workflow-lint/changes.ts": "5bae754ff218eb471fc2078734cd971dafc20398c353dc5c30801ce7ed810835",
+    ".github/ci/workflow-lint/merge-line.test.ts": "ad5bca903a541f57f38b9b0bda319191183d42dcc1f5caf19d8cc4ed332122df",
+    ".github/ci/workflow-lint/merge-line.ts": "f2fa835576534929431c70e800a989a3031e18fc1867680a07cdb5f61bb2b9cd",
+    ".github/ci/workflow-lint/next-job.test.ts": "7363b2758b99d033a852d76531117189ef60bc342b172b330c24cf2b3a7a3a4f",
+    ".github/ci/workflow-lint/next-job.ts": "237f552b30126497029b9749f717a74cd4c45a0f233d99aee435c7c93821d8e6",
+    ".github/ci/workflow-lint/record.ts": "996b30cf099a4a65b8790c63a99d3cef83aee5f5c602e51064e4fe73b140e10c",
+    ".github/ci/workflow-lint/related.test.ts": "2eb9c471c70098163835ffce5906201e7c19b2d3d968bad59114730968e94e43",
+    ".github/ci/workflow-lint/related.ts": "d7f6cc77f7061d378a1515df430179eeccec18f8b07d6b1e1e67be098a9b58bf",
+    ".github/ci/workflow-lint/wiring.test-support.ts": "d76349ecee666074cd8ca5f2dd26e353f3274953fa349a9895917699d1fda7f0",
+    ".github/workflows/check.yaml": "28e729a218308fed739d373fe652a3334fb8a8d7ad5b02b3c90dbb065e8cbb02"
+  },
+  "plants": [
+    {
+      "law": "D1 delivery selection",
+      "plant": "drop the kalfa/ rule from delivered",
+      "result": "red"
+    },
+    {
+      "law": "D1 delivery selection",
+      "plant": "drop a route path (the record guard) from delivered",
+      "result": "red"
+    },
+    {
+      "law": "D1 delivery selection",
+      "plant": "count a built dist file as a package change",
+      "result": "red"
+    },
+    {
+      "law": "D1 confirmed and select",
+      "plant": "drop the discovery confirmation",
+      "result": "red"
+    },
+    {
+      "law": "D1 confirmed and select",
+      "plant": "let archive name the tooling leg",
+      "result": "red"
+    },
+    {
+      "law": "D1 confirmed and select",
+      "plant": "do not print the consumer output",
+      "result": "red"
+    },
+    {
+      "law": "D1 selector as CI runs it",
+      "plant": "drop the kalfa/ readers rule",
+      "result": "red"
+    },
+    {
+      "law": "D1 selector as CI runs it",
+      "plant": "select by full run alone, not by the delivery rule",
+      "result": "red"
+    },
+    {
+      "law": "D1 selector as CI runs it",
+      "plant": "never fail when Vitest cannot list the law",
+      "result": "red"
+    },
+    {
+      "law": "D1 projects and flags",
+      "plant": "drop kalfa/ from the read trees",
+      "result": "red"
+    },
+    {
+      "law": "D1 projects and flags",
+      "plant": "drop Kalfa's ordinary laws from the next project",
+      "result": "red"
+    },
+    {
+      "law": "D1 projects and flags",
+      "plant": "let built Kalfa tests run (drop the dist exclusion)",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept a digest mismatch",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept an extra file in the folder",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept a push event",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "swap source and requested",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept a failed stage",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept a missing refusal",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept other export keys",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept a skipped or failed P2 result",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept P2 twice",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept a skipped assertion",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt check",
+      "plant": "accept a report that did not succeed",
+      "result": "red"
+    },
+    {
+      "law": "D2 receipt step",
+      "plant": "exit 0 on a refused delivery",
+      "result": "red"
+    },
+    {
+      "law": "D5 fault check",
+      "plant": "accept a run outside CI",
+      "result": "red"
+    },
+    {
+      "law": "D5 fault check",
+      "plant": "accept a faulted run that passes",
+      "result": "red"
+    },
+    {
+      "law": "D5 fault check",
+      "plant": "accept a failure for another reason",
+      "result": "red"
+    },
+    {
+      "law": "D5 fault check",
+      "plant": "accept a restore with other bytes",
+      "result": "red"
+    },
+    {
+      "law": "D5 fault check",
+      "plant": "accept a second run that fails or skips",
+      "result": "red"
+    },
+    {
+      "law": "D3 delivery steps",
+      "plant": "the receipt step may be soft or carry a token (drop its key count)",
+      "result": "red"
+    },
+    {
+      "law": "D3 delivery steps",
+      "plant": "the fault step's condition is not pinned",
+      "result": "red"
+    },
+    {
+      "law": "D3 delivery steps",
+      "plant": "the upload may warn or ignore missing files",
+      "result": "red"
+    },
+    {
+      "law": "D3 delivery steps",
+      "plant": "the receipt's head and requested are not pinned",
+      "result": "red"
+    },
+    {
+      "law": "D3 Q1 upload",
+      "plant": "the record guard permits any upload",
+      "result": "red"
+    },
+    {
+      "law": "D3 Q1 upload",
+      "plant": "the record guard permits two exact uploads",
+      "result": "red"
+    },
+    {
+      "law": "D3 delivery steps",
+      "plant": "the upload may sit before its receipt and its fault step (drop both order pins)",
+      "result": "red"
+    },
+    {
+      "law": "D4 select outputs",
+      "plant": "select may print a ninth output",
+      "result": "red"
+    },
+    {
+      "law": "D4 select outputs",
+      "plant": "an output may be read from another step",
+      "result": "red"
+    },
+    {
+      "law": "O1 ordinary discovery",
+      "plant": "restore the positional next/ in list",
+      "result": "red"
+    },
+    {
+      "law": "O2 reader narrowing",
+      "plant": "any filter that is not the two roots narrows to the readers",
+      "result": "red"
+    },
+    {
+      "law": "O2 reader narrowing",
+      "plant": "no filter at all means the readers",
+      "result": "red"
+    },
+    {
+      "law": "O2 fallback equals project",
+      "plant": "the size step's fallback is next/ again",
+      "result": "red"
+    },
+    {
+      "law": "O2 fallback equals project",
+      "plant": "the next job's fallback is next/ again",
+      "result": "red"
+    },
+    {
+      "law": "O1/O2 shards partition",
+      "plant": "the next job's fallback is next/ again",
+      "result": "red"
+    },
+    {
+      "law": "O2 Kalfa never joins related",
+      "plant": "an ordinary Kalfa file joins the integration project",
+      "result": "red"
+    },
+    {
+      "law": "O3 record",
+      "plant": "decode the legacy next/ as all",
+      "result": "red"
+    },
+    {
+      "law": "O3 first pass",
+      "plant": "print the legacy next/ as the full filter",
+      "result": "red"
+    },
+    {
+      "law": "O3 same program",
+      "plant": "let the parser's pass offer a Kalfa path",
+      "result": "red"
+    },
+    {
+      "law": "O3 printed text",
+      "plant": "read any filter naming next/ as all",
+      "result": "red"
+    },
+    {
+      "law": "O4 sizing guard",
+      "plant": "allow the old spelling in SIZE_ENV.FILTER",
+      "result": "red"
+    },
+    {
+      "law": "O4 sizing guard",
+      "plant": "allow a second narrowing env on the size step",
+      "result": "red"
+    },
+    {
+      "law": "O4 next-job guard",
+      "plant": "allow the old spelling in the next job's fallback",
+      "result": "red"
+    },
+    {
+      "law": "O4 merge-line guard",
+      "plant": "allow the old spelling in VITEST_VARS",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 89.0,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billed": null,
+  "billing": null
+}
