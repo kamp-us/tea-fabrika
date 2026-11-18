@@ -24,6 +24,7 @@
     "next/programs/inbox": "next-program",
     "next/programs/chaos": "next-program",
     "next/programs/counter": "next-program",
+    "next/programs/fabsh": "next-program",
     "next/programs/pipeline": "next-program",
     "next/programs/tezgah": "next-program"
   },

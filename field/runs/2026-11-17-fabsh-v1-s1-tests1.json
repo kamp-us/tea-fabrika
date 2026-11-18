@@ -1,0 +1,190 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-fabsh-v1-s1-tests1",
+  "ticket": "kamp-us/tea-fabrika#1078",
+  "pr": null,
+  "parent": null,
+  "role": "step",
+  "step": "tests",
+  "started": "2026-11-17T13:17:34-08:00",
+  "ended": "2026-11-17T13:41:05.686471-08:00",
+  "minutes": 23.53,
+  "active": null,
+  "model": null,
+  "effort": null,
+  "outcome": "parked",
+  "tokens": null,
+  "tools": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "base": "3c25bf901394edc723cda57e012892bfce67da36",
+  "head": "435a3b27f564d6a4e18b8215ac5cfaa4f4228942",
+  "why": "pipeline, tracker ticket 1078, tests: In next/, S1 reader and pure editor test authoring is finished. Fourteen behavioral laws are written in six suites. Execution proof is pending CI under the owner instruction. This row records no red or green result.",
+  "note": "L1 runs 500 cases. L2, L4, L6 to L11, L13 and L15 run 300 each at both depths. L5 uses 100, the current default count. L12 keeps the default property count and tea arbMsgSequence. L8 to L11 keep fc.commands with case-local legal coverage. L14 checks every code point against the installed Ghostty wasm, plus hard cell-position vectors. L24 remains the build-owned exhaustive role-map type check; L25 remains the existing package-imports lint. No product code, S2, settings or CI machinery changed. No tests, test listing, compiler, lint, fault, plant or benchmark was executed locally. Formatting, approved plan digest and owner/S1 comparisons, whitespace checks and source leak checks passed. Commits are unsigned and unpushed. CI must establish semantic red, green, and caught faults after build; an import failure is not semantic red. The lead approved the missing tests/S1 boundary registration in its own plan amendment. A separate tests commit adds only the fabsh libraries row using the existing next-program type. Existing layer and product import globs needed no edits.",
+  "laws": [
+    {
+      "id": "L1",
+      "file": "next/programs/fabsh/src/reader.laws.test.ts",
+      "line": 44,
+      "title": "L1 spans cover every non-space character exactly once in source order",
+      "runs": 500,
+      "red": "pending CI; not executed",
+      "plant": "omit the closing quote from its span",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L2",
+      "file": "next/programs/fabsh/src/reader.laws.test.ts",
+      "line": 76,
+      "title": "L2 only a finished unknown first word is an error",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "classify a finished missing program as program",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L4",
+      "file": "next/programs/fabsh/src/reader.laws.test.ts",
+      "line": 98,
+      "title": "L4 pipe roles and check use needed fields and accept extra writer fields",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "require exact record equality instead of needed fields",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L5",
+      "file": "next/programs/fabsh/src/editor/screen.laws.test.ts",
+      "line": 10,
+      "title": "L5 the error text is underlined and uses the terminal palette",
+      "runs": 100,
+      "red": "pending CI; not executed",
+      "plant": "drop SGR 4 while retaining the error palette color",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L6",
+      "file": "next/programs/fabsh/src/reader.laws.test.ts",
+      "line": 142,
+      "title": "L6 tokens keep their source and the word at the cursor stays unfinished",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "shift token start by one; judge the unfinished cursor word",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L7",
+      "file": "next/programs/fabsh/src/complete.laws.test.ts",
+      "line": 12,
+      "title": "L7 completion filters by prefix, context and pipe fit and completes one valid word",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "offer incompatible readers after a pipe",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L8",
+      "file": "next/programs/fabsh/src/editor/editor.laws.test.ts",
+      "line": 131,
+      "title": "L8 every bound key redraws the prompt and puts the cursor at spot(left)",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "count a wide character as one cell in cursor placement",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L9",
+      "file": "next/programs/fabsh/src/editor/editor.laws.test.ts",
+      "line": 258,
+      "title": "L9 kills join only in a row, yank-pop walks ten kills and undo restores prior edits",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "join kills across an intervening cursor move",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L10",
+      "file": "next/programs/fabsh/src/editor/editor.laws.test.ts",
+      "line": 410,
+      "title": "L10 history deduplicates, obeys the configured limit and restores a draft after recall",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "keep a repeated history line twice",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L11",
+      "file": "next/programs/fabsh/src/editor/editor.laws.test.ts",
+      "line": 498,
+      "title": "L11 reverse and forward search choose the right match and cancellation restores the draft",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "start reverse search at the oldest matching line",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L12",
+      "file": "next/programs/fabsh/src/editor/editor.laws.test.ts",
+      "line": 618,
+      "title": "L12 busy keys wait in order, Ctrl-D is dropped and Ctrl-C interrupts at once",
+      "runs": "default",
+      "red": "pending CI; not executed",
+      "plant": "queue Ctrl-C behind type-ahead rather than interrupting now",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L13",
+      "file": "next/programs/fabsh/src/editor/keys.laws.test.ts",
+      "line": 17,
+      "title": "L13 bracketed paste inserts text across frame boundaries and never submits its newlines",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "interpret a pasted newline as accept-line",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L14",
+      "file": "next/programs/fabsh/src/editor/cells.laws.test.ts",
+      "line": 120,
+      "title": "it.effect(\"vector: L14 every code point's cell facts and hard-character spot match Ghostty wasm\", () =>",
+      "runs": "all 0x110000 code points",
+      "red": "pending CI; not executed",
+      "plant": "treat U+FE0F as a cell after non-emoji too",
+      "result": "not executed; pending CI after build"
+    },
+    {
+      "id": "L15",
+      "file": "next/programs/fabsh/src/editor/screen.laws.test.ts",
+      "line": 67,
+      "title": "L15 program text cannot send cursor, title, erase or terminal-control sequences",
+      "runs": 300,
+      "red": "pending CI; not executed",
+      "plant": "pass OSC through shown without making its controls visible",
+      "result": "not executed; pending CI after build"
+    }
+  ],
+  "checks": {
+    "L24": {
+      "kind": "compiler",
+      "state": "pending CI after build",
+      "plant": "drop room from the exhaustive palette map"
+    },
+    "L25": {
+      "kind": "lint",
+      "state": "pending CI after build",
+      "plant": "import @kampus/fabrika-old from fabsh"
+    }
+  },
+  "sourceHashes": {
+    "next/programs/fabsh/package.json": "94f5ac404cf9144b2dcb691183ec493ae367d991f83a17bb45dc49c26a4813d8",
+    "next/programs/fabsh/src/complete.laws.test.ts": "e290c6bfb779670cab3321744d2a50ac8d0a3b696a77c0f98324e90cf154320c",
+    "next/programs/fabsh/src/editor/cells.laws.test.ts": "076a52072b0f40229932a962ed49f99c3a82b755f8882550d946aeb1dd1a3622",
+    "next/programs/fabsh/src/editor/editor.laws.test.ts": "a5591ba23285d9c02cdb8d5ab068885903a5129312ebd4746deb38c515783a36",
+    "next/programs/fabsh/src/editor/keys.laws.test.ts": "3fe15bdc653cd7f693792967ae4526f37e350bf9217b7f9d32f32a1600100664",
+    "next/programs/fabsh/src/editor/screen.laws.test.ts": "1195bf33b3f241b1fea33419f539f683c2dfe03741aac901401c41613b0a3563",
+    "next/programs/fabsh/src/reader.laws.test.ts": "7e2fefaf962e444df64b8493e40ab9d201c478fdad413a6cd9486c6975d5cdde",
+    "next/programs/fabsh/tsconfig.json": "ff18c580442c09f46509b2414271ab3ecfe9ef3c19eb200666d6e5bb8f5d717b",
+    "boundary-rules.json": "1fd949527b30c156b89255a2ab0d91f2561068e0652e5d19bd510864272696ca"
+  }
+}

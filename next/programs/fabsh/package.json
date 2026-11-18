@@ -1,0 +1,40 @@
+{
+  "name": "@kampus/fabsh",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/editor/editor.ts",
+    "./words": "./src/words.ts",
+    "./grammar": "./src/grammar.ts",
+    "./check": "./src/check.ts",
+    "./roles": "./src/roles.ts",
+    "./complete": "./src/complete.ts",
+    "./editor": "./src/editor/editor.ts",
+    "./keys": "./src/editor/keys.ts",
+    "./screen": "./src/editor/screen.ts",
+    "./cells": "./src/editor/cells.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@demlik/tea": "catalog:",
+    "@kampus/libfabrika": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@kampus/vitest": "workspace:*",
+    "@types/node": "catalog:",
+    "fast-check": "catalog:",
+    "ghostty-web": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "volta": {
+    "extends": "../../../package.json"
+  }
+}

@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0586, 0275, 0069, 0579, 0587 and 0594; body 85d87d3bf1a7
+Approved by the lead agent, builds 0586, 0275, 0069, 0579, 0587 and 0594; body acef6be246c0
 Plancheck-Version: 3
 
 # Plan: fabsh v1, today's terminal in a tile of next/, with its line editor, tsh's grammar, syntax highlighting and [terminal] settings in Ghostty's key names (ticket 1078)
@@ -443,6 +443,7 @@ Today's files below are the behavior to rebuild under 0586, never imports into `
 | next/apps/fabrika/e2e/fabsh.visual.test.ts | tests | S4 | tests |
 | next/apps/fabrika/package.json | tests | S2 | tests |
 | layer-rules.json | tests | S1 | tests |
+| boundary-rules.json | tests | S1 | tests |
 | .oxlintrc.json | tests | S1 | tests |
 | pnpm-lock.yaml | tests | S1 | tests |
 | .glossary/TERMS.md | build | S1, S2 | docs |
