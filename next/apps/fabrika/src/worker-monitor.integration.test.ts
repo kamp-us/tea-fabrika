@@ -15,7 +15,7 @@ import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, Predicate, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -359,10 +359,9 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
               const code = built.programs[program];
               expect(code).toBeDefined();
 
-              const started = await Reflect.get(instance.project(PROJECT), "start")(
-                { _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } },
-                from,
-              );
+              const started = await instance
+                .project(PROJECT)
+                .start({ _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } }, from);
 
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             },
@@ -387,7 +386,8 @@ const carries = (value: unknown, type: string): boolean =>
     ? value.some((item) => carries(item, type))
     : typeof value === "object" &&
       value !== null &&
-      (Reflect.get(value, "type") === type || Object.values(value).some((item) => carries(item, type)));
+      ((Predicate.hasProperty(value, "type") && value.type === type) ||
+        Object.values(value).some((item) => carries(item, type)));
 
 /** The next view update the brain pushes for `pid` whose rows hold one of this type. It asks nothing. */
 const pushed = (client: Awaited<ReturnType<typeof wire>>, pid: string, type: string) =>

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Stub } from "@kampus/vitest";
 import { RpcCallError } from "alchemy/Rpc";
 import { Effect, Layer, Schema } from "effect";
 import * as fc from "fast-check";
@@ -13,8 +14,10 @@ import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProgramDown } from "../runtime/Program.ts";
+import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain, SinkError } from "../telemetry/Trace.ts";
+import type { ConnectionBinding, ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
 import { programBox } from "./box.ts";
 import { connectionLayer } from "./connection.ts";
 import { fetch, workerLoader } from "./index.ts";
@@ -44,25 +47,19 @@ const failures: fc.Arbitrary<object> = fc.oneof(
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
 
-/** A platform object whose every method rejects with `failure`, whatever its name. */
-const rejecting = <A>(failure: unknown): A =>
-  new Proxy(
-    {},
-    {
-      get: (_, key) => (key === "then" ? undefined : () => Promise.reject(failure)),
-    },
-  ) as A;
+/** A platform call that rejects with `failure`: what each stub below answers for any method name. */
+const rejects = (failure: unknown) => () => Promise.reject(failure);
 
 /** A platform value built from plain parts: the adapter reads only the parts each law gives. */
 const fake = <A>(value: object): A => value as A;
 
 /** Every client the shared callback serves, built on a rejecting platform object. */
 const clients = (failure: unknown): Record<string, Record<string, (...args: Array<never>) => unknown>> => ({
-  project: ProjectClient.make(rejecting(failure)),
-  process: ProcessClient.make(rejecting(failure)),
-  gateway: GatewayClient.make(rejecting(failure)),
-  storage: StorageClient.make(rejecting(failure)),
-  bucket: BucketClient.make(rejecting(failure)),
+  project: ProjectClient.make(Stub.make<ProjectBinding>(() => rejects(failure))),
+  process: ProcessClient.make(Stub.make<ProcessBinding>(() => rejects(failure))),
+  gateway: GatewayClient.make(Stub.make<ConnectionBinding>(() => rejects(failure))),
+  storage: StorageClient.make(Stub.make<DurableObjectStorage>(() => rejects(failure))),
+  bucket: BucketClient.make(Stub.make<R2Bucket>(() => rejects(failure))),
 });
 
 const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
@@ -211,17 +208,15 @@ const env: Env = fake({
   INSTANCE: JSON.stringify(instanceFixture({ name: "p", port: 8787 })),
   PROJECT: {
     getByName: () =>
-      new Proxy(rejecting<object>(new Error("no project in this law")), {
-        get: (target, key) =>
-          key === "settingsStart"
-            ? async () => StartsTest.reply(instanceFixture({ name: "p", port: 8787 }))
-            : Reflect.get(target, key),
+      Stub.make<ProjectBinding>(() => rejects(new Error("no project in this law")), {
+        settingsStart: async () =>
+          Start.Reply.cases.ok.make({ value: StartsTest.receipt(instanceFixture({ name: "p", port: 8787 })) }),
       }),
   },
-  RECORD: { getByName: () => rejecting(new Error("no record in this law")) },
-  CONNECTION: { getByName: () => rejecting(new Error("no connection in this law")) },
-  PROCESS: { getByName: () => rejecting(new Error("no process in this law")) },
-  MEASUREMENTS: rejecting(new Error("no bucket in this law")),
+  RECORD: { getByName: () => Stub.make<RecordBinding>(() => rejects(new Error("no record in this law"))) },
+  CONNECTION: { getByName: () => Stub.make<ConnectionBinding>(() => rejects(new Error("no connection in this law"))) },
+  PROCESS: { getByName: () => Stub.make<ProcessBinding>(() => rejects(new Error("no process in this law"))) },
+  MEASUREMENTS: Stub.make<R2Bucket>(() => rejects(new Error("no bucket in this law"))),
   LOADER: loader(() => Promise.resolve(null)),
 });
 
@@ -281,7 +276,15 @@ describe("T695, the object adapters keep what failed", () => {
         Effect.sync(() => vi.spyOn(crypto.subtle, "digest").mockRejectedValue(failure)),
         () =>
           Effect.gen(function* () {
-            const error = yield* Effect.flip(checkedPut(rejecting(new Error("unused")), key, body, "00"));
+            const error = yield* Effect.flip(
+              checkedPut(
+                Stub.make<R2Bucket>(() => rejects(new Error("unused"))),
+                key,
+                body,
+                "00",
+              ),
+            );
+
             expect(error.reason).toBe("crypto");
             expect(error.cause).toBe(failure);
           }),
@@ -295,7 +298,15 @@ describe("T695, the object adapters keep what failed", () => {
     fc.record({ body: fc.uint8Array({ maxLength: 32 }), key: fc.string() }),
     ({ body, key }) =>
       Effect.gen(function* () {
-        const error = yield* Effect.flip(checkedPut(rejecting(new Error("unused")), key, body, "not-a-digest"));
+        const error = yield* Effect.flip(
+          checkedPut(
+            Stub.make<R2Bucket>(() => rejects(new Error("unused"))),
+            key,
+            body,
+            "not-a-digest",
+          ),
+        );
+
         expect(error.reason).toBe("bad_row");
         expect(error.cause).toBeUndefined();
       }),

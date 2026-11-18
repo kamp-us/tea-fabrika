@@ -10,7 +10,12 @@ import { ProcessId } from "../ProcessId.ts";
 import type { Sql } from "../Sql.ts";
 import { short } from "../telemetry/Trace.ts";
 
-const Connection = Schema.Struct({
+/**
+ * Schema for one client's connection: its key, client, Connection object, session and join time.
+ *
+ * @category schemas
+ */
+export const Connection = Schema.Struct({
   key: Schema.NonEmptyString,
   client: Schema.NonEmptyString,
   gateway: Schema.NonEmptyString,
