@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0591, 0590, 0579; body 7292fedef1c2
+
 Plancheck-Version: 3
 
 # Plan: the exam's code-shape checks become lint rules, a text-reading law declares `reads:`, and the `readers` list goes (0591)
@@ -504,6 +504,12 @@ slice F   one-page-runtime and the L9 plants, from the readers    waits on nothi
   `fabrikalfa/exam-to-lint`; no slice opens a pull request (the step rules).
 - The pull request lands whole, after 0580's slice 1 and pull request 1496 are on main, so no head
   of main has a moved rule test that no event runs (doubt 2).
+- Amended 2026-11-18: the work lands in two pull requests. Pull request 1504 lands first with
+  slices A, B and F, each reviewed done, and main merged in. Doubt 2 holds for them, since pull
+  request 1496 is on main, and none of the three needs 0580's slice 1. Slices C, D and E stay on
+  their own branches, each as its review left it, and fold into a second pull request from this
+  branch once 1504 is on main. C still waits on 0580's slice 1, and D on C. The main that 1504
+  merged in touched every laws file slice E edits, so E takes main again before it folds.
 - 0573: its pull request 1 edits `plants.test.ts`'s "elsewhere" list and adds
   `effect-checks-held.test.ts`. Whichever lands second takes a short rebase of that list, and this
   sweep folds `effect-checks.test.ts` into 0573's file if 0573 is on main by slice A's build.
