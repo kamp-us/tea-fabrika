@@ -3,8 +3,9 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Layer, Schema, Stream } from "effect";
 import { Result } from "effect";
+import * as Arr from "effect/Array";
 import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";

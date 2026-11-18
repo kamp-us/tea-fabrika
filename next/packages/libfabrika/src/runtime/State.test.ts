@@ -1,6 +1,7 @@
 // S3, next/. Saved.upgrade(saved, state, build) returns {saved, ran}; no I/O.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Formatter, Schema } from "effect";
+import { Effect, Schema } from "effect";
+import * as Formatter from "effect/Formatter";
 import { Saved } from "./State.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, step: Schema.Int });

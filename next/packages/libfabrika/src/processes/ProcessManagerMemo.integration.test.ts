@@ -3,7 +3,8 @@
 // build kept for a whole history; a fresh one is built for a single call and folds from rev 0.
 // `storage()` reopens real SQLite files (Process.test-support.ts), so it is `.integration.` (0584).
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer, Predicate } from "effect";
+import { Cause, Effect, Exit, Layer } from "effect";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";

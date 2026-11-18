@@ -10,8 +10,9 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, type Context, Effect, Exit, Formatter, Layer, Option, Schema, type Scope } from "effect";
+import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";

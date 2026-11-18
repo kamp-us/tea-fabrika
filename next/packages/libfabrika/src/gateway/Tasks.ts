@@ -1,7 +1,8 @@
 /**
  * Task methods over an authenticated connection, called inside the shared write turn.
  */
-import { Array as Arr, Effect, Result, Schema, Stream } from "effect";
+import { Effect, Result, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Task, Result as TaskResult, type Recorded } from "../tasks/Task.ts";

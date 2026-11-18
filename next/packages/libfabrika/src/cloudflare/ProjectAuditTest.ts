@@ -1,6 +1,6 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
 import { Machine } from "@demlik/tea/effect";
-import { Effect, Layer, Schema, type Scope, Stream, Formatter } from "effect";
+import { Effect, Layer, Schema, type Scope, Stream } from "effect";
 
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -22,6 +22,7 @@ import type { Sql } from "../Sql.ts";
 import * as PublicKey from "../transport/PublicKey.ts";
 import { writeSshsig } from "../transport/Sshsig.ts";
 
+import * as Formatter from "effect/Formatter";
 import { programBox } from "./box.ts";
 import { ProjectService, projectLayer, type ProjectOptions } from "./runtime.ts";
 import { Props, receive } from "./tail.ts";

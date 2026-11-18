@@ -7,7 +7,8 @@
 // The walk's plants are named on each law and were run once, then undone (decision 0093).
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr, Option, Schema } from "effect";
+import { Option, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as Access from "../../access/Access.ts";

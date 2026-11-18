@@ -3,8 +3,9 @@
  * has folded up to. An old number climbs through named upgrades, one number each, and decodes only
  * at the end. A failure keeps the old bytes.
  */
-import { Option, Result, Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { Rev } from "../coordination/index.ts";
 import { ProgramDown, type State } from "./Program.ts";
 

@@ -9,12 +9,13 @@ import {
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Recorder, runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Cause, Effect, Exit, Layer, Option, Redacted, Schema, Formatter } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Signature from "effect/crypto/Signature";
 import * as Base64Url from "effect/encoding/Base64Url";
+import * as Formatter from "effect/Formatter";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";

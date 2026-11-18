@@ -2,7 +2,9 @@
  * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
  * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
  */
-import { Effect, Equal, Option, pipe, Redacted, Result, Schema } from "effect";
+import { Effect, Equal, Redacted, Result, Schema } from "effect";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
 import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { httpContext } from "./fetch.ts";
@@ -148,7 +150,7 @@ export const control = Effect.fn("runtime.control")(function* (
   programs: Readonly<Record<string, ProgramSource>>,
 ) {
   const bearer = Redacted.make(
-    pipe(
+    Function.pipe(
       request.headers.get("authorization") ?? "",
       Str.match(/^Bearer (.+)$/),
       Option.map((found) => found[1]),

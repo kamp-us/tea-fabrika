@@ -3,23 +3,11 @@
  * calls it sends to the project.
  */
 import { applyCell } from "@demlik/tea";
-import {
-  Context,
-  Duration,
-  Effect,
-  Exit,
-  Formatter,
-  Layer,
-  Option,
-  Result,
-  Schema,
-  Semaphore,
-  Stream,
-  Tracer,
-} from "effect";
+import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Formatter from "effect/Formatter";
 import { RateLimiter } from "effect/persistence/RateLimiter";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";

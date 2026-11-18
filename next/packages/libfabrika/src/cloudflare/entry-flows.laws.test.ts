@@ -7,12 +7,13 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer, Formatter } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
 
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Signature from "effect/crypto/Signature";
 import * as Base64Url from "effect/encoding/Base64Url";
+import * as Formatter from "effect/Formatter";
 import * as Str from "effect/String";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -23,9 +24,9 @@ import type { Sql } from "../Sql.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
 import type { GatewayCalls } from "./bindings.ts";
-import { ConnectionService, connectionRuntime } from "./connection.ts";
 // Loading record.ts registers RecordPart's constructor, which the objects.ts mock below captures.
 import "./record.ts";
+import { ConnectionService, connectionRuntime } from "./connection.ts";
 import { fetch } from "./fetch.ts";
 import type { RecordShape } from "./objects.ts";
 import { ProcessService, ProjectService, processRuntime, projectRuntime, settingsReply, type Env } from "./runtime.ts";

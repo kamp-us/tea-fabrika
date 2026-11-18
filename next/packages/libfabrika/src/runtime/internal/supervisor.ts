@@ -2,8 +2,9 @@
 // one unfinished job; the runner performs it and sends the completion Msg only after the write
 // succeeds. Nothing here reads a clock, a store or a service (0037, 0046).
 import { Machine } from "@demlik/tea/effect";
-import { Option, Schema } from "effect";
+import { Schema } from "effect";
 import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import { ExitReason } from "../../processes/ExitReason.ts";
 import { From } from "../../processes/Mailbox.ts";

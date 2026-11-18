@@ -10,7 +10,8 @@
  * lost answer never lands in two parts. Nothing but content is ever deleted, and content only by
  * `deleteContent`.
  */
-import { Array as Arr, Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import type { Sql } from "../Sql.ts";
 import { type Chain, Content, partName, Rolled, SinkError, SpanRow, sinkError } from "./Trace.ts";
 

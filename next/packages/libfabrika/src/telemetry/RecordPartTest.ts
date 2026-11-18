@@ -3,7 +3,7 @@
 // The laws, and no driver (0062): a runner in the module that owns a driver calls
 // `RecordPartTest.suite(open)`, and `open` acquires each store in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import type * as PlatformError from "effect/PlatformError";
 import type * as Scope from "effect/Scope";

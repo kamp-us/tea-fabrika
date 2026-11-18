@@ -4,10 +4,11 @@
 // P39 slice 3 (ticket 1040), J1's select half: a collected task is never offered, as a finished one
 // is not. Plant (after build): let select keep `collected` tasks.
 import { expect, it } from "@effect/vitest";
-import { Array as Arr, Result, Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as Id from "../Id.ts";
 import { type Task, Request, Executor, Result as TaskResult, State } from "../tasks/Task.ts";
 
+import * as Arr from "effect/Array";
 import * as TaskAccess from "./TaskAccess.ts";
 
 const Item = Schema.Struct({

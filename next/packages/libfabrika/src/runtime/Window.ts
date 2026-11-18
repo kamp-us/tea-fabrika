@@ -2,7 +2,9 @@
  * A program's window contract: its data, presses and optional tile machine.
  */
 import type { Machine } from "@demlik/tea/effect";
-import { Option, pipe, type Schema } from "effect";
+import { type Schema } from "effect";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
 import * as Str from "effect/String";
 import type { Program } from "./Program.ts";
 
@@ -111,7 +113,7 @@ export const defineWindow = <P extends AnyProgram, View, T extends AnyTile = nev
  * @category combinators
  */
 export const commandMsg = (command: string): { readonly type: string } | null =>
-  pipe(
+  Function.pipe(
     Str.indexOf(".")(command),
     Option.filter((dot) => dot > 0 && dot < command.length - 1),
     Option.map((dot) => ({ type: Str.slice(dot + 1)(command) })),

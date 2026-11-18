@@ -1,7 +1,8 @@
 /**
  * Selection and ownership rules for authenticated task access.
  */
-import { Array as Arr, Result } from "effect";
+import { Result } from "effect";
+import * as Arr from "effect/Array";
 import type { Task } from "../tasks/Task.ts";
 
 type Subject = { readonly process: string; readonly key: string; readonly execution?: string };

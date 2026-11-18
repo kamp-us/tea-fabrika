@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 /**
  * Where an object's old measurements go: one R2 bucket behind our own small interface, so nothing
  * here imports Cloudflare. The object's wiring passes the bucket's calls in.
@@ -6,7 +7,6 @@
  * stored checksums. So `put` here answers the hash R2 says it stored, and the sink deletes its
  * local rows only when that equals the hash it worked out itself.
  */
-import { Array as Arr } from "effect";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

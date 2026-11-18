@@ -1,4 +1,4 @@
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 // Health in two levels, over an object's own SQLite: a raw row per ended span, and an hourly summary
 // per piece, both kept forever. Raw rows stay local about two weeks, then leave for R2, one file per
 // object per UTC day, deleted here only after the stored file's hash matches. A row of the day that

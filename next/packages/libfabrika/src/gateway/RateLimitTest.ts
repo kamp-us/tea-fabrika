@@ -1,6 +1,8 @@
 // T843, next/. The driver owner supplies a scoped persistent Sql and its reopen operation (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr, Duration, Effect, Exit, Formatter, Layer, Option, Schema, type Scope } from "effect";
+import { Duration, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as Str from "effect/String";
 import { TestClock } from "effect/testing";

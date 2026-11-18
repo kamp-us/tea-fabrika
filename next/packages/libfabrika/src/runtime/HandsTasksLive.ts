@@ -1,8 +1,9 @@
 /**
  * The `HandsTasks` layer over `Tasks`, run in the Project inside its shared write turn.
  */
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer } from "effect";
 import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import type { From } from "../processes/Mailbox.ts";
 import { needs } from "../tasks/Task.ts";
 import { Tasks, type TasksError } from "../tasks/Tasks.ts";

@@ -12,7 +12,6 @@ import {
   Equal,
   Exit,
   Fiber,
-  Formatter,
   Layer,
   Option,
   Result,
@@ -22,6 +21,7 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Formatter from "effect/Formatter";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Str from "effect/String";
