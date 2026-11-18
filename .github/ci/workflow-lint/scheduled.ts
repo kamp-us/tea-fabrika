@@ -1,4 +1,4 @@
-// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC20).
+// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC21).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -172,6 +172,16 @@ const SLOT_OUTPUT = `\${{ steps.${SELECT_STEP}.outputs.slots }}`;
 const RUN_NUMBER = `\${{ github.run_number }}`;
 
 const RECORD = `\${{ runner.temp }}/proof-set.json`;
+
+// The hand start's two inputs (0590, ticket 1161): `scope`, `changed` by default, and `law`, empty by
+// default, which only select's set step reads, as `SCOPE` and `LAW` (SC17, SC21). The default is
+// 0590's ruling, not a free setting (0069): a default of `full` would make every hand start the full
+// set, so the lint holds it the way SC16 holds the gap's floor.
+const SELECT_READS = { SCOPE: "inputs.scope", LAW: "inputs.law" };
+
+// A read of the inputs: the `inputs` context, `github.event.inputs`, or the whole event or `github`
+// context as JSON, which holds them. GitHub's context and function names are case-insensitive.
+const READS_INPUTS = /\binputs\b|toJSON\(\s*github(?:\.event)?\s*\)/i;
 
 // `tests` runs after a skipped `select`, on main, or after one that said `full`.
 const TESTS_IF = `\${{ !cancelled() && ${STARTED} && (needs.${SELECT_JOB}.result == 'skipped' || needs.${SELECT_JOB}.outputs.scope == 'full') }}`;
@@ -367,6 +377,42 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
       pins?.proof,
       proof,
     ), `SC20: the test job's first ${MAIN_SLOTS} legs take main's groups 1 to ${MAIN_SLOTS} in order, and its first ${PROOF_SLOTS} legs the proof groups 1 to ${PROOF_SLOTS}, each leg once, so no group waits empty`);
+};
+
+/**
+ * SC21. The hand start's two inputs, and who reads them (0590, ticket 1161). On main `select` never
+ * runs (SC17), so `scope` does nothing there: no other step, `if`, group or env may read the inputs.
+ */
+const dispatchInputs = (workflow: Record<string, unknown>, require: Require): void => {
+  const inputs = map(map(map(workflow["on"])["workflow_dispatch"])["inputs"]);
+  const scope = map(inputs["scope"]);
+  const law = map(inputs["law"]);
+
+  const described = (input: Record<string, unknown>) =>
+    Predicate.isString(input["description"]) && input["description"] !== "";
+
+  require(JSON.stringify(Rec.keys(inputs).toSorted()) === JSON.stringify(["law", "scope"]) &&
+    scope["type"] === "choice" &&
+    scope["required"] === true &&
+    scope["default"] === "changed" &&
+    JSON.stringify(scope["options"]) === JSON.stringify(["changed", "full"]) &&
+    described(scope) &&
+    law["type"] === "string" &&
+    law["required"] === false &&
+    law["default"] === "" &&
+    described(
+      law,
+    ), "SC21: a hand start takes scope, changed or full and changed by default, and law, text that is empty by default, and no other input, each with a description");
+
+  // Everything but `on`, with select's set step's SCOPE and LAW taken out, reads no input.
+  const rest = structuredClone(workflow);
+  Reflect.deleteProperty(rest, "on");
+  const set = steps(map(map(rest["jobs"])[SELECT_JOB])).find((s) => s["id"] === SELECT_STEP);
+  Reflect.deleteProperty(map(set?.["env"]), "SCOPE");
+  Reflect.deleteProperty(map(set?.["env"]), "LAW");
+  require(!READS_INPUTS.test(
+    JSON.stringify(rest),
+  ), "SC21: only select's set step reads the hand start's inputs, as SCOPE and LAW, so main's runs never read scope");
 };
 
 /**
@@ -581,7 +627,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // `true` (0590): a push to main, the catch-up and a hand start on main skip it, so SC15's `tests`
   // runs every test there. It runs proof.ts once, in a step whose outputs are the job's,
   // with the most legs at once (`MOST`, the `changed` matrix's `max-parallel` and PROOF_SLOTS, SC6, SC19), the legs' test
-  // step limit (`LIMIT`, next's, SC18) and where its record goes, and no token. It checks out the
+  // step limit (`LIMIT`, next's, SC18), where its record goes and the hand start's two inputs (`SCOPE`
+  // and `LAW`, read as `inputs.scope` and `inputs.law`, SC21), and no token. It checks out the
   // whole history, to diff the branch with origin/main from their merge base, and keeps the record
   // as `proof-set` after a red step too.
   const commandsOf = (job: Record<string, unknown>) =>
@@ -592,7 +639,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const selectRuns = selectSteps.filter((s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile");
   const selectEnv = map(selectRuns[0]?.["env"]);
   const selectOutputs = { ...SELECT_OUTPUTS, slots: SLOT_OUTPUT };
-  const selectKeys = ["MOST", "LIMIT", "RECORD", "RUN_NUMBER"];
+  const selectKeys = ["MOST", "LIMIT", "RECORD", "RUN_NUMBER", "SCOPE", "LAW"];
   const selectCheckouts = selectSteps.filter((s) => uses(s, "actions/checkout"));
   const records = selectSteps.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === RECORD);
   require(SELECT_JOB in jobs &&
@@ -606,6 +653,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(Object.keys(selectEnv)) === JSON.stringify(selectKeys) &&
     selectEnv["RUN_NUMBER"] === RUN_NUMBER &&
     selectEnv["RECORD"] === RECORD &&
+    compact(selectEnv["SCOPE"]) === SELECT_READS.SCOPE &&
+    compact(selectEnv["LAW"]) === SELECT_READS.LAW &&
     selectCheckouts.length === 1 &&
     map(selectCheckouts[0]?.["with"])["fetch-depth"] === 0 &&
     records.length === 1 &&
@@ -739,6 +788,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   ), `SC6: its jobs take at most ${BUDGET} machines at once, half of the 20 runners`);
 
   jobSlots(workflow, require);
+  dispatchInputs(workflow, require);
 
   // SC7. All of next/ on check.yaml's full matrix, each leg's `/N` its kind's count, nothing
   // narrowed. A `--changed`, a `$FILTER` or a list would make it the merge line's selection again.

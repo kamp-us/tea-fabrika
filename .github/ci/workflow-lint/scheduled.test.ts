@@ -30,8 +30,11 @@ type Job = Record<string, unknown> & {
   needs?: unknown;
 };
 
+/** The hand start's inputs (ticket 1161): each one's type, whether it is required, its default and the rest. */
+type Inputs = Record<string, Record<string, unknown>>;
+
 type Workflow = Record<string, unknown> & {
-  on: Record<string, unknown>;
+  on: Record<string, unknown> & { workflow_dispatch: { inputs: Inputs } };
   env?: Record<string, unknown>;
   concurrency: Record<string, unknown>;
   permissions: unknown;
@@ -39,6 +42,9 @@ type Workflow = Record<string, unknown> & {
 };
 
 const real = (): Workflow => parse(read("scheduled.yaml"));
+
+/** The hand start's two inputs, `scope` and `law`, as a plant reaches them. */
+const hand = (w: Workflow): Inputs => w.on.workflow_dispatch.inputs;
 
 /**
  * Moves the legs whose shard `leaves` picks out of the test job into a job of their own, `split`,
@@ -120,8 +126,11 @@ const scheduled = fc
     fc.array(fc.integer({ min: 0, max: 1000 }), { minLength: 9, maxLength: 9 }),
     fc.boolean(),
     fc.boolean(),
+    // S11: the two inputs' descriptions, any text, since what they say changes nothing.
+    fc.string({ minLength: 1 }),
+    fc.string({ minLength: 1 }),
   )
-  .map(([minute, minutes, main, gap, mainTail, proofTail, numeric, upper]) => {
+  .map(([minute, minutes, main, gap, mainTail, proofTail, numeric, upper, scopeText, lawText]) => {
     const proof = 9 - main;
     const w = real();
     // SAFETY: the branch is taken only when `schedule` is a list, and each GitHub schedule entry is a map.
@@ -140,6 +149,11 @@ const scheduled = fc
     w.jobs["tests"]!.strategy!["max-parallel"] = spaced(`\${{ ${REF} && ${main} || ${proof} }}`, gap);
     w.jobs["changed"]!.strategy!["max-parallel"] = proof;
     step(w, "select", "set").env!["MOST"] = proof;
+    // S11: the set step reads the two inputs with the spacing of the rest of the file.
+    step(w, "select", "set").env!["SCOPE"] = `\${{${gap}inputs.scope${gap}}}`;
+    step(w, "select", "set").env!["LAW"] = `\${{${gap}inputs.law${gap}}}`;
+    hand(w)["scope"]!["description"] = scopeText;
+    hand(w)["law"]!["description"] = lawText;
 
     const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
 
@@ -1174,6 +1188,37 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   ["SC17: a red select loses its record", (w) => (step(w, "select", "record")["if"] = "success()")],
   ["SC17: the record takes another name", (w) => (step(w, "select", "record").with!["name"] = "results-set")],
+  // SC17's two reads, ticket 1161. Plants, each run once on scheduled.ts and restored: SC17's key list
+  // admits any extra key (red on the seventh key); SC17's two value checks dropped (red on the other
+  // five).
+  ["SC17: select's step has no SCOPE", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "SCOPE")],
+  ["SC17: select's step has no LAW", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "LAW")],
+  ["SC17: SCOPE is the literal full", (w) => (step(w, "select", "set").env!["SCOPE"] = "full")],
+  [
+    "SC17: SCOPE reads github.event.inputs",
+    (w) => (step(w, "select", "set").env!["SCOPE"] = `\${{ github.event.inputs.scope }}`),
+  ],
+  [
+    "SC17: SCOPE and LAW are swapped",
+    (w) => {
+      const env = step(w, "select", "set").env!;
+      [env["SCOPE"], env["LAW"]] = [env["LAW"], env["SCOPE"]];
+    },
+  ],
+  ["SC17: select's step gets a seventh env key", (w) => (step(w, "select", "set").env!["EXTRA"] = "x")],
+  // SC21, ticket 1161: the hand start's two inputs. Plants, each run once on scheduled.ts and restored:
+  // SC21's input check dropped (red on each of these).
+  ["SC21: the scope default is full", (w) => (hand(w)["scope"]!["default"] = "full")],
+  ["SC21: the scope has no default", (w) => Reflect.deleteProperty(hand(w)["scope"]!, "default")],
+  ["SC21: the scope options gain readers", (w) => (hand(w)["scope"]!["options"] = ["changed", "full", "readers"])],
+  ["SC21: the scope options lose full", (w) => (hand(w)["scope"]!["options"] = ["changed"])],
+  ["SC21: the scope is a string", (w) => (hand(w)["scope"]!["type"] = "string")],
+  ["SC21: the scope is not required", (w) => (hand(w)["scope"]!["required"] = false)],
+  ["SC21: the scope has no description", (w) => Reflect.deleteProperty(hand(w)["scope"]!, "description")],
+  ["SC21: a third input", (w) => (hand(w)["extra"] = { type: "string", required: false, default: "" })],
+  ["SC21: the law input is missing", (w) => Reflect.deleteProperty(hand(w), "law")],
+  ["SC21: the law is required", (w) => (hand(w)["law"]!["required"] = true)],
+  ["SC21: the law has a default of a path", (w) => (hand(w)["law"]!["default"] = ".github/ci/proof.test.ts")],
   // SC18, 0590: a changed set's legs. Plants, each run once on scheduled.ts and restored: SC18's
   // `if` check dropped (red on the first two); its command checks dropped (red on the next three);
   // its limit checks dropped (red on the three limits).
@@ -1389,6 +1434,78 @@ it.each(plants)("rejects the schedule's plant: %s", (plant, mutate) => {
     }),
     { ...options, numRuns: 20 },
   );
+});
+
+// Where a read of the hand start's inputs may be put, and the forms a read takes (ticket 1161).
+const JOBS = ["gate", "tests", "select", "changed", "report"] as const;
+
+const places: [string, (w: Workflow, read: string, at: number) => void][] = [
+  ...JOBS.flatMap((job): [string, (w: Workflow, read: string, at: number) => void][] => [
+    [`${job}'s if`, (w, read) => (w.jobs[job]!["if"] = `\${{ ${read} == 'x' }}`)],
+    [`${job}'s group`, (w, read) => (w.jobs[job]!.concurrency!["group"] = `scheduled-\${{ ${read} }}`)],
+    [
+      `${job}'s step env`,
+      (w, read, at) => {
+        const target = w.jobs[job]!.steps[at % w.jobs[job]!.steps.length]!;
+        target.env = { ...target.env, FROM_INPUTS: `\${{ ${read} }}` };
+      },
+    ],
+  ]),
+  ["the workflow's group", (w, read) => (w.concurrency["group"] = `scheduled-\${{ ${read} }}`)],
+  ["tests's max-parallel", (w, read) => (w.jobs["tests"]!.strategy!["max-parallel"] = `\${{ ${read} }}`)],
+];
+
+const READS = ["inputs.scope", "inputs.law", "inputs['scope']", "github.event.inputs.scope", "toJSON(github.event)"];
+
+it("S9 property: a read of the hand start's inputs anywhere but select's set step is named by SC21, whatever the place and the form", () => {
+  // Plant, run once on scheduled.ts and restored: SC21's read check scans only `tests`'s `if` (red: the
+  // gate's env reading `inputs.scope` passes).
+  const reached = new Set<string>();
+
+  fc.assert(
+    fc.property(
+      scheduled,
+      fc.constantFrom(...places),
+      fc.constantFrom(...READS),
+      fc.nat(8),
+      (clean, [place, put], read, at) => {
+        const broken = structuredClone(clean);
+        put(broken, read, at);
+        reached.add(`${place} reads ${read}`);
+        const errors = lint(broken);
+        expect(
+          errors.some((error) => error.startsWith("scheduled.yaml: SC21:")),
+          `${place} reads ${read}: ${JSON.stringify(errors)}`,
+        ).toBe(true);
+      },
+    ),
+    options,
+  );
+
+  // Every place was reached, and every form: 100 runs of 17 places and 5 forms cover each of them.
+  expect(new Set([...reached].map((found) => found.split(" reads ")[0])).size).toBe(places.length);
+  expect(new Set([...reached].map((found) => found.split(" reads ")[1])).size).toBe(READS.length);
+});
+
+it("S12 scenario: on the real scheduled.yaml the only reads of the inputs are select's SCOPE and LAW, and a read added to tests's if is named by SC15 and SC21", () => {
+  // Plant, run once on scheduled.ts and restored: SC21's read check dropped (red: the plant gives
+  // SC15's error alone).
+  const w = real();
+  expect(lint(w)).toEqual([]);
+  expect(JSON.stringify(w.jobs).match(/\binputs\b/g)).toHaveLength(2);
+  expect(step(w, "select", "set").env!["SCOPE"]).toContain("inputs.scope");
+  expect(step(w, "select", "set").env!["LAW"]).toContain("inputs.law");
+
+  w.jobs["tests"]!["if"] = `${String(w.jobs["tests"]!["if"]).replace(/ \}\}$/, "")} && inputs.scope != 'changed' }}`;
+  const errors = lint(w);
+  expect(
+    errors.some((error) => error.startsWith("scheduled.yaml: SC15:")),
+    JSON.stringify(errors),
+  ).toBe(true);
+  expect(
+    errors.some((error) => error.startsWith("scheduled.yaml: SC21:")),
+    JSON.stringify(errors),
+  ).toBe(true);
 });
 
 it("SC1 and SC16 property: a cron at any minute from 1 to 59 every hour, and any whole gap of an hour or more, pass; minute 0 and a gap under an hour do not", () => {

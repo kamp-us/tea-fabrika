@@ -1,13 +1,16 @@
 import { readFileSync } from "node:fs";
 import { afterAll, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { parse } from "yaml";
 import { rowsAt } from "../../vitest.shards.ts";
 import { E2E_SETUP, room } from "./legs.ts";
 import {
+  type Ask,
+  askOf,
   choose,
+  inProjects,
   isTrigger,
   legsOf,
   outputs,
@@ -21,20 +24,24 @@ import {
 } from "./proof.ts";
 
 // Today's CI, serving both versions. Covers proof.ts, which picks what a branch's proof run tests
-// (0590): the full set when the change touches a rerun trigger, else the tests Vitest's `--changed`
-// lists, split into as many legs as they need. The triggers and their match are vitest.config.ts's
+// (0590): the full set when the change touches a rerun trigger or the hand start asked `scope: full`
+// for a named law (ticket 1161), else the tests Vitest's `--changed` lists, split into as many legs as
+// they need. The triggers and their match are vitest.config.ts's
 // own; seconds come from scratch tables, so a law holds for any table, not only today's. Each plant
 // was run once on proof.ts and restored; each turned its law red.
 const options = { seed: 119120, numRuns: 100 };
 
 const sha = (c: string) => c.repeat(40);
 
-const seen = (changed: readonly string[]): Seen => ({
+const changedAsk: Ask = { _tag: "changed" };
+
+const seen = (changed: readonly string[], asked: Ask = changedAsk): Seen => ({
   base: sha("b"),
   head: sha("h"),
   at: "2026-11-15T20:00:00.000Z",
   vitest: "5.0.5",
   changed,
+  asked,
 });
 
 const workflow = parse(readFileSync(new URL("../workflows/scheduled.yaml", import.meta.url), "utf8")) as {
@@ -90,8 +97,19 @@ it("pinned: a change to any rerun trigger 0590 names runs the full set, whatever
       real,
     );
 
+    // P7, and P13 for the full record: the ask is `changed`, and the record keeps git's changed files.
     const { base, head, at, vitest } = seen([]);
-    expect(proof, path).toStrictEqual({ _tag: "full", base, head, at, vitest, triggers: [path] });
+
+    expect(proof, path).toStrictEqual({
+      _tag: "full",
+      base,
+      head,
+      at,
+      vitest,
+      asked: { _tag: "changed" },
+      changed: ["next/a.ts", path],
+      triggers: [path],
+    });
     expect(outputs(proof, 8, real.most), path).toEqual(["scope=full", "legs=[]", "files={}", identitySlots]);
   }
 
@@ -350,6 +368,230 @@ it("pinned: the changed legs run every project proof.ts lists, and no other, and
 
   const proof: Proof = choose(seen(["next/a/b.ts"]), [], ["next/a/b.test.ts"], real);
   expect(Object.keys(proof).toSorted()).toEqual(
-    ["_tag", "at", "base", "changed", "head", "legs", "seconds", "vitest"].toSorted(),
+    ["_tag", "asked", "at", "base", "changed", "head", "legs", "seconds", "vitest"].toSorted(),
   );
+
+  // Plant, run once on proof.ts and restored: the full record drops `asked` (red: its keys differ).
+  const full: Proof = choose(seen(["package.json"]), ["package.json"], [], real);
+  expect(Object.keys(full).toSorted()).toEqual(
+    ["_tag", "asked", "at", "base", "changed", "head", "triggers", "vitest"].toSorted(),
+  );
+});
+
+// The hand start's ask (ticket 1161): `scope` and `law`, as scheduled.yaml's inputs give them. Three
+// real test files stand for a full ask's law.
+const LAWS = [".github/ci/proof.test.ts", ".github/ci/gate.test.ts", ".github/ci/workflow-lint/scheduled.test.ts"];
+
+const asks: fc.Arbitrary<Ask> = fc.oneof(
+  fc.constant<Ask>({ _tag: "changed" }),
+  fc.constantFrom(...LAWS).map((law): Ask => ({ _tag: "full", law })),
+);
+
+// Changed files: at most two rerun triggers, so a change with none is common, and any plain files.
+const touched = fc
+  .tuple(fc.subarray(TRIGGERS, { maxLength: 2 }), fc.subarray(PLAIN))
+  .map(([triggers, plain]) => [...plain, ...triggers]);
+
+it("property: the run tests the full set exactly when the change touches a rerun trigger or the ask is full, and a full record keeps the ask, git's changed files and the triggers", () => {
+  // P6. Plant, run once on proof.ts and restored: `choose` reads only `triggers` (red: a full ask with
+  // no trigger splits a list).
+  const reached = new Set<string>();
+
+  fc.assert(
+    fc.property(touched, asks, set, (changed, asked, { files, sizing }) => {
+      const found = triggered(changed, isTrigger);
+      const proof = choose(seen(changed, asked), found, files, sizing);
+      reached.add(`${asked._tag}/${found.length > 0 ? "trigger" : "plain"}`);
+      expect(proof._tag).toBe(found.length > 0 || asked._tag === "full" ? "full" : "changed");
+
+      if (proof._tag === "full") {
+        const { base, head, at, vitest } = seen([]);
+        expect(proof).toStrictEqual({ _tag: "full", base, head, at, vitest, asked, changed, triggers: found });
+        expect(outputs(proof, 8, real.most).slice(0, 3)).toEqual(["scope=full", "legs=[]", "files={}"]);
+      } else {
+        expect(proof.asked).toEqual({ _tag: "changed" });
+        expect(proof.changed).toEqual(changed);
+      }
+    }),
+    options,
+  );
+
+  expect([...reached].toSorted()).toEqual(["changed/plain", "changed/trigger", "full/plain", "full/trigger"]);
+});
+
+// What `isLaw` holds in P8: the three real test files, and no other.
+const isLaw = (path: string) => LAWS.includes(path);
+
+// P8's scope and law, each drawn from the real values, near misses and any text.
+const scopes = fc.oneof(
+  fc.constantFrom("changed", "full", "", undefined, "FULL", " full", "readers", "changed "),
+  fc.string(),
+);
+
+const laws = fc.oneof(fc.constantFrom(undefined, ""), fc.constantFrom(...LAWS), fc.string());
+
+it("property: askOf accepts exactly changed with no law, and full with a law the project list holds, and names SCOPE or LAW for every other ask", () => {
+  // P8. Plant, run once on proof.ts and restored: `askOf` reads a missing SCOPE as `changed` (red: the
+  // missing case decodes).
+  const reached = new Set<string>();
+
+  fc.assert(
+    fc.property(scopes, laws, (scope, law) => {
+      // What each ask must give: the ask itself, or the name of the variable the step refuses.
+      const expected =
+        scope !== "changed" && scope !== "full"
+          ? "SCOPE"
+          : scope === "changed"
+            ? law === undefined || law === ""
+              ? ({ _tag: "changed" } as const)
+              : "LAW"
+            : law !== undefined && isLaw(law)
+              ? ({ _tag: "full", law } as const)
+              : "LAW";
+
+      const label = typeof expected === "string" ? `${expected} refused` : expected._tag;
+      reached.add(expected === "LAW" ? `${label} for ${scope}` : label);
+
+      // The refusal's own words begin `proof: <variable> `, so the variable is read off them.
+      const actual = Result.match(
+        Result.try(() => askOf(scope, law, isLaw)),
+        {
+          onSuccess: (asked) => asked,
+          onFailure: (error) => String(error).replace(/^Error: proof: (\w+) .*$/s, "$1"),
+        },
+      );
+
+      expect(actual).toEqual(expected);
+    }),
+    options,
+  );
+
+  expect([...reached].toSorted()).toEqual(
+    ["LAW refused for changed", "LAW refused for full", "SCOPE refused", "changed", "full"].toSorted(),
+  );
+});
+
+it("property: a law that starts with a dash or holds whitespace is refused before isLaw is called, so it never reaches vitest list as a flag", () => {
+  // P9. Plant, run once on proof.ts and restored: the dash check dropped (red: `--project=today`
+  // reaches `isLaw`). Pinned past bug: a `-t x` or `--project=today` law would have read as a flag.
+  const dashed = fc.tuple(fc.constantFrom("-", "--"), fc.string()).map(([dash, rest]) => `${dash}${rest}`);
+
+  const spaced = fc
+    .tuple(fc.string({ minLength: 1 }), fc.constantFrom(" ", "\t", "\n", "\r", " "), fc.string({ minLength: 1 }))
+    .map(([a, gap, b]) => `${a}${gap}${b}`);
+
+  fc.assert(
+    fc.property(fc.oneof(dashed, spaced), (law) => {
+      const calls: string[] = [];
+
+      expect(() =>
+        askOf("full", law, (path) => {
+          calls.push(path);
+
+          return true;
+        }),
+      ).toThrow(/^proof: LAW /);
+
+      expect(calls).toEqual([]);
+    }),
+    { ...options, examples: [["--project=today"], ["-t x"], ["a b.test.ts"], ["\t"]] },
+  );
+
+  // A plain path does reach `isLaw`, once, so the refusal above is the pre-check and not a dead `isLaw`.
+  const calls: string[] = [];
+
+  expect(
+    askOf("full", LAWS[0], (path) => {
+      calls.push(path);
+
+      return true;
+    }),
+  ).toEqual({ _tag: "full", law: LAWS[0] });
+
+  expect(calls).toEqual([LAWS[0]]);
+});
+
+it("property: inProjects asks the lister for exactly the four projects and the path, and holds only when the list gives the path itself", () => {
+  // P10. Plant, run once on proof.ts and restored: `includes` becomes a substring match (red:
+  // `proof.test.ts` holds for `.github/ci/proof.test.ts`).
+  const reached = new Set<string>();
+  const path = fc.stringMatching(/^[a-z]{1,6}\/[a-z]{1,6}\.test\.ts$/);
+
+  fc.assert(
+    fc.property(
+      path,
+      fc.boolean(),
+      fc.subarray(["next/other.test.ts", "tooling/x.test.ts"]),
+      fc.constantFrom("", "extra/", "../"),
+      fc.constantFrom("", ".map", ".snap"),
+      (wanted, listsIt, others, before, after) => {
+        // A longer path that holds the wanted one, so a substring match would hold when `includes` does not.
+        const longer = before === "" && after === "" ? [] : [`${before}${wanted}${after}`];
+        const given = [...others, ...longer, ...(listsIt ? [wanted] : [])];
+        const asked: string[][] = [];
+
+        const held = inProjects((args) => {
+          asked.push([...args]);
+
+          return given;
+        })(wanted);
+
+        reached.add(`${listsIt ? "listed" : "unlisted"}${longer.length > 0 ? " with a longer path" : ""}`);
+        expect(held).toBe(listsIt);
+        expect(asked).toEqual([[...PROJECTS.flatMap((project) => ["--project", project]), wanted]]);
+      },
+    ),
+    options,
+  );
+
+  expect([...reached].toSorted()).toEqual(
+    ["listed", "listed with a longer path", "unlisted", "unlisted with a longer path"].toSorted(),
+  );
+});
+
+it("property: a full ask's summary names its law and says it was asked by hand, and a trigger's summary under changed keeps today's text", () => {
+  // P11. Plants, each run once on proof.ts and restored: `summary` drops the law (red: the law is not
+  // in the text); the trigger line is dropped (red: no rerun trigger is named).
+  const reached = new Set<string>();
+
+  fc.assert(
+    fc.property(asks, fc.subarray(TRIGGERS, { maxLength: 2 }), (asked, found) => {
+      const proof = choose(seen([...found], asked), found, [], real);
+      const said = summary(proof);
+      reached.add(`${asked._tag}/${found.length > 0 ? "trigger" : "plain"}`);
+
+      expect(said.includes("scope: full")).toBe(asked._tag === "full");
+      expect(said.includes("rerun trigger")).toBe(found.length > 0);
+
+      if (asked._tag === "full") {
+        expect(said).toContain(`\`${asked.law}\``);
+      }
+
+      for (const path of found) {
+        expect(said).toContain(`- \`${path}\``);
+      }
+    }),
+    options,
+  );
+
+  expect([...reached].toSorted()).toEqual(["changed/plain", "changed/trigger", "full/plain", "full/trigger"]);
+});
+
+it("type: a changed record cannot carry a full ask", () => {
+  // P12, a type law, red only in a typecheck. Plant, run once on proof.ts and restored: type the
+  // changed variant's `asked` as `Ask` (red in a typecheck: the expect-error line is then unused).
+  const refused: Proof = {
+    _tag: "changed",
+    base: sha("b"),
+    head: sha("h"),
+    at: "2026-11-15T20:00:00.000Z",
+    vitest: "5.0.5",
+    // @ts-expect-error A changed record never carries a full ask: a full ask is a full set.
+    asked: { _tag: "full", law: LAWS[0]! },
+    changed: [],
+    legs: {},
+    seconds: {},
+  };
+
+  expect(refused._tag).toBe("changed");
 });
