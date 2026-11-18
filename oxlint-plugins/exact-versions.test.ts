@@ -4,9 +4,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Array as Arr, pipe, Record as Rec } from "effect";
+import { afterAll, describe, expect, it } from "@effect/vitest";
+import { Array as Arr, pipe, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
-import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "exact-versions.ts");
 
@@ -267,90 +267,81 @@ describe("a named catalog's pointer", () => {
   });
 });
 
-// P3 (slice 1 of the kalfa program plan): a `patchedDependencies` row is keyed on one exact version,
-// and on a version a catalog pins when a catalog names its package. So tea's patch row,
-// `@demlik/tea@0.29.0`, holds while the catalog pins 0.29.0, and the bump that takes the release
-// finds it refused and deletes it (0569). Plants, each run once: (a) `inWorkspace` reads no
-// `patchedDependencies`; (b) `refusedPatches` skips the catalog check; (c) `refusedPatches` takes any
-// text after the `@` as a version. Each run holds every case below at once, so 10 runs reach them all.
+// P3 (slice 1 of the kalfa program plan): a `patchedDependencies` row is keyed on one exact
+// version, never a bare name or a range, which pnpm would apply to whatever version it installs, a
+// later release included. A row at a version nothing installs is pnpm's own refusal, so this check
+// passes it: the install fails with ERR_PNPM_UNUSED_PATCH, which is how the bump that takes demlik's
+// next release finds tea's old 0.29.0 row (0569, and 0040: the existing tool wins). Plants, each run
+// once: (a) `inWorkspace` reads no `patchedDependencies`; (b) `refusedPatches` takes any text after
+// the `@` as a version; (c) a row at a version no catalog pins is refused, as pnpm already does.
 describe("a patchedDependencies row", () => {
-  const runs = { seed: 119120, numRuns: 10 };
+  const Lower = Schema.String.check(Schema.isPattern(/^[a-z]{1,6}$/));
+  const Part = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 }));
+  const Version = Schema.Struct({ major: Part, minor: Part, patch: Part });
+  const Package = { name: Lower, scope: Lower, scoped: Schema.Boolean };
 
-  const version = fc
-    .tuple(fc.nat({ max: 30 }), fc.nat({ max: 30 }), fc.nat({ max: 30 }))
-    .map(([major, minor, patch]) => `${major}.${minor}.${patch}`);
+  /** Every range or tag form a row could be keyed on, each one checked in every run. */
+  const RANGES = ["^", "~", ">=", "*", "latest", "1.x", " || 9.9.9", "workspace:*"];
 
-  const name = fc.oneof(
-    fc.stringMatching(/^[a-z]{1,8}$/),
-    fc.tuple(fc.stringMatching(/^[a-z]{1,6}$/), fc.stringMatching(/^[a-z]{1,6}$/)).map(([s, n]) => `@${s}/${n}`),
-  );
+  const exact = ({ major, minor, patch }: typeof Version.Type) => `${major}.${minor}.${patch}`;
 
-  /** Packages the default catalog pins, one of them pinned again by `catalogs.old`, and one no catalog names. */
-  const world = fc
-    .record({
-      pinned: fc.uniqueArray(name, { minLength: 2, maxLength: 4 }),
-      outside: name,
-      now: version,
-      old: version,
-      free: version,
-      range: fc.constantFrom("^", "~", ">=", "*", "latest", "1.x", " || 9.9.9", "workspace:*"),
-    })
-    .filter(({ pinned, outside, now, old }) => !pinned.includes(outside) && now !== old);
+  /** One package name per suffix, scoped or not, so the keys of one workspace never collide. */
+  const named = ({ name, scope, scoped }: { name: string; scope: string; scoped: boolean }, suffix: string) =>
+    scoped ? `@${scope}/${name}${suffix}` : `${name}${suffix}`;
 
-  const workspace = (pinned: readonly string[], now: string, old: string, keys: readonly string[]) =>
+  const workspace = (pins: readonly (readonly [string, string])[], keys: readonly string[]) =>
     [
       "catalog:",
-      ...Arr.map(pinned, (n) => `  '${n}': ${now}`),
-      "catalogs:",
-      "  old:",
-      `    '${pinned[0]}': ${old}`,
+      ...Arr.map(pins, ([key, version]) => `  '${key}': ${version}`),
       "patchedDependencies:",
       ...Arr.map(keys, (key, i) => `  '${key}': patches/${i}.patch`),
       "",
     ].join("\n");
 
-  it("passes a row at each version a catalog pins, and a row for a package no catalog names", () => {
-    fc.assert(
-      fc.property(world, ({ pinned, outside, now, old, free }) => {
-        const keys = [...Arr.map(pinned, (n) => `${n}@${now}`), `${pinned[0]}@${old}`, `${outside}@${free}`];
-        expect(run({ "pnpm-workspace.yaml": workspace(pinned, now, old, keys) })).toEqual({
-          status: 0,
-          said: expect.stringContaining("every version exact"),
-        });
-      }),
-      runs,
-    );
-  });
+  it.prop(
+    "passes a row keyed on one exact version, the catalog's or one no catalog pins, which pnpm refuses at install",
+    { ...Package, pinned: Version, patched: Version },
+    (drawn) => {
+      const [a, b] = [named(drawn, "a"), named(drawn, "b")];
 
-  it("refuses a bare name, a range, and a version no catalog pins, naming each", () => {
-    fc.assert(
-      fc.property(world, ({ pinned, outside, now, old, range }) => {
-        // A major past any drawn version: what a catalog moved on from leaves behind.
-        const stale = `1${now}`;
+      const pins = [
+        [a, exact(drawn.pinned)],
+        [b, exact(drawn.pinned)],
+      ] as const;
 
-        const bad = [
-          `${pinned[0]}`,
-          `${pinned[1]}@${range}${now}`,
-          `${pinned[1]}@${stale}`,
-          `${outside}@${range}`,
-          `${outside}@`,
-        ];
+      const keys = [`${a}@${exact(drawn.pinned)}`, `${b}@${exact(drawn.patched)}`];
+      expect(run({ "pnpm-workspace.yaml": workspace(pins, keys) })).toEqual({
+        status: 0,
+        said: expect.stringContaining("every version exact"),
+      });
+    },
+    { arbitrary: { runs: 10 } },
+  );
 
-        const good = [`${pinned[0]}@${old}`, `${pinned[1]}@${now}`];
-        const { status, said } = run({ "pnpm-workspace.yaml": workspace(pinned, now, old, [...good, ...bad]) });
-        expect(status).toBe(1);
+  it.prop(
+    "refuses a bare name, each range form and an empty version, naming each, and passes the exact row beside them",
+    { ...Package, version: Version },
+    (drawn) => {
+      const good = `${named(drawn, "a")}@${exact(drawn.version)}`;
 
-        for (const key of bad) {
-          expect(said).toContain(`pnpm-workspace.yaml: patchedDependencies: ${key}:`);
-        }
+      const bad = [
+        named(drawn, "b"),
+        `${named(drawn, "c")}@`,
+        ...Arr.map(RANGES, (range, i) => `${named(drawn, `r${i}`)}@${range}${exact(drawn.version)}`),
+        ...Arr.map(RANGES, (range, i) => `${named(drawn, `t${i}`)}@${range}`),
+      ];
 
-        for (const key of good) {
-          expect(said).not.toContain(`pnpm-workspace.yaml: patchedDependencies: ${key}:`);
-        }
-      }),
-      runs,
-    );
-  });
+      const { status, said } = run({ "pnpm-workspace.yaml": workspace([], [good, ...bad]) });
+      expect(status).toBe(1);
+
+      for (const key of bad) {
+        expect(said).toContain(`pnpm-workspace.yaml: patchedDependencies: ${key}:`);
+      }
+
+      expect(said).not.toContain(`pnpm-workspace.yaml: patchedDependencies: ${good}:`);
+    },
+    { arbitrary: { runs: 10 } },
+  );
 });
 
 describe("what must never read as clean", () => {

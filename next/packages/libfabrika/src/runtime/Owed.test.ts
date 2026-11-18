@@ -1,7 +1,9 @@
 // Slice 1 of the kalfa program plan, next/. Laws P1 and P2: the local patch on tea 0.29.0
 // (`patches/@demlik__tea@0.29.0.patch`) carries demlik pulls 982 and 983 as demlik main has them
 // (kamp-us/demlik 48b1058, packages/tea/src). The law walks a real Effect engine on a logged store
-// over one memory journal, restarted between moves, and picks each move from what is owed then.
+// over one memory journal, restarted between moves. Its moves come from a Schema (0579), and each
+// one is played only when what is owed then allows it, as fast-check's `fc.commands` plays a command
+// only when its `check` holds.
 //
 // P1, after pull 982: `owed` and `Owed` are root exports (index.ts:56, :108). A Cmd handler that
 // answers `owed()` marks its call owed (internal/engine/loop.ts:845-856), so the delivery is never
@@ -27,10 +29,7 @@ import { memoryJournal } from "@demlik/tea/mem";
 import { eventSourcedStore } from "@demlik/tea/persistence";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Predicate, Result, Schema, Scope } from "effect";
-import * as fc from "fast-check";
-
-const CHECK = { seed: 119120, numRuns: runsFor({ fast: 20, full: 100 }) };
+import { Cause, Effect, Exit, Match, Predicate, Result, Schema, Scope, type Types } from "effect";
 
 const Model = Schema.Struct({ started: Schema.Array(Schema.Int), settled: Schema.Array(Schema.String) });
 
@@ -70,14 +69,44 @@ const machine = Machine.make({
   },
 });
 
-/** The way a started job's handler ends: with its value, or owed for a later call to answer. */
-type Ending = "done" | "owed";
+const Reply = {
+  pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 })),
+  err: Schema.Boolean,
+  value: Schema.Int.check(Schema.isBetween({ minimum: -1000, maximum: 1000 })),
+  at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2 ** 40 })),
+};
+
+/**
+ * One move of a walk. A start's handler ends with its value or owed for a later call; a repeat
+ * picks among the three newest answers, so one in the same start is as likely as one after a restart.
+ */
+const Move = Schema.TaggedUnion({
+  start: { ending: Schema.Literals(["done", "owed"]) },
+  restart: {},
+  answer: Reply,
+  again: { ...Reply, pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 2 })) },
+  stranger: { offset: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 })) },
+});
+
+type Move = typeof Move.Type;
+
+/** A walk of 10 to 40 moves: long enough to owe, answer, restart and repeat in one case. */
+const Moves = Schema.Array(Move).check(Schema.isMinLength(10), Schema.isMaxLength(40));
 
 /** One delivery the handler was handed: its id and the Cmd's value. */
 interface Handed {
   readonly id: number;
   readonly value: number;
 }
+
+/** A promise the law waits on rejected: the law's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise of tea's store or journal inside the law's Effect. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 const storeOn = (journal: ReturnType<typeof memoryJournal>) =>
   eventSourcedStore(journal, { state: teaSchema(Model), message: teaSchema(Logged), command: teaSchema(Job) });
@@ -108,7 +137,7 @@ type Started = Effect.Success<ReturnType<typeof boot>>;
 /** The real engine and its journal. One store per start, as a host that ends each call has. */
 class World {
   readonly journal = memoryJournal();
-  readonly plan = new Map<number, Ending>();
+  readonly plan = new Map<number, "done" | "owed">();
   readonly handed: Handed[] = [];
   readonly errors: unknown[] = [];
   store = storeOn(this.journal);
@@ -123,18 +152,21 @@ class World {
     return Effect.succeed(this.plan.get(cmd.value) === "done" ? cmd.value * 10 : owed());
   };
 
-  async boot() {
-    this.started = await Effect.runPromise(boot(this.store, this.handle, this.errors));
+  boot() {
+    return Effect.map(boot(this.store, this.handle, this.errors), (started) => {
+      this.started = started;
+    });
   }
 
-  async stop() {
-    const started = this.started;
-    this.started = undefined;
+  stop() {
+    return Effect.suspend(() => {
+      const started = this.started;
+      this.started = undefined;
 
-    if (started !== undefined) {
-      await Effect.runPromise(started.live.stop());
-      await Effect.runPromise(Scope.close(started.scope, Exit.void));
-    }
+      return started === undefined
+        ? Effect.void
+        : Effect.andThen(started.live.stop(), Scope.close(started.scope, Exit.void));
+    });
   }
 
   get live() {
@@ -144,19 +176,22 @@ class World {
   }
 
   /** Runs one engine call, then waits until the engine is idle. */
-  async send(effect: Effect.Effect<void, unknown>) {
-    const exit = await Effect.runPromiseExit(effect);
-    await Effect.runPromise(this.live.idle());
-
-    return exit;
+  send(effect: Effect.Effect<void, unknown>) {
+    return Effect.tap(Effect.exit(effect), () => this.live.idle());
   }
 
-  async surviving() {
-    return logLedger(await this.store.readLog()).surviving();
+  surviving() {
+    return Effect.map(
+      promised(() => this.store.readLog()),
+      (log) => logLedger(log).surviving(),
+    );
   }
 
-  async records() {
-    return (await this.store.readLog()).records.map(({ record }) => record);
+  records() {
+    return Effect.map(
+      promised(() => this.store.readLog()),
+      (log) => log.records.map(({ record }) => record),
+    );
   }
 }
 
@@ -166,7 +201,6 @@ interface Expected {
   readonly settled: string[];
   owed: Handed[];
   readonly answered: Array<Handed & { cold: boolean }>;
-  readonly reached: Set<string>;
 }
 
 const ids = (list: ReadonlyArray<{ readonly id: number }>) => list.map(({ id }) => id);
@@ -184,14 +218,15 @@ const refusals = (exit: Exit.Exit<void, unknown>): ReadonlyArray<unknown> =>
       })
     : [];
 
-const start = (ending: Ending): fc.AsyncCommand<Expected, World> => ({
-  check: () => true,
-  toString: () => `start ${ending}`,
-  run: async (m, w) => {
+/** The cases the walks must reach, filled by the walks and read by the coverage law after them. */
+const reached = new Set<string>();
+
+const start = (m: Expected, w: World, ending: "done" | "owed") =>
+  Effect.gen(function* () {
     const value = m.next++;
     w.plan.set(value, ending);
     const before = w.handed.length;
-    expect(Exit.isSuccess(await w.send(w.live.dispatch(Msg.cases.start.make({ value }))))).toBe(true);
+    expect(Exit.isSuccess(yield* w.send(w.live.dispatch(Msg.cases.start.make({ value }))))).toBe(true);
     const fresh = w.handed.slice(before);
     expect(
       fresh.map((h) => h.value),
@@ -200,61 +235,55 @@ const start = (ending: Ending): fc.AsyncCommand<Expected, World> => ({
 
     if (ending === "owed") {
       m.owed.push(fresh[0]!);
-      m.reached.add("owed");
+      reached.add("owed");
     } else {
       m.settled.push(`ok:${value}:${value * 10}`);
     }
 
-    expect(ids(await w.surviving()), "P1: an owed job stays in the ledger").toEqual(ids(m.owed));
+    expect(ids(yield* w.surviving()), "P1: an owed job stays in the ledger").toEqual(ids(m.owed));
     expect(w.live.getState().settled).toEqual(m.settled);
-  },
-});
+  });
 
-const restart: fc.AsyncCommand<Expected, World> = {
-  check: () => true,
-  toString: () => "restart",
-  run: async (m, w) => {
-    await w.stop();
+const restart = (m: Expected, w: World) =>
+  Effect.gen(function* () {
+    yield* w.stop();
     w.store = storeOn(w.journal);
     const before = w.handed.length;
-    await w.boot();
+    yield* w.boot();
     expect(w.handed.slice(before), "P1: the next start hands each owed job out again, with its first id").toEqual(
       m.owed,
     );
-    expect(ids(await w.surviving())).toEqual(ids(m.owed));
+    expect(ids(yield* w.surviving())).toEqual(ids(m.owed));
     expect(w.live.getState().settled).toEqual(m.settled);
 
     if (m.owed.length > 0) {
-      m.reached.add("handed again");
+      reached.add("handed again");
     }
 
     for (const a of m.answered) {
       a.cold = true;
     }
-  },
-};
+  });
 
-const answer = (pick: number, err: boolean, value: number, at: number): fc.AsyncCommand<Expected, World> => ({
-  check: (m) => m.owed.length > 0,
-  toString: () => `answer ${pick} ${err ? "err" : value}`,
-  run: async (m, w) => {
+const answer = (m: Expected, w: World, { pick, err, value, at }: Types.ExtractTag<Move, "answer">) =>
+  Effect.gen(function* () {
     const entry = m.owed[pick % m.owed.length]!;
-    const persisted = (await w.surviving()).find((d) => d.id === entry.id);
+    const persisted = (yield* w.surviving()).find((d) => d.id === entry.id);
     expect(persisted, `delivery ${entry.id} is owed`).toBeDefined();
     const cmd = persisted!.effect;
-    const before = (await w.records()).length;
+    const before = (yield* w.records()).length;
     const reply = err ? job.err(cmd, Unavailable.make({}), at) : job.ok(cmd, value, at);
     expect(
-      Exit.isSuccess(await w.send(w.live.dispatch(reply, { answerTo: entry.id }))),
+      Exit.isSuccess(yield* w.send(w.live.dispatch(reply, { answerTo: entry.id }))),
       "P2: the answer is admitted",
     ).toBe(true);
     m.owed = m.owed.filter((h) => h.id !== entry.id);
     m.answered.push({ ...entry, cold: false });
     m.settled.push(err ? `err:${entry.value}:unavailable` : `ok:${entry.value}:${value}`);
-    m.reached.add("answered");
+    reached.add("answered");
     expect(w.live.getState().settled, "P2: the answer folds once").toEqual(m.settled);
-    expect(ids(await w.surviving()), "P2: the answer clears its owed entry").toEqual(ids(m.owed));
-    const added = (await w.records()).slice(before);
+    expect(ids(yield* w.surviving()), "P2: the answer clears its owed entry").toEqual(ids(m.owed));
+    const added = (yield* w.records()).slice(before);
     expect(
       added.filter((r) => r._tag === "message" && r.answerTo === entry.id),
       "P2: one message record carries the answer and its receipt",
@@ -263,80 +292,71 @@ const answer = (pick: number, err: boolean, value: number, at: number): fc.Async
       added.filter((r) => r._tag === "confirmed"),
       "P2: no separate confirmation is written",
     ).toEqual([]);
-  },
-});
+  });
 
-const again = (pick: number, err: boolean, value: number, at: number): fc.AsyncCommand<Expected, World> => ({
-  check: (m) => m.answered.length > 0,
-  toString: () => `answer again ${pick} ${err ? "err" : value}`,
-  run: async (m, w) => {
+const again = (m: Expected, w: World, { pick, err, value, at }: Types.ExtractTag<Move, "again">) =>
+  Effect.gen(function* () {
     // Newest first, so a repeat in the same start is as likely as one after a restart.
     const entry = m.answered[m.answered.length - 1 - (pick % m.answered.length)]!;
-    const before = await w.records();
+    const before = yield* w.records();
     const cmd = job({ value: entry.value });
     const reply = err ? job.err(cmd, Unavailable.make({}), at) : job.ok(cmd, value, at);
-    expect(Exit.isSuccess(await w.send(w.live.dispatch(reply, { answerTo: entry.id }))), "P2: a repeat resolves").toBe(
+    expect(Exit.isSuccess(yield* w.send(w.live.dispatch(reply, { answerTo: entry.id }))), "P2: a repeat resolves").toBe(
       true,
     );
-    expect(await w.records(), "P2: a repeat answer writes nothing").toEqual(before);
+    expect(yield* w.records(), "P2: a repeat answer writes nothing").toEqual(before);
     expect(w.live.getState().settled, "P2: a repeat answer folds nothing").toEqual(m.settled);
-    m.reached.add(entry.cold ? "repeat after restart" : "repeat");
-  },
-});
+    reached.add(entry.cold ? "repeat after restart" : "repeat");
+  });
 
-const stranger = (offset: number): fc.AsyncCommand<Expected, World> => ({
-  check: () => true,
-  toString: () => `answer a stranger +${offset}`,
-  run: async (m, w) => {
+const stranger = (m: Expected, w: World, offset: number) =>
+  Effect.gen(function* () {
     const id = Math.max(0, ...ids(w.handed)) + 1 + offset;
-    const before = await w.records();
-    const exit = await w.send(w.live.dispatch(job.ok(job({ value: 0 }), 1, 1), { answerTo: id }));
+    const before = yield* w.records();
+    const exit = yield* w.send(w.live.dispatch(job.ok(job({ value: 0 }), 1, 1), { answerTo: id }));
     expect(refusals(exit), "P2: an id never owed is refused as unknown_answer").toEqual(["unknown_answer"]);
-    expect(await w.records(), "P2: a refused answer writes nothing").toEqual(before);
+    expect(yield* w.records(), "P2: a refused answer writes nothing").toEqual(before);
     expect(w.live.getState().settled).toEqual(m.settled);
-    m.reached.add("refused");
-  },
-});
+    reached.add("refused");
+  });
 
-const answers = (pick: fc.Arbitrary<number>) =>
-  fc.tuple(pick, fc.boolean(), fc.integer({ min: -1000, max: 1000 }), fc.nat({ max: 2 ** 40 }));
-
-// Starts and answers are listed twice, so a walk owes and answers more often than it restarts.
-const moves = fc.commands(
-  [
-    fc.constantFrom<Ending>("done", "owed", "owed").map(start),
-    fc.constantFrom<Ending>("owed").map(start),
-    fc.constant(restart),
-    answers(fc.nat()).map((a) => answer(...a)),
-    answers(fc.nat()).map((a) => answer(...a)),
-    answers(fc.nat({ max: 2 })).map((a) => again(...a)),
-    answers(fc.nat({ max: 2 })).map((a) => again(...a)),
-    fc.nat({ max: 50 }).map(stranger),
-  ],
-  { maxCommands: 40, size: "large" },
-);
+/** Plays one move, or skips it when nothing is owed or answered for it to act on. */
+const play = (m: Expected, w: World, move: Move) =>
+  Match.value(move).pipe(
+    Match.tagsExhaustive({
+      start: ({ ending }) => start(m, w, ending),
+      restart: () => restart(m, w),
+      answer: (a) => (m.owed.length > 0 ? answer(m, w, a) : Effect.void),
+      again: (a) => (m.answered.length > 0 ? again(m, w, a) : Effect.void),
+      stranger: ({ offset }) => stranger(m, w, offset),
+    }),
+  );
 
 describe("P1 and P2 the patched tea hands owed work out again and takes its answer later", () => {
-  it("P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused", async () => {
-    expectTypeOf(owed()).toEqualTypeOf<Owed>();
-    const reached = new Set<string>();
-    await fc.assert(
-      fc.asyncProperty(moves, async (list) => {
+  it.effect.prop(
+    "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+    { moves: Moves },
+    ({ moves }) =>
+      Effect.gen(function* () {
+        expectTypeOf(owed()).toEqualTypeOf<Owed>();
         const world = new World();
-        const expected: Expected = { next: 1, settled: [], owed: [], answered: [], reached };
-        await world.boot();
+        const expected: Expected = { next: 1, settled: [], owed: [], answered: [] };
+        yield* Effect.addFinalizer(() =>
+          world.stop().pipe(Effect.andThen(promised(() => world.journal.close())), Effect.orDie),
+        );
+        yield* world.boot();
 
-        try {
-          await fc.asyncModelRun(() => ({ model: expected, real: world }), list);
-          expect(world.errors, "no handler or store error reached onError").toEqual([]);
-        } finally {
-          await world.stop();
-          await world.journal.close();
+        for (const move of moves) {
+          yield* play(expected, world, move);
         }
-      }),
-      CHECK,
-    );
 
+        expect(world.errors, "no handler or store error reached onError").toEqual([]);
+      }),
+    { arbitrary: { runs: runsFor({ fast: 20, full: 100 }) } },
+  );
+
+  // Coverage: the walks above must reach each case at least once, or the law proved less than it says.
+  it("scenario: P1 and P2's generated walks reached an owed job, a second hand-out, an answer, a repeat in the same start and after a restart, and a refusal", () => {
     for (const name of ["owed", "handed again", "answered", "repeat", "repeat after restart", "refused"]) {
       expect(reached, `no run reached: ${name}`).toContain(name);
     }
