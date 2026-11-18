@@ -1,6 +1,7 @@
 /**
  * Which clients of a key are connected now, kept in the project's Sql.
  */
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -10,7 +11,12 @@ import { ProcessId } from "../ProcessId.ts";
 import type { Sql } from "../Sql.ts";
 import { short } from "../telemetry/Trace.ts";
 
-const Connection = Schema.Struct({
+/**
+ * Schema for one client's connection: its key, client, Connection object, session and join time.
+ *
+ * @category schemas
+ */
+export const Connection = Schema.Struct({
   key: Schema.NonEmptyString,
   client: Schema.NonEmptyString,
   gateway: Schema.NonEmptyString,
@@ -128,9 +134,9 @@ export class Connections extends Context.Service<
             }
 
             const connections = yield* stored(() =>
-              sql
-                .exec(`SELECT * FROM process_connections WHERE "key" = ? ORDER BY client`, key)
-                .map((row) => decodeConnection({ ...row, gateway: row.connection })),
+              Arr.map(sql.exec(`SELECT * FROM process_connections WHERE "key" = ? ORDER BY client`, key), (row) =>
+                decodeConnection({ ...row, gateway: row.connection }),
+              ),
             );
 
             return yield* Effect.forEach(

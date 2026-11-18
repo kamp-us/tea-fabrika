@@ -5,6 +5,7 @@ import type { AnyCmdDef, CmdOf, Reducer, Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import * as Duration from "effect/Duration";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
@@ -27,7 +28,7 @@ export const Model = Schema.TaggedUnion({
  */
 export type Model = typeof Model.Type;
 
-const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite });
+const Timer = Schema.TaggedStruct("timer", { at: Schema.Finite });
 
 /**
  * The period given to `make` is not a whole, positive number of milliseconds.
@@ -71,7 +72,7 @@ export const make = <C extends AnyCmdDef>(config: {
   readonly cmd: C;
   readonly work: (due: number, period: number) => CmdOf<C>;
 }) => {
-  if (typeof config.period === "number" && !Number.isSafeInteger(config.period)) {
+  if (Predicate.isNumber(config.period) && !Number.isSafeInteger(config.period)) {
     return Result.fail(ScheduledJobError.make({ reason: "bad_period" }));
   }
 

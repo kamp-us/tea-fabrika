@@ -1,8 +1,8 @@
 import type { Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { CodeHost, Program, Send, StartChild, Started, type Refusal } from "@kampus/libfabrika";
-import { Schema } from "effect";
-import { Abandon, Drop, Enqueue, Reply, Resume } from "./Mail.ts";
+import { CodeHost, MalformedResult, Program, Send, StartChild, Started, type Refusal } from "@kampus/libfabrika";
+import { Array as Arr, Record as Rec, Schema } from "effect";
+import { Abandon, Drop, Enqueue, Land, Reply, Resume } from "./Mail.ts";
 import type { Values } from "./Settings.ts";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -45,18 +45,31 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
   ok: O,
   tags: ReadonlyArray<T>,
 ) => {
-  const cmd = input.mapFields((fields) => ({ ...fields, type: Schema.Literal(name) }));
+  const cmd = input.mapFields((fields) => ({
+    ...fields,
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's input restated as tea's value, keyed `_tag` by tea; slice 5 (demlik 952) deletes this helper
+    _tag: Schema.Literal(name),
+  }));
 
   return Schema.Union([
-    Schema.Struct({ type: Schema.Literal(`${name}_ok`), cmd, value: ok, at: Schema.Finite }),
-    Schema.Struct({
-      type: Schema.Literal(`${name}_err`),
+    Schema.TaggedStruct(`${name}_ok`, { cmd, value: ok, at: Schema.Finite }),
+    Schema.TaggedStruct(`${name}_err`, {
       cmd,
-      error: Schema.Union(tags.map((tag) => Schema.TaggedStruct(tag, {}))),
+      error: Schema.Union([...Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {})), MalformedResult]),
       at: Schema.Finite,
     }),
   ]);
 };
+
+/**
+ * The runner's own answer to a refused start, beside tea's: `cmd` echoes only the Cmd's `_tag`, and
+ * `reason` says why. One start is out while `starting`, so a refusal with no name answers that start.
+ */
+const StartRefused = Schema.TaggedStruct("start_child_err", {
+  cmd: Schema.TaggedStruct("start_child", {}),
+  reason: Schema.Literals([...StartChild.StartRefusal.literals, "bad_cmd"]),
+  at: Schema.Finite,
+});
 
 const Msg = Schema.Union([
   Enqueue,
@@ -64,26 +77,24 @@ const Msg = Schema.Union([
   Resume,
   Reply,
   answers("start_child", StartChild.StartChildInput, Started, StartChild.startChild.errTags),
-  // Runner.ts echoes only the type of a refused built-in start. Each Cmd is answered and folded
-  // once, as StartChildTest L11 and QueueRunnerTest QR5 check. One start is out while `starting`,
-  // so an unnamed refusal there answers that start.
-  Schema.Struct({
-    type: Schema.Literal("start_child_err"),
-    cmd: Schema.Struct({ type: Schema.Literal("start_child") }),
-    reason: Schema.Literals([...StartChild.StartRefusal.literals, "bad_cmd"]),
-    at: Schema.Finite,
-  }),
+  StartRefused,
   answers("send", Send.SendInput, Send.Queued, Send.send.errTags),
 ]);
 
-type Message = typeof Msg.Type | Settled<typeof StartChild.startChild | typeof Send.send>;
+/** What the machine decodes: the inputs alone, since tea mints each answer from the Cmd list. */
+const Input = Schema.Union([Enqueue, Drop, Resume, Reply]);
+
+type Message = typeof Input.Type | Settled<typeof StartChild.startChild | typeof Send.send> | typeof StartRefused.Type;
+
+/** The whole Msg the program declares, as tea types it: the inputs and each Cmd's settled answers. */
+const Whole: Schema.Codec<Message, typeof Msg.Encoded> = Msg;
 
 const forward = (entry: Entry, reply: typeof Reply.Type): ReadonlyArray<Command> =>
   entry.reply === null ? [] : [Send.send({ to: entry.reply.to, m: { ...reply, ref: entry.reply.ref } })];
 
 /** One queue, registered under the same name its host supplies here. */
 export const queue = ({ name, settings }: { readonly name: string; readonly settings: Values }) => {
-  const unset = Object.values(settings.checks).every((checks) => checks.length === 0);
+  const unset = Arr.every(Rec.values(settings.checks), (checks) => checks.length === 0);
 
   const next = (s: Pick<Model, "attempt" | "late">, line: ReadonlyArray<Entry>): Cell => {
     const [entry, ...rest] = line;
@@ -101,7 +112,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
         StartChild.startChild({
           program: "pipeline/merger",
           name: current.name,
-          input: { type: "land", ref: String(attempt), change: entry.change, head: entry.head, reply: name },
+          input: Land.make({ ref: String(attempt), change: entry.change, head: entry.head, reply: name }),
         }),
       ],
     ];
@@ -111,12 +122,12 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
     const line = s._tag === "idle" ? [] : s.line;
     const current = s._tag === "starting" || s._tag === "landing" ? s.current : null;
 
-    if (m.type === "enqueue") {
+    if (m._tag === "enqueue") {
       if (unset) {
         return { reason: "unset" };
       }
 
-      if (current?.change === m.change || line.some((entry) => entry.change === m.change)) {
+      if (current?.change === m.change || Arr.some(line, (entry) => entry.change === m.change)) {
         return { reason: "queued" };
       }
 
@@ -125,8 +136,8 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       }
     }
 
-    if (m.type === "drop") {
-      if (current?.change !== m.change && !line.some((entry) => entry.change === m.change)) {
+    if (m._tag === "drop") {
+      if (current?.change !== m.change && !Arr.some(line, (entry) => entry.change === m.change)) {
         return { reason: "missing" };
       }
 
@@ -135,11 +146,11 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       }
     }
 
-    return m.type === "resume" && s._tag !== "stopped" ? { reason: "running" } : null;
+    return m._tag === "resume" && s._tag !== "stopped" ? { reason: "running" } : null;
   };
 
   const reduce = (s: Model, m: Message): Cell => {
-    if (m.type === "send_ok" || m.type === "send_err") {
+    if (m._tag === "send_ok" || m._tag === "send_err") {
       return [s, []];
     }
 
@@ -147,18 +158,18 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       return [s, []];
     }
 
-    if (m.type === "enqueue") {
+    if (m._tag === "enqueue") {
       const entry = Entry.make({ change: m.change, head: m.head, reply: m.reply ?? null });
 
       return s._tag === "idle" ? next(s, [entry]) : [{ ...s, line: [...s.line, entry] }, []];
     }
 
-    if (m.type === "start_child_ok" || m.type === "start_child_err") {
+    if (m._tag === "start_child_ok" || m._tag === "start_child_err") {
       if (s._tag !== "starting" || ("name" in m.cmd && m.cmd.name !== s.current.name)) {
         return [{ ...s, late: s.late + 1 }, []];
       }
 
-      if (m.type === "start_child_ok" && m.value._tag === "started") {
+      if (m._tag === "start_child_ok" && m.value._tag === "started") {
         return [
           Model.cases.landing.make({ attempt: s.attempt, late: s.late, line: s.line, current: s.current, since: m.at }),
           [],
@@ -173,14 +184,14 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
           reason: Stop.cases.start_refused.make({
             change: s.current.change,
             name: s.current.name,
-            refusal: m.type === "start_child_err" ? ("reason" in m ? m.reason : m.error._tag) : m.value._tag,
+            refusal: m._tag === "start_child_err" ? ("reason" in m ? m.reason : m.error._tag) : m.value._tag,
           }),
         }),
         [],
       ];
     }
 
-    if (m.type === "reply") {
+    if (Schema.is(Reply)(m)) {
       if (s._tag !== "landing" || m.ref !== String(s.attempt)) {
         return [{ ...s, late: s.late + 1 }, []];
       }
@@ -209,31 +220,39 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       return [model, [...sent, ...commands]];
     }
 
-    if (m.type === "drop" && s._tag !== "idle") {
+    if (m._tag === "drop" && s._tag !== "idle") {
       if (s._tag === "landing" && s.current.change === m.change) {
-        return [s, [Send.send({ to: s.current.name, m: Abandon.make({ type: "abandon", ref: String(s.attempt) }) })]];
+        return [s, [Send.send({ to: s.current.name, m: Abandon.make({ ref: String(s.attempt) }) })]];
       }
 
-      const sent = s.line
-        .filter((entry) => entry.change === m.change)
-        .flatMap((entry) => forward(entry, Reply.cases.abandoned.make({ ref: "dropped", change: entry.change })));
+      const sent = Arr.flatMap(
+        Arr.filter(s.line, (entry) => entry.change === m.change),
+        (entry: Entry) => forward(entry, Reply.cases.abandoned.make({ ref: "dropped", change: entry.change })),
+      );
 
-      return [{ ...s, line: s.line.filter((entry) => entry.change !== m.change) }, sent];
+      return [{ ...s, line: Arr.filter(s.line, (entry) => entry.change !== m.change) }, sent];
     }
 
-    return m.type === "resume" && s._tag === "stopped" ? next(s, s.line) : [s, []];
+    return m._tag === "resume" && s._tag === "stopped" ? next(s, s.line) : [s, []];
   };
 
   const machine = Machine.make({
     model: Model,
-    msg: Msg,
+    msg: Input,
     cmds: [StartChild.startChild, Send.send],
     init: (loaded) => [loaded ?? Model.cases.idle.make({ attempt: 0, late: 0 }), []],
     update: {
       enqueue: reduce,
       drop: reduce,
       resume: reduce,
-      reply: reduce,
+      merged: reduce,
+      red: reduce,
+      conflict: reduce,
+      moved: reduce,
+      closed: reduce,
+      unset: reduce,
+      abandoned: reduce,
+      behind: reduce,
       start_child_ok: reduce,
       start_child_err: reduce,
       send_ok: reduce,
@@ -243,7 +262,8 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
 
   return Program.make({
     name: "pipeline/queue",
-    machine,
+    // The program keeps the whole Msg, tea's answers included: the runner folds them, and the laws decode them.
+    machine: { ...machine, msg: Whole },
     state: { v: 1, upgrades: [] },
     view: (s) => ({
       state: s._tag,
@@ -252,7 +272,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
           ? { change: s.current.change, head: s.current.head, name: s.current.name }
           : null,
       since: s._tag === "landing" ? s.since : null,
-      line: s._tag === "idle" ? [] : s.line.map(({ change, head }) => ({ change, head })),
+      line: s._tag === "idle" ? [] : Arr.map(s.line, ({ change, head }) => ({ change, head })),
       attempt: s.attempt,
       late: s.late,
       reason: s._tag === "stopped" ? s.reason : null,
@@ -263,7 +283,14 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       enqueue: "Add a change at its pinned head to the line",
       drop: "Abandon a waiting change or ask its merger to abandon it",
       resume: { description: "Continue landing after a stop", personOnly: true },
-      reply: "Receive the current merger's reply",
+      merged: "Receive the current merger's reply: merged",
+      red: "Receive the current merger's reply: checks red",
+      conflict: "Receive the current merger's reply: a conflict",
+      moved: "Receive the current merger's reply: the head moved",
+      closed: "Receive the current merger's reply: the change closed",
+      unset: "Receive the current merger's reply: no checks set",
+      abandoned: "Receive the current merger's reply: abandoned",
+      behind: "Receive the current merger's reply: still behind main",
     },
     outputs: {},
     writes: {},

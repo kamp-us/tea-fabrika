@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
+import { it as effectIt } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
+import { Array as Arr, Predicate, Record as Rec, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintScheduled } from "./scheduled.ts";
 
@@ -27,8 +30,11 @@ type Job = Record<string, unknown> & {
   needs?: unknown;
 };
 
+/** The hand start's inputs (ticket 1161): each one's type, whether it is required, its default and the rest. */
+type Inputs = Record<string, Record<string, unknown>>;
+
 type Workflow = Record<string, unknown> & {
-  on: Record<string, unknown>;
+  on: Record<string, unknown> & { workflow_dispatch: { inputs: Inputs } };
   env?: Record<string, unknown>;
   concurrency: Record<string, unknown>;
   permissions: unknown;
@@ -37,12 +43,16 @@ type Workflow = Record<string, unknown> & {
 
 const real = (): Workflow => parse(read("scheduled.yaml"));
 
+/** The hand start's two inputs, `scope` and `law`, as a plant reaches them. */
+const hand = (w: Workflow): Inputs => w.on.workflow_dispatch.inputs;
+
 /**
  * Moves the legs whose shard `leaves` picks out of the test job into a job of their own, `split`,
  * with the same steps, as two matrices were before 2026-11-15, and has the report wait on it too.
  */
 const split = (w: Workflow, leaves: (shard: string) => boolean) => {
   const tests = w.jobs["tests"]!;
+  // SAFETY: the real scheduled workflow's test job is a matrix over a list of shard names.
   const all = tests.strategy!.matrix.shard as string[];
   const apart = structuredClone(tests);
   apart.strategy!.matrix.shard = all.filter(leaves);
@@ -50,6 +60,7 @@ const split = (w: Workflow, leaves: (shard: string) => boolean) => {
   tests.strategy!.matrix.shard = all.filter((shard) => !leaves(shard));
   tests.strategy!["max-parallel"] = 1;
   w.jobs["split"] = apart;
+  // SAFETY: `real()` reads the report job's `needs` from the workflow, where it is a list of job names.
   (w.jobs["report"]!.needs as string[]).push("split");
 };
 
@@ -64,13 +75,37 @@ const step = (w: Workflow, job: string, name: string): Step => {
   return found[0]!;
 };
 
+// SC22 (the 0602 amendment): the two steps of `tests` that keep the tested @kalfa/config archive.
+const RECEIPT = "node .github/ci/related.ts --receipt";
+
+const FOLDER = `\${{ runner.temp }}/kalfa-config-package`;
+
+const ARCHIVE_PATHS = `${FOLDER}/kalfa-config-0.0.0.tgz\n${FOLDER}/receipt.json`;
+
+const ON_E2E = "startsWith(matrix.shard, 'e2e-')";
+
+const ON_TOOLING = "startsWith(matrix.shard, 'tooling-')";
+
+const ON_NUMBERED = `!${ON_E2E} && !${ON_TOOLING}`;
+
+const receipt = (w: Workflow): Step => step(w, "tests", "package receipt");
+
+const archive = (w: Workflow): Step => step(w, "tests", "package archive");
+
+/** Moves the step named `name` of `tests` to the place of the step named `before`, ahead of it. */
+const put = (w: Workflow, name: string, before: string) => {
+  const list = w.jobs["tests"]!.steps;
+  const [moved] = list.splice(list.indexOf(step(w, "tests", name)), 1);
+  list.splice(list.indexOf(step(w, "tests", before)), 0, moved!);
+};
+
 // What may change without changing what the full run does: the catch-up's minute (0581 fixes the
 // cron hourly, and its minute stays a choice), the gap (a setting, 0069, an hour at least), the
 // workflow group's case and spacing, how many legs run at once within the cap, and the spacing in an `if`,
 // a job's or a step's. Each is varied only where the real workflow has it, so a part it lacks stays
 // missing.
 const spaced = (value: unknown, gap: string) =>
-  typeof value === "string" ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
+  Predicate.isString(value) ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
 
 // 0598's split of the nine test groups: MAIN_SLOTS for main's full run (1 to 8), PROOF_SLOTS for a
 // branch's proof, the rest. A `tests` group takes the prefix and the pin map by the ref, so the
@@ -85,7 +120,7 @@ const counts = (w: Workflow) => ({ main: Number(w.env!["MAIN_SLOTS"]), proof: Nu
 
 /** Each leg's pin: the first `count` legs take groups 1 to `count` in order, the others `tail`'s group. */
 const pinned = (shards: readonly string[], count: number, tail: readonly number[]) =>
-  Object.fromEntries(shards.map((shard, i) => [shard, i < count ? String(i + 1) : String((tail[i]! % count) + 1)]));
+  Rec.fromEntries(Arr.map(shards, (shard, i) => [shard, i < count ? String(i + 1) : String((tail[i]! % count) + 1)]));
 
 /** The `tests` group as the real file writes it, from a main map and a proof map. */
 const groupOf = (main: unknown, proof: unknown, gap = " ", upper = false) =>
@@ -100,10 +135,109 @@ const pinsIn = (w: Workflow): [Record<string, unknown>, Record<string, unknown>]
 
 /** The `changed` group's closed identity lookup over the proof groups. */
 const rotationSlots = (count: number): Record<string, string> =>
-  Object.fromEntries(upTo(count).map((slot) => [slot, slot]));
+  Rec.fromEntries(Arr.map(upTo(count), (slot) => [slot, slot]));
 
 const rotationGroup = (slots: unknown, gap = " ", upper = false) =>
   `${upper ? "SCHEDULED-PROOF-" : "scheduled-proof-"}\${{${gap}fromJSON('${JSON.stringify(slots)}')[fromJSON(needs.select.outputs.slots)[matrix.shard]]${gap}||${gap}'1'${gap}}}`;
+
+/** One draw of what may change: the minute, the gap, the split, the spacing, the tails, the two flags, the two texts. */
+type Variation = readonly [
+  number,
+  number,
+  number,
+  string,
+  readonly number[],
+  readonly number[],
+  boolean,
+  boolean,
+  string,
+  string,
+];
+
+// The same draw as a Schema, for the laws that run as `it.prop` (0579).
+const Varied = Schema.Tuple([
+  Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 59 })),
+  Schema.Int.check(Schema.isBetween({ minimum: 60, maximum: 1440 })),
+  Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
+  Schema.Literals(["", " ", "  "]),
+  Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }))).check(
+    Schema.isMinLength(9),
+    Schema.isMaxLength(9),
+  ),
+  Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }))).check(
+    Schema.isMinLength(9),
+    Schema.isMaxLength(9),
+  ),
+  Schema.Boolean,
+  Schema.Boolean,
+  // S11: the two inputs' descriptions, any text, since what they say changes nothing.
+  Schema.String.check(Schema.isMinLength(1)),
+  Schema.String.check(Schema.isMinLength(1)),
+]);
+
+const vary = ([minute, minutes, main, gap, mainTail, proofTail, numeric, upper, scopeText, lawText]: Variation) => {
+  const proof = 9 - main;
+  const w = real();
+  // SAFETY: the branch is taken only when `schedule` is a list, and each GitHub schedule entry is a map.
+  const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
+
+  for (const cron of crons) {
+    if (Predicate.isString(cron.cron)) {
+      cron.cron = cron.cron.replace(/^\d+ /, `${minute} `);
+    }
+  }
+
+  w.env = { GAP_MINUTES: minutes, MAIN_SLOTS: main, PROOF_SLOTS: proof };
+
+  w.concurrency["group"] = `${upper ? "SCHEDULED" : "scheduled"}-\${{${gap}github.ref${gap}}}`;
+  // The count of groups is a setting, and `max-parallel` of the test job and MOST are its copies (0598).
+  w.jobs["tests"]!.strategy!["max-parallel"] = spaced(`\${{ ${REF} && ${main} || ${proof} }}`, gap);
+  w.jobs["changed"]!.strategy!["max-parallel"] = proof;
+  step(w, "select", "set").env!["MOST"] = proof;
+  // S11: the set step reads the two inputs with the spacing of the rest of the file.
+  step(w, "select", "set").env!["SCOPE"] = `\${{${gap}inputs.scope${gap}}}`;
+  step(w, "select", "set").env!["LAW"] = `\${{${gap}inputs.law${gap}}}`;
+  hand(w)["scope"]!["description"] = scopeText;
+  hand(w)["law"]!["description"] = lawText;
+
+  const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
+
+  const asValue = (pins: Record<string, string>): Record<string, string | number> =>
+    numeric ? Rec.fromEntries(Arr.map(Rec.toEntries(pins), ([leg, group]) => [leg, Number(group)])) : pins;
+
+  const pins = (count: number, tail: readonly number[]) => {
+    const all = asValue(pinned(shards, count, tail));
+
+    return upper ? Rec.fromEntries(Arr.reverse(Rec.toEntries(all))) : all;
+  };
+
+  w.jobs["tests"]!.concurrency!["group"] = spaced(
+    groupOf(pins(main, mainTail), pins(proof, proofTail), gap, upper),
+    gap,
+  );
+
+  w.jobs["changed"]!.concurrency!["group"] = rotationGroup(rotationSlots(proof), gap, upper);
+
+  for (const job of Rec.values(w.jobs)) {
+    if (upper && typeof job.concurrency?.["group"] === "string") {
+      job.concurrency["group"] = Str.replace(/^scheduled-/, "SCHEDULED-")(job.concurrency["group"]);
+    }
+  }
+
+  for (const job of Rec.values(w.jobs)) {
+    if ("if" in job) {
+      job["if"] = spaced(job["if"], gap);
+    }
+
+    for (const s of job.steps) {
+      if ("if" in s) {
+        s["if"] = spaced(s["if"], gap);
+      }
+    }
+  }
+
+  return w;
+};
 
 const scheduled = fc
   .tuple(
@@ -115,64 +249,11 @@ const scheduled = fc
     fc.array(fc.integer({ min: 0, max: 1000 }), { minLength: 9, maxLength: 9 }),
     fc.boolean(),
     fc.boolean(),
+    // S11: the two inputs' descriptions, any text, since what they say changes nothing.
+    fc.string({ minLength: 1 }),
+    fc.string({ minLength: 1 }),
   )
-  .map(([minute, minutes, main, gap, mainTail, proofTail, numeric, upper]) => {
-    const proof = 9 - main;
-    const w = real();
-    const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
-
-    for (const cron of crons) {
-      if (typeof cron.cron === "string") {
-        cron.cron = cron.cron.replace(/^\d+ /, `${minute} `);
-      }
-    }
-
-    w.env = { GAP_MINUTES: minutes, MAIN_SLOTS: main, PROOF_SLOTS: proof };
-
-    w.concurrency["group"] = `${upper ? "SCHEDULED" : "scheduled"}-\${{${gap}github.ref${gap}}}`;
-    // The count of groups is a setting, and `max-parallel` of the test job and MOST are its copies (0598).
-    w.jobs["tests"]!.strategy!["max-parallel"] = spaced(`\${{ ${REF} && ${main} || ${proof} }}`, gap);
-    w.jobs["changed"]!.strategy!["max-parallel"] = proof;
-    step(w, "select", "set").env!["MOST"] = proof;
-
-    const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
-
-    const asValue = (pins: Record<string, string>) =>
-      numeric ? Object.fromEntries(Object.entries(pins).map(([leg, group]) => [leg, Number(group)])) : pins;
-
-    const pins = (count: number, tail: readonly number[]) => {
-      const all = asValue(pinned(shards, count, tail));
-
-      return upper ? Object.fromEntries(Object.entries(all).toReversed()) : all;
-    };
-
-    w.jobs["tests"]!.concurrency!["group"] = spaced(
-      groupOf(pins(main, mainTail), pins(proof, proofTail), gap, upper),
-      gap,
-    );
-
-    w.jobs["changed"]!.concurrency!["group"] = rotationGroup(rotationSlots(proof), gap, upper);
-
-    for (const job of Object.values(w.jobs)) {
-      if (upper && typeof job.concurrency?.["group"] === "string") {
-        job.concurrency["group"] = job.concurrency["group"].replace(/^scheduled-/, "SCHEDULED-");
-      }
-    }
-
-    for (const job of Object.values(w.jobs)) {
-      if ("if" in job) {
-        job["if"] = spaced(job["if"], gap);
-      }
-
-      for (const s of job.steps) {
-        if ("if" in s) {
-          s["if"] = spaced(s["if"], gap);
-        }
-      }
-    }
-
-    return w;
-  });
+  .map(vary);
 
 const lint = (w: Workflow) => lintScheduled(JSON.stringify(w), check);
 
@@ -237,7 +318,7 @@ const remap = (w: Workflow, change: (main: Record<string, string>, proof: Record
 
 // SC18's message, which a scenario on the next limit expects beside SC13's.
 const CHANGED_RULE =
-  "SC18: changed runs only when select said changed with a leg, each leg its own list over every project at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
+  "SC18: changed runs only when select said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (0602), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
 
 it("pinned: the real scheduled.yaml passes, against the real check.yaml", () => {
   expect(lintScheduled(read("scheduled.yaml"), check)).toEqual([]);
@@ -504,7 +585,7 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC14: the gate's step has another id", (w) => (gate(w).steps.find((s) => s["id"] === "decide")!["id"] = "read")],
   [
     "SC14: the gate checks out the whole repository",
-    (w) => Reflect.deleteProperty(gate(w).steps.find((s) => typeof s["uses"] === "string")!.with!, "sparse-checkout"),
+    (w) => Reflect.deleteProperty(gate(w).steps.find((s) => Predicate.isString(s["uses"]))!.with!, "sparse-checkout"),
   ],
   // SC14, the review of pull request 1404: a gate that ends with no `start` and no failure leaves
   // main unproven with no sev1. A job that hits its own limit ends `cancelled`, read as stopped by
@@ -523,7 +604,7 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC14: the gate's checkout has no time limit of its own",
     (w) =>
       Reflect.deleteProperty(
-        gate(w).steps.find((s) => typeof s["uses"] === "string")!,
+        gate(w).steps.find((s) => Predicate.isString(s["uses"]))!,
         "timeout-minutes",
       ),
   ],
@@ -543,7 +624,7 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   [
     "SC14: the gate's checkout never runs",
-    (w) => (gate(w).steps.find((s) => typeof s["uses"] === "string")!["if"] = false),
+    (w) => (gate(w).steps.find((s) => Predicate.isString(s["uses"]))!["if"] = false),
   ],
   // SC15: the tests start only on the gate's `true`.
   ["SC15: the tests run whatever the gate said", (w) => Reflect.deleteProperty(w.jobs["tests"]!, "if")],
@@ -784,7 +865,7 @@ const plants: [string, (w: Workflow) => void][] = [
   [
     "SC5: the gate's checkout gets the token",
     (w) => {
-      const checkout = gate(w).steps.find((s) => typeof s["uses"] === "string")!;
+      const checkout = gate(w).steps.find((s) => Predicate.isString(s["uses"]))!;
       checkout.env = { GITHUB_TOKEN: `\${{ github.token }}` };
     },
   ],
@@ -881,6 +962,7 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC6: a new job, in the cap",
     (w) => {
       w.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
+      // SAFETY: the report job of the real workflow lists its `needs` as an array of job names.
       (w.jobs["report"]!.needs as string[]).push("extra");
     },
   ],
@@ -968,14 +1050,31 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC7: next runs next/ as a path, so next-visual starts on legs with no Chromium",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "next/ ");
+      s["run"] = String(s["run"]).replace("$PROJECTS ", "next/ ");
     },
   ],
+  // 0602: main's full run runs every real-resource law, and a branch's full set none. Plants, each
+  // run once on scheduled.ts and restored: SC7's PROJECTS check dropped (red on the first three, the
+  // fourth caught by the command check above it).
   [
-    "SC7: next drops next-integration, so the real-resource tests run nowhere",
+    "SC7: main's full run drops next-integration, so the real-resource laws run nowhere",
+    (w) => (step(w, "tests", "vitest").env!["PROJECTS"] = `\${{ ${REF} && '--project next' || '--project next' }}`),
+  ],
+  [
+    "SC7: a branch's full set runs the real-resource laws, which only main's full run runs",
+    (w) =>
+      (step(w, "tests", "vitest").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project next --project next-integration' || '--project next --project next-integration' }}`),
+  ],
+  [
+    "SC7: next's vitest legs lose their projects, so an empty $PROJECTS runs every project",
+    (w) => Reflect.deleteProperty(step(w, "tests", "vitest").env!, "PROJECTS"),
+  ],
+  [
+    "SC7: next's vitest legs name both projects in the command again, so a branch's full set runs next-integration",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace(" --project next-integration", "");
+      s["run"] = String(s["run"]).replace("$PROJECTS ", "--project next --project next-integration ");
     },
   ],
   [
@@ -1016,26 +1115,45 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   [
     "SC8: tooling runs today's tests too",
-    (w) => {
-      const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--project tooling", "--project tooling --project today");
-    },
+    (w) =>
+      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project tooling --project tooling-integration --project today' || '--project tooling' }}`),
   ],
   [
-    "SC8: tooling loses its project, so it runs every project",
-    (w) => {
-      const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--project tooling ", "");
-    },
+    "SC8: tooling loses its projects, so an empty $PROJECTS runs every project",
+    (w) => Reflect.deleteProperty(step(w, "tests", "tooling tests").env!, "PROJECTS"),
   ],
   [
     "SC8: tooling leaves the trees out with --exclude, which a project ignores",
     (w) => {
       const s = step(w, "tests", "tooling tests");
       s["run"] = String(s["run"]).replace(
-        "--project tooling ",
+        "$PROJECTS ",
         "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' ",
       );
+    },
+  ],
+  // 0602 and 0584: main's full run runs every tooling law that starts a process, and a branch's full
+  // set none. Plants, each run once on scheduled.ts and restored: SC8's PROJECTS check dropped (red on
+  // the first two, and on "tooling runs today's tests too" and "tooling loses its projects" above;
+  // the third is caught by the command check above it).
+  [
+    "SC8: main's full run drops tooling-integration, so the tooling laws that start a process run nowhere",
+    (w) =>
+      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project tooling' || '--project tooling' }}`),
+  ],
+  [
+    "SC8: a branch's full set runs tooling-integration, which only main's full run runs",
+    (w) =>
+      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project tooling --project tooling-integration' || '--project tooling --project tooling-integration' }}`),
+  ],
+  [
+    "SC8: the tooling legs name both projects in the command again, so a branch's full set runs tooling-integration",
+    (w) => {
+      const s = step(w, "tests", "tooling tests");
+      s["run"] = String(s["run"]).replace("$PROJECTS ", "--project tooling --project tooling-integration ");
     },
   ],
   [
@@ -1167,19 +1285,162 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   ["SC17: a red select loses its record", (w) => (step(w, "select", "record")["if"] = "success()")],
   ["SC17: the record takes another name", (w) => (step(w, "select", "record").with!["name"] = "results-set")],
+  // SC17's two reads, ticket 1161. Plants, each run once on scheduled.ts and restored: SC17's key list
+  // admits any extra key (red on the seventh key); SC17's two value checks dropped (red on the other
+  // seven: the literal, the two bare names, the two swapped and the github.event.inputs read).
+  ["SC17: select's step has no SCOPE", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "SCOPE")],
+  ["SC17: select's step has no LAW", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "LAW")],
+  ["SC17: SCOPE is the literal full", (w) => (step(w, "select", "set").env!["SCOPE"] = "full")],
+  // A bare name is text, not a read: the step would get the words `inputs.scope`, not the input.
+  ["SC17: SCOPE is the bare text inputs.scope", (w) => (step(w, "select", "set").env!["SCOPE"] = "inputs.scope")],
+  ["SC17: LAW is the bare text inputs.law", (w) => (step(w, "select", "set").env!["LAW"] = "inputs.law")],
+  [
+    "SC17: SCOPE reads github.event.inputs",
+    (w) => (step(w, "select", "set").env!["SCOPE"] = `\${{ github.event.inputs.scope }}`),
+  ],
+  [
+    "SC17: SCOPE and LAW are swapped",
+    (w) => {
+      const env = step(w, "select", "set").env!;
+      [env["SCOPE"], env["LAW"]] = [env["LAW"], env["SCOPE"]];
+    },
+  ],
+  ["SC17: select's step gets a seventh env key", (w) => (step(w, "select", "set").env!["EXTRA"] = "x")],
+  // SC21, ticket 1161: the hand start's two inputs. Plants, each run once on scheduled.ts and restored:
+  // SC21's input check dropped (red on each of these).
+  ["SC21: the scope default is full", (w) => (hand(w)["scope"]!["default"] = "full")],
+  ["SC21: the scope has no default", (w) => Reflect.deleteProperty(hand(w)["scope"]!, "default")],
+  ["SC21: the scope options gain readers", (w) => (hand(w)["scope"]!["options"] = ["changed", "full", "readers"])],
+  ["SC21: the scope options lose full", (w) => (hand(w)["scope"]!["options"] = ["changed"])],
+  ["SC21: the scope is a string", (w) => (hand(w)["scope"]!["type"] = "string")],
+  ["SC21: the scope is not required", (w) => (hand(w)["scope"]!["required"] = false)],
+  ["SC21: the scope has no description", (w) => Reflect.deleteProperty(hand(w)["scope"]!, "description")],
+  ["SC21: the law has no description", (w) => Reflect.deleteProperty(hand(w)["law"]!, "description")],
+  ["SC21: a third input", (w) => (hand(w)["extra"] = { type: "string", required: false, default: "" })],
+  ["SC21: the law input is missing", (w) => Reflect.deleteProperty(hand(w), "law")],
+  ["SC21: the law is required", (w) => (hand(w)["law"]!["required"] = true)],
+  ["SC21: the law has a default of a path", (w) => (hand(w)["law"]!["default"] = ".github/ci/proof.test.ts")],
+  // SC22, the 0602 amendment: main's full run keeps the tested @kalfa/config archive, once, on the leg
+  // that ran the package law. Each plant is applied to the real file alone, and was run once on
+  // scheduled.ts with SC22's rule it breaks dropped, and that turned its case red.
+  ["SC22: the receipt on the visual legs", (w) => (receipt(w)["if"] = `success() && ${REF} && !${ON_TOOLING}`)],
+  ["SC22: the receipt on the tooling legs", (w) => (receipt(w)["if"] = `success() && ${REF} && !${ON_E2E}`)],
+  ["SC22: the receipt on every ref", (w) => (receipt(w)["if"] = `success() && ${ON_NUMBERED}`)],
+  [
+    "SC22: the receipt on a branch's proof run only",
+    (w) => (receipt(w)["if"] = `success() && github.ref != 'refs/heads/main' && ${ON_NUMBERED}`),
+  ],
+  ["SC22: the receipt without success()", (w) => (receipt(w)["if"] = `${REF} && ${ON_NUMBERED}`)],
+  ["SC22: the receipt even after a red step", (w) => (receipt(w)["if"] = `always() && ${REF} && ${ON_NUMBERED}`)],
+  ["SC22: the receipt before the vitest step", (w) => put(w, "package receipt", "vitest")],
+  ["SC22: the receipt soft", (w) => (receipt(w)["continue-on-error"] = true)],
+  ["SC22: the receipt with a token", (w) => (receipt(w)["env"] = { GITHUB_TOKEN: `\${{ github.token }}` })],
+  [
+    "SC22: the receipt with an env key that points it at another commit",
+    (w) => (receipt(w)["env"] = { GITHUB_SHA: "0000000" }),
+  ],
+  ["SC22: the receipt with a two minute limit", (w) => (receipt(w)["timeout-minutes"] = 2)],
+  ["SC22: the receipt with no limit", (w) => Reflect.deleteProperty(receipt(w), "timeout-minutes")],
+  ["SC22: the receipt's id renamed", (w) => (receipt(w)["id"] = "delivery")],
+  ["SC22: the receipt with no id", (w) => Reflect.deleteProperty(receipt(w), "id")],
+  ["SC22: the receipt renamed", (w) => (receipt(w)["name"] = "check package")],
+  ["SC22: a second receipt step", (w) => w.jobs["tests"]!.steps.splice(5, 0, structuredClone(receipt(w)))],
+  [
+    "SC22: a step between the vitest step and the receipt",
+    (w) => w.jobs["tests"]!.steps.splice(w.jobs["tests"]!.steps.indexOf(receipt(w)), 0, { uses: "actions/cache@v4" }),
+  ],
+  ["SC22: the receipt in the report job", (w) => w.jobs["report"]!.steps.push({ run: RECEIPT })],
+  ["SC22: the receipt in the changed job", (w) => w.jobs["changed"]!.steps.push({ run: RECEIPT })],
+  ["SC22: the archive without the receipt's kept", (w) => (archive(w)["if"] = `success() && ${REF}`)],
+  [
+    "SC22: the archive on the receipt's outcome, not its output",
+    (w) => (archive(w)["if"] = `success() && ${REF} && steps.receipt.outcome == 'success'`),
+  ],
+  ["SC22: the archive without success()", (w) => (archive(w)["if"] = `${REF} && steps.receipt.outputs.kept == 'true'`)],
+  ["SC22: the archive on every ref", (w) => (archive(w)["if"] = "success() && steps.receipt.outputs.kept == 'true'")],
+  [
+    "SC22: the archive even after a red step",
+    (w) => (archive(w)["if"] = `always() && ${REF} && steps.receipt.outputs.kept == 'true'`),
+  ],
+  ["SC22: the archive with a wildcard path", (w) => (archive(w).with!["path"] = `${FOLDER}/*`)],
+  ["SC22: the archive with a third path", (w) => (archive(w).with!["path"] = `${ARCHIVE_PATHS}\n${FOLDER}/extra.json`)],
+  ["SC22: the archive of the whole folder", (w) => (archive(w).with!["path"] = FOLDER)],
+  ["SC22: the archive of one path", (w) => (archive(w).with!["path"] = `${FOLDER}/receipt.json`)],
+  [
+    "SC22: the archive's paths swapped",
+    (w) => (archive(w).with!["path"] = `${FOLDER}/receipt.json\n${FOLDER}/kalfa-config-0.0.0.tgz`),
+  ],
+  ["SC22: a missing file only warns", (w) => (archive(w).with!["if-no-files-found"] = "warn")],
+  ["SC22: a missing file is ignored", (w) => (archive(w).with!["if-no-files-found"] = "ignore")],
+  ["SC22: no word on a missing file", (w) => Reflect.deleteProperty(archive(w).with!, "if-no-files-found")],
+  ["SC22: the archive before the receipt", (w) => put(w, "package archive", "package receipt")],
+  [
+    "SC22: a step between the receipt and the archive",
+    (w) => w.jobs["tests"]!.steps.splice(w.jobs["tests"]!.steps.indexOf(archive(w)), 0, { uses: "actions/cache@v4" }),
+  ],
+  ["SC22: the archive with no retention", (w) => Reflect.deleteProperty(archive(w).with!, "retention-days")],
+  ["SC22: the archive kept for no days", (w) => (archive(w).with!["retention-days"] = 0)],
+  ["SC22: the archive kept for part of a day", (w) => (archive(w).with!["retention-days"] = 0.5)],
+  ["SC22: the archive kept for days as text", (w) => (archive(w).with!["retention-days"] = "90")],
+  [
+    "SC22: the archive's name without the attempt",
+    (w) => (archive(w).with!["name"] = `kalfa-config-\${{ github.sha }}`),
+  ],
+  [
+    "SC22: the archive under another name",
+    (w) => (archive(w).with!["name"] = `package-\${{ github.sha }}-attempt-\${{ github.run_attempt }}`),
+  ],
+  ["SC22: the archive with a third input", (w) => (archive(w).with!["compression-level"] = 0)],
+  ["SC22: the archive soft", (w) => (archive(w)["continue-on-error"] = true)],
+  ["SC22: the archive with a token", (w) => (archive(w)["env"] = { GITHUB_TOKEN: `\${{ github.token }}` })],
+  ["SC22: the archive with a two minute limit", (w) => (archive(w)["timeout-minutes"] = 2)],
+  ["SC22: the archive with no limit", (w) => Reflect.deleteProperty(archive(w), "timeout-minutes")],
+  ["SC22: the archive renamed", (w) => (archive(w)["name"] = "upload")],
+  [
+    "SC22: a second archive upload in tests",
+    (w) => w.jobs["tests"]!.steps.push({ ...structuredClone(archive(w)), name: "again" }),
+  ],
+  ["SC22: a kalfa-config upload in the changed job", (w) => w.jobs["changed"]!.steps.push(structuredClone(archive(w)))],
+  ["SC22: a kalfa-config upload in the report job", (w) => w.jobs["report"]!.steps.push(structuredClone(archive(w)))],
+  [
+    "SC22: another kalfa-config upload in the select job",
+    (w) =>
+      w.jobs["select"]!.steps.push({ uses: "actions/upload-artifact@v7", with: { name: "kalfa-config-x", path: "x" } }),
+  ],
+  ["SC22: a step that names the delivery folder", (w) => w.jobs["changed"]!.steps.push({ run: `ls ${FOLDER}` })],
+  // SC9: the receipt is the one new command, and no step narrows a test command to the package law.
+  [
+    "SC9: a step runs the package law alone",
+    (w) =>
+      w.jobs["tests"]!.steps.splice(5, 0, {
+        run: "pnpm exec vitest run --project next-integration kalfa/config/src/Package.integration.test.ts",
+      }),
+  ],
+  ["SC9: the receipt takes another flag", (w) => (receipt(w)["run"] = `${RECEIPT} --fault`)],
+  ["SC9: the receipt is a second command", (w) => (receipt(w)["run"] = `${RECEIPT} && pnpm test`)],
   // SC18, 0590: a changed set's legs. Plants, each run once on scheduled.ts and restored: SC18's
-  // `if` check dropped (red on the first two); its command checks dropped (red on the next three);
+  // `if` check dropped (red on the first two); its command checks dropped (red on the next four);
   // its limit checks dropped (red on the three limits).
   ["SC18: the changed legs run on main too", (w) => (w.jobs["changed"]!["if"] = "needs.gate.outputs.start == 'true'")],
   [
     "SC18: the changed legs start on a set of zero files",
     (w) => (w.jobs["changed"]!["if"] = "needs.gate.outputs.start == 'true' && needs.select.outputs.scope == 'changed'"),
   ],
+  // 0602: a changed leg runs no real-resource law, so it names no next-integration project.
+  // proof.test.ts holds the same list against proof.ts's PROJECTS.
   [
-    "SC18: a changed leg leaves out the real-resource laws",
+    "SC18: a changed leg runs the real-resource laws, which only main's full run runs",
     (w) =>
       (step(w, "changed", "vitest")["run"] = String(step(w, "changed", "vitest")["run"]).replace(
-        "--project next-integration ",
+        "--project next ",
+        "--project next --project next-integration ",
+      )),
+  ],
+  [
+    "SC18: a changed leg leaves out the in-memory laws",
+    (w) =>
+      (step(w, "changed", "vitest")["run"] = String(step(w, "changed", "vitest")["run"]).replace(
+        "--project next ",
         "",
       )),
   ],
@@ -1285,6 +1546,7 @@ it("SC6 scenario: on the real scheduled.yaml, the tooling legs or the next legs 
   // One more job beside the test job, even with no matrix, is not the one-matrix shape either.
   const beside = real();
   beside.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
+  // SAFETY: `beside` is `real()`, whose report job waits on a list of job names.
   (beside.jobs["report"]!.needs as string[]).push("extra");
   expect(lint(beside)).toEqual([
     ONE,
@@ -1383,6 +1645,187 @@ it.each(plants)("rejects the schedule's plant: %s", (plant, mutate) => {
   );
 });
 
+// SC22's retention is a setting (0069): any whole number of days from 1 is held, and nothing else.
+// Plant, run once on scheduled.ts and restored: SC22's whole-number check dropped (red: 0, a part of
+// a day and text pass).
+it("SC22 property: the archive's retention is any whole number of days from 1, and no zero, part of a day or text", () => {
+  fc.assert(
+    fc.property(
+      scheduled,
+      fc.oneof(
+        fc.record({ days: fc.integer({ min: 1, max: 365 }), held: fc.constant(true) }),
+        fc.record({ days: fc.integer({ min: -365, max: 0 }), held: fc.constant(false) }),
+        fc.record({ days: fc.double({ min: 0.01, max: 365, noInteger: true }), held: fc.constant(false) }),
+        fc.record({ days: fc.integer({ min: 1, max: 365 }).map(String), held: fc.constant(false) }),
+      ),
+      (w, { days, held }) => {
+        archive(w).with!["retention-days"] = days;
+        const errors = lint(w);
+        expect(errors, JSON.stringify({ days, errors })).toEqual(
+          held ? [] : [expect.stringMatching(/^scheduled\.yaml: SC22:/)],
+        );
+      },
+    ),
+    options,
+  );
+});
+
+// SC22 reads each `if` as an expression: spacing and the `${{ }}` wrapper change nothing, as for the
+// test steps' own. Plant, run once on scheduled.ts and restored: `compact` dropped from the two `if`
+// checks (red: a wrapped `if` is named).
+it("SC22 scenario: the real scheduled.yaml's two ifs read the same wrapped in an expression", () => {
+  const w = real();
+  receipt(w)["if"] = `\${{ ${String(receipt(w)["if"])} }}`;
+  archive(w)["if"] = `\${{ ${String(archive(w)["if"])} }}`;
+  expect(lint(w)).toEqual([]);
+});
+
+// Where a read of the hand start's inputs may be put, and the forms a read takes (ticket 1161).
+const JOBS = ["gate", "tests", "select", "changed", "report"] as const;
+
+const places: [string, (w: Workflow, read: string, at: number) => void][] = [
+  ...JOBS.flatMap((job): [string, (w: Workflow, read: string, at: number) => void][] => [
+    [`${job}'s if`, (w, read) => (w.jobs[job]!["if"] = `\${{ ${read} == 'x' }}`)],
+    [`${job}'s group`, (w, read) => (w.jobs[job]!.concurrency!["group"] = `scheduled-\${{ ${read} }}`)],
+    [
+      `${job}'s step env`,
+      (w, read, at) => {
+        const target = w.jobs[job]!.steps[at % w.jobs[job]!.steps.length]!;
+        target.env = { ...target.env, FROM_INPUTS: `\${{ ${read} }}` };
+      },
+    ],
+  ]),
+  ["the workflow's group", (w, read) => (w.concurrency["group"] = `scheduled-\${{ ${read} }}`)],
+  ["tests's max-parallel", (w, read) => (w.jobs["tests"]!.strategy!["max-parallel"] = `\${{ ${read} }}`)],
+];
+
+// The forms a read takes: the `inputs` context in dot and bracket form, `github.event.inputs`, the whole
+// `github` context or its `event` as JSON, in any form of the dot, the index and the `*` filter, and the
+// same in capitals, since GitHub's context and function names do not tell the case.
+const READS = [
+  "inputs.scope",
+  "inputs.law",
+  "inputs['scope']",
+  "github.event.inputs.scope",
+  "toJSON(github)",
+  "toJSON(github.*)",
+  "toJSON(github['*'])",
+  "toJSON(github.event)",
+  "toJSON(github['event'])",
+  "toJSON(github.event.*)",
+  "toJSON(github['event']['*'])",
+  "INPUTS.SCOPE",
+  "TOJSON(GITHUB)",
+  "TOJSON(GITHUB.*)",
+  "TOJSON(GITHUB.EVENT)",
+  "toJson(GitHub['Event'])",
+];
+
+const reachedS9 = new Set<string>();
+
+effectIt.prop(
+  "S9 property: a read of the hand start's inputs anywhere but select's set step is named by SC21, whatever the place and the form",
+  {
+    varied: Varied,
+    place: Schema.Literals(places.map(([name]) => name)),
+    read: Schema.Literals(READS),
+    at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 })),
+  },
+  ({ varied, place, read, at }) => {
+    // Plants, each run once on scheduled.ts and restored: SC21's read check scans only `tests`'s `if`
+    // (red: the gate's env reading `inputs.scope` passes); READS_INPUTS drops its `i` flag (red: the
+    // capital forms pass); a bracket read is not taken as a dot read (red: `github['event']` passes);
+    // a whole `github` or `github.event` read is not counted (red: the `toJSON` and `.*` forms pass).
+    const broken = vary(varied);
+    places.find(([name]) => name === place)![1](broken, read, at);
+    reachedS9.add(`${place} reads ${read}`);
+    const errors = lint(broken);
+    expect(
+      errors.some((error) => error.startsWith("scheduled.yaml: SC21:")),
+      `${place} reads ${read}: ${JSON.stringify(errors)}`,
+    ).toBe(true);
+  },
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } },
+);
+
+// What is not a read of the inputs: any other property of `github` or of its event, in the dot form, the
+// index form and capitals. A lint that names these would reject the real workflow's own `github.ref`.
+const OTHER_PROPERTIES = [
+  "github.ref",
+  "github['ref']",
+  "github.event_name",
+  "GITHUB['Event_Name']",
+  "github.run_number",
+  "github.event.schedule",
+  "github['event']['schedule']",
+  "github.event['schedule']",
+  "GitHub.Event.Pull_Request.Head.SHA",
+];
+
+const reachedS9Other = new Set<string>();
+
+afterAll(() => {
+  // Each S9 law reached every place and every form it names. Nothing reached means the law was
+  // filtered out of this run, not that it missed one.
+  const found = [...reachedS9].map((reached) => reached.split(" reads "));
+
+  expect(reachedS9.size === 0 ? [] : [...new Set(found.map(([place]) => place))].toSorted()).toEqual(
+    reachedS9.size === 0 ? [] : places.map(([place]) => place).toSorted(),
+  );
+
+  expect(reachedS9.size === 0 ? [] : [...new Set(found.map(([, read]) => read))].toSorted()).toEqual(
+    reachedS9.size === 0 ? [] : READS.toSorted(),
+  );
+
+  expect(reachedS9Other.size === 0 ? [] : [...reachedS9Other].toSorted()).toEqual(
+    reachedS9Other.size === 0 ? [] : OTHER_PROPERTIES.toSorted(),
+  );
+});
+
+effectIt.prop(
+  "S9 property: a read of another property of github or of its event is not named by SC21, in any place and form",
+  {
+    varied: Varied,
+    place: Schema.Literals(places.map(([name]) => name)),
+    read: Schema.Literals(OTHER_PROPERTIES),
+    at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 })),
+  },
+  ({ varied, place, read, at }) => {
+    // Plant, run once on scheduled.ts and restored: an index with a quoted name is not read as a dot
+    // (red: `github['ref']` reads as the whole `github` context).
+    const w = vary(varied);
+    places.find(([name]) => name === place)![1](w, read, at);
+    reachedS9Other.add(read);
+    const errors = lint(w);
+    expect(
+      errors.some((error) => error.startsWith("scheduled.yaml: SC21:")),
+      `${place} reads ${read}: ${JSON.stringify(errors)}`,
+    ).toBe(false);
+  },
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } },
+);
+
+it("S12 scenario: on the real scheduled.yaml the only reads of the inputs are select's SCOPE and LAW, and a read added to tests's if is named by SC15 and SC21", () => {
+  // Plant, run once on scheduled.ts and restored: SC21's read check dropped (red: the plant gives
+  // SC15's error alone).
+  const w = real();
+  expect(lint(w)).toEqual([]);
+  expect(JSON.stringify(w.jobs).match(/\binputs\b/g)).toHaveLength(2);
+  expect(step(w, "select", "set").env!["SCOPE"]).toContain("inputs.scope");
+  expect(step(w, "select", "set").env!["LAW"]).toContain("inputs.law");
+
+  w.jobs["tests"]!["if"] = `${String(w.jobs["tests"]!["if"]).replace(/ \}\}$/, "")} && inputs.scope != 'changed' }}`;
+  const errors = lint(w);
+  expect(
+    errors.some((error) => error.startsWith("scheduled.yaml: SC15:")),
+    JSON.stringify(errors),
+  ).toBe(true);
+  expect(
+    errors.some((error) => error.startsWith("scheduled.yaml: SC21:")),
+    JSON.stringify(errors),
+  ).toBe(true);
+});
+
 it("SC1 and SC16 property: a cron at any minute from 1 to 59 every hour, and any whole gap of an hour or more, pass; minute 0 and a gap under an hour do not", () => {
   // Plants, each run once on scheduled.ts and restored: SC1's hourly check dropped (red: the 3-hour
   // and minute-0 crons pass); SC16's floor dropped (red: a 59-minute gap passes).
@@ -1411,7 +1854,7 @@ it("SC1 and SC16 property: a cron at any minute from 1 to 59 every hour, and any
     options,
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });
@@ -1428,3 +1871,29 @@ it("property: the schedule's legs follow check.yaml's full matrix, so a new leg 
     options,
   );
 });
+
+effectIt.prop(
+  "P7 every scheduled test command requires its progress reporter and existing reporters and changed leg identity",
+  { index: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })), substitute: Schema.Boolean },
+  ({ index, substitute }) => {
+    // Plant: remove the custom reporter requirement from the shared exact command rule.
+    const good = real();
+    expect(lintScheduled(JSON.stringify(good), check)).toEqual([]);
+
+    const targets = Object.values(good.jobs)
+      .flatMap((job) => job.steps)
+      .filter((item) => typeof item["run"] === "string" && item["run"].startsWith("pnpm exec vitest run"));
+
+    expect(targets).toHaveLength(4);
+    const item = targets[index]!;
+    item["run"] = String(item["run"]).replace(
+      "--reporter=./.github/ci/progress-reporter.ts ",
+      substitute ? "--reporter=./other.ts " : "",
+    );
+    expect(lintScheduled(JSON.stringify(good), check).length).toBeGreaterThan(0);
+    const missingLeg = real();
+    Reflect.deleteProperty(step(missingLeg, "changed", "vitest").env!, "LEG");
+    expect(lintScheduled(JSON.stringify(missingLeg), check).length).toBeGreaterThan(0);
+  },
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } },
+);

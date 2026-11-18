@@ -1,6 +1,6 @@
 import { Machine } from "@demlik/tea/effect";
 import { Program } from "@kampus/libfabrika";
-import { Schema } from "effect";
+import { Array as Arr, Schema } from "effect";
 
 const Fact = Schema.Struct({ stream: Schema.NonEmptyString, rev: Schema.Int });
 
@@ -18,7 +18,7 @@ export const Row = Schema.TaggedUnion({ added: Added });
 
 const Model = Schema.Struct({ rows: Schema.Array(Row) });
 
-const Msg = Schema.Union([Schema.Struct({ type: Schema.Literal("added"), ...Added })]);
+const Msg = Schema.TaggedUnion({ added: Added });
 
 /** Keeps the first letter for each fact, in arrival order, without Cmds. */
 export const inboxMachine = Machine.make({
@@ -28,11 +28,11 @@ export const inboxMachine = Machine.make({
   init: (loaded) => [loaded ?? { rows: [] }, []],
   update: {
     added: (model, msg) => {
-      if (model.rows.some((row) => row.id === msg.id)) {
+      if (Arr.some(model.rows, (row) => row.id === msg.id)) {
         return [model, []];
       }
 
-      const { type: _type, ...fields } = msg;
+      const { _tag: _type, ...fields } = msg;
 
       return [{ rows: [...model.rows, Row.cases.added.make(fields)] }, []];
     },

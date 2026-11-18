@@ -5,8 +5,22 @@ import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Clock, Effect, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  Clock,
+  Effect,
+  Fiber,
+  FileSystem,
+  Layer,
+  Match,
+  Option,
+  Path,
+  Queue,
+  Schema,
+  Stream,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
@@ -25,6 +39,13 @@ import * as ChaosSchedule from "@kampus/libfabrika/runtime/ChaosSchedule";
 import { Nemesis } from "@kampus/libfabrika/runtime/Nemesis";
 import * as NemesisLedger from "@kampus/libfabrika/runtime/NemesisLedger";
 import * as RevokeHold from "./chaos-revoke.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  start: {},
+});
 
 const PERSON = "person_0000000000e008000000000001";
 
@@ -97,7 +118,7 @@ const Frame = Schema.Struct({
 });
 
 /** Masked client frame, RFC 6455 section 5.2; the payload is a complete small JSON request. */
-const encode = (value: unknown) => {
+const encode = (value: Schema.Json) => {
   const payload = new TextEncoder().encode(JSON.stringify(value));
 
   if (payload.length > 65535) {
@@ -172,7 +193,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
     buffered = Buffer.concat([buffered, bytes]);
   });
 
-  while (!buffered.includes("\r\n\r\n")) {
+  while (buffered.includes("\r\n\r\n") !== true) {
     yield* more;
   }
 
@@ -192,14 +213,22 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
 
       const opcode = (buffered[0] ?? 0) & 15;
       const short = (buffered[1] ?? 0) & 127;
-      const header = short === 126 ? 4 : short === 127 ? 10 : 2;
+
+      const header = Match.value(short).pipe(
+        Match.when(126, () => 4),
+        Match.when(127, () => 10),
+        Match.orElse(() => 2),
+      );
 
       while (buffered.length < header) {
         yield* more;
       }
 
-      const size =
-        short === 126 ? buffered.readUInt16BE(2) : short === 127 ? Number(buffered.readBigUInt64BE(2)) : short;
+      const size = Match.value(short).pipe(
+        Match.when(126, () => buffered.readUInt16BE(2)),
+        Match.when(127, () => Number(buffered.readBigUInt64BE(2))),
+        Match.orElse(() => short),
+      );
 
       if (!Number.isSafeInteger(size) || size > 1024 * 1024) {
         return yield* WireFailure.make({ cause: "oversized test frame" });
@@ -236,7 +265,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   // A JSON-RPC 2.0 id only has to be unique among this client's open requests.
   let calls = 0;
 
-  const call = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const id = `call-${++calls}`;
     socket.write(encode({ jsonrpc: "2.0", id, method, params }));
 
@@ -269,22 +298,10 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   };
 });
 
-/** A local binding's calls, as the dev command sees them. */
-type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
-
-const invoke = Effect.fn("RevokeTest.control")(function* (
-  binding: Binding,
-  method: string,
-  args: ReadonlyArray<unknown>,
-) {
-  const target = binding[method];
-
-  if (target === undefined) {
-    return yield* WireFailure.make({ cause: new Error(`the binding has no ${method} call`) });
-  }
-
+/** One typed call on the local instance's dev client, its rejection kept as a wire failure. */
+const invoke = Effect.fn("RevokeTest.control")(function* <A>(call: () => Promise<A>) {
   return yield* Effect.tryPromise({
-    try: () => Reflect.apply(target, binding, args),
+    try: call,
     catch: (cause) => WireFailure.make({ cause }),
   });
 });
@@ -348,7 +365,7 @@ const served = Effect.gen(function* () {
 
   const instance = yield* localInstance(
     built,
-    RecordWireTest.settingsFixture({
+    yield* RecordWireTest.settingsFixture({
       home,
       name: PROJECT,
       person: PERSON,
@@ -356,7 +373,7 @@ const served = Effect.gen(function* () {
       window: old.raw,
       port,
     }),
-  ).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(localState()));
+  ).pipe(Effect.provide(SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(localState()))));
 
   const from = {
     by: root.fingerprint,
@@ -374,19 +391,21 @@ const served = Effect.gen(function* () {
     return yield* Effect.die(new Error("the real checklist was not built"));
   }
 
-  const started = yield* invoke(instance.project(PROJECT), "start", [
-    Start.cases.first.make({
-      id: "checklist-start",
-      // P14 slice 2: the real entry boots `checklist:1` itself, so the proof starts its own target
-      // under the next name, owned by this test's root key.
-      name: "checklist:2",
-      code: { program: "fabrika/checklist", hash: source.hash },
-    }),
-    from,
-  ]);
+  const started = yield* invoke(() =>
+    instance.project(PROJECT).start(
+      Start.cases.first.make({
+        id: "checklist-start",
+        // P14 slice 2: the real entry boots `checklist:1` itself, so the proof starts its own target
+        // under the next name, owned by this test's root key.
+        name: "checklist:2",
+        code: { program: "fabrika/checklist", hash: source.hash },
+      }),
+      from,
+    ),
+  );
 
   const { process: pid } = yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started);
-  const read = (stream: string) => invoke(instance.project(PROJECT), "read", [stream, 0, "p17b-audit"]);
+  const read = (stream: string) => invoke(() => instance.project(PROJECT).read(stream, 0, "p17b-audit"));
 
   return { root, old, other, instance, pid, read, built: built.build };
 }).pipe(Effect.provide(NodeServices.layer));
@@ -461,16 +480,17 @@ it.live(
           },
         });
 
-        expect(
-          yield* RevokeTest.invoke(project, "grant", [{ text: grant, armored: yield* root.proof(grant) }]),
-        ).toMatchObject({ _tag: "applied" });
+        const armored = yield* root.proof(grant);
+        expect(yield* RevokeTest.invoke(() => project.grant({ text: grant, armored }))).toMatchObject({
+          _tag: "applied",
+        });
         const other = yield* RevokeTest.connect(instance.url, otherKey, "other");
         expect(other.first.error).toBeUndefined();
 
         const input = (letter: string, name: string) => ({
           pid,
           letter,
-          m: { type: "add", name },
+          m: { ...Tag.cases.add.make({}), name },
           sentAt: RevokeTest.SENT,
           seen: 0,
         });
@@ -479,8 +499,11 @@ it.live(
         expect(before.error).toBeUndefined();
         expect(before.result).toMatchObject({ _tag: "accepted" });
 
-        const hold = (method: string, params: unknown = {}) =>
-          RevokeTest.invoke(project, "route", ["p90-control", method, params, "p90-control"]);
+        const hold = (method: string, params: Schema.Json = {}) =>
+          RevokeTest.invoke(() =>
+            // @ts-expect-error p90-control is no ConnectionId: only the test's control binding takes it (chaos-revoke.worker.test-support.ts:90)
+            project.route("p90-control", method, params, "p90-control"),
+          );
 
         yield* Effect.acquireRelease(hold("p90.arm", { process: pid }), () => hold("p90.release").pipe(Effect.orDie));
 
@@ -497,7 +520,7 @@ it.live(
           ),
         ).toMatchObject({ result: { _tag: "held", process: pid } });
         // Nothing has been written yet. The real request has already passed online membership.
-        expect((yield* rows("gateway/inputs")).filter((row) => row.by === oldKey.fingerprint)).toHaveLength(1);
+        expect(Arr.filter(yield* rows("gateway/inputs"), (row) => row.by === oldKey.fingerprint)).toHaveLength(1);
 
         const binding = Chaos.Target.make({
           program: "fabrika/checklist",
@@ -558,9 +581,10 @@ it.live(
               saw: { label: "Old test client", location: "local", method: "command", check: "none" },
             });
 
-            expect(
-              yield* RevokeTest.invoke(project, "grant", [{ text, armored: yield* root.proof(text) }]),
-            ).toMatchObject({ _tag: "applied" });
+            const armored = yield* root.proof(text);
+            expect(yield* RevokeTest.invoke(() => project.grant({ text, armored }))).toMatchObject({
+              _tag: "applied",
+            });
 
             return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
           });
@@ -580,7 +604,9 @@ it.live(
         yield* Effect.scoped(
           Effect.gen(function* () {
             const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
-            expect((yield* runner.msg(world.letter(1, { type: "start", ...start, most })))._tag).toBe("accepted");
+            expect((yield* runner.msg(world.letter(1, { ...Tag.cases.start.make({}), ...start, most })))._tag).toBe(
+              "accepted",
+            );
 
             for (let n = 0; n < most; n++) {
               const saved = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
@@ -596,7 +622,11 @@ it.live(
         );
         const final = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
         expect(final.phase._tag).toBe("done");
-        const revoked = (yield* rows("gateway/access")).find((row) => row._tag === "revoked");
+
+        const revoked = Option.getOrUndefined(
+          Arr.findFirst(yield* rows("gateway/access"), (row) => row._tag === "revoked"),
+        );
+
         expect(revoked).toBeDefined();
 
         if (revoked === undefined) {
@@ -628,21 +658,26 @@ it.live(
         expect(live.result).toMatchObject({ _tag: "accepted" });
 
         const inbox = yield* RevokeTest.until(rows(`${TARGET}/inbox`), (entries) =>
-          entries.some((entry) => entry.id === "other-after"),
+          Arr.some(entries, (entry) => entry.id === "other-after"),
         );
 
-        const sends = inbox.filter((row) => row._tag === "send");
+        const sends = Arr.filter(inbox, (row) => row._tag === "send");
         const clientKeys = new Set([oldKey.fingerprint, otherKey.fingerprint]);
-        expect(sends.filter((row) => clientKeys.has(row.by)).map((row) => ({ id: row.id, by: row.by }))).toEqual([
+        expect(
+          Arr.map(
+            Arr.filter(sends, (row) => clientKeys.has(row.by)),
+            (row) => ({ id: row.id, by: row.by }),
+          ),
+        ).toEqual([
           { id: "old-before", by: oldKey.fingerprint },
           { id: "other-after", by: otherKey.fingerprint },
         ]);
 
         // The checklist runner stamps its own timer letters with the program owner's key.
-        for (const row of sends.filter((entry) => !clientKeys.has(entry.by))) {
+        for (const row of Arr.filter(sends, (entry) => !clientKeys.has(entry.by))) {
           const { m } = Schema.decodeUnknownSync(
             Schema.Struct({
-              m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
+              m: Schema.TaggedStruct("timer", { at: Schema.Int, arrivedAt: Schema.Int }),
             }),
           )(row.body);
 
@@ -652,16 +687,25 @@ it.live(
           expect(row.body).toEqual({ m });
         }
 
-        const surviving = inbox.find((row) => row.id === "other-after");
+        const surviving = Option.getOrUndefined(Arr.findFirst(inbox, (row) => row.id === "other-after"));
         expect(surviving?.rev).toBeGreaterThan(revoked.rev);
         expect(surviving?.arrivedAt).toBeGreaterThanOrEqual(revoked.arrivedAt);
         const gateway = yield* rows("gateway/inputs");
         const process = yield* rows(pid);
-        const after = [...gateway, ...inbox, ...process].filter((row) => row.rev > revoked.rev);
-        expect(after.filter((row) => row.by === oldKey.fingerprint)).toEqual([]);
-        const oldInputs = new Set(gateway.filter((row) => row.by === oldKey.fingerprint).map((row) => row.id));
-        expect(after.filter((row) => row.parent !== null && oldInputs.has(row.parent))).toEqual([]);
-        expect(inbox.find((row) => row.id === "old-before")?.rev).toBeLessThan(revoked.rev);
+        const after = Arr.filter([...gateway, ...inbox, ...process], (row) => row.rev > revoked.rev);
+        expect(Arr.filter(after, (row) => row.by === oldKey.fingerprint)).toEqual([]);
+
+        const oldInputs = new Set(
+          Arr.map(
+            Arr.filter(gateway, (row) => row.by === oldKey.fingerprint),
+            (row) => row.id,
+          ),
+        );
+
+        expect(Arr.filter(after, (row) => row.parent !== null && oldInputs.has(row.parent))).toEqual([]);
+        expect(Option.getOrUndefined(Arr.findFirst(inbox, (row) => row.id === "old-before"))?.rev).toBeLessThan(
+          revoked.rev,
+        );
         const viewed = yield* other.call("view.open", { pid });
         expect(viewed.error).toBeUndefined();
         expect(viewed.result).toMatchObject({
@@ -678,7 +722,7 @@ it.live(
             expect(Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model)).toEqual(final);
           }),
         );
-        expect((yield* rows("gateway/access")).filter((row) => row._tag === "revoked")).toHaveLength(1);
+        expect(Arr.filter(yield* rows("gateway/access"), (row) => row._tag === "revoked")).toHaveLength(1);
         // Compact reproducible facts only. Signing keys, proofs and item text never enter this record.
         yield* Effect.logInfo("p17b-revoke", {
           seed: SEED,

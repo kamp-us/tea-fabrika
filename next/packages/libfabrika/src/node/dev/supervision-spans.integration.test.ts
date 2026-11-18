@@ -2,12 +2,18 @@
 // Only this file owns content deletion and trace attribution; other laws inspect lifecycle events.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { programBox } from "../../cloudflare/box.ts";
@@ -20,6 +26,12 @@ import { type Descriptor, ProgramRunner, Supervision } from "../../runtime/Runne
 import { mailChunk } from "../../settings/Declarations.ts";
 import type { Sql } from "../../Sql.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  poison: {},
+});
 
 const policy = {
   maxDeliveries: 3,
@@ -38,7 +50,7 @@ const Model = Schema.Struct({ count: Schema.Int });
 
 type Model = typeof Model.Type;
 
-const Msg = Schema.Struct({ type: Schema.Literal("poison") });
+const Msg = Schema.TaggedStruct("poison", {});
 
 // Only the platform base class and the RPC transport are supplied. Box methods are real.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -52,7 +64,7 @@ const runnerLayer: (
   },
 ) => ReturnType<typeof ProgramRunner.layer> = ProgramRunner.layer;
 
-const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveries = policy.maxDeliveries) => {
+const world = (cause: unknown, adapter: "node" | "worker" = "node", maxDeliveries = policy.maxDeliveries) => {
   const ledger = storage(),
     state = storage(),
     sink = storage();
@@ -78,7 +90,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
     init: (s) => [s ?? { count: 0 }, []],
     update: {
       poison: () => {
-        throw thrown;
+        throw cause;
       },
     },
   });
@@ -167,7 +179,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
 
   const input = {
     id: "poison",
-    envelope: { id: `in-${X}-1`, by: owner, arrivedAt: 0, input: { type: "poison" } },
+    envelope: { id: `in-${X}-1`, by: owner, arrivedAt: 0, input: Tag.cases.poison.make({}) },
     sentAt: from().sentAt,
     seen: 0,
     span: { traceId: from().traceId, spanId: "00f067aa0ba902b7" },
@@ -207,7 +219,7 @@ const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
       const rows = yield* recorded(process);
 
       for (const name of ["runner.recover", "runner.restart"]) {
-        const row = rows.find((r) => r.name === name);
+        const row = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.name === name));
         expect(row, name).toBeDefined();
         expect(row!.attributes).toMatchObject({
           "fab.process": process,
@@ -222,11 +234,14 @@ const recoverySpans = (w: ReturnType<typeof world>, process: string) =>
  *  writes for it, one origin and one nested origin, each naming its caller and a made-up folder. */
 const evaluated = (error: Error, id: string) =>
   Object.assign(error, {
-    stack: [
-      error.stack,
-      `    at eval (eval at caller (file:///made-up-${id}/origin.ts:3:7), <anonymous>:1:5)`,
-      `    at eval (eval at outer (eval at inner (/made-up-${id}/deep.ts:9:2), <anonymous>:2:1), <anonymous>:4:8)`,
-    ].join("\n"),
+    stack: Arr.join(
+      [
+        error.stack ?? "",
+        `    at eval (eval at caller (file:///made-up-${id}/origin.ts:3:7), <anonymous>:1:5)`,
+        `    at eval (eval at outer (eval at inner (/made-up-${id}/deep.ts:9:2), <anonymous>:2:1), <anonymous>:4:8)`,
+      ],
+      "\n",
+    ),
   });
 
 const failure = fc
@@ -239,22 +254,16 @@ const failure = fc
 
     class ProgramError extends Error {}
 
-    const value =
-      kind === "TypeError"
-        ? new TypeError(message)
-        : kind === "RangeError"
-          ? new RangeError(message)
-          : kind === "SyntaxError"
-            ? new SyntaxError(message)
-            : kind === "custom"
-              ? new ProgramError(message)
-              : kind === "eval"
-                ? evaluated(new Error(message), id)
-                : kind === "Error"
-                  ? new Error(message)
-                  : kind === "object"
-                    ? { message }
-                    : message;
+    const value = Match.value(kind).pipe(
+      Match.when("TypeError", () => new TypeError(message)),
+      Match.when("RangeError", () => new RangeError(message)),
+      Match.when("SyntaxError", () => new SyntaxError(message)),
+      Match.when("custom", () => new ProgramError(message)),
+      Match.when("eval", () => evaluated(new Error(message), id)),
+      Match.when("Error", () => new Error(message)),
+      Match.when("object", () => ({ message })),
+      Match.orElse(() => message),
+    );
 
     return { value, message, private: [message, ...(value instanceof Error ? [value.stack!] : [])] };
   });
@@ -274,16 +283,16 @@ const located = (location: string): { file: string; folder: boolean } => {
     return { file: `eval at ${origin[1]} (${inner.file}), ${outer.file}`, folder: inner.folder || outer.folder };
   }
 
-  const folder = !location.startsWith("node:") && /[/\\]/.test(location);
+  const folder = !Function.pipe(location, Str.startsWith("node:")) && /[/\\]/.test(location);
 
   return {
-    file: folder ? location.slice(Math.max(location.lastIndexOf("/"), location.lastIndexOf("\\")) + 1) : location,
+    file: folder ? Arr.lastNonEmpty(Str.split(location, /[/\\]/)) : location,
     folder,
   };
 };
 
 const frames = (text: string) =>
-  text.split("\n").flatMap((line) => {
+  Arr.flatMap(Str.split(text, "\n"), (line) => {
     const frame = /^\s*at (?:(.+?) \((.*)\)|(.*?))(?: \{)?$/.exec(line);
 
     if (frame === null) {
@@ -318,12 +327,12 @@ const generatedThrow = fc.oneof(
       fc.constant(Symbol("made-up-throw")),
       fc.func(fc.jsonValue()),
     )
-    .map((value) => ({ value, message: null, private: [] as string[] })),
+    .map((value) => ({ value, message: null, private: Array.of<string>() })),
 );
 
 for (const adapter of ["node", "worker"] as const) {
-  it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead events and measurements`, async () => {
-    await fc.assert(
+  it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead events and measurements`, () =>
+    fc.assert(
       fc.asyncProperty(generatedThrow, (sample) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -340,26 +349,28 @@ for (const adapter of ["node", "worker"] as const) {
                 concurrency: 1,
               });
 
-              const kept = contents.flatMap((c) => (Option.isSome(c) && c.value._tag === "kept" ? [c.value] : []));
+              const kept = Arr.flatMap(contents, (c) => (Option.isSome(c) && c.value._tag === "kept" ? [c.value] : []));
               expect(kept.length).toBeGreaterThan(0);
 
               // A-Sink stores each frame with its folders cut, so the law asks for the frames, not the raw stack.
               const thrown = sample.value instanceof Error ? frames(sample.value.stack ?? "") : [];
 
-              const lost = kept.map((c) => [
-                ...(sample.message === null || c.message.includes(sample.message) ? [] : [sample.message]),
+              const lost = Arr.map(kept, (c) => [
+                ...(sample.message === null || Function.pipe(c.message, Str.includes(sample.message))
+                  ? []
+                  : [sample.message]),
                 ...lostFrames(
-                  frames(c.message).map((stored) => stored.frame),
-                  thrown.map((raw) => raw.frame),
+                  Arr.map(frames(c.message), (stored) => stored.frame),
+                  Arr.map(thrown, (raw) => raw.frame),
                 ),
               ]);
 
               expect(
-                lost.some((none) => none.length === 0),
-                `original message and every stack frame (name, file, line, column) must reach P37; lost: ${JSON.stringify(lost)}`,
+                Arr.some(lost, (none) => none.length === 0),
+                `original message and every stack frame (name, file, line, column) must reach P37; lost: ${Formatter.format(lost)}`,
               ).toBe(true);
 
-              for (const stored of kept.flatMap((c) => frames(c.message))) {
+              for (const stored of Arr.flatMap(kept, (c) => frames(c.message))) {
                 expect(stored.folder, `a stored frame names a folder: ${stored.frame}`).toBe(false);
               }
 
@@ -381,9 +392,13 @@ for (const adapter of ["node", "worker"] as const) {
                     : typeof sample.value;
 
               expect(receipt).toMatchObject({ errors: [name], tries: 1 });
-              expect(rows.find((row) => row.name === "runner.throw")?.attributes["error.type"]).toBe(name);
-              expect(measurements.filter((row) => row.piece === "runner.throw")).toMatchObject([{ error: name }]);
-              expect(dead.map((row) => row.body)).toEqual([expect.objectContaining({ errors: [name], tries: 1 })]);
+              expect(
+                Option.getOrUndefined(Arr.findFirst(rows, (row) => row.name === "runner.throw"))?.attributes[
+                  "error.type"
+                ],
+              ).toBe(name);
+              expect(Arr.filter(measurements, (row) => row.piece === "runner.throw")).toMatchObject([{ error: name }]);
+              expect(Arr.map(dead, (row) => row.body)).toEqual([expect.objectContaining({ errors: [name], tries: 1 })]);
 
               for (const text of sample.private) {
                 for (const permanent of [
@@ -394,7 +409,9 @@ for (const adapter of ["node", "worker"] as const) {
                   measurements,
                   w.sink.sql.exec("SELECT * FROM summary"),
                 ]) {
-                  expect(JSON.stringify(permanent)).not.toContain(JSON.stringify(text).slice(1, -1));
+                  expect(Formatter.formatJson(permanent)).not.toContain(
+                    Function.pipe(Formatter.formatJson(text), Str.slice(1, -1)),
+                  );
                 }
               }
 
@@ -413,7 +430,9 @@ for (const adapter of ["node", "worker"] as const) {
               });
 
               for (const text of sample.private) {
-                expect(JSON.stringify(after)).not.toContain(JSON.stringify(text).slice(1, -1));
+                expect(Formatter.formatJson(after)).not.toContain(
+                  Function.pipe(Formatter.formatJson(text), Str.slice(1, -1)),
+                );
               }
 
               expect(yield* recorded(A)).toEqual(rows);
@@ -432,8 +451,7 @@ for (const adapter of ["node", "worker"] as const) {
         ),
       ),
       { seed: 119120, numRuns: 40 },
-    );
-  });
+    ));
 }
 
 describe("P34 supervision recording", () => {
@@ -452,7 +470,7 @@ describe("P34 supervision recording", () => {
           yield* w.boot;
           yield* Effect.gen(function* () {
             yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
-            const throws = (yield* recorded(A)).filter((row) => row.name === "runner.throw");
+            const throws = Arr.filter(yield* recorded(A), (row) => row.name === "runner.throw");
             expect(throws).toHaveLength(1);
             expect(throws[0]!.attributes).toMatchObject({
               "fab.process": A,
@@ -491,21 +509,20 @@ describe("P34 supervision recording", () => {
                 { concurrency: 1 },
               );
 
-              const at = contents.findIndex((content) =>
+              const at = Arr.findFirstIndex(contents, (content) =>
                 Option.match(content, {
                   onNone: () => false,
-                  onSome: (c) => c._tag === "kept" && c.message.includes(secret),
+                  onSome: (c) => c._tag === "kept" && Function.pipe(c.message, Str.includes(secret)),
                 }),
               );
 
-              expect(
-                at,
-                "the original throw must reach deletable content before guards erase it",
-              ).toBeGreaterThanOrEqual(0);
-              expect(JSON.stringify(rows)).not.toContain(secret);
-              expect(JSON.stringify(w.sink.sql.exec("SELECT * FROM measurements"))).not.toContain(secret);
-              expect(JSON.stringify(yield* read(`processes/${NAME}`))).not.toContain(secret);
-              expect(JSON.stringify(yield* read(`${A}/dead`))).not.toContain(secret);
+              expect(Option.isSome(at), "the original throw must reach deletable content before guards erase it").toBe(
+                true,
+              );
+              expect(Formatter.formatJson(rows)).not.toContain(secret);
+              expect(Formatter.formatJson(w.sink.sql.exec("SELECT * FROM measurements"))).not.toContain(secret);
+              expect(Formatter.formatJson(yield* read(`processes/${NAME}`))).not.toContain(secret);
+              expect(Formatter.formatJson(yield* read(`${A}/dead`))).not.toContain(secret);
 
               for (const output of [
                 rows,
@@ -513,10 +530,12 @@ describe("P34 supervision recording", () => {
                 yield* read(`processes/${NAME}`),
                 yield* read(`${A}/dead`),
               ]) {
-                expect(JSON.stringify(output)).not.toContain(JSON.stringify(secret).slice(1, -1));
+                expect(Formatter.formatJson(output)).not.toContain(
+                  Function.pipe(Formatter.formatJson(secret), Str.slice(1, -1)),
+                );
               }
 
-              const span = rows[at]!;
+              const span = rows[Option.getOrThrow(at)]!;
               yield* r.deleteContent({ _tag: "job", process: A }, span.spanId, {
                 by: owner.key,
                 reason: "test deletion",
@@ -524,7 +543,9 @@ describe("P34 supervision recording", () => {
               expect(Option.getOrNull(yield* r.content({ _tag: "job", process: A }, span.spanId))).toMatchObject({
                 _tag: "deleted",
               });
-              expect((yield* recorded(A)).find((row) => row.spanId === span.spanId)).toEqual(span);
+              expect(
+                Option.getOrUndefined(Arr.findFirst(yield* recorded(A), (row) => row.spanId === span.spanId)),
+              ).toEqual(span);
             }).pipe(Effect.provide(w.layer()));
           }),
         { discard: true },
@@ -543,10 +564,10 @@ describe("P34 supervision recording", () => {
           yield* Effect.gen(function* () {
             yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input)));
             const rows = yield* recorded(process);
-            expect(rows.filter((row) => row.name === "runner.throw")).toHaveLength(1);
+            expect(Arr.filter(rows, (row) => row.name === "runner.throw")).toHaveLength(1);
 
             if (n === 2) {
-              expect(rows.some((row) => row.name === "runner.dead")).toBe(true);
+              expect(Arr.some(rows, (row) => row.name === "runner.dead")).toBe(true);
             }
           }).pipe(Effect.provide(w.layer()));
 

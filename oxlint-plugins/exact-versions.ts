@@ -1,7 +1,8 @@
 // `pnpm lint:versions`: no ranged npm version, in any package.json or pnpm-workspace.yaml git tracks
 // (docs/direction/pin-exact-versions.md). It lists what passes (an exact version, `workspace:*`, and
 // `catalog:` or `catalog:<name>`, whose catalog entry is checked exact), so a range, a tag, a `git:`
-// or a `file:` all fail without being named here.
+// or a `file:` all fail without being named here. A `patchedDependencies` row is keyed on one exact
+// version.
 //
 //   node oxlint-plugins/exact-versions.ts            # this repo
 //   node oxlint-plugins/exact-versions.ts <folder>   # another git tree, as the test does
@@ -10,6 +11,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { Array as Arr, pipe, Predicate, Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -27,17 +29,18 @@ const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optional
 const OVERRIDES = ["overrides", "resolutions"];
 
 const passes = (version: unknown): boolean =>
-  typeof version === "string" && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
+  Predicate.isString(version) && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
 
-const isMap = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isMap = (value: unknown): value is Record<string, unknown> => Predicate.isObject(value);
 
 /** One line per name in `map` whose version does not pass. */
 const refused = (file: string, field: string, map: unknown): readonly string[] =>
   isMap(map)
-    ? Object.entries(map)
-        .filter(([, version]) => !passes(version))
-        .map(([name, version]) => `${file}: ${field}: ${name}: ${JSON.stringify(version)}`)
+    ? pipe(
+        Rec.toEntries(map),
+        Arr.filter(([, version]) => !passes(version)),
+        Arr.map(([name, version]) => `${file}: ${field}: ${name}: ${JSON.stringify(version)}`),
+      )
     : [];
 
 const inPackage = (file: string, text: string): readonly string[] => {
@@ -50,10 +53,26 @@ const inPackage = (file: string, text: string): readonly string[] => {
   const { pnpm } = manifest;
 
   return [
-    ...[...FIELDS, ...OVERRIDES].flatMap((field) => refused(file, field, manifest[field])),
+    ...Arr.flatMap([...FIELDS, ...OVERRIDES], (field) => refused(file, field, manifest[field])),
     ...(isMap(pnpm) ? refused(file, "pnpm.overrides", pnpm["overrides"]) : []),
   ];
 };
+
+/** A patch row's key: a package name, scoped or not, then `@` and the version it names. */
+const PATCH_KEY = /^(?:@[^@/\s]+\/)?[^@/\s]+@(.*)$/;
+
+/** A patch row names one exact version (`name@1.2.3`), never a bare name or a range: pnpm applies
+ * such a row to whatever version it installs, a later release included. A row at a version nothing
+ * installs is pnpm's own refusal, not this check's: the install fails with ERR_PNPM_UNUSED_PATCH, so
+ * the bump that takes a release finds its old row there (decision 0569). */
+const refusedPatches = (file: string, patched: unknown): readonly string[] =>
+  isMap(patched)
+    ? pipe(
+        Rec.keys(patched),
+        Arr.filter((key) => !EXACT.test(PATCH_KEY.exec(key)?.[1] ?? "")),
+        Arr.map((key) => `${file}: patchedDependencies: ${key}: not one exact version`),
+      )
+    : [];
 
 const inWorkspace = (file: string, text: string): readonly string[] => {
   const workspace: unknown = parse(text);
@@ -62,14 +81,15 @@ const inWorkspace = (file: string, text: string): readonly string[] => {
     return [];
   }
 
-  const { catalog, catalogs, overrides } = workspace;
+  const { catalog, catalogs, overrides, patchedDependencies } = workspace;
 
   return [
     ...refused(file, "catalog", catalog),
     ...(isMap(catalogs)
-      ? Object.entries(catalogs).flatMap(([name, map]) => refused(file, `catalogs.${name}`, map))
+      ? Arr.flatMap(Rec.toEntries(catalogs), ([name, map]) => refused(file, `catalogs.${name}`, map))
       : []),
     ...refused(file, "overrides", overrides),
+    ...refusedPatches(file, patchedDependencies),
   ];
 };
 
@@ -82,7 +102,7 @@ const root = process.argv[2] ?? join(import.meta.dirname, "..");
 
 const tracked = spawnSync(
   "git",
-  ["ls-files", "-z", "--", ...Object.keys(READERS).flatMap((name) => [name, `**/${name}`])],
+  ["ls-files", "-z", "--", ...Arr.flatMap(Rec.keys(READERS), (name) => [name, `**/${name}`])],
   {
     cwd: root,
     encoding: "utf8",
@@ -90,7 +110,7 @@ const tracked = spawnSync(
   },
 );
 
-const files = tracked.stdout.split("\0").filter((file) => file !== "");
+const files = Arr.filter(tracked.stdout.split("\0"), (file) => file !== "");
 
 // No file read must never read as clean.
 if (tracked.status !== 0 || files.length === 0) {
@@ -109,23 +129,24 @@ const check = (file: string): readonly string[] => {
 };
 
 /** What one file refuses, or the line saying it could not be read. */
-const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } => {
-  try {
-    return { lines: check(file), broken: false };
-  } catch (error) {
-    return { lines: [`${file}: could not read: ${String(error)}`], broken: true };
-  }
-};
+const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } =>
+  Result.match(
+    Result.try(() => check(file)),
+    {
+      onSuccess: (lines) => ({ lines, broken: false }),
+      onFailure: (error) => ({ lines: [`${file}: could not read: ${String(error)}`], broken: true }),
+    },
+  );
 
-const results = files.map(attempt);
+const results = Arr.map(files, attempt);
 
-const lines = results.flatMap((result) => result.lines);
+const lines = Arr.flatMap(results, (result) => result.lines);
 
 for (const line of lines) {
   console.error(line);
 }
 
-if (results.some((result) => result.broken)) {
+if (Arr.some(results, (result) => result.broken)) {
   process.exit(2);
 }
 

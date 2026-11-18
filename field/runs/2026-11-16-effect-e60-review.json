@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e60-review",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:03:55-08:00",
+  "ended": "2026-11-16T01:09:09-08:00",
+  "parent": "2026-11-16-effect-e60-step2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Review of slice E60 (unstableApiUsage, 0574) in next/ and tooling, the whole diff eeb8ecdb..f5c125f4: send back to tests, one blocking class. The source change is right: the only lines removed from the 16 PR 1366 files are 135 '@stability unstable' lines and 16 bare ' *' lines, each directly above a tag that was its block's last line; no other comment or oxlint-disable line went, no block now ends in an empty line, and no '* @stability' doc line is left in any .ts, .mjs or .json source (the .github/ci/fixtures/same/*.new.txt vectors, the word list in .github/ci/program.test.ts and the planted strings in two oxlint-plugins tests stay, as allowed). The .oxlintrc.json change deletes exactly the 23-line 'off' block for fabrika/no-stability-tag and nothing else. No lock, override, allowedUnstableApis, tsconfig or tsconfig.base.json change. The blocker is law 2 of oxlint-plugins/no-stability-tag.test.ts (lines 130-146): its first property says the rule fires on each in-scope folder, tests, internal/ and the 16 files included, but it draws fc.constantFrom with numRuns equal to the list length under the fixed seed 119120, so it samples with replacement. Recorded under vitest at this head, it checks 15 of its 23 paths and never next/packages/libfabrika/src/internal/planted.ts, transport/Planted.test.ts, next/apps/fabrika/src/planted.ts, ledger/LedgerTransactionSql.ts, ledger/Log.ts, ledger/RefereeSql.ts, processes/ProcessManager.ts or processes/ProgramMailLedger.ts. At the base the same law, with 7 runs, did check internal/ and next/apps; so the edit narrows its reach. An 'off' override for ledger/Log.ts alone would leave law 2 green. The silent property checks 2 of its 3 outside paths (never docs/tutorials/planted.ts). Fix: give both fc.assert calls examples listing every path, e.g. examples: [...IN_SCOPE, ...FORMERLY_OFF].map((path) => [path]), so each path runs once, and record a plant of an off override for one file the seed missed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Read-only apart from this row. Head f5c125f4. Ran at this head: oxlint-plugins/jsdocs.test.ts 17 passed; oxlint-plugins/no-stability-tag.test.ts 5 passed; a scratch copy of that test that logged each drawn path (deleted after); pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 18 parts passed; one pnpm typecheck, exit 0. Recount with only unstableApiUsage at error (effect-tsgo diagnostics --format json --project, --lspconfig replacing the plugin block): next/packages/libfabrika 2112 hits in 304 files over 27 Effect parts, next/apps/fabrika 883 hits in 100 files over 26 parts, 0 hits on any module outside effect and @effect/*; both match the step 2 row. loosening.sh eeb8ecdb..f5c125f4: two unrecognized changes (.oxlintrc.json:2527, the deleted off block, which widens the rule; no-stability-tag.test.ts:93, the renamed list) and two removed laws, which are law 2's two properties renamed; the rename is not a loosening, but the draws are, as above. git merge-tree with origin/main: no conflict. Not blocking, left as finding rows: three comments the change made stale (oxlint-plugins/no-stability-tag.ts:8-10, oxlint-plugins/README.md:399, oxlint-plugins/jsdocs.test.ts:51) and the plan's E60 row parts that no step did (jsdocs refusing the tag, the lock of the folders not yet locked).",
+  "step": "review"
+}

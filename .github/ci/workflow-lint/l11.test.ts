@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { it, expect } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Schema } from "effect";
+import { Match, Schema } from "effect";
 import { parse, stringify } from "yaml";
 import { bootstrap, cached, cases, uncached } from "../l11-cases.ts";
 import { lintL11 } from "./l11.ts";
@@ -63,12 +63,14 @@ const workflow = () => ({
         env["L11_VARIANT"] = `\${{ matrix.variant }}`;
       }
 
-      const when =
-        name === "output"
-          ? "inputs.case != 'l11-compare' && inputs.case != 'l11-inputs' && inputs.case != 'l11-batch'"
-          : name === "collect"
-            ? "always()"
-            : `inputs.case == 'l11-${slot >= 0 || name === "manifest" ? "batch" : name}'`;
+      const when = Match.value(name).pipe(
+        Match.when(
+          "output",
+          () => "inputs.case != 'l11-compare' && inputs.case != 'l11-inputs' && inputs.case != 'l11-batch'",
+        ),
+        Match.when("collect", () => "always()"),
+        Match.orElse(() => `inputs.case == 'l11-${slot >= 0 || name === "manifest" ? "batch" : name}'`),
+      );
 
       return [
         name,

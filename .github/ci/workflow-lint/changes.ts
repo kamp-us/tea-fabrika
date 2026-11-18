@@ -1,3 +1,4 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's changes job (S1): its flags and outputs, the
 // parser's pass, and the size step that sizes next's legs (legs.ts).
 import {
@@ -38,7 +39,7 @@ const LEGS_OUTPUTS = [
 // held before the push (0534), the classify step's BASE.
 const SIZE_ENV = {
   EVENT: `\${{ github.event_name }}`,
-  FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
+  FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/ kalfa/' }}`,
   BASE: env.BASE,
   VISUAL: `\${{ ${VISUAL_LABEL} }}`,
 };
@@ -70,7 +71,7 @@ export const changesJob: Rule = ({ jobs }, require) => {
   require(compact(outputs["related"]) ===
     compact(RELATED), "R1: ready PR and queue checks select their missing projects");
   const exposed = [...FLAGS, "next", "filter", "related", ...LEGS_OUTPUTS.map(([name]) => name)].toSorted();
-  require(JSON.stringify(Object.keys(outputs).toSorted()) ===
+  require(JSON.stringify(Rec.keys(outputs).toSorted()) ===
     JSON.stringify(exposed), "S1: changes exposes its flags, filter and the size step's outputs, and nothing else");
 
   const changeSteps = steps(changes);
@@ -78,7 +79,7 @@ export const changesJob: Rule = ({ jobs }, require) => {
   require(same?.["run"] === "node .github/ci/changes.mjs --same" &&
     same["continue-on-error"] === true, "changes runs the parser's pass, and its failure fails nothing");
 
-  for (const [key, expected] of Object.entries(classifier)) {
+  for (const [key, expected] of Rec.toEntries(classifier)) {
     require(map(same?.["env"])[key] === expected, `the parser's pass gets event ${key} through env`);
   }
 
@@ -86,8 +87,8 @@ export const changesJob: Rule = ({ jobs }, require) => {
 
   for (const step of changeSteps.filter(
     (s) =>
-      (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
-      (typeof s["run"] === "string" && s["run"].startsWith("pnpm install")),
+      (Predicate.isString(s["uses"]) && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
+      (Predicate.isString(s["run"]) && s["run"].startsWith("pnpm install")),
   )) {
     const forSizing = step["run"] === "pnpm install --frozen-lockfile --ignore-scripts";
     const before = forSizing ? sizing : same;
@@ -117,14 +118,19 @@ export const changesJob: Rule = ({ jobs }, require) => {
     compact(sizing["if"]) ===
       SIZED, "S1: changes sizes next with legs.ts after the parser's pass, on every run that tests next, and fails open");
 
-  for (const [key, expected] of Object.entries(SIZE_ENV)) {
+  for (const [key, expected] of Rec.toEntries(SIZE_ENV)) {
     require(map(sizing?.["env"])[key] === expected, `S1: the size step gets ${key} through env`);
   }
+
+  require(JSON.stringify(Object.keys(map(sizing?.["env"])).toSorted()) ===
+    JSON.stringify(
+      [...Object.keys(SIZE_ENV), "BUDGET"].toSorted(),
+    ), "S1: the size step gets exactly its own env, no second narrowing");
 
   // S1. BUDGET is the setting for a vitest leg's seconds (legs.ts): a positive number, declared here
   // once. legs.ts refuses any other value, and its step then prints nothing.
   const budget = map(sizing?.["env"])["BUDGET"];
-  require(typeof budget === "number" &&
+  require(Predicate.isNumber(budget) &&
     Number.isFinite(budget) &&
     budget > 0, "S1: the size step gets BUDGET, a vitest leg's seconds, as a positive number");
 

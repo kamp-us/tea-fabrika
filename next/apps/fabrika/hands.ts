@@ -9,6 +9,7 @@
 //   stdout  {"_tag":"waiting","fingerprint":...,"code":...,"until":...}, then
 //           {"_tag":"online","fingerprint":...} or {"_tag":"offline","fingerprint":...}
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { Id } from "@kampus/libfabrika";
 import { start } from "@kampus/libfabrika/client/HandsStart";
 import * as JournalStore from "@kampus/libfabrika/client/JournalStore";
@@ -16,13 +17,12 @@ import * as CommandsNode from "@kampus/libfabrika/node/client/CommandsNode";
 import * as JournalSqlite from "@kampus/libfabrika/node/client/JournalSqlite";
 import * as KeyFile from "@kampus/libfabrika/node/client/KeyFile";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
-import * as Declarations from "@kampus/libfabrika/settings/Declarations";
-import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
-import type { Link } from "@kampus/libfabrika/transport/Link";
-import { Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
+import { Link } from "@kampus/libfabrika/transport/Link";
+import { Record as Rec, Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { Socket } from "effect/socket";
+import { environment, present } from "./src/environment.ts";
 
 const VERSION = "0.0.0";
 
@@ -45,31 +45,31 @@ const OS: Partial<Record<NodeJS.Platform, "macos" | "linux" | "windows">> = {
   win32: "windows",
 };
 
-/** The entries that hold a value, as one record. */
-const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
-
 /** What a parent needs to know of the link: waiting for a grant, online, or neither. */
 const lineFor = (link: Link, fingerprint: string): Line =>
-  link._tag === "waiting_grant"
-    ? Line.cases.waiting.make({ fingerprint, code: link.code, until: link.until })
-    : link._tag === "online"
-      ? Line.cases.online.make({ fingerprint })
-      : Line.cases.offline.make({ fingerprint });
+  Link.matchOrElse(
+    link,
+    {
+      waiting_grant: (link) => Line.cases.waiting.make({ fingerprint, code: link.code, until: link.until }),
+      online: () => Line.cases.online.make({ fingerprint }),
+    },
+    () => Line.cases.offline.make({ fingerprint }),
+  );
 
 const hands = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
 
-  const home = process.env.FABRIKA_HOME ?? path.join(yield* Config.String("HOME"), ".fabrika");
+  const env = yield* environment;
+  const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
 
   const loaded = yield* Load.load({
     person: {
       path: path.join(home, "fabrika.toml"),
-      name: `${process.env.FABRIKA_HOME === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
+      name: `${env.home === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
     },
     flags: {},
-    env: present(Declarations.all.declarations.map((d) => [d.env, process.env[d.env]])),
+    env: present(Rec.toEntries(env.settings)),
     version: VERSION,
   }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto]));
 

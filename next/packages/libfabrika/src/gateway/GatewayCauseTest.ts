@@ -13,7 +13,10 @@
 // importKey, sign and verify share).
 import { describe, expect } from "@effect/vitest";
 import { Effect, Predicate, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Base64Url } from "effect/encoding";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
@@ -36,28 +39,34 @@ export type Harness = {
 export type Law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown>) => void;
 
 /** The same `Sql`, but each transaction throws `failure`, as SQLite does on a full disk. */
-const throwing = (sql: Sql, failure: unknown): Sql => ({
+const throwing = (sql: Sql, failure: object): Sql => ({
   ...sql,
   transaction: () => {
     throw failure;
   },
 });
 
-/** What an error keeps beneath it: the cause under its tagged reason (0119), or its own. */
-const beneath = (error: unknown): unknown => {
-  if (Predicate.hasProperty(error, "reason") && Predicate.hasProperty(error.reason, "cause")) {
-    return error.reason.cause;
-  }
+/**
+ * What an error keeps beneath it: the cause under its tagged reason (0119), or its own. A cause that
+ * is no object is nothing beneath, as neither caller reads one.
+ */
+const beneath = (error: object | undefined): object | undefined => {
+  const cause =
+    Predicate.hasProperty(error, "reason") && Predicate.hasProperty(error.reason, "cause")
+      ? error.reason.cause
+      : Predicate.hasProperty(error, "cause")
+        ? error.cause
+        : undefined;
 
-  return Predicate.hasProperty(error, "cause") ? error.cause : undefined;
+  return Predicate.isObjectOrArray(cause) ? cause : undefined;
 };
 
 /** An error and every cause under it, outermost first. */
-const chain = (error: unknown): ReadonlyArray<unknown> => {
-  const found: Array<unknown> = [];
+const chain = (error: object): ReadonlyArray<object> => {
+  const found: Array<object> = [];
   let at: unknown = error;
 
-  while (typeof at === "object" && at !== null && !found.includes(at)) {
+  while (Predicate.isObjectOrArray(at) && !found.includes(at)) {
     found.push(at);
     at = beneath(at);
   }
@@ -66,7 +75,7 @@ const chain = (error: unknown): ReadonlyArray<unknown> => {
 };
 
 /** Whether `link` is the door's own error for a saved row that does not decode. */
-const isBadRow = (link: unknown): boolean =>
+const isBadRow = (link: object): boolean =>
   Predicate.hasProperty(link, "_tag") &&
   link._tag === "GatewayError" &&
   Predicate.hasProperty(link, "reason") &&
@@ -74,7 +83,7 @@ const isBadRow = (link: unknown): boolean =>
   link.reason._tag === "BadRow";
 
 /** One WebCrypto call rejects with `failure` while `work` runs: an own property shadows the method. */
-const rejecting = <A, E>(method: "importKey" | "sign" | "verify", failure: unknown, work: Effect.Effect<A, E>) =>
+const rejecting = <A, E>(method: "importKey" | "sign" | "verify", failure: object, work: Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
       Object.defineProperty(crypto.subtle, method, {
@@ -118,10 +127,10 @@ export const suite = (law: Law, { fresh }: Harness) => {
         Effect.gen(function* () {
           const store = gatewayStore(fresh());
           yield* store.atomic(() => store.set(name, Schema.String, value));
-          store.sql.exec("UPDATE gateway_state SET value=? WHERE name=?", JSON.stringify(bad), name);
+          store.sql.exec("UPDATE gateway_state SET value=? WHERE name=?", Formatter.formatJson(bad), name);
           const error = yield* Effect.flip(store.atomic(() => store.get(name, Schema.String)));
           expect(error._tag).toBe("GatewayError");
-          const row = chain(error).find(isBadRow);
+          const row = Option.getOrUndefined(Arr.findFirst(chain(error), isBadRow));
           expect(row, "a `BadRow` GatewayError is in the chain").toBeDefined();
           expect(Schema.isSchemaError(beneath(row)), "it holds the decoder's own failure").toBe(true);
         }),

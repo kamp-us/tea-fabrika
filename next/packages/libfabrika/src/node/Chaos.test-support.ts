@@ -2,16 +2,20 @@
 import { applyCell } from "@demlik/tea";
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
+
 import { Writer } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -46,6 +50,13 @@ import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import * as StepFaultTest from "./stepFault.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  arm: {},
+  before: {},
+});
+
 const brain = "SHA256:test-brain";
 
 const trace = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
@@ -61,7 +72,7 @@ export const agent = Writer.cases.agent.make({ key: "SHA256:test-agent", for: "t
 export const letter = (n: number, input: unknown, by: Writer = person) => ({
   id: `chaos-input-${n}`,
   envelope: {
-    id: Schema.decodeSync(Id.Input)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+    id: Schema.decodeSync(Id.Input)(`input_0000000000e008${Function.pipe(n.toString(16), Str.padStart(12, "0"))}`),
     by,
     arrivedAt: n,
     input,
@@ -112,9 +123,9 @@ const faultControl = Effect.fnUntraced(function* () {
 
   return {
     arm: (name: string, letter: string, classes: ReadonlyArray<typeof StepFaultTest.ErrorClass.Type>) =>
-      send({ type: "arm", name, letter, errors: classes }).pipe(Effect.asVoid),
+      send({ ...Tag.cases.arm.make({}), name, letter, errors: classes }).pipe(Effect.asVoid),
     before: Effect.fnUntraced(function* (input: typeof StepFaultTest.Before.Type) {
-      const [previous, next] = yield* send({ type: "before", ...input });
+      const [previous, next] = yield* send({ ...Tag.cases.before.make({}), ...input });
 
       if (previous._tag === "armed" && next._tag === "armed" && next.attempts.length > previous.attempts.length) {
         const attempt = next.attempts.at(-1);
@@ -256,8 +267,9 @@ export const open = Effect.gen(function* () {
         );
 
         const checkpoint = yield* ProcessStore.use((store) => store.load).pipe(
-          Effect.provide(ProcessStore.layer(sql, { process: status.state.process })),
-          Effect.provide(ledgerLayer(ledger)),
+          Effect.provide(
+            ProcessStore.layer(sql, { process: status.state.process }).pipe(Layer.provideMerge(ledgerLayer(ledger))),
+          ),
           Effect.orDie,
         );
 
@@ -300,9 +312,9 @@ export const open = Effect.gen(function* () {
       Effect.gen(function* () {
         const sql = yield* files("manager");
 
-        return sql
-          .exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`)
-          .map((row) => Schema.decodeUnknownSync(Row)(row));
+        return Arr.map(sql.exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`), (row) =>
+          Schema.decodeUnknownSync(Row)(row),
+        );
       }),
     );
 
@@ -310,9 +322,9 @@ export const open = Effect.gen(function* () {
     Effect.gen(function* () {
       const sql = yield* files("manager");
 
-      return sql
-        .exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev")
-        .map((row) => Schema.decodeUnknownSync(Row)(row));
+      return Arr.map(sql.exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev"), (row) =>
+        Schema.decodeUnknownSync(Row)(row),
+      );
     }),
   );
 

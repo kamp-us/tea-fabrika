@@ -7,13 +7,14 @@
 //   `mailChunk` at `mail.chunk`, a byte size from 1 KiB to 1 MiB written as text ("64 KiB"), both in
 //   `all`, scope `["repo"]`, reload on restart.
 import { describe, expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
+import type { TomlDocument } from "@kalfa/config/Toml";
 import { ByteSize, Effect, Exit, Result, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
 import * as Sources from "./Fabrika.ts";
-import * as Files from "./Files.ts";
-import type { TomlDocument } from "./Toml.ts";
 
 const KIB = 1_024;
 
@@ -105,7 +106,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
                 );
                 expect(failure?._tag === "Fail" ? failure.error : null).toMatchObject({ reason: "invalid" });
                 const message = failure?._tag === "Fail" ? String(failure.error.message) : "";
-                expect(message.includes(setting.path), `the refusal names ${setting.path}`).toBe(true);
+                expect(Str.includes(setting.path)(message), `the refusal names ${setting.path}`).toBe(true);
               }
 
               reached.add(`${key}_refused`);

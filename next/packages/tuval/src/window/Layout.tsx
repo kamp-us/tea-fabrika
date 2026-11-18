@@ -21,6 +21,12 @@
 import { lengths, STRIP, shut } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP, order } from "@kampus/libfabrika/tezgah/Layout";
 import type { Dir, Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Str from "effect/String";
+import * as Tuple from "effect/Tuple";
 import type { ReactElement } from "react";
 
 /**
@@ -29,7 +35,10 @@ import type { ReactElement } from "react";
  * uses (the tile guidelines' "Program name" and "Tile id").
  */
 export const tileWords = (tile: Pick<Tile, "program" | "n">) => ({
-  program: tile.program.slice(tile.program.lastIndexOf("/") + 1),
+  program: Option.match(Str.lastIndexOf("/")(tile.program), {
+    onNone: () => tile.program,
+    onSome: (slash) => Str.slice(slash + 1)(tile.program),
+  }),
   handle: `t${tile.n}`,
 });
 
@@ -80,10 +89,12 @@ const FOCUSABLE =
 export const landing = (region: HTMLElement, cursor: string | null): HTMLElement => {
   const row =
     cursor === null
-      ? undefined
-      : [...region.querySelectorAll("[data-cursor]")].find((e) => e.getAttribute("data-cursor") === cursor);
+      ? Option.none()
+      : Arr.findFirst([...region.querySelectorAll("[data-cursor]")], (e) => e.getAttribute("data-cursor") === cursor);
 
-  return (row ?? region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region;
+  return (
+    Option.getOrElse(row, () => region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region
+  );
 };
 
 const LIVE: State = { word: "", live: true };
@@ -94,7 +105,7 @@ const NONE: ReadonlySet<TileId> = new Set();
 const stripName = (tile: Pick<Tile, "program" | "n">): string => `open ${tileName(tile)}`;
 
 /** A box's classes: its own, and the direction it lays its parts in when it holds a container. */
-const flow = (own: string, inner: Tree): string => (typeof inner === "string" ? own : `${own} flow-${inner.dir}`);
+const flow = (own: string, inner: Tree): string => (Predicate.isString(inner) ? own : `${own} flow-${inner.dir}`);
 
 /** The close question, in the tile guidelines' words, as tmux asks it. */
 export const question = (tile: Pick<Tile, "n">): string => `close t${tile.n}? (y/n)`;
@@ -115,7 +126,11 @@ const TileRegion = ({
   readonly children: ReactElement;
 }) => (
   <section
-    className={["tile", focused ? "focused" : "", state.live ? "" : "disconnected"].filter((c) => c !== "").join(" ")}
+    className={Function.pipe(
+      ["tile", focused ? "focused" : "", state.live ? "" : "disconnected"],
+      Arr.filter((c) => c !== ""),
+      Arr.join(" "),
+    )}
     aria-label={tileName(tile)}
     aria-current={focused ? "true" : undefined}
     data-tile={tile.id}
@@ -135,7 +150,7 @@ const TileRegion = ({
       <span className="tile-mark" aria-hidden="true">
         ·
       </span>
-      <span className="tile-name">{tile.program.slice(tile.program.lastIndexOf("/") + 1)}</span>
+      <span className="tile-name">{tileWords(tile).program}</span>
       {asking ? (
         <span className="tile-state question">{question(tile)}</span>
       ) : state.word === "" ? null : (
@@ -185,7 +200,7 @@ export const Layout = ({
   strips = NONE,
   open,
 }: Props) => {
-  const byId = new Map(tiles.map((t) => [t.id, t]));
+  const byId = new Map(Arr.map(tiles, (t) => Tuple.make(t.id, t)));
 
   const divider = (i: number) => (
     <div key={`divider-${i}`} className="divider" style={{ flexBasis: GAP }} aria-hidden="true" />
@@ -204,7 +219,7 @@ export const Layout = ({
     dir: Dir,
     box: { readonly width: number; readonly height: number } | null,
   ): ReactElement | ReadonlyArray<ReactElement> | null => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       const tile = byId.get(node);
 
       if (tile !== undefined && node !== workspace.focus && strips.has(node)) {
@@ -228,7 +243,7 @@ export const Layout = ({
     const row = node.dir === "row";
     const shares = box === null ? null : lengths(node, row ? box.width : box.height, strips, workspace.focus);
 
-    return node.parts.flatMap((part, i) => {
+    return Arr.flatMap(node.parts, (part, i) => {
       const share = shares?.[i];
 
       const inner =
@@ -249,12 +264,12 @@ export const Layout = ({
 
       // A band: every tile of a folded container lies along it, one strip each, sharing its length.
       const body =
-        folded && typeof part.inner !== "string"
-          ? order(part.inner).flatMap((t, k) => [...(k === 0 ? [] : [divider(k)]), ...strip(t, node.dir)])
+        folded && !Predicate.isString(part.inner)
+          ? Arr.flatMap(order(part.inner), (t, k) => [...(k === 0 ? [] : [divider(k)]), ...strip(t, node.dir)])
           : draw(part.inner, node.dir, inner);
 
       const flows =
-        folded && typeof part.inner !== "string"
+        folded && !Predicate.isString(part.inner)
           ? `part band flow-${row ? "column" : "row"}`
           : flow("part", part.inner);
 

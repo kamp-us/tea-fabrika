@@ -7,11 +7,12 @@
 import { run } from "@demlik/tea/effect";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import type * as Types from "effect/Types";
 import * as Id from "../Id.ts";
+import { isJsonObject } from "../runtime/Patch.ts";
 import { ClientKey } from "../transport/ClientKey.ts";
 import { ErrorClass } from "../transport/ClientRows.ts";
 import { helloText } from "../transport/Hello.ts";
@@ -45,12 +46,12 @@ const Failure = Schema.TaggedUnion({
 const F = Failure.cases;
 
 /** The socket's Msgs the hands machine reads: a failure to open shows as its close. */
-const forHands = (m: DialMsg): m is Exclude<DialMsg, { readonly type: "socket_failure" }> =>
-  m.type !== "socket_failure";
+const forHands = (m: DialMsg): m is Exclude<DialMsg, Types.ExtractTag<DialMsg, "socket_failure">> =>
+  m._tag !== "socket_failure";
 
 /** A call that says what the client has `seen` also says when it was sent, on the client's own clock. */
-const stamped = (params: unknown, sentAt: string): unknown =>
-  Predicate.isObject(params) && "seen" in params ? { ...params, sentAt } : params;
+const stamped = (params: Schema.Json, sentAt: string): Schema.Json =>
+  isJsonObject(params) && "seen" in params ? { ...params, sentAt } : params;
 
 /**
  * Boots a hands client and runs every Cmd to hand-off; the door's answers arrive as Msgs.

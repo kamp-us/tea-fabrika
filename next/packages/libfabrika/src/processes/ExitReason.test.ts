@@ -3,6 +3,7 @@
 // the uncalled cases below. The real-store halves of L1 and L7 are in ExitReasonTest.ts.
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { ExitReason } from "./ExitReason.ts";
 import {
@@ -44,7 +45,7 @@ describe("P34c slice 1: the exit reason schema", () => {
         fc.integer({ min: 0, max: ERROR_CLASS_MAX + 64 }),
         fc.string({ minLength: 1, maxLength: 20 }),
         (phase, length, word) => {
-          const error = "E".repeat(length);
+          const error = Str.repeat(length)("E");
           const answer = decode({ _tag: "crashed", phase, error });
 
           if (length >= 1 && length <= ERROR_CLASS_MAX) {
@@ -62,6 +63,7 @@ describe("P34c slice 1: the exit reason schema", () => {
             phase,
           });
           expect(Result.isFailure(decode({ _tag: "crashed", error: "Error" })), "the phase is required").toBe(true);
+          // SAFETY: PHASES is a tuple of strings; widening it only lets `includes` test any generated word.
           const unknown = (PHASES as ReadonlyArray<string>).includes(word) ? `${word}_` : word;
           expect(Result.isFailure(decode({ _tag: "crashed", phase: unknown })), "an unknown phase").toBe(true);
           expect(Result.isFailure(decode({ _tag: "noproc" })), "noproc is a monitor result, never an exit").toBe(true);

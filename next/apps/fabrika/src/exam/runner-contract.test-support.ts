@@ -31,8 +31,14 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
+import { String as Str, pipe, Array as Arr, Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
 
 export const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
 
@@ -60,16 +66,11 @@ const Model = Schema.Struct({ body: Schema.String, version: Schema.Int });
 
 type Model = typeof Model.Type;
 
-export const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("save"),
-    body: Schema.String,
-    base: Schema.Finite,
-    work: Schema.Boolean,
-  }),
+export const Msg = Schema.TaggedUnion({
+  save: { body: Schema.String, base: Schema.Finite, work: Schema.Boolean },
   // A person-only write port, so the runner's person-only refusal has a real port to guard.
-  Schema.Struct({ type: Schema.Literal("guard"), body: Schema.String }),
-]);
+  guard: { body: Schema.String },
+});
 
 type Msg = typeof Msg.Type;
 
@@ -108,7 +109,7 @@ export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws
       guard: { description: "Exam person-only save", personOnly: true },
       // A read port: never a write, so a fresh input naming it is bad_msg.
       peek: Input.cases.read.make({
-        schema: Schema.Struct({ type: Schema.Literal("peek") }),
+        schema: Schema.TaggedStruct("peek", {}),
         description: "Exam read",
         answer: (v: Model) => v.version,
       }),
@@ -130,7 +131,7 @@ const name = "notes-exam:1";
 export const build = "p8-exam";
 
 export const id = (prefix: "input" | "letter", n: number) =>
-  `${prefix}_0000000000e008${n.toString(16).padStart(12, "0")}`;
+  `${prefix}_0000000000e008${pipe(n.toString(16), Str.padStart(12, "0"))}`;
 
 export const incoming = (n: number, body: string, base = 0, work = false): Incoming => ({
   id: id("letter", n),
@@ -138,7 +139,7 @@ export const incoming = (n: number, body: string, base = 0, work = false): Incom
     id: Schema.decodeSync(Id.InputId)(id("input", n)),
     by: writer,
     arrivedAt: n,
-    input: { type: "save", body, base, work },
+    input: { ...Tag.cases.save.make({}), body, base, work },
   },
   sentAt: "2030-01-01T00:00:00Z",
   seen: 0,
@@ -166,7 +167,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
       recipient: Recipient.cases.client.make({ client: "exam", session: process }),
       by: "SHA256:exam-brain",
     },
-    Effect.sync(() => `process_0000000000e008${(++nextProcess).toString(16).padStart(12, "0")}`),
+    Effect.sync(() => `process_0000000000e008${pipe((++nextProcess).toString(16), Str.padStart(12, "0"))}`),
   ).pipe(Layer.provide(ledger));
 
   const shared = Layer.mergeAll(Mailbox.layer, ProcessStore.layer(sql, { process })).pipe(Layer.provideMerge(ledger));
@@ -285,10 +286,12 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
         yield* runner.due(at);
       }),
     receipts: () =>
-      sql.exec("SELECT value FROM process_receipts WHERE name=?", name).map((row) => JSON.parse(String(row.value))),
+      Arr.map(sql.exec("SELECT value FROM process_receipts WHERE name=?", name), (row) =>
+        JSON.parse(String(row.value)),
+      ),
     dead: () => sql.exec("SELECT * FROM entries WHERE stream LIKE '%/dead'"),
     down: () => sql.exec("SELECT * FROM entries WHERE \"_tag\"='down'"),
   };
 });
 
-export const unchanged = (before: unknown, after: unknown) => expect(after).toEqual(before);
+export const unchanged = <A>(before: A, after: A) => expect(after).toEqual(before);

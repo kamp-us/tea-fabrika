@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "person": false,
+  "links": [],
+  "id": "2026-11-18-ticket-host-discovery-timeout-plant",
+  "stage": "plan",
+  "kind": "friction",
+  "what": "Ticket text, filed as a row because this cloud session has no tracker. Title: the host-discovery-timeout plant has no Stryker mutant. Body: the old plant case host-discovery-timeout moved runtime discovery in .agents/skills/lead/scripts/flow/host.ts out of Effect.cached, so it ran before the first line's deadline. No Stryker 10.1.1 mutator unwraps or moves a call, so @kalfa/quality/stryker cannot plant it, and 0600 allows no hand-written fallback. Its law, the host step's scenario that stalled runtime discovery shares the first command's deadline and is reaped before returning, keeps only its recorded one-time plant until a Stryker-made mutant is found (a survey of host.ts) or the law gets another proof.",
+  "cause": "Stryker's mutators change expressions in place; none moves code between scopes.",
+  "primitive": "Check",
+  "fix": "Run kalfa quality stryker survey over flow/host.ts with the law's file, and add the plant if a mutant the law kills is found.",
+  "test": "The plant answers killed on CI."
+}

@@ -9,9 +9,44 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Result, Schema } from "effect";
+import {
+  Array as Arr,
+  flow,
+  Match,
+  pipe,
+  Predicate,
+  Record as Rec,
+  String as Str,
+  Effect,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  check: {},
+  remove: {},
+  rename: {},
+  timer: {},
+  uncheck: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 
 const SEED = 119120;
 
@@ -33,12 +68,12 @@ type Item = { readonly name: string; readonly state: State };
 type Model = { readonly items: ReadonlyArray<Item> };
 
 type Msg =
-  | { readonly type: "add"; readonly name: string }
-  | { readonly type: "rename"; readonly name: string; readonly to: string }
-  | { readonly type: "remove"; readonly name: string }
-  | { readonly type: "check"; readonly name: string; readonly note?: string }
-  | { readonly type: "uncheck"; readonly name: string }
-  | { readonly type: "timer"; readonly at: number; readonly arrivedAt: number };
+  | { readonly _tag: "add"; readonly name: string }
+  | { readonly _tag: "rename"; readonly name: string; readonly to: string }
+  | { readonly _tag: "remove"; readonly name: string }
+  | { readonly _tag: "check"; readonly name: string; readonly note?: string }
+  | { readonly _tag: "uncheck"; readonly name: string }
+  | { readonly _tag: "timer"; readonly at: number; readonly arrivedAt: number };
 
 expectTypeOf<Model>().toEqualTypeOf<ChecklistMachine["model"]["Type"]>();
 
@@ -48,7 +83,7 @@ expectTypeOf<State>().toEqualTypeOf<ChecklistMachine["model"]["Type"]["items"][n
 
 expectTypeOf<Msg>().toEqualTypeOf<ChecklistMachine["msg"]["Type"]>();
 
-type Fresh = Exclude<Msg, { readonly type: "timer" }>;
+type Fresh = Exclude<Msg, { readonly _tag: "timer" }>;
 
 /** The plan's one day, written out here so the law does not read it from the code it checks. */
 const DAY = 86_400_000;
@@ -60,7 +95,7 @@ const MOST = 256;
 const Note = fc.option(
   fc.oneof(
     fc.constant("n"),
-    fc.constant("m".repeat(MOST)),
+    fc.constant(Str.repeat(MOST)("m")),
     fc.string({ unit: "grapheme", minLength: 1, maxLength: 64 }).filter((s) => s.length <= MOST),
     fc.string({ minLength: 2, maxLength: MOST - 1 }),
   ),
@@ -69,7 +104,7 @@ const Note = fc.option(
 
 /** Four names per run, the 1 and 80 character edges among them. */
 const Pool = fc.uniqueArray(
-  fc.oneof(fc.string({ minLength: 1, maxLength: 80 }), fc.constant("x"), fc.constant("n".repeat(80))),
+  fc.oneof(fc.string({ minLength: 1, maxLength: 80 }), fc.constant("x"), fc.constant(Str.repeat(80)("n"))),
   { minLength: 4, maxLength: 4 },
 );
 
@@ -96,15 +131,26 @@ const at = <A>(items: ReadonlyArray<A>, i: number): A | undefined => items[i % M
 
 /** The next move, read off the model reached: a move that has nothing to act on is a timer. */
 const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: number): Msg => {
-  const here = m.items.map((i) => i.name);
-  const free = names.filter((n) => !here.includes(n));
-  const unchecked = m.items.filter((i) => i.state._tag !== "checked").map((i) => i.name);
-  const checked = m.items.filter((i) => i.state._tag === "checked").map((i) => i.name);
-  const wakes = m.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since + DAY] : []));
-  const wake = m.items.some((i) => i.state._tag === "new") ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
+  const here = Arr.map(m.items, (i) => i.name);
+  const free = Arr.filter(names, (n) => !here.includes(n));
+
+  const unchecked = pipe(
+    m.items,
+    Arr.filter((i) => i.state._tag !== "checked"),
+    Arr.map((i) => i.name),
+  );
+
+  const checked = pipe(
+    m.items,
+    Arr.filter((i) => i.state._tag === "checked"),
+    Arr.map((i) => i.name),
+  );
+
+  const wakes = Arr.flatMap(m.items, (i) => (i.state._tag === "open" ? [i.state.since + DAY] : []));
+  const wake = Arr.some(m.items, (i) => i.state._tag === "new") ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
 
   const timer: Msg = {
-    type: "timer",
+    ...Tag.cases.timer.make({}),
     at: wake,
     arrivedAt: move.onTime ? Math.max(wake, clock + move.gap) : clock + move.gap,
   };
@@ -116,18 +162,18 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
     one === undefined
       ? timer
       : move.note === undefined
-        ? { type: "check", name: one }
-        : { type: "check", name: one, note: move.note };
+        ? { ...Tag.cases.check.make({}), name: one }
+        : { ...Tag.cases.check.make({}), name: one, note: move.note };
 
   switch (move.kind) {
     case 0:
     case 1:
     case 2:
-      return fresh === undefined ? timer : { type: "add", name: fresh };
+      return fresh === undefined ? timer : { ...Tag.cases.add.make({}), name: fresh };
     case 3:
-      return name === undefined || fresh === undefined ? timer : { type: "rename", name, to: fresh };
+      return name === undefined || fresh === undefined ? timer : { ...Tag.cases.rename.make({}), name, to: fresh };
     case 4:
-      return name === undefined ? timer : { type: "remove", name };
+      return name === undefined ? timer : { ...Tag.cases.remove.make({}), name };
     case 5:
       return check(at(unchecked, move.pick));
     // A second `check` on a checked item, with a note of its own (847, gap 1).
@@ -136,7 +182,7 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
     case 6: {
       const one = at(checked, move.pick);
 
-      return one === undefined ? timer : { type: "uncheck", name: one };
+      return one === undefined ? timer : { ...Tag.cases.uncheck.make({}), name: one };
     }
 
     default:
@@ -160,7 +206,7 @@ const walked = (machine: ChecklistMachine, minLength = 0) =>
 
       for (const move of moves) {
         const msg = choose(model, names, move, clock);
-        clock = msg.type === "timer" ? msg.arrivedAt : clock;
+        clock = msg._tag === "timer" ? msg.arrivedAt : clock;
         msgs.push(msg);
         [model] = applyCell(machine, model, msg);
       }
@@ -170,25 +216,25 @@ const walked = (machine: ChecklistMachine, minLength = 0) =>
 
 /** The plan's table for slice 1 (A1), as an independent record: the expected next items. */
 const expected = (prev: Model, msg: Msg): ReadonlyArray<Item> => {
-  switch (msg.type) {
+  switch (msg._tag) {
     case "add":
       return [...prev.items, { name: msg.name, state: { _tag: "new" } }];
     case "rename":
-      return prev.items.map((i) => (i.name === msg.name ? { ...i, name: msg.to } : i));
+      return Arr.map(prev.items, (i) => (i.name === msg.name ? { ...i, name: msg.to } : i));
     case "remove":
-      return prev.items.filter((i) => i.name !== msg.name);
+      return Arr.filter(prev.items, (i) => i.name !== msg.name);
     case "check":
-      return prev.items.map((i) =>
+      return Arr.map(prev.items, (i) =>
         i.name === msg.name && i.state._tag !== "checked"
           ? { name: i.name, state: { _tag: "checked", note: msg.note ?? null } }
           : i,
       );
     case "uncheck":
-      return prev.items.map((i) =>
+      return Arr.map(prev.items, (i) =>
         i.name === msg.name && i.state._tag === "checked" ? { name: i.name, state: { _tag: "new" } } : i,
       );
     case "timer":
-      return prev.items.map((i) =>
+      return Arr.map(prev.items, (i) =>
         i.state._tag === "new"
           ? { name: i.name, state: { _tag: "open", since: msg.arrivedAt } }
           : i.state._tag === "open" && msg.arrivedAt >= i.state.since + DAY
@@ -204,13 +250,13 @@ const byName = (items: ReadonlyArray<Item>) =>
 
 /** What the plan's `refuse` sketch says of one fresh input (A1: no `verify`). */
 const reason = (m: Model, msg: Fresh): string | null => {
-  const has = (name: string) => m.items.some((i) => i.name === name);
+  const has = (name: string) => Arr.some(m.items, (i) => i.name === name);
 
-  if (msg.type === "add") {
+  if (msg._tag === "add") {
     return has(msg.name) ? "taken" : null;
   }
 
-  if (msg.type === "rename") {
+  if (msg._tag === "rename") {
     return !has(msg.name) ? "missing" : has(msg.to) ? "taken" : null;
   }
 
@@ -222,7 +268,7 @@ const reason = (m: Model, msg: Fresh): string | null => {
 const reached = (machine: ChecklistMachine) =>
   walked(machine, 4).chain(({ names, model }) => {
     const any = fc.constantFrom(...names);
-    const here = model.items.map((i) => i.name);
+    const here = Arr.map(model.items, (i) => i.name);
 
     const name =
       here.length === 0
@@ -230,18 +276,26 @@ const reached = (machine: ChecklistMachine) =>
         : fc.oneof({ arbitrary: fc.constantFrom(...here), weight: 3 }, { arbitrary: any, weight: 1 });
 
     return fc
-      .record({ type: fc.constantFrom("add", "rename", "remove", "check", "uncheck"), name, to: any })
-      .map(({ type, name, to }): { model: Model; msg: Fresh } => ({
+      .record({ kind: fc.constantFrom("add", "rename", "remove", "check", "uncheck"), name, to: any })
+      .map(({ kind, name, to }): { model: Model; msg: Fresh } => ({
         model,
-        msg: type === "rename" ? { type, name, to } : type === "add" ? { type, name: to } : { type, name },
+        msg: Match.value(kind).pipe(
+          Match.when("rename", () => ({ ...Tag.cases.rename.make({}), name, to })),
+          Match.when("add", () => ({ ...Tag.cases.add.make({}), name: to })),
+          Match.orElse((rest) => ({ ...Tag.cases[rest].make({}), name })),
+        ),
       }));
   });
 
-const left = (m: Model) => m.items.filter((i) => i.state._tag !== "checked").length;
+const left = (m: Model) => Arr.filter(m.items, (i) => i.state._tag !== "checked").length;
 
 /** Each item as the plan's view shows it, from the independent record: its note only when checked. */
 const shownBy = (m: Model) =>
-  m.items.map((i) => ({ name: i.name, state: i.state._tag, note: i.state._tag === "checked" ? i.state.note : null }));
+  Arr.map(m.items, (i) => ({
+    name: i.name,
+    state: i.state._tag,
+    note: i.state._tag === "checked" ? i.state.note : null,
+  }));
 
 /** A walk's Msgs with the record the plan's table folds from them, step by step, beside the real models. */
 const folded = (machine: ChecklistMachine, msgs: ReadonlyArray<Msg>) => {
@@ -262,340 +316,388 @@ const folded = (machine: ChecklistMachine, msgs: ReadonlyArray<Msg>) => {
 /** One saved item made wrong in one field: a name off the 1 to 80 wall, an unknown state, a `since`
  *  that is no integer, a note that is no string. */
 const Broken = fc.constantFrom(
-  (i: Item): unknown => ({ ...i, name: "" }),
-  (i: Item): unknown => ({ ...i, name: "x".repeat(81) }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "gone" } }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "open", since: 1.5 } }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "checked", note: 7 } }),
-  (i: Item): unknown => ({ name: i.name }),
+  (i: Item): object => ({ ...i, name: "" }),
+  (i: Item): object => ({ ...i, name: Str.repeat(81)("x") }),
+  (i: Item): object => ({ ...i, state: { _tag: "gone" } }),
+  (i: Item): object => ({ ...i, state: { _tag: "open", since: 1.5 } }),
+  (i: Item): object => ({ ...i, state: { _tag: "checked", note: 7 } }),
+  (i: Item): object => ({ name: i.name }),
 );
 
 /** A Msg one field outside the plan's shape, on an otherwise good `check` or `rename`. */
 const Bad = fc.oneof(
-  fc.constantFrom("", "x".repeat(81)).map((name) => ({ type: "check", name })),
-  fc.constantFrom("", "x".repeat(81)).map((to) => ({ type: "rename", name: "a", to })),
-  fc.constantFrom("", "x".repeat(MOST + 1)).map((note) => ({ type: "check", name: "a", note })),
+  fc.constantFrom("", Str.repeat(81)("x")).map((name) => ({ ...Tag.cases.check.make({}), name })),
+  fc.constantFrom("", Str.repeat(81)("x")).map((to) => ({ ...Tag.cases.rename.make({}), name: "a", to })),
+  fc.constantFrom("", Str.repeat(MOST + 1)("x")).map((note) => ({ ...Tag.cases.check.make({}), name: "a", note })),
   fc
     .oneof(fc.integer(), fc.boolean(), fc.constant(null), fc.array(fc.string(), { maxLength: 2 }), fc.object())
-    .map((note) => ({ type: "check", name: "a", note })),
+    .map((note) => ({ ...Tag.cases.check.make({}), name: "a", note })),
   fc
     .string({ minLength: 1, maxLength: 12 })
     .filter((t) => !["add", "rename", "remove", "check", "uncheck", "timer"].includes(t))
-    .map((type) => ({ type, name: "a" })),
+    .map((key) => ({ ...keyed(key), name: "a" })),
 );
 
 describe("ticket 806 the checklist's laws", () => {
-  it("L1: every move follows the table, a note on check and the first note kept on a checked item, at every tea step, and no step returns a Cmd", async () => {
-    const { checklistMachine } = await load();
-    propertyInvariant(
-      checklistMachine,
-      {},
-      walked(checklistMachine).map((w) => w.msgs),
-      ({ prev, msg, next, cmds }) =>
-        cmds.length !== 0
-          ? `${msg.type} returned ${cmds.length} Cmds`
-          : byName(next.items) === byName(expected(prev, msg)) || `${msg.type} broke the table`,
-      { seed: SEED, numRuns: RUNS },
-    );
-  });
-
-  it("L2: every JSON cut keeps every later model and Cmd", async () => {
-    const { checklist } = await load();
-    fc.assert(
-      fc.property(walked(checklist.machine), ({ msgs }) => {
-        syncTest(
-          checklist.machine,
+  it.live(
+    "L1: every move follows the table, a note on check and the first note kept on a checked item, at every tea step, and no step returns a Cmd",
+    () =>
+      Effect.gen(function* () {
+        const { checklistMachine } = yield* promised(() => load());
+        propertyInvariant(
+          checklistMachine,
           {},
-          {
-            msgs,
-            encode: Schema.encodeSync(checklist.state.schema),
-            decode: Schema.decodeUnknownSync(checklist.state.schema),
-            equals: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
-            seed: SEED,
-          },
+          walked(checklistMachine).map((w) => w.msgs),
+          ({ prev, msg, next, cmds }) =>
+            cmds.length !== 0
+              ? `${msg._tag} returned ${cmds.length} Cmds`
+              : byName(next.items) === byName(expected(prev, msg))
+                ? true
+                : `${msg._tag} broke the table`,
+          { seed: SEED, numRuns: RUNS },
         );
       }),
-      { seed: SEED, numRuns: RUNS },
-    );
-  });
+  );
 
-  it("L3: refuse says taken exactly when the new name exists, missing exactly when the named item does not", async () => {
-    const { checklist } = await load();
-    fc.assert(
-      fc.property(reached(checklist.machine), ({ model, msg }) => {
-        expect(checklist.refuse(model, msg)?.reason ?? null).toBe(reason(model, msg));
-      }),
-      { seed: SEED, numRuns: RUNS },
-    );
-  });
-
-  it("L4: a refused Msg leaves the model, view and Cmds as they were, through the stepper", async () => {
-    const { checklist } = await load();
-    const loaded = stepper(checklist);
-    expect(Result.isSuccess(loaded)).toBe(true);
-    const p = Result.getOrThrow(loaded);
-    const encode = Schema.encodeSync(checklist.state.schema);
-    fc.assert(
-      fc.property(reached(checklist.machine), ({ model, msg }) => {
-        const saved = encode(model);
-        const before = JSON.stringify(saved);
-        const step = p.step(saved, msg);
-        const no = reason(model, msg);
-        const [next] = applyCell(checklist.machine, model, msg);
-        expect(step).toEqual(
-          no === null
-            ? {
-                _tag: "stepped",
-                model: encode(next),
-                view: checklist.view.select(next),
-                cmds: [],
-                wake: checklist.wake(next),
-              }
-            : { _tag: "refused", reason: no },
-        );
-        expect(JSON.stringify(saved), "a step never edits the model it was given").toBe(before);
-      }),
-      { seed: SEED, numRuns: RUNS },
-    );
-  });
-
-  it("L5: wake is 0 while any item is new, else the oldest open since + LATE, else null", async () => {
-    const { checklistMachine, checklist, LATE } = await load();
-    expect(LATE).toBe(DAY);
-    propertyInvariant(
-      checklistMachine,
-      {},
-      walked(checklistMachine).map((w) => w.msgs),
-      ({ next }) => {
-        const since = next.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
-
-        const want = next.items.some((i) => i.state._tag === "new")
-          ? 0
-          : since.length === 0
-            ? null
-            : Math.min(...since) + DAY;
-
-        return checklist.wake(next) === want || `wake ${checklist.wake(next)}, want ${want}`;
-      },
-      { seed: SEED, numRuns: RUNS },
-    );
-  });
-
-  it("L6: a timer makes an open item late exactly when arrivedAt >= since + LATE, and stamps every new item from arrivedAt", async () => {
-    const { checklistMachine } = await load();
-
-    const Timed = walked(checklistMachine, 4).chain((w) =>
-      fc
-        .record({
-          pick: fc.nat(),
-          offset: fc.oneof(fc.integer({ min: -3, max: 3 }), fc.integer()),
-          asked: fc.integer(),
-        })
-        .map(({ pick, offset, asked }) => {
-          const open = w.model.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
-          const since = at(open, pick) ?? w.clock;
-
-          return { model: w.model, arrivedAt: since + DAY + offset, asked };
-        }),
-    );
-
-    fc.assert(
-      fc.property(Timed, ({ model, arrivedAt: time, asked }) => {
-        const [next] = applyCell(checklistMachine, model, { type: "timer", at: asked, arrivedAt: time });
-
-        for (const [n, item] of model.items.entries()) {
-          const now = next.items.find((i) => i.name === item.name)?.state;
-          const s = item.state;
-          expect(now, `item ${n} after a timer at ${time}`).toEqual(
-            s._tag === "new"
-              ? { _tag: "open", since: time }
-              : s._tag === "open" && time >= s.since + DAY
-                ? { _tag: "late", since: s.since }
-                : s,
+  it.live("L2: every JSON cut keeps every later model and Cmd", () =>
+    Effect.gen(function* () {
+      const { checklist } = yield* promised(() => load());
+      fc.assert(
+        fc.property(walked(checklist.machine), ({ msgs }) => {
+          syncTest(
+            checklist.machine,
+            {},
+            {
+              msgs,
+              encode: Schema.encodeSync(checklist.state.schema),
+              decode: Schema.decodeUnknownSync(checklist.state.schema),
+              equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+              seed: SEED,
+            },
           );
-        }
-
-        expect(next.items).toHaveLength(model.items.length);
-      }),
-      // Biased toward the edge: `offset` 0 is drawn on most runs.
-      { seed: SEED, numRuns: RUNS },
-    );
-  });
-
-  it("L7: query left answers a non-negative integer equal to an independent count of items not checked, and to view.left", async () => {
-    const { checklistMachine, checklist } = await load();
-    const port = checklist.inputs.left;
-    // The query takes no input: its schema is `Null`, and its answer reads the view alone.
-    expect(Schema.decodeSync(port.schema)(null)).toBeNull();
-    propertyInvariant(
-      checklistMachine,
-      {},
-      walked(checklistMachine).map((w) => w.msgs),
-      ({ next }) => {
-        const view = checklist.view.select(next);
-        const answer: unknown = port.answer(view);
-
-        return (
-          (Number.isInteger(answer) &&
-            typeof answer === "number" &&
-            answer >= 0 &&
-            view.left === left(next) &&
-            answer === left(next)) ||
-          `left ${view.left}, answer ${String(port.answer(view))}, want ${left(next)}`
-        );
-      },
-      { seed: SEED, numRuns: RUNS },
-    );
-    expect(port._tag).toBe("read");
-  });
-
-  it("L8: finished is a Done exactly when there is an item and all are checked, and it decodes by Done", async () => {
-    const { checklistMachine, finished, Done } = await load();
-    const roundTrip = (d: unknown) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
-    propertyInvariant(
-      checklistMachine,
-      {},
-      walked(checklistMachine).map((w) => w.msgs),
-      ({ next }) => {
-        const done = next.items.length > 0 && next.items.every((i) => i.state._tag === "checked");
-        const out = finished(next);
-
-        if (!done) {
-          return out === null || "finished before every item was checked";
-        }
-
-        return (
-          (out !== null &&
-            JSON.stringify(roundTrip(out)) === JSON.stringify(out) &&
-            JSON.stringify([...out.items].sort()) === JSON.stringify(next.items.map((i) => i.name).sort())) ||
-          `not finished, or not a Done of every item: ${JSON.stringify(out)}`
-        );
-      },
-      { seed: SEED, numRuns: RUNS },
-    );
-  });
-
-  it("L13: query items and view.items answer each item's name, state and the note the walk wrote, in list order", async () => {
-    const { checklist } = await load();
-    const port = checklist.inputs.items;
-    expect(port._tag).toBe("read");
-    expect(Schema.decodeSync(port.schema)(null)).toBeNull();
-    fc.assert(
-      fc.property(walked(checklist.machine), ({ msgs }) => {
-        for (const { model, record } of folded(checklist.machine, msgs)) {
-          const view = checklist.view.select(model);
-          expect(view.items, "the view's items are the record's").toEqual(shownBy(record));
-          expect(port.answer(view), "the items query answers the record's").toEqual(shownBy(record));
-        }
-      }),
-      { seed: SEED, numRuns: RUNS },
-    );
-  });
-
-  it("L14: every reached model and walked Msg goes through the program's schemas back to itself, a reached model one field wrong does not, and a main-shaped model still decodes at v 1", async () => {
-    const { checklist } = await load();
-    const model = checklist.state.schema;
-    const roundTrip = (m: Model) => Schema.decodeUnknownSync(model)(Schema.encodeSync(model)(m));
-    const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(model)(u));
-    expect(checklist.state.v).toBe(1);
-    fc.assert(
-      fc.property(walked(checklist.machine), Broken, fc.nat(), ({ msgs }, broken, pick) => {
-        for (const { record } of folded(checklist.machine, msgs)) {
-          expect(roundTrip(record), "a reached model").toEqual(record);
-
-          // The schema is a wall, not a pass-through: the same model with one item made wrong is refused.
-          const items: ReadonlyArray<Item> =
-            record.items.length === 0 ? [{ name: "x", state: { _tag: "new" } }] : record.items;
-
-          const wrong = items.map((i, n) => (n === pick % items.length ? broken(i) : i));
-          expect(decodes({ items: wrong }), `a model with ${JSON.stringify(wrong)}`).toBe(false);
-        }
-
-        for (const msg of msgs) {
-          expect(Schema.decodeSync(checklist.msg)(msg), "a walked Msg").toEqual(msg);
-        }
-      }),
-      { seed: SEED, numRuns: RUNS },
-    );
-
-    for (const note of ["", "o".repeat(MOST + 44), null]) {
-      // pinned: main's saved shape, `note: NullOr(String)` with no length checks (plan, L14): an
-      // empty note and one past `MOST` still decode, so the saved state needs no upgrade and stays v 1.
-      const saved = { items: [{ name: "x", state: { _tag: "checked", note } }] };
-      expect(Schema.decodeSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
-    }
-  });
-
-  it("L15: a Msg one field outside the shape fails to decode through checklist.msg, and the same Msg made good decodes", async () => {
-    const { checklist } = await load();
-    const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(checklist.msg)(u));
-    fc.assert(
-      fc.property(Bad, (bad) => {
-        expect(decodes(bad), JSON.stringify(bad)).toBe(false);
-        // The control: the good Msg it was made from decodes, so the refusal is the one field's.
-        expect(
-          decodes(
-            bad.type === "rename" ? { type: "rename", name: "a", to: "b" } : { type: "check", name: "a", note: "n" },
-          ),
-        ).toBe(true);
-      }),
-      { seed: SEED, numRuns: RUNS },
-    );
-  });
-
-  // oxlint-disable-next-line fabrika/law-shape -- a type law: its @ts-expect-error lines are the check, so it is neither a property nor an example
-  it("L11 type: an input key that is no Msg type, a query on a field the view lacks, or a check note that is not a string, does not compile", async () => {
-    // A type law (plan, L11): the checks are the `@ts-expect-error` lines, read by the typecheck.
-    const { checklist, checklistMachine } = await load();
-
-    const spec = {
-      name: checklist.name,
-      machine: checklistMachine,
-      state: { v: checklist.state.v, upgrades: checklist.state.upgrades },
-      view: checklist.view.select,
-      refuse: checklist.refuse,
-      outputs: {},
-      writes: {},
-      wake: checklist.wake,
-    };
-
-    // @ts-expect-error `tick` is no Msg type of the checklist.
-    Program.make({ ...spec, inputs: { tick: "Tick" } });
-    // @ts-expect-error The checklist's view has no `done` field to read.
-    Program.make({
-      ...spec,
-      inputs: {
-        done: Input.cases.read.make({
-          schema: Schema.Null,
-          description: "Done",
-          answer: (v: { done: number }) => v.done,
         }),
-      },
-    });
-    expectTypeOf(checklist.view.select).returns.toHaveProperty("left").toEqualTypeOf<number>();
-    expectTypeOf(checklist.inputs).toHaveProperty("left");
-    expectTypeOf(checklist.inputs).not.toHaveProperty("timer");
-    expectTypeOf(checklist.inputs).toHaveProperty("items");
+        { seed: SEED, numRuns: RUNS },
+      );
+    }),
+  );
 
-    type Check = Extract<typeof checklist.msg.Type, { readonly type: "check" }>;
+  it.live("L3: refuse says taken exactly when the new name exists, missing exactly when the named item does not", () =>
+    Effect.gen(function* () {
+      const { checklist } = yield* promised(() => load());
+      fc.assert(
+        fc.property(reached(checklist.machine), ({ model, msg }) => {
+          expect(checklist.refuse(model, msg)?.reason ?? null).toBe(reason(model, msg));
+        }),
+        { seed: SEED, numRuns: RUNS },
+      );
+    }),
+  );
 
-    expectTypeOf<Check["note"]>().toEqualTypeOf<string | undefined>();
-    // @ts-expect-error A check's note is a string or absent, never a number.
-    const numbered: Check = { type: "check", name: "x", note: 1 };
-    expect(numbered.name).toBe("x");
-  });
+  it.live("L4: a refused Msg leaves the model, view and Cmds as they were, through the stepper", () =>
+    Effect.gen(function* () {
+      const { checklist } = yield* promised(() => load());
+      const loaded = stepper(checklist);
+      expect(Result.isSuccess(loaded)).toBe(true);
+      const p = Result.getOrThrow(loaded);
+      const encode = Schema.encodeSync(checklist.state.schema);
+      fc.assert(
+        fc.property(reached(checklist.machine), ({ model, msg }) => {
+          const saved = encode(model);
+          const before = JSON.stringify(saved);
+          const step = p.step(saved, msg);
+          const no = reason(model, msg);
+          const [next] = applyCell(checklist.machine, model, msg);
+          expect(step).toEqual(
+            no === null
+              ? {
+                  _tag: "stepped",
+                  model: encode(next),
+                  view: checklist.view.select(next),
+                  cmds: [],
+                  wake: checklist.wake(next),
+                }
+              : { _tag: "refused", reason: no },
+          );
+          expect(JSON.stringify(saved), "a step never edits the model it was given").toBe(before);
+        }),
+        { seed: SEED, numRuns: RUNS },
+      );
+    }),
+  );
+
+  it.live("L5: wake is 0 while any item is new, else the oldest open since + LATE, else null", () =>
+    Effect.gen(function* () {
+      const { checklistMachine, checklist, LATE } = yield* promised(() => load());
+      expect(LATE).toBe(DAY);
+      propertyInvariant(
+        checklistMachine,
+        {},
+        walked(checklistMachine).map((w) => w.msgs),
+        ({ next }) => {
+          const since = Arr.flatMap(next.items, (i) => (i.state._tag === "open" ? [i.state.since] : []));
+
+          const want = Arr.some(next.items, (i) => i.state._tag === "new")
+            ? 0
+            : since.length === 0
+              ? null
+              : Math.min(...since) + DAY;
+
+          return checklist.wake(next) === want || `wake ${checklist.wake(next)}, want ${want}`;
+        },
+        { seed: SEED, numRuns: RUNS },
+      );
+    }),
+  );
+
+  it.live(
+    "L6: a timer makes an open item late exactly when arrivedAt >= since + LATE, and stamps every new item from arrivedAt",
+    () =>
+      Effect.gen(function* () {
+        const { checklistMachine } = yield* promised(() => load());
+
+        const Timed = walked(checklistMachine, 4).chain((w) =>
+          fc
+            .record({
+              pick: fc.nat(),
+              offset: fc.oneof(fc.integer({ min: -3, max: 3 }), fc.integer()),
+              asked: fc.integer(),
+            })
+            .map(({ pick, offset, asked }) => {
+              const open = Arr.flatMap(w.model.items, (i) => (i.state._tag === "open" ? [i.state.since] : []));
+              const since = at(open, pick) ?? w.clock;
+
+              return { model: w.model, arrivedAt: since + DAY + offset, asked };
+            }),
+        );
+
+        fc.assert(
+          fc.property(Timed, ({ model, arrivedAt: time, asked }) => {
+            const [next] = applyCell(checklistMachine, model, {
+              ...Tag.cases.timer.make({}),
+              at: asked,
+              arrivedAt: time,
+            });
+
+            for (const [n, item] of model.items.entries()) {
+              const now = Option.getOrUndefined(Arr.findFirst(next.items, (i) => i.name === item.name))?.state;
+              const s = item.state;
+              expect(now, `item ${n} after a timer at ${time}`).toEqual(
+                s._tag === "new"
+                  ? { _tag: "open", since: time }
+                  : s._tag === "open" && time >= s.since + DAY
+                    ? { _tag: "late", since: s.since }
+                    : s,
+              );
+            }
+
+            expect(next.items).toHaveLength(model.items.length);
+          }),
+          // Biased toward the edge: `offset` 0 is drawn on most runs.
+          { seed: SEED, numRuns: RUNS },
+        );
+      }),
+  );
+
+  it.live(
+    "L7: query left answers a non-negative integer equal to an independent count of items not checked, and to view.left",
+    () =>
+      Effect.gen(function* () {
+        const { checklistMachine, checklist } = yield* promised(() => load());
+        const port = checklist.inputs.left;
+        // The query takes no input: its schema is `Null`, and its answer reads the view alone.
+        expect(Schema.decodeSync(port.schema)(null)).toBeNull();
+        propertyInvariant(
+          checklistMachine,
+          {},
+          walked(checklistMachine).map((w) => w.msgs),
+          ({ next }) => {
+            const view = checklist.view.select(next);
+            const answer: unknown = port.answer(view);
+
+            return (
+              (Number.isInteger(answer) &&
+                Predicate.isNumber(answer) &&
+                answer >= 0 &&
+                view.left === left(next) &&
+                answer === left(next)) ||
+              `left ${view.left}, answer ${String(port.answer(view))}, want ${left(next)}`
+            );
+          },
+          { seed: SEED, numRuns: RUNS },
+        );
+        expect(port._tag).toBe("read");
+      }),
+  );
+
+  it.live("L8: finished is a Done exactly when there is an item and all are checked, and it decodes by Done", () =>
+    Effect.gen(function* () {
+      const { checklistMachine, finished, Done } = yield* promised(() => load());
+      const roundTrip = (d: typeof Done.Type) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
+      propertyInvariant(
+        checklistMachine,
+        {},
+        walked(checklistMachine).map((w) => w.msgs),
+        ({ next }) => {
+          const done = next.items.length > 0 && Arr.every(next.items, (i) => i.state._tag === "checked");
+          const out = finished(next);
+
+          if (!done) {
+            return out === null || "finished before every item was checked";
+          }
+
+          return (
+            (out !== null &&
+              JSON.stringify(roundTrip(out)) === JSON.stringify(out) &&
+              JSON.stringify([...out.items].sort()) === JSON.stringify(Arr.map(next.items, (i) => i.name).sort())) ||
+            `not finished, or not a Done of every item: ${JSON.stringify(out)}`
+          );
+        },
+        { seed: SEED, numRuns: RUNS },
+      );
+    }),
+  );
+
+  it.live(
+    "L13: query items and view.items answer each item's name, state and the note the walk wrote, in list order",
+    () =>
+      Effect.gen(function* () {
+        const { checklist } = yield* promised(() => load());
+        const port = checklist.inputs.items;
+        expect(port._tag).toBe("read");
+        expect(Schema.decodeSync(port.schema)(null)).toBeNull();
+        fc.assert(
+          fc.property(walked(checklist.machine), ({ msgs }) => {
+            for (const { model, record } of folded(checklist.machine, msgs)) {
+              const view = checklist.view.select(model);
+              expect(view.items, "the view's items are the record's").toEqual(shownBy(record));
+              expect(port.answer(view), "the items query answers the record's").toEqual(shownBy(record));
+            }
+          }),
+          { seed: SEED, numRuns: RUNS },
+        );
+      }),
+  );
+
+  it.live(
+    "L14: every reached model and walked Msg goes through the program's schemas back to itself, a reached model one field wrong does not, and a main-shaped model still decodes at v 1",
+    () =>
+      Effect.gen(function* () {
+        const { checklist } = yield* promised(() => load());
+        const model = checklist.state.schema;
+        const roundTrip = (m: Model) => Schema.decodeUnknownSync(model)(Schema.encodeSync(model)(m));
+        const decodes = flow(Schema.decodeUnknownResult(model), Result.isSuccess);
+        expect(checklist.state.v).toBe(1);
+        fc.assert(
+          fc.property(walked(checklist.machine), Broken, fc.nat(), ({ msgs }, broken, pick) => {
+            for (const { record } of folded(checklist.machine, msgs)) {
+              expect(roundTrip(record), "a reached model").toEqual(record);
+
+              // The schema is a wall, not a pass-through: the same model with one item made wrong is refused.
+              const items: ReadonlyArray<Item> =
+                record.items.length === 0 ? [{ name: "x", state: { _tag: "new" } }] : record.items;
+
+              const wrong = Arr.map(items, (i, n) => (n === pick % items.length ? broken(i) : i));
+              expect(decodes({ items: wrong }), `a model with ${JSON.stringify(wrong)}`).toBe(false);
+            }
+
+            for (const msg of msgs) {
+              expect(Schema.decodeSync(checklist.msg)(msg), "a walked Msg").toEqual(msg);
+            }
+          }),
+          { seed: SEED, numRuns: RUNS },
+        );
+
+        for (const note of ["", Str.repeat(MOST + 44)("o"), null]) {
+          // pinned: main's saved shape, `note: NullOr(String)` with no length checks (plan, L14): an
+          // empty note and one past `MOST` still decode, so the saved state needs no upgrade and stays v 1.
+          const saved = { items: [{ name: "x", state: { _tag: "checked", note } }] };
+          expect(Schema.decodeSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
+        }
+      }),
+  );
+
+  it.live(
+    "L15: a Msg one field outside the shape fails to decode through checklist.msg, and the same Msg made good decodes",
+    () =>
+      Effect.gen(function* () {
+        const { checklist } = yield* promised(() => load());
+        const decodes = flow(Schema.decodeUnknownResult(checklist.msg), Result.isSuccess);
+        fc.assert(
+          fc.property(Bad, (bad) => {
+            expect(decodes(bad), JSON.stringify(bad)).toBe(false);
+            // The control: the good Msg it was made from decodes, so the refusal is the one field's.
+            expect(
+              decodes(
+                bad._tag === "rename"
+                  ? { ...Tag.cases.rename.make({}), name: "a", to: "b" }
+                  : { ...Tag.cases.check.make({}), name: "a", note: "n" },
+              ),
+            ).toBe(true);
+          }),
+          { seed: SEED, numRuns: RUNS },
+        );
+      }),
+  );
+
+  it.live(
+    // oxlint-disable-next-line fabrika/law-shape -- a type law: its @ts-expect-error lines are the check, so it is neither a property nor an example
+    "L11 type: an input key that is no Msg type, a query on a field the view lacks, or a check note that is not a string, does not compile",
+    () =>
+      Effect.gen(function* () {
+        // A type law (plan, L11): the checks are the `@ts-expect-error` lines, read by the typecheck.
+        const { checklist, checklistMachine } = yield* promised(() => load());
+
+        const spec = {
+          name: checklist.name,
+          machine: checklistMachine,
+          state: { v: checklist.state.v, upgrades: checklist.state.upgrades },
+          view: checklist.view.select,
+          refuse: checklist.refuse,
+          outputs: {},
+          writes: {},
+          wake: checklist.wake,
+        };
+
+        // @ts-expect-error `tick` is no Msg type of the checklist.
+        Program.make({ ...spec, inputs: { tick: "Tick" } });
+        // @ts-expect-error The checklist's view has no `done` field to read.
+        Program.make({
+          ...spec,
+          inputs: {
+            done: Input.cases.read.make({
+              schema: Schema.Null,
+              description: "Done",
+              answer: (v: { done: number }) => v.done,
+            }),
+          },
+        });
+        expectTypeOf(checklist.view.select).returns.toHaveProperty("left").toEqualTypeOf<number>();
+        expectTypeOf(checklist.inputs).toHaveProperty("left");
+        expectTypeOf(checklist.inputs).not.toHaveProperty("timer");
+        expectTypeOf(checklist.inputs).toHaveProperty("items");
+
+        type Check = Extract<typeof checklist.msg.Type, { readonly _tag: "check" }>;
+
+        expectTypeOf<Check["note"]>().toEqualTypeOf<string | undefined>();
+        // @ts-expect-error A check's note is a string or absent, never a number.
+        const numbered: Check = { ...Tag.cases.check.make({}), name: "x", note: 1 };
+        expect(numbered.name).toBe("x");
+      }),
+  );
 
   // pinned: the checklist's input keys, so a renamed or dropped input is seen.
-  it("pinned: the checklist's input keys, so a renamed or dropped input is seen", async () => {
-    const { checklist } = await load();
-    expect(Object.keys(checklist.inputs).sort()).toEqual([
-      "add",
-      "check",
-      "items",
-      "left",
-      "remove",
-      "rename",
-      "uncheck",
-    ]);
-  });
+  it.live("pinned: the checklist's input keys, so a renamed or dropped input is seen", () =>
+    Effect.gen(function* () {
+      const { checklist } = yield* promised(() => load());
+      expect(Rec.keys(checklist.inputs).sort()).toEqual([
+        "add",
+        "check",
+        "items",
+        "left",
+        "remove",
+        "rename",
+        "uncheck",
+      ]);
+    }),
+  );
 });

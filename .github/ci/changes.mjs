@@ -24,7 +24,9 @@ const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
  */
 const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path) || /^field\/(?:notes|runs|findings)\//.test(path);
 
-const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
+// kalfa/ is read too: the package's README ships inside its archive, and a reader test reads the parser
+// adapter's location as text, so a Markdown change there is no safe Markdown.
+const readTrees = ["programs/", "fixtures/", "packages/", "next/", "kalfa/"];
 
 const skillTrees = [".agents/skills/", ".claude/skills/"];
 
@@ -59,8 +61,13 @@ const safe = (path) => rows(path) || markdown(path);
 /** @param {string} path */
 const old = (path) => trees.some((tree) => path.startsWith(tree)) && !path.startsWith("packages/fabrika-design/");
 
-/** Paths no heavy job reads: field rows, plain Markdown and skill prose. @param {string} path */
-const quiet = (path) => safe(path) || prose(path);
+/**
+ * Paths no heavy job reads: field rows, plain Markdown and skill prose, and a path `shown` lists:
+ * the paths `displayOnly` proved change nothing but how GitHub shows a diff.
+ * @param {string} path
+ * @param {readonly string[]} shown
+ */
+const quiet = (path, shown) => safe(path) || prose(path) || shown.includes(path);
 
 /**
  * check.yaml's `paths-ignore` for a pull request: a pull request that changes only these starts no
@@ -105,7 +112,8 @@ const experiment = (path) => path.startsWith("experiments/") && !read.some((fold
  * the lockfile or a root config, is not one.
  * @param {string} path
  */
-const todays = (path) => (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path);
+const todays = (path) =>
+  (trees.some((tree) => path.startsWith(tree)) || path.startsWith("fixtures/")) && !quiet(path, []);
 
 /**
  * An event whose jobs follow its changed paths, because it can read them: a pull request, a merge
@@ -155,14 +163,15 @@ const rank = { none: 0, readers: 1, all: 2 };
  * What of next/ one path needs. A path nobody listed lands on `all`, so the list stays closed.
  * @param {string} path
  * @param {readonly string[]} proven
+ * @param {readonly string[]} shown
  * @returns {Scope}
  */
-const needs = (path, proven) => {
+const needs = (path, proven, shown) => {
   if (reads(path)) {
     return "all";
   }
 
-  if (quiet(path) || script(path) || old(path) || experiment(path) || skill(path) || ci(path)) {
+  if (quiet(path, shown) || script(path) || old(path) || experiment(path) || skill(path) || ci(path)) {
     return "none";
   }
 
@@ -180,9 +189,10 @@ const needs = (path, proven) => {
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {readonly string[]} [proven]
+ * @param {readonly string[]} [shown] paths `displayOnly` proved quiet
  * @returns {Scope}
  */
-export const scope = (paths, event, proven = []) => {
+export const scope = (paths, event, proven = [], shown = []) => {
   if (!scoped(event) || paths === null || paths.length === 0) {
     return "all";
   }
@@ -191,7 +201,7 @@ export const scope = (paths, event, proven = []) => {
   let widest = "none";
 
   for (const path of paths) {
-    const need = needs(path, proven);
+    const need = needs(path, proven, shown);
 
     if (rank[need] > rank[widest]) {
       widest = need;
@@ -213,9 +223,10 @@ export const scope = (paths, event, proven = []) => {
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {readonly string[]} [_proven]
+ * @param {readonly string[]} [shown] paths `displayOnly` proved quiet: no job reads them
  * @returns {Flags}
  */
-export const classify = (paths, event, _proven = []) => {
+export const classify = (paths, event, _proven = [], shown = []) => {
   if (!scoped(event) || paths === null || paths.length === 0) {
     return { ...all };
   }
@@ -229,9 +240,9 @@ export const classify = (paths, event, _proven = []) => {
   // The typecheck is its own job so it answers at once, beside lint and build. It reads what check
   // reads, less the experiments, which the root tsconfig leaves out.
   return {
-    check: !paths.every(quiet),
-    typecheck: !paths.every((path) => quiet(path) || experiment(path)),
-    next: scope(paths, event) !== "none",
+    check: !paths.every((path) => quiet(path, shown)),
+    typecheck: !paths.every((path) => quiet(path, shown) || experiment(path)),
+    next: scope(paths, event, [], shown) !== "none",
     field: paths.some(rows),
     build: touched,
   };
@@ -248,10 +259,11 @@ export const classify = (paths, event, _proven = []) => {
  * @param {string} event
  * @param {boolean} draft
  * @param {readonly string[]} [_proven] never changes a job, as in classify
+ * @param {readonly string[]} [shown] as in classify
  * @returns {Flags}
  */
-export const jobs = (paths, event, draft, _proven = []) => {
-  const flags = classify(paths, event);
+export const jobs = (paths, event, draft, _proven = [], shown = []) => {
+  const flags = classify(paths, event, [], shown);
 
   if (event === "pull_request" && draft) {
     return { ...flags, next: false, build: false };
@@ -321,6 +333,112 @@ export const readPaths = (base, head, event, run = git) => {
   return diff.stdout === "" ? [] : diff.stdout.slice(0, -1).split("\0");
 };
 
+/** The root attributes file: Git reads it to set `eol`, `text`, `filter` and `diff` on checkout. */
+const attributes = ".gitattributes";
+
+/** One attribute word that only tells GitHub how to show a file, such as `linguist-generated=true`. */
+const linguist = /^[-!]?linguist-[a-z-]+(?:=\S+)?$/;
+
+/**
+ * A `.gitattributes` line that changes nothing a job reads: blank, a comment, or a pattern whose
+ * attributes are all `linguist-*`. A macro definition (`[attr]name ...`) is never one. A quoted pattern with a space splits into words that are no
+ * attribute, so it reads as a change that matters.
+ * @param {string} line
+ */
+const display = (line) => {
+  const text = line.trim();
+
+  if (text === "" || text.startsWith("#")) {
+    return true;
+  }
+
+  // A macro line defines or redefines a name that other lines then use.
+  if (text.startsWith("[attr]")) {
+    return false;
+  }
+
+  const [, ...words] = text.split(/\s+/);
+
+  return words.length > 0 && words.every((word) => linguist.test(word));
+};
+
+/**
+ * Whether the attributes file at `rev` defines a macro, or git cannot say. A macro makes any
+ * `linguist-*` word on a line a possible alias for `eol` or `text`, so a file that has one is never
+ * proven.
+ * @param {string} rev
+ * @param {Runner} run
+ */
+const defines = (rev, run) => {
+  const listed = run(["ls-tree", "--name-only", rev, "--", attributes]);
+
+  if (listed.status !== 0 || typeof listed.stdout !== "string") {
+    return true;
+  }
+
+  if (listed.stdout.trim() === "") {
+    return false;
+  }
+
+  const shown = run(["show", `${rev}:${attributes}`]);
+
+  return shown.status !== 0 || typeof shown.stdout !== "string" || /^\s*\[attr\]/m.test(shown.stdout);
+};
+
+/**
+ * The changed paths that only change how GitHub shows a diff: today the root `.gitattributes`, when
+ * every added and removed line, from `git diff -U0`, is blank, a comment or `linguist-*` attributes
+ * (checked-in `eol`, `text`, `filter` and `diff` change the bytes tests read, so any other attribute
+ * keeps the file loud), and neither version of the file defines a macro. Any doubt is none: a diff
+ * git cannot read, or a binary one.
+ * @param {string} from
+ * @param {string} head
+ * @param {readonly string[] | null} paths
+ * @param {Runner} run
+ * @returns {string[]}
+ */
+export const displayOnly = (from, head, paths, run) => {
+  if (paths === null || !paths.includes(attributes) || defines(from, run) || defines(head, run)) {
+    return [];
+  }
+
+  const diff = run([
+    "diff",
+    "-U0",
+    "--text",
+    "--no-color",
+    "--no-ext-diff",
+    "--no-renames",
+    from,
+    head,
+    "--",
+    attributes,
+  ]);
+
+  if (diff.status !== 0 || typeof diff.stdout !== "string") {
+    return [];
+  }
+
+  // A file header runs from `diff --git` to its first `@@`; only its `Binary files` line matters.
+  let header = false;
+
+  for (const line of diff.stdout.split("\n")) {
+    if (line.startsWith("diff ")) {
+      header = true;
+    } else if (line.startsWith("@@")) {
+      header = false;
+    } else if (header) {
+      if (/^(?:Binary files|GIT binary patch)/.test(line)) {
+        return [];
+      }
+    } else if ((line.startsWith("+") || line.startsWith("-")) && !display(line.slice(1))) {
+      return [];
+    }
+  }
+
+  return [attributes];
+};
+
 /**
  * A merge queue's run of this workflow, as GitHub's API lists it: the fields `tested` reads.
  * @typedef {{id: number, status: string, conclusion: string | null, head_sha: string, head_commit: {tree_id: string} | null}} QueueRun
@@ -377,7 +495,7 @@ export const github = (env, get = globalThis.fetch) => {
   // `owner/repo/.github/workflows/check.yaml@refs/heads/main`: the file this run started from.
   const workflow = /\/\.github\/workflows\/([^/@]+)@/.exec(env["GITHUB_WORKFLOW_REF"] ?? "")?.[1];
 
-  if (!token || !repository || workflow === undefined) {
+  if (token === undefined || token === "" || repository === undefined || repository === "" || workflow === undefined) {
     return null;
   }
 
@@ -505,8 +623,9 @@ export const recordName = (tree, base) => `tested-${tree}-${base}`;
 
 /**
  * What a run's changes job selected, from what it printed: a job runs only when its flag is exactly
- * "true", so an empty or unknown value counts as a job that did not run. The filter names all of
- * next/ or the reader tests; anything else covers no next/ test.
+ * "true", so an empty or unknown value counts as a job that did not run. The filter names both roots of
+ * the configured `next` project, `next/ kalfa/`, or the reader tests, exactly; anything else, the legacy
+ * one-root `next/` and a missing filter included, covers no ordinary test.
  * @param {Record<string, string | undefined>} printed
  * @returns {Selection}
  */
@@ -516,7 +635,7 @@ export const selectionOf = (printed) => ({
   next: printed["next"] === "true",
   field: printed["field"] === "true",
   build: printed["build"] === "true",
-  scope: printed["filter"] === "next/" ? "all" : printed["filter"] === readers.join(" ") ? "readers" : "none",
+  scope: printed["filter"] === "next/ kalfa/" ? "all" : printed["filter"] === readers.join(" ") ? "readers" : "none",
 });
 
 /**
@@ -543,7 +662,13 @@ export const covers = (ran, needed) =>
 const groupNeeds = (base, head, run) => {
   const paths = readPaths(base, head, "merge_group", run);
 
-  return paths === null ? null : { ...jobs(paths, "merge_group", false), scope: scope(paths, "merge_group") };
+  if (paths === null) {
+    return null;
+  }
+
+  const shown = displayOnly(base, head, paths, run);
+
+  return { ...jobs(paths, "merge_group", false, [], shown), scope: scope(paths, "merge_group", [], shown) };
 };
 
 /**
@@ -652,15 +777,15 @@ const matched = async (base, head, run, api) => {
 /** A group a pull request run already tested runs no job but changes and ci-required. @type {Flags} */
 const none = { check: false, typecheck: false, next: false, field: false, build: false };
 
-/** What the next job runs: its path argument, the reader tests or all of next/. @param {Scope} need */
-const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/");
+/** What the next job runs: its path arguments, the reader tests or both roots of the `next` project. @param {Scope} need */
+const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/ kalfa/");
 
 /**
  * The paths a proof could lower: next/ paths that need all of next/ only because nobody proved
  * them. Proving any other path changes nothing.
  * @param {readonly string[]} paths
  */
-const candidates = (paths) => paths.filter((path) => path.startsWith("next/") && needs(path, []) === "all");
+const candidates = (paths) => paths.filter((path) => path.startsWith("next/") && needs(path, [], []) === "all");
 
 /** A changed line that starts like a comment, or is blank. @param {string} line */
 const commentLike = (line) => /^\s*(?:\/\/|\/\*|\*|$)/.test(line);
@@ -675,16 +800,17 @@ const commentLike = (line) => /^\s*(?:\/\/|\/\*|\*|$)/.test(line);
  * @param {string} from
  * @param {string} head
  * @param {Runner} run
+ * @param {readonly string[]} shown
  */
-const probe = (paths, event, flags, from, head, run) => {
+const probe = (paths, event, flags, from, head, run, shown) => {
   const files = candidates(paths);
 
   if (
     !flags.next ||
     files.length === 0 ||
     !files.every(provable) ||
-    scope(paths, event) !== "all" ||
-    scope(paths, event, files) !== "readers"
+    scope(paths, event, [], shown) !== "all" ||
+    scope(paths, event, files, shown) !== "readers"
   ) {
     return false;
   }
@@ -754,9 +880,15 @@ export const outputs = async ({
   const paths = readPaths(base, head, event, run);
   // `github.event.pull_request.draft`: "true" on a draft, "false" or empty otherwise. Anything but
   // "true" runs the full set, so a value we cannot read never skips a job.
-  const changed = jobs(paths, event, env["DRAFT"] === "true");
   const from = start(base, head, event, run);
-  const first = scope(paths, event);
+  const shown = from === null ? [] : displayOnly(from, head, paths, run);
+
+  if (!same && shown.length > 0) {
+    note(`${shown.join(", ")} changes only how GitHub shows a diff, so no heavy job reads it`);
+  }
+
+  const changed = jobs(paths, event, env["DRAFT"] === "true", [], shown);
+  const first = scope(paths, event, [], shown);
 
   if (!same) {
     const queued = event === "push" && paths !== null && api !== null ? await tested(base, head, run, api) : null;
@@ -776,7 +908,7 @@ export const outputs = async ({
       );
     }
 
-    const worth = paths !== null && from !== null && probe(paths, event, flags, from, head, run);
+    const worth = paths !== null && from !== null && probe(paths, event, flags, from, head, run, shown);
 
     return {
       ...Object.fromEntries(Object.entries(flags).map(([job, on]) => [job, String(on)])),
@@ -808,8 +940,8 @@ export const outputs = async ({
   const proven = program.samePaths(from, head, candidates(paths), run, (path, verdict) => note(`${path}: ${verdict}`));
 
   return {
-    next: String(jobs(paths, event, env["DRAFT"] === "true", proven).next),
-    filter: filterOf(scope(paths, event, proven)),
+    next: String(jobs(paths, event, env["DRAFT"] === "true", proven, shown).next),
+    filter: filterOf(scope(paths, event, proven, shown)),
   };
 };
 
@@ -846,7 +978,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const note = (line) => {
     process.stdout.write(`${line}\n`);
 
-    if (summary) {
+    if (summary !== undefined && summary !== "") {
       appendFileSync(summary, `- ${line}\n`);
     }
   };
@@ -861,7 +993,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.stdout.write(output);
   const file = process.env["GITHUB_OUTPUT"];
 
-  if (file) {
+  if (file !== undefined && file !== "") {
     appendFileSync(file, output);
   }
 

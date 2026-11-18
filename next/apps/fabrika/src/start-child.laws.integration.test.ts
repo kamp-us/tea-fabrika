@@ -1,8 +1,9 @@
-import { it as effectIt } from "@effect/vitest";
 // P42 slice 1 (ticket 770), next/: L9 and L10 on a real local instance, L11 on the public Project.
 // Outside only: real workerd,
 // sockets, object storage, alarms and the private local instance capability, set up as ticket 402's
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
+import { it as effectIt, layer } from "@effect/vitest";
+
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Started } from "@kampus/libfabrika/processes/Children";
@@ -12,7 +13,26 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Clock,
+  Context,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Logger,
+  ManagedRuntime,
+  Match,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+  Duration,
+  Record as Rec,
+} from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -22,8 +42,25 @@ import {
   type Key,
   letter,
   PROJECT,
+  type ProjectTemplate,
+  projectTemplate,
   SENT,
 } from "./start-child.test-support.ts";
+
+/** A public call's rejection, kept whole in `cause`, so a law reads exactly what the caller got. */
+class Rejected extends Schema.TaggedError<Rejected, { readonly brand: unique symbol }>()("Rejected", {
+  cause: Schema.Defect(),
+}) {}
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  start: {},
+  start_child: {},
+  start_child_ok: {},
+  throw: {},
+});
 
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = vi.hoisted(() => ({
@@ -55,7 +92,10 @@ type Fixture = Effect.Success<ReturnType<typeof childInstance>>;
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Fixture["instance"] & Record<string, any>;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
+
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 /**
  * A real 5 ms pause on Effect's live clock, whatever clock the law runs on: the test clock under
@@ -65,10 +105,10 @@ const realPause = Effect.sleep("5 millis").pipe(Effect.provideService(Clock.Cloc
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, ms = WAIT): Promise<A> => {
-  const end = Date.now() + ms;
+  const end = now() + ms;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -89,7 +129,7 @@ const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) 
 /** A real WebSocket client at the door; it keeps every pushed frame. `close` waits for the close. */
 const socketAt = (instance: Instance, key: Key, tab: string) => {
   const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
-  const socket = new WebSocket(String(instance.url).replace("http", "ws") + name);
+  const socket = new WebSocket(Str.replace("http", "ws")(String(instance.url)) + name);
   const frames: any[] = [];
   const pushed: any[] = [];
   let closeCode: number | undefined;
@@ -112,13 +152,13 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
-      const index = frames.findIndex(match);
+    while (now() < end) {
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -131,7 +171,7 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
 
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -140,9 +180,9 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
 
   const close = async () => {
     socket.close();
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (closeCode === undefined && Date.now() < end) {
+    while (closeCode === undefined && now() < end) {
       await pause(20);
     }
   };
@@ -181,7 +221,7 @@ const hello = async (
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+        signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
       })
     ).error,
   ).toBeUndefined();
@@ -202,9 +242,12 @@ const world = (
       Effect.gen(function* () {
         const fixture = yield* childInstance(starts);
         const scope = yield* Effect.scope;
+        // `test` is a plain async function, so `connect` runs with this world's services.
+        const context = yield* Effect.context();
 
         const connect = (tab: string) =>
-          Effect.runPromise(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
+          // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
+          Effect.runPromiseWith(context)(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
 
         yield* Effect.promise(() => test(fixture, connect));
       }),
@@ -212,23 +255,12 @@ const world = (
   );
 
 const helpers = ({ instance, hashes, from }: Fixture) => {
+  // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
   const project = () => (instance as Instance).project(PROJECT);
-
-  const call = (method: string, ...args: ReadonlyArray<unknown>) => {
-    const target = project();
-    const invoke = target[method];
-
-    if (invoke === undefined) {
-      throw new Error(`Project has no ${method} method`);
-    }
-
-    return invoke.apply(target, [...args]);
-  };
 
   return {
     start: async (name: string, program: "starter" | "child") => {
-      const started = await call(
-        "start",
+      const started = await project().start(
         { _tag: "first", id: `start-${name}`, name, code: { program: `p42/${program}`, hash: hashes[program] } },
         from,
       );
@@ -236,9 +268,11 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
     facts: async (stream: string) =>
-      ((await call("read", stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+      // SAFETY: the audit read answers the stream's rows as an array.
+      Arr.map((await project().read(stream, 0, "audit")) as Array<any>, (row) => ({ ...row.body, _tag: row._tag })),
     live: async (name: string): Promise<string | undefined> =>
-      ((await call("info")) as Array<any>).find((row) => row.name === name)?.process,
+      // SAFETY: info answers the project's process rows as an array.
+      Option.getOrUndefined(Arr.findFirst((await project().info()) as Array<any>, (row) => row.name === name))?.process,
   };
 };
 
@@ -247,7 +281,7 @@ const Secret = fc
   .tuple(fc.stringMatching(/^sk-[A-Za-z0-9]{24}$/), fc.constantFrom('"', "/%? ", "\n"))
   .map(([word, suffix]) => word + suffix);
 
-const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
+const forms = (text: string) => [text, Str.slice(1, -1)(JSON.stringify(text)), encodeURIComponent(text)];
 
 // Effect Arbitrary has no command-walk generator or fast-check adapter.
 const SecretPick = fc.record({ point: fc.nat(), encoding: fc.integer({ min: 0, max: 2 }) });
@@ -274,12 +308,15 @@ const ProjectTape = fc
 // Read stored JSON values and their string leaves. Error causes are deliberately excluded: only
 // the message that runPromise actually put in its rejected Error is an error output.
 const outputText = (value: unknown): Array<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return [value, JSON.stringify(value)];
   }
 
-  if (typeof value === "object" && value !== null) {
-    return Object.entries(value).flatMap(([key, entry]) => [key, ...outputText(entry)]);
+  if (Predicate.isObjectOrArray(value)) {
+    return Arr.flatMap(
+      Arr.isArray(value) ? Arr.map(value, (entry, at): [string, unknown] => [`${at}`, entry]) : Rec.toEntries(value),
+      ([key, entry]) => [key, ...outputText(entry)],
+    );
   }
 
   return [];
@@ -320,7 +357,7 @@ const projectSecrets = Effect.fnUntraced(function* (
     name: "child:secret",
     code: { program: "p42/child", hash: CODE.child.hash },
     requester: Recipient.cases.process.make({ process: project.boot.process }),
-    input: { type: "inc" },
+    input: Tag.cases.inc.make({}),
   };
 
   let pid: string | undefined;
@@ -338,11 +375,11 @@ const projectSecrets = Effect.fnUntraced(function* (
             return request;
           }).pipe(Effect.provide(logging)),
         ),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => Rejected.make({ cause: error }),
     }).pipe(Effect.result);
 
     if (Result.isFailure(outcome)) {
-      const error = outcome.failure;
+      const error = outcome.failure.cause;
       // This is the actual public call's rejection, not Cause.pretty on an in-memory Exit.
       outputs.reply.push(error instanceof Error ? error.message : String(error), String(error));
     } else {
@@ -354,19 +391,18 @@ const projectSecrets = Effect.fnUntraced(function* (
 
   const placed = Effect.fnUntraced(function* () {
     const starts = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
-    const saved = starts.filter((row) => row._tag === "started");
+    const saved = Arr.filter(starts, (row) => row._tag === "started");
     expect(saved, "L11: the failing path follows a committed child start").toHaveLength(1);
-    pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(saved[0]?.body).process;
+    pid = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(saved[0]?.body)).process;
   });
 
   const remaining = new Set<ChildFailure>(
-    path === "descriptor"
-      ? ["owner", "descriptor"]
-      : path === "recovery"
-        ? ["exists", "owner", "descriptor"]
-        : path === "configuration"
-          ? ["pending", "configure", "ack"]
-          : ["exit_write", "down", "watch_cleanup", "retire"],
+    Match.value(path).pipe(
+      Match.when("descriptor", (): ReadonlyArray<ChildFailure> => ["owner", "descriptor"]),
+      Match.when("recovery", (): ReadonlyArray<ChildFailure> => ["exists", "owner", "descriptor"]),
+      Match.when("configuration", (): ReadonlyArray<ChildFailure> => ["pending", "configure", "ack"]),
+      Match.orElse((): ReadonlyArray<ChildFailure> => ["exit_write", "down", "watch_cleanup", "retire"]),
+    ),
   );
 
   const expected = remaining.size;
@@ -470,12 +506,15 @@ const projectSecrets = Effect.fnUntraced(function* (
       });
       const rows = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
       expect(
-        rows.filter((row) => row._tag === "exited"),
+        Arr.filter(rows, (row) => row._tag === "exited"),
         "L11: retry writes one normal exit",
       ).toMatchObject([{ body: { process: pid, reason: { _tag: "normal" } } }]);
       const watches = yield* Effect.promise(() => runtime.runPromise(project.read("processes", 0, "audit")));
       expect(
-        watches.filter((row) => row._tag === "demonitored" && JSON.stringify(row.body).includes(`out-${reached.size}`)),
+        Arr.filter(
+          watches,
+          (row) => row._tag === "demonitored" && Str.includes(`out-${reached.size}`)(JSON.stringify(row.body)),
+        ),
       ).toHaveLength(1);
       inspectRows();
     }
@@ -486,9 +525,9 @@ const projectSecrets = Effect.fnUntraced(function* (
 
   yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), tape));
   expect(reached.size, "L11: every available failure operation was exercised").toBe(expected);
-  expect(fixture.configured.filter((c) => c.descriptor.name === child.name).length).toBeGreaterThan(0);
+  expect(Arr.filter(fixture.configured, (c) => c.descriptor.name === child.name).length).toBeGreaterThan(0);
 
-  const recorded = fixture.recorded.flatMap((batch) =>
+  const recorded = Arr.flatMap(fixture.recorded, (batch) =>
     Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) })))(
       batch,
     ),
@@ -501,7 +540,7 @@ const projectSecrets = Effect.fnUntraced(function* (
 
   for (const text of outputs[output]) {
     for (const form of secretForms) {
-      assert(!text.includes(form), `L11: ${path} leaked storage text or metadata into ${output}`);
+      assert(!Str.includes(form)(text), `L11: ${path} leaked storage text or metadata into ${output}`);
     }
   }
 });
@@ -533,13 +572,14 @@ type StorageCut = { path: StoragePath; operation: number; statement: string };
 
 const storageCall = Effect.fnUntraced(function* (
   path: StoragePath,
+  template: ProjectTemplate,
   inspect: (
     fixture: Effect.Success<ReturnType<typeof childProject>>,
-    call: Effect.Effect<unknown, unknown>,
+    call: Effect.Effect<unknown, Rejected>,
     reopen: Effect.Effect<void>,
   ) => Effect.Effect<void, unknown, Scope.Scope>,
 ) {
-  const fixture = yield* childProject();
+  const fixture = yield* childProject(template);
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   let runtime = yield* Scope.provide(scope)(fixture.acquire());
@@ -557,7 +597,7 @@ const storageCall = Effect.fnUntraced(function* (
     name: "child:storage",
     code: { program: "p42/child", hash: CODE.child.hash },
     requester: Recipient.cases.process.make({ process: project.boot.process }),
-    input: { type: "inc" },
+    input: Tag.cases.inc.make({}),
   };
 
   const start = ProjectService.use((p) => p.processChild(child, fixture.from));
@@ -570,7 +610,7 @@ const storageCall = Effect.fnUntraced(function* (
 
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => Rejected.make({ cause: error }),
     }).pipe(Effect.result);
 
     prepared = Result.isFailure(failed) && fixture.hit();
@@ -580,7 +620,7 @@ const storageCall = Effect.fnUntraced(function* (
 
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
-      catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+      catch: (error) => Rejected.make({ cause: error }),
     }).pipe(Effect.result);
 
     prepared = Result.isFailure(failed) && fixture.hit();
@@ -646,8 +686,12 @@ const storageCall = Effect.fnUntraced(function* (
           "counter:1/inbox",
           `${child.id}/answer`,
           letterLine(fixture.from, {
-            type: "start_child_ok",
-            cmd: { type: "start_child", id: child.id, input: { program: child.code.program, name: child.name } },
+            ...Tag.cases.start_child_ok.make({}),
+            cmd: {
+              ...Tag.cases.start_child.make({}),
+              id: child.id,
+              input: { program: child.code.program, name: child.name },
+            },
             value: { _tag: "started", process: pid, name: child.name, rev },
           }),
         );
@@ -671,7 +715,7 @@ const storageCall = Effect.fnUntraced(function* (
 
   const invoke = Effect.tryPromise({
     try: () => runtime.runPromise(call.pipe(Effect.provide(logging))),
-    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    catch: (error) => Rejected.make({ cause: error }),
   });
 
   yield* inspect(fixture, invoke, reopen);
@@ -679,36 +723,63 @@ const storageCall = Effect.fnUntraced(function* (
   return printed;
 });
 
-const storageSecrets = Effect.fnUntraced(function* () {
-  const remaining: Array<StorageCut> = [];
+/** One booted Project, and every storage operation of every flow in inventory order. */
+class StorageInventory extends Context.Service<
+  StorageInventory,
+  { readonly template: ProjectTemplate; readonly inventory: ReadonlyArray<StorageCut> }
+>()("p42/StartChildLaws.StorageInventory") {}
 
-  for (const path of StoragePath) {
-    yield* Effect.scoped(
-      storageCall(path, (fixture, call) =>
-        Effect.gen(function* () {
-          fixture.observe();
-          yield* call;
-          const statements = fixture.observed();
-          expect(statements.length, `L11: ${path} reached storage`).toBeGreaterThan(0);
-          statements.forEach((statement, operation) => {
-            remaining.push({ path, operation, statement });
-          });
-        }),
-      ),
-    );
-  }
+// Built once for all 16 parts. Every cut, the inventory's included, restarts its own copy of one
+// booted Project. A cold boot of its own per cut was about half of this law's time: 16.5 ms and
+// 264 statements, against about 10 ms and 99 statements for a restart (profiled on 2026-11-17).
+const StorageInventoryLive = Layer.effect(
+  StorageInventory,
+  Effect.gen(function* () {
+    const template = yield* projectTemplate();
+    const inventory: Array<StorageCut> = [];
 
-  const inventory = [...remaining];
+    for (const path of StoragePath) {
+      yield* Effect.scoped(
+        storageCall(path, template, (fixture, call) =>
+          Effect.gen(function* () {
+            fixture.observe();
+            yield* call;
+            const statements = fixture.observed();
+            expect(statements.length, `L11: ${path} reached storage`).toBeGreaterThan(0);
+            Arr.forEach(statements, (statement, operation) => {
+              inventory.push({ path, operation, statement });
+            });
+          }),
+        ),
+      );
+    }
+
+    return { template, inventory };
+  }),
+);
+
+/**
+ * One flow's part of the storage law. Every part walks the same 100 walks at seed 119120, with the
+ * same picks and the same list of operations still to cut, so every part chooses exactly the cuts
+ * the whole law chose, in the same order. A part runs only the cuts in its own flow; the others it
+ * only marks as chosen. The 16 parts' cuts are the whole law's cuts, each run once.
+ */
+const storageSecrets = Effect.fnUntraced(function* (part: StoragePath) {
+  const { template, inventory } = yield* StorageInventory;
+  const remaining = [...inventory];
+  const own = Arr.filter(inventory, (cut) => cut.path === part);
   const reached = new Set<string>();
   const leaks = new Set<string>();
   const perWalk = Math.max(4, Math.ceil(inventory.length / 100));
+  // fast-check calls back with plain Promises, so each walk and each move runs with this law's services.
+  const context = yield* Effect.context();
 
   const tape = fc
     .commands(
       [
         SecretPick.map((pick): fc.AsyncCommand<object, SecretWalk> => ({
           check: () => true,
-          run: (_model, real) => Effect.runPromise(real.step(pick)),
+          run: (_model, real) => Effect.runPromiseWith(context)(real.step(pick)),
           toString: () => JSON.stringify(pick),
         })),
       ],
@@ -720,13 +791,23 @@ const storageSecrets = Effect.fnUntraced(function* () {
     let moves = 0;
 
     const step = Effect.fnUntraced(function* (pick: SecretPick) {
-      // The model records completed cuts only. Pick an unvisited operation that its prepared
-      // process state can reach, or repeat a visited one once the whole inventory is covered.
+      // Pick an operation no walk has chosen yet, or repeat one once the whole inventory has been
+      // chosen. Every part makes this same choice; only the part that owns the cut's flow runs it.
       const available = remaining.length > 0 ? remaining : inventory;
       const cut = available[pick.point % available.length];
 
       if (cut === undefined) {
         return yield* Effect.die("empty storage inventory");
+      }
+
+      moves++;
+
+      if (remaining.length > 0) {
+        remaining.splice(remaining.indexOf(cut), 1);
+      }
+
+      if (cut.path !== part) {
+        return;
       }
 
       const marker = forms(secret)[pick.encoding] ?? secret;
@@ -740,7 +821,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
       const outputs: Record<ChildOutput, Array<string>> = { reply: [], row: [], span: [], log: [] };
 
       const printed = yield* Effect.scoped(
-        storageCall(cut.path, (fixture, call, reopen) =>
+        storageCall(cut.path, template, (fixture, call, reopen) =>
           Effect.gen(function* () {
             fixture.observe(cut.operation, fault);
             const outcome = yield* call.pipe(Effect.result);
@@ -748,7 +829,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
             expect(fixture.hit(), `L11: ${cut.path}/${cut.operation} ${cut.statement}`).toBe(true);
 
             if (Result.isFailure(outcome)) {
-              const error = outcome.failure;
+              const error = outcome.failure.cause;
               outputs.reply.push(error instanceof Error ? error.message : String(error), String(error));
             } else {
               outputs.reply.push(...outputText(outcome.success));
@@ -771,19 +852,13 @@ const storageSecrets = Effect.fnUntraced(function* () {
 
       outputs.log.push(...(printed ?? []));
 
-      for (const [output, texts] of Object.entries(outputs)) {
-        if (texts.some((text) => forms(secret).some((form) => text.includes(form)))) {
+      for (const [output, texts] of Rec.toEntries(outputs)) {
+        if (Arr.some(texts, (text) => Arr.some(forms(secret), (form) => Str.includes(form)(text)))) {
           leaks.add(`${cut.path}/${cut.operation} ${cut.statement} -> ${output}`);
         }
       }
 
       reached.add(`${cut.path}/${cut.operation}`);
-
-      if (remaining.length > 0) {
-        remaining.splice(remaining.indexOf(cut), 1);
-      }
-
-      moves++;
     });
 
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), commands));
@@ -792,24 +867,28 @@ const storageSecrets = Effect.fnUntraced(function* () {
 
   yield* Effect.promise(() =>
     fc.assert(
-      fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromise(law(secret, commands))),
+      fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromiseWith(context)(law(secret, commands))),
       // Every storage operation in every flow must be cut once, which takes all 100 walks at this seed.
       { seed: 119120, numRuns: runsFor({ fast: 100, full: 100 }), endOnFailure: true },
     ),
   );
   expect(remaining, "L11: every storage operation in every flow was cut").toEqual([]);
-  expect(reached.size).toBe(inventory.length);
+  expect(reached.size, `L11: every ${part} operation was cut`).toBe(own.length);
   expect(
     [...leaks].sort(),
-    `L11: ${reached.size} storage operations were cut; storage text or metadata reached these outputs`,
+    `L11: ${reached.size} ${part} storage operations were cut; storage text or metadata reached these outputs`,
   ).toEqual([]);
 });
 
 describe("P42 slice 1: a code start on the real Worker path", () => {
-  effectIt.effect(
-    "L11: every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs",
-    storageSecrets,
-  );
+  layer(StorageInventoryLive)("L11 storage walk, one part per flow", (storage) => {
+    for (const path of StoragePath) {
+      storage.effect(
+        `L11: every storage read and write in the ${path} flow keeps error text and metadata out of outputs`,
+        () => storageSecrets(path),
+      );
+    }
+  });
 
   for (const path of ["descriptor", "recovery", "configuration", "exit"] as const) {
     for (const output of ["reply", "span", "row", "log"] as const) {
@@ -846,7 +925,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             name: "child:cut",
             code: { program: "p42/child", hash: CODE.child.hash },
             requester: Recipient.cases.process.make({ process: boot }),
-            input: { type: "inc" },
+            input: Tag.cases.inc.make({}),
           };
 
           fixture.cut();
@@ -858,11 +937,11 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           expect(fixture.hit(), "L10: the cut reached the descriptor write").toBe(true);
           expect(cut._tag).toBe("Failure");
           const starts = yield* Effect.promise(() => first.runPromise(project.read("processes/child:cut", 0, "audit")));
-          const committed = starts.filter((row) => row._tag === "started");
+          const committed = Arr.filter(starts, (row) => row._tag === "started");
           expect(committed, "L10: the child start committed before the descriptor failed").toHaveLength(1);
           const input = yield* Effect.promise(() => first.runPromise(project.read("child:cut/inbox", 0, "audit")));
           expect(input, "L10: the first letter committed with the start").toHaveLength(1);
-          expect(fixture.configured.filter((call) => call.descriptor.name === child.name)).toEqual([]);
+          expect(Arr.filter(fixture.configured, (call) => call.descriptor.name === child.name)).toEqual([]);
           yield* Scope.close(scope, Exit.void);
           const reopened = yield* fixture.acquire();
           const recovered = yield* Effect.promise(() => reopened.runPromise(ProjectService));
@@ -872,12 +951,13 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             value: { _tag: "started", name: child.name, rev: committed[0]?.rev },
           });
           expect(
-            fixture.configured.filter((call) => call.descriptor.name === child.name),
+            Arr.filter(fixture.configured, (call) => call.descriptor.name === child.name),
             "L10: recovery rebuilds the descriptor and wakes the first letter once",
           ).toEqual([
             {
               descriptor: {
-                id: Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(committed[0]?.body).process,
+                id: (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(committed[0]?.body))
+                  .process,
                 name: child.name,
                 program: "p42/child",
                 build: CODE.child.hash,
@@ -901,7 +981,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     let armed: number | undefined;
     let fail = true;
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- the fixture supplies only the storage calls configureProcess reads; workerd owns the full context
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: the fixture supplies only the storage calls configureProcess reads; workerd owns the full context
     const ctx = {
       exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
       storage: {
@@ -954,17 +1034,15 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             (runtime: ManagedRuntime.ManagedRuntime<ProcessService, never>) => runtime.disposeEffect,
           );
 
-          yield* Effect.promise(async () => {
-            const first = await Effect.runPromise(Effect.result(configureProcess(ctx, descriptor, runtime, true)));
-            expect(first._tag).toBe("Failure");
-            const wake = await Effect.runPromise(savedAlarm(ctx));
-            expect(wake).toBeTypeOf("number");
-            expect(armed).toBeUndefined();
-            await Effect.runPromise(configureProcess(ctx, descriptor, runtime, true));
-            expect(armed, "L10: retry arms the first wake even though its saved value already exists").toBe(wake);
-            expect(values.get("descriptor")).toEqual(descriptor);
-            expect(await Effect.runPromise(savedAlarm(ctx))).toBe(wake);
-          });
+          const first = yield* Effect.result(configureProcess(ctx, descriptor, runtime, true));
+          expect(first._tag).toBe("Failure");
+          const wake = yield* savedAlarm(ctx);
+          expect(wake).toBeTypeOf("number");
+          expect(armed).toBeUndefined();
+          yield* configureProcess(ctx, descriptor, runtime, true);
+          expect(armed, "L10: retry arms the first wake even though its saved value already exists").toBe(wake);
+          expect(values.get("descriptor")).toEqual(descriptor);
+          expect(yield* savedAlarm(ctx)).toBe(wake);
         }),
       ),
     );
@@ -989,7 +1067,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       for (const [n, ask] of asks.entries()) {
         expect(
-          await client.call("process.send", letter(starter, `desk-s1-${n}`, { type: "start", ...ask })),
+          await client.call("process.send", letter(starter, `desk-s1-${n}`, { ...Tag.cases.start.make({}), ...ask })),
           "the starter takes the founder's letter",
         ).toMatchObject({ result: { _tag: "accepted" } });
       }
@@ -1000,6 +1078,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         (opened) => (opened.result?.view?.told?.length ?? 0) >= asks.length,
       );
 
+      // SAFETY: the wait above returned once `told` held every ask, so it is an array.
       const told = view.result.view.told as Array<unknown>;
       expect(told, "L1: no start was refused, though no grant names its program").not.toContain("forbidden");
 
@@ -1010,7 +1089,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         ).toBe("Some");
         expect(told[n], `L1: ${ask.program} started fresh`).toMatchObject({ _tag: "started", name: ask.name });
         expect(await live(ask.name), `L1: ${ask.name} is live`).toBeDefined();
-        const lines = (await facts(`processes/${ask.name}`)).filter((fact) => fact._tag === "started");
+        const lines = Arr.filter(await facts(`processes/${ask.name}`), (fact) => fact._tag === "started");
         expect(lines, "L2: the start's requester is the starter's life, the program that asked").toMatchObject([
           { requester: { process: starter } },
         ]);
@@ -1021,7 +1100,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       // The starts were allowed because of this one row: no grant names either program.
       expect(
-        (await facts("permissions/relations")).map(({ _tag, subject, relation, object }) => ({
+        Arr.map(await facts("permissions/relations"), ({ _tag, subject, relation, object }) => ({
           _tag,
           subject,
           relation,
@@ -1046,7 +1125,12 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       const sent = await client.call(
         "process.send",
-        letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1", input: { type: "inc" } }),
+        letter(starter, "start-1", {
+          ...Tag.cases.start.make({}),
+          program: "p42/child",
+          name: "child:1",
+          input: Tag.cases.inc.make({}),
+        }),
       );
 
       expect(sent, "the starter takes the letter").toMatchObject({ result: { _tag: "accepted" } });
@@ -1061,13 +1145,15 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       await pause(1_000);
       const after = client.pushed.slice(quiet);
       expect(
-        after.filter(
-          (frame) => JSON.stringify(frame).includes(String(child)) || JSON.stringify(frame).includes("child:1"),
+        Arr.filter(
+          after,
+          (frame) =>
+            Str.includes(String(child))(JSON.stringify(frame)) || Str.includes("child:1")(JSON.stringify(frame)),
         ),
         "L9: no frame about the child reaches any client",
       ).toEqual([]);
       expect(
-        after.filter((frame) => /notify|view|focus|open/i.test(String(frame.method))),
+        Arr.filter(after, (frame) => /notify|view|focus|open/i.test(String(frame.method))),
         "L9: a code start opens, notifies and focuses nothing",
       ).toEqual([]);
     });
@@ -1091,20 +1177,20 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       const client = await connect("children");
 
       for (let n = 0; n < 2; n++) {
-        expect(await client.call("process.send", letter(other ?? "", `other-inc-${n}`, { type: "inc" }))).toMatchObject(
-          {
-            result: { _tag: "accepted" },
-          },
-        );
+        expect(
+          await client.call("process.send", letter(other ?? "", `other-inc-${n}`, Tag.cases.inc.make({}))),
+        ).toMatchObject({
+          result: { _tag: "accepted" },
+        });
       }
 
       const otherView = await until(
         "the independent counter has a nonzero count",
-        () => client.call("view.open", { pid: other }),
+        () => client.call("view.open", { pid: other! }),
         (frame) => frame.result?.view?.count === 2,
       );
 
-      expect(await client.call("process.send", letter(peer, "peer-inc", { type: "inc" }))).toMatchObject({
+      expect(await client.call("process.send", letter(peer, "peer-inc", Tag.cases.inc.make({})))).toMatchObject({
         result: { _tag: "accepted" },
       });
 
@@ -1116,7 +1202,12 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       await client.call(
         "process.send",
-        letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1", input: { type: "inc" } }),
+        letter(starter, "start-1", {
+          ...Tag.cases.start.make({}),
+          program: "p42/child",
+          name: "child:1",
+          input: Tag.cases.inc.make({}),
+        }),
       );
 
       const first = String(
@@ -1135,7 +1226,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       );
 
       expect(view, "L10: the child's first letter is its input").toMatchObject({ result: { view: { count: 1 } } });
-      expect(await client.call("process.send", letter(first, "inc-1", { type: "inc" }))).toMatchObject({
+      expect(await client.call("process.send", letter(first, "inc-1", Tag.cases.inc.make({})))).toMatchObject({
         result: { _tag: "accepted" },
       });
       await until(
@@ -1153,11 +1244,11 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       expect(starterView.result.view.told).toMatchObject([{ _tag: "started", process: first, name: "child:1" }]);
 
       // A throw restarts it: one restarted fact naming the old life, in the child's own name.
-      await client.call("process.send", letter(first, "throw-1", { type: "throw" }));
+      await client.call("process.send", letter(first, "throw-1", Tag.cases.throw.make({})));
 
       const [restarted] = await until(
         "one restarted fact after the child's throw",
-        async () => (await facts("processes/child:1")).filter((fact) => fact._tag === "restarted"),
+        async () => Arr.filter(await facts("processes/child:1"), (fact) => fact._tag === "restarted"),
         (rows) => rows.length >= 1,
       );
 
@@ -1183,7 +1274,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "L10: the starter keeps its saved state after the child throws",
       ).toEqual(starterView.result.view);
       expect(
-        (await client.call("view.open", { pid: other })).result?.view,
+        (await client.call("view.open", { pid: other! })).result?.view,
         "L10: the independent program keeps its nonzero count after the child throws",
       ).toEqual(otherView.result.view);
       expect(
@@ -1191,15 +1282,15 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "L10: another life of the child's program keeps its nonzero count",
       ).toEqual(peerView.result.view);
       expect(
-        (await facts("processes/starter:1")).filter((fact) => fact._tag === "restarted"),
+        Arr.filter(await facts("processes/starter:1"), (fact) => fact._tag === "restarted"),
         "L10: the starter's restarts are unchanged",
       ).toEqual([]);
       expect(
-        (await facts("processes/counter:1")).filter((fact) => fact._tag === "restarted"),
+        Arr.filter(await facts("processes/counter:1"), (fact) => fact._tag === "restarted"),
         "L10: another program's restarts are unchanged",
       ).toEqual([]);
       expect(
-        (await facts("processes/child:boot")).filter((fact) => fact._tag === "restarted"),
+        Arr.filter(await facts("processes/child:boot"), (fact) => fact._tag === "restarted"),
         "L10: another life of the child's program has no restart",
       ).toEqual([]);
     });
@@ -1231,6 +1322,7 @@ describe("Desk S1: start and stop refusals decode by name", () => {
       fc.property(fc.constantFrom(...named), fc.string(), (reason, other) => {
         const decoded = Schema.decodeOption(Schema.Union([stops, StartChild.StartRefusal]))(reason);
         expect(decoded._tag === "Some" ? decoded.value : null, `L4: ${reason} decodes by name`).toBe(reason);
+        // SAFETY: `includes` only compares; any string may be looked for in the list of names.
         expect(
           Schema.is(Schema.Union([stops, StartChild.StartRefusal]))(other),
           `L4: ${JSON.stringify(other)} is no refusal`,

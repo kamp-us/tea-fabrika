@@ -1,6 +1,7 @@
 // P15 slice 1, next/. Runtime's reload suite on scoped node:sqlite stores (0062).
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -60,7 +61,7 @@ const decode = Schema.decodeUnknownSync(Row);
 const rows: ReloadTest.Rig["rows"] = (sql) =>
   sql.exec("SELECT name FROM sqlite_master WHERE name='entries'").length === 0
     ? []
-    : sql.exec("SELECT * FROM entries ORDER BY rev").map((raw) => {
+    : Arr.map(sql.exec("SELECT * FROM entries ORDER BY rev"), (raw) => {
         const row = decode(raw);
 
         return { stream: row.stream, id: row.id, event: row._tag, body: row.body, build: row.build };

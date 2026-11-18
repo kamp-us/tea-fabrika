@@ -1,7 +1,7 @@
 ---
 id: 0016
 title: Tier 1 supervision is OTP's top-level supervisor, and each difference from OTP is written with its reason
-status: amended-in-part by [0018](0018-one-application-per-program.md)
+status: amended-in-part by [0018](0018-one-application-per-program.md), [0601](0601-program-make-with-optional-pipes.md)
 date: 2026-11-09
 tags: [supervision, otp, coordination, tier-1, next, restart]
 ---

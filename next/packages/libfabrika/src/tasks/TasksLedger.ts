@@ -4,11 +4,16 @@
  * when the machine accepts it. A repeat answers the first event's receipt; a refusal writes nothing.
  */
 import { applyCell } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerStreams } from "../ledger/LedgerStreams.ts";
@@ -56,36 +61,36 @@ const stream = (id: string) => `${PREFIX}${id}`;
 
 const toMsg = (stored: Stored): Msg => {
   if (stored._tag === "requested") {
-    return { type: "request", request: stored.request };
+    return Msg.cases.request.make({ request: stored.request });
   }
 
   if (stored._tag === "taken") {
-    return { type: "take", executor: stored.executor, execution: stored.execution };
+    return Msg.cases.take.make({ executor: stored.executor, execution: stored.execution });
   }
 
   if (stored._tag === "collected") {
-    return { type: "collect", collection: stored.collection };
+    return Msg.cases.collect.make({ collection: stored.collection });
   }
 
   return stored._tag === "started"
-    ? { type: "start", execution: stored.execution }
-    : { type: "finish", execution: stored.execution, result: stored.result };
+    ? Msg.cases.start.make({ execution: stored.execution })
+    : Msg.cases.finish.make({ execution: stored.execution, result: stored.result });
 };
 
 const toStored = (msg: Msg): Stored => {
-  if (msg.type === "request") {
+  if (msg._tag === "request") {
     return Stored.cases.requested.make({ request: msg.request });
   }
 
-  if (msg.type === "take") {
+  if (msg._tag === "take") {
     return Stored.cases.taken.make({ executor: msg.executor, execution: msg.execution });
   }
 
-  if (msg.type === "collect") {
+  if (msg._tag === "collect") {
     return Stored.cases.collected.make({ collection: msg.collection });
   }
 
-  return msg.type === "start"
+  return msg._tag === "start"
     ? Stored.cases.started.make({ execution: msg.execution })
     : Stored.cases.finished.make({ execution: msg.execution, result: msg.result });
 };
@@ -95,7 +100,7 @@ type Model = (typeof task)["model"]["Type"];
 const step = (model: Model, msg: Msg): Model => applyCell(task, model, msg)[0];
 
 const fold = (events: ReadonlyArray<Stored>): Model =>
-  events.reduce((model, event) => step(model, toMsg(event)), task.init(null, undefined)[0]);
+  Arr.reduce(events, task.init(null, undefined)[0], (model, event) => step(model, toMsg(event)));
 
 /** The tasks a target index names that are still open: requested, assigned or started. */
 const OPEN: ReadonlySet<Task["state"]["_tag"]> = new Set(["requested", "assigned", "started"]);
@@ -106,10 +111,13 @@ const translated = (cause: LedgerError) =>
 
 /** One task as its stream holds it, read inside a turn: its state and its events. */
 const saved = (turn: LedgerTurn, id: string): Task => {
-  const entries = [...turn.read(stream(id), 0)].map((entry) => ({ entry, stored: decodeStored(valueFor(entry)) }));
-  const events = entries.map(({ entry, stored }) => decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }));
+  const entries = Arr.map([...turn.read(stream(id), 0)], (entry) => ({ entry, stored: decodeStored(valueFor(entry)) }));
 
-  return { state: fold(entries.map(({ stored }) => stored)).state, events };
+  const events = Arr.map(entries, ({ entry, stored }) =>
+    decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }),
+  );
+
+  return { state: fold(Arr.map(entries, ({ stored }) => stored)).state, events };
 };
 
 /**
@@ -152,7 +160,10 @@ export const layer = Layer.effect(
 
       const answer = yield* ledger
         .transact((turn) => {
-          const model = step(fold([...turn.read(stream(id), 0)].map((entry) => decodeStored(valueFor(entry)))), msg);
+          const model = step(
+            fold(Arr.map([...turn.read(stream(id), 0)], (entry) => decodeStored(valueFor(entry)))),
+            msg,
+          );
 
           if (model.answer._tag === "refused") {
             return R.fail(model.answer.reason);
@@ -166,18 +177,20 @@ export const layer = Layer.effect(
 
             // An accepted request is also indexed under its target, in the same turn: a repeat or a
             // refusal never reaches here, so it writes no second line.
-            if (msg.type === "request") {
+            if (msg._tag === "request") {
               const pointer = encodePointer(Pointer.make({ id, process: msg.request.process }));
               turn.append(targetStream(msg.request.target), id, lineFor(writer, pointer));
             }
           }
 
-          const entry = [...turn.read(stream(id), 0)].find((e) => e._tag === stored._tag);
+          const entry = Arr.findFirst(turn.read(stream(id), 0), (e) => e._tag === stored._tag);
 
           // An accepted or repeated call has its event in the stream; a stream without one is a broken store.
-          return entry === undefined
-            ? R.fail("storage" as const)
-            : R.succeed({ receipt: { rev: entry.rev, arrivedAt: entry.arrivedAt }, state: model.state });
+          return Option.match(entry, {
+            onNone: () => R.fail("storage" as const),
+            onSome: (found) =>
+              R.succeed({ receipt: { rev: found.rev, arrivedAt: found.arrivedAt }, state: model.state }),
+          });
         })
         .pipe(Effect.mapError(translated));
 
@@ -190,31 +203,31 @@ export const layer = Layer.effect(
 
     return {
       request: Effect.fn("tasks.request")(function* (request: Request, recorded: Recorded) {
-        return (yield* call(request.id, { type: "request", request }, recorded)).receipt;
+        return (yield* call(request.id, Msg.cases.request.make({ request }), recorded)).receipt;
       }),
       take: Effect.fn("tasks.take")(function* (id: string, executor: Executor, recorded: Recorded) {
         const proposed = yield* ids
           .next(Execution)
           .pipe(Effect.mapError((cause) => TasksError.make({ reason: "storage", cause })));
 
-        const { receipt, state } = yield* call(id, { type: "take", executor, execution: proposed }, recorded);
+        const { receipt, state } = yield* call(id, Msg.cases.take.make({ executor, execution: proposed }), recorded);
         // An accepted or repeated take leaves the task owned, so the saved assignment is there.
         const execution = state._tag === "absent" || state._tag === "requested" ? proposed : state.assignment.execution;
 
         return { ...receipt, execution };
       }),
       started: Effect.fn("tasks.started")(function* (id: string, execution: string, recorded: Recorded) {
-        return (yield* call(id, { type: "start", execution }, recorded)).receipt;
+        return (yield* call(id, Msg.cases.start.make({ execution }), recorded)).receipt;
       }),
       finish: Effect.fn("tasks.finish")(function* (id: string, execution: string, result: Result, recorded: Recorded) {
-        return (yield* call(id, { type: "finish", execution, result }, recorded)).receipt;
+        return (yield* call(id, Msg.cases.finish.make({ execution, result }), recorded)).receipt;
       }),
       collected: Effect.fn("tasks.collected")(function* (
         id: string,
         collection: typeof Collection.Type,
         recorded: Recorded,
       ) {
-        return (yield* call(id, { type: "collect", collection }, recorded)).receipt;
+        return (yield* call(id, Msg.cases.collect.make({ collection }), recorded)).receipt;
       }),
       read,
       forTarget: Effect.fn("tasks.forTarget")(function* (key: string) {
@@ -222,9 +235,10 @@ export const layer = Layer.effect(
           .transact((turn) => {
             const index = targetStream(key);
 
-            const tasks = [...turn.read(index, 0)]
-              .map((entry) => saved(turn, decodePointer(valueFor(entry)).id))
-              .filter((found) => OPEN.has(found.state._tag));
+            const tasks = Arr.filter(
+              Arr.map([...turn.read(index, 0)], (entry) => saved(turn, decodePointer(valueFor(entry)).id)),
+              (found) => OPEN.has(found.state._tag),
+            );
 
             return { tasks, rev: turn.head(index) };
           })
@@ -233,7 +247,7 @@ export const layer = Layer.effect(
       forProcess: (process: typeof ProcessId.Type) =>
         streams.list(PREFIX).pipe(
           Stream.mapError((cause) => TasksError.make({ reason: "storage", cause })),
-          Stream.mapEffect((name) => read(name.slice(PREFIX.length))),
+          Stream.mapEffect((name) => read(Function.pipe(name, Str.slice(PREFIX.length)))),
           Stream.filter((task) => task.state._tag !== "absent" && task.state.request.process === process),
         ),
     };

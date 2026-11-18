@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 import { Exceeded, RecoveryReserveExhausted, type Allowance } from "../Quotas.ts";
 
 const Amount = Schema.Struct({ writes: Schema.Finite, bytes: Schema.Finite });
+
 const Decision = Schema.TaggedUnion({ admitted: {}, refused: { reason: Exceeded } });
 
 /**
@@ -42,20 +43,20 @@ export const Model = Schema.TaggedUnion({
 /** @internal */
 export type Model = typeof Model.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("propose"),
+/** @internal */
+export const Msg = Schema.TaggedUnion({
+  propose: {
     at: Schema.Finite,
     operation: Schema.String,
     ...Amount.fields,
     ahead: Amount,
     replay: Schema.optionalKey(Schema.Struct({ message: Schema.String, recovery: Schema.String })),
-  }),
-  Schema.Struct({ type: Schema.Literal("advance"), at: Schema.Finite }),
-  Schema.Struct({ type: Schema.Literal("resume"), at: Schema.Finite }),
-  Schema.Struct({ type: Schema.Literal("restore"), model: Model }),
-  Schema.Struct({ type: Schema.Literal("settle"), bytes: Schema.Finite, ahead: Amount }),
-]);
+  },
+  advance: { at: Schema.Finite },
+  resume: { at: Schema.Finite },
+  restore: { model: Model },
+  settle: { bytes: Schema.Finite, ahead: Amount },
+});
 
 /** @internal */
 export type Msg = typeof Msg.Type;
@@ -63,6 +64,7 @@ export type Msg = typeof Msg.Type;
 const advance = (s: Model, at: number): Model => {
   const now = Math.max(s.at, at);
   const groups = s.groups.filter((g) => g.at > now - 60_000);
+
   return {
     ...s,
     writes: groups.reduce((n, g) => n + g.writes, 0),
@@ -106,6 +108,7 @@ export const make = (options: { readonly account: Account; readonly limits: Allo
       advance: (s, m) => [advance(s, m.at), []],
       resume: (s, m) => {
         const { _tag: _case, ...fields } = advance(s, m.at);
+
         return [Model.cases.ready.make(fields), []];
       },
       propose: (previous, m) => {
@@ -116,22 +119,26 @@ export const make = (options: { readonly account: Account; readonly limits: Allo
         }
 
         const account = s.account;
+
         const replay =
           m.replay !== undefined &&
           (s.replay.recovery !== m.replay.recovery || !s.replay.messages.includes(m.replay.message)) &&
           m.writes <= options.limits.message.writes &&
           Math.max(0, m.bytes) <= options.limits.message.bytes;
+
         const writes = replay ? 0 : m.writes + m.ahead.writes;
         const bytes = replay ? 0 : Math.max(0, m.bytes + m.ahead.bytes);
         const usedWrites = s.writes + writes;
         const usedBytes = account._tag === "recovery" ? s.bytes + bytes : s.bytes + m.bytes + m.ahead.bytes;
         const resource = usedWrites > options.limits.writes ? "writes" : "storage";
+
         const exceeded =
           account._tag !== "local" && (usedWrites > options.limits.writes || usedBytes > options.limits.bytes);
 
         if (exceeded) {
           if (account._tag === "recovery") {
             const { _tag: _case, ...fields } = s;
+
             return [
               Model.cases.reserve_fault.make({
                 ...fields,

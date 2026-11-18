@@ -11,12 +11,17 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";
-import { Handshake, handshakeMachine, hello, knock } from "../transport/Handshake.ts";
+import { Handshake, handshakeMachine, HandshakeMsg, hello, knock } from "../transport/Handshake.ts";
 import { backoff, Link, linkMachine, LinkMsg, ping, socketDial, timerDeps } from "../transport/Link.ts";
 import { Entry } from "./Journal.ts";
 
@@ -100,14 +105,14 @@ const HandsModel = Schema.Struct({
 
 type HandsModel = typeof HandsModel.Type;
 
-const Own = Schema.Union([
+const Own = Schema.TaggedUnion({
   // What one dial's socket saw, raw, from the dial Sub the window shares.
-  Schema.Struct({ type: Schema.Literal("socket_opened"), dial: Dial, at: Ms }),
-  Schema.Struct({ type: Schema.Literal("frame"), dial: Dial, text: Schema.String, at: Ms, ms: Schema.optionalKey(Ms) }),
-  Schema.Struct({ type: Schema.Literal("socket_closed"), dial: Dial, code: Schema.Int, at: Ms }),
+  socket_opened: { dial: Dial, at: Ms },
+  frame: { dial: Dial, text: Schema.String, at: Ms, ms: Schema.optionalKey(Ms) },
+  socket_closed: { dial: Dial, code: Schema.Int, at: Ms },
   // The work's own timer: the backoff of the state's `tries` ran out.
-  Schema.Struct({ type: Schema.Literal("again"), tries: Count }),
-]);
+  again: { tries: Count },
+});
 
 type Own = typeof Own.Type;
 
@@ -167,7 +172,7 @@ const assigned = (w: Assigned): Assigned => ({
 });
 
 /** A Msg's time as the journal keeps it: the client's own clock, in ISO text. */
-const iso = (at: number): string => new Date(at).toISOString();
+const iso = (at: number): string => DateTime.formatIso(DateTime.makeUnsafe(at));
 
 /** The start time to keep on an entry, when one is known. */
 const since = (startedAt: string | undefined) => (startedAt === undefined ? {} : { startedAt });
@@ -189,13 +194,13 @@ const Nonce = Schema.Struct({ nonce: Schema.String });
 
 const Rpc = Schema.Struct({
   id: Schema.String,
-  result: Schema.optionalKey(Schema.Unknown),
+  result: Schema.optionalKey(Schema.Json),
   error: Schema.optionalKey(
     Schema.Struct({ data: Schema.optionalKey(Schema.Struct({ reason: Schema.optionalKey(Schema.String) })) }),
   ),
 });
 
-const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Unknown) });
+const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Json) });
 
 const decodeFrame = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Union([Rpc, Notice])));
 
@@ -332,9 +337,10 @@ const saved = (s: HandsModel, task: Assigned, entry: Entry): Step => {
  * next one, so one task whose take fails for a passing reason does not hold back the others.
  */
 const takeable = (s: HandsModel, tasks: ReadonlyArray<(typeof Listed.Type.tasks)[number]>, tries: number) => {
-  const once = tasks.filter(
+  const once = Arr.filter(
+    tasks,
     (p) =>
-      tasks.filter((q) => q.process === p.process).length === 1 &&
+      Arr.filter(tasks, (q) => q.process === p.process).length === 1 &&
       !s.held.includes(p.id) &&
       !s.skip.tasks.includes(p.id),
   );
@@ -361,18 +367,21 @@ const takeable = (s: HandsModel, tasks: ReadonlyArray<(typeof Listed.Type.tasks)
  *   what the table cannot place is sent again.
  */
 const LASTS: ReadonlyMap<string, "never" | "link" | "list"> = new Map([
-  ...[
-    "not_allowed",
-    "not_target",
-    "conflict",
-    "wrong_execution",
-    "wrong_state",
-    "wrong_process",
-    "not_found",
-    "bad_input",
-    "reserved",
-    "unknown_method",
-  ].map((reason) => [reason, "never"] as const),
+  ...Arr.map(
+    [
+      "not_allowed",
+      "not_target",
+      "conflict",
+      "wrong_execution",
+      "wrong_state",
+      "wrong_process",
+      "not_found",
+      "bad_input",
+      "reserved",
+      "unknown_method",
+    ],
+    (reason) => [reason, "never"] as const,
+  ),
   ["lacks_capability", "link"],
   ["idle", "list"],
   ["ambiguous", "list"],
@@ -383,11 +392,12 @@ const lasts = (reason: string | null): "never" | "link" | "list" | "later" =>
   (reason === null ? undefined : LASTS.get(reason)) ?? "later";
 
 /** Why a take that assigned nothing to this client was refused, or null when its answer does not decode. */
-const refusal = (reason: string | null, result: unknown): string | null =>
+const refusal = (reason: string | null, result: Schema.Json | undefined): string | null =>
   reason ??
   Option.match(Schema.decodeUnknownOption(TakeReply)(result), {
     onNone: () => null,
-    onSome: (reply) => (reply._tag === "idle" ? "idle" : reply._tag === "refused" ? reply.reason : "not_allowed"),
+    onSome: (reply) =>
+      TakeReply.match(reply, { idle: () => "idle", refused: ({ reason }) => reason, assigned: () => "not_allowed" }),
   });
 
 /** Skips `task` on this link while the list stays at its rev, and lists again at once. */
@@ -397,7 +407,7 @@ const skip = (s: HandsModel, task: string): Step => list({ ...s, skip: { ...s.sk
 const BadEntry = Schema.Struct({ reason: Schema.Literal("bad_entry") });
 
 /** The assignment in a take's answer, when it is this client's own for an open task. */
-const assignment = (s: HandsModel, result: unknown) =>
+const assignment = (s: HandsModel, result: Schema.Json | undefined) =>
   Option.flatMap(Schema.decodeUnknownOption(TakeReply)(result), (reply) => {
     const state = reply._tag === "assigned" ? reply.task.state : null;
 
@@ -417,7 +427,7 @@ const assignment = (s: HandsModel, result: unknown) =>
   });
 
 /** The brain answered the live work call: `result` when it is ok, else the door's `reason`. */
-const answered = (s: HandsModel, result: unknown, reason: string | null, at: string): Step => {
+const answered = (s: HandsModel, result: Schema.Json | undefined, reason: string | null, at: string): Step => {
   const w = s.work;
   const woke = reason === null ? Option.getOrNull(Schema.decodeUnknownOption(Woke)(result)) : null;
   const heard: HandsModel = woke === null ? s : { ...s, seen: Math.max(s.seen, woke.rev) };
@@ -515,7 +525,7 @@ const answered = (s: HandsModel, result: unknown, reason: string | null, at: str
 /** The work's timer: the backoff a state waits before it calls or writes again, or null. */
 const workTimer = (w: Work): { readonly ms: number; readonly msg: Own } | null =>
   ((w._tag === "listing" || w._tag === "reporting") && w.call === undefined) || (w._tag === "saving" && w.due)
-    ? { ms: backoff(w.tries), msg: { type: "again", tries: w.tries } }
+    ? { ms: backoff(w.tries), msg: Own.cases.again.make({ tries: w.tries }) }
     : null;
 
 /** The work state a journal Cmd's answer is for: the write out now, of the same entry for the same task. */
@@ -556,17 +566,19 @@ const linked = (s: HandsModel, m: LinkMsg): Step => {
   const fresh = open !== null && open > s.handshake.dial;
   // A grant wait's renewal knock goes on the dial it holds, with its own id `k<dial>.<n>`: its answer
   // renews the code the exchange shows.
-  const renew = cmds.some((c) => c.type === "knock");
+  const renew = Arr.some(cmds, (c) => c._tag === "knock");
 
   const next: HandsModel = {
     ...s,
     link,
-    handshake: fresh ? applyCell(handshakeMachine, s.handshake, { type: "opened", dial: open })[0] : s.handshake,
+    handshake: fresh
+      ? applyCell(handshakeMachine, s.handshake, HandshakeMsg.cases.opened.make({ dial: open }))[0]
+      : s.handshake,
     tries: fresh && link._tag === "dialing" ? (link.tries ?? 0) : s.tries,
     sent: renew ? s.sent + 1 : s.sent,
   };
 
-  const pings = cmds.filter((c): c is ReturnType<typeof ping> => c.type === "ping");
+  const pings = Arr.filter(cmds, (c): c is ReturnType<typeof ping> => c._tag === "ping");
   const knocks = renew ? [knock({ dial: open ?? 0, id: `k${open ?? 0}.${next.sent}` })] : [];
 
   return moved(s, [next, [...pings, ...knocks]]);
@@ -578,14 +590,20 @@ type HandshakeIn =
 /** The Link Msg a change of the hello exchange means, if any. */
 const outcome = (was: Handshake, now: Handshake, fingerprint: string): LinkMsg | null => {
   if (now._tag === "admitted" && was._tag !== "admitted") {
-    return { type: "admitted", dial: now.dial, ping: now.ping, ms: now.ms };
+    return LinkMsg.cases.admitted.make({ dial: now.dial, ping: now.ping, ms: now.ms });
   }
 
   if (now._tag === "waiting" && (was._tag !== "waiting" || was.code !== now.code || was.until !== now.until)) {
-    return { type: "not_granted", dial: now.dial, fingerprint, code: now.code, until: now.until, ms: now.ms };
+    return LinkMsg.cases.not_granted.make({
+      dial: now.dial,
+      fingerprint,
+      code: now.code,
+      until: now.until,
+      ms: now.ms,
+    });
   }
 
-  return was._tag === "waiting" && now._tag === "initializing" ? { type: "granted", dial: now.dial } : null;
+  return was._tag === "waiting" && now._tag === "initializing" ? LinkMsg.cases.granted.make({ dial: now.dial }) : null;
 };
 
 /** Steps the hello exchange by hand, sends its Cmds on and tells the Link what changed. */
@@ -600,7 +618,7 @@ const shook = (s: HandsModel, m: HandshakeIn): Step => {
 
   const told: LinkMsg | null =
     handshake._tag === "failed" && s.handshake._tag !== "failed"
-      ? { type: "blocked", reason: handshake.error }
+      ? LinkMsg.cases.blocked.make({ reason: handshake.error })
       : outcome(s.handshake, handshake, s.key ?? "");
 
   if (told === null) {
@@ -619,7 +637,7 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
   }
 
   if (m.text === "pong") {
-    return linked(s, { type: "pong", dial: m.dial });
+    return linked(s, LinkMsg.cases.pong.make({ dial: m.dial }));
   }
 
   const decoded = decodeFrame(m.text);
@@ -630,10 +648,10 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
 
   const frame = decoded.value;
 
-  const waiting = (params: unknown): Step =>
+  const waiting = (params: Schema.Json | undefined): Step =>
     Option.match(Schema.decodeUnknownOption(WaitingCode)(params), {
       onNone: () => stay(s),
-      onSome: (w) => shook(s, { type: "waiting", dial: m.dial, ...w, at: m.at }),
+      onSome: (w) => shook(s, HandshakeMsg.cases.waiting.make({ dial: m.dial, ...w, at: m.at })),
     });
 
   if (!("id" in frame)) {
@@ -641,7 +659,14 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
       return Option.match(Schema.decodeUnknownOption(Nonce)(frame.params), {
         onNone: () => stay(s),
         onSome: ({ nonce }) =>
-          shook(s, { type: frame.method === "challenge" ? "challenge" : "granted", dial: m.dial, nonce, at: m.at }),
+          shook(
+            s,
+            HandshakeMsg.cases[frame.method === "challenge" ? "challenge" : "granted"].make({
+              dial: m.dial,
+              nonce,
+              at: m.at,
+            }),
+          ),
       });
     }
 
@@ -650,15 +675,17 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
 
   const reason = frame.error === undefined ? null : (frame.error.data?.reason ?? "other");
 
-  if (frame.id.startsWith("h")) {
-    const [next, out] = shook(s, {
-      type: "answer",
-      dial: m.dial,
-      id: frame.id,
-      result: frame.result ?? null,
-      ...(reason === null ? {} : { reason }),
-      at: m.at,
-    });
+  if (Function.pipe(frame.id, Str.startsWith("h"))) {
+    const [next, out] = shook(
+      s,
+      HandshakeMsg.cases.answer.make({
+        dial: m.dial,
+        id: frame.id,
+        result: frame.result ?? null,
+        ...(reason === null ? {} : { reason }),
+        at: m.at,
+      }),
+    );
 
     // The key the door admitted is the one every assignment this client runs must name.
     const admitted = next.handshake._tag === "admitted" && s.handshake._tag !== "admitted";
@@ -667,7 +694,7 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
     return [key === null ? next : { ...next, key: key.identity.key }, out];
   }
 
-  if (frame.id.startsWith("k")) {
+  if (Function.pipe(frame.id, Str.startsWith("k"))) {
     return waiting(frame.result);
   }
 
@@ -691,13 +718,19 @@ export const handsMachine = Machine.make({
   model: HandsModel,
   msg: Schema.Union([LinkMsg, Own]),
   cmds: [write, hello, knock, ping, journalRead, journalWrite, execute],
+  // SAFETY: tea's `types` slot only carries the socket Sub type; tea never reads this empty value
+  // (0561).
   types: { sub: {} as SocketSub },
   init: (loaded) => [
     loaded ??
       HandsModel.make({
         link: linkMachine.init(null, {})[0],
         // Dial 1's exchange waits for its challenge; its socket opening times it.
-        handshake: applyCell(handshakeMachine, handshakeMachine.init(null, {})[0], { type: "opened", dial: 1 })[0],
+        handshake: applyCell(
+          handshakeMachine,
+          handshakeMachine.init(null, {})[0],
+          HandshakeMsg.cases.opened.make({ dial: 1 }),
+        )[0],
         work: Work.cases.offline.make({}),
         sent: 0,
         tries: 0,
@@ -721,7 +754,7 @@ export const handsMachine = Machine.make({
     blocked: linked,
     ask_again: linked,
     socket_opened: (s, m): Step =>
-      socketDial(s.link) === m.dial ? shook(s, { type: "opened", dial: m.dial, at: m.at }) : stay(s),
+      socketDial(s.link) === m.dial ? shook(s, HandshakeMsg.cases.opened.make({ dial: m.dial, at: m.at })) : stay(s),
     frame: (s, m): Step => frameIn(s, m),
     socket_closed: (s, m): Step => {
       if (socketDial(s.link) !== m.dial) {
@@ -731,7 +764,7 @@ export const handsMachine = Machine.make({
       const h = s.handshake;
       const ms = h.dial === m.dial && "since" in h && h.since !== undefined ? Math.max(0, m.at - h.since) : 0;
 
-      return linked(s, { type: "closed", dial: m.dial, code: m.code, fingerprint: s.key ?? "", ms });
+      return linked(s, LinkMsg.cases.closed.make({ dial: m.dial, code: m.code, fingerprint: s.key ?? "", ms }));
     },
     again: (s): Step => {
       const w = s.work;
@@ -751,8 +784,8 @@ export const handsMachine = Machine.make({
     write_err: stay,
     hello_ok: (s, m): Step => shook(s, m),
     hello_err: (s, m): Step => shook(s, m),
-    knock_ok: (s, m): Step => (m.cmd.id.startsWith("h") ? shook(s, m) : stay(s)),
-    knock_err: (s, m): Step => (m.cmd.id.startsWith("h") ? shook(s, m) : stay(s)),
+    knock_ok: (s, m): Step => (Function.pipe(m.cmd.id, Str.startsWith("h")) ? shook(s, m) : stay(s)),
+    knock_err: (s, m): Step => (Function.pipe(m.cmd.id, Str.startsWith("h")) ? shook(s, m) : stay(s)),
     ping_ok: stay,
     ping_err: stay,
     journal_read_ok: (s, m): Step => {
@@ -811,10 +844,13 @@ export const handsMachine = Machine.make({
     },
   },
   subs: [
-    { type: "timer", deps: (s) => timerDeps(s.link) },
-    { type: "timer", deps: (s) => workTimer(s.work) },
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a tea Sub entry: tea gives a built-in Sub no maker, and its `deps` is a function no schema makes
+    { _tag: "timer", deps: (s) => timerDeps(s.link) },
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a tea Sub entry: tea gives a built-in Sub no maker, and its `deps` is a function no schema makes
+    { _tag: "timer", deps: (s) => workTimer(s.work) },
     {
-      type: "socket",
+      // oxlint-disable-next-line fabrika/no-hand-tag -- a tea Sub entry: a Sub is named by its runner, and its `deps` is a function no schema makes
+      _tag: "socket",
       deps: (s) => {
         const dial = socketDial(s.link);
 

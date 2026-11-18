@@ -76,9 +76,9 @@ it("phase walks record only pass, failure, pass and keep incomplete answers term
         if (terminal) {
           expect(model).toEqual(previous);
         } else {
-          expect(msg.type).toBe("phase_ok");
+          expect(msg._tag).toBe("phase_ok");
 
-          if (msg.type === "phase_ok") {
+          if (msg._tag === "phase_ok") {
             seen.push(msg.value);
           }
         }

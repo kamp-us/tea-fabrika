@@ -3,6 +3,9 @@
 // succeeds. Nothing here reads a clock, a store or a service (0037, 0046).
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import { ExitReason } from "../../processes/ExitReason.ts";
 import { From } from "../../processes/Mailbox.ts";
 import { canRestart, Start } from "../../processes/Process.ts";
@@ -50,7 +53,7 @@ const CodeChange = Schema.Struct({
   ran: Schema.Array(Text),
   origin: From,
   pos: Millis,
-  view: Schema.Unknown,
+  view: Schema.Json,
   wake: Schema.NullOr(Millis),
   maxDeliveries: Schema.NullOr(Deliveries),
 }).check(
@@ -106,7 +109,7 @@ export const Supervision = Schema.Struct({
 
     if (j._tag === "stepping" && j.attempt.phase === "fresh") {
       return (
-        s.receipts.some((r) => r.letter === j.attempt.letter && r.input !== null) ||
+        Arr.some(s.receipts, (r) => r.letter === j.attempt.letter && r.input !== null) ||
         "fresh stepping keeps its admitted input"
       );
     }
@@ -114,8 +117,10 @@ export const Supervision = Schema.Struct({
     // Dead work names its exact fresh failure, so its terminal receipt must be that letter's own.
     if (j._tag === "writing_dead") {
       return (
-        s.receipts.some((r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null) ||
-        "dead work keeps its terminal receipt"
+        Arr.some(
+          s.receipts,
+          (r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null,
+        ) || "dead work keeps its terminal receipt"
       );
     }
 
@@ -155,46 +160,44 @@ export const Supervision = Schema.Struct({
 /** @internal */
 export type Supervision = typeof Supervision.Type;
 
-const msg = <T extends string, F extends Schema.Struct.Fields>(type: T, fields: F) =>
-  Schema.Struct({ type: Schema.Literal(type), ...fields });
-
-const Msg = Schema.Union([
-  msg("swapped", { process: ProcessId, build: Text }),
-  msg("swap_prepared", { change: CodeChange }),
-  msg("swap_completed", { load: Text }),
-  msg("received", { receipt: Receipt }),
-  msg("compacted", { letter: Text, digest: Text }),
-  msg("limited", { maxDeliveries: Schema.NullOr(Deliveries) }),
-  msg("begin", { process: ProcessId, letter: Text, build: Text, phase: Attempt.fields.phase, at: Millis }),
-  msg("admitted", { seq: Count, receipt: Receipt }),
-  msg("refused", { seq: Count, reply: Reply }),
-  msg("reply_written", { seq: Count }),
-  msg("abandoned", { seq: Count }),
-  msg("attempt_cleared", { seq: Count }),
-  msg("check_threw", { seq: Count, receipt: Receipt, error: Text, reason: ExitReason, from: From }),
-  msg("finished", { seq: Count }),
-  msg("threw", { seq: Count, error: Text, reason: ExitReason, from: From }),
-  msg("interrupted", { process: ProcessId, letter: Text, build: Text, reason: ExitReason, from: From, at: Millis }),
-  msg("dead_written", { seq: Count }),
-  msg("exit_written", { process: ProcessId, restarts: Schema.Array(Millis), at: Millis, program: Text }),
-  msg("down_written", { process: ProcessId }),
-  msg("due", { at: Millis, program: Text, from: From }),
-  msg("started", { id: Text, process: ProcessId, at: Millis }),
-  msg("checkpointed", { after: ProcessId, process: ProcessId, restarts: Schema.Array(Millis), at: Millis }),
-  msg("adopted", { process: ProcessId, build: Text, restarts: Schema.Array(Millis) }),
-  msg("restart_requested", {
+/** @internal The supervisor's Msgs, each made with `SupervisorMsg.cases.<name>.make`. */
+export const SupervisorMsg = Schema.TaggedUnion({
+  swapped: { process: ProcessId, build: Text },
+  swap_prepared: { change: CodeChange },
+  swap_completed: { load: Text },
+  received: { receipt: Receipt },
+  compacted: { letter: Text, digest: Text },
+  limited: { maxDeliveries: Schema.NullOr(Deliveries) },
+  begin: { process: ProcessId, letter: Text, build: Text, phase: Attempt.fields.phase, at: Millis },
+  admitted: { seq: Count, receipt: Receipt },
+  refused: { seq: Count, reply: Reply },
+  reply_written: { seq: Count },
+  abandoned: { seq: Count },
+  attempt_cleared: { seq: Count },
+  check_threw: { seq: Count, receipt: Receipt, error: Text, reason: ExitReason, from: From },
+  finished: { seq: Count },
+  threw: { seq: Count, error: Text, reason: ExitReason, from: From },
+  interrupted: { process: ProcessId, letter: Text, build: Text, reason: ExitReason, from: From, at: Millis },
+  dead_written: { seq: Count },
+  exit_written: { process: ProcessId, restarts: Schema.Array(Millis), at: Millis, program: Text },
+  down_written: { process: ProcessId },
+  due: { at: Millis, program: Text, from: From },
+  started: { id: Text, process: ProcessId, at: Millis },
+  checkpointed: { after: ProcessId, process: ProcessId, restarts: Schema.Array(Millis), at: Millis },
+  adopted: { process: ProcessId, build: Text, restarts: Schema.Array(Millis) },
+  restart_requested: {
     id: Text,
     build: Text,
     live: Schema.Boolean,
     process: ProcessId,
     program: Text,
     from: From,
-  }),
-  msg("healthy", { at: Millis }),
-]);
+  },
+  healthy: { at: Millis },
+});
 
 /** @internal */
-export type SupervisorMsg = typeof Msg.Type;
+export type SupervisorMsg = typeof SupervisorMsg.Type;
 
 type Ctx = {
   readonly policy: Policy;
@@ -209,7 +212,7 @@ const DEAD = Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }).
 const unchanged = (s: Supervision) => [s, []] as const;
 
 const crashReason = (failure: Failure) =>
-  failure._tag === "saved" ? "saved_letter" : failure._tag === "fresh" ? "step" : "interrupted";
+  Failure.match(failure, { saved: () => "saved_letter", fresh: () => "step", interrupted: () => "interrupted" });
 
 /** The successor's start request, after the process that ended. */
 const again = (s: Supervision, id: string, after: string, reason: string, code: { program: string; hash: string }) =>
@@ -266,7 +269,7 @@ const failed = (
     return [observe(s, failure, seen, exiting(failure, reason, from)), []];
   }
 
-  const old = s.receipts.find((r) => r.letter === failure.letter);
+  const old = Option.getOrUndefined(Arr.findFirst(s.receipts, (r) => r.letter === failure.letter));
 
   if (old === undefined) {
     return unchanged(s);
@@ -291,7 +294,7 @@ const failed = (
   return [
     {
       ...observe(s, failure, seen, journal),
-      receipts: s.receipts.map((r) => (r.letter === failure.letter ? receipt : r)),
+      receipts: Arr.map(s.receipts, (r) => (r.letter === failure.letter ? receipt : r)),
     },
     [],
   ];
@@ -300,8 +303,9 @@ const failed = (
 /** @internal */
 export const supervisor = Machine.make({
   model: Supervision,
-  msg: Msg,
+  msg: SupervisorMsg,
   cmds: [],
+  // SAFETY: `types` only carries the Ctx type; tea never reads this value at run time.
   types: { ctx: {} as Ctx },
   init: (saved, ctx) => [
     saved ??
@@ -347,15 +351,15 @@ export const supervisor = Machine.make({
     swapped: (s, m) =>
       s.journal._tag === "idle" && s.journal.process === m.process ? [{ ...s, build: m.build }, []] : unchanged(s),
     received: (s, m) =>
-      s.receipts.some((r) => r.letter === m.receipt.letter)
+      Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
         ? unchanged(s)
         : [{ ...s, receipts: [...s.receipts, m.receipt] }, []],
     compacted: (s, m) =>
-      s.receipts.some((r) => r.letter === m.letter && r.tries === 0 && r.input !== null)
+      Arr.some(s.receipts, (r) => r.letter === m.letter && r.tries === 0 && r.input !== null)
         ? [
             {
               ...s,
-              receipts: s.receipts.map((r) =>
+              receipts: Arr.map(s.receipts, (r) =>
                 r.letter === m.letter && r.tries === 0 ? { ...r, input: null, digest: m.digest } : r,
               ),
             },
@@ -376,7 +380,7 @@ export const supervisor = Machine.make({
         return unchanged(s);
       }
 
-      const { type: _type, ...fields } = m;
+      const { _tag: _type, ...fields } = m;
       const attempt = { ...fields, seq: s.seq + 1 };
 
       const journal =
@@ -398,7 +402,9 @@ export const supervisor = Machine.make({
         return unchanged(s);
       }
 
-      const receipts = s.receipts.some((r) => r.letter === m.receipt.letter) ? s.receipts : [...s.receipts, m.receipt];
+      const receipts = Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
+        ? s.receipts
+        : [...s.receipts, m.receipt];
 
       return [{ ...s, receipts, journal: Journal.cases.stepping.make({ attempt: j.attempt }) }, []];
     },
@@ -439,7 +445,9 @@ export const supervisor = Machine.make({
         return unchanged(s);
       }
 
-      const receipts = s.receipts.some((r) => r.letter === m.receipt.letter) ? s.receipts : [...s.receipts, m.receipt];
+      const receipts = Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
+        ? s.receipts
+        : [...s.receipts, m.receipt];
 
       return failed({ ...s, receipts }, j.attempt, m.error, m.reason, m.from);
     },
@@ -521,7 +529,11 @@ export const supervisor = Machine.make({
       }
 
       // The brake: N crashes in T. Down waits until the window has room again.
-      const times = m.restarts.filter((at) => at >= until - s.policy.periodMs).toSorted((a, b) => a - b);
+      const times = Arr.sort(
+        Arr.filter(m.restarts, (at) => at >= until - s.policy.periodMs),
+        Order.Number,
+      );
+
       const edge = times[times.length - s.policy.intensity];
       const held = edge === undefined ? until : Math.max(until, edge + s.policy.periodMs + 1);
       const recovery = { process: m.process, reason, crashes, until: held };
@@ -610,7 +622,7 @@ export const supervisor = Machine.make({
       const j = s.journal;
       const settled = j._tag === "idle" || (waitingFor(j) !== null && j._tag !== "writing_down");
 
-      if (!settled || s.requests.some((r) => r.id === m.id)) {
+      if (!settled || Arr.some(s.requests, (r) => r.id === m.id)) {
         return unchanged(s);
       }
 

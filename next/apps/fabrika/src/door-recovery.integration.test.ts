@@ -1,10 +1,7 @@
 // P34, next/. The real door delivers to the real P11 runner and P33 manager on SQLite files.
 // P34 extends delivery's callback with {id,sentAt,seen}; its result is the runner's Sent.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { Machine } from "@demlik/tea/effect";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as A from "@kampus/libfabrika";
 import { Grant } from "@kampus/libfabrika/access/Access";
@@ -27,13 +24,21 @@ import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, Layer, Schema, Scope, Stream } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, Schema, Scope, Stream, Array as Arr, String as Str } from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
+
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  press: {},
+});
 
 const P1 = "process_0000000000e008000000000000";
 
@@ -54,26 +59,29 @@ const URL = "https://fabrika.test/entry/project-socket";
 // removes the folder (0061).
 const disks = Effect.gen(function* () {
   const scope = yield* Effect.scope;
-  const top = yield* Effect.acquireRelease(
-    Effect.sync(() => mkdtempSync(join(tmpdir(), "p34-door-"))),
-    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-  );
+  const top = yield* FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p34-door-" }));
+  const paths = yield* Path.Path;
   let file = 0;
+  // `open` is a plain call (a disk reopens its file outside any Effect), so it runs with the
+  // services this Effect already has.
+  const context = yield* Effect.context();
 
   // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
   // journal in memory. Every byte a law reads stays in the file and survives reopen (ticket 585,
   // decision 0052).
-  const open = (path: string) => Effect.runSync(Scope.provide(scope)(TestDatabase.make(path)));
+  const open = (path: string) => Effect.runSyncWith(context)(Scope.provide(scope)(TestDatabase.make(path)));
 
   const disk = () => {
-    const path = join(top, `${++file}.db`);
+    const path = paths.join(top, `${++file}.db`);
     let db = open(path);
     let inner = nodeSql(db);
+
     const sql: Sql = {
       exec: (q, ...args) => inner.exec(q, ...args),
       transaction: (f) => inner.transaction(f),
       size: () => inner.size(),
     };
+
     return {
       sql,
       reopen: () => {
@@ -85,57 +93,9 @@ const disks = Effect.gen(function* () {
   };
 
   return { top, disk };
-});
+}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 type Disks = Effect.Success<typeof disks>;
-
-const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value) : Buffer.from(value);
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(b.length);
-
-  return Buffer.concat([size, b]);
-};
-
-const key = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const bytes = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  const fingerprint = (value: Uint8Array) =>
-    `SHA256:${createHash("sha256").update(value).digest("base64").replace(/=+$/, "")}`;
-
-  return {
-    raw: bytes.toString("base64url"),
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: fingerprint(bytes),
-    sshFingerprint: fingerprint(blob),
-    sign: (text: string) => {
-      const signed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, signed, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packed.toString("base64")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 const from = () => ({
   by: "SHA256:brain",
@@ -160,13 +120,14 @@ const policy = {
   backoff: { minMs: 100, maxMs: 800, resetAfterMs: 5000 },
 };
 
-const world = ({ disk }: Disks) => {
+/** The founder's window key and another person's key, fresh for one world. */
+const people = Effect.all({ window: SshsigTest.identity, other: SshsigTest.identity }, { concurrency: "unbounded" });
+
+const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>) => {
   const project = disk(),
     process = disk();
 
   const partFiles = new Map<string, ReturnType<Disks["disk"]>>();
-  const window = key();
-  const other = key();
 
   const founder = {
     name: "Recovery test",
@@ -199,7 +160,7 @@ const world = ({ disk }: Disks) => {
   type Model = typeof Model.Type;
 
   // Wire inputs use _tag, tea uses type. The program's Msg keeps tea's own tag.
-  const TeaMsg = Schema.Struct({ type: Schema.Literal("press"), poison: Schema.Boolean });
+  const TeaMsg = Schema.TaggedStruct("press", { poison: Schema.Boolean });
 
   const tea = Machine.make({
     model: Model,
@@ -362,8 +323,8 @@ const world = ({ disk }: Disks) => {
     exec: (query, ...args) => {
       if (
         controls.cutRecorded &&
-        query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
+        Str.startsWith("UPDATE gateway_bindings")(query) &&
+        Arr.some(args, (arg) => Predicate.isString(arg) && Str.includes('"_tag":"recorded"')(arg))
       ) {
         controls.cutRecorded = false;
         controls.cuts++;
@@ -372,8 +333,8 @@ const world = ({ disk }: Disks) => {
 
       if (
         controls.cutRetryable &&
-        query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
+        Str.startsWith("UPDATE gateway_bindings")(query) &&
+        Arr.some(args, (arg) => Predicate.isString(arg) && Str.includes('"_tag":"retryable"')(arg))
       ) {
         controls.cutRetryable = false;
         controls.retryableCuts++;
@@ -417,7 +378,7 @@ const world = ({ disk }: Disks) => {
       return A.ProgramRunner.use((r) =>
         r.msg({
           id: meta?.id ?? envelope.id,
-          envelope: { ...envelope, input: { type: "press", poison: envelope.input.poison } },
+          envelope: { ...envelope, input: { ...Tag.cases.press.make({}), poison: envelope.input.poison } },
           sentAt: meta?.sentAt ?? from().sentAt,
           seen: meta?.seen ?? 0,
           span,
@@ -438,11 +399,12 @@ const world = ({ disk }: Disks) => {
       ),
     );
 
-  const online = Effect.fnUntraced(function* (signer = window) {
+  const online = Effect.fnUntraced(function* (signer: SshsigTest.Identity = window) {
     const d = yield* Gateway;
     const client = yield* d.connect();
     const nonce = yield* d.challenge(client);
     const tab = "recovery-tab";
+    const signed = yield* signer.proof(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
 
     const result = yield* d.initialize(
       client,
@@ -456,7 +418,7 @@ const world = ({ disk }: Disks) => {
         platform: "browser",
         os: "ios",
         sentAt: from().sentAt,
-        signed: signer.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
+        signed,
       },
       { url: URL, tab, name: signer.fingerprint },
     );
@@ -530,7 +492,7 @@ describe("P34 door recovery", () => {
               Effect.runPromise(
                 Effect.scoped(
                   Effect.gen(function* () {
-                    const w = world(yield* disks);
+                    const w = world(yield* disks, yield* people);
                     const queued = request(false, letter);
 
                     const binding = () => {
@@ -586,7 +548,7 @@ describe("P34 door recovery", () => {
                             id: Schema.decodeSync(A.Id.InputId)(old),
                             by: Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }),
                             arrivedAt: 0,
-                            input: { type: "press", poison: false },
+                            input: { ...Tag.cases.press.make({}), poison: false },
                           },
                           sentAt: queued.sentAt,
                           seen: queued.seen,
@@ -703,7 +665,7 @@ describe("P34 door recovery", () => {
         Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const w = world(yield* disks);
+              const w = world(yield* disks, yield* people);
               const queued = request(false, letter);
               yield* w.boot;
 
@@ -797,7 +759,7 @@ describe("P34 door recovery", () => {
         Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const w = world(yield* disks);
+              const w = world(yield* disks, yield* people);
               yield* w.boot;
               w.controls.cutRetryable = true;
 
@@ -869,7 +831,7 @@ describe("P34 door recovery", () => {
 
   it.effect("p80 plant, void delivery hides placing: forward the real runner result and stable outbox ID", () =>
     Effect.gen(function* () {
-      const w = world(yield* disks);
+      const w = world(yield* disks, yield* people);
       yield* w.boot;
       yield* Effect.gen(function* () {
         const client = yield* w.online();
@@ -891,7 +853,7 @@ describe("P34 door recovery", () => {
         ["poison", generated],
         (value) =>
           Effect.gen(function* () {
-            const w = world(yield* disks);
+            const w = world(yield* disks, yield* people);
             yield* w.boot;
 
             for (let n = 0; n < 3; n++) {
@@ -940,7 +902,7 @@ describe("P34 door recovery", () => {
               });
 
               const text = grantText(grant);
-              expect(yield* d.grant({ text, armored: w.window.sign(text) })).toMatchObject({
+              expect(yield* d.grant({ text, armored: yield* w.window.proof(text) })).toMatchObject({
                 _tag: "applied",
               });
               const other = yield* w.online(w.other);
@@ -964,7 +926,7 @@ describe("P34 door recovery", () => {
         ["poison", generated],
         (value) =>
           Effect.gen(function* () {
-            const w = world(yield* disks);
+            const w = world(yield* disks, yield* people);
             yield* w.boot;
             yield* Effect.gen(function* () {
               const client = yield* w.online();

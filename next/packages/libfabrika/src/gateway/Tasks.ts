@@ -2,6 +2,7 @@
  * Task methods over an authenticated connection, called inside the shared write turn.
  */
 import { Effect, Result, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Task, Result as TaskResult, type Recorded } from "../tasks/Task.ts";
@@ -57,7 +58,7 @@ const refusal = (attached: typeof Attached.cases.online.Type): string | null =>
  */
 export const waitOn = (
   attached: typeof Attached.cases.online.Type,
-  input: unknown,
+  input: Schema.Json | undefined,
 ): Result.Result<{ readonly stream: string; readonly after: Rev }, string> => {
   const refused = refusal(attached);
 
@@ -84,7 +85,12 @@ const ok = (result: Schema.Json, wake: string | null = null): Routed => ({
  * @category routing
  */
 export const route = Effect.fn("gateway.tasks")(
-  function* (tasks: Tasks["Service"], attached: typeof Attached.cases.online.Type, method: string, input: unknown) {
+  function* (
+    tasks: Tasks["Service"],
+    attached: typeof Attached.cases.online.Type,
+    method: string,
+    input: Schema.Json | undefined,
+  ) {
     const { identity, has, build, client } = attached;
     const refused = refusal(attached);
 
@@ -100,7 +106,7 @@ export const route = Effect.fn("gateway.tasks")(
       // Pointers only: the command stays behind `tasks.take`, the one door work reaches a machine by.
       const listed = yield* tasks.forTarget(identity.key);
 
-      const pointers = listed.tasks.flatMap(({ state }) =>
+      const pointers = Arr.flatMap(listed.tasks, ({ state }) =>
         state._tag === "absent" ? [] : [{ id: state.request.id, process: state.request.process }],
       );
 
@@ -151,7 +157,7 @@ export const route = Effect.fn("gateway.tasks")(
         return no("not_allowed");
       }
 
-      if (!task.state.request.needs.every((need) => has.includes(need))) {
+      if (!Arr.every(task.state.request.needs, (need) => has.includes(need))) {
         return no("lacks_capability");
       }
 
@@ -198,7 +204,7 @@ export const route = Effect.fn("gateway.tasks")(
         return no("not_allowed");
       }
 
-      if (!task.state.request.needs.every((need) => has.includes(need))) {
+      if (!Arr.every(task.state.request.needs, (need) => has.includes(need))) {
         return no("lacks_capability");
       }
 

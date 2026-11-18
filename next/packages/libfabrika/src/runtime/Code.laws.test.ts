@@ -8,10 +8,10 @@
 //
 // Test contract (the plan names the shapes; their export names are fixed here, and the builder
 // follows them): `Code.ts` exports `From`, `CodeEvent` (`code.loaded`, `code.failed`), `Selected`
-// (the machine's Model) and `code`, the one machine. Its Ctx is `{}`. Msgs, each with tea's `type`:
+// (the machine's Model) and `code`, the one machine. Its Ctx is `{}`. Msgs, each with tea's `_tag`:
 //   checked {id, program, hash, from}   a candidate passed its checks; nothing is selected yet
 //   loaded {id, program, hash}          a `code.loaded` entry as the ledger holds it; `id` is the install's
-// Cmds, each with tea's `type`:
+// Cmds, each with tea's `_tag`:
 //   append {id, event}                  `event` is one `code.loaded`; `id` names the install it answers
 //   swap {load, program, hash}          `load` is the install's id
 //
@@ -21,11 +21,22 @@
 // or a `loaded` for an entry the ledger holds. The oracle is the walk's own selection, never the reducer.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import type { ProgramName } from "../packs/ProgramName.ts";
 import * as Code from "./Code.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  checked: {},
+  loaded: {},
+  swap: {},
+});
 
 const SEED = 119120;
 
@@ -35,14 +46,14 @@ type Model = typeof Code.Selected.Type;
 
 /** Every Msg names the install it answers, its program and its hash; `checked` adds `from`. */
 type Msg = {
-  readonly type: "checked" | "loaded";
+  readonly _tag: "checked" | "loaded";
   readonly id: string;
   readonly program: string;
   readonly hash: string;
   readonly from?: From;
 };
 
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
+type Cmd = { readonly _tag: string; readonly [key: string]: unknown };
 
 // 0135: the restated shapes below are pinned to the module's own types.
 type Loaded = {
@@ -74,8 +85,10 @@ expectTypeOf<(typeof Code.CodeEvent.cases)["code.failed"]["Type"]["reason"]>().t
 expectTypeOf<(typeof Code.CodeEvent.Type)["_tag"]>().toEqualTypeOf<"code.loaded" | "code.failed">();
 
 const step = (model: Model, msg: Msg): readonly [Model, ReadonlyArray<Cmd>] => {
+  // SAFETY: each Msg the walk sends is one of the code cell's own `checked` or `loaded` messages.
   const [next, cmds] = applyCell(Code.code, model, msg as never);
 
+  // SAFETY: every Cmd the code cell returns is a record with a string `type`, which is all Cmd here says.
   return [next, cmds as ReadonlyArray<Cmd>];
 };
 
@@ -134,7 +147,10 @@ const moves = (w: World, programs: ReadonlyArray<string>, cell: Cell, n: number)
   const fresh = `install_${n}`;
 
   const options: Array<Move> = [
-    { name: "checked_new", msg: { type: "checked", id: fresh, program, hash: cell.hash, from: cell.from } },
+    {
+      name: "checked_new",
+      msg: { ...Tag.cases.checked.make({}), id: fresh, program, hash: cell.hash, from: cell.from },
+    },
   ];
 
   const earlier = w.seen.get(program) ?? [];
@@ -142,7 +158,7 @@ const moves = (w: World, programs: ReadonlyArray<string>, cell: Cell, n: number)
   if (earlier.length > 0) {
     options.push({
       name: "checked_earlier",
-      msg: { type: "checked", id: fresh, program, hash: nth(earlier, cell.pick), from: cell.from },
+      msg: { ...Tag.cases.checked.make({}), id: fresh, program, hash: nth(earlier, cell.pick), from: cell.from },
     });
   }
 
@@ -152,21 +168,21 @@ const moves = (w: World, programs: ReadonlyArray<string>, cell: Cell, n: number)
     const [p, s] = nth(chosen, cell.pick);
     options.push({
       name: "checked_selected",
-      msg: { type: "checked", id: fresh, program: p, hash: s.hash, from: "watch" },
+      msg: { ...Tag.cases.checked.make({}), id: fresh, program: p, hash: s.hash, from: "watch" },
     });
   }
 
   if (w.ids.length > 0) {
     // A repeated install: the same id, program and hash the watcher sent before.
     const again = nth(w.ids, cell.pick);
-    options.push({ name: "checked_repeat", msg: { type: "checked", ...again, from: cell.from } });
+    options.push({ name: "checked_repeat", msg: { ...Tag.cases.checked.make({}), ...again, from: cell.from } });
   }
 
   if (w.ledger.length > 0) {
     const entry = nth(w.ledger, cell.pick);
     options.push(
-      { name: "loaded", msg: { type: "loaded", ...entry } },
-      { name: "loaded", msg: { type: "loaded", ...entry } },
+      { name: "loaded", msg: { ...Tag.cases.loaded.make({}), ...entry } },
+      { name: "loaded", msg: { ...Tag.cases.loaded.make({}), ...entry } },
     );
   }
 
@@ -206,18 +222,18 @@ const account = (move: Move, cmds: ReadonlyArray<Cmd>, w: World): void => {
   const { id, program, hash } = move.msg;
   w.seen.set(program, [...new Set([...(w.seen.get(program) ?? []), hash])]);
 
-  if (move.msg.type === "loaded") {
+  if (move.msg._tag === "loaded") {
     w.selected.set(program, { hash, load: id });
 
     return;
   }
 
-  if (!w.ids.some((i) => i.id === id)) {
+  if (!Arr.some(w.ids, (i) => i.id === id)) {
     w.ids.push({ id, program, hash });
   }
 
   for (const cmd of cmds) {
-    if (cmd.type === "append" && !w.ledger.some((e) => e.id === id && e.hash === hash)) {
+    if (cmd._tag === "append" && !Arr.some(w.ledger, (e) => e.id === id && e.hash === hash)) {
       w.ledger.push({ id, program, hash });
     }
   }
@@ -235,7 +251,7 @@ describe("P15 slice 1: the brain's code per program", () => {
           const { id, program, hash } = move.msg;
           const current = w.selected.get(program);
 
-          if (move.msg.type === "checked") {
+          if (move.msg._tag === "checked") {
             // A candidate that passed its checks selects nothing.
             expect(after, `${move.name} changed the selection`).toEqual(before);
 
@@ -247,7 +263,7 @@ describe("P15 slice 1: the brain's code per program", () => {
               return;
             }
 
-            expect(cmds.map((c) => c.type)).toEqual(["append"]);
+            expect(Arr.map(cmds, (c) => c._tag)).toEqual(["append"]);
             const [append] = cmds;
             const event = Schema.decodeUnknownSync(Code.CodeEvent)(append?.event);
             expect(event).toEqual(
@@ -277,7 +293,7 @@ describe("P15 slice 1: the brain's code per program", () => {
 
           // loaded: the program selects the entry's hash under its load, and that one swap is pushed.
           expect(after).toEqual({ ...before, [program]: { hash, load: id } });
-          expect(cmds).toEqual([{ type: "swap", load: id, program, hash }]);
+          expect(cmds).toEqual([{ ...Tag.cases.swap.make({}), load: id, program, hash }]);
           seen.add("loaded");
         });
 
@@ -286,7 +302,7 @@ describe("P15 slice 1: the brain's code per program", () => {
         }
 
         // The machine's model is the walk's selection, whole.
-        expect(w.model).toEqual(Object.fromEntries(w.selected));
+        expect(w.model).toEqual(Rec.fromEntries(w.selected));
       }),
       { seed: SEED, numRuns: RUNS },
     );

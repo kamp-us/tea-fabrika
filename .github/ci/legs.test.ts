@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { beforeAll, expect, it } from "@effect/vitest";
+import { Config, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
-import { beforeAll, expect, it } from "vitest";
 import { readers } from "./changes.mjs";
 import {
   budgetOf,
@@ -22,6 +23,15 @@ import {
 } from "./legs.ts";
 import { nextFiles, visualFiles } from "./shard-rows.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // Today's CI, next/. Covers legs.ts, which sizes the next job's matrix on the merge line: a pull
 // request, a merge queue group and a push to main (0534). Paths are the real next/ files Vitest
@@ -48,7 +58,8 @@ const pr: Run = { event: "pull_request", scope: "all", base, visual: true };
 const plainPr: Run = { ...pr, visual: false };
 
 // A merge line run that tests all of next/ from a base commit, the runs legs.ts sizes (0534), with
-// the visual flag either way: only a pull request's counts (0536).
+// the visual flag either way: only a pull request's counts, and a push to main runs the visual files
+// it reaches without one (0536).
 const line = fc
   .tuple(fc.constantFrom("pull_request", "merge_group", "push"), fc.stringMatching(/^[a-f0-9]{40}$/), fc.boolean())
   .filter(([, sha]) => !/^0+$/.test(sha))
@@ -58,9 +69,11 @@ let vitest: string[] = [];
 
 let e2e: string[] = [];
 
-beforeAll(async () => {
-  [vitest, e2e] = await Promise.all([nextFiles(ROOT), visualFiles(ROOT)]);
-});
+beforeAll(() =>
+  Effect.gen(function* () {
+    [vitest, e2e] = yield* promised(() => Promise.all([nextFiles(ROOT), visualFiles(ROOT)]));
+  }),
+);
 
 /** Some of the real files, with a scratch table that gives each a row or none. */
 const picked = () =>
@@ -87,10 +100,10 @@ const picked = () =>
 
 /** A file's seconds as legs.ts counts them: its row, else the table's median. */
 const total = (files: readonly string[], table: Readonly<Record<string, number>>) => {
-  const rows = Object.values(table).toSorted((a, b) => a - b);
+  const rows = Rec.values(table).toSorted((a, b) => a - b);
   const unmeasured = rows[Math.floor((rows.length - 1) / 2)] ?? 1;
 
-  return files.reduce((sum, path) => sum + (Object.hasOwn(table, path) ? table[path]! : unmeasured), 0);
+  return files.reduce((sum, path) => sum + (Rec.has(table, path) ? table[path]! : unmeasured), 0);
 };
 
 it("property: no selection gives no legs, so next skips", () => {
@@ -124,7 +137,7 @@ it("property: a selection whose seconds fit the budget gives one leg", () => {
       const most = (kind === "vitest" ? limit.vitest : limit.e2e) / 6;
       const files = Array.from(new Set(Array.from({ length: count }, (_, i) => pool[(at + i * 7) % pool.length]!)));
 
-      const table = Object.fromEntries(
+      const table = Rec.fromEntries(
         files.flatMap((path, i) => (shares[i] === undefined ? [] : [[path, shares[i] * most]])),
       );
 
@@ -160,10 +173,12 @@ it("scenario: every next/ file selected, with today's table, gives exactly today
 // 0534 narrowed this law: the merge queue and a push to main left it. They size their legs as a pull
 // request does, so none of the three runs the whole suite; the schedule does. Ticket 997 narrowed it
 // again: a run of the reader tests alone left it, and is sized (the law below).
-it("property: a run of all of next/ with no base commit, or an event off the merge line, gives the full vitest legs, and visual legs only where asked", () => {
-  // Plant: drop the base check (red on no base). 0536, plants, each run once on legs.ts and
-  // restored: `visual` always true (red: the merge queue got e2e legs); `visual` without the pull
-  // request check (red: a push with the flag got them).
+it("property: a run of all of next/ with no base commit, or an event off the merge line, gives the full vitest legs, and visual legs only on a push to main or a pull request that asked", () => {
+  // Plant: drop the base check (red on no base). 0536 and the owner's ruling of 2026-11-18, plants,
+  // each run once on legs.ts and restored: `visual` always true (red: the merge queue got e2e legs);
+  // `visual` without the pull request check (red: a queue group with the flag got them); PR 1581's
+  // `LINE.has(run.event) || run.visual` back (red: a pull request without the label and the merge
+  // queue got them); the push dropped (red: a first push to main lost them).
   fc.assert(
     fc.property(
       picked(),
@@ -184,7 +199,7 @@ it("property: a run of all of next/ with no base commit, or an event off the mer
           .map(([event, scope, visual]): Run => ({ event, scope, base, visual })),
       ),
       ({ selected, table }, run) => {
-        const asked = ["pull_request", "merge_group", "push"].includes(run.event) || run.visual;
+        const asked = run.event === "push" || (run.event === "pull_request" && run.visual);
         expect(size(run, selected, full, limit, table)).toEqual({ vitest: full.vitest, e2e: asked ? full.e2e : 0 });
       },
     ),
@@ -206,18 +221,19 @@ it("property: a run of all of next/ with no base commit, or an event off the mer
   );
 });
 
-it("property: a merge queue group and a push to main size their legs as a pull request without the visual label does", () => {
+it("property: a merge queue group sizes its legs as a pull request without the visual label does, and a push to main as one with it", () => {
   // Plant: the old `run.event === "pull_request"` in `sizes` (red on merge_group and push). 0536,
-  // plant, run once on legs.ts and restored: `visual` without the pull request check (red: a queue
-  // group with the flag got e2e legs).
+  // plants, each run once on legs.ts and restored: `visual` without the pull request check (red: a
+  // queue group with the flag got e2e legs); the push dropped (red: a push lost its e2e legs).
   fc.assert(
     fc.property(
       picked(),
       line.filter((run) => run.event !== "pull_request"),
       ({ selected, table }, run) => {
-        expect(size(run, selected, full, limit, table)).toEqual(size(plainPr, selected, full, limit, table));
+        const like = run.event === "push" ? pr : plainPr;
+        expect(size(run, selected, full, limit, table)).toEqual(size(like, selected, full, limit, table));
         expect(outputs(run, size(run, selected, full, limit, table), selected)).toEqual(
-          outputs({ ...plainPr, base: run.base }, size(plainPr, selected, full, limit, table), selected),
+          outputs({ ...like, base: run.base }, size(like, selected, full, limit, table), selected),
         );
       },
     ),
@@ -234,18 +250,51 @@ it("property: a merge queue group and a push to main size their legs as a pull r
   );
 });
 
-it("property: a sized pull request selects related visual files without requiring a label", () => {
-  // 0536. Plant, run once on legs.ts and restored: size e2e as if every pull request asked (red).
+// A sized merge queue group, with the visual flag either way: no label reaches the queue.
+const group = line.filter((run) => run.event === "merge_group");
+
+it("property: a sized pull request without the visual label, and every merge queue group, start no end-to-end leg, whatever they selected", () => {
+  // 0536 and the owner's ruling of 2026-11-18: a visual law needs a browser or Electron, so it stays
+  // off the pull request and the merge queue unless a pull request asks. Plants, each run once on
+  // legs.ts and restored: size e2e as if every pull request asked (red); PR 1581's
+  // `LINE.has(run.event) || run.visual` back (red: both got e2e legs).
   fc.assert(
-    fc.property(picked(), ({ selected, table }) => {
-      const legs = size(plainPr, selected, full, limit, table);
-      expect(legs.e2e).toBe(size(pr, selected, full, limit, table).e2e);
+    fc.property(picked(), fc.oneof(fc.constant(plainPr), group), ({ selected, table }, run) => {
+      const legs = size(run, selected, full, limit, table);
+      expect(legs.e2e).toBe(0);
       expect(legs.vitest).toBe(size(pr, selected, full, limit, table).vitest);
-      expect(shards(legs).filter((leg) => leg.startsWith("e2e-")).length).toBe(legs.e2e);
+      expect(shards(legs).some((leg) => leg.startsWith("e2e-"))).toBe(false);
     }),
     options,
   );
 });
+
+it.prop(
+  "property: a sized pull request with the visual label, and a push to main, start the end-to-end legs their visual files need",
+  {
+    event: Schema.Literals(["pull_request", "push"]),
+    flag: Schema.Boolean,
+    rows: Schema.Array(
+      Schema.Tuple([
+        Schema.String.check(Schema.isPattern(/^next\/[a-z]{1,8}\.visual\.test\.ts$/)),
+        Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 600 })),
+      ]),
+    ).check(Schema.isMaxLength(12)),
+  },
+  ({ event, flag, rows }) => {
+    // The label still asks, and a push to main keeps the visual files its change reaches. No label
+    // reaches a push, so its flag is either way. Plants, each run once on legs.ts and restored:
+    // `visual` false on every run (red: both lost their e2e legs); the push dropped (red: a push
+    // lost them).
+    const run: Run = { event, scope: "all", base, visual: event === "pull_request" || flag };
+    const files = rows.map(([path]) => path);
+    const table = Rec.fromEntries(rows);
+    expect(size(run, { vitest: [], e2e: files }, full, limit, table).e2e).toBe(
+      fewest(files, full.e2e, limit.e2e, table),
+    );
+  },
+  { arbitrary: { runs: 100 } },
+);
 
 it("property: every selected file lands on exactly one leg, on any count up to the full one", () => {
   // `split` is the cut `Shards` keeps on each leg (vitest.shards.test.ts, E6). Plant: keep a file on
@@ -296,7 +345,7 @@ const budgeted = () =>
           )
           .map(([at, shares]) => {
             const files = at.map((i) => vitest[i]!);
-            const table = Object.fromEntries(files.map((path, i) => [path, (shares[i]! / 100) * budget.limit]));
+            const table = Rec.fromEntries(files.map((path, i) => [path, (shares[i]! / 100) * budget.limit]));
 
             return { selected: { vitest: files, e2e: [] }, table };
           }),
@@ -411,27 +460,33 @@ it("property: the size step's BUDGET is a positive number of seconds, and anythi
   );
 });
 
-it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queue with no base commit, with no list", () => {
-  // scenario: no BASE, so nothing to diff with; the list step would need git and an install.
-  const output = join(mkdtempSync(join(tmpdir(), "legs-test-")), "out");
+// 0536: the merge queue never starts the visual legs; a push to main keeps them.
+it.each([
+  ["the merge queue", "merge_group", 'shards=["1","2","3","4","5"]\nvitest=5\ne2e=0\nnext=true\n'],
+  ["a push to main", "push", 'shards=["e2e-1","e2e-2","1","2","3","4","5"]\nvitest=5\ne2e=2\nnext=true\n'],
+])(
+  "scenario: the main prints the full matrix to GITHUB_OUTPUT in %s with no base commit, with no list",
+  (_, event, printed) => {
+    // scenario: no BASE, so nothing to diff with; the list step would need git and an install.
+    // Plants, each run once on legs.ts and restored: PR 1581's `LINE.has(run.event) || run.visual`
+    // back (red: the queue printed e2e legs); the push dropped (red: the push printed none).
+    const output = join(mkdtempSync(join(tmpdir(), "legs-test-")), "out");
 
-  const done = spawnSync(process.execPath, [fileURLToPath(new URL("./legs.ts", import.meta.url))], {
-    encoding: "utf8",
-    env: {
-      PATH: process.env["PATH"],
-      EVENT: "merge_group",
-      FILTER: "next/",
-      BUDGET: String(budget),
-      GITHUB_OUTPUT: output,
-    },
-  });
+    const done = spawnSync(process.execPath, [fileURLToPath(new URL("./legs.ts", import.meta.url))], {
+      encoding: "utf8",
+      env: {
+        PATH: Effect.runSync(Config.String("PATH")),
+        EVENT: event,
+        FILTER: "next/",
+        BUDGET: String(budget),
+        GITHUB_OUTPUT: output,
+      },
+    });
 
-  expect(done.status).toBe(0);
-  // 0536: the merge queue never starts the visual legs.
-  expect(readFileSync(output, "utf8")).toBe(
-    'shards=["e2e-1","e2e-2","1","2","3","4","5"]\nvitest=5\ne2e=2\nnext=true\n',
-  );
-});
+    expect(done.status).toBe(0);
+    expect(readFileSync(output, "utf8")).toBe(printed);
+  },
+);
 
 // PR 1235: the reader tests (changes.mjs's `readers`) read source as text, so `--changed` misses
 // them. A sized run adds them to the vitest files, each once, and every vitest leg runs that list.
@@ -561,4 +616,189 @@ it("property: global rerun selection never narrows owed visual files a second ti
     }),
     options,
   );
+});
+
+// T1076 O1 and O2. The size step's main, run as CI runs it, over a stand-in for `vitest list`: the
+// stand-in follows Vitest's own filter (a positional argument keeps the files whose path holds it,
+// `--changed` keeps the files the change reaches), so a positional `next/` left in the call drops
+// Kalfa's ordinary laws, which `--project next` holds beside next/'s. The real Vitest filter is held
+// in related.test.ts, on the real configured discovery. Each run starts a process, so the count is
+// small. Plants, each run once on legs.ts and restored: put the positional `next/` back in `list`
+// (red, the Kalfa laws are missing from the sized set); read any filter but the exact readers as the
+// readers (red, a changed run lists only the readers).
+const FULL = "next/ kalfa/";
+
+const READER_FILTER = readers.join(" ");
+
+/** A git repository the child reads through GIT_DIR: `base` and its child `head`, which adds one next/ file. */
+const repository = () => {
+  const dir = mkdtempSync(join(tmpdir(), "legs-repo-"));
+
+  const git = (args: readonly string[]) => {
+    const done = spawnSync(
+      "git",
+      ["-c", "user.name=ci", "-c", "user.email=ci@example.com", "-c", "commit.gpgsign=false", ...args],
+      { cwd: dir, encoding: "utf8", env: { PATH: process.env["PATH"], HOME: dir, GIT_CONFIG_NOSYSTEM: "1" } },
+    );
+
+    expect(done.status, done.stderr).toBe(0);
+
+    return done.stdout.trim();
+  };
+
+  git(["init", "-q", "-b", "main"]);
+  writeFileSync(join(dir, "seed.txt"), "seed\n");
+  git(["add", "."]);
+  git(["commit", "-q", "-m", "base"]);
+
+  const base = git(["rev-parse", "HEAD"]);
+
+  mkdirSync(join(dir, "next/apps/a/src"), { recursive: true });
+  writeFileSync(join(dir, "next/apps/a/src/changed.ts"), "export {};\n");
+  git(["add", "."]);
+  git(["commit", "-q", "-m", "change"]);
+
+  return { gitDir: join(dir, ".git"), base, home: dir };
+};
+
+const STAND_IN = (node: string) => `#!${node}
+const { appendFileSync, readFileSync, writeFileSync } = require("node:fs");
+const model = JSON.parse(readFileSync(process.env.STAND_IN_MODEL, "utf8"));
+const args = process.argv.slice(2);
+const at = args.indexOf("--project");
+const project = args[at + 1];
+const out = args.find((arg) => arg.startsWith("--json=")).slice("--json=".length);
+const changed = args.some((arg) => arg.startsWith("--changed="));
+const filters = args
+  .slice(args.indexOf("list") + 1)
+  .filter((arg, i, all) => !arg.startsWith("--") && all[i - 1] !== "--project");
+const files = (model.universe[project] ?? []).filter(
+  (file) => (!changed || model.reach.includes(file)) && (filters.length === 0 || filters.some((filter) => file.includes(filter))),
+);
+writeFileSync(out, JSON.stringify(files.map((file) => ({ file: model.root + "/" + file }))));
+`;
+
+const git = repository();
+
+const bin = join(git.home, "bin");
+
+mkdirSync(bin);
+
+writeFileSync(join(bin, "pnpm"), STAND_IN(process.execPath));
+
+chmodSync(join(bin, "pnpm"), 0o755);
+
+const Stem = Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/));
+
+/** Kalfa's ordinary laws, next/'s, and the reader tests, as one `next` project holds them. */
+const OrdinaryFiles = Schema.Struct({
+  kalfa: Schema.UniqueArray(Stem).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+  other: Schema.UniqueArray(Stem).check(Schema.isMaxLength(4)),
+  readers: Schema.UniqueArray(Stem).check(Schema.isMinLength(1), Schema.isMaxLength(3)),
+});
+
+type Ordinary = typeof OrdinaryFiles.Type;
+
+// What the filter may be: the two roots, the exact readers, the legacy one root, and anything else.
+const RunFilter = Schema.Union([
+  Schema.Literals([
+    FULL,
+    READER_FILTER,
+    "next/",
+    "",
+    "next",
+    "kalfa/",
+    "kalfa/ next/",
+    "next/ ",
+    readers[0]!,
+    readers.toReversed().join(" "),
+  ]),
+  Schema.Undefined,
+  Schema.String.check(Schema.isMaxLength(12)),
+]);
+
+/** One run of the size step's main over a stand-in project, and what it must list. */
+const expectOrdinary = (files: Ordinary, mask: readonly boolean[], filter: string | undefined, readable: boolean) => {
+  const universe = [
+    ...files.kalfa.map((w) => `kalfa/config/src/${w}.test.ts`),
+    ...files.other.map((w) => `next/packages/libfabrika/src/${w}.test.ts`),
+    ...files.readers.map((w) => `next/apps/fabrika/src/exam/${w}.test.ts`),
+  ];
+
+  // A Kalfa law is always among the changed files' reach, so a changed run must list it.
+  const reach = universe.filter((_, i) => i === 0 || mask[i % mask.length]);
+
+  const dir = mkdtempSync(join(tmpdir(), "legs-run-"));
+  const model = join(dir, "model.json");
+  const output = join(dir, "out");
+
+  writeFileSync(model, JSON.stringify({ root: ROOT.replace(/\/$/, ""), universe: { next: universe }, reach }));
+
+  const done = spawnSync(process.execPath, [fileURLToPath(new URL("./legs.ts", import.meta.url))], {
+    encoding: "utf8",
+    env: {
+      PATH: `${bin}:${process.env["PATH"]}`,
+      HOME: git.home,
+      GIT_DIR: git.gitDir,
+      GIT_CONFIG_NOSYSTEM: "1",
+      EVENT: "merge_group",
+      ...(filter === undefined ? {} : { FILTER: filter }),
+      // An unreadable base, a valid commit name Git does not have, is the run of everything.
+      BASE: readable ? git.base : "b".repeat(40),
+      BUDGET: String(budget),
+      GITHUB_OUTPUT: output,
+      STAND_IN_MODEL: model,
+    },
+  });
+
+  expect(done.status, done.stderr).toBe(0);
+
+  const printed = readFileSync(output, "utf8")
+    .split("\n")
+    .find((line) => line.startsWith("files="))
+    ?.slice("files=".length);
+
+  const readerFiles = universe.filter((path) => readers.some((reader) => path.includes(reader)));
+
+  // The readers alone narrow, and only when the filter is exactly theirs and the change is readable;
+  // anything else is every ordinary file, or the changed ones.
+  const picked = !readable ? universe : filter === READER_FILTER ? [] : reach;
+
+  const expected = [...new Set([...picked, ...readerFiles])].toSorted();
+
+  const listed = (printed ?? "").split(" ").filter(Boolean);
+
+  expect(new Set(listed).size).toBe(listed.length);
+  expect(listed.toSorted()).toEqual(expected);
+};
+
+// Each run starts a process, about a second, so the property is a dozen runs: a hundred would pass the
+// 60 s test limit. The routes it may miss are each pinned below as a scenario.
+it.prop(
+  "property: the size step lists the whole ordinary project, Kalfa's laws included, full or changed, and narrows to the readers only for the exact reader filter",
+  {
+    files: OrdinaryFiles,
+    mask: Schema.Array(Schema.Boolean).check(Schema.isMinLength(16), Schema.isMaxLength(16)),
+    filter: RunFilter,
+    readable: Schema.Boolean,
+  },
+  ({ files, mask, filter, readable }) => expectOrdinary(files, mask, filter, readable),
+  { arbitrary: { seed: 119120, runs: 12, size: 100 } },
+);
+
+const pinned: Ordinary = {
+  kalfa: ["a"],
+  other: [],
+  readers: ["b"],
+};
+
+it.each([
+  // pinned: the one-root spelling a run printed before Kalfa joined the `next` project, which is all.
+  ["the legacy one root", "next/"],
+  ["the two roots", FULL],
+  ["the exact reader filter", READER_FILTER],
+  ["no filter at all", undefined],
+])("scenario: the size step on a readable and an unreadable change, with %s", (_name, filter) => {
+  expectOrdinary(pinned, [true], filter, true);
+  expectOrdinary(pinned, [true], filter, false);
 });

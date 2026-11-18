@@ -9,6 +9,7 @@ import {
   Effect,
   Exit,
   FileSystem,
+  Match,
   Option,
   Path,
   Ref,
@@ -1055,14 +1056,12 @@ const targetFacts = (request: Cases.Request, record: TestRecord): Array<typeof T
     const assertion = assertions.find((fact) => fact.target === title);
     const final = assertion?.final === true && assertion.status === "failed" && !assertion.timeout;
 
-    const field =
-      request.case === "l11-span-name"
-        ? "name"
-        : request.case === "l11-span-code"
-          ? "code"
-          : request.case === "l11-span-errcode"
-            ? "errcode"
-            : null;
+    const field = Match.value(request.case).pipe(
+      Match.when("l11-span-name", () => "name" as const),
+      Match.when("l11-span-code", () => "code" as const),
+      Match.when("l11-span-errcode", () => "errcode" as const),
+      Match.orElse(() => null),
+    );
 
     const path = Cases.paths.find((path) => title === Cases.sibling(path, "span"));
 
@@ -1722,8 +1721,11 @@ const decodedJobs = Effect.fnUntraced(function* (env: Environment) {
   const jobs = yield* actionJobs(env);
 
   return jobs.map((job): ActionJob => {
-    const compare =
-      job.name === "l11-compare-cached" ? "cached" : job.name === "l11-compare-uncached" ? "uncached" : null;
+    const compare = Match.value(job.name).pipe(
+      Match.when("l11-compare-cached", () => "cached" as const),
+      Match.when("l11-compare-uncached", () => "uncached" as const),
+      Match.orElse(() => null),
+    );
 
     const key = compare !== null ? "compare" : (Job.literals.find((key) => job.name === `l11-${key}`) ?? null);
     const expected = `https://github.com/kamp-us/tea-fabrika/actions/runs/${env.GITHUB_RUN_ID}/job/${job.id}`;

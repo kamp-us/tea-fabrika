@@ -3,6 +3,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
+import * as Arr from "effect/Array";
 import { Writer } from "../access/SessionManager.ts";
 import { InputId } from "../Id.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
@@ -17,11 +18,18 @@ import { ProgramRunner, Sent } from "./Runner.ts";
 import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 import { Gone, Unreachable, WatcherManagerError } from "./WatcherManager.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  other: {},
+});
+
 const NAME = "watch-counter:1";
 
 const Model = Schema.Struct({ count: Schema.Int });
 
-const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+const Msg = Schema.TaggedStruct("inc", {});
 
 const program = {
   name: "watch-counter",
@@ -168,7 +176,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
         id: InputId.make("input_0000000000e008000000000001"),
         by: owner,
         arrivedAt: 0,
-        input: { type: "inc" },
+        input: Tag.cases.inc.make({}),
       },
       sentAt: meta.sentAt,
       seen: 0,
@@ -178,8 +186,8 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
     const answer = yield* live.runner.msg(incoming);
     pos++;
     expect(answer).toEqual(Sent.cases.accepted.make({ rev: answer._tag === "accepted" ? answer.rev : -1, pos }));
-    const recipients = [...expected.keys()].filter((c) => routes.has(c) && !unknown.has(c));
-    expect(frames.map((f) => f.client).sort()).toEqual(recipients.sort());
+    const recipients = Arr.filter([...expected.keys()], (c) => routes.has(c) && !unknown.has(c));
+    expect(Arr.map(frames, (f) => f.client).sort()).toEqual(recipients.sort());
 
     for (const { client, update } of frames) {
       expect(update.type).toBe("patch");
@@ -242,7 +250,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
 
     if (gaps) {
       for (let gap = 0; gap <= step.pick % 4; gap++) {
-        yield* live.mailbox.send("unrelated:1", `gap-${i}-${gap}`, { type: "other" }, meta).pipe(Effect.orDie);
+        yield* live.mailbox.send("unrelated:1", `gap-${i}-${gap}`, Tag.cases.other.make({}), meta).pipe(Effect.orDie);
       }
 
       yield* rebuild();

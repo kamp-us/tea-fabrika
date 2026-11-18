@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-t1161-new-laws-raw-fc-assert",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "opus",
+  "rule": "rule_break",
+  "location": {
+    "path": ".github/ci/proof.test.ts",
+    "line": 400
+  },
+  "says": "In today's CI tooling, the new property laws P6, P8, P9, P10 and P11 in proof.test.ts, and S9 in scheduled.test.ts, are raw fc.assert(fc.property(...)) calls with a hand seed, where 0579 says a property law in our tooling is it.prop or it.effect.prop and carries no seed. The same file already writes P1 to P4 that way (it.prop at proof.test.ts:182, 206, 242).",
+  "proof": "proof.test.ts:32 `const options = { seed: 119120, numRuns: 100 };`, used by the new `fc.assert(` calls at lines 400, 438, 483, 520 and 557. .decisions/0579-property-laws-use-it-prop.md: `fc.assert(fc.property(...))` and `fc.asyncProperty` with a hand seed are not the way, and a law carries no seed.",
+  "cost": "Six more laws for 0579's sweep to move. The approved plan's Generator column asked for this shape, so the plan step drifted from 0579 too.",
+  "head": "a2217352223acf0e6754240e1dd2a07dfbdd0e3f",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623"
+}

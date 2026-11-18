@@ -17,6 +17,8 @@
  * superseded is kept. Moves dropped together are taken one at a time, oldest first.
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { apply } from "../runtime/Patch.ts";
@@ -70,34 +72,38 @@ export const TezgahClient = Schema.Struct({
  */
 export type TezgahClient = typeof TezgahClient.Type;
 
-const Msg = Schema.Union([
+/**
+ * Schema for what the window's tezgah child takes, each Msg made with its case's maker.
+ *
+ * @category schemas
+ */
+export const TezgahMsg = Schema.TaggedUnion({
   /** A whole view from tezgah, as the wire carries it. */
-  Schema.Struct({ type: Schema.Literal("server"), rev: Schema.Int, view: Schema.Unknown }),
+  server: { rev: Schema.Int, view: Schema.Unknown },
   /** One view patch from tezgah, from revision `base` to `rev`. */
-  Schema.Struct({ type: Schema.Literal("patch"), base: Schema.Int, rev: Schema.Int, patch: Schema.Unknown }),
+  patch: { base: Schema.Int, rev: Schema.Int, patch: Schema.Unknown },
   /** The window moved focus from `from` to `to`, leaving `cursor` on `from`, as the letter in press
    *  slot `n`. */
-  Schema.Struct({
-    type: Schema.Literal("move"),
+  move: {
     n: Schema.Int,
     from: TileId,
     to: TileId,
     cursor: Schema.NullOr(CursorKey),
-  }),
+  },
   /** Press slot `n` was given its letter id. */
-  Schema.Struct({ type: Schema.Literal("dated"), n: Schema.Int, letter: Schema.String }),
+  dated: { n: Schema.Int, letter: Schema.String },
   /** tezgah took `letter` at inbox position `pos`, answered after `ms`. */
-  Schema.Struct({ type: Schema.Literal("accepted"), letter: Schema.String, pos: Schema.Int, ms: Ms }),
+  accepted: { letter: Schema.String, pos: Schema.Int, ms: Ms },
   /** tezgah refused `letter`, answered after `ms`: its state did not change. */
-  Schema.Struct({ type: Schema.Literal("refused"), letter: Schema.String, ms: Ms }),
-]);
+  refused: { letter: Schema.String, ms: Ms },
+});
 
 /**
  * The type of a Msg the window's tezgah child takes: a whole view, or a patch.
  *
  * @category models
  */
-export type TezgahMsg = typeof Msg.Type;
+export type TezgahMsg = typeof TezgahMsg.Type;
 
 /** Ask tezgah for a whole view: the shown one stays until it comes. The window turns it into its
  *  own open call and never runs it. */
@@ -127,8 +133,16 @@ const S = MoveState.cases;
 const sentAs = (p: Mutation): string | null => (p.state._tag === "waiting" ? null : p.state.letter);
 
 /** The focus the window draws on its workspace with `pending` over the server state. */
-const drawnFocus = (s: TezgahClient, pending: ReadonlyArray<Mutation>): string | null =>
-  optimisticState({ ...s, pendingMutations: pending })?.workspaces.find((w) => w.n === s.workspace)?.focus ?? null;
+const drawnFocus = (s: TezgahClient, pending: ReadonlyArray<Mutation>): string | null => {
+  const view = optimisticState({ ...s, pendingMutations: pending });
+
+  return view === null
+    ? null
+    : Arr.findFirst(view.workspaces, (w) => w.n === s.workspace).pipe(
+        Option.map((w) => w.focus),
+        Option.getOrNull,
+      );
+};
 
 /** Drops each answered move the shown view is at or past, one at a time, oldest first: each is
  *  `overridden` when dropping it moves the drawn focus, else `kept`. */
@@ -142,7 +156,7 @@ const confirmed = (s: TezgahClient): Step => {
     }
 
     const was = drawnFocus(s, pending);
-    pending = pending.filter((x) => x !== p);
+    pending = Arr.filter(pending, (x) => x !== p);
     const result = drawnFocus(s, pending) === was ? "kept" : "overridden";
     rows.push(settled({ letter: p.state.letter, result, ms: p.state.ms }));
   }
@@ -161,8 +175,10 @@ const encodeView = Schema.encodeUnknownResult(TezgahView);
  */
 export const tezgahMachine = Machine.make({
   model: TezgahClient,
-  msg: Msg,
+  msg: TezgahMsg,
   cmds: [ask, settled],
+  // SAFETY: tea's `types` slot only carries the ctx type, the workspace's number; tea never reads
+  // this empty value (0561).
   types: { ctx: {} as { readonly workspace: number } },
   init: (loaded, ctx) => [
     loaded ?? TezgahClient.make({ workspace: ctx.workspace, serverState: null, rev: 0, pendingMutations: [] }),
@@ -213,7 +229,7 @@ export const tezgahMachine = Machine.make({
     dated: (s, m): Step => [
       {
         ...s,
-        pendingMutations: s.pendingMutations.map((p) =>
+        pendingMutations: Arr.map(s.pendingMutations, (p) =>
           p.state._tag === "waiting" && p.state.n === m.n ? { ...p, state: S.sent.make({ letter: m.letter }) } : p,
         ),
       },
@@ -223,7 +239,7 @@ export const tezgahMachine = Machine.make({
     accepted: (s, m): Step =>
       confirmed({
         ...s,
-        pendingMutations: s.pendingMutations.map((p) =>
+        pendingMutations: Arr.map(s.pendingMutations, (p) =>
           p.state._tag === "sent" && p.state.letter === m.letter
             ? { ...p, state: S.answered.make({ letter: m.letter, pos: m.pos, ms: m.ms }) }
             : p,
@@ -231,11 +247,11 @@ export const tezgahMachine = Machine.make({
       }),
     // tezgah's state did not change, so the move is dropped now: the drawn focus goes back to the server's.
     refused: (s, m): Step => {
-      const gone = s.pendingMutations.filter((p) => sentAs(p) === m.letter);
+      const gone = Arr.filter(s.pendingMutations, (p) => sentAs(p) === m.letter);
 
       return [
-        { ...s, pendingMutations: s.pendingMutations.filter((p) => sentAs(p) !== m.letter) },
-        gone.map(() => settled({ letter: m.letter, result: "overridden", ms: m.ms })),
+        { ...s, pendingMutations: Arr.filter(s.pendingMutations, (p) => sentAs(p) !== m.letter) },
+        Arr.map(gone, () => settled({ letter: m.letter, result: "overridden", ms: m.ms })),
       ];
     },
     ask_ok: (s): Step => [s, []],
@@ -251,8 +267,8 @@ const applyFocus = (view: TezgahView | null, mutation: Mutation): TezgahView | n
   view === null
     ? null
     : {
-        workspaces: view.workspaces.map((w) => focus(w, mutation.to)),
-        tiles: view.tiles.map((t) => (t.id === mutation.from ? { ...t, cursor: mutation.cursor } : t)),
+        workspaces: Arr.map(view.workspaces, (w) => focus(w, mutation.to)),
+        tiles: Arr.map(view.tiles, (t) => (t.id === mutation.from ? { ...t, cursor: mutation.cursor } : t)),
       };
 
 /**
@@ -262,4 +278,4 @@ const applyFocus = (view: TezgahView | null, mutation: Mutation): TezgahView | n
  * @category getters
  */
 export const optimisticState = (m: TezgahClient): TezgahView | null =>
-  m.pendingMutations.reduce(applyFocus, m.serverState);
+  Arr.reduce(m.pendingMutations, m.serverState, applyFocus);

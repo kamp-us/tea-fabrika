@@ -16,7 +16,9 @@
 // Plant, run once and undone (recorded in the tests step's field row): leave out the `PRIMARY KEY`,
 // so an overwrite adds a second row.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -95,9 +97,9 @@ const agree = (m: Model, r: Real, task: string, label: string) =>
     ]);
   });
 
-const written = (m: Readonly<Model>, r: Real) => r.pool.filter((task) => m.saved.has(task));
+const written = (m: Readonly<Model>, r: Real) => Arr.filter(r.pool, (task) => m.saved.has(task));
 
-const unwritten = (m: Readonly<Model>, r: Real) => r.pool.filter((task) => !m.saved.has(task));
+const unwritten = (m: Readonly<Model>, r: Real) => Arr.filter(r.pool, (task) => !m.saved.has(task));
 
 const pick = <A>(from: ReadonlyArray<A>, n: number): A | undefined => from[n % Math.max(from.length, 1)];
 
@@ -161,7 +163,7 @@ const garbageStep = (n: number, value: string): Step => ({
 
 const Text = fc.string({ minLength: 1, maxLength: 24 });
 
-const At = fc.integer({ min: 0, max: 4_102_444_800_000 }).map((ms) => new Date(ms).toISOString());
+const At = fc.integer({ min: 0, max: 4_102_444_800_000 }).map((ms) => DateTime.formatIso(DateTime.makeUnsafe(ms)));
 
 // fast-check: unsupported Effect -- fc.commands draws every step from fast-check arbitraries, and Effect's Arbitrary is another engine
 const AResult = fc.oneof(

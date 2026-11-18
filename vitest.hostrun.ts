@@ -15,8 +15,8 @@
 // guess from the platform. `CLAUDECODE` is no marker, since local sessions set it too, and the box
 // has no `/.dockerenv` or `/run/.containerenv` to read. The platform is a second lock: the cloud box
 // is a Linux container and the laptop is a Mac, so a stray `CLAUDE_CODE_REMOTE` in a shell on the
-// Mac still refuses. The laptop's own boxes (box.ts's sandbox, mutbox's Docker container) set no
-// such variable, so they refuse too: they run on the Mac.
+// Mac still refuses. The laptop's own boxes (box.ts's sandbox, mutbox's Docker container on the laptop,
+// which is handed no `CI`) set no such variable, so they refuse too: they run on the Mac.
 //
 // The doubt: if the cloud runtime ever stops setting the variable, or sets another value, a cloud
 // box is refused again, which is the safe side. Nothing stops a shell from setting `CI` or the
@@ -33,7 +33,7 @@ type HostRun = { readonly _tag: "allow"; readonly reason: "ci" | "owner" | "box"
 
 /** The guard's decision, from the environment and the platform alone. */
 export const hostRun = (env: Readonly<Record<string, string | undefined>>, platform: NodeJS.Platform): HostRun => {
-  if (env.CI) {
+  if ((env.CI ?? "") !== "") {
     return { _tag: "allow", reason: "ci" };
   }
 

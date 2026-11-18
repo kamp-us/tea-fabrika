@@ -30,6 +30,7 @@ const PingLive = Ping.make(
         hit: Effect.fnUntraced(function* (n: number) {
           // Plant replaces the following call with a bare lookup inside this method.
           const reply = yield* pongs.getByName("one").back(n + 1);
+
           return { path: ["ping.hit", ...reply.path], n: reply.n };
         }),
         leaf: (n: number) => Effect.succeed({ path: ["ping.leaf"], n: n + 1 }),
@@ -44,6 +45,7 @@ const PongLive = Pong.make(
       Effect.succeed({
         back: Effect.fnUntraced(function* (n: number) {
           const reply = yield* pings.getByName("one").leaf(n + 1);
+
           return { path: ["pong.back", ...reply.path], n: reply.n };
         }),
       }),

@@ -23,7 +23,13 @@
 // another process's waiting receipt out of the reply. Plant: drop that check in `HandsTasksLive.ts`.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Result as R, type Scope } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as R from "effect/Result";
+import type * as Scope from "effect/Scope";
+
 import * as fc from "fast-check";
 import type { From } from "../processes/Mailbox.ts";
 import { Command, type Task, type Result, State } from "../tasks/Task.ts";
@@ -114,7 +120,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
     const read = (id: string) => tasks((j) => j.read(id));
 
     for (const cell of tape.cells) {
-      const waiting = [...saved.entries()].filter(([, s]) => s.phase === "requested");
+      const waiting = Arr.filter([...saved.entries()], ([, s]) => s.phase === "requested");
 
       const can: Record<Move, boolean> = {
         ask: true,
@@ -124,7 +130,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
       };
 
       const move = choose(
-        (["ask", "change", "finish", "reopen"] as const).filter((m) => can[m]),
+        Arr.filter(["ask", "change", "finish", "reopen"] as const, (m) => can[m]),
         cell.move,
       );
 
@@ -149,7 +155,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
           const task = answered(yield* read(a.id), "a waiting ask saved its task");
           const first = task.events[0];
           expect(
-            task.events.map((e) => e.event),
+            Arr.map(task.events, (e) => e.event),
             "one request is saved",
           ).toEqual(["requested"]);
           expect(reply, "S1: a new task answers waiting with its request's receipt").toEqual(
@@ -184,7 +190,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
         } else {
           const result = kept.result ?? expect.fail("a finished task has its result");
           const task = answered(yield* read(a.id), "a finished task reads back");
-          const collected = task.events.filter((e) => e.event === "collected");
+          const collected = Arr.filter(task.events, (e) => e.event === "collected");
           expect(collected, "one collect is saved, however often the Cmd asks").toHaveLength(1);
           const receipt = { rev: collected[0]?.rev ?? -1, arrivedAt: collected[0]?.arrivedAt ?? -1 };
           expect(reply, "a finished task answers its result and the collect's receipt").toEqual(
@@ -326,7 +332,10 @@ const foreign = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<strin
     expect(reply, `S2: another process's ask is refused id_reused and nothing else (${tape.state})`).toEqual(
       Reply.cases.refused.make({ reason: "id_reused" }),
     );
-    expect(Object.keys(reply).sort(), "S2: the refusal carries no receipt or result").toEqual(["_tag", "reason"]);
+    expect(Rec.keys<string, unknown>(reply).sort(), "S2: the refusal carries no receipt or result").toEqual([
+      "_tag",
+      "reason",
+    ]);
 
     const after = answered(yield* tasks((j) => j.read(id)), "the saved task still reads back");
     expect(after, `S2: another process's ask writes nothing (${tape.state})`).toEqual(before);
@@ -339,10 +348,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "S1: an unset hands.target writes no task and answers refused no_hands; a set one is the request's target, and the snapshot hash its settings",
       () =>
         Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
           const done = new Set<string>();
           const law = walk(open, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-          const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+          const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
           const options = { seed: 119120, numRuns: runsFor({ fast: 20, full: 100 }), includeErrorInReport: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, options));
@@ -370,10 +380,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "S2: an ask under a saved task's id from another process is refused id_reused in every state of the task, writes nothing, and reveals no receipt or result",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const done = new Set<string>();
           const law = foreign(open, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-          const property = fc.asyncProperty(Foreign, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+          const property = fc.asyncProperty(Foreign, (tape) => runPromise(Effect.scoped(law(tape))));
           const options = { seed: 119120, numRuns: runsFor({ fast: 20, full: 60 }), includeErrorInReport: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, options));

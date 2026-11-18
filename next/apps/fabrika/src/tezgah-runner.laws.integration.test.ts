@@ -18,7 +18,6 @@
 //   `processes/tezgah:<person>` once admitted, with the person from the door's admission, opens
 //   tezgah's view, attaches its workspace itself, and shows the workspace's tiles, each tile's
 //   process view opened, in place of a fixed list.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
@@ -27,14 +26,35 @@ import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import * as RunnerTest from "@kampus/tezgah/RunnerTest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Duration,
+  Effect,
+  FileSystem,
+  Layer,
+  Path,
+  Predicate,
+  Schema,
+  DateTime,
+  Option,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  did: {},
+});
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
@@ -61,68 +81,20 @@ const typeId = (prefix: string, n: number): string => {
   return `${prefix}_${suffix}`;
 };
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const n = Buffer.alloc(4);
-  n.writeUInt32BE(body.length);
-
-  return Buffer.concat([n, body]);
-};
-
 /** A fresh SSH identity: its public line and raw key, its fingerprint, its door proof and its signer. */
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    sign: (data: Uint8Array) => new Uint8Array(sign(null, data, pair.privateKey)),
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
-
-      return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-type Key = ReturnType<typeof identity>;
+type Key = SshsigTest.Identity;
 
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Record<string, any>;
 
-const pause = (ms = 100) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 100) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** Polls an observable fact; a timeout fails with the last observed value. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {
-  const end = Date.now() + WAIT;
+  const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + WAIT;
   let last: unknown = null;
 
-  while (Date.now() < end) {
+  while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
     try {
       const value = await look();
       last = value;
@@ -143,7 +115,7 @@ const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) 
 /** One door socket as the founder, past its signed hello: `call` is one JSON-RPC call and its frame. */
 const door = async (instance: Instance, key: Key, tab: string) => {
   const socket = new WebSocket(
-    `${String(instance.url).replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+    `${Str.replace("http", "ws")(String(instance.url))}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
   );
 
   const frames: Array<any> = [];
@@ -155,13 +127,9 @@ const door = async (instance: Instance, key: Key, tab: string) => {
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const found = await until(
-      "a frame",
-      async () => frames.findIndex(match),
-      (i) => i >= 0,
-    );
+    const found = await until("a frame", async () => Arr.findFirstIndex(frames, match), Option.isSome);
 
-    return frames.splice(found, 1)[0];
+    return frames.splice(Option.getOrThrow(found), 1)[0];
   };
 
   const call = async (method: string, params: unknown) => {
@@ -183,7 +151,7 @@ const door = async (instance: Instance, key: Key, tab: string) => {
     platform: "headless",
     os: "linux",
     sentAt: SENT,
-    signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+    signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
   });
 
   expect(hello.error, "the founder's hello is admitted").toBeUndefined();
@@ -191,42 +159,23 @@ const door = async (instance: Instance, key: Key, tab: string) => {
   return { call, close: () => socket.close() };
 };
 
-/** Sets one env value for the scope and puts the old one back. */
-const env = (name: string, value: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const old = process.env[name];
-      process.env[name] = value;
-
-      return old;
-    }),
-    (old) =>
-      Effect.sync(() => {
-        if (old === undefined) {
-          delete process.env[name];
-        } else {
-          process.env[name] = old;
-        }
-      }),
-  );
-
 /** One real local instance of the app's own build, with one founder whose window key is granted. */
 const startInstance = Effect.fnUntraced(
   function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    yield* env("DO_NOT_TRACK", "1");
+    yield* Effect.sync(noTracking);
     // A short home: a socket path has a 103-byte limit.
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "ds2a-" });
-    yield* env("FABRIKA_HOME", home);
+    yield* scopedEnv({ FABRIKA_HOME: home });
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
     const built = yield* build({ out: path.join(home, "dist") });
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-    const key = identity();
+    const key = yield* SshsigTest.identity;
 
     const instance: Instance = yield* localInstance(
       built,
-      RecordWireTest.startupFixture({
+      yield* RecordWireTest.startupFixture({
         home,
         name: PROJECT,
         person: PERSON,
@@ -248,7 +197,8 @@ const calls = (instance: Instance) => {
   return {
     info: async (): Promise<Array<any>> => project().info(),
     facts: async (stream: string): Promise<Array<any>> =>
-      ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+      // SAFETY: the audit read answers the stream's rows as an array.
+      Arr.map((await project().read(stream, 0, "audit")) as Array<any>, (row) => ({ ...row.body, _tag: row._tag })),
   };
 };
 
@@ -257,10 +207,10 @@ const findTezgah = async (instance: Instance) => {
   const rows = await until(
     "tezgah's process in the table",
     () => calls(instance).info(),
-    (all) => all.some((row) => String(row.name).startsWith("tezgah:")),
+    (all) => Arr.some(all, (row) => Str.startsWith("tezgah:")(String(row.name))),
   );
 
-  const found = rows.filter((row) => String(row.name).startsWith("tezgah:"));
+  const found = Arr.filter(rows, (row) => Str.startsWith("tezgah:")(String(row.name)));
   expect(found, "one tezgah process, for the one person").toHaveLength(1);
 
   return { pid: String(found[0].process), name: String(found[0].name) };
@@ -294,11 +244,12 @@ const open: RunnerTest.Open = Effect.gen(function* () {
     view: Effect.promise(async () => (await socket.call("view.open", { pid: tezgah.pid })).result?.view),
     process: (name: string) =>
       Effect.promise(async () => {
-        const live = (await calls(instance).info()).some((row) => row.name === name);
+        const live = Arr.some(await calls(instance).info(), (row) => row.name === name);
 
-        const exited = (await calls(instance).facts(`processes/${name}`))
-          .filter((row) => row._tag === "exited")
-          .map((row) => row.reason);
+        const exited = Arr.map(
+          Arr.filter(await calls(instance).facts(`processes/${name}`), (row) => row._tag === "exited"),
+          (row) => row.reason,
+        );
 
         return { live, exited };
       }),
@@ -309,13 +260,13 @@ RunnerTest.suite(open);
 
 /** What L12 reads of tezgah's view: workspace 1's tiles in reading order. */
 const order = (node: any): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : (node?.parts ?? []).flatMap((p: any) => order(p.inner));
+  Predicate.isString(node) ? [node] : (node?.parts ?? []).flatMap((p: any) => order(p.inner));
 
 const shown = (view: any) => {
   const space = (view?.workspaces ?? []).find((w: any) => w.n === 1);
   const ids = space === undefined ? [] : order(space.layout);
 
-  return ids.map((id) => ({ id, name: (view.tiles ?? []).find((t: any) => t.id === id)?.shows }));
+  return Arr.map(ids, (id) => ({ id, name: (view.tiles ?? []).find((t: any) => t.id === id)?.shows }));
 };
 
 describe("Desk S2a L12: a headless window follows tezgah on the real instance", () => {
@@ -329,9 +280,9 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
           const signer: Identity = {
             fingerprint: key.fingerprint,
             raw: key.raw,
-            line: Schema.decodeSync(KeyLine)(key.line),
+            line: yield* Schema.decodeEffect(KeyLine)(key.line),
             found: "reused",
-            sign: (bytes) => Effect.sync(() => key.sign(bytes)),
+            sign: key.sign,
           };
 
           const window = windowMachineFor({
@@ -371,18 +322,17 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             const view = async () => (await socket.call("view.open", { pid: tezgah.pid })).result?.view;
 
             const tiles = () =>
-              run
-                .getState()
-                .tiles.map((t) => ({ id: t.id, name: t.name, open: t.reach._tag === "open" }))
-                .sort((a, b) => (a.id < b.id ? -1 : 1));
+              Arr.map(run.getState().tiles, (t) => ({ id: t.id, name: t.name, open: t.reach._tag === "open" })).sort(
+                (a, b) => (a.id < b.id ? -1 : 1),
+              );
 
             /** The window shows exactly workspace 1's tiles in tezgah's view, each one open. */
             const follows = async (label: string, count: number) => {
               const want = await until(label, view, (v) => shown(v).length === count);
 
-              const expected = shown(want)
-                .map((t) => ({ ...t, open: true }))
-                .sort((a, b) => (a.id < b.id ? -1 : 1));
+              const expected = Arr.map(shown(want), (t) => ({ ...t, open: true })).sort((a, b) =>
+                a.id < b.id ? -1 : 1,
+              );
 
               await until(
                 `${label}: the window follows`,
@@ -400,7 +350,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
               const sent = await socket.call("process.send", {
                 pid: tezgah.pid,
                 letter: `desk-s2a-l12-${++letters}`,
-                m: { type: "did", via: { _tag: "key", keys: "ctrl+b %" }, ...m },
+                m: { ...Tag.cases.did.make({}), via: { _tag: "key", keys: "ctrl+b %" }, ...m },
                 sentAt: SENT,
                 seen: 0,
               });
@@ -415,7 +365,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             );
             const one = await follows("the window's own attach makes workspace 1 of checklist:1", 1);
             expect(
-              one.map((t) => t.name),
+              Arr.map(one, (t) => t.name),
               "L12: workspace 1's first tile is the boot list's checklist:1",
             ).toEqual(["checklist:1"]);
 
@@ -423,7 +373,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             await did({ does: "tezgah.split_right", from: one[0]!.id, tile: t2 });
             const two = await follows("after a split right", 2);
             expect(
-              two.map((t) => t.id),
+              Arr.map(two, (t) => t.id),
               "L12: the new tile follows t1",
             ).toEqual([one[0]!.id, t2]);
 
@@ -431,25 +381,28 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             await did({ does: "tezgah.split_down", from: t2, tile: t3 });
             const three = await follows("after a split down", 3);
             expect(
-              three.map((t) => t.id),
+              Arr.map(three, (t) => t.id),
               "L12: t3 follows t2",
             ).toEqual([one[0]!.id, t2, t3]);
 
             await did({ does: "tezgah.close", from: t2 });
             const closed = await follows("after a close", 2);
             expect(
-              closed.map((t) => t.id),
+              Arr.map(closed, (t) => t.id),
               "L12: t2 is gone",
             ).toEqual([one[0]!.id, t3]);
 
             const ended = await until(
               "the closed tile's process ends",
               () => calls(instance).facts(`processes/${three[1]!.name}`),
-              (rows) => rows.some((row) => row._tag === "exited"),
+              (rows) => Arr.some(rows, (row) => row._tag === "exited"),
             );
 
             expect(
-              ended.filter((row) => row._tag === "exited").map((row) => row.reason),
+              Arr.map(
+                Arr.filter(ended, (row) => row._tag === "exited"),
+                (row) => row.reason,
+              ),
               "L12: the closed tile's process ends with shutdown",
             ).toMatchObject([{ _tag: "shutdown" }]);
           });

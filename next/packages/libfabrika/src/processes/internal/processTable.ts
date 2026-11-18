@@ -1,5 +1,6 @@
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Rec from "effect/Record";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { Entry, valueFor } from "../../ledger/Log.ts";
 import { Sender } from "../../permissions/Senders.ts";
@@ -140,7 +141,8 @@ const Model = Schema.Struct({
 /** @internal */
 export type Model = typeof Model.Type;
 
-const Msg = Schema.Struct({ type: Schema.Literal("recorded"), entry: Entry });
+/** @internal The one Msg: an entry was recorded. */
+export const Recorded = Schema.TaggedStruct("recorded", { entry: Entry });
 
 const decodeEvent = Schema.decodeUnknownSync(ProcessEvent);
 
@@ -167,7 +169,7 @@ const lifeFor = (s: Model, process: string): Life => {
 export const processTableFor = (by: string) =>
   Machine.make({
     model: Model,
-    msg: Msg,
+    msg: Recorded,
     cmds: [],
     init: () => [
       {
@@ -181,7 +183,7 @@ export const processTableFor = (by: string) =>
     ],
     update: {
       recorded: (s, { entry }) => {
-        if (!Object.hasOwn(ProcessEvent.cases, entry._tag) || entry.by !== by) {
+        if (!Rec.has<string, unknown>(ProcessEvent.cases, entry._tag) || entry.by !== by) {
           return [s, []];
         }
 

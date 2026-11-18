@@ -19,12 +19,22 @@
 // reasons, other words, free text or none.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Array as Arr, pipe, Record as Rec, String as Str, Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { checklist, checklistMachine } from "./program.ts";
 import { checklistWindow } from "./window.tsx";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  check: {},
+  remove: {},
+  timer: {},
+  uncheck: {},
+});
 
 const SEED = 119120;
 
@@ -40,16 +50,18 @@ type View = ReturnType<typeof checklist.view.select>;
 const WORDS = { new: "Open", open: "Open", late: "Late", checked: "Done" } as const;
 
 const unescape = (text: string) =>
-  text
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&");
+  pipe(
+    text,
+    Str.replace(/&lt;/g, "<"),
+    Str.replace(/&gt;/g, ">"),
+    Str.replace(/&quot;/g, '"'),
+    Str.replace(/&#x27;/g, "'"),
+    Str.replace(/&#39;/g, "'"),
+    Str.replace(/&amp;/g, "&"),
+  );
 
 /** The text a person reads: the markup without its tags. */
-const text = (html: string) => unescape(html.replace(/<[^>]*>/g, " "));
+const text = (html: string) => unescape(Str.replace(/<[^>]*>/g, " ")(html));
 
 const attr = (tag: string, name: string) => {
   const m = new RegExp(`\\s${name}="([^"]*)"`).exec(tag);
@@ -59,15 +71,16 @@ const attr = (tag: string, name: string) => {
 
 /** The text of the element whose id is `id`, up to its own closing tag. */
 const byId = (html: string, id: string): string | null => {
-  const open = new RegExp(`<([a-z]+)[^>]*\\sid="${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*>`).exec(html);
+  const open = new RegExp(`<([a-z]+)[^>]*\\sid="${Str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")(id)}"[^>]*>`).exec(html);
 
   if (open === null) {
     return null;
   }
 
-  const end = html.indexOf(`</${open[1]}>`, open.index + open[0].length);
+  const rest = Str.slice(open.index + open[0].length)(html);
+  const end = Str.indexOf(`</${open[1]}>`)(rest);
 
-  return text(html.slice(open.index + open[0].length, end < 0 ? undefined : end)).trim();
+  return Str.trim(text(Option.match(end, { onNone: () => rest, onSome: (at) => Str.slice(0, at)(rest) })));
 };
 
 /** A control's accessible name in this markup: its aria-label, its labelledby text or its `for` label. */
@@ -81,24 +94,26 @@ const named = (html: string, tag: string): string | null => {
   const by = attr(tag, "aria-labelledby");
 
   if (by !== null) {
-    return by
-      .split(/\s+/)
-      .map((id) => byId(html, id) ?? "")
-      .join(" ")
-      .trim();
+    return Str.trim(
+      pipe(
+        Str.split(by, /\s+/),
+        Arr.map((id) => byId(html, id) ?? ""),
+        Arr.join(" "),
+      ),
+    );
   }
 
   const id = attr(tag, "id");
   const forLabel = id === null ? null : new RegExp(`<label[^>]*\\sfor="${id}"[^>]*>([\\s\\S]*?)</label>`).exec(html);
 
-  return forLabel === null ? null : text(forLabel[1]!).trim();
+  return forLabel === null ? null : Str.trim(text(forLabel[1]!));
 };
 
-const tags = (html: string, pattern: RegExp) => [...html.matchAll(pattern)].map((m) => m[0]);
+const tags = (html: string, pattern: RegExp) => Arr.map([...Str.matchAll(pattern)(html)], (m) => m[0]);
 
 const name = fc.oneof(
-  fc.stringMatching(/^[a-z][a-z &<>"']{0,20}$/).map((s) => s.trimEnd()),
-  fc.constant("a".repeat(80)),
+  fc.stringMatching(/^[a-z][a-z &<>"']{0,20}$/).map((s) => Str.trimEnd(s)),
+  fc.constant(Str.repeat(80)("a")),
 );
 
 const choice = fc.record({ move: fc.nat(), pick: fc.nat(), name, later: fc.integer({ min: 0, max: 2 * DAY }) });
@@ -116,15 +131,15 @@ const fold = (list: ReadonlyArray<Choice>): ReadonlyArray<View> => {
     const wake = checklist.wake(model);
 
     const options: Array<Msg> = [
-      { type: "add", name: c.name },
+      { ...Tag.cases.add.make({}), name: c.name },
       // Once an item is stamped, its real wake time makes the late state reachable.
-      ...(wake === null ? [] : [{ type: "timer" as const, at: wake, arrivedAt: Math.max(now, wake) + c.later }]),
+      ...(wake === null ? [] : [{ ...Tag.cases.timer.make({}), at: wake, arrivedAt: Math.max(now, wake) + c.later }]),
       ...(held === null
         ? []
         : ([
-            { type: "check", name: held },
-            { type: "uncheck", name: held },
-            { type: "remove", name: held },
+            { ...Tag.cases.check.make({}), name: held },
+            { ...Tag.cases.uncheck.make({}), name: held },
+            { ...Tag.cases.remove.make({}), name: held },
           ] as const)),
     ];
 
@@ -133,7 +148,7 @@ const fold = (list: ReadonlyArray<Choice>): ReadonlyArray<View> => {
 
     if (checklist.refuse(model, msg) === null) {
       model = applyCell(checklistMachine, model, msg)[0];
-      now = msg.type === "timer" ? msg.arrivedAt : now;
+      now = msg._tag === "timer" ? msg.arrivedAt : now;
       views.push(checklist.view.select(model));
     }
   }
@@ -176,21 +191,38 @@ describe("L24: the checklist window's markup", () => {
           const html = render(view, null, draft);
           const boxes = tags(html, /<input[^>]*type="checkbox"[^>]*>/g);
           expect(boxes, "one box per item").toHaveLength(view.items.length);
-          expect(boxes.map((b) => named(html, b)).sort()).toEqual(view.items.map((i) => i.name).sort());
+          expect(Arr.map(boxes, (b) => named(html, b)).sort()).toEqual(Arr.map(view.items, (i) => i.name).sort());
           expect(
-            boxes.filter((b) => /\schecked=""/.test(b)).map((b) => named(html, b)),
+            pipe(
+              boxes,
+              Arr.filter((b) => /\schecked=""/.test(b)),
+              Arr.map((b) => named(html, b)),
+            ),
             "a box is checked exactly when its item is",
-          ).toEqual(view.items.filter((i) => i.state === "checked").map((i) => i.name));
+          ).toEqual(
+            pipe(
+              view.items,
+              Arr.filter((i) => i.state === "checked"),
+              Arr.map((i) => i.name),
+            ),
+          );
 
           const read = text(html);
 
-          for (const word of new Set(Object.values(WORDS))) {
-            const count = view.items.filter((i) => WORDS[i.state] === word).length;
-            expect(read.match(new RegExp(`\\b${word}\\b`, "g"))?.length ?? 0, `${word} words`).toBe(count);
+          for (const word of new Set(Rec.values(WORDS))) {
+            const count = Arr.filter(view.items, (i) => WORDS[i.state] === word).length;
+            expect(
+              Option.match(Str.match(new RegExp(`\\b${word}\\b`, "g"))(read), {
+                onNone: () => 0,
+                onSome: (found) => found.length,
+              }),
+              `${word} words`,
+            ).toBe(count);
           }
 
-          const buttons = tags(html, /<button[^>]*>[\s\S]*?<\/button>/g).map(
-            (b) => attr(b, "aria-label") ?? text(b).trim(),
+          const buttons = Arr.map(
+            tags(html, /<button[^>]*>[\s\S]*?<\/button>/g),
+            (b) => attr(b, "aria-label") ?? Str.trim(text(b)),
           );
 
           for (const item of view.items) {
@@ -198,12 +230,13 @@ describe("L24: the checklist window's markup", () => {
           }
 
           expect(read).toContain(`${view.left} left`);
-          expect(read.includes("Nothing on the list yet."), "the empty line shows exactly when there is none").toBe(
-            view.items.length === 0,
-          );
+          expect(
+            Str.includes("Nothing on the list yet.")(read),
+            "the empty line shows exactly when there is none",
+          ).toBe(view.items.length === 0);
           seen.empty += view.items.length === 0 ? 1 : 0;
-          seen.checked += view.items.some((i) => i.state === "checked") ? 1 : 0;
-          seen.late += view.items.some((i) => i.state === "late") ? 1 : 0;
+          seen.checked += Arr.some(view.items, (i) => i.state === "checked") ? 1 : 0;
+          seen.late += Arr.some(view.items, (i) => i.state === "late") ? 1 : 0;
         }
       }),
       { seed: SEED, numRuns: 50 },
@@ -217,7 +250,7 @@ describe("L24: the checklist window's markup", () => {
     let shown = 0;
     fc.assert(
       fc.property(views, fc.string({ maxLength: 80 }), fc.option(REASONS), name, (view, draft, reason, item) => {
-        const words = reason === null ? null : refused({ type: "add", name: item }, reason);
+        const words = reason === null ? null : refused({ ...Tag.cases.add.make({}), name: item }, reason);
         const html = render(view, words, draft);
         const fields = tags(html, /<input[^>]*type="text"[^>]*>/g);
         expect(fields).toHaveLength(1);
@@ -226,12 +259,14 @@ describe("L24: the checklist window's markup", () => {
         expect(attr(field, "maxLength") ?? attr(field, "maxlength")).toBe("80");
         expect(attr(field, "value") ?? "").toBe(draft);
 
-        const described = (attr(field, "aria-describedby") ?? "")
-          .split(/\s+/)
-          .filter((id) => id !== "")
-          .map((id) => byId(html, id) ?? "")
-          .join(" ")
-          .trim();
+        const described = Str.trim(
+          pipe(
+            Str.split(attr(field, "aria-describedby") ?? "", /\s+/),
+            Arr.filter((id) => id !== ""),
+            Arr.map((id) => byId(html, id) ?? ""),
+            Arr.join(" "),
+          ),
+        );
 
         if (words === null) {
           expect(described, "no refusal, no description words").toBe("");
@@ -250,23 +285,25 @@ describe("L24: the checklist window's markup", () => {
   it("refused words name the item for taken and missing; other reasons get the default, which never echoes free text", () => {
     fc.assert(
       fc.property(name, REASONS, REASONS, (item, a, b) => {
-        const taken = refused({ type: "add", name: item }, "taken");
-        const missing = refused({ type: "check", name: item }, "missing");
+        const taken = refused({ ...Tag.cases.add.make({}), name: item }, "taken");
+        const missing = refused({ ...Tag.cases.check.make({}), name: item }, "missing");
         expect(taken).toContain(`"${item}"`);
         expect(missing).toContain(`"${item}"`);
         expect(taken).not.toBe(missing);
         const word = (r: string) => /^[a-z_]{1,40}$/.test(r);
 
-        for (const r of [a, b].filter((r) => r !== "taken" && r !== "missing")) {
-          const said = refused({ type: "remove", name: item }, r);
-          expect(said.includes(`"${item}"`), `${r} named the item`).toBe(false);
-          expect(said.includes(r), `${r}'s words`).toBe(word(r));
+        for (const r of Arr.filter([a, b], (r) => r !== "taken" && r !== "missing")) {
+          const said = refused({ ...Tag.cases.remove.make({}), name: item }, r);
+          expect(Str.includes(`"${item}"`)(said), `${r} named the item`).toBe(false);
+          expect(Str.includes(r)(said), `${r}'s words`).toBe(word(r));
         }
 
-        const free = [a, b].filter((r) => !word(r));
+        const free = Arr.filter([a, b], (r) => !word(r));
 
         if (free.length === 2) {
-          expect(refused({ type: "add", name: item }, free[0]!)).toBe(refused({ type: "add", name: item }, free[1]!));
+          expect(refused({ ...Tag.cases.add.make({}), name: item }, free[0]!)).toBe(
+            refused({ ...Tag.cases.add.make({}), name: item }, free[1]!),
+          );
         }
       }),
       { seed: SEED, numRuns: 50 },

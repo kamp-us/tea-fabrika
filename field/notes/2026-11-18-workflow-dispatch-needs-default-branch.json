@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1603"
+  ],
+  "id": "2026-11-18-workflow-dispatch-needs-default-branch",
+  "stage": "plan",
+  "kind": "friction",
+  "person": false,
+  "what": "The plan for PR 1603 first had each plant proven before the review with `gh workflow run plants.yaml --ref <branch>`. plants.yaml is a new file, and GitHub dispatches only a workflow file the default branch holds, so it cannot run before the merge. The lead amended the plan: the build ran the five plants once in the disposable cloud box, which the host guard allows, and the first plants.yaml run on main after the merge is the proof the old runner's deletion needs.",
+  "cause": "GitHub's workflow_dispatch event requires the workflow file on the default branch; --ref picks only the code it runs.",
+  "primitive": "Check",
+  "fix": "The plan skill's validation part says that a new dispatch-only workflow cannot prove a law before its merge, and names where that law runs first.",
+  "test": "The next plan with a new dispatch-only workflow names its pre-merge proof without that workflow."
+}

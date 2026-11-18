@@ -4,12 +4,26 @@ import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import type * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
 import { Event, TrustDecision } from "../RepositoryTrust.ts";
 import * as Open from "./open.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  answer: {},
+  checked: {},
+  close: {},
+  failed: {},
+  history: {},
+  saved: {},
+  select: {},
+});
 
 type Model = typeof Open.machine.model.Type;
 
@@ -89,23 +103,25 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
 
       const replay = (pick: number) => {
         const selection = draw.selections[pick % draw.selections.length]!;
-        send({ type: "select", selection });
+        send({ ...Tag.cases.select.make({}), selection });
         expect(model._tag).toBe("checking");
-        send({ type: "checked", selection, snapshot });
+        send({ ...Tag.cases.checked.make({}), selection, snapshot });
         expect(model._tag).toBe("checking");
-        const result = send({ type: "history", selection, events: [...events] });
+        const result = send({ ...Tag.cases.history.make({}), selection, events: [...events] });
         expect(result._tag).toBe(
-          decision?._tag === "accepted" ? "saving" : decision?._tag === "denied" ? "refused" : "awaiting_trust",
+          decision === undefined
+            ? "awaiting_trust"
+            : TrustDecision.match(decision, { accepted: () => "saving", denied: () => "refused" }),
         );
 
         if (result._tag === "saving") {
           expect(result.snapshot).toEqual(snapshot);
           expect(result.request).toBe(selection);
-          const other = draw.selections.find((id) => id !== selection)!;
+          const other = Option.getOrThrow(Arr.findFirst(draw.selections, (id) => id !== selection));
           const receipt = draw.receipts[pick % draw.receipts.length]!;
-          expect(send({ type: "saved", selection: other, request: selection, receipt })).toEqual(result);
-          expect(send({ type: "saved", selection, request: other, receipt })).toEqual(result);
-          const ready = send({ type: "saved", selection, request: selection, receipt });
+          expect(send({ ...Tag.cases.saved.make({}), selection: other, request: selection, receipt })).toEqual(result);
+          expect(send({ ...Tag.cases.saved.make({}), selection, request: other, receipt })).toEqual(result);
+          const ready = send({ ...Tag.cases.saved.make({}), selection, request: selection, receipt });
           expect(ready._tag).toBe("ready");
 
           if (ready._tag === "ready") {
@@ -116,7 +132,7 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
           expect(result.reason).toBe("denied");
         }
 
-        send({ type: "close" });
+        send(Tag.cases.close.make({}));
         expect(model._tag).toBe("closed");
       };
 
@@ -169,7 +185,7 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
         undefined,
         fc.constant(messages),
         ({ prev, next, msg }) =>
-          next._tag !== "ready" || prev._tag === "ready" || (prev._tag === "saving" && msg.type === "saved"),
+          next._tag !== "ready" || prev._tag === "ready" || (prev._tag === "saving" && msg._tag === "saved"),
         { seed: 119120, numRuns: 1 },
       );
     }),
@@ -200,7 +216,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
 
         if (next._tag === "ready") {
           expect(accepted).toBe(true);
-          expect(msg.type === "saved" || model._tag === "ready").toBe(true);
+          expect(msg._tag === "saved" || model._tag === "ready").toBe(true);
           expect(next.snapshot).toEqual(snapshot);
         }
 
@@ -210,38 +226,48 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
 
       const select = (pick: number) => {
         if (model._tag !== "closed") {
-          old.push({ type: "checked", selection, snapshot });
-          old.push({ type: "history", selection, events: [] });
+          old.push({ ...Tag.cases.checked.make({}), selection, snapshot });
+          old.push({ ...Tag.cases.history.make({}), selection, events: [] });
           old.push({
-            type: "answer",
+            ...Tag.cases.answer.make({}),
             selection,
             request,
             decision: TrustDecision.cases.accepted.make({}),
           });
-          old.push({ type: "saved", selection, request, receipt: draw.receipts[pick % draw.receipts.length]! });
-          old.push({ type: "failed", selection, request, reason: draw.failures[pick % draw.failures.length]! });
+          old.push({
+            ...Tag.cases.saved.make({}),
+            selection,
+            request,
+            receipt: draw.receipts[pick % draw.receipts.length]!,
+          });
+          old.push({
+            ...Tag.cases.failed.make({}),
+            selection,
+            request,
+            reason: draw.failures[pick % draw.failures.length]!,
+          });
         }
 
-        const alternatives = draw.selections.filter((id) => id !== selection);
+        const alternatives = Arr.filter(draw.selections, (id) => id !== selection);
         selection = alternatives[pick % alternatives.length]!;
         snapshot = draw.snapshots[pick % draw.snapshots.length]!;
         accepted = false;
-        send({ type: "select", selection }, "checking");
+        send({ ...Tag.cases.select.make({}), selection }, "checking");
       };
 
       const advance = (pick: number, yes: boolean) => {
         if (cursor.phase === "closed" || cursor.phase === "ready" || cursor.phase === "refused") {
           select(pick);
         } else if (cursor.phase === "checking") {
-          send({ type: "checked", selection, snapshot }, "history");
+          send({ ...Tag.cases.checked.make({}), selection, snapshot }, "history");
         } else if (cursor.phase === "history") {
-          send({ type: "history", selection, events: [] }, "awaiting_trust");
+          send({ ...Tag.cases.history.make({}), selection, events: [] }, "awaiting_trust");
         } else if (cursor.phase === "awaiting_trust") {
           request = draw.answers[pick % draw.answers.length]!;
           accepted = yes;
           send(
             {
-              type: "answer",
+              ...Tag.cases.answer.make({}),
               selection,
               request,
               decision: yes ? TrustDecision.cases.accepted.make({}) : TrustDecision.cases.denied.make({}),
@@ -250,7 +276,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
           );
         } else {
           send(
-            { type: "saved", selection, request, receipt: draw.receipts[pick % draw.receipts.length]! },
+            { ...Tag.cases.saved.make({}), selection, request, receipt: draw.receipts[pick % draw.receipts.length]! },
             accepted ? "ready" : "refused",
           );
         }
@@ -259,7 +285,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       for (const cell of draw.cells) {
         const moves = ["advance", "replace", "close"];
 
-        if (old.some((msg) => "selection" in msg && msg.selection !== selection)) {
+        if (Arr.some(old, (msg) => "selection" in msg && msg.selection !== selection)) {
           moves.push("late");
         }
 
@@ -278,27 +304,42 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         } else if (move === "replace") {
           select(cell.pick);
         } else if (move === "close") {
-          send({ type: "close" }, "closed");
+          send(Tag.cases.close.make({}), "closed");
         } else if (move === "late") {
-          const late = old.filter((msg) => "selection" in msg && msg.selection !== selection);
+          const late = Arr.filter(old, (msg) => "selection" in msg && msg.selection !== selection);
           const before = model;
           send(late[cell.pick % late.length]!, cursor.phase);
           expect(model).toEqual(before);
         } else if (move === "failed") {
           send(
-            { type: "failed", selection, request, reason: draw.failures[cell.pick % draw.failures.length]! },
+            {
+              ...Tag.cases.failed.make({}),
+              selection,
+              request,
+              reason: draw.failures[cell.pick % draw.failures.length]!,
+            },
             "refused",
           );
         } else if (move === "wrong-request") {
-          const other = draw.answers.find((id) => id !== request)!;
+          const other = Option.getOrThrow(Arr.findFirst(draw.answers, (id) => id !== request));
           const before = model;
           send(
-            { type: "saved", selection, request: other, receipt: draw.receipts[cell.pick % draw.receipts.length]! },
+            {
+              ...Tag.cases.saved.make({}),
+              selection,
+              request: other,
+              receipt: draw.receipts[cell.pick % draw.receipts.length]!,
+            },
             cursor.phase,
           );
           expect(model).toEqual(before);
           send(
-            { type: "failed", selection, request: other, reason: draw.failures[cell.pick % draw.failures.length]! },
+            {
+              ...Tag.cases.failed.make({}),
+              selection,
+              request: other,
+              reason: draw.failures[cell.pick % draw.failures.length]!,
+            },
             cursor.phase,
           );
           expect(model).toEqual(before);
@@ -306,7 +347,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
           const before = model;
           send(
             {
-              type: "answer",
+              ...Tag.cases.answer.make({}),
               selection,
               request,
               decision: accepted ? TrustDecision.cases.accepted.make({}) : TrustDecision.cases.denied.make({}),
@@ -317,7 +358,12 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         } else {
           const before = model;
           send(
-            { type: "saved", selection, request, receipt: draw.receipts[cell.pick % draw.receipts.length]! },
+            {
+              ...Tag.cases.saved.make({}),
+              selection,
+              request,
+              receipt: draw.receipts[cell.pick % draw.receipts.length]!,
+            },
             cursor.phase,
           );
           expect(model).toEqual(before);
@@ -333,7 +379,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
 
       expect(model._tag).toBe("ready");
       const receipt = model;
-      send({ type: "saved", selection, request, receipt: draw.receipts[0]! }, "ready");
+      send({ ...Tag.cases.saved.make({}), selection, request, receipt: draw.receipts[0]! }, "ready");
       expect(model).toEqual(receipt);
       select(draw.cells[0]!.pick);
 
@@ -345,7 +391,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
 
       // Require a stale yes to arrive while its replacement is actually awaiting an answer.
       const stale: Msg = {
-        type: "answer",
+        ...Tag.cases.answer.make({}),
         selection,
         request,
         decision: TrustDecision.cases.accepted.make({}),
@@ -363,7 +409,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         undefined,
         fc.constant(messages),
         ({ prev, next, msg }) =>
-          next._tag !== "ready" || prev._tag === "ready" || (prev._tag === "saving" && msg.type === "saved"),
+          next._tag !== "ready" || prev._tag === "ready" || (prev._tag === "saving" && msg._tag === "saved"),
         { seed: 119120, numRuns: 1 },
       );
     }),

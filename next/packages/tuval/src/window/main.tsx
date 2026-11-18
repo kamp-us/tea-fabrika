@@ -21,14 +21,21 @@ import {
   type windowMachineFor,
   type WindowModel,
   type WindowMsg,
+  WindowOwn,
 } from "@kampus/libfabrika/client/WindowMachine";
 import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
+import { LinkMsg } from "@kampus/libfabrika/transport/Link";
 import { Button, useClipboard } from "@manti-ui/react";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -118,16 +125,20 @@ const TileBody = ({
   readonly tile: TezgahTile;
   readonly windowFor: PageProps["windowFor"];
 }) => {
-  const [row, send] = useRuntime(run, (m) => m.tiles.find((t) => t.id === tile.id));
+  const [row, send] = useRuntime(run, (m) => Option.getOrUndefined(Arr.findFirst(m.tiles, (t) => t.id === tile.id)));
 
   const [shown] = useRuntime(run, (m) => {
-    const t = m.tiles.find((t) => t.id === tile.id);
+    const t = Option.getOrUndefined(Arr.findFirst(m.tiles, (t) => t.id === tile.id));
 
-    return t?.last ? m.client.views[t.last] : undefined;
+    return t?.last !== undefined && t.last !== null && t.last !== "" ? m.client.views[t.last] : undefined;
   });
 
   const registration = windowFor(tile.program);
-  const data = registration && shown ? Option.getOrNull(Schema.decodeOption(registration.data)(shown.view)) : null;
+
+  const data =
+    registration !== null && shown !== undefined
+      ? Option.getOrNull(Schema.decodeOption(registration.data)(shown.view))
+      : null;
 
   // The tile guideline's empty state: one word where the view will start, and on an ended tile in
   // place of the ended process's last view.
@@ -141,8 +152,8 @@ const TileBody = ({
     <registration.View
       data={data}
       tile={row.own}
-      press={(m) => send({ type: "press", tile: row.id, m, via: "button" })}
-      send={(msg) => send({ type: "tile", id: row.id, msg })}
+      press={(m) => send(WindowOwn.cases.press.make({ tile: row.id, m, via: "button" }))}
+      send={(msg) => send(WindowOwn.cases.tile.make({ id: row.id, msg }))}
       refusal={refusalFor(registration, row.refusal)}
     />
   );
@@ -161,13 +172,15 @@ const PRINTED: Readonly<Record<string, string>> = { arrowleft: "←", arrowright
 /** The prefix line's hints: each key after the prefix and what it does, from the one table. The way
  *  out, `Esc cancel`, is the line's own right end. */
 const prefixHints = (table: Keys.Table): ReadonlyArray<string> =>
-  table.rows.flatMap((row) => {
-    const keys = row.keys
-      .filter((k) => k.startsWith("<prefix>"))
-      .map((k) => k.slice("<prefix>".length))
-      .map((k) => PRINTED[k] ?? k);
+  Arr.flatMap(table.rows, (row) => {
+    const keys = Function.pipe(
+      row.keys,
+      Arr.filter(Str.startsWith("<prefix>")),
+      Arr.map(Str.slice("<prefix>".length)),
+      Arr.map((k) => PRINTED[k] ?? k),
+    );
 
-    return keys.length === 0 ? [] : [`${keys.join(" ")} ${row.word}`];
+    return keys.length === 0 ? [] : [`${Arr.join(keys, " ")} ${row.word}`];
   });
 
 /** The prefix line, one line at every size (the tile guidelines; modes M3): the mode's word at the
@@ -178,7 +191,7 @@ const PrefixLine = ({ table }: { readonly table: Keys.Table }) => (
   <>
     <span className="mode">prefix</span>
     <span className="hints">
-      {prefixHints(table).map((hint) => (
+      {Arr.map(prefixHints(table), (hint) => (
         <span key={hint} className="hint">
           {hint}
         </span>
@@ -205,7 +218,7 @@ const useKeys = (run: LiveWindow, machine: PageProps["machine"], table: Keys.Tab
         return;
       }
 
-      const press: KeyPress = { type: "key", key, at: Math.max(0, e.timeStamp) };
+      const press: KeyPress = WindowOwn.cases.key.make({ key, at: Math.max(0, e.timeStamp) });
       const judged = handle(machine, table, run.getState(), line.unread, press);
       line.unread = judged.unread;
 
@@ -242,7 +255,7 @@ const useSize = (send: (msg: WindowMsg) => void) => {
       if (entry !== undefined) {
         // The tiles are laid out inside the desk's padding, one gap on each side.
         const { width, height } = entry.contentRect;
-        send({ type: "size", width: Math.max(0, width - 2 * GAP), height: Math.max(0, height - 2 * GAP) });
+        send(WindowOwn.cases.size.make({ width: Math.max(0, width - 2 * GAP), height: Math.max(0, height - 2 * GAP) }));
       }
     });
 
@@ -281,7 +294,7 @@ const useFocusIn = (send: (msg: WindowMsg) => void) =>
       const at = focusAt(e.target);
 
       if (at !== null) {
-        send({ type: "focus", ...at });
+        send(WindowOwn.cases.focus.make({ ...at }));
       }
     };
 
@@ -323,23 +336,34 @@ const Desk = (props: PageProps) => {
   const [size] = useRuntime(props.run, pickSize);
   const [tie] = useRuntime(props.run, pickTie);
   const view = none || client === null ? null : optimisticState(client);
-  const space = view?.workspaces.find((w) => w.n === client?.workspace);
+
+  const space =
+    view === null ? undefined : Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === client?.workspace));
+
   const area = useSize(send);
-  const roomless = polite === null ? undefined : view?.tiles.find((t) => t.id === polite.tile);
-  const focused = view?.tiles.find((t) => t.id === space?.focus);
+
+  const roomless =
+    polite === null || view === null
+      ? undefined
+      : Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === polite.tile));
+
+  const focused =
+    view === null ? undefined : Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === space?.focus));
+
   /** Where DOM focus last sat in a tile: the one answer both landings read (0165). */
   const cursor = (t: TezgahTile) => lastCursor(tie, t);
   useFocusIn(send);
   useFollow(area, {
     focus: focused?.id ?? null,
     cursor: focused === undefined ? null : cursor(focused),
-    live: tileState(
-      link,
-      rows.find((r) => r.id === focused?.id),
-    ).live,
+    live: tileState(link, Option.getOrUndefined(Arr.findFirst(rows, (r) => r.id === focused?.id))).live,
     layout: space === undefined ? "" : JSON.stringify(space.layout),
   });
-  const asked = prefix._tag === "asking" ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
+
+  const asked =
+    prefix._tag === "asking" && view !== null
+      ? Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === prefix.tile))
+      : undefined;
 
   const line = none ? (
     NO_TEZGAH
@@ -355,7 +379,7 @@ const Desk = (props: PageProps) => {
     tileName(focused)
   );
 
-  const said = typeof line === "string" ? <span className="says">{line}</span> : line;
+  const said = Predicate.isString(line) ? <span className="says">{line}</span> : line;
 
   return (
     <>
@@ -369,17 +393,12 @@ const Desk = (props: PageProps) => {
           <Layout
             workspace={space}
             tiles={view.tiles}
-            state={(t) =>
-              tileState(
-                link,
-                rows.find((r) => r.id === t.id),
-              )
-            }
+            state={(t) => tileState(link, Option.getOrUndefined(Arr.findFirst(rows, (r) => r.id === t.id)))}
             asking={asked?.id ?? null}
             cursor={cursor}
             size={size}
             strips={size === null ? new Set() : fold(space, size)}
-            open={(tile) => send({ type: "focus", tile: tile.id, cursor: tile.cursor })}
+            open={(tile) => send(WindowOwn.cases.focus.make({ tile: tile.id, cursor: tile.cursor }))}
           >
             {(tile) => <TileBody run={props.run} tile={tile} windowFor={props.windowFor} />}
           </Layout>
@@ -402,7 +421,9 @@ const Page = (props: PageProps) => {
   const [said] = useRuntime(props.run, (m) => m.said);
   useKeys(props.run, props.machine, props.keys, send);
   const view = client === null ? null : optimisticState(client);
-  const named = (id: string) => view?.tiles.find((t) => t.id === id);
+
+  const named = (id: string) =>
+    view === null ? undefined : Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === id));
 
   // The status messages of the current burst, as one line (0504): a refusal, or a tile without focus
   // whose process ended. A refusal's words are those of the program its tile shows.
@@ -414,12 +435,15 @@ const Page = (props: PageProps) => {
 
   const roomless = polite === null ? undefined : named(polite.tile);
 
-  const words = [
-    ...(none ? [NO_TEZGAH] : []),
-    ...(burst === "" ? [] : [burst]),
-    ...(prefix._tag === "armed" ? ["prefix"] : []),
-    ...(roomless === undefined ? [] : [noRoom(roomless)]),
-  ].join(" ");
+  const words = Arr.join(
+    [
+      ...(none ? [NO_TEZGAH] : []),
+      ...(burst === "" ? [] : [burst]),
+      ...(prefix._tag === "armed" ? ["prefix"] : []),
+      ...(roomless === undefined ? [] : [noRoom(roomless)]),
+    ],
+    " ",
+  );
 
   const asked = prefix._tag === "asking" ? named(prefix.tile) : undefined;
 
@@ -431,7 +455,7 @@ const Page = (props: PageProps) => {
         <h1>Removed</h1>
         <p>This window was removed</p>
         <p>Ask again to make a new key and wait for a new grant.</p>
-        <Button variant="primary" onClick={() => send({ type: "ask_again", dial: dials + 1 })}>
+        <Button variant="primary" onClick={() => send(LinkMsg.cases.ask_again.make({ dial: dials + 1 }))}>
           Ask again
         </Button>
       </main>
@@ -440,7 +464,7 @@ const Page = (props: PageProps) => {
         <h1>Blocked</h1>
         <p>The browser could not keep or use this window's key. {link.reason}</p>
       </main>
-    ) : link._tag !== "online" && Object.keys(views).length === 0 ? (
+    ) : link._tag !== "online" && Rec.keys(views).length === 0 ? (
       <main className="screen">
         <p>Connecting</p>
       </main>
@@ -449,7 +473,7 @@ const Page = (props: PageProps) => {
         <header className="topbar">
           <span role="status">
             {link._tag === "online" ? "Online" : "Connection lost. Retrying."}
-            {trouble ? ` ${trouble}` : ""}
+            {trouble !== null && trouble !== "" ? ` ${trouble}` : ""}
           </span>
         </header>
         <Desk {...props} />

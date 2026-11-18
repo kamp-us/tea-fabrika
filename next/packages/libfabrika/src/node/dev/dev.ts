@@ -5,6 +5,8 @@
  */
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
+import * as Arr from "effect/Array";
+import type * as Brand from "effect/Brand";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -12,24 +14,34 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Queue from "effect/Queue";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import type { LedgerCalls } from "../../ledger/Ledger.ts";
+import type { Connections } from "../../presence/Connections.ts";
+import type { From } from "../../processes/Mailbox.ts";
+import type { Start } from "../../processes/Process.ts";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
+import type { ProcessCalls } from "../../processes/ProcessManager.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { Installed, type Install } from "../../runtime/Code.ts";
 import type { CodeEvent } from "../../runtime/Code.ts";
+import type { ProcessObjectCalls } from "../../runtime/ObjectCalls.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
-import { type devLife, type DevState, latest, pending, Pid, reachable, recovering, target } from "./DevLife.ts";
+import { DevMsg, type devLife, type DevState, latest, pending, Pid, reachable, recovering, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory, lifeCell, signal, terminate } from "./local-dev.ts";
 
 /**
@@ -50,6 +62,76 @@ export class ControlError extends Schema.TaggedError<ControlError, { readonly br
 type Target = "project" | "process" | "record" | "loader" | "bucket";
 
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+
+/** Each call of `S` with its own arguments, answering what crossed the control socket, still undecoded. */
+type Undecoded<S> = {
+  readonly [K in keyof S]: S[K] extends (...args: infer A) => unknown ? (...args: A) => Promise<unknown> : never;
+};
+
+/** The client's name at the door, as the Project object brands it. */
+type ConnectionId = string & Brand.Brand<"ConnectionId">;
+
+type Gateways = (typeof Connections)["Service"];
+
+/** A process's append, as the Project object's `commit` takes it after the process ID. */
+type Commit = {
+  readonly id: string;
+  readonly parent: string;
+  readonly kind: string;
+  readonly stream: string;
+  readonly event: unknown;
+};
+
+/** The Project calls the control door allows, each with the arguments the Project object takes. */
+type ProjectDoor = LedgerCalls &
+  Pick<Gateways, "join" | "leave" | "online"> &
+  Pick<ProcessCalls, "exit"> & {
+    readonly challenge: (client: ConnectionId) => unknown;
+    readonly initialize: (
+      client: ConnectionId,
+      input: Schema.Json | undefined,
+      trusted: { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string },
+    ) => unknown;
+    readonly route: (client: ConnectionId, method: string, params: Schema.Json | undefined, reader?: string) => unknown;
+    readonly grant: (input: unknown) => unknown;
+    readonly start: (request: Start, from: From) => unknown;
+    readonly info: () => unknown;
+    readonly sign: (process: string, id: string, parent: string, kind: string) => unknown;
+    readonly commit: (pid: string, input: Commit) => unknown;
+    readonly brain: (event: typeof BrainEvent.Type) => unknown;
+    readonly codeInstall: (input: Install) => unknown;
+    readonly codeFailed: (input: (typeof CodeEvent.cases)["code.failed"]["Type"]) => unknown;
+  };
+
+/**
+ * The dev client's Project gateways: `join`, `leave` and `online`.
+ *
+ * @category models
+ */
+export type DevGateways = Undecoded<Pick<Gateways, "join" | "leave" | "online">>;
+
+/**
+ * The dev client's Project: the calls its control door allows, `connect` for `clientConnect`, the
+ * gateways, and `forProcess(pid).append` for `commit(pid, ...)`. An answer crossed JSON undecoded,
+ * so each is `Promise<unknown>`.
+ *
+ * @category models
+ */
+export type DevProject = Undecoded<ProjectDoor> & {
+  readonly connect: () => Promise<unknown>;
+  readonly gateways: DevGateways;
+  readonly forProcess: (pid: string) => { readonly append: (input: Commit) => Promise<unknown> };
+};
+
+/**
+ * The dev client's Process: the calls its control door allows, and `alarm` for `savedAlarm`. An
+ * answer crossed JSON undecoded, so each is `Promise<unknown>`.
+ *
+ * @category models
+ */
+export type DevProcess = Undecoded<
+  Pick<ProcessObjectCalls, "msg" | "open" | "due" | "restart" | "abort" | "activity" | "recover" | "savedAlarm">
+> & { readonly alarm: () => Promise<unknown> };
 
 type Life = typeof devLife.model.Type;
 
@@ -88,7 +170,7 @@ const sample = (pid: number) =>
         return yield* ControlError.make({ reason: "sample" });
       }
 
-      return Number(text.trim()) * 1024;
+      return Number(Str.trim(text)) * 1024;
     }),
   ).pipe(Effect.mapError((cause) => ControlError.make({ reason: "sample", cause })));
 
@@ -101,9 +183,14 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
 
   const { sha256 } = yield* Schema.decodeUnknownEffect(Schema.Struct({ sha256: Schema.String }))(raw);
 
+  const pairs: ReadonlyArray<string> = Option.getOrElse(
+    Function.pipe(sha256, Str.match(/../g)),
+    (): Array<string> => [],
+  );
+
   return {
     checksums: {
-      sha256: Uint8Array.from((sha256.match(/../g) ?? []).map((byte) => Number.parseInt(byte, 16))).buffer,
+      sha256: Uint8Array.from(Arr.map(pairs, (byte) => Number.parseInt(byte, 16))).buffer,
     },
   };
 });
@@ -156,7 +243,9 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const config = options,
     scope = yield* Effect.scope,
     ids = yield* ProcessIdGenerator,
-    client = yield* HttpClient.HttpClient;
+    client = yield* HttpClient.HttpClient,
+    // The services a binding's Promise call runs on, so it keeps the brain's clock, logger and tracer.
+    context = yield* Effect.context<never>();
 
   const outbox = yield* brainOutbox(options.home),
     runtimeScope = yield* Scope.make(),
@@ -220,10 +309,13 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     const url = `http://127.0.0.1:${port}`;
     const fail = (cause: unknown) => ControlError.make({ reason: "unreachable", cause });
 
-    const body = yield* Effect.try({
-      try: () => JSON.stringify({ target, project, name, method, args }),
-      catch: fail,
-    });
+    const body = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))({
+      target,
+      project,
+      name,
+      method,
+      args,
+    }).pipe(Effect.mapError(fail));
 
     const response = yield* HttpClientRequest.post(url).pipe(
       // oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
@@ -320,7 +412,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
             name: "user-worker",
             entrypoint: "Control",
             // oxlint-disable-next-line fabrika/no-redacted-value -- Alchemy sends these entrypoint props to workerd
-            props: { json: JSON.stringify({ token: Redacted.value(token) }) },
+            props: { json: Formatter.formatJson({ token: Redacted.value(token) }) },
           },
         },
       ],
@@ -335,7 +427,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           ),
         );
 
-        const [prev, next] = yield* send({ type: "listened", port });
+        const [prev, next] = yield* send(DevMsg.cases.listened.make({ port }));
         yield* Deferred.succeed(listening, undefined);
         const id = consumed(prev, next);
         const ready = id === null ? undefined : replacements.get(id);
@@ -349,7 +441,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   );
 
   const stopRuntime = Effect.fn("brain.stop")(function* () {
-    const [, stopping] = yield* send({ type: "stop" });
+    const [, stopping] = yield* send(DevMsg.cases.stop.make({}));
     yield* Scope.close(runtimeScope, Exit.void);
     const start = latest(stopping);
 
@@ -360,7 +452,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       yield* flush.pipe(Effect.ignore);
     }
 
-    yield* send({ type: "stopped" });
+    yield* send(DevMsg.cases.stopped.make({}));
     // The stop discards any replacement still waiting; its restart ends with the scope.
     replacements.clear();
   });
@@ -393,7 +485,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         replacements.set(start, ready);
         // The exit is folded before its row is written, so no call dials the ended process while
         // the write is under way.
-        const [prev] = yield* send({ type: "exited", replacement: start });
+        const [prev] = yield* send(DevMsg.cases.exited.make({ replacement: start }));
         const old = pending(prev);
 
         // A second exit before any listener replaces the token, as main replaced the wait.
@@ -412,7 +504,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
             ...(rss === undefined ? {} : { bytes: rss }),
           }),
         );
-        yield* Effect.forkIn(recorded(restartRuntime(ready)).pipe(Effect.ignore), scope);
+        yield* ready.pipe(restartRuntime, recorded, Effect.ignore, Effect.forkIn(scope));
       }
 
       if (event.type === "start") {
@@ -429,7 +521,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
         const next = yield* ids.next;
         const at = yield* Clock.currentTimeMillis;
-        const [, up] = yield* send({ type: "started", start: next, pid, build: config.build, at });
+        const [, up] = yield* send(DevMsg.cases.started.make({ start: next, pid, build: config.build, at }));
 
         // Braked and stopping refuse a start.
         if (up._tag !== "spawned" && up._tag !== "online") {
@@ -451,7 +543,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         yield* Deferred.succeed(started, undefined);
       } else if (event.type === "restart") {
         const until = (yield* Clock.currentTimeMillis) + event.delay;
-        yield* send({ type: "waiting", until, reason });
+        yield* send(DevMsg.cases.waiting.make({ until, reason }));
         const at = yield* Clock.currentTimeMillis;
         yield* outbox.add(
           BrainEvent.cases.restarting.make({
@@ -466,7 +558,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           }),
         );
       } else if (event.type === "stop") {
-        const [prev, next] = yield* send({ type: "braked", reason: event.reason });
+        const [prev, next] = yield* send(DevMsg.cases.braked.make({ reason: event.reason }));
         const id = consumed(prev, next);
         const ready = id === null ? undefined : replacements.get(id);
 
@@ -580,29 +672,36 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     ),
   );
 
-  const proxy = <Members extends object>(
+  // A stand-in answers its own members, and any other name goes to the door as it is: the door
+  // refuses a name it does not allow.
+  const proxy = <Members extends Readonly<Record<string | symbol, unknown>>>(
     invoke: (method: string, args: ReadonlyArray<unknown>) => Effect.Effect<unknown, ControlError>,
     members: Members,
   ) =>
-    new Proxy(Object.assign<Binding, Members>({}, members), {
+    new Proxy(members, {
       get: (_value, method) => {
         if (method === "then") {
           return undefined;
         }
 
-        if (Object.hasOwn(members, method)) {
+        if (Rec.has<string | symbol, unknown>(members, method)) {
+          // SAFETY: Object.hasOwn just found `method` among members' own keys.
           return members[method as keyof Members];
         }
 
         const work = (args: ReadonlyArray<unknown>) => invoke(String(method), args);
 
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
-        return (...args: ReadonlyArray<unknown>) => Effect.runPromise(work(args));
+        return (...args: ReadonlyArray<unknown>) => Effect.runPromiseWith(context)(work(args));
       },
     });
 
   const binding = (target: Target, project: string, name = "") =>
-    proxy((method, args) => call(target, project, name, method, args), {});
+    proxy<Binding>((method, args) => call(target, project, name, method, args), {});
+
+  // A Worker Loader's start: the program's init, answering its binding.
+  const loaded = (name: string, pid: string) =>
+    call("loader", pid, name, "init", [null]).pipe(Effect.as(binding("loader", pid, name)));
 
   return {
     recording,
@@ -617,30 +716,135 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         Effect.mapError((cause) => ControlError.make({ reason: "install", cause })),
       ),
     url: `http://127.0.0.1:${config.port}`,
-    project: (project: string) =>
-      proxy((method, args) => call("project", project, "", method === "connect" ? "clientConnect" : method, args), {
-        gateways: binding("project", project),
-        forProcess: (pid: string) =>
-          proxy(
-            (method, args) => call("project", project, "", method === "append" ? "commit" : method, [pid, ...args]),
-            {},
-          ),
-      }),
-    process: (pid: string) =>
-      proxy((method, args) => call("process", config.name, pid, method === "alarm" ? "savedAlarm" : method, args), {}),
+    project: (project: string): DevProject => {
+      const door = (method: string, args: ReadonlyArray<unknown>) => call("project", project, "", method, args);
+
+      return proxy<DevProject>(door, {
+        challenge: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("challenge", args)),
+        initialize: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("initialize", args)),
+        route: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("route", args)),
+        grant: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("grant", args)),
+        read: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("read", args)),
+        append: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("append", args)),
+        wait: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("wait", args)),
+        start: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("start", args)),
+        exit: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("exit", args)),
+        info: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("info", args)),
+        sign: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("sign", args)),
+        commit: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("commit", args)),
+        brain: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("brain", args)),
+        codeInstall: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("codeInstall", args)),
+        codeFailed: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("codeFailed", args)),
+        connect: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("clientConnect", args)),
+        join: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("join", args)),
+        leave: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("leave", args)),
+        online: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("online", args)),
+        gateways: proxy<DevGateways>(door, {
+          join: (...args) =>
+            // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+            Effect.runPromiseWith(context)(door("join", args)),
+          leave: (...args) =>
+            // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+            Effect.runPromiseWith(context)(door("leave", args)),
+          online: (...args) =>
+            // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+            Effect.runPromiseWith(context)(door("online", args)),
+        }),
+        forProcess: (pid: string) => {
+          const own = (method: string, args: ReadonlyArray<unknown>) => door(method, [pid, ...args]);
+
+          return proxy<ReturnType<DevProject["forProcess"]>>(own, {
+            append: (...args) =>
+              // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Project matches the binding's Promise API
+              Effect.runPromiseWith(context)(own("commit", args)),
+          });
+        },
+      });
+    },
+    process: (pid: string): DevProcess => {
+      const door = (method: string, args: ReadonlyArray<unknown>) => call("process", config.name, pid, method, args);
+
+      return proxy<DevProcess>(door, {
+        msg: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("msg", args)),
+        open: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("open", args)),
+        due: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("due", args)),
+        restart: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("restart", args)),
+        abort: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("abort", args)),
+        activity: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("activity", args)),
+        recover: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("recover", args)),
+        savedAlarm: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("savedAlarm", args)),
+        alarm: (...args) =>
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Process matches the binding's Promise API
+          Effect.runPromiseWith(context)(door("savedAlarm", args)),
+      });
+    },
     record: (project: string, name: string) => binding("record", project, name),
     loader: {
       load: (name: string, pid: string) =>
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local Worker Loader proxy matches the platform's Promise API
-        Effect.runPromise(call("loader", pid, name, "init", [null]).pipe(Effect.as(binding("loader", pid, name)))),
+        Effect.runPromiseWith(context)(loaded(name, pid)),
     },
     bucket: {
       put: (key: string, body: Uint8Array, options: { sha256: string }) =>
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local R2 proxy matches the platform's Promise API
-        Effect.runPromise(call("bucket", config.name, "", "put", [key, [...body], options.sha256])),
+        Effect.runPromiseWith(context)(call("bucket", config.name, "", "put", [key, [...body], options.sha256])),
       head: (key: string) =>
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local R2 proxy matches the platform's Promise API
-        Effect.runPromise(bucketChecksum(call("bucket", config.name, "", "head", [key]))),
+        Effect.runPromiseWith(context)(bucketChecksum(call("bucket", config.name, "", "head", [key]))),
     },
   };
 });

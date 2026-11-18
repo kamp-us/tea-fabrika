@@ -1,6 +1,5 @@
 // T285, PR 1, next/. These laws keep the five partial door spans at their current scope.
 // Plants: widen initialize, rename a span, lose its parent/link/tags, or recover inside it.
-import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Id } from "@kampus/libfabrika";
 import { Saw } from "@kampus/libfabrika/access/Access";
@@ -19,13 +18,36 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Cause,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Option,
+  Predicate,
+  Record as Rec,
+  Result,
+  Schema,
+  Stream,
+  Tracer,
+} from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  comment: {},
+});
 
 const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }), endOnFailure: true };
 
@@ -45,7 +67,7 @@ const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json)
 
 // SQL columns and span fields can hold another JSON document.
 const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     const prior = cache.get(value);
 
     if (prior !== undefined) {
@@ -57,7 +79,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     const result = [
       value,
       ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
-      ...Array.from(value.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
+      ...Array.from(Str.matchAll(/https?:\/\/[^\s"<>\\]+/gu)(value), ([url]) =>
         Result.getOrElse(
           Result.try(() => decodeURIComponent(decodeURIComponent(url))),
           () => url,
@@ -71,9 +93,11 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
   }
 
   return Array.isArray(value)
-    ? value.flatMap((part) => texts(part, cache))
-    : value !== null && typeof value === "object"
-      ? Object.values(value).flatMap((part) => texts(part, cache))
+    ? Arr.flatMap(value, (part) => texts(part, cache))
+    : Predicate.isObject(value)
+      ? // SAFETY: Array.isArray above took every array at runtime, but TypeScript keeps a readonly array in
+        // this branch, so the cast says what the value is here: a Json object, whose values are Json.
+        Arr.flatMap(Rec.values(value as { readonly [key: string]: Schema.Json }), (part) => texts(part, cache))
       : [];
 };
 
@@ -90,71 +114,9 @@ const sample = fc.record({
 
 type Sample = typeof sample extends fc.Arbitrary<infer A> ? A : never;
 
-const u32 = (n: number) => {
-  const b = Buffer.alloc(4);
-  b.writeUInt32BE(n);
-
-  return b;
-};
-
-const field = (value: string | Uint8Array) => {
-  const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
-
-  return Buffer.concat([u32(bytes.length), bytes]);
-};
-
-const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
-
-// Generated Ed25519 seeds stay in memory. No key file is read or written.
-const key = (seed: Uint8Array, salt: number) => {
-  const privateKey = createPrivateKey({
-    key: Buffer.concat([
-      Buffer.from("302e020100300506032b657004220420", "hex"),
-      Buffer.from(seed.map((b) => b ^ salt)),
-    ]),
-    format: "der",
-    type: "pkcs8",
-  });
-
-  const raw = createPublicKey(privateKey).export({ format: "der", type: "spki" }).subarray(-32);
-  const blob = Buffer.concat([field("ssh-ed25519"), field(raw)]);
-
-  return {
-    raw: raw.toString("base64url"),
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: fingerprint(raw),
-    sshFingerprint: fingerprint(blob),
-    sign: (text: string) => {
-      const space = "fabrika-client";
-
-      const signed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field(space),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const signature = Buffer.concat([field("ssh-ed25519"), field(sign(null, signed, privateKey))]);
-
-      const bytes = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        u32(1),
-        field(blob),
-        field(space),
-        field(""),
-        field("sha512"),
-        field(signature),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${bytes
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
+// Generated Ed25519 seeds stay in memory. No key file is read or written. Each salt gives a
+// different key from the sample's one seed.
+const key = (seed: Uint8Array, salt: number) => SshsigTest.identityFrom(seed.map((b) => b ^ salt));
 
 const fixture = Effect.fnUntraced(function* (a: Sample) {
   const databases: Array<DatabaseSync> = [];
@@ -187,9 +149,9 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
   );
   const sql = open();
 
-  const root = key(a.seed, 0),
-    window = key(a.seed, 1),
-    stranger = key(a.seed, 2);
+  const root = yield* key(a.seed, 0),
+    window = yield* key(a.seed, 1),
+    stranger = yield* key(a.seed, 2);
 
   const controls = { fail: "", deliveryFails: false, audit: "ok", selections: 0, deliveries: 0 };
 
@@ -294,15 +256,17 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
           {
             msg: controls.audit === "decode" ? Schema.Struct({ missing: Schema.String }) : Input,
             audit: {
-              data: Schema.Struct({ type: Schema.Literal("comment") }),
+              data: Schema.TaggedStruct("comment", {}),
               select: () => {
-                const m = Schema.decodeUnknownSync(Input)(message);
+                const m = Schema.decodeSync(Input)(message);
 
                 if (controls.audit === "selector") {
                   throw new Error(m.text);
                 }
 
-                return { type: controls.audit === "output" ? m.text : "comment" };
+                return controls.audit === "output"
+                  ? Schema.TaggedStruct(m.text, {}).make({})
+                  : Tag.cases.comment.make({});
               },
             },
           },
@@ -435,7 +399,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                     expect(Cause.hasDies(exit.cause)).toBe(false);
                     const error = Cause.squash(exit.cause);
                     expect(error).toBeInstanceOf(Audit.AuditError);
-                    errors.push(String(error), JSON.stringify(error), Cause.pretty(exit.cause));
+                    errors.push(String(error), Formatter.formatJson(error), Cause.pretty(exit.cause));
                   }
 
                   expect(w.controls.deliveries).toBe(beforeDeliveries);
@@ -458,36 +422,42 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                 yield* (yield* SpanSink).flush;
                 expect(w.archived.length).toBeGreaterThan(0);
 
-                const cells = w.databases.flatMap((db) =>
-                  db
-                    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-                    .all()
-                    .flatMap(({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all()),
+                const cells = Arr.flatMap(w.databases, (db) =>
+                  Arr.flatMap(
+                    db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all(),
+                    ({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all(),
+                  ),
                 );
 
-                const shown = JSON.stringify(
-                  {
-                    spans: tracer.spans.map((s) => ({ name: s.name, tags: [...s.attributes] })),
-                    events: tracer.events,
-                  },
-                  (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
-                );
+                const shown = yield* Schema.encodeEffect(
+                  Schema.fromJsonString(Schema.Unknown, {
+                    replacer: (_k, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
+                  }),
+                )({
+                  spans: Arr.map(tracer.spans, (s) => ({ name: s.name, tags: [...s.attributes] })),
+                  events: tracer.events,
+                });
 
-                const outputs = [...w.writes, ...w.archived, JSON.stringify(cells), shown, ...errors].flatMap(
+                const outputs = Arr.flatMap(
+                  [...w.writes, ...w.archived, Formatter.formatJson(cells), shown, ...errors],
                   (output) => texts(output, decoded),
                 );
 
                 for (const body of bodies) {
-                  for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
-                    expect(outputs.filter((output) => output.includes(form))).toEqual([]);
+                  for (const form of [body, Str.slice(1, -1)(Formatter.formatJson(body)), encodeURIComponent(body)]) {
+                    expect(Arr.filter(outputs, (output) => Str.includes(form)(output))).toEqual([]);
                   }
                 }
 
                 // A successful control still records the required safe metadata.
                 if (move === "send") {
-                  const rows = cells.filter((r) => r.stream === "gateway/inputs" && r._tag === "received");
+                  const rows = Arr.filter(cells, (r) => r.stream === "gateway/inputs" && r._tag === "received");
                   expect(rows.length).toBeGreaterThan(0);
-                  expect(JSON.parse(String(rows.at(-1)!.body))).toMatchObject({ input: { type: "comment" } });
+                  expect(
+                    yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(String(rows.at(-1)!.body)),
+                  ).toMatchObject({
+                    input: Tag.cases.comment.make({}),
+                  });
                 }
               }
             }).pipe(Effect.provide(w.layer));
@@ -505,7 +475,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
 const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record<string, unknown> = {}) => {
   expect(span.traceId).toBe(a.traceId);
   expect(Option.getOrThrow(span.parent).spanId).toBe(a.spanId);
-  expect(Object.fromEntries(span.attributes)).toEqual(attributes);
+  expect(Rec.fromEntries(span.attributes)).toEqual(attributes);
   expect(span.status._tag).toBe("Ended");
 
   if (span.status._tag === "Ended") {
@@ -513,7 +483,7 @@ const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record
   }
 };
 
-const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: ReturnType<typeof key>, tab: string) {
+const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: SshsigTest.Identity, tab: string) {
   const client = yield* d.connect(),
     nonce = yield* d.challenge(client);
 
@@ -529,7 +499,7 @@ const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: ReturnT
       platform: "browser",
       os: "unknown",
       sentAt: SENT,
-      signed: k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
+      signed: yield* k.proof(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
     },
     trusted: { url: URL, tab, name: k.fingerprint },
   };
@@ -618,11 +588,11 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   Exit.isSuccess(result),
                   Exit.isFailure(result) ? String(Cause.squash(result.cause)) : "success",
                 ).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                expect(spans.map((s) => s.name)).toEqual(["gateway.initialize"]);
+                const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.initialize"]);
                 checkSpan(spans[0]!, a, !fail);
-                const appends = c.spans.filter((s) => s.name === "authorization.appendAdmitted");
-                const transactions = c.spans.filter((s) => s.name === "ledger.transaction");
+                const appends = Arr.filter(c.spans, (s) => s.name === "authorization.appendAdmitted");
+                const transactions = Arr.filter(c.spans, (s) => s.name === "ledger.transaction");
                 expect(appends).toHaveLength(1);
                 expect(transactions).toHaveLength(1);
 
@@ -685,15 +655,15 @@ describe("door partial spans, next/ tracing keep-laws", () => {
 
                 const result = yield* Effect.exit(
                   d
-                    .grant({ text, armored: w.root.sign(text) })
+                    .grant({ text, armored: yield* w.root.proof(text) })
                     .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                 );
 
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                expect(spans.map((s) => s.name)).toEqual(["gateway.grant"]);
+                const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.grant"]);
                 checkSpan(spans[0]!, a, !fail);
-                const write = c.spans.find((s) => s.name === "access.write")!;
+                const write = Option.getOrThrow(Arr.findFirst(c.spans, (s) => s.name === "access.write"));
                 expect(Option.getOrThrow(write.parent).spanId).toBe(spans[0]!.spanId);
               }).pipe(Effect.provide(w.layer));
             }),
@@ -726,10 +696,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 );
 
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                expect(spans.map((s) => s.name)).toEqual(["gateway.deny"]);
+                const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.deny"]);
                 checkSpan(spans[0]!, a, true);
-                const write = c.spans.find((s) => s.name === "access.write")!;
+                const write = Option.getOrThrow(Arr.findFirst(c.spans, (s) => s.name === "access.write"));
                 expect(write.traceId).toBe(a.traceId);
                 expect(Option.getOrThrow(write.parent).spanId).toBe(a.spanId);
                 expect(write.status._tag).toBe("Ended");
@@ -790,8 +760,8 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       expect(Cause.squash(result.cause)).toBeInstanceOf(LedgerError);
                     }
 
-                    const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                    expect(spans.map((s) => s.name)).toEqual(
+                    const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
+                    expect(Arr.map(spans, (s) => s.name)).toEqual(
                       call === "input_failed" ? ["gateway.input"] : ["gateway.input", "gateway.route"],
                     );
                     checkSpan(spans[0]!, a, call !== "input_failed");
@@ -807,7 +777,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       ok ? { "fab.gateway.outcome": call === "refused" ? "refused" : "ok" } : {},
                     );
                     expect(
-                      spans[1]!.links.map((l) => ({
+                      Arr.map(spans[1]!.links, (l) => ({
                         traceId: l.span.traceId,
                         spanId: l.span.spanId,
                         attributes: l.attributes,
@@ -816,7 +786,9 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                     const recorded = yield* Stream.runCollect((yield* RecordManager).read(Chain.cases.spans.make({})));
 
                     for (const span of spans) {
-                      expect(recorded.find((r) => r.spanId === span.spanId)).toMatchObject({
+                      expect(
+                        Option.getOrUndefined(Arr.findFirst(recorded, (r) => r.spanId === span.spanId)),
+                      ).toMatchObject({
                         name: span.name,
                         ok: span === spans[0] || ok,
                         traceId: a.traceId,

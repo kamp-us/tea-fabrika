@@ -4,7 +4,7 @@
 import { expect, it } from "@effect/vitest";
 import { ProgramDown, stepper, type Incoming, type ProgramRunner, type Refusal } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
-import { Arbitrary, Cause, Effect, Exit, Result, Schema } from "effect";
+import { Arbitrary, Array as Arr, Cause, Effect, Exit, Predicate, Result, Schema } from "effect";
 import {
   Body,
   build,
@@ -20,6 +20,17 @@ import {
   world,
   writer,
 } from "./runner-contract.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  guard: {},
+  peek: {},
+  save: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 
 const refusal = (actual: unknown, want: Refusal) => expect(actual).toEqual({ _tag: "refused", ...want });
 
@@ -50,7 +61,7 @@ it.effect.prop(
       refusal(yield* runner.msg(incoming(1, body, 0, true)), want);
       unchanged(before, yield* runner.open("watcher-1"));
       expect(yield* w.rows()).toEqual([]);
-      expect(w.updates.filter((u) => u.type === "patch")).toEqual([]);
+      expect(Arr.filter(w.updates, (u) => u.type === "patch")).toEqual([]);
       expect(w.calls).toEqual([]);
     }),
   opts,
@@ -62,8 +73,8 @@ it.prop(
   ({ c }) => {
     const { body, ...want } = c;
     const pure = Result.getOrThrow(stepper(makeProgram(() => want)));
-    refusal(pure.step(empty, { type: "save", body: 17 }), { reason: "bad_msg" });
-    refusal(pure.step(empty, { type: "save", body, base: 0, work: false }), want);
+    refusal(pure.step(empty, { ...Tag.cases.save.make({}), body: 17 }), { reason: "bad_msg" });
+    refusal(pure.step(empty, { ...Tag.cases.save.make({}), body, base: 0, work: false }), want);
     expect(() => refusal({ _tag: "refused", reason: `${want.reason}!` }, want)).toThrow();
   },
   opts,
@@ -85,7 +96,7 @@ const Wrong = Schema.Union([
 
 const BadMsgCases = Arbitrary.schema(
   Schema.Struct({
-    type: Schema.Union([
+    tag: Schema.Union([
       Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(96)),
       Schema.Literals(["__proto__", "constructor", "toString", "hasOwnProperty", "probe_ok"]),
     ]),
@@ -104,35 +115,35 @@ type BadMsgCase = typeof BadMsgCases extends Arbitrary.Arbitrary<infer C> ? C : 
 // A value of the wrong type for the field, whatever Wrong drew.
 const wrongFor = (field: BadMsgCase["field"], wrong: BadMsgCase["wrong"]) =>
   field === "body"
-    ? typeof wrong === "string"
+    ? Predicate.isString(wrong)
       ? wrong.length
       : wrong
     : field === "base"
-      ? typeof wrong === "number"
+      ? Predicate.isNumber(wrong)
         ? String(wrong)
         : wrong
-      : typeof wrong === "boolean"
+      : Predicate.isBoolean(wrong)
         ? Number(wrong)
         : wrong;
 
-const badInput = (c: BadMsgCase, kind: Bad): unknown => {
+const badInput = (c: BadMsgCase, kind: Bad): BadMsgCase["wrong"] | object => {
   // work is true, so a bad input that got through would also run a Cmd.
-  const save = { type: "save", body: c.body, base: c.base, work: true };
+  const save = { ...Tag.cases.save.make({}), body: c.body, base: c.base, work: true };
 
   if (kind === "untyped") {
     return c.wrong;
   }
 
   if (kind === "unknown") {
-    return { ...save, type: ["save", "guard", "peek"].includes(c.type) ? `${c.type}.undeclared` : c.type };
+    return { ...save, ...keyed(["save", "guard", "peek"].includes(c.tag) ? `${c.tag}.undeclared` : c.tag) };
   }
 
   if (kind === "read") {
-    return { type: "peek" };
+    return Tag.cases.peek.make({});
   }
 
   if (kind === "person_only") {
-    return { type: "guard", body: c.body };
+    return { ...Tag.cases.guard.make({}), body: c.body };
   }
 
   if (kind === "parent") {
@@ -157,7 +168,7 @@ type World = Effect.Success<ReturnType<typeof world>>;
 
 type Runner = typeof ProgramRunner.Service;
 
-const patches = (w: World) => w.updates.filter((u) => u.type === "patch");
+const patches = (w: World) => Arr.filter(w.updates, (u) => u.type === "patch");
 
 // p22: a bad fresh shape returns bad_msg, writes no accepted input, changes no view, publishes no patch, runs no Cmd.
 const freshBadMsg = Effect.fnUntraced(function* (
@@ -262,7 +273,7 @@ it.effect.prop(
       unchanged(before, (yield* runner.open("watcher-2")).view);
       unchanged(kept, yield* w.rows());
       // Watchers only see the read position move past the mail: a patch with no change to the view.
-      expect(patches(w).flatMap((u) => (u.type === "patch" ? u.patch : []))).toEqual([]);
+      expect(Arr.flatMap(patches(w), (u) => (u.type === "patch" ? u.patch : []))).toEqual([]);
       expect(w.calls).toEqual([]);
       expect(w.dead()).toEqual([]);
       expect(spy.calls).toBe(0);
@@ -324,7 +335,7 @@ it.effect.prop(
       refusal(yield* runner.msg(incoming(1, body, 0, true)), { reason: "seen_ahead" });
       unchanged(before, yield* runner.open("watcher"));
       expect(yield* w.rows()).toEqual([]);
-      expect(w.updates.filter((u) => u.type === "patch")).toEqual([]);
+      expect(Arr.filter(w.updates, (u) => u.type === "patch")).toEqual([]);
       expect(w.calls).toEqual(["append"]);
     }),
   opts,

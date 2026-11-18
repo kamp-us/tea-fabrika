@@ -2,7 +2,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Arbitrary, Effect, Schema } from "effect";
+import { Arbitrary, Effect, Schema, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { inboxMachine } from "./program.ts";
 
@@ -26,7 +26,7 @@ const Row = Schema.TaggedUnion({ added: Fields });
 
 const Model = Schema.Struct({ rows: Schema.Array(Row) });
 
-const Msg = Schema.Struct({ type: Schema.Literal("added"), ...Fields });
+const Msg = Schema.TaggedStruct("added", Fields);
 
 const Moves = Arbitrary.array(
   Arbitrary.schema(
@@ -61,7 +61,7 @@ describe("ticket 884 the inbox program, slice 1", () => {
           msgs.push(msg);
 
           if (!rows.has(msg.id)) {
-            const { type: _type, ...fields } = msg;
+            const { _tag: _key, ...fields } = msg;
             rows.set(msg.id, Row.cases.added.make(fields));
           }
 
@@ -92,7 +92,7 @@ describe("ticket 884 the inbox program, slice 1", () => {
       // CI checks the type pin. The window's press type belongs to slice 2.
       const { inbox } = yield* Effect.promise(load);
       expectTypeOf<keyof (typeof inbox)["inputs"]>().toEqualTypeOf<never>();
-      expect(Object.keys(inbox.inputs)).toEqual([]);
+      expect(Rec.keys(inbox.inputs)).toEqual([]);
     }),
   );
 

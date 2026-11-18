@@ -6,12 +6,16 @@ import { run } from "@demlik/tea/effect";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import { watch, type RolldownWatcherEvent } from "rolldown";
 import * as Id from "../../Id.ts";
 import { hash } from "../../runtime/Built.ts";
@@ -19,7 +23,7 @@ import { CodeEvent, Installed, type Install } from "../../runtime/Code.ts";
 import { buildPrograms, type Selection } from "../build/build.ts";
 import { compile } from "../build/compiler.ts";
 import { ControlError } from "./dev.ts";
-import { watcher } from "./internal/watcher.ts";
+import { Msg as WatcherMsg, watcher } from "./internal/watcher.ts";
 
 type Failed = (typeof CodeEvent.cases)["code.failed"]["Type"];
 
@@ -45,10 +49,10 @@ const Diagnostic = Schema.Struct({
 
 const Errors = Schema.Struct({ errors: Schema.Array(Diagnostic) });
 
-const details = (raw: unknown, root: string, path: Path.Path) => {
-  const many = Schema.decodeUnknownOption(Errors)(raw);
-  const list = Schema.decodeUnknownOption(Schema.Array(Diagnostic))(raw);
-  const one = Schema.decodeUnknownOption(Diagnostic)(raw);
+const details = (cause: unknown, root: string, path: Path.Path) => {
+  const many = Schema.decodeUnknownOption(Errors)(cause);
+  const list = Schema.decodeUnknownOption(Schema.Array(Diagnostic))(cause);
+  const one = Schema.decodeUnknownOption(Diagnostic)(cause);
 
   const item = Option.isSome(many)
     ? many.value.errors[0]
@@ -64,7 +68,7 @@ const details = (raw: unknown, root: string, path: Path.Path) => {
 
   const relative = path.isAbsolute(file) ? path.relative(root, file) : file;
 
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (Function.pipe(relative, Str.startsWith("..")) || path.isAbsolute(relative)) {
     return {};
   }
 
@@ -100,6 +104,8 @@ export const watchPrograms = (options: {
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
+      // The services Rolldown's listener runs each event on.
+      const context = yield* Effect.context<never>();
       const generated = path.join(path.dirname(options.entry), "program.watch.generated.ts");
       const events = yield* Queue.unbounded<RolldownWatcherEvent>();
       // Results are owned as soon as the callback receives them, including during interruption.
@@ -153,7 +159,7 @@ export const watchPrograms = (options: {
                   }
                 },
                 transform(code, id) {
-                  if (id.endsWith(".tsx")) {
+                  if (Function.pipe(id, Str.endsWith(".tsx"))) {
                     return { code: compile(id, code).code };
                   }
                 },
@@ -162,7 +168,7 @@ export const watchPrograms = (options: {
           });
 
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown awaits its listener before END
-          watcher.on("event", (event) => Effect.runPromise(received(event)));
+          watcher.on("event", (event) => Effect.runPromiseWith(context)(received(event)));
 
           return watcher;
         }),
@@ -227,14 +233,16 @@ export const watchPrograms = (options: {
               buildPrograms({ root, entry: options.entry, programs: [selected] }, undefined, inputs),
             );
 
-            const digest = yield* hash(JSON.stringify([...inputs].sort(([a], [b]) => a.localeCompare(b))));
+            const digest = yield* hash(
+              Formatter.formatJson([...inputs].sort(([a], [b]) => Function.pipe(a, Str.localeCompare(b)))),
+            );
 
             if (built._tag === "Failure" && phase.getState().failedInputs === digest) {
               return yield* finish(Option.none());
             }
 
             yield* phase
-              .dispatch({ type: "rebuilt", failedInputs: built._tag === "Failure" ? digest : null })
+              .dispatch(WatcherMsg.cases.rebuilt.make({ failedInputs: built._tag === "Failure" ? digest : null }))
               .pipe(Effect.orDie);
 
             if (built._tag === "Failure") {
@@ -260,7 +268,7 @@ export const watchPrograms = (options: {
               })
               .pipe(Effect.orElseSucceed(() => Installed.cases.failed.make({ reason: "load" })));
 
-            yield* phase.dispatch({ type: "attempted" }).pipe(Effect.orDie);
+            yield* phase.dispatch(WatcherMsg.cases.attempted.make({})).pipe(Effect.orDie);
 
             return yield* finish(
               Option.some({ ...answer, program: selected.name, hash: code.hash }),

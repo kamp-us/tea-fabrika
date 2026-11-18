@@ -14,6 +14,7 @@
 // @demlik/tea 0.25.0), so a `type` operand would be overwritten by "send_chunks".
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Str from "effect/String";
 import { Program } from "../Program.ts";
 import { send, sendChunks } from "../Send.ts";
 
@@ -37,26 +38,20 @@ export const WriterModel = Schema.Struct({ answers: Schema.Array(Answer), pendin
 
 type WriterModel = typeof WriterModel.Type;
 
-const Letter = Schema.Struct({ type: Schema.Literal("letter"), n: Schema.Int });
-
-const Rows = Schema.Struct({ type: Schema.Literal("rows"), n: Schema.Int, items: Schema.Array(Item) });
-
-/** A plain letter to the writer's second peer, so a law sees whether another name's mail waits. */
-const Aside = Schema.Struct({ type: Schema.Literal("aside"), n: Schema.Int });
-
-/** A send whose items the writer makes itself: `count` items of `size` padding each, the last of
- *  `tail` padding, so a law can put the operands at an exact byte count. */
-const Big = Schema.Struct({
-  type: Schema.Literal("big"),
-  n: Schema.Int,
-  count: Schema.Int,
-  size: Schema.Int,
-  tail: Schema.Int,
+/** @internal The writers' inputs. `aside` is a plain letter to the writer's second peer, so a law sees
+ *  whether another name's mail waits. `big` is a send whose items the writer makes itself: `count`
+ *  items of `size` padding each, the last of `tail` padding, so a law can put the operands at an
+ *  exact byte count. */
+export const WriterMsg = Schema.TaggedUnion({
+  letter: { n: Schema.Int },
+  aside: { n: Schema.Int },
+  rows: { n: Schema.Int, items: Schema.Array(Item) },
+  big: { n: Schema.Int, count: Schema.Int, size: Schema.Int, tail: Schema.Int },
 });
 
 /** @internal The items a `big` input makes: `count` items of send `n`, the last padded with `tail`. */
 export const madeItems = (n: number, count: number, size: number, tail: number) =>
-  Array.from({ length: count }, (_, i) => ({ s: n, i, pad: "x".repeat(i === count - 1 ? tail : size) }));
+  Array.from({ length: count }, (_, i) => ({ s: n, i, pad: Str.repeat(i === count - 1 ? tail : size)("x") }));
 
 /** A plain send's number, read back from the letter its answer echoes. */
 const numbered = (m: unknown): number => {
@@ -92,11 +87,11 @@ const chunkAnswered = (s: WriterModel, answer: string, extra: Partial<typeof Ans
 export const pipeWriter = (peer: string) => {
   const machine = Machine.make({
     model: WriterModel,
-    msg: Letter,
+    msg: WriterMsg.cases.letter,
     cmds: [send],
     init: (loaded) => [loaded ?? { answers: [], pending: [] }, []],
     update: {
-      letter: (s, m) => [s, [send({ to: peer, m: { type: "letter", n: m.n } })]],
+      letter: (s, m) => [s, [send({ to: peer, m: Got.cases.letter.make({ n: m.n }) })]],
       send_ok: (s, m) => [answered(s, numbered(m.cmd), "queued"), []],
       send_err: (s, m) => [answered(s, numbered(m.cmd), m.error._tag), []],
     },
@@ -120,12 +115,12 @@ export const pipeWriter = (peer: string) => {
 export const chunkWriter = (peer: string, other: string = peer) => {
   const machine = Machine.make({
     model: WriterModel,
-    msg: Schema.Union([Letter, Aside, Rows, Big]),
+    msg: WriterMsg,
     cmds: [send, sendChunks],
     init: (loaded) => [loaded ?? { answers: [], pending: [] }, []],
     update: {
-      letter: (s, m) => [s, [send({ to: peer, m: { type: "letter", n: m.n } })]],
-      aside: (s, m) => [s, [send({ to: other, m: { type: "letter", n: m.n } })]],
+      letter: (s, m) => [s, [send({ to: peer, m: Got.cases.letter.make({ n: m.n }) })]],
+      aside: (s, m) => [s, [send({ to: other, m: Got.cases.letter.make({ n: m.n }) })]],
       rows: (s, m) => [chunked(s, m.n), [sendChunks({ to: peer, as: "rows", items: m.items })]],
       big: (s, m) => [
         chunked(s, m.n),
@@ -162,10 +157,10 @@ export const chunkWriter = (peer: string, other: string = peer) => {
 const Part = Schema.Struct({ id: Schema.String, seq: Schema.Int, last: Schema.Boolean });
 
 /** @internal One letter the reader folded. */
-export const Got = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("letter"), n: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("rows"), items: Schema.Array(Item), part: Part }),
-]);
+export const Got = Schema.TaggedUnion({
+  letter: { n: Schema.Int },
+  rows: { items: Schema.Array(Item), part: Part },
+});
 
 /** @internal */
 export const ReaderModel = Schema.Struct({ got: Schema.Array(Got) });
@@ -178,8 +173,8 @@ export const pipeReader = () => {
     cmds: [],
     init: (loaded) => [loaded ?? { got: [] }, []],
     update: {
-      letter: (s, m) => [{ got: [...s.got, { type: "letter" as const, n: m.n }] }, []],
-      rows: (s, m) => [{ got: [...s.got, { type: "rows" as const, items: m.items, part: m.part }] }, []],
+      letter: (s, m) => [{ got: [...s.got, Got.cases.letter.make({ n: m.n })] }, []],
+      rows: (s, m) => [{ got: [...s.got, Got.cases.rows.make({ items: m.items, part: m.part })] }, []],
     },
   });
 

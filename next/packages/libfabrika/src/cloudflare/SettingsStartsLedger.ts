@@ -63,10 +63,12 @@ const saved = Effect.fnUntraced(function* (entry: Entry, start: string) {
  * settings.
  *
  * The layer asks for a `Referee` and builds none: the caller picks the storage and the doorbell.
+ * It is fresh: each use builds its own `Starts` over the `Referee` it is given there, even where
+ * another use was built first in the same context.
  *
  * @category layers
  */
-export const fromLedger = () =>
+export const fromLedger = Layer.fresh(
   Layer.effect(
     Starts,
     Effect.gen(function* () {
@@ -154,7 +156,8 @@ export const fromLedger = () =>
         read: (start: string) => read(start).pipe(Effect.provide(Digest.layerWebCrypto)),
       };
     }),
-  );
+  ),
+);
 
 /**
  * Layer that keeps instance starts in the ledger of one `Sql`, with a referee of its own.
@@ -166,7 +169,7 @@ export const fromLedger = () =>
  * @category layers
  */
 export const layer = (sql: Sql) =>
-  fromLedger().pipe(
+  fromLedger.pipe(
     Layer.provide(RefereeSql.layer(sql)),
     Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
   );

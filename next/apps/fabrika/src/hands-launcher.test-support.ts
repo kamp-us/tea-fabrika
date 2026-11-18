@@ -10,7 +10,7 @@
 // Every other request goes to the real `Control` untouched. The product's list gains nothing.
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
-import { Cause, Effect, Option, Schema } from "effect";
+import { Array as Arr, String as Str, Cause, Effect, Formatter, Match, Option, Schema, Record as Rec } from "effect";
 import { Control as RealControl, Project as RealProject } from "./brain.ts";
 import { projectTasksLayer } from "./runtime.ts";
 
@@ -37,7 +37,11 @@ const ControlCall = Schema.fromJsonString(
   Schema.Struct({ target: Schema.Literal("project"), project: Schema.String, ...Call.fields }),
 );
 
-const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array) =>
+  Arr.join(
+    Array.from(bytes, (byte) => Str.padStart(2, "0")(byte.toString(16))),
+    "",
+  );
 
 export class Project extends RealProject {
   /** Asks the hands of `target` for `git --version`, as a started program would. */
@@ -86,27 +90,23 @@ export class Project extends RealProject {
   allRows() {
     const sql = this.ctx.storage.sql;
 
-    const tables = sql
-      .exec("SELECT name FROM sqlite_master WHERE type='table'")
-      .toArray()
-      .map((row) => String(row["name"]));
+    const tables = Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table'").toArray(), (row) =>
+      String(row["name"]),
+    );
 
-    return Object.fromEntries(
-      tables.map((table) => [
+    return Rec.fromEntries(
+      Arr.map(tables, (table) => [
         table,
-        sql
-          .exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)
-          .toArray()
-          .map((row) =>
-            Object.fromEntries(
-              Object.entries(row).map(([column, value]) => [
-                column,
-                value instanceof ArrayBuffer
-                  ? { hex: hex(new Uint8Array(value)), text: new TextDecoder().decode(value) }
-                  : value,
-              ]),
-            ),
+        Arr.map(sql.exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`).toArray(), (row) =>
+          Rec.fromEntries(
+            Arr.map(Rec.toEntries(row), ([column, value]) => [
+              column,
+              value instanceof ArrayBuffer
+                ? { hex: hex(new Uint8Array(value)), text: new TextDecoder().decode(value) }
+                : value,
+            ]),
           ),
+        ),
       ]),
     );
   }
@@ -119,14 +119,16 @@ export class Project extends RealProject {
       Effect.tryPromise(() => request.json()).pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(Call)),
         Effect.flatMap((call): Effect.Effect<unknown, unknown> =>
-          call.method === "requestHandsTask"
-            ? Schema.decodeUnknownEffect(Schema.NonEmptyString)(call.args[0]).pipe(
+          Match.value(call.method).pipe(
+            Match.when("requestHandsTask", () =>
+              Schema.decodeUnknownEffect(Schema.NonEmptyString)(call.args[0]).pipe(
                 Effect.flatMap((target) => this.requestHandsTask(target)),
                 Effect.asVoid,
-              )
-            : call.method === "readHandsTask"
-              ? this.readHandsTask()
-              : Effect.sync(() => this.allRows()),
+              ),
+            ),
+            Match.when("readHandsTask", () => this.readHandsTask()),
+            Match.orElse(() => Effect.sync(() => this.allRows())),
+          ),
         ),
         Effect.map((value) => Response.json({ value: value ?? null })),
         // The whole cause is the reason, so a red run says why the brain refused.
@@ -160,7 +162,7 @@ export class Control extends RealControl {
                   Effect.tryPromise(() =>
                     this.env.PROJECT.getByName(call.project).fetch("http://project/", {
                       method: "POST",
-                      body: JSON.stringify({ method: call.method, args: call.args }),
+                      body: Formatter.formatJson({ method: call.method, args: call.args }),
                     }),
                   )
                 : Effect.succeed(new Response(null, { status: 403 })),

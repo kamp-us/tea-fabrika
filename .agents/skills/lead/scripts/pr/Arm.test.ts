@@ -6,8 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 // step canceled the other nine, so the run's own conclusion reads `cancelled`.
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
-import { FileSystem } from "effect";
+import { Effect, FileSystem, Layer, Match, Schema } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import { type Job, type Run, Runs } from "../ci/Runs.ts";
 import * as RunsGh from "../ci/RunsGh.ts";
@@ -180,13 +179,12 @@ const hit = LeakGrepRefused.make({ reason: "leakgrep.sh exited 1" });
 
 /** The one leak check that refuses, with the error it refuses with. */
 const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
-  leak === "clean"
-    ? {}
-    : leak === "leakChange"
-      ? { leakChange: hit }
-      : leak === "leakGrep"
-        ? { leakGrep: hit }
-        : { leakText: hit };
+  Match.value(leak).pipe(
+    Match.when("clean", () => ({})),
+    Match.when("leakChange", () => ({ leakChange: hit })),
+    Match.when("leakGrep", () => ({ leakGrep: hit })),
+    Match.orElse(() => ({ leakText: hit })),
+  );
 
 const armedAt = [{ _tag: "arm", number: 1092, oid }];
 
@@ -234,6 +232,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         } as const;
 
         for (const [stands, line] of Object.entries(said)) {
+          // SAFETY: `Object.entries(said)` gives only the keys of `said`.
           const m = memory({ stands: stands as keyof typeof said }, red);
           const refused = yield* Effect.flip(arm(m));
           expect(refused.reason.split("\n")[0]).toBe(line);
@@ -524,7 +523,7 @@ const Head = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
 const automaticFixture = { jobs: shaped("changed"), log: "" };
 
-describe("automatic ready CI as the current-head resource proof", () => {
+describe("automatic ready CI, with its related tooling legs, as the current-head proof", () => {
   // Plant owed on CI: omit the automatic lookup; older changed/red history would refuse again.
   it.effect.prop(
     "property: complete ready CI, including an explicitly empty related set, supersedes older scheduled history and arms the exact head",

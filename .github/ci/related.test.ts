@@ -1,11 +1,22 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { it, beforeAll } from "@effect/vitest";
+import { Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
 import { parse } from "yaml";
 import { measured } from "../../vitest.shards.ts";
 import { vitestLegs } from "./workflow-lint.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // Today's CI for both versions. Vitest 5.0.5's public node API, read in
 // dist/chunks/plugin.d.C8mmycim.d.ts and cli-api.De07GUeT.js: `related` takes absolute
@@ -72,13 +83,18 @@ const options = { seed: 119120, numRuns: 20 };
 
 let vitest: Vitest;
 
-beforeAll(async () => {
-  vitest = await createVitest("test", { root, watch: false, maxWorkers: 1 });
-});
+/** A vitest made for the laws, closed when the file's scope closes, after its last test. */
+const made = (options: Parameters<typeof createVitest>[1]) =>
+  Effect.acquireRelease(
+    promised(() => createVitest("test", options)),
+    (context) => promised(() => context.close()).pipe(Effect.orDie),
+  );
 
-afterAll(async () => {
-  await vitest?.close();
-});
+beforeAll(() =>
+  Effect.gen(function* () {
+    vitest = yield* made({ root, watch: false, maxWorkers: 1 });
+  }),
+);
 
 const affected = async (paths: string[]) => {
   vitest.config.related = paths.map((path) => join(root, path));
@@ -89,44 +105,46 @@ const affected = async (paths: string[]) => {
 const declaring = (changed: ReadonlyArray<string>) =>
   tests.filter((test) => changed.some((path) => readers.get(test)!.has(path))).sort();
 
-it("real script subsets select exactly their declaring tests, never an empty set", async () => {
-  await fc.assert(
+it("real script subsets select exactly their declaring tests, never an empty set", () =>
+  fc.assert(
     fc.asyncProperty(fc.subarray(readScripts, { minLength: 1, maxLength: 12 }), async (paths) => {
       const expected = declaring(paths);
       expect(expected.length).toBeGreaterThan(0);
       expect(await affected(paths)).toEqual(expected);
     }),
     options,
-  );
-});
+  ));
 
 // scenario: every real script alone, each in its own test, so another declared script in a subset
 // cannot hide a missing import. The subset property once re-checked only its sampled members
 // alone, inside its own run: about 150 graph walks in one test, 12.7 s in the mutation
 // container's plain run and over the mutation run's 10 s limit (CI runs 42988915529 and
 // 42989306764). This walks every script, not a sample, at one walk per test.
-it.each(readScripts)("the real script %s alone selects exactly its declaring tests, never none", async (path) => {
-  const expected = declaring([path]);
-  expect(expected.length).toBeGreaterThan(0);
-  expect(await affected([path])).toEqual(expected);
-});
+it.live.each(readScripts)("the real script %s alone selects exactly its declaring tests, never none", (path) =>
+  Effect.gen(function* () {
+    const expected = declaring([path]);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(yield* promised(() => affected([path]))).toEqual(expected);
+  }),
+);
 
 // scenario: the rule that takes fixtures out of the script laws. A fixture alone selects what a
 // lockfile change selects, every test, so a change to a fixture never runs too few.
-it.each(fixtures)("scenario: the fixture %s alone selects every test, as a lockfile change does", async (path) => {
-  const every = await affected(["pnpm-lock.yaml"]);
-  expect(every.length).toBeGreaterThan(tests.length);
-  expect(await affected([path])).toEqual(every);
-});
+it.live.each(fixtures)("scenario: the fixture %s alone selects every test, as a lockfile change does", (path) =>
+  Effect.gen(function* () {
+    const every = yield* promised(() => affected(["pnpm-lock.yaml"]));
+    expect(every.length).toBeGreaterThan(tests.length);
+    expect(yield* promised(() => affected([path]))).toEqual(every);
+  }),
+);
 
-it("real skill Markdown subsets select no test", async () => {
-  await fc.assert(
+it("real skill Markdown subsets select no test", () =>
+  fc.assert(
     fc.asyncProperty(fc.subarray(markdown, { minLength: 1, maxLength: 12 }), async (paths) => {
       expect(await affected(paths)).toEqual([]);
     }),
     options,
-  );
-});
+  ));
 
 // Today's CI serves both versions. The baseline deliberately has no next/ CLI filter.
 // The matrix also holds the legs `e2e-1` to `e2e-N`, which run no vitest step, so the law reads the
@@ -167,51 +185,45 @@ describe("next workflow coverage", () => {
     expect(new Set(kept.flat()).size).toBe(kept.flat().length);
   };
 
-  beforeAll(async () => {
-    const baseline = await createVitest("test", { root, watch: false, maxWorkers: 1 });
-    contexts.push(baseline);
-    nextSpecs = (await baseline.globTestSpecifications()).filter((spec) => repoPath(spec).startsWith("next/"));
-
-    for (const index of indices) {
-      contexts.push(
-        await createVitest("test", {
-          root,
-          watch: false,
-          maxWorkers: 1,
-          shard: `${index}/${denominator}`,
-        }),
+  beforeAll(() =>
+    Effect.gen(function* () {
+      const baseline = yield* made({ root, watch: false, maxWorkers: 1 });
+      contexts.push(baseline);
+      nextSpecs = (yield* promised(() => baseline.globTestSpecifications())).filter((spec) =>
+        repoPath(spec).startsWith("next/"),
       );
-    }
-  });
-  afterAll(async () => {
-    for (const context of contexts) {
-      await context.close();
-    }
-  });
 
-  it("scenario: workflow shards partition every config-discovered next file exactly once", async () => {
-    // Real config discovery and each configured sequencer run without executing a test.
-    expect(Number.isInteger(denominator)).toBe(true);
-    expect(indices.toSorted((a, b) => Number(a) - Number(b))).toEqual(
-      Array.from({ length: denominator }, (_, i) => String(i + 1)),
-    );
-    const universe = nextSpecs.map(repoPath);
-    expect(universe.length).toBeGreaterThan(0);
-    expect(new Set(universe).size).toBe(universe.length);
-    const kept: string[][] = [];
+      for (const index of indices) {
+        contexts.push(yield* made({ root, watch: false, maxWorkers: 1, shard: `${index}/${denominator}` }));
+      }
+    }),
+  );
 
-    for (const context of contexts.slice(1)) {
-      const specs = await context.globTestSpecifications(["next/"]);
-      const Sequencer = context.config.sequence.sequencer;
-      kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
-    }
+  it.live("scenario: workflow shards partition every config-discovered next file exactly once", () =>
+    Effect.gen(function* () {
+      // Real config discovery and each configured sequencer run without executing a test.
+      expect(Number.isInteger(denominator)).toBe(true);
+      expect(indices.toSorted((a, b) => Number(a) - Number(b))).toEqual(
+        Array.from({ length: denominator }, (_, i) => String(i + 1)),
+      );
+      const universe = nextSpecs.map(repoPath);
+      expect(universe.length).toBeGreaterThan(0);
+      expect(new Set(universe).size).toBe(universe.length);
+      const kept: string[][] = [];
 
-    complete(kept, universe);
-  });
+      for (const context of contexts.slice(1)) {
+        const specs = yield* promised(() => Promise.resolve(context.globTestSpecifications(["next/"])));
+        const Sequencer = context.config.sequence.sequencer;
+        kept.push((yield* promised(() => Promise.resolve(new Sequencer(context).shard(specs)))).map(repoPath));
+      }
 
-  it("real configured shards preserve generated subsets, order and unmeasured files", async () => {
+      complete(kept, universe);
+    }),
+  );
+
+  it("real configured shards preserve generated subsets, order and unmeasured files", () =>
     // External test specifications have no domain Schema. Reuse real discovery, at most 12 files.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(
         fc.subarray(nextSpecs, { maxLength: 10 }),
         fc.array(fc.nat(), { minLength: 12, maxLength: 12 }),
@@ -224,7 +236,7 @@ describe("next workflow coverage", () => {
           );
 
           for (const spec of unknown) {
-            expect(Object.hasOwn(measured, repoPath(spec))).toBe(false);
+            expect(Rec.has(measured, repoPath(spec))).toBe(false);
           }
 
           const files = [...subset, ...unknown];
@@ -245,6 +257,91 @@ describe("next workflow coverage", () => {
         },
       ),
       options,
-    );
+    ));
+
+  // T1076 O1 and O2, on the real configured discovery: Vitest's own filter, over the real config, with
+  // no test run. Both fallbacks of the workflow (the size step's and the next job's) are the filters
+  // `$FILTER` hands Vitest when nothing narrows it, so they must reach exactly the `next` project,
+  // Kalfa's ordinary laws beside next/'s, and the shards must still partition them once each.
+  // Plants, each run once on check.yaml and restored: put `next/` back in either fallback (red, the
+  // Kalfa laws are missing from the reached set); copy an ordinary Kalfa file into the integration
+  // project's include (red, it joins `related`).
+  const fallbackOf = (expression: unknown): string[] =>
+    (/\|\|\s*'([^']*)'\s*\}\}\s*$/.exec(String(expression))?.[1] ?? "").split(" ").filter(Boolean);
+
+  const fallbacks = (): Record<string, string[]> => {
+    const parsed = parse(workflow);
+
+    return {
+      "the size step's": fallbackOf(
+        parsed.jobs.changes.steps.find((step: { id?: string }) => step.id === "size")?.env.FILTER,
+      ),
+      "the next job's": fallbackOf(
+        parsed.jobs.next.steps.find((step: { run?: string }) =>
+          step.run?.startsWith("pnpm exec vitest run --project next $FILTER "),
+        )?.env.FILTER,
+      ),
+    };
+  };
+
+  /** Kalfa's ordinary laws, as the package's folder holds them: its test files that are not integration laws. */
+  const ordinaryKalfa = () =>
+    readdirSync(join(root, "kalfa/config/src"), { recursive: true })
+      .map(String)
+      .filter((name) => name.endsWith(".test.ts") && !name.endsWith(".integration.test.ts"))
+      .map((name) => `kalfa/config/src/${name}`)
+      .toSorted();
+
+  const named = (specs: TestSpecification[], project: string) =>
+    specs
+      .filter((spec) => spec.project.name === project)
+      .map(repoPath)
+      .toSorted();
+
+  it("scenario: each fallback filter reaches exactly the configured next project, Kalfa's ordinary laws included, and no ordinary Kalfa law joins related", async () => {
+    const configured = named(await contexts[0]!.globTestSpecifications(), "next");
+
+    const kalfa = ordinaryKalfa();
+
+    expect(kalfa.length).toBeGreaterThan(0);
+    expect(configured).toEqual(expect.arrayContaining(kalfa));
+
+    for (const [which, filters] of Object.entries(fallbacks())) {
+      expect(filters.length, `${which} fallback names its roots`).toBeGreaterThan(0);
+      expect(named(await contexts[0]!.globTestSpecifications(filters), "next"), `${which} fallback`).toEqual(
+        configured,
+      );
+    }
+
+    // The two fallbacks are one filter, so a sized run and the unsized one never disagree.
+    const [sizing, running] = Object.values(fallbacks());
+
+    expect(sizing).toEqual(running);
+
+    // `related` runs the integration and tooling projects: no ordinary Kalfa law is among them.
+    const all = await contexts[0]!.globTestSpecifications();
+
+    const related = [...named(all, "next-integration"), ...named(all, "tooling")];
+
+    expect(related.filter((path) => kalfa.includes(path))).toEqual([]);
+  });
+
+  it("scenario: the fallback's shards partition the configured next project once each, Kalfa's ordinary laws included", async () => {
+    const [filters] = Object.values(fallbacks());
+
+    const universe = named(await contexts[0]!.globTestSpecifications(), "next");
+
+    expect(universe.length).toBeGreaterThan(0);
+
+    const kept: string[][] = [];
+
+    for (const context of contexts.slice(1)) {
+      const specs = (await context.globTestSpecifications(filters)).filter((spec) => spec.project.name === "next");
+      const Sequencer = context.config.sequence.sequencer;
+      kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
+    }
+
+    complete(kept, universe);
+    expect(kept.flat()).toEqual(expect.arrayContaining(ordinaryKalfa()));
   });
 });

@@ -1,0 +1,303 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e88-fix1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T19:19:17-08:00",
+  "ended": "2026-11-16T19:31:39-08:00",
+  "parent": "2026-11-16-effect-e88-review",
+  "active": null,
+  "role": "step",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "blocked",
+  "why": "Bounded E88 fix round in next/. Shared SSHSIG identity support replaces the duplicate app helper, all callers use neutral identity names, ProjectAuditTest reuses PublicKey, new Effect imports use namespaces, the inherited workerd tree reuse is preserved, and the exact platform-node test layer patch restores IPv4 loopback. Cannot commit through stepcommit because its temporary formatter invocation fails before formatting. Remote integration proof and the lead-owned upstream issue remain pending.",
+  "laws": [
+    {
+      "law": "R1 nodeBuiltinImport",
+      "red": "Planted import reported at error. Current tracked app top-src, cloudflare and runtime scopes each have zero hits."
+    },
+    {
+      "law": "R2 added library imports",
+      "red": "Planted Digest barrel import reported at error. No added E88 violation versus eeb8ecdbb;664 existing namespace diagnostics remain in cloudflare/runtime."
+    },
+    {
+      "law": "R3 shared identity property",
+      "red": "Five recorded plants fail intended assertions. Property runs100 cases, seed119120. Final transport suite passes28 tests."
+    },
+    {
+      "law": "R4 saved vectors and independent writer",
+      "red": "Field-length plant fails saved-vector equality and hash acceptance. Plain transport suite passes. Real ssh-keygen interoperability remains remote."
+    },
+    {
+      "law": "R5 probes",
+      "red": "Minimal real bind repro failed before patch and passed after. Both original probe laws now assert actual IPv4 loopback and a nonzero port. Sealed-program control, refusal, hit counts and isolation plant remain unrun remotely."
+    },
+    {
+      "law": "R6 cleanup and workerd selection",
+      "red": "Inherited exact-one tree selection hunk is unchanged. Real crash/cleanup laws and wrong-tree plant remain unrun remotely."
+    }
+  ],
+  "plants": [
+    {
+      "law": "R1",
+      "plant": "Add a node:fs readFileSync import to runtime.decode.test.ts. Installed checker reports nodeBuiltinImport at error on line1. Restore the import afterward.",
+      "result": "red"
+    },
+    {
+      "law": "R2",
+      "plant": "Change Built.test.ts Digest namespace import back to the crypto barrel. Installed checker adds the Digest preferNamespaceImport diagnostic at error on line8. Restore afterward.",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "Sign text with one extra character. Proof acceptance returns bad_signature.",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "Hash the whole SSH blob for the raw fingerprint. PublicKey fingerprint comparison fails.",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "Sign a different namespace. Proof acceptance fails.",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "Write SSHSIG version2. Proof acceptance fails.",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "Wrap the raw signature as ssh-rsa. Proof acceptance fails.",
+      "result": "red"
+    },
+    {
+      "law": "R4",
+      "plant": "Increase shared RFC4251 string lengths by one. Saved-vector byte equality and writer hash laws fail.",
+      "result": "red"
+    },
+    {
+      "law": "R5 bind only",
+      "plant": "Before patching, the scoped layerTest address assertion fails because the real listener binds ::. After the patch it binds127.0.0.1 and has a nonzero port.",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 12.37,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "note": "Exact model variant, token usage and billing were unavailable, so no price or usage is invented. Historical approved row lists86 hits; old tests row reports88, app68 rather than66. New recounts are recorded separately from those historical numbers. Five historical finding payloads remain unavailable; the two original commits add no finding files. Old test and review rows were not changed. Recovery requires a fresh whole-diff review because the original reviewer cannot be resumed. The initial fast-check inputs were incorrectly passed to it.effect.prop, causing registration failure; corrected to the existing transport fc.asyncProperty style. An overlapping door-spans run during plants was invalid; its clean sequential rerun passes. The unpatched standalone bind repro ran before the lead reply restricted direct repros to loopback-only listeners. It briefly bound an ephemeral :: listener; scope cleanup ran after failure. No child process, signal, launchd, Electron or home data was used by that repro. The unpatched bind is not repeated locally.",
+  "inputHead": "ca6d843c0cde39563456d15ece9575dd98c79737",
+  "checkedHead": null,
+  "checkedState": "Uncommitted repair files. The required commit tool refused before creating any commit. File hashes bind the checked content. No remote proof is claimed.",
+  "checkedFiles": {
+    "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts": "4dd2a4cbd867fb2826607a7279a77717de6e86d8f802cc3cbc4f83c1ae562e11",
+    "next/apps/fabrika/src/door-recovery.integration.test.ts": "649fbc9bb5bc7158eb2457425c3a2006cd0aa9fa3506374aa5eb8e1bea4d542c",
+    "next/apps/fabrika/src/door-spans.test.ts": "6680ba8350ce6ad661ae22c6fc4ccdc67f4d42c8b1952a99850941c0d4b791bd",
+    "next/apps/fabrika/src/hands-launcher.integration.test.ts": "c95726a4068ae0ad94a1481f53fef8959d3de8364d381da137ed7d34c8990072",
+    "next/apps/fabrika/src/input-recording.integration.test.ts": "060b9441c77779b5ba1916187daece313d02035508d8e424328e6df5ac918730",
+    "next/apps/fabrika/src/instance-one-file.integration.test.ts": "dfa9764f2af62d47f89bfa08a73f49638ecbefb5b5b67a9f1cb61ff490993f08",
+    "next/apps/fabrika/src/instance-records.integration.test.ts": "1c1cb7a755acfe1aa3482686613e16ce568545bee0a903483b673ce7363c30d1",
+    "next/apps/fabrika/src/instance-wire.integration.test.ts": "a91c30f2e9a453221b04fad286087d7a59d87e8acd637eecba23d1bb15132546",
+    "next/apps/fabrika/src/memory-replace.laws.integration.test.ts": "4be7bdafccb118e817c1f15a14ae8dc429a99101e482e0f4b921ce658b598ce9",
+    "next/apps/fabrika/src/port-home.laws.integration.test.ts": "ee9e0b9bf286133fcb513e211595c1e6a37f4cb610ac7108ff40b9f953853c1d",
+    "next/apps/fabrika/src/record-wire.test-support.ts": "6f3fbd2a7365938a20dd5244dd90667e772ec8cf2d3f12ffdfe697b253c2d05e",
+    "next/apps/fabrika/src/repository-open.integration.test.ts": "5bc84e683cfcc23784318470391421ec41cc0118f764e347699de155f5883ca7",
+    "next/apps/fabrika/src/runtime-quotas.laws.test.ts": "28242509ebf42cbdffcd87639b7ef9724701c883fe8fb2abd8280fec146e1d1c",
+    "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts": "47f2be9ab571f852b7e7567195da6b41374fdf34534eebba645f38d83a76443e",
+    "next/apps/fabrika/src/runtime.laws.integration.test.ts": "8e3853364573230b5e82e9fa386edf394cc699ed5861288a1b3dbe77180fb51d",
+    "next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts": "feefa0e0aea034ec025bd9a68af8a5aa3346012a45b737a998c250fdb35b35c7",
+    "next/apps/fabrika/src/settings-start.integration.test.ts": "1f81f295b179119393c40ed5d13cdc612b271acde4f10f06322a5e3a7f59bc5b",
+    "next/apps/fabrika/src/start-child.test-support.ts": "eaa154e8054e850fe57ba3a6496b7e1340d2e9bb785f0b5f9c0808ff1f2bb323",
+    "next/apps/fabrika/src/tasks-wire.integration.test.ts": "b599b44cda6f0a72badd9d1e9ad7bb4afddbaa2bc8823c831a1577791805e81e",
+    "next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts": "a8cd9f7a37b83ac92a387f60b728fec2dcf78d0e113c3eea654a92687c0ab793",
+    "next/apps/fabrika/src/worker-mail.integration.test.ts": "86923cf4df8a17b59a80fe10218ef8831a075b811a65362d947385bef8b300f0",
+    "next/apps/fabrika/src/worker-monitor.integration.test.ts": "e1b172a486e2121a0a4af5006917d70376bddfb10d4d58d29a378b578f712fba",
+    "next/apps/fabrika/src/worker-quotas.integration.test.ts": "526ac0434b2b48a680cb4f2d4da5023683d08bfc3352e55b7586eb60dae505ff",
+    "next/apps/fabrika/src/worker-supervision.integration.test.ts": "6fb74afe2682831060866c9ffdca40f28e6865e4f44d479cf84cd07f001b6133",
+    "next/apps/fabrika/src/worker-usage.integration.test.ts": "75bf338c5a3b8dbd34e270416fd2db891f5105cdea64e3af7332a54376450f74",
+    "next/apps/fabrika/src/workerd.test-support.ts": "5ce0abb1db06ab56da6083d89611d8c0e5e8990b72852eb520c70687217de8c5",
+    "next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts": "fab4e73a8034d238339fa3ce801a5fbca92c4edfc30b39acc20844bf2518a5f3",
+    "next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts": "25e95d61960774e09e9296096c94f13518291174bd6833370b1f8f5c50254ea2",
+    "next/packages/libfabrika/src/cloudflare/index.test.ts": "ea9b66f8a9feab817ef46f129da4638d8096e71bce91289713d0b247aece3e65",
+    "next/packages/libfabrika/src/cloudflare/p14.test.ts": "5386009c06e963471777eb89de09f916a2b2a7f42976a0ffa70810053502fa59",
+    "next/packages/libfabrika/src/cloudflare/readers.laws.test.ts": "cebb40be77e88c487ef93574d6a20ce87676b4cfc482319404fb6468fbbca54c",
+    "next/packages/libfabrika/src/runtime/Built.test.ts": "7b728ab6c68c652930fa9a399ad23a91258db3a6acb7b61de9c4dec938da4296",
+    "next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts": "044212b08766a851bcdf81d4ea307407bad62ab894b41991a5c43d7dd500d307",
+    "next/packages/libfabrika/src/runtime/Runner.integration.test.ts": "9d133358c350b7ccb6902beb6dec7ce6e6030351d4ef311b1fca6dded7af2df7",
+    "next/packages/libfabrika/src/transport/Sshsig.test-support.ts": "a3b622da8d64d69fff8a6977d3ef274620c5bcf80f976e8d5f9119f379a4d23a",
+    "next/packages/libfabrika/src/transport/Sshsig.test.ts": "6f5ecf5b1b3fbc2b3859b9f812bb3e352a4fb0ac603a2442acad76971cfbf4d1",
+    "pnpm-lock.yaml": "4825fa6011b5ce922fde613d4847f5e95b1761b36a6c4d3d1244acdf4ef1f092",
+    "pnpm-workspace.yaml": "f5fc2445713d4f81c7cb355323ed88b97e8e93cdc6714f0d1223e213c413f318",
+    "patches/@effect__platform-node@4.1.3.patch": "01679769b2c1a2b1cae15e9ee60052a73da7099390b5489b08ba2a49ef8cbc01"
+  },
+  "removedFiles": [
+    "next/apps/fabrika/src/person-key.test-support.ts",
+    "next/apps/fabrika/src/person-key.test.ts"
+  ],
+  "plainSuites": [
+    {
+      "file": "next/apps/fabrika/src/build.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/door-spans.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/error-cause.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/instance-watch.laws.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/runtime-quotas.laws.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/runtime.decode.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/connection.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/error-cause.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/fetch.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/index.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/leave.laws.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/mail.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/p14.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/readers.laws.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/reload.laws.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/runtime/Built.test.ts",
+      "exit": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/transport/Sshsig.test.ts",
+      "exit": 0
+    }
+  ],
+  "remotePending": [
+    "next/apps/fabrika/e2e/chaos-revoke.integration.test.ts",
+    "next/apps/fabrika/e2e/one-file.visual.test.ts",
+    "next/apps/fabrika/src/brain-life.integration.test.ts",
+    "next/apps/fabrika/src/build-command.integration.test.ts",
+    "next/apps/fabrika/src/build.integration.test.ts",
+    "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts",
+    "next/apps/fabrika/src/door-recovery.integration.test.ts",
+    "next/apps/fabrika/src/door.integration.test.ts",
+    "next/apps/fabrika/src/file-services.laws.integration.test.ts",
+    "next/apps/fabrika/src/hands-launcher.integration.test.ts",
+    "next/apps/fabrika/src/input-recording.integration.test.ts",
+    "next/apps/fabrika/src/instance-one-file.integration.test.ts",
+    "next/apps/fabrika/src/instance-records.integration.test.ts",
+    "next/apps/fabrika/src/instance-wire.integration.test.ts",
+    "next/apps/fabrika/src/local-instance.integration.test.ts",
+    "next/apps/fabrika/src/memory-replace.laws.integration.test.ts",
+    "next/apps/fabrika/src/port-home.laws.integration.test.ts",
+    "next/apps/fabrika/src/repository-open.integration.test.ts",
+    "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts",
+    "next/apps/fabrika/src/runtime.laws.integration.test.ts",
+    "next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts",
+    "next/apps/fabrika/src/settings-start.integration.test.ts",
+    "next/apps/fabrika/src/sibling.laws.integration.test.ts",
+    "next/apps/fabrika/src/start-child.laws.integration.test.ts",
+    "next/apps/fabrika/src/start-member.laws.integration.test.ts",
+    "next/apps/fabrika/src/tasks-wire.integration.test.ts",
+    "next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts",
+    "next/apps/fabrika/src/worker-mail.integration.test.ts",
+    "next/apps/fabrika/src/worker-monitor.integration.test.ts",
+    "next/apps/fabrika/src/worker-quotas.integration.test.ts",
+    "next/apps/fabrika/src/worker-supervision.integration.test.ts",
+    "next/apps/fabrika/src/worker-usage.integration.test.ts",
+    "next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts",
+    "next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts",
+    "next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts",
+    "next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts",
+    "next/packages/libfabrika/src/runtime/RecoveryStore.integration.test.ts",
+    "next/packages/libfabrika/src/runtime/Runner.integration.test.ts",
+    "next/packages/libfabrika/src/transport/Sshsig.integration.test.ts"
+  ],
+  "checks": [
+    {
+      "command": "pnpm format",
+      "result": "Formatter passed; lint-fix stopped on three existing no-node-imports in preserved untracked scratch."
+    },
+    {
+      "command": "pnpm lint",
+      "result": "16 of18 parts passed. Only scratch fails: three no-node-imports and unused export all. No ledger changed."
+    },
+    {
+      "command": "node oxlint-plugins/lint.ts <36 named repair TypeScript files>",
+      "result": "Passed, zero blocking."
+    },
+    {
+      "command": "pnpm exec oxfmt --check --disable-nested-config --no-error-on-unmatched-pattern <named repair files>",
+      "result": "Passed."
+    },
+    {
+      "command": "node next/apps/fabrika/src/exam/ratchet.ts --base <merge base with origin/main>",
+      "result": "Passed."
+    },
+    {
+      "command": "effect-tsgo diagnostics --project <app and library tsconfig> --format json --lspconfig <disposable diagnostic options>",
+      "result": "R1 zero in tracked E88 scopes. App69 outside includes68 old exam/e2e hits and1 untracked scratch hit. Library84 node hits outside. R2 no added E88 violation;664 existing namespace hits in cloudflare/runtime. Overall commands exit126 from unrelated diagnostics; this is not a green full typecheck."
+    },
+    {
+      "command": "pnpm typecheck",
+      "result": "Not run; the lead owns the one final global check."
+    },
+    {
+      "command": "stepcommit.sh tests1075 <named repair paths>",
+      "result": "Refused not_formatted. Exact reproduction shows installed pnpm12.16.1 exits ERR_PNPM_RECURSIVE_EXEC_NO_PACKAGE in the formatter temporary folder. No commit, signing or push. Existing tracker1123 has the repro."
+    }
+  ],
+  "upstreamIssue": null,
+  "inheritedWorkerd": "Preserved byte for byte. The selector still filters descendants, matches the workerd command, requires exactly one result and keeps its signal behavior.",
+  "scratchPreserved": true
+}

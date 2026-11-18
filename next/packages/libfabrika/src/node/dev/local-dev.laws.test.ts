@@ -5,15 +5,33 @@
 // its moment and what the state said as it went out. No law here reaches the real `process.kill`:
 // the signals are a stand-in, and L6's `signal` runs against a spy.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Function from "effect/Function";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
+
 import { vi } from "vitest";
+import type { devLife } from "./DevLife.ts";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
+
+/** The state a step moves from, as the life machine holds it. */
+type Life = typeof devLife.model.Type;
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  exited: {},
+  listened: {},
+  started: {},
+  stop: {},
+});
 
 const SEED = 119120;
 
@@ -31,8 +49,8 @@ type Entry = {
 // A running process the brain samples: started and listening, so `replacing` may fold.
 const running = Effect.fnUntraced(function* (pid: number) {
   const life = yield* lifeCell(null);
-  yield* life.send({ type: "started", start: "start-1", pid, build: "build-1", at: 0 });
-  yield* life.send({ type: "listened", port: 40_001 });
+  yield* life.send({ ...Tag.cases.started.make({}), start: "start-1", pid, build: "build-1", at: 0 });
+  yield* life.send({ ...Tag.cases.listened.make({}), port: 40_001 });
   const log: Array<Entry> = [];
   const now = Clock.currentTimeMillis;
 
@@ -42,7 +60,7 @@ const running = Effect.fnUntraced(function* (pid: number) {
     );
 
   // What the brain records once a step moved the state: the fact its new signal names.
-  const record = (_prev: unknown, next: { readonly signal: Signal }) =>
+  const record = (_prev: Life, next: { readonly signal: Signal }) =>
     Effect.gen(function* () {
       log.push({ step: next.signal === "SIGTERM" ? "replacing" : "killed", at: yield* now, vouched: true });
     });
@@ -53,7 +71,7 @@ const running = Effect.fnUntraced(function* (pid: number) {
     });
 
   // The runtime reports the exit, and the brain folds it, as its event fiber does.
-  const exits = life.send({ type: "exited", replacement: "start-1" });
+  const exits = life.send({ ...Tag.cases.exited.make({}), replacement: "start-1" });
 
   return { life, log, record, heard, exits };
 });
@@ -106,7 +124,7 @@ describe("the memory restart's bounded stop, next/", () => {
 
         yield* TestClock.adjust(grace * 2 + 1);
         const ended = yield* Fiber.join(fiber);
-        const log = w.log.map(({ step, at, vouched }) => ({ step, at: at - began, vouched }));
+        const log = Arr.map(w.log, ({ step, at, vouched }) => ({ step, at: at - began, vouched }));
         const itself = ends !== null && ends < grace;
         // Each fact is recorded before its signal, so a log reads in the order things happened.
         expect({ ended: ended._tag, log }).toEqual(
@@ -154,7 +172,7 @@ describe("the memory restart's bounded stop, next/", () => {
         if (code === "ESRCH") {
           expect(exit).toEqual(Exit.void);
         } else {
-          expect(Exit.isFailure(exit) && exit.cause.reasons.every((reason) => reason._tag === "Die")).toBe(true);
+          expect(Exit.isFailure(exit) && Arr.every(exit.cause.reasons, (reason) => reason._tag === "Die")).toBe(true);
         }
       }).pipe(Effect.scoped),
     { arbitrary: { seed: SEED, runs: 50 } },
@@ -191,12 +209,13 @@ describe("the memory restart's bounded stop, next/", () => {
       Effect.gen(function* () {
         const w = yield* running(pid);
 
-        const msg =
-          event === "exited"
-            ? ({ type: "exited", replacement: "start-1" } as const)
-            : event === "stop"
-              ? ({ type: "stop" } as const)
-              : ({ type: "started", start: "start-2", pid: pid + 1, build: "build-1", at: 0 } as const);
+        const msg = Match.value(event).pipe(
+          Match.when("exited", () => ({ ...Tag.cases.exited.make({}), replacement: "start-1" }) as const),
+          Match.when("stop", () => Tag.cases.stop.make({})),
+          Match.orElse(
+            () => ({ ...Tag.cases.started.make({}), start: "start-2", pid: pid + 1, build: "build-1", at: 0 }) as const,
+          ),
+        );
 
         const landed: Array<Fiber.Fiber<unknown>> = [];
 
@@ -208,7 +227,7 @@ describe("the memory restart's bounded stop, next/", () => {
         // A fact's write takes a while, as a synced file write does: other fibers run meanwhile.
         const write = Effect.yieldNow.pipe(Effect.repeat({ times: 5 }));
 
-        const record = (prev: unknown, next: { readonly signal: Signal }) =>
+        const record = (prev: Life, next: { readonly signal: Signal }) =>
           Effect.gen(function* () {
             const fact = next.signal === "SIGTERM" ? "replacing" : "killed";
             yield* land(`${fact}-start`);
@@ -236,7 +255,7 @@ describe("the memory restart's bounded stop, next/", () => {
         const life: typeof w.life = {
           ...w.life,
           step: (next, moved, then) =>
-            (point === "timeout" && next.type === "killed" ? w.life.send(msg) : Effect.void).pipe(
+            (point === "timeout" && next._tag === "killed" ? w.life.send(msg) : Effect.void).pipe(
               Effect.andThen(w.life.step(next, moved, then)),
             ),
         };
@@ -260,16 +279,21 @@ describe("the memory restart's bounded stop, next/", () => {
 
         // How many signals the replace sends: none for a sample the state does not vouch for, the
         // SIGTERM alone when the process went before the `killed` fold, else both.
-        const sent = stale || point === "before" ? 0 : point.startsWith("killed") || point === "after-SIGKILL" ? 2 : 1;
+        const sent =
+          stale || point === "before"
+            ? 0
+            : Function.pipe(point, Str.startsWith("killed")) || point === "after-SIGKILL"
+              ? 2
+              : 1;
 
         const steps = [
           ["replacing", "SIGTERM"],
           ["killed", "SIGKILL"],
         ];
 
-        expect(w.log.map(({ step }) => step)).toEqual(steps.slice(0, sent).flat());
+        expect(Arr.map(w.log, ({ step }) => step)).toEqual(steps.slice(0, sent).flat());
         // No signal went out on a pid the state had stopped vouching for.
-        expect(w.log.filter(({ vouched }) => !vouched)).toEqual([]);
+        expect(Arr.filter(w.log, ({ vouched }) => !vouched)).toEqual([]);
         expect(ended._tag).toBe(["refused", "itself", "killed"][sent]);
         // Whatever landed was folded in the end, so no replace of this pid is left.
         const last = yield* SubscriptionRef.get(w.life.state);

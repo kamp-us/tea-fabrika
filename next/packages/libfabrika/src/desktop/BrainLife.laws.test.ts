@@ -2,8 +2,11 @@
 import { applyCell } from "@demlik/tea";
 import { arbGuidedSequence, propertyInvariant, propertyTrace, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { syncTest } from "../Testing.ts";
@@ -11,6 +14,17 @@ import * as Outside from "./BrainControl.test-support.ts";
 import * as BrainLife from "./BrainLife.ts";
 import { Readiness, Children } from "./BrainProbe.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  tick: {},
+  stop: {},
+  up: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 
 const options = { seed: 119120, numRuns: 150 };
 
@@ -23,22 +37,22 @@ const oldId = Schema.decodeSync(Id.Cmd)("cmd_01m6v5270hf3c8x2q7w9z4k5mn");
 const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
   const settled = <A>(value: fc.Arbitrary<A>) => fc.record({ value, failed: fc.integer({ min: 0, max: 9 }) });
 
-  const reply = <T extends BrainLife.Command["type"], A>(
-    cmd: Extract<BrainLife.Command, { type: T }>,
+  const reply = <T extends BrainLife.Command["_tag"], A>(
+    cmd: Extract<BrainLife.Command, { _tag: T }>,
     answer: { value: A; failed: number },
   ): BrainLife.Msg =>
     (answer.failed === 0
-      ? { type: `${cmd.type}_err`, cmd, error: Failure.cases.Operation.make({}), at: 0 }
-      : { type: `${cmd.type}_ok`, cmd, value: answer.value, at: 0 }) as BrainLife.Msg;
+      ? { ...keyed(`${cmd._tag}_err`), cmd, error: Failure.cases.Operation.make({}), at: 0 }
+      : { ...keyed(`${cmd._tag}_ok`), cmd, value: answer.value, at: 0 }) as BrainLife.Msg;
 
   const guided = arbGuidedSequence(
     machine,
     ctx,
     {
       outside: {
-        up: fc.constant({ type: "up" as const, at: 0 }),
-        stop: fc.constant({ type: "stop" as const, at: 0 }),
-        tick: fc.record({ type: fc.constant("tick" as const), at: fc.integer({ min: 0, max: 30 }) }),
+        up: fc.constant({ ...Tag.cases.up.make({}), at: 0 }),
+        stop: fc.constant({ ...Tag.cases.stop.make({}), at: 0 }),
+        tick: fc.integer({ min: 0, max: 30 }).map((at) => ({ ...Tag.cases.tick.make({}), at })),
       },
       answers: {
         inspect: {
@@ -71,7 +85,9 @@ const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
 
     for (const msg of msgs) {
       const id = "pending" in state ? state.pending?.id : undefined;
-      const stale = id === undefined ? undefined : history.findLast((old) => old.cmd.id !== id);
+
+      const stale =
+        id === undefined ? undefined : Option.getOrUndefined(Arr.findLast(history, (old) => old.cmd.id !== id));
 
       if (stale !== undefined) {
         walk.push(stale);
@@ -105,7 +121,7 @@ describe("P19 lifecycle", () => {
           }
 
           syncTest(machine, ctx, {
-            msgs: steps.map((step) => step.msg),
+            msgs: Arr.map(steps, (step) => step.msg),
             encode: Schema.encodeSync(BrainLife.Model),
             decode: Schema.decodeUnknownSync(BrainLife.Model),
             equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
@@ -147,7 +163,7 @@ describe("P19 lifecycle", () => {
 
           for (const { prev, msg } of steps) {
             const id = "pending" in prev ? prev.pending?.id : undefined;
-            const stale = id === undefined ? [] : earlier.filter((old) => old.cmd.id !== id);
+            const stale = id === undefined ? [] : Arr.filter(earlier, (old) => old.cmd.id !== id);
 
             if (id !== undefined && "cmd" in msg) {
               stale.push({ ...msg, cmd: { ...msg.cmd, id: oldId } } as (typeof stale)[number]);
@@ -156,7 +172,7 @@ describe("P19 lifecycle", () => {
             for (const old of stale) {
               checked++;
               const pending = "pending" in prev ? prev.pending : null;
-              replayed += Number(pending !== null && old.cmd.type === pending.type && old.cmd.id !== oldId);
+              replayed += Number(pending !== null && old.cmd._tag === pending._tag && old.cmd.id !== oldId);
               staleStates.add(prev._tag);
               const [after, cmds] = applyCell(machine, prev, old);
               expect(after).toEqual(prev);
@@ -181,7 +197,7 @@ describe("P19 lifecycle", () => {
   it.effect("L5 every pending command rejects replies at or after its deadline", () =>
     Effect.gen(function* () {
       const machine = BrainLife.machine({ spec: Outside.spec, settings: yield* ServiceTest.timing() });
-      const reached = new Set<BrainLife.Command["type"]>();
+      const reached = new Set<BrainLife.Command["_tag"]>();
       const acceptedExpired = new Set<string>();
       propertyTrace(
         machine,
@@ -193,16 +209,16 @@ describe("P19 lifecycle", () => {
               continue;
             }
 
-            if (msg.cmd.id !== prev.pending.id || msg.cmd.type !== prev.pending.type) {
+            if (msg.cmd.id !== prev.pending.id || msg.cmd._tag !== prev.pending._tag) {
               continue;
             }
 
-            reached.add(prev.pending.type);
+            reached.add(prev.pending._tag);
 
             const replies: ReadonlyArray<BrainLife.Msg> = [
               msg,
               {
-                type: `${prev.pending.type}_err`,
+                ...keyed(`${prev.pending._tag}_err`),
                 cmd: prev.pending,
                 error: Failure.cases.Operation.make({}),
                 at: msg.at,
@@ -226,10 +242,10 @@ describe("P19 lifecycle", () => {
                   after._tag !== expected ||
                   !("reason" in after) ||
                   after.reason !== "Timeout" ||
-                  after.command !== prev.pending.type ||
+                  after.command !== prev.pending._tag ||
                   cmds.length !== 0
                 ) {
-                  acceptedExpired.add(`${prev._tag}:${reply.type}:${at === prev.deadline ? "at" : "after"}`);
+                  acceptedExpired.add(`${prev._tag}:${reply._tag}:${at === prev.deadline ? "at" : "after"}`);
                 }
 
                 const [stale, staleCmds] = applyCell(machine, prev, {
@@ -262,23 +278,23 @@ describe("P19 lifecycle", () => {
         ctx,
         walks(machine),
         ({ prev, next, msg, cmds }) => {
-          const removes = cmds.some((cmd) => cmd.type === "remove");
-          const checksChildren = cmds.some((cmd) => cmd.type === "cleanup");
+          const removes = Arr.some(cmds, (cmd) => cmd._tag === "remove");
+          const checksChildren = Arr.some(cmds, (cmd) => cmd._tag === "cleanup");
           removals += Number(removes);
           expect(
-            !removes || (prev._tag === "checking_children" && msg.type === "cleanup_ok" && msg.value._tag === "gone"),
+            !removes || (prev._tag === "checking_children" && msg._tag === "cleanup_ok" && msg.value._tag === "gone"),
           ).toBe(true);
           expect(
             !checksChildren ||
               prev._tag === "checking_children" ||
               ((prev._tag === "inspecting" || prev._tag === "confirming_absence") &&
-                msg.type === "inspect_ok" &&
+                msg._tag === "inspect_ok" &&
                 msg.value._tag === "absent"),
           ).toBe(true);
           expect(
             next._tag !== "stopped" ||
               prev._tag === "stopped" ||
-              (prev._tag === "removing" && msg.type === "remove_ok"),
+              (prev._tag === "removing" && msg._tag === "remove_ok"),
           ).toBe(true);
 
           return true;
@@ -308,8 +324,11 @@ it.effect.prop(
           const [next] = applyCell(machine, prev, poisoned);
           const outputs = [JSON.stringify(next), JSON.stringify(Schema.encodeSync(BrainLife.Model)(next))];
 
-          return outputs.every((output) =>
-            [secret, encoded, JSON.stringify(secret).slice(1, -1)].every((form) => !output.includes(form)),
+          return Arr.every(outputs, (output) =>
+            Arr.every(
+              [secret, encoded, Str.slice(1, -1)(JSON.stringify(secret))],
+              (form) => !Str.includes(form)(output),
+            ),
           );
         },
         { seed, numRuns: 1 },

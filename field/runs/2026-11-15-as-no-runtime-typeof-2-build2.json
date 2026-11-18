@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-as-no-runtime-typeof-2-build2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:28:08-08:00",
+  "ended": "2026-11-16T00:06:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second build step of anti-slop judgment slice AS-no-runtime-typeof-2 (decision 0563 and its amendment), in next/ and our tooling, on the second tests step's head c85e1cf98, after the merge of origin/main with pull request 1366. Rule anti-slop/no-runtime-typeof forced to error in a scratch config outside the repo, with absolute override globs over the slice's folders. Product-file hits met: 41, recounted here, the tests step's 38 plus the first build's 3 left labels. Fixed: 38, all hand edits through a scratch replace script outside the repo, all in next/packages/libfabrika/src, each typeof check turned into the Effect Predicate guard that answers the same: isString, isNumber, isBoolean, isFunction, isObject where the old code also excluded arrays, and isObjectOrArray for typeof object and not null. One hit took Schema in place of a guard: Runner.ts, where an Err reply gains its tag as reason, reads the Json reply through Schema.decodeUnknownOption(Schema.JsonObject), because every Predicate guard narrows Schema.Json to an intersection that TypeScript will not spread (TS2698); for a Json value it answers what the old typeof object, not null, not array check did. Files: runtime/Runner.ts (12), gateway/Gateway.ts (6), telemetry/Sink.ts (6), cloudflare/connection.ts (4), ledger/internal/ledgerStore.ts (3), settings/JsonSchema.ts (2), runtime/RecoveryStore.ts (2), cloudflare/runtime.ts (2), runtime/QuotaRunner.ts (1). Side changes the fix needed: three casts to Record<string, unknown> went (Runner.ts operands and withoutInput, Gateway.ts rawObject), since Predicate.isObject already narrows to a record; Predicate joins the effect imports of six files. Left: 3, all JS type labels that are right as written: next/packages/libfabrika/src/runtime/Program.ts:574 and next/packages/libfabrika/src/telemetry/Trace.ts:329 (the error class label, which the integration laws compute the same way), and next/packages/libfabrika/src/cloudflare/platform.ts:56 (a thrown non-Error's description). Their fit is the 0563 ignore line, which fails lint until the lock names the rule's folders, so none was added. Program.ts is untouched, so law D4's read order holds. No lock line, no .oxlintrc.json change, no disable line, no test, suite or test-support file touched.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 38,
+  "note": "Checks at the working tree on c85e1cf98: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 fails only on oxlint-plugins/anti-slop.ts's audit asking to add folders now at zero to the rule's block (13 folders, now gateway, ledger and settings among them), which the owner ruled comes later with the locks; every other part passed. The list ratchet exits 0. Two whole pnpm typecheck runs: the first found the TS2698 above, the fix was checked with libfabrika's own typecheck, and the second whole pnpm typecheck exits 0. Tests, one file at a time under nice -n 15 with --maxWorkers=1: the 69 test files that import a touched module, plain and .integration. alike (the cloud guard of pull request 1508 allowed the integration laws), 890 tests, all green; the 19 that ran before the last Runner.ts edit ran again, all green. Not run: next/apps/fabrika/src/instance-records.integration.test.ts and next/apps/fabrika/src/instance-one-file.integration.test.ts, which send SIGKILL to processes, and next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.laws.integration.test.ts, which calls launchctl: the build skill keeps signal and launchd tests off this box; a scheduled run proves them. loosening.sh c85e1cf98..HEAD: 0 hits.",
+  "step": "build"
+}

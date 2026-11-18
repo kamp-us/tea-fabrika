@@ -1,6 +1,11 @@
 // P33 / p79. The manager is rebuilt over the same SQLite file for each reopen check.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Ledger } from "../ledger/Ledger.ts";
@@ -39,7 +44,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
     const context = yield* Effect.context<R>();
     yield* Effect.promise(() =>
       fc.assert(
-        fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
+        fc.asyncProperty(arb, (a) => Effect.runPromiseWith(context)(law(a))),
         {
           seed: 119120,
           numRuns: 40,
@@ -228,7 +233,7 @@ describe("p79, process identity", () => {
       fc.tuple(
         fc
           .stringMatching(/^[a-z][a-z0-9:]{0,20}$/)
-          .filter((name) => !["counter:1", "processes", "gateway"].includes(name) && !name.startsWith("client:")),
+          .filter((name) => !["counter:1", "processes", "gateway"].includes(name) && !Str.startsWith("client:")(name)),
         hash.filter((build) => build !== CODE.hash),
       ),
       [["counter:2", "build-b"]],
@@ -397,7 +402,7 @@ describe("p79, predecessors and live info", () => {
                 build,
                 restarts,
               }))
-              .sort((a, b) => a.name.localeCompare(b.name)),
+              .sort((a, b) => Str.localeCompare(b.name)(a.name)),
           ).toEqual([
             { process: X, name: "counter:1", program: "counter", build: "build-a", restarts: 2 },
             { process: W, name: "watcher:1", program: "watcher", build: "build-a", restarts: 0 },
@@ -600,7 +605,8 @@ const lawsFor = (
 };
 
 describe("P33, the process fold ignores events not written by the brain", () => {
-  for (const tag of Object.keys(ProcessEvent.cases) as Array<keyof typeof ProcessEvent.cases>) {
+  // SAFETY: `Rec.keys` of the event union's `cases` answers exactly its case names.
+  for (const tag of Rec.keys(ProcessEvent.cases) as Array<keyof typeof ProcessEvent.cases>) {
     it.effect(`the fold ignores an event tagged ${tag} whose by is not the brain's writer`, () =>
       check(
         fc.tuple(
@@ -704,7 +710,7 @@ describe("P33, the brain writes process events and `parent` keeps who asked", ()
           ),
         );
         yield* ProcessManager.use((p) => p.start(first(), from({ by: X_KEY, parent: asked })));
-        const written = store.rows().filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));
+        const written = store.rows().filter((row) => Rec.has<string, unknown>(ProcessEvent.cases, row._tag));
         expect(written.map((row) => row._tag)).toEqual(["registered", "started"]);
 
         for (const row of written) {

@@ -167,6 +167,7 @@ const land = (world: World) => {
 
     expect(said.status, said.stderr).toBe(0);
     const record = join(dir, "boxes/state/t652f.land.json");
+    // SAFETY: land.ts writes this file with ReadyJson, a JSON object, so it parses to a record.
     const { quest: named, ...rest } = JSON.parse(readFileSync(record, "utf8")) as Record<string, unknown>;
     expect(named).toBe("t652f");
 

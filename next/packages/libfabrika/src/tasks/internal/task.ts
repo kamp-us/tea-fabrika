@@ -2,6 +2,7 @@
 // events through it, steps the call it was given, and appends that call only when the answer is
 // `accepted`. A repeat answers `repeated`; a refusal names its reason. Neither changes the state.
 import { Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
 import { Collection, Executor, Request, Result, State } from "../Task.ts";
@@ -34,13 +35,13 @@ const Model = Schema.Struct({ state: State, answer: Answer });
 type Model = typeof Model.Type;
 
 /** @internal */
-export const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("request"), request: Request }),
-  Schema.Struct({ type: Schema.Literal("take"), executor: Executor, execution: Execution }),
-  Schema.Struct({ type: Schema.Literal("start"), execution: Execution }),
-  Schema.Struct({ type: Schema.Literal("finish"), execution: Execution, result: Result }),
-  Schema.Struct({ type: Schema.Literal("collect"), collection: Collection }),
-]);
+export const Msg = Schema.TaggedUnion({
+  request: { request: Request },
+  take: { executor: Executor, execution: Execution },
+  start: { execution: Execution },
+  finish: { execution: Execution, result: Result },
+  collect: { collection: Collection },
+});
 
 /** @internal */
 export type Msg = typeof Msg.Type;
@@ -82,7 +83,7 @@ export const task = Machine.make({
         return refused(model, "not_target");
       }
 
-      if (!s.request.needs.every((need) => executor.has.includes(need))) {
+      if (!Arr.every(s.request.needs, (need) => executor.has.includes(need))) {
         return refused(model, "lacks_capability");
       }
 

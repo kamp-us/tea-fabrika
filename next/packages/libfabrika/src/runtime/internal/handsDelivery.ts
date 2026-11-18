@@ -28,7 +28,8 @@ export const State = Schema.TaggedUnion({
 
 type State = typeof State.Type;
 
-const Msg = Schema.Struct({ type: Schema.Literal("replied"), reply: Reply });
+/** @internal The one Msg: the hands' reply arrived. */
+export const Replied = Schema.TaggedStruct("replied", { reply: Reply });
 
 const same = (s: State): [State, []] => [s, []];
 
@@ -37,7 +38,7 @@ const settled = (answer: typeof Settled.Type): [State, []] => [State.cases.resul
 /** @internal */
 export const handsDelivery = Machine.make({
   model: State,
-  msg: Msg,
+  msg: Replied,
   cmds: [],
   init: (loaded) => [loaded ?? State.cases.pending.make({}), []],
   update: {

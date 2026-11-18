@@ -2,10 +2,21 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { it } from "@effect/vitest";
+import { Effect, Match, Predicate, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
 import * as ci from "./changes.mjs";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // Today's CI, both versions. Covers changes.mjs and the shared gitignore.mjs.
 // Red baseline adapters are preserved in the first T342 tests commit. These laws
@@ -496,8 +507,8 @@ it("property: unreadable history, no path at all, or an event with no paths of i
       fc.constantFrom("workflow_dispatch", "schedule", ""),
       fc.boolean(),
       (event, none, paths, other, draft) => {
-        expect(Object.values(ci.jobs(none, event, false)).every(Boolean)).toBe(true);
-        expect(Object.values(ci.jobs(paths, other, draft)).every(Boolean)).toBe(true);
+        expect(Rec.values(ci.jobs(none, event, false)).every(Boolean)).toBe(true);
+        expect(Rec.values(ci.jobs(paths, other, draft)).every(Boolean)).toBe(true);
       },
     ),
     options,
@@ -513,7 +524,7 @@ it("scenario: a push with no commit before it reads no paths, so it runs every j
   for (const base of ["0".repeat(40), ""]) {
     const read = ci.readPaths(base, "c".repeat(40), "push", run);
     expect(read).toBeNull();
-    expect(Object.values(ci.jobs(read, "push", false)).every(Boolean)).toBe(true);
+    expect(Rec.values(ci.jobs(read, "push", false)).every(Boolean)).toBe(true);
   }
 });
 
@@ -802,6 +813,7 @@ it("property: adding paths never lowers the scope or turns a flag off, and addin
       (paths, more, same, extra, event) => {
         const before = ci.scope(paths, event, same);
         const after = ci.scope([...paths, ...more], event, same);
+        // SAFETY: `ci.scope` only answers "none", "readers" or "all", the three keys of `rank`; its string type is wider than that.
         expect(rank[after as Scope]).toBeGreaterThanOrEqual(rank[before as Scope]);
         const flags = ci.classify(paths, event, same);
         const grown = ci.classify([...paths, ...more], event, same);
@@ -811,6 +823,7 @@ it("property: adding paths never lowers the scope or turns a flag off, and addin
         }
 
         // Proving more paths can only lower what next/ needs, and never moves a flag.
+        // SAFETY: this `ci.scope` call answers one of the three keys of `rank` too, as `before` above does.
         expect(rank[ci.scope(paths, event, [...same, ...extra, ...paths]) as Scope]).toBeLessThanOrEqual(
           rank[before as Scope],
         );
@@ -939,11 +952,14 @@ const envOf = (event: string, draft: boolean) => ({
   DRAFT: String(draft),
 });
 
-/** What a run prints for a scope: the reader paths, or all of next/. */
-const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : "next/");
+/** The full filter: both roots of the configured `next` project, as Vitest takes them (O3). */
+const FULL = "next/ kalfa/";
 
-it("property: probe changes no flag: the first pass prints the same flags for any diff text", async () => {
-  await fc.assert(
+/** What a run prints for a scope: the reader paths, or both roots of the `next` project. */
+const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : FULL);
+
+it("property: probe changes no flag: the first pass prints the same flags for any diff text", () =>
+  fc.assert(
     fc.asyncProperty(
       // A NUL ends a path in git's output, so no path holds one.
       fc
@@ -963,67 +979,80 @@ it("property: probe changes no flag: the first pass prints the same flags for an
         const printed = await ci.outputs({ same: false, env: envOf(event, draft), run: git(paths, diff) });
         const expected = ci.jobs(paths, event, draft);
 
-        for (const [key, on] of Object.entries(expected)) {
+        for (const [key, on] of Rec.toEntries(expected)) {
           expect(printed[key], key).toBe(String(on));
         }
 
         expect(["true", "false"]).toContain(printed["probe"]);
 
         if (expected.next) {
+          // SAFETY: `ci.scope` answers one of the three values `filterOf` takes; the law above checks that set.
           expect(printed["filter"]).toBe(filterOf(ci.scope(paths, event) as Scope));
         }
       },
     ),
     options,
-  );
-});
+  ));
 
-it("scenario: with no parser to import, --same prints what the first pass printed", async () => {
-  // scenario: the import of program.ts rejects, as it does when the parser's install failed. Then
-  // a parser that proves every path, and one that proves all but one, for the same runs.
-  const rejects = () => Promise.reject(new Error("Cannot find package 'oxc-parser'"));
+it.live("scenario: with no parser to import, --same prints what the first pass printed", () =>
+  Effect.gen(function* () {
+    // scenario: the import of program.ts rejects, as it does when the parser's install failed. Then
+    // a parser that proves every path, and one that proves all but one, for the same runs.
+    const rejects = () => Promise.reject(new Error("Cannot find package 'oxc-parser'"));
 
-  const proves = (keep: (path: string) => boolean) => () =>
-    Promise.resolve({ samePaths: (_base: string, _head: string, paths: readonly string[]) => paths.filter(keep) });
+    const proves = (keep: (path: string) => boolean) => () =>
+      Promise.resolve({ samePaths: (_base: string, _head: string, paths: readonly string[]) => paths.filter(keep) });
 
-  const nextPaths = [
-    "next/packages/libfabrika/src/transport/Hello.ts",
-    "next/packages/libfabrika/src/transport/Wire.ts",
-  ];
+    const nextPaths = [
+      "next/packages/libfabrika/src/transport/Hello.ts",
+      "next/packages/libfabrika/src/transport/Wire.ts",
+    ];
 
-  const comments = "+/** A note. */\n+// more";
+    const comments = "+/** A note. */\n+// more";
 
-  for (const [paths, event] of [
-    [nextPaths, "pull_request"],
-    [nextPaths, "merge_group"],
-    [[".oxlintrc.json"], "push"],
-    [[...nextPaths, ".oxlintrc.json"], "pull_request"],
-  ] as [readonly string[], string][]) {
-    const run = git(paths, comments);
-    const env = envOf(event, false);
-    const first = await ci.outputs({ same: false, env, run });
-    const again = await ci.outputs({ same: true, env, run, load: rejects });
-    expect({ next: again["next"], filter: again["filter"] }).toEqual({ next: first["next"], filter: first["filter"] });
-    expect(first["next"]).toBe("true");
+    // SAFETY: each row below is a list of paths and one event name, written out here by hand.
+    for (const [paths, event] of [
+      [nextPaths, "pull_request"],
+      [nextPaths, "merge_group"],
+      [[".oxlintrc.json"], "push"],
+      [[...nextPaths, ".oxlintrc.json"], "pull_request"],
+    ] as [readonly string[], string][]) {
+      const run = git(paths, comments);
+      const env = envOf(event, false);
+      const first = yield* promised(() => ci.outputs({ same: false, env, run }));
+      const again = yield* promised(() => ci.outputs({ same: true, env, run, load: rejects }));
+      expect({ next: again["next"], filter: again["filter"] }).toEqual({
+        next: first["next"],
+        filter: first["filter"],
+      });
+      expect(first["next"]).toBe("true");
 
-    const proved = await ci.outputs({ same: true, env, run, load: proves(() => true) });
-    expect(proved).toMatchObject({ next: "true", filter: filterOf("readers") });
-    const one = await ci.outputs({ same: true, env, run, load: proves((p) => !p.endsWith("Wire.ts")) });
-    expect(one).toMatchObject({
+      const proved = yield* promised(() => ci.outputs({ same: true, env, run, load: proves(() => true) }));
+      expect(proved).toMatchObject({ next: "true", filter: filterOf("readers") });
+
+      const one = yield* promised(() =>
+        ci.outputs({ same: true, env, run, load: proves((p) => !p.endsWith("Wire.ts")) }),
+      );
+
+      expect(one).toMatchObject({
+        next: "true",
+        filter: paths.includes("next/packages/libfabrika/src/transport/Wire.ts") ? FULL : filterOf("readers"),
+      });
+    }
+
+    // History that cannot be read: both passes run everything, parser or none.
+    const broken: Runner = () => ({ status: 128, stdout: "" });
+    const env = envOf("pull_request", false);
+    expect(yield* promised(() => ci.outputs({ same: true, env, run: broken, load: rejects }))).toMatchObject({
       next: "true",
-      filter: paths.includes("next/packages/libfabrika/src/transport/Wire.ts") ? "next/" : filterOf("readers"),
+      filter: FULL,
     });
-  }
-
-  // History that cannot be read: both passes run everything, parser or none.
-  const broken: Runner = () => ({ status: 128, stdout: "" });
-  const env = envOf("pull_request", false);
-  expect(await ci.outputs({ same: true, env, run: broken, load: rejects })).toMatchObject({
-    next: "true",
-    filter: "next/",
-  });
-  expect(await ci.outputs({ same: false, env, run: broken })).toMatchObject({ next: "true", filter: "next/" });
-});
+    expect(yield* promised(() => ci.outputs({ same: false, env, run: broken }))).toMatchObject({
+      next: "true",
+      filter: FULL,
+    });
+  }),
+);
 
 // A push to main that a merge queue run already tested (changes.mjs's `tested`). The queue moves
 // main to the commit it tested, so a push and its queue run share their tree and their base tree;
@@ -1124,7 +1153,7 @@ const pushed = (paths: readonly string[], fake: Fake, env: Record<string, string
 
 /** Every flag `outputs` printed is the one `expected` holds. */
 const prints = (printed: Record<string, string>, expected: Record<string, boolean>) => {
-  for (const [key, on] of Object.entries(expected)) {
+  for (const [key, on] of Rec.toEntries(expected)) {
     expect(printed[key], key).toBe(String(on));
   }
 };
@@ -1133,8 +1162,8 @@ const prints = (printed: Record<string, string>, expected: Record<string, boolea
 // not ended counts, any head tree counts, any base tree counts, an API error counts as tested, every
 // event asks, a tested push skips check too, the reader ignores a refused answer, the reader asks
 // with no token, and a tree git cannot read is ignored.
-it("property: a push whose tree and base tree a passed queue run tested skips next, and nothing else", async () => {
-  await fc.assert(
+it("property: a push whose tree and base tree a passed queue run tested skips next, and nothing else", () =>
+  fc.assert(
     fc.asyncProperty(changedPaths, async (paths) => {
       const { printed } = await pushed(paths, {});
       const expected = ci.jobs(paths, "push", false);
@@ -1143,23 +1172,29 @@ it("property: a push whose tree and base tree a passed queue run tested skips ne
       expect(printed["probe"]).toBe("false");
     }),
     options,
-  );
-});
+  ));
 
-it("scenario: a tested push of today's and next/ files keeps check, typecheck, build and field, and names the run", async () => {
-  // scenario: the shape of most queue merges, written out so the flags are read and not compared.
-  const { printed } = await pushed(["apps/fabrika/src/a.ts", "next/packages/libfabrika/src/b.ts"], {});
-  expect(printed).toMatchObject({
-    check: "true",
-    typecheck: "true",
-    next: "false",
-    build: "true",
-    tested: "7",
-  });
-});
+it.live(
+  "scenario: a tested push of today's and next/ files keeps check, typecheck, build and field, and names the run",
+  () =>
+    Effect.gen(function* () {
+      // scenario: the shape of most queue merges, written out so the flags are read and not compared.
+      const { printed } = yield* promised(() =>
+        pushed(["apps/fabrika/src/a.ts", "next/packages/libfabrika/src/b.ts"], {}),
+      );
 
-it("property: a queue run that did not pass, or has not ended, tests nothing, so the push runs what jobs says", async () => {
-  await fc.assert(
+      expect(printed).toMatchObject({
+        check: "true",
+        typecheck: "true",
+        next: "false",
+        build: "true",
+        tested: "7",
+      });
+    }),
+);
+
+it("property: a queue run that did not pass, or has not ended, tests nothing, so the push runs what jobs says", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.oneof(
@@ -1176,22 +1211,20 @@ it("property: a queue run that did not pass, or has not ended, tests nothing, so
       },
     ),
     options,
-  );
-});
+  ));
 
-it("property: with no queue run at all, as after an admin merge or a direct push, the push runs what jobs says", async () => {
-  await fc.assert(
+it("property: with no queue run at all, as after an admin merge or a direct push, the push runs what jobs says", () =>
+  fc.assert(
     fc.asyncProperty(changedPaths, async (paths) => {
       const { printed } = await pushed(paths, { runs: [] });
       prints(printed, ci.jobs(paths, "push", false));
       expect(printed["tested"]).toBe("");
     }),
     options,
-  );
-});
+  ));
 
-it("property: a passed queue run of another tree, or of no readable tree, tests nothing", async () => {
-  await fc.assert(
+it("property: a passed queue run of another tree, or of no readable tree, tests nothing", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom<QueueRun["head_commit"]>({ tree_id: tree.other }, { tree_id: tree.base }, { tree_id: "" }, null),
@@ -1202,84 +1235,88 @@ it("property: a passed queue run of another tree, or of no readable tree, tests 
       },
     ),
     options,
-  );
-});
+  ));
 
-it("property: a passed queue run of the same tree built on another base tree tests nothing", async () => {
+it("property: a passed queue run of the same tree built on another base tree tests nothing", () =>
   // A push of two queue entries at once: the last entry's run started from the first's head, so
   // its `--changed` tests missed what the first brought.
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(changedPaths, fc.constantFrom(tree.other, tree.head, ""), async (paths, baseTree) => {
       const { printed } = await pushed(paths, { baseTree });
       prints(printed, ci.jobs(paths, "push", false));
       expect(printed["tested"]).toBe("");
     }),
     options,
-  );
-});
+  ));
 
-it("property: an API error, a malformed answer or a tree git cannot read runs what jobs says", async () => {
-  await fc.assert(
-    fc.asyncProperty(
-      changedPaths,
-      fc.constantFrom("runs", "commit") satisfies fc.Arbitrary<Fake["fails"]>,
-      async (paths, fails) => {
-        const { printed } = await pushed(paths, { fails });
-        prints(printed, ci.jobs(paths, "push", false));
-        expect(printed["tested"]).toBe("");
-      },
-    ),
-    options,
-  );
-
-  // Answers of the wrong shape, read through the real GitHub reader: each throws or matches nothing.
-  const runEnv = {
-    ...pushEnv,
-    GITHUB_TOKEN: "token",
-    GITHUB_REPOSITORY: "owner/repo",
-    GITHUB_WORKFLOW_REF: "owner/repo/.github/workflows/check.yaml@refs/heads/main",
-  };
-
-  await fc.assert(
-    fc.asyncProperty(
-      changedPaths,
-      fc.constantFrom<[unknown, unknown]>(
-        [{}, {}],
-        [null, null],
-        [{ workflow_runs: null }, {}],
-        [{ workflow_runs: "runs" }, {}],
-        [{ workflow_runs: [{}] }, {}],
-        [{ workflow_runs: [passed] }, {}],
-        [{ workflow_runs: [passed] }, { tree: { sha: tree.head }, parents: null }],
-        [{ workflow_runs: [passed] }, { tree: null, parents: [{ sha: queue.base }] }],
+it.live("property: an API error, a malformed answer or a tree git cannot read runs what jobs says", () =>
+  Effect.gen(function* () {
+    yield* promised(() =>
+      fc.assert(
+        fc.asyncProperty(
+          changedPaths,
+          fc.constantFrom("runs", "commit") satisfies fc.Arbitrary<Fake["fails"]>,
+          async (paths, fails) => {
+            const { printed } = await pushed(paths, { fails });
+            prints(printed, ci.jobs(paths, "push", false));
+            expect(printed["tested"]).toBe("");
+          },
+        ),
+        options,
       ),
-      async (paths, [runs, commit]) => {
-        const api = ci.github(runEnv, (url) =>
-          Promise.resolve({
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve(url.includes("/runs?") ? runs : commit),
-          }),
-        );
+    );
 
-        const printed = await ci.outputs({ same: false, env: runEnv, run: pushGit(paths), api });
-        prints(printed, ci.jobs(paths, "push", false));
-        expect(printed["tested"]).toBe("");
-      },
-    ),
-    options,
-  );
+    // Answers of the wrong shape, read through the real GitHub reader: each throws or matches nothing.
+    const runEnv = {
+      ...pushEnv,
+      GITHUB_TOKEN: "token",
+      GITHUB_REPOSITORY: "owner/repo",
+      GITHUB_WORKFLOW_REF: "owner/repo/.github/workflows/check.yaml@refs/heads/main",
+    };
 
-  // git cannot read the push's trees: no question goes to GitHub, and every job the paths need runs.
-  const paths = ["apps/fabrika/src/a.ts"];
-  const { api, calls } = fakeApi({});
-  const printed = await ci.outputs({ same: false, env: pushEnv, run: git(paths, ""), api });
-  prints(printed, ci.jobs(paths, "push", false));
-  expect(calls).toEqual([]);
-});
+    yield* promised(() =>
+      fc.assert(
+        fc.asyncProperty(
+          changedPaths,
+          fc.constantFrom<[unknown, unknown]>(
+            [{}, {}],
+            [null, null],
+            [{ workflow_runs: null }, {}],
+            [{ workflow_runs: "runs" }, {}],
+            [{ workflow_runs: [{}] }, {}],
+            [{ workflow_runs: [passed] }, {}],
+            [{ workflow_runs: [passed] }, { tree: { sha: tree.head }, parents: null }],
+            [{ workflow_runs: [passed] }, { tree: null, parents: [{ sha: queue.base }] }],
+          ),
+          async (paths, [runs, commit]) => {
+            const api = ci.github(runEnv, (url) =>
+              Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve(url.includes("/runs?") ? runs : commit),
+              }),
+            );
 
-it("property: a pull request never asks GitHub, a merge queue's group asks only for its trees' record, and with none each runs what jobs says", async () => {
-  await fc.assert(
+            const printed = await ci.outputs({ same: false, env: runEnv, run: pushGit(paths), api });
+            prints(printed, ci.jobs(paths, "push", false));
+            expect(printed["tested"]).toBe("");
+          },
+        ),
+        options,
+      ),
+    );
+
+    // git cannot read the push's trees: no question goes to GitHub, and every job the paths need runs.
+    const paths = ["apps/fabrika/src/a.ts"];
+    const { api, calls } = fakeApi({});
+    const printed = yield* promised(() => ci.outputs({ same: false, env: pushEnv, run: git(paths, ""), api }));
+    prints(printed, ci.jobs(paths, "push", false));
+    expect(calls).toEqual([]);
+  }),
+);
+
+it("property: a pull request never asks GitHub, a merge queue's group asks only for its trees' record, and with none each runs what jobs says", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom("pull_request", "merge_group"),
@@ -1293,8 +1330,7 @@ it("property: a pull request never asks GitHub, a merge queue's group asks only 
       },
     ),
     options,
-  );
-});
+  ));
 
 // Experiment 292, change 5: a merge queue group passes at once when a ready pull request run already
 // tested its tree green. The pull request run's changes job records the tree it tested (the merge
@@ -1433,7 +1469,11 @@ const world = (paths: readonly string[], ran: ci.Selection, fault: Fault) => {
   const run = {
     event: "pull_request",
     status: fault === "unfinished" ? "in_progress" : "completed",
-    conclusion: fault === "conclusion" ? "failure" : fault === "unfinished" ? null : "success",
+    conclusion: Match.value(fault).pipe(
+      Match.when("conclusion", () => "failure"),
+      Match.when("unfinished", () => null),
+      Match.orElse(() => "success"),
+    ),
     path: fault === "workflow" ? ".github/workflows/host.yaml" : ".github/workflows/check.yaml",
     html_url: "https://github.com/owner/repo/actions/runs/11",
     repository: { id: 1 },
@@ -1485,32 +1525,40 @@ const grouped = async (paths: readonly string[], api: ci.Api) => {
 
 const noJob = { check: false, typecheck: false, next: false, field: false, build: false };
 
-it("scenario: a group whose tree and base tree a ready pull request run tested green runs no job but changes and ci-required, and links that run", async () => {
-  // scenario: the common merge, a next/ file and today's app, so the group would run check,
-  // typecheck, next and the build.
-  const paths = ["next/packages/libfabrika/src/b.ts", "apps/fabrika/src/a.ts"];
-  const needed = neededOf(paths);
-  expect(needed).toMatchObject({ check: true, typecheck: true, next: true, build: true, scope: "all" });
-  const { api, made } = world(paths, needed, "none");
-  expect(made.name).toBe(`tested-${tree.head}-${tree.base}`);
-  const { printed, notes } = await grouped(paths, api);
-  prints(printed, noJob);
-  expect(printed["tested"]).toBe("11");
-  expect(printed["probe"]).toBe("false");
-  expect(notes.join("\n")).toContain("https://github.com/owner/repo/actions/runs/11");
-  expect(notes.join("\n")).toContain(tree.head);
-});
+it.live(
+  "scenario: a group whose tree and base tree a ready pull request run tested green runs no job but changes and ci-required, and links that run",
+  () =>
+    Effect.gen(function* () {
+      // scenario: the common merge, a next/ file and today's app, so the group would run check,
+      // typecheck, next and the build.
+      const paths = ["next/packages/libfabrika/src/b.ts", "apps/fabrika/src/a.ts"];
+      const needed = neededOf(paths);
+      expect(needed).toMatchObject({ check: true, typecheck: true, next: true, build: true, scope: "all" });
+      const { api, made } = world(paths, needed, "none");
+      expect(made.name).toBe(`tested-${tree.head}-${tree.base}`);
+      const { printed, notes } = yield* promised(() => grouped(paths, api));
+      prints(printed, noJob);
+      expect(printed["tested"]).toBe("11");
+      expect(printed["probe"]).toBe("false");
+      expect(notes.join("\n")).toContain("https://github.com/owner/repo/actions/runs/11");
+      expect(notes.join("\n")).toContain(tree.head);
+    }),
+);
 
-it("scenario: main moved after the pull request run, so the group's base tree has no record and it runs its tests", async () => {
-  // scenario: the run tested its merge onto an older main. Its record names that main's tree, and
-  // the group, built on the newer main, asks for the record of its own.
-  const paths = ["next/packages/libfabrika/src/b.ts"];
-  const { api, made } = world(paths, neededOf(paths), "base");
-  expect(made.name).toBe(`tested-${tree.head}-${tree.other}`);
-  const { printed } = await grouped(paths, api);
-  prints(printed, ci.jobs(paths, "merge_group", false));
-  expect(printed).toMatchObject({ check: "true", next: "true", tested: "" });
-});
+it.live(
+  "scenario: main moved after the pull request run, so the group's base tree has no record and it runs its tests",
+  () =>
+    Effect.gen(function* () {
+      // scenario: the run tested its merge onto an older main. Its record names that main's tree, and
+      // the group, built on the newer main, asks for the record of its own.
+      const paths = ["next/packages/libfabrika/src/b.ts"];
+      const { api, made } = world(paths, neededOf(paths), "base");
+      expect(made.name).toBe(`tested-${tree.head}-${tree.other}`);
+      const { printed } = yield* promised(() => grouped(paths, api));
+      prints(printed, ci.jobs(paths, "merge_group", false));
+      expect(printed).toMatchObject({ check: "true", next: "true", tested: "" });
+    }),
+);
 
 // What a changes job may print for one flag or the filter: GitHub hands an output over as text, and
 // a step that did not run leaves it empty.
@@ -1519,16 +1567,26 @@ const flagText = fc.oneof(
   fc.string(),
 );
 
+// O3: the full filter is exactly both roots. The legacy one-root `next/`, a missing filter and any
+// other spelling of the roots (reversed, spaced, joined, one alone) are not it.
 const filterText = fc.oneof(
   fc.constantFrom(
+    FULL,
     "next/",
     ci.readers.join(" "),
     "",
     "next",
     "next/ ",
+    " next/ kalfa/",
+    "next/ kalfa/ ",
+    "next/  kalfa/",
+    "kalfa/ next/",
+    "kalfa/",
+    "next/kalfa/",
     ci.readers[0]!,
     ci.readers.toReversed().join(" "),
   ),
+  fc.constant(undefined),
   fc.string(),
 );
 
@@ -1541,7 +1599,7 @@ const printedText = fc.record({
   filter: filterText,
 });
 
-it("property: a printed flag counts as a job that ran only when it is exactly true, and the filter names all of next/ or the reader tests only when it is exactly theirs", () => {
+it("property: a printed flag counts as a job that ran only when it is exactly true, and the filter names all of the ordinary project or the reader tests only when it is exactly theirs", () => {
   fc.assert(
     fc.property(printedText, (printed) => {
       const read = ci.selectionOf(printed);
@@ -1550,7 +1608,7 @@ it("property: a printed flag counts as a job that ran only when it is exactly tr
         expect(read[job], job).toBe(printed[job] === "true");
       }
 
-      const scope = printed.filter === "next/" ? "all" : printed.filter === ci.readers.join(" ") ? "readers" : "none";
+      const scope = printed.filter === FULL ? "all" : printed.filter === ci.readers.join(" ") ? "readers" : "none";
       expect(read.scope).toBe(scope);
     }),
     options,
@@ -1659,8 +1717,8 @@ it("property: covers holds for the same selection and any wider one, and fails w
   );
 });
 
-it("property: a group passes at once only when a green ready pull request run of the same tree and base tree covered it; any one thing wrong runs its tests", async () => {
-  await fc.assert(
+it("property: a group passes at once only when a green ready pull request run of the same tree and base tree covered it; any one thing wrong runs its tests", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom(...faults),
@@ -1688,8 +1746,7 @@ it("property: a group passes at once only when a green ready pull request run of
         0,
       ]),
     },
-  );
-});
+  ));
 
 // GitHub's values for a run's event, status and conclusion, and a job's conclusion (its REST
 // docs for workflow runs and jobs), with names a job of this workflow can have.
@@ -1887,10 +1944,11 @@ const malformed = fc.oneof(
   fc.integer(),
 );
 
-it("property: a group whose one GitHub call fails or answers in a wrong shape runs what jobs says", async () => {
+it("property: a group whose one GitHub call fails or answers in a wrong shape runs what jobs says", () => {
   const paths = ["next/packages/libfabrika/src/b.ts"];
   const { api } = world(paths, neededOf(paths), "none");
-  await fc.assert(
+
+  return fc.assert(
     fc.asyncProperty(
       fc.constantFrom("artifacts", "run", "jobs"),
       fc.oneof(
@@ -1899,6 +1957,7 @@ it("property: a group whose one GitHub call fails or answers in a wrong shape ru
       ),
       async (call, answer) => {
         const broken = () =>
+          // SAFETY: the fake GitHub call hands back a malformed answer on purpose, to see `grouped` refuse it.
           answer === "reject" ? Promise.reject(new Error("502")) : Promise.resolve(answer.value as never);
 
         const { printed } = await grouped(paths, { ...api, [call]: broken });
@@ -1910,7 +1969,7 @@ it("property: a group whose one GitHub call fails or answers in a wrong shape ru
   );
 });
 
-it("property: of the artifacts GitHub lists for the group's record, only one of exactly that name, not expired, with its run's id, lets the group pass", async () => {
+it("property: of the artifacts GitHub lists for the group's record, only one of exactly that name, not expired, with its run's id, lets the group pass", () => {
   const paths = ["next/packages/libfabrika/src/b.ts"];
   const { api } = world(paths, neededOf(paths), "none");
   const name = ci.recordName(tree.head, tree.base);
@@ -1926,7 +1985,7 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
     workflow_run: fc.constantFrom<unknown>({ id: 11 }, { id: "11" }, { id: 12 }, {}, null),
   });
 
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(fc.array(artifact, { maxLength: 4 }), async (listed) => {
       // The id goes into a URL, so GitHub would read run 11 for "11" too: the fake does the same,
       // and only `matched`'s own check keeps a malformed id out.
@@ -1937,6 +1996,7 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
 
       const { printed } = await grouped(paths, {
         ...api,
+        // SAFETY: `listed` holds artifacts whose `workflow_run` may be any shape, on purpose, so the law sees bad ones refused.
         artifacts: () => Promise.resolve(listed as never),
         run: byUrl(api.run),
         jobs: byUrl(api.jobs),
@@ -1948,12 +2008,12 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
         (a) =>
           a.name === name &&
           !a.expired &&
-          typeof a.workflow_run === "object" &&
-          a.workflow_run !== null &&
+          Predicate.isObjectOrArray(a.workflow_run) &&
           "id" in a.workflow_run &&
-          typeof a.workflow_run.id === "number",
+          Predicate.isNumber(a.workflow_run.id),
       );
 
+      // SAFETY: the `find` above kept only an artifact whose `workflow_run` is an object with a numeric `id`.
       const vouched = first !== undefined && (first.workflow_run as { id: number }).id === 11;
       prints(printed, vouched ? noJob : ci.jobs(paths, "merge_group", false));
       expect(printed["tested"]).toBe(vouched ? "11" : "");
@@ -1962,61 +2022,71 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
   );
 });
 
-it("scenario: the GitHub reader asks only with a token, a repository and a workflow file, and fails on a bad answer", async () => {
-  const runEnv = {
-    GITHUB_TOKEN: "token",
-    GITHUB_REPOSITORY: "owner/repo",
-    GITHUB_WORKFLOW_REF: "owner/repo/.github/workflows/check.yaml@refs/heads/main",
-    GITHUB_API_URL: "https://api.example",
-  };
+it.live(
+  "scenario: the GitHub reader asks only with a token, a repository and a workflow file, and fails on a bad answer",
+  () =>
+    Effect.gen(function* () {
+      const runEnv = {
+        GITHUB_TOKEN: "token",
+        GITHUB_REPOSITORY: "owner/repo",
+        GITHUB_WORKFLOW_REF: "owner/repo/.github/workflows/check.yaml@refs/heads/main",
+        GITHUB_API_URL: "https://api.example",
+      };
 
-  for (const missing of ["GITHUB_TOKEN", "GITHUB_REPOSITORY", "GITHUB_WORKFLOW_REF"]) {
-    expect(ci.github({ ...runEnv, [missing]: "" }), missing).toBeNull();
-  }
+      for (const missing of ["GITHUB_TOKEN", "GITHUB_REPOSITORY", "GITHUB_WORKFLOW_REF"]) {
+        expect(ci.github({ ...runEnv, [missing]: "" }), missing).toBeNull();
+      }
 
-  const asked: { url: string; auth: string | undefined }[] = [];
-  const artifact = { name: ci.recordName(tree.head, tree.base), expired: false, workflow_run: { id: 11 } };
-  const job = { name: "ci-required", conclusion: "success" };
+      const asked: { url: string; auth: string | undefined }[] = [];
+      const artifact = { name: ci.recordName(tree.head, tree.base), expired: false, workflow_run: { id: 11 } };
+      const job = { name: "ci-required", conclusion: "success" };
 
-  // Most specific first: a run's jobs, a run, then the rest.
-  const answers: Record<string, unknown> = {
-    "runs/11/jobs": { jobs: [job] },
-    "runs/11": { event: "pull_request" },
-    artifacts: { artifacts: [artifact] },
-    runs: { workflow_runs: [passed] },
-    commits: { tree: { sha: tree.head }, parents: [{ sha: queue.base }] },
-  };
+      // Most specific first: a run's jobs, a run, then the rest.
+      const answers: Record<string, unknown> = {
+        "runs/11/jobs": { jobs: [job] },
+        "runs/11": { event: "pull_request" },
+        artifacts: { artifacts: [artifact] },
+        runs: { workflow_runs: [passed] },
+        commits: { tree: { sha: tree.head }, parents: [{ sha: queue.base }] },
+      };
 
-  const api = ci.github(runEnv, (url, init) => {
-    asked.push({ url, auth: init.headers["authorization"] });
-    const kind = Object.keys(answers).find((key) => url.includes(`/${key}`));
+      const api = ci.github(runEnv, (url, init) => {
+        asked.push({ url, auth: init.headers["authorization"] });
+        const kind = Rec.keys(answers).find((key) => url.includes(`/${key}`));
 
-    return Promise.resolve({
-      ok: kind !== undefined,
-      status: kind === undefined ? 404 : 200,
-      json: () => Promise.resolve(answers[kind ?? ""]),
-    });
-  });
+        return Promise.resolve({
+          ok: kind !== undefined,
+          status: kind === undefined ? 404 : 200,
+          json: () => Promise.resolve(answers[kind ?? ""]),
+        });
+      });
 
-  expect(api).not.toBeNull();
-  expect(await api?.runs()).toEqual([passed]);
-  expect(await api?.commit(queue.head)).toEqual({ tree: tree.head, parents: [queue.base] });
-  expect(api?.workflow).toBe("check.yaml");
-  expect(await api?.artifacts(artifact.name)).toEqual([artifact]);
-  expect(await api?.run(11)).toEqual({ event: "pull_request" });
-  expect(await api?.jobs(11)).toEqual([job]);
-  expect(asked.map((a) => a.url)).toEqual([
-    "https://api.example/repos/owner/repo/actions/workflows/check.yaml/runs?event=merge_group&status=success&exclude_pull_requests=true&per_page=50",
-    `https://api.example/repos/owner/repo/git/commits/${queue.head}`,
-    `https://api.example/repos/owner/repo/actions/artifacts?name=${artifact.name}&per_page=20`,
-    "https://api.example/repos/owner/repo/actions/runs/11",
-    "https://api.example/repos/owner/repo/actions/runs/11/jobs?per_page=100",
-  ]);
-  expect(asked.every((a) => a.auth === "Bearer token")).toBe(true);
+      expect(api).not.toBeNull();
+      expect(yield* promised(() => Promise.resolve(api?.runs()))).toEqual([passed]);
+      expect(yield* promised(() => Promise.resolve(api?.commit(queue.head)))).toEqual({
+        tree: tree.head,
+        parents: [queue.base],
+      });
+      expect(api?.workflow).toBe("check.yaml");
+      expect(yield* promised(() => Promise.resolve(api?.artifacts(artifact.name)))).toEqual([artifact]);
+      expect(yield* promised(() => Promise.resolve(api?.run(11)))).toEqual({ event: "pull_request" });
+      expect(yield* promised(() => Promise.resolve(api?.jobs(11)))).toEqual([job]);
+      expect(asked.map((a) => a.url)).toEqual([
+        "https://api.example/repos/owner/repo/actions/workflows/check.yaml/runs?event=merge_group&status=success&exclude_pull_requests=true&per_page=50",
+        `https://api.example/repos/owner/repo/git/commits/${queue.head}`,
+        `https://api.example/repos/owner/repo/actions/artifacts?name=${artifact.name}&per_page=20`,
+        "https://api.example/repos/owner/repo/actions/runs/11",
+        "https://api.example/repos/owner/repo/actions/runs/11/jobs?per_page=100",
+      ]);
+      expect(asked.every((a) => a.auth === "Bearer token")).toBe(true);
 
-  const refused = ci.github(runEnv, () => Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) }));
-  await expect(refused?.runs()).rejects.toThrow("403");
-});
+      const refused = ci.github(runEnv, () =>
+        Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) }),
+      );
+
+      yield* promised(() => expect(refused?.runs()).rejects.toThrow("403"));
+    }),
+);
 
 // 0533: CI runs none of the tests of today's version, and 0539: the merge line runs no tooling test.
 // No event, path list or draft flag turns today's tests, its app end to end or the tooling tests
@@ -2028,15 +2098,15 @@ const flagNames = ["build", "check", "field", "next", "typecheck"];
 
 const anyEvent = fc.constantFrom("pull_request", "merge_group", "push", "workflow_dispatch", "schedule", "");
 
-it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests, e2e or a tooling test", async () => {
-  await fc.assert(
+it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests, e2e or a tooling test", () =>
+  fc.assert(
     fc.asyncProperty(paths, anyEvent, fc.boolean(), async (paths, event, draft) => {
-      expect(Object.keys(ci.classify(paths, event)).toSorted()).toEqual(flagNames);
-      expect(Object.keys(ci.jobs(paths, event, draft)).toSorted()).toEqual(flagNames);
+      expect(Rec.keys(ci.classify(paths, event)).toSorted()).toEqual(flagNames);
+      expect(Rec.keys(ci.jobs(paths, event, draft)).toSorted()).toEqual(flagNames);
       // Unreadable history is the fallback that runs every job.
       const run: Runner = paths === null ? () => ({ status: 128, stdout: "" }) : git(paths, "");
       const printed = await ci.outputs({ same: false, env: envOf(event, draft), run });
-      expect(Object.keys(printed).toSorted()).toEqual([...flagNames, "filter", "probe", "tested"].toSorted());
+      expect(Rec.keys(printed).toSorted()).toEqual([...flagNames, "filter", "probe", "tested"].toSorted());
     }),
     {
       ...options,
@@ -2047,8 +2117,7 @@ it("property: on every event, for any paths and either draft flag, no flag and n
         [null, "workflow_dispatch", false],
       ],
     },
-  );
-});
+  ));
 
 // The old merge-line run had no selector or related matrix and cannot vouch for their coverage.
 it("property: a green historical partial run cannot skip the new automatic projects", () => {
@@ -2071,6 +2140,381 @@ it("property: a green historical partial run cannot skip the new automatic proje
       expect(ci.vouches(found, [required, selected], "check.yaml")).toBe(false);
       expect(ci.vouches(found, [required, related], "check.yaml")).toBe(false);
       expect(ci.vouches(found, [required, selected, related], "check.yaml")).toBe(true);
+    }),
+    options,
+  );
+});
+
+// T1076 O3. The full filter is both roots of the configured `next` project, `next/ kalfa/`: Kalfa's
+// ordinary laws are that project's files too. Plants for the new laws, each run once on changes.mjs
+// and restored: decode the legacy `next/` as all (the record law), print the legacy `next/` as the full
+// filter (the first-pass law), let the parser's pass offer a Kalfa path (the same-program law).
+// The Schemas of these laws: paths by shape, and the printed filters the record may meet.
+const KalfaPath = Schema.String.check(Schema.isPattern(/^kalfa\/config\/src\/[a-z]{1,12}\.ts$/));
+
+const NextPath = Schema.String.check(Schema.isPattern(/^next\/packages\/libfabrika\/src\/[a-z]{1,12}\.ts$/));
+
+const OtherPath = Schema.Union([
+  Schema.String.check(Schema.isPattern(/^docs\/[a-z]{1,12}\.md$/)),
+  Schema.String.check(Schema.isPattern(/^field\/[a-z]{1,12}\.jsonl$/)),
+  Schema.String.check(Schema.isPattern(/^(?:apps|programs|packs|wip|legacy)\/[a-z]{1,12}\.ts$/)),
+  Schema.String.check(Schema.isPattern(/^unknown\/[a-z]{1,12}$/)),
+  Schema.String.check(Schema.isPattern(/^oxlint-plugins\/[a-z]{1,12}\.mjs$/)),
+  Schema.Literals(["pnpm-lock.yaml", ".oxlintrc.json", ".agents/skills/lead/SKILL.md"]),
+]);
+
+const PrintedFilter = Schema.Union([
+  Schema.Literals([
+    FULL,
+    "next/",
+    ci.readers.join(" "),
+    "",
+    "next",
+    "next/ ",
+    " next/ kalfa/",
+    "next/ kalfa/ ",
+    "next/  kalfa/",
+    "kalfa/ next/",
+    "kalfa/",
+    "next/kalfa/",
+    ci.readers[0]!,
+    ci.readers.toReversed().join(" "),
+  ]),
+  Schema.Undefined,
+  Schema.String.check(Schema.isMaxLength(24)),
+]);
+
+const ScopedEvent = Schema.Literals(["pull_request", "merge_group", "push"]);
+
+const Sources = Schema.Array(KalfaPath).check(Schema.isMinLength(1), Schema.isMaxLength(4));
+
+const unique = (paths: readonly string[]) => [...new Set(paths)];
+
+/** Runs an async body as the Effect a property returns, its failures the test's failures. */
+const body = (run: () => Promise<void>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new Error("a property body failed", { cause }) });
+
+// A change that needs all of the ordinary project, and the run's own pass, on a Schema's drawn paths.
+it.effect.prop(
+  "property: the first pass prints the two roots for every change that needs the ordinary project, Kalfa's included",
+  {
+    sources: Sources,
+    others: Schema.Array(Schema.Union([NextPath, OtherPath])).check(Schema.isMaxLength(4)),
+    event: ScopedEvent,
+  },
+  ({ sources, others, event }) =>
+    body(async () => {
+      const changed = unique([...sources, ...others]);
+
+      expect(ci.scope(changed, event)).toBe("all");
+
+      const printed = await ci.outputs({ same: false, env: envOf(event, false), run: git(changed, "") });
+
+      expect(printed["next"]).toBe("true");
+      expect(printed["filter"]).toBe(FULL);
+    }),
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);
+
+it.prop(
+  "property: a ready run records its trees only when it printed the two roots for a change that needs the ordinary project; the legacy next/, a missing filter and a malformed one record nothing",
+  {
+    changed: Schema.Array(Schema.Union([KalfaPath, NextPath])).check(Schema.isMinLength(1), Schema.isMaxLength(6)),
+    filter: PrintedFilter,
+  },
+  ({ changed: drawn, filter }) => {
+    const changed = unique(drawn);
+
+    const needed = neededOf(changed);
+
+    expect(needed).toMatchObject({ next: true, scope: "all" });
+
+    const recorded = (printed: string | undefined) =>
+      ci.record(
+        { ...recordEnv(needed), FILTER: printed } as Record<string, string | undefined>,
+        prGit(changed, { merge: tree.head, base: tree.base }),
+      ).name;
+
+    // Reached in every run: the two roots record, and the drawn filter records only if it is them. A
+    // pinned case below holds the one-root spelling a run printed before Kalfa joined the project.
+    expect(recorded(FULL)).toBe(ci.recordName(tree.head, tree.base));
+    expect(recorded(filter)).toBe(filter === FULL ? ci.recordName(tree.head, tree.base) : null);
+    expect(recorded("next/")).toBeNull();
+    expect(recorded(undefined)).toBeNull();
+  },
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);
+
+it.effect.prop(
+  "property: the parser's pass never lowers a change that touches Kalfa to reader-only coverage, and is never offered a Kalfa path",
+  { sources: Sources, others: Schema.Array(NextPath).check(Schema.isMaxLength(4)), event: ScopedEvent },
+  ({ sources, others, event }) =>
+    body(async () => {
+      const changed = unique([...sources, ...others]);
+
+      const offered: string[] = [];
+
+      // A parser that proves every path it is offered is the same program: the readers' scope, if
+      // Kalfa could be offered.
+      const load = () =>
+        Promise.resolve({
+          samePaths: (_base: string, _head: string, paths: readonly string[]) => {
+            offered.push(...paths);
+
+            return [...paths];
+          },
+        });
+
+      const printed = await ci.outputs({
+        same: true,
+        env: envOf(event, false),
+        run: git(changed, "+// a note"),
+        load,
+      });
+
+      expect(offered.filter((path) => path.startsWith("kalfa/"))).toEqual([]);
+      expect(printed).toMatchObject({ next: "true", filter: FULL });
+    }),
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);
+
+// A change to .gitattributes that only edits `linguist-*` attributes changes how GitHub shows a diff
+// and no byte any job reads, so it runs only what Markdown runs. `eol`, `text`, `filter` and `diff`
+// change checked-out bytes, so any other line keeps every job on, and so does a macro: a name
+// defined with `[attr]` can stand for any attribute, even one that looks like linguist's.
+const attributesDiff = (...lines: string[]) =>
+  [
+    "diff --git a/.gitattributes b/.gitattributes",
+    "--- a/.gitattributes",
+    "+++ b/.gitattributes",
+    "@@ -1 +1 @@",
+    ...lines,
+  ].join("\n");
+
+/** A fake git that also serves the attributes file at the run's base and at its head. */
+const attributesGit =
+  (diff: string, base: string | null, head: string | null): Runner =>
+  (args) => {
+    const rev = Match.value(args[0]).pipe(
+      Match.when("ls-tree", () => args[2]),
+      Match.when("show", () => args[1]?.split(":")[0]),
+      Match.orElse(() => undefined),
+    );
+
+    const text = rev === sha.head ? head : base;
+
+    if (args[0] === "ls-tree") {
+      return { status: 0, stdout: text === null ? "" : ".gitattributes\n" };
+    }
+
+    return args[0] === "show" ? { status: 0, stdout: text ?? "" } : git([".gitattributes"], diff)(args);
+  };
+
+const attributesJobs = async (event: string, diff: string, base: string | null = "", head: string | null = "") => {
+  const printed = await ci.outputs({ same: false, env: envOf(event, false), run: attributesGit(diff, base, head) });
+
+  return { check: printed["check"], typecheck: printed["typecheck"], next: printed["next"], build: printed["build"] };
+};
+
+// build starts only for a file of today's version, which no root attributes file is.
+const fullRun = { check: "true", typecheck: "true", next: "true", build: "false" };
+
+const quietRun = { check: "false", typecheck: "false", next: "false", build: "false" };
+
+// Git's attribute grammar: a pattern, then words that each set (`name`), unset (`-name`), leave
+// unspecified (`!name`) or give a value to (`name=value`) one attribute.
+const pattern = fc.oneof(
+  word.map((s) => `${s}/**`),
+  word.map((s) => `*.${s}`),
+  word.map((s) => `docs/${s}`),
+);
+
+const linguistName = fc
+  .constantFrom("generated", "vendored", "documentation", "detectable", "language")
+  .map((name) => `linguist-${name}`);
+
+const otherName = fc.constantFrom("text", "eol", "filter", "diff", "merge", "binary", "ident", "export-ignore");
+
+const forms = (name: fc.Arbitrary<string>) =>
+  fc
+    .tuple(name, fc.constantFrom("", "-", "!", "="), word)
+    .map(([n, mark, value]) => (mark === "=" ? `${n}=${value}` : `${mark}${n}`));
+
+const gap = fc.constantFrom(" ", "  ", "\t");
+
+const attributeLine = (attributes: fc.Arbitrary<string[]>) =>
+  fc.tuple(pattern, gap, attributes).map(([p, sep, list]) => `${p}${sep}${list.join(sep)}`);
+
+const linguistWords = fc.array(forms(linguistName), { minLength: 1, maxLength: 3 });
+
+/** A line no job can feel: only linguist attributes, a comment, or blank. */
+const quietLine = fc.oneof(
+  attributeLine(linguistWords),
+  word.map((s) => `# ${s}`),
+  fc.constantFrom("", "  ", "\t"),
+);
+
+/** A line that can change a checked-out byte: another attribute, alone or with linguist ones, or a macro. */
+const loudLine = fc.oneof(
+  attributeLine(
+    fc
+      .tuple(linguistWords, forms(otherName), fc.nat(3))
+      .map(([lingo, other, at]) => lingo.toSpliced(Math.min(at, lingo.length), 0, other)),
+  ),
+  attributeLine(fc.array(forms(otherName), { minLength: 1, maxLength: 3 })),
+  fc
+    .tuple(word, fc.array(fc.oneof(forms(linguistName), forms(otherName)), { minLength: 1, maxLength: 3 }))
+    .map(([name, list]) => `[attr]${name} ${list.join(" ")}`),
+);
+
+const mark = fc.constantFrom("+", "-");
+
+const edit = (line: fc.Arbitrary<string>) => fc.tuple(mark, line).map(([m, text]) => `${m}${text}`);
+
+it("property: a .gitattributes edit of only linguist attributes, comments or blank lines runs no heavy job", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.array(edit(quietLine), { minLength: 1, maxLength: 6 }), scopedEvent, async (lines, event) => {
+      expect(await attributesJobs(event, attributesDiff(...lines))).toEqual(quietRun);
+    }),
+    {
+      ...options,
+      examples: [
+        // pinned: pull request 1595 added this line and started every job, the bug this fixes.
+        [["+field/** linguist-generated=true"], "pull_request"],
+        [["-field/** linguist-generated=true", "+field/** linguist-generated=true linguist-vendored"], "push"],
+        [["+docs/** -linguist-detectable !linguist-language"], "merge_group"],
+        [["+# the field rows are generated", "+"], "pull_request"],
+      ],
+    },
+  );
+});
+
+// Plants, each run once on changes.mjs and restored, each red: `display` returning true first
+// fails the loud law; `display` returning false for linguist words fails the quiet law and the two
+// scenarios that need quiet; dropping the `[attr]` line check and `defines` fails the loud and macro
+// laws; dropping only `defines` fails the macro law and the unreadable-file scenario.
+it("property: a .gitattributes edit with any other attribute or a macro line runs every job", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(edit(quietLine), { maxLength: 4 }),
+      edit(loudLine),
+      fc.array(edit(quietLine), { maxLength: 4 }),
+      scopedEvent,
+      async (before, loud, after, event) => {
+        expect(await attributesJobs(event, attributesDiff(...before, loud, ...after))).toEqual(fullRun);
+      },
+    ),
+    {
+      ...options,
+      examples: [
+        [[], "+* text=auto eol=lf", [], "pull_request"],
+        [["+field/** linguist-generated=true"], "+*.sh eol=lf", [], "push"],
+        [[], '+"my file" linguist-generated', [], "merge_group"],
+        // pinned: a macro redefining git's own `binary`.
+        [[], "+[attr]binary linguist-generated", [], "pull_request"],
+      ],
+    },
+  );
+});
+
+it("property: a linguist-looking line is loud when the file defines a macro at its base or at its head", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.array(edit(attributeLine(linguistWords)), { minLength: 1, maxLength: 4 }),
+      word,
+      fc.constantFrom("eol=crlf", "text", "binary", "filter=lfs"),
+      fc.constantFrom("base", "head"),
+      scopedEvent,
+      async (lines, name, body, where, event) => {
+        const defined = `*.md linguist-vendored\n[attr]linguist-${name} ${body}\n`;
+
+        const run = attributesJobs(
+          event,
+          attributesDiff(...lines),
+          where === "base" ? defined : "",
+          where === "head" ? defined : "",
+        );
+
+        expect(await run).toEqual(fullRun);
+      },
+    ),
+    {
+      ...options,
+      examples: [
+        // pinned: the base defines `linguist-gen` as `eol=crlf`, and a new line uses it.
+        [["+*.sh linguist-gen"], "gen", "eol=crlf", "base", "pull_request"],
+      ],
+    },
+  );
+});
+
+it("scenario: a new or deleted .gitattributes of only linguist lines is quiet", async () => {
+  const diff = attributesDiff("+field/** linguist-generated=true");
+  expect(await attributesJobs("pull_request", diff, null, "field/** linguist-generated=true\n")).toEqual(quietRun);
+  expect(await attributesJobs("pull_request", diff, "field/** linguist-generated=true\n", null)).toEqual(quietRun);
+});
+
+it("scenario: a linguist-only .gitattributes edit beside any other path changes nothing for that path", async () => {
+  const diff = attributesDiff("+field/** linguist-generated=true");
+
+  for (const [paths, expected] of [
+    [[".gitattributes", "pnpm-lock.yaml"], fullRun],
+    [[".gitattributes", "docs/a.md"], quietRun],
+    // Only the root file is read as attributes; another folder's is not proven.
+    [["fixtures/toy/.gitattributes"], { ...fullRun, build: "true" }],
+  ] as const) {
+    const run: Runner = (args) =>
+      args[0] === "ls-tree" || args[0] === "show" ? attributesGit(diff, "", "")(args) : git(paths, diff)(args);
+
+    const printed = await ci.outputs({ same: false, env: envOf("pull_request", false), run });
+    expect({
+      check: printed["check"],
+      typecheck: printed["typecheck"],
+      next: printed["next"],
+      build: printed["build"],
+    }).toEqual(expected);
+  }
+});
+
+it("scenario: a .gitattributes diff or file git cannot read, a binary diff and unreadable history run every job", async () => {
+  const diff = attributesDiff("+field/** linguist-generated=true");
+  const env = envOf("pull_request", false);
+
+  const failing =
+    (command: string): Runner =>
+    (args) =>
+      args[0] === command ? { status: 128, stdout: "" } : attributesGit(diff, "", "")(args);
+
+  for (const command of ["diff", "ls-tree", "show"]) {
+    const run: Runner = (args) =>
+      command === "diff" && args.includes("--name-only")
+        ? attributesGit(diff, "", "")(args)
+        : command === "show"
+          ? args[0] === "show"
+            ? { status: 128, stdout: "" }
+            : attributesGit(diff, "x", "x")(args)
+          : failing(command)(args);
+
+    expect((await ci.outputs({ same: false, env, run }))["next"], command).toBe("true");
+  }
+
+  const binary = attributesDiff().replace("@@ -1 +1 @@", "Binary files a/.gitattributes and b/.gitattributes differ");
+  expect(await attributesJobs("pull_request", binary)).toEqual(fullRun);
+
+  const broken: Runner = () => ({ status: 128, stdout: "" });
+  const printed = await ci.outputs({ same: false, env, run: broken });
+  expect(printed).toMatchObject({ check: "true", typecheck: "true", next: "true", build: "true" });
+  expect(ci.displayOnly("a".repeat(40), "c".repeat(40), null, broken)).toEqual([]);
+});
+
+it("property: a path list proven display-only changes only that path's own answer", () => {
+  fc.assert(
+    fc.property(fc.array(fc.oneof(safe, next, shared), { maxLength: 6 }), (others) => {
+      expect(ci.classify([...others, ".gitattributes"], "pull_request", [], [".gitattributes"])).toEqual(
+        ci.classify(others.length === 0 ? ["docs/a.md"] : others, "pull_request"),
+      );
+      // Not proven: the file is unlisted and runs everything.
+      expect(ci.classify([...others, ".gitattributes"], "pull_request")).toMatchObject(heavy);
     }),
     options,
   );

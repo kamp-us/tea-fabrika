@@ -4,7 +4,7 @@
 import { applyCell } from "@demlik/tea";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
-import { machine } from "./internal/open.ts";
+import { machine, Msg as OpenMsg } from "./internal/open.ts";
 
 /**
  * A selection after its checks: the repository's id and key, a label to show, the pinned branch,
@@ -15,7 +15,14 @@ import { machine } from "./internal/open.ts";
  */
 export type CheckedSelection = import("./internal/open.ts").CheckedSelection;
 
-type Msg = typeof machine.msg.Type;
+/**
+ * Schema for what an opening session is told, each Msg made with `Msg.cases.<name>.make`.
+ *
+ * @category schemas
+ */
+export const Msg = OpenMsg;
+
+type Msg = typeof Msg.Type;
 
 type State = typeof machine.model.Type;
 

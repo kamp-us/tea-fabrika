@@ -11,6 +11,9 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { InputId, LedgerError, type Sql, Writer } from "../coordination/index.ts";
@@ -52,7 +55,7 @@ const RUNS = runsFor({ fast: 10, full: 40 });
 
 const CUTS = ["after_observation", "after_dead", "after_exit", "after_start", "after_checkpoint"] as const;
 
-const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
+const pid = (n: number): string => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
 
 const from = (): From => ({
   by: "SHA256:brain",
@@ -68,10 +71,12 @@ const person = Writer.cases.person.make({ key: "SHA256:person", for: from().for 
 
 const Model = Schema.Struct({ count: Schema.Int });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("poison"), key: Schema.String }),
-]);
+const Msg = Schema.TaggedUnion({
+  add: { n: Schema.Int },
+  poison: { key: Schema.String },
+});
+
+const add = Msg.cases.add.make({ n: 1 });
 
 /** An Error whose class is named `name`, as a program's own error class would be. */
 const thrown = (name: string): Error => {
@@ -144,16 +149,17 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
     error: "TypeError",
     savedThrows: false,
     transport: false,
-    cut: "" as string,
-    hits: [] as Array<string>,
+    cut: "",
+    hits: Array.of<string>(),
     /** Fail every write to the state store while set: the recovery save cannot commit. */
     saveFail: false,
     /** The store goes down the moment the step throws: its observation cannot commit. */
     dropStore: false,
     /** Fail the next ledger entry insert after skipping this many: a lifecycle write is lost. */
+    // SAFETY: loseEntry starts unset; a law sets it to the number of inserts to skip.
     loseEntry: null as number | null,
     steps: new Map<string, number>(),
-    inits: [] as Array<unknown>,
+    inits: Array.of<unknown>(),
   };
 
   let alarm: number | null = null;
@@ -366,7 +372,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
         return false;
       }
 
-      const sent = yield* Mailbox.use((box) => box.send(NAME, id, { type: "add", n: 1 }, from()));
+      const sent = yield* Mailbox.use((box) => box.send(NAME, id, add, from()));
 
       if (sent._tag !== "placed") {
         return false;
@@ -404,7 +410,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
   const input = (id: string, m: unknown): Incoming => ({
     id,
     envelope: {
-      id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${(++inputs).toString(16).padStart(12, "0")}`),
+      id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")((++inputs).toString(16))}`),
       by: person,
       arrivedAt: 0,
       input: m,
@@ -458,13 +464,15 @@ const law = (
     name,
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const done = new Set<string>();
 
         const law = (limits: Limits, tape: ReadonlyArray<Cell>) =>
           Effect.scoped(walk(rig, limits, tape, moves, done)).pipe(Effect.provide(TestClock.layer()));
 
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Limits, Tape, (limits, tape) => Effect.runPromise(law(limits, tape)));
+        const property = fc.asyncProperty(Limits, Tape, (limits, tape) => runPromise(law(limits, tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: RUNS, includeErrorInReport: true }));
         // An empty flow cannot pass: each move and cut this law is about ran.
@@ -492,7 +500,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
     };
 
     // One good letter, so the live process has a checkpoint a saved letter can sit behind.
-    expect(Exit.isSuccess(yield* w.runner((r) => r.msg(w.letter("good-0", { type: "add", n: 1 }))))).toBe(true);
+    expect(Exit.isSuccess(yield* w.runner((r) => r.msg(w.letter("good-0", add))))).toBe(true);
     a.letters.set("good-0", { errors: [], dead: null, accepted: true });
 
     /** A recovery the runner performs: the next process ID is its successor. */
@@ -504,10 +512,11 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
     const crashed = (phase: "step" | "saved_letter", error: string) => ExitReason.cases.crashed.make({ phase, error });
 
     for (const [index, cell] of tape.entries()) {
-      const open = [...a.letters].filter(([id, l]) => id.startsWith("poison") && l.dead === null);
-      const dead = [...a.letters].filter(([, l]) => l.dead !== null);
+      const open = Arr.filter([...a.letters], ([id, l]) => Str.startsWith("poison")(id) && l.dead === null);
+      const dead = Arr.filter([...a.letters], ([, l]) => l.dead !== null);
 
-      const options = allowed.filter(
+      const options = Arr.filter(
+        allowed,
         (move) =>
           (move !== "resend" || open.length + dead.length > 0) &&
           (move !== "restart_again" && move !== "restart_conflict" ? true : a.requests.size > 0),
@@ -527,7 +536,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.letters.set(id, known);
           w.controls.throws = true;
           const before = w.controls.steps.get(id) ?? 0;
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.throws = false;
 
           if (known.dead !== null) {
@@ -552,7 +561,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
 
         case "add": {
           const id = `add-${index}`;
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "add", n: 1 })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, add)));
 
           if (Exit.isSuccess(sent)) {
             a.letters.set(id, { errors: [], dead: null, accepted: true });
@@ -588,7 +597,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.letters.set(id, known);
           w.controls.transport = true;
           w.controls.cut = "";
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.transport = false;
           expect(Exit.isFailure(sent), "transport loss fails the call, and decides nothing").toBe(true);
           break;
@@ -641,7 +650,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.steps.set(id, 1);
           w.controls.throws = true;
           w.controls.cut = "";
-          yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.throws = false;
           a.exits.push({ process: a.process, reason: crashed("step", cell.error) });
           const status = yield* w.manager((p) => p.status(NAME));
@@ -674,7 +683,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           const before = yield* w.recovery((s) => s.load);
           w.controls.saveFail = true;
           w.controls.throws = true;
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.saveFail = false;
           w.controls.throws = false;
           expect(Exit.isFailure(sent), "a failed recovery save fails the call").toBe(true);
@@ -696,7 +705,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           w.controls.error = lost;
           w.controls.dropStore = true;
           w.controls.throws = true;
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.throws = false;
           w.controls.dropStore = false;
           w.controls.saveFail = false;
@@ -708,9 +717,10 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           yield* w.settle;
           recovered();
           const receipt = yield* w.recovery((s) => s.receipt(id));
-          expect(JSON.stringify([w.rows(), receipt]).includes(lost), "an uncaptured class survives nowhere").toBe(
-            false,
-          );
+          expect(
+            Str.includes(lost)(Formatter.formatJson([w.rows(), receipt])),
+            "an uncaptured class survives nowhere",
+          ).toBe(false);
           break;
         }
 
@@ -722,7 +732,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.steps.set(id, 1);
           w.controls.loseEntry = cell.pick % 2;
           w.controls.throws = true;
-          yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.throws = false;
           w.controls.loseEntry = null;
           a.exits.push({ process: a.process, reason: crashed("step", cell.error) });
@@ -753,18 +763,22 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
 
 const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof world>>, a: Account, limit: number) {
   const rows = w.rows();
-  const lifecycle = rows.filter((row) => row.stream === `processes/${NAME}`);
+  const lifecycle = Arr.filter(rows, (row) => row.stream === `processes/${NAME}`);
 
-  const exits = lifecycle
-    .filter((row) => row.event === "exited")
-    .map((row) => row.body as { process: string; reason: unknown })
-    .map(({ process, reason }) => ({ process, reason }));
+  const exits = Arr.map(
+    Arr.map(
+      Arr.filter(lifecycle, (row) => row.event === "exited"),
+      // SAFETY: an `exited` row's body names the process and its reason.
+      (row) => row.body as { process: string; reason: unknown },
+    ),
+    ({ process, reason }) => ({ process, reason }),
+  );
 
   // J2, J12: each exit once, in order, with its producer's reason, through every cut and retry.
   expect(exits, "each exit is written once with its slice-1 reason").toEqual(a.exits);
   // J2, J6, J7: one successor per recovery; a cut start or transfer never starts another.
   expect(
-    lifecycle.filter((row) => row.event === "restarted"),
+    Arr.filter(lifecycle, (row) => row.event === "restarted"),
     "one successor per recovery",
   ).toHaveLength(a.successors);
   const status = yield* w.manager((p) => p.status(NAME));
@@ -774,8 +788,8 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
   ]);
 
   // J4: exact per-letter accounting and the dead letter's own process.
-  const dead = rows.filter((row) => row.stream.endsWith("/dead"));
-  const expectedDead = [...a.letters].filter(([, l]) => l.dead !== null);
+  const dead = Arr.filter(rows, (row) => Str.endsWith("/dead")(row.stream));
+  const expectedDead = Arr.filter([...a.letters], ([, l]) => l.dead !== null);
   expect(dead, "one dead entry per dead letter").toHaveLength(expectedDead.length);
 
   for (const [id, l] of a.letters) {
@@ -794,6 +808,7 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
         result: l.dead === null ? null : DEAD,
       });
       // J9: a failed delivery keeps its original input.
+      // SAFETY: the expect above matched the receipt as a receipt object, which holds an `input`.
       expect((receipt as { input: unknown } | null)?.input, `letter ${id} keeps its input`).not.toBeNull();
     }
 
@@ -802,18 +817,25 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
     if (l.dead !== null) {
       expect(l.errors.length).toBeLessThanOrEqual(limit);
       expect(
-        dead.filter((row) => row.stream === `${l.dead}/dead`).map((row) => row.body),
+        Arr.map(
+          Arr.filter(dead, (row) => row.stream === `${l.dead}/dead`),
+          (row) => row.body,
+        ),
         `dead ${id}`,
       ).toEqual([expect.objectContaining({ m: id, errors: l.errors, tries: l.errors.length })]);
     }
   }
 
   // J5: a saved letter stays in the inbox and is never a dead letter.
-  const inbox = rows.filter((row) => row.stream === `${NAME}/inbox`).map((row) => row.id);
+  const inbox = Arr.map(
+    Arr.filter(rows, (row) => row.stream === `${NAME}/inbox`),
+    (row) => row.id,
+  );
 
   for (const id of a.saved) {
     expect(inbox).toContain(id);
-    expect(dead.some((row) => (row.body as { m?: unknown }).m === id)).toBe(false);
+    // SAFETY: a dead row's body holds the letter id under `m`, read as unknown.
+    expect(Arr.some(dead, (row) => (row.body as { m?: unknown }).m === id)).toBe(false);
   }
 
   // J6: a person's restart starts its successor fresh; a crash recovery carries the checkpoint.

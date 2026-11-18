@@ -23,7 +23,8 @@
     "@kampus/fabrika-design": "workspace:*",
     "@manti-ui/styles": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "@kalfa/config": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261027.1",

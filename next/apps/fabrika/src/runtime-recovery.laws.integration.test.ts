@@ -1,14 +1,13 @@
 // P12, next/. The real Project and Process services, Gateway and runner on SQLite.
 // Only Cloudflare's handles and Worker Loader transport are supplied by this Node fixture.
 // No class from brain.ts, and the only fake is the box's platform base class: the services are what the classes hand off to.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { inspect } from "node:util";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { it as effect } from "@effect/vitest";
 import { checklist } from "@kampus/checklist";
 import { counter } from "@kampus/counter";
-import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrika";
+import { nodeExecution, type Descriptor } from "@kampus/libfabrika";
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
 import { Start } from "@kampus/libfabrika/processes/Process";
@@ -21,7 +20,9 @@ import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
+import type { ProcessBinding, ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import {
   commitReply,
@@ -33,29 +34,62 @@ import {
   savedAlarm,
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
-import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { runsFor, Stub } from "@kampus/vitest";
+import { Effect, Exit, Schema, DateTime, String as Str, Duration, Fiber, Predicate, Record as Rec } from "effect";
+
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  approve: {},
+  prepare: {},
+  answer: {},
+  inc: {},
+  request: {},
+  start: {},
+  throw: {},
+  write_err: {},
+});
+
+// SAFETY: nothing is in the table until the world writes it, and every write here stores a
+// `built(...)` value, which is `{ hash, source }`.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
+
 vi.mock("./table.ts", () => table);
+
 // Only the platform base class is fake. The box methods run the real programBox.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
 // P16: the runtime reads its built program table from the build's generated module
 // (libfabrika's build-modules.d.ts). Mocking both keeps these laws on either wiring.
 vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
+
 type ProcessCalls = (typeof ProcessService)["Service"];
+
+/**
+ * The call `method` names on an object, as the platform's RPC reaches it: any own or inherited
+ * member, which must be a function, called on the object with `args`.
+ */
+const callByName = (object: object, method: string, args: ReadonlyArray<unknown>): unknown => {
+  const member = Predicate.hasProperty(object, method) ? object[method] : undefined;
+  assert(Predicate.isFunction(member), `the object has no ${method} call`);
+
+  return Reflect.apply(member, object, args);
+};
 
 // What the Project class hands off: each call runs one service method on the object's runtime.
 const projectObject = (ctx: DurableObjectState, env: Env) => {
   const runtime = projectRuntime(ctx, env);
   const run = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProjectService.use(use));
+
   return {
     runtime,
     settingsStart: (...args: Parameters<typeof runtime.settingsStart>) =>
@@ -110,6 +144,7 @@ type ProjectObject = ReturnType<typeof projectObject>;
 const processObject = (ctx: DurableObjectState, env: Env) => {
   const runtime = processRuntime(ctx, env, programs);
   const run = <A, E>(use: (p: ProcessCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProcessService.use(use));
+
   return {
     runtime,
     configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor, runtime)),
@@ -129,63 +164,37 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
 
 type ProcessObject = ReturnType<typeof processObject>;
 
-const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
-const counterCode = built("counter");
-const checklistCode = built("checklist");
-const tezgahCode = built("tezgah");
-const approvalCode = built("approvals");
-const poisonCode = built("poison");
-const requesterCode = built("requester");
-const responderCode = built("responder");
+/** A built program's table row: its hash is the SHA-256 of its source, as the builder's is. */
+const built = (source: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(source))).pipe(
+      Effect.map((hash) => ({ hash, source })),
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
+
+const counterCode = await built("counter");
+
+const checklistCode = await built("checklist");
+
+const tezgahCode = await built("tezgah");
+
+const approvalCode = await built("approvals");
+
+const poisonCode = await built("poison");
+
+const requesterCode = await built("requester");
+
+const responderCode = await built("responder");
 
 /** A call on a Durable Object stub rejected. */
 class StubFailure extends Schema.TaggedError<StubFailure>()("StubFailure", { cause: Schema.Defect() }) {}
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-08T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    bytes = Buffer.from(pair.publicKey.export({ format: "jwk" }).x!, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  return {
-    raw: bytes.toString("base64url"),
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 const Model = Schema.Struct({
   count: Schema.Int,
@@ -193,10 +202,10 @@ const Model = Schema.Struct({
   failures: Schema.Array(Schema.String),
 });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("prepare"), parent: Schema.optionalKey(Schema.String) }),
-  Schema.Struct({ type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String) }),
-]);
+const Msg = Schema.TaggedUnion({
+  prepare: { parent: Schema.optionalKey(Schema.String) },
+  approve: { parent: Schema.optionalKey(Schema.String) },
+});
 
 const write = Cmd.make("write", {
   input: Schema.Struct({ stream: Schema.String, write: Schema.Json }),
@@ -241,12 +250,12 @@ const RequestModel = Schema.TaggedUnion({
   answered: { ref: Schema.String, value: Schema.Int },
   failed: { ref: Schema.String, reason: Schema.String },
 });
+
 /** @internal */
 type RequestModel = typeof RequestModel.Type;
 
 /** `to` and `claim` let a law aim one request elsewhere, or have it claim another sender. */
-const RequestStart = Schema.Struct({
-  type: Schema.Literal("start"),
+const RequestStart = Schema.TaggedStruct("start", {
   ref: Schema.NonEmptyString,
   value: Schema.Int,
   to: Schema.optionalKey(Schema.NonEmptyString),
@@ -254,8 +263,7 @@ const RequestStart = Schema.Struct({
   parent: Schema.optionalKey(Schema.String),
 });
 
-const Answer = Schema.Struct({
-  type: Schema.Literal("answer"),
+const Answer = Schema.TaggedStruct("answer", {
   ref: Schema.String,
   value: Schema.Int,
   parent: Schema.optionalKey(Schema.String),
@@ -279,12 +287,14 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
           return [s, []];
         }
 
-        const body = { type: "request", ref: m.ref, value: m.value, reply: config.self };
+        const body = { ...Tag.cases.request.make({}), ref: m.ref, value: m.value, reply: config.self };
+
         // A claimed sender rides beside the operands, as a program could try; the host binds the real one.
         const input =
           m.claim === undefined
             ? { to: m.to ?? config.peer, m: body }
             : { to: m.to ?? config.peer, m: body, source: m.claim };
+
         return [RequestModel.cases.waiting.make({ ref: m.ref }), [send(input)]];
       },
       answer: (s, m) =>
@@ -293,21 +303,18 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
           : [s, []],
       send_ok: (s) => [s, []],
       send_err: (s, m) =>
-        s._tag === "waiting" &&
-        m.cmd.m !== null &&
-        typeof m.cmd.m === "object" &&
-        "ref" in m.cmd.m &&
-        m.cmd.m.ref === s.ref
+        s._tag === "waiting" && Predicate.isObjectOrArray(m.cmd.m) && "ref" in m.cmd.m && m.cmd.m.ref === s.ref
           ? [RequestModel.cases.failed.make({ ref: s.ref, reason: m.error._tag }), []]
           : [s, []],
     },
   });
+
   return Program.make({
-    name: `p41/requester-${config.self.replaceAll(":", "-")}`,
+    name: `p41/requester-${Str.replaceAll(":", "-")(config.self)}`,
     machine,
     state: { v: 1, upgrades: [] },
     view: (s) => s,
-    refuse: (s, m) => (m.type === "start" && s._tag === "waiting" ? { reason: "busy" } : null),
+    refuse: (s, m) => (m._tag === "start" && s._tag === "waiting" ? { reason: "busy" } : null),
     inputs: { start: "Start a request", answer: "An answer from a responder" },
     outputs: {},
     writes: {},
@@ -323,18 +330,19 @@ const ResponseModel = Schema.TaggedStruct("ready", {
   queued: Schema.Int,
   refused: Schema.Int,
 });
+
 /** @internal */
 type ResponseModel = typeof ResponseModel.Type;
 
-const Request = Schema.Struct({
-  type: Schema.Literal("request"),
+const Request = Schema.TaggedStruct("request", {
   ref: Schema.NonEmptyString,
   value: Schema.Int,
   reply: Schema.NonEmptyString,
   parent: Schema.optionalKey(Schema.String),
 });
 
-const Approve = Schema.Struct({ type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String) });
+const Approve = Schema.TaggedStruct("approve", { parent: Schema.optionalKey(Schema.String) });
+
 /** @internal */
 const ResponseMsg = Schema.Union([Request, Approve]);
 
@@ -346,7 +354,7 @@ const machine = Machine.make({
   update: {
     request: (s, m) => [
       { ...s, answered: s.answered + 1 },
-      [send({ to: m.reply, m: { type: "answer", ref: m.ref, value: m.value + 1 } })],
+      [send({ to: m.reply, m: { ...Tag.cases.answer.make({}), ref: m.ref, value: m.value + 1 } })],
     ],
     approve: (s) => [s, []],
     send_ok: (s) => [{ ...s, queued: s.queued + 1 }, []],
@@ -360,7 +368,7 @@ const mailResponder = Program.make({
   machine,
   state: { v: 1, upgrades: [] },
   view: (s) => s,
-  refuse: (_s, m) => (m.type === "request" && m.value < 0 ? { reason: "negative" } : null),
+  refuse: (_s, m) => (m._tag === "request" && m.value < 0 ? { reason: "negative" } : null),
   inputs: {
     request: "Answer a request",
     approve: { description: "Approve", personOnly: true },
@@ -386,6 +394,7 @@ type AlarmHooks = { readonly set: (at: number) => void; readonly clear: () => vo
 const storage = (db: DatabaseSync, alarms?: AlarmHooks) => {
   const sql = nodeSql(db),
     values = new Map<string, unknown>();
+
   return {
     values,
     sql: {
@@ -415,10 +424,10 @@ const storage = (db: DatabaseSync, alarms?: AlarmHooks) => {
 // A program that throws a TypeError on "throw" and counts on "inc", run inside the real box.
 const PoisonModel = Schema.Struct({ count: Schema.Int });
 
-const PoisonMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("throw"), parent: Schema.optionalKey(Schema.String) }),
-  Schema.Struct({ type: Schema.Literal("inc"), parent: Schema.optionalKey(Schema.String) }),
-]);
+const PoisonMsg = Schema.TaggedUnion({
+  throw: { parent: Schema.optionalKey(Schema.String) },
+  inc: { parent: Schema.optionalKey(Schema.String) },
+});
 
 const poisonProgram = (limit: number | null) => ({
   name: "p34/poison-fixture",
@@ -453,9 +462,11 @@ const OLD_PROJECT_CALLS = new Set(["read", "wait", "append", "inbox", "own", "pu
 
 const gate = () => {
   let resolve = () => {};
+
   const promise = new Promise<void>((done) => {
     resolve = done;
   });
+
   return { promise, resolve };
 };
 
@@ -464,20 +475,28 @@ type Entry = {
   readonly db: DatabaseSync;
   readonly ctx: DurableObjectState;
   readonly values: Map<string, unknown>;
-  timer: ReturnType<typeof setTimeout> | undefined;
+  timer: Fiber.Fiber<void> | undefined;
   alarm: number | null;
   held?: boolean;
 };
 
+/** Cancels a pending alarm the way clearTimeout did: the interrupt lands before this returns. */
+const cancel = (timer: Fiber.Fiber<void> | undefined) => {
+  if (timer !== undefined) {
+    Effect.runFork(Fiber.interrupt(timer));
+  }
+};
+
 type Lost = { readonly at: number; readonly side: "before" | "after" } | null;
 
-const world = (
+const world = async (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
   settingsCounts = { calls: 0, reads: 0, appends: 0 },
   // The quota settings ride in the start's settings snapshot; a law names only the values it changes.
   values: StartsTest.Values = {},
 ) => {
+  const key = await Effect.runPromise(SshsigTest.identity);
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
   table.programs["fabrika/checklist"] = checklistCode;
@@ -487,10 +506,13 @@ const world = (
   table.programs["p34/poison-fixture"] = poisonCode;
   table.programs[requestProgram.name] = requesterCode;
   table.programs[mailResponder.name] = responderCode;
-  const key = identity(),
-    db = new DatabaseSync(":memory:");
+  const db = new DatabaseSync(":memory:");
   const handles = storage(db);
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
+
+  // SAFETY: projectRuntime's Project reads `id.name`, `storage` (here the SQL wrapper that counts
+  // settings reads) and `exports.IsolateTail` for its tail, and this object has those three; only
+  // workerd can build a whole DurableObjectState.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
   const ctx = {
     id: { name: "project-test" },
@@ -504,7 +526,7 @@ const world = (
           query: string,
           ...args: Parameters<typeof handles.sql.exec> extends [string, ...infer A] ? A : never
         ) => {
-          if (args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"))) {
+          if (args.some((arg) => Predicate.isString(arg) && Str.startsWith("settings/instance/")(arg))) {
             if (/SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
               settingsCounts.reads++;
             }
@@ -520,20 +542,25 @@ const world = (
     },
     exports: loopbacks,
   } as unknown as DurableObjectState;
+
   // Keyed by the storage name the runtime asks for, so the runtime alone decides which IDs share one.
   const processes = new Map<string, Entry>(),
     attempts: Descriptor[] = [],
     deliveries: Array<Promise<"configured" | "failed">> = [],
-    received: Incoming[] = [],
+    received: unknown[] = [],
     entered = gate(),
     interrupted = gate(),
     // Each one looks again whenever a configure is asked for, so a wait on attempts polls no clock.
     onAttempt = new Set<() => void>();
+
   let project: ProjectObject;
   let settingsRefused = false;
   let beforeCommit = async () => {};
+
   let afterMail = async () => {};
+
   let beforeProject = (_method: string) => {};
+
   let signs = 0,
     commits = 0,
     newCalls = 0,
@@ -541,32 +568,42 @@ const world = (
     lostDone = false,
     stepFault: "none" | "rpc" | "decode" = "none",
     closed = false;
-  const schedule = (entry: Entry) => {
-    clearTimeout(entry.timer);
 
-    if (entry.alarm === null || entry.held || closed) {
+  const schedule = (entry: Entry) => {
+    cancel(entry.timer);
+
+    if (entry.alarm === null || entry.held === true || closed) {
       return;
     }
 
     const fire = (tries: number) => {
-      entry.timer = setTimeout(
-        () => {
-          entry.alarm = null;
-          entry.object.alarm().catch(() => {
-            // workerd retries a failed alarm handler; so does this platform stand-in.
-            if (!closed && tries < 5 && entry.alarm === null) {
-              fire(tries + 1);
-            }
-          });
-        },
-        tries === 0 ? Math.max(0, (entry.alarm ?? 0) - Date.now()) : 100,
+      entry.timer = Effect.runFork(
+        Effect.sleep(
+          Duration.millis(
+            tries === 0 ? Math.max(0, (entry.alarm ?? 0) - DateTime.toEpochMillis(DateTime.nowUnsafe())) : 100,
+          ),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              entry.alarm = null;
+              entry.object.alarm().catch(() => {
+                // workerd retries a failed alarm handler; so does this platform stand-in.
+                if (!closed && tries < 5 && entry.alarm === null) {
+                  fire(tries + 1);
+                }
+              });
+            }),
+          ),
+        ),
       );
     };
+
     fire(0);
   };
+
   const call = (method: string) => async (args: ReadonlyArray<unknown>) => {
     beforeProject(method);
-    const work = () => Reflect.apply(Reflect.get(project, method), project, args);
+    const work = () => callByName(project, method, args);
 
     if (method === "settingsStart" || method === "settingsRead") {
       settingsCounts.calls++;
@@ -597,55 +634,50 @@ const world = (
     await work();
     throw new Error("transport lost the Project's answer");
   };
+
+  // SAFETY: the brain's code calls each namespace's `getByName` and the loader's `get`, the members
+  // these doubles define; workerd's namespace and loader types are classes with RPC brands that a
+  // Node object literal cannot have.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
-      RecordWireTest.settingsFixture({
-        name: "project-test",
-        person: PERSON,
-        founder: key.line,
-        window: key.raw,
-        port: 18787,
-        build: "brain-test",
-        mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
-        values,
-      }),
+      await Effect.runPromise(
+        RecordWireTest.settingsFixture({
+          name: "project-test",
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: 18787,
+          build: "brain-test",
+          mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
+          values,
+        }),
+      ),
     ),
     // Every Project RPC the real class hands off, so new Project calls reach the real service too.
     PROJECT: {
       getByName: () =>
-        new Proxy(
-          {},
+        Stub.make<ProjectBinding>(
+          (method) =>
+            (...args: ReadonlyArray<unknown>) =>
+              call(method)(args),
           {
-            get: (_target, method) => {
-              if (typeof method !== "string" || method === "then") {
-                return undefined;
-              }
+            sign: (...args: Parameters<ProjectObject["sign"]>) => {
+              signs++;
 
-              if (method === "sign") {
-                return (...args: Parameters<ProjectObject["sign"]>) => {
-                  signs++;
-                  return project.sign(...args);
-                };
-              }
+              return project.sign(...args);
+            },
+            mail: async (...args: Parameters<ProjectObject["mail"]>) => {
+              const reply = await project.mail(...args);
+              await afterMail();
 
-              if (method === "mail") {
-                return async (...args: Parameters<ProjectObject["mail"]>) => {
-                  const reply = await project.mail(...args);
-                  await afterMail();
-                  return reply;
-                };
-              }
+              return reply;
+            },
+            commit: async (...args: Parameters<ProjectObject["commit"]>) => {
+              commits++;
+              await beforeCommit();
 
-              if (method === "commit") {
-                return async (...args: Parameters<ProjectObject["commit"]>) => {
-                  commits++;
-                  await beforeCommit();
-                  return project.commit(...args);
-                };
-              }
-
-              return (...args: ReadonlyArray<unknown>) => call(method)(args);
+              return project.commit(...args);
             },
           },
         ),
@@ -653,9 +685,11 @@ const world = (
     PROCESS: {
       getByName: (name: string) => {
         const [, storageKey] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String]))(JSON.parse(name));
+
         const made = (): Entry => {
           const processDb = new DatabaseSync(":memory:");
           let entry: Entry | undefined;
+
           const handles = storage(processDb, {
             set: (at) => {
               if (entry === undefined) {
@@ -671,11 +705,15 @@ const world = (
               }
 
               entry.alarm = null;
-              clearTimeout(entry.timer);
+              cancel(entry.timer);
             },
           });
+
+          // SAFETY: processLogic in cloudflare/runtime.ts reads the object's `id.name`, its `storage` and,
+          // to bind a program's tail, `exports`; those are the three members given here.
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
           const processCtx = { id: { name }, storage: handles, exports: loopbacks } as unknown as DurableObjectState;
+
           const created: Entry = {
             db: processDb,
             ctx: processCtx,
@@ -684,58 +722,55 @@ const world = (
             alarm: null,
             object: processObject(processCtx, env),
           };
+
           entry = created;
           processes.set(storageKey, created);
+
           return created;
         };
+
         const current: Entry = processes.get(storageKey) ?? made();
+
         // Every Process RPC the real class hands off; reopen swaps the object behind the same stub.
-        return new Proxy(
-          {},
+        return Stub.make<ProcessBinding>(
+          // A Durable Object stub answers every call as a Promise, as the platform does.
+          (method) =>
+            async (...args: ReadonlyArray<unknown>) =>
+              callByName(current.object, method, args),
           {
-            get: (_target, method) => {
-              if (typeof method !== "string" || method === "then") {
-                return undefined;
+            configure: async (descriptor: Descriptor) => {
+              attempts.push(structuredClone(descriptor));
+              entered.resolve();
+
+              for (const look of onAttempt) {
+                look();
               }
 
-              if (method === "configure") {
-                return async (descriptor: Descriptor) => {
-                  attempts.push(structuredClone(descriptor));
-                  entered.resolve();
-
-                  for (const look of onAttempt) {
-                    look();
-                  }
-
-                  if (attempts.length === 1 && fault === "failed") {
-                    throw new Error("configure failed before save");
-                  }
-
-                  if (attempts.length === 1 && fault === "interrupted") {
-                    await interrupted.promise;
-                    return;
-                  }
-
-                  const delivery = current.object.configure(descriptor);
-                  deliveries.push(
-                    delivery.then(
-                      () => "configured" as const,
-                      () => "failed" as const,
-                    ),
-                  );
-                  return delivery;
-                };
+              if (attempts.length === 1 && fault === "failed") {
+                throw new Error("configure failed before save");
               }
 
-              if (method === "msg") {
-                return (incoming: Incoming) => {
-                  received.push(incoming);
-                  return current.object.msg(incoming);
-                };
+              if (attempts.length === 1 && fault === "interrupted") {
+                await interrupted.promise;
+
+                return;
               }
 
-              return (...args: ReadonlyArray<unknown>) =>
-                Reflect.apply(Reflect.get(current.object, method), current.object, args);
+              const delivery = current.object.configure(descriptor);
+              deliveries.push(
+                delivery.then(
+                  () => "configured" as const,
+                  () => "failed" as const,
+                ),
+              );
+
+              return delivery;
+            },
+            // The Process object takes any input and decodes it itself, so the stand-in keeps it as sent.
+            msg: (incoming: unknown) => {
+              received.push(incoming);
+
+              return current.object.msg(incoming);
             },
           },
         );
@@ -749,21 +784,25 @@ const world = (
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          const requester = id.startsWith(`${requesterCode.hash}/`),
-            responder = id.startsWith(`${responderCode.hash}/`);
+          const requester = Str.startsWith(`${requesterCode.hash}/`)(id),
+            responder = Str.startsWith(`${responderCode.hash}/`)(id);
 
-          if (id.startsWith(`${poisonCode.hash}/`) || requester || responder) {
+          if (Str.startsWith(`${poisonCode.hash}/`)(id) || requester || responder) {
             // The real box: its declaration carries the program's own maxDeliveries.
             const program = requester ? requestProgram : responder ? mailResponder : poisonProgram(flow.limit);
+
             const Box = programBox(
               program,
               requester ? requesterCode.hash : responder ? responderCode.hash : poisonCode.hash,
             );
+
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+
             return {
               describe: () => box.describe(),
               init: (saved: unknown) => {
                 inits++;
+
                 return box.init(saved);
               },
               step: (model: unknown, msg: unknown) => box.step(model, msg),
@@ -789,14 +828,16 @@ const world = (
             };
           }
 
-          if (id.startsWith(`${checklistCode.hash}/`)) {
+          if (Str.startsWith(`${checklistCode.hash}/`)(id)) {
             const Box = programBox(checklist, checklistCode.hash);
+
             return Reflect.construct(Box, []);
           }
 
-          const approval = id.startsWith(`${approvalCode.hash}/`),
+          const approval = Str.startsWith(`${approvalCode.hash}/`)(id),
             program = approval ? approvals : counter,
             execution = nodeExecution(program);
+
           return {
             describe: async () => ({
               name: program.name,
@@ -816,6 +857,7 @@ const world = (
             }),
             init: (saved: unknown) => {
               inits++;
+
               return Effect.runPromise(execution.init(saved));
             },
             step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
@@ -840,13 +882,15 @@ const world = (
       }),
     },
   } as unknown as Env;
+
   project = projectObject(ctx, env);
+
   const close = async () => {
     closed = true;
     interrupted.resolve();
 
     for (const { object, db: processDb, timer } of processes.values()) {
-      clearTimeout(timer);
+      cancel(timer);
       await object.runtime.dispose();
       processDb.close();
     }
@@ -854,12 +898,16 @@ const world = (
     await project.runtime.dispose();
     db.close();
   };
+
   closers.push(close);
+
   /** The registered name the Project saved for a process ID, if any. */
   const nameFor = (pid: string): string | undefined => {
     const row = db.prepare("SELECT value FROM dev_descriptors WHERE process=?").get(pid);
+
     return row === undefined ? undefined : JSON.parse(String(row.value)).name;
   };
+
   /** The storage owner of a process ID, however the runtime keys it. */
   const processFor = (pid: string): Entry => {
     const direct = processes.get(pid);
@@ -869,11 +917,15 @@ const world = (
     }
 
     const name = nameFor(pid);
-    const found = [...processes.entries()].find(
-      ([storageKey, entry]) =>
-        Reflect.get(Object(entry.values.get("descriptor")), "id") === pid ||
-        (name !== undefined && storageKey === name),
-    );
+
+    const found = [...processes.entries()].find(([storageKey, entry]) => {
+      const descriptor = entry.values.get("descriptor");
+
+      return (
+        (Predicate.hasProperty(descriptor, "id") && descriptor.id === pid) ||
+        (name !== undefined && storageKey === name)
+      );
+    });
 
     if (found === undefined) {
       throw new Error(`no storage owner for ${pid}`);
@@ -881,6 +933,7 @@ const world = (
 
     return found[1];
   };
+
   return {
     localUsage: (pid: string) =>
       QuotasSql.accounting(nodeSql(processFor(pid).db), {
@@ -912,6 +965,7 @@ const world = (
             done();
           }
         };
+
         onAttempt.add(look);
         look();
       }),
@@ -920,6 +974,7 @@ const world = (
     /** How each start the Project delivered ended at its object, once the first one has ended. */
     delivered: async () => {
       await entered.promise;
+
       return Promise.all(deliveries);
     },
     /** How many times a program's init ran: each is one process's first turn after a load. */
@@ -945,7 +1000,7 @@ const world = (
     /** Platform restart: every object's runtime ends; storage and saved alarms survive. */
     reopenAll: async () => {
       for (const entry of processes.values()) {
-        clearTimeout(entry.timer);
+        cancel(entry.timer);
         await entry.object.runtime.dispose();
       }
 
@@ -973,7 +1028,7 @@ const world = (
     },
     reopenProcess: async (pid: string) => {
       const entry = processFor(pid);
-      clearTimeout(entry.timer);
+      cancel(entry.timer);
       await entry.object.runtime.dispose();
       entry.object = processObject(entry.ctx, env);
       schedule(entry);
@@ -1021,14 +1076,16 @@ const world = (
     },
     reopen: async () => {
       await project.runtime.dispose();
-      table.programs["fabrika/counter"] = built("changed counter");
+      table.programs["fabrika/counter"] = await built("changed counter");
       project = projectObject(ctx, env);
+
       return project.info();
     },
     admit: async () => {
       const client = await project.clientConnect(),
         nonce = await project.challenge(client),
         tab = "recovery-test";
+
       expect(
         await project.initialize(
           client,
@@ -1042,11 +1099,12 @@ const world = (
             platform: "headless",
             os: "linux",
             sentAt: SENT,
-            signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+            signed: await Effect.runPromise(key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`)),
           },
           { url: "http://127.0.0.1:18787", tab, name: key.fingerprint },
         ),
       ).toMatchObject({ _tag: "online" });
+
       return client;
     },
     /**
@@ -1060,9 +1118,14 @@ const world = (
         // A session is named as a process is (fetch takes it from ProcessIdGenerator).
         session = "process_01m6v5270hf3c8x2q7w9z4k5mp",
         tab = "door-test";
+
       const client = await project.clientConnect(),
         nonce = await project.challenge(client);
+
       let attached: unknown = Attached.cases.new.make({ client, nonce });
+
+      // SAFETY: connection.ts calls four methods on a hibernating socket, deserializeAttachment,
+      // serializeAttachment, send and close, and this double defines exactly those.
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the hibernating socket methods the Connection service calls
       const socket = {
         deserializeAttachment: () => attached,
@@ -1074,6 +1137,10 @@ const world = (
         },
         close: () => {},
       } as unknown as WebSocket;
+
+      // SAFETY: of the state's members, connection.ts reads `id`, `storage`, `getWebSockets`, `getTags`,
+      // the two auto-response members, all given here, and `acceptWebSocket`, which only its fetch
+      // upgrade calls; this law hands frames to `door.message` and never sends a fetch.
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage and socket handles the real Connection service reads
       const doorCtx = {
         id: { name: "gateway-test" },
@@ -1084,21 +1151,25 @@ const world = (
         setWebSocketAutoResponse: () => {},
         exports: loopbacks,
       } as unknown as DurableObjectState;
+
       const runtime = connectionRuntime(doorCtx, env);
       await project.register(client, "gateway-test", session);
       let id = 0;
-      const call = async (method: string, params: unknown) => {
+
+      const call = async (method: string, params: Schema.Json) => {
         id++;
         await runtime.runPromise(
           ConnectionService.use((door) => door.message(socket, JSON.stringify({ jsonrpc: "2.0", id, method, params }))),
         );
         const answer = frames.map((frame) => JSON.parse(frame)).find((frame) => frame.id === id);
+
         return answer === undefined
           ? undefined
           : "result" in answer
             ? { _tag: "ok", result: answer.result }
             : { _tag: "refused", reason: answer.error.data.reason };
       };
+
       expect(
         await call("initialize", {
           versions: [1],
@@ -1110,9 +1181,10 @@ const world = (
           platform: "headless",
           os: "linux",
           sentAt: SENT,
-          signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+          signed: await Effect.runPromise(key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`)),
         }),
       ).toMatchObject({ _tag: "ok" });
+
       return {
         db: doorDb,
         call,
@@ -1149,7 +1221,8 @@ const world = (
           saw: { label: "fixture", location: "local", method: "command", check: "none" },
           sentAt: SENT,
         });
-        expect(await project.grant({ text, armored: key.proof(text) })).toMatchObject({
+
+        expect(await project.grant({ text, armored: await Effect.runPromise(key.proof(text)) })).toMatchObject({
           _tag: "applied",
         });
       };
@@ -1164,10 +1237,12 @@ StartsTest.law(
   ([refusedStart, choices]) =>
     Effect.gen(function* () {
       const costs = { calls: 0, reads: 0, appends: 0 };
+
       const w = yield* Effect.acquireRelease(
-        Effect.sync(() => world("healthy", { limit: null, lost: null }, costs)),
+        Effect.promise(() => world("healthy", { limit: null, lost: null }, costs)),
         (owned) => Effect.promise(() => owned.close()),
       );
+
       // A first start pays the gate at configure: the Project's build sends it, and configureProcess
       // builds the process's services, gate first, before it runs the first turn. So the refusal is
       // planted before the Project's first build, and the walk below starts from how that configure ended.
@@ -1206,6 +1281,7 @@ StartsTest.law(
             ? ["step", "step", "open", "alarm", "successor", "reopen"]
             : ["step", "step", "open", "alarm", "reopen"]
           : ["refuse", "step", "open"];
+
         const move = moves[choice % moves.length];
         const owner = w.process(pid);
 
@@ -1249,11 +1325,12 @@ StartsTest.law(
             w.project.route(client, "process.send", {
               pid,
               letter: `settings-step-${index}`,
-              m: { type: "inc" },
+              m: Tag.cases.inc.make({}),
               sentAt: SENT,
               seen: 0,
             }),
           );
+
           expect(answer).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           count++;
           expect(yield* Effect.promise(() => owner.object.open("settings-audit"))).toMatchObject({ view: { count } });
@@ -1269,7 +1346,7 @@ StartsTest.law(
           pid = successor.process;
           restarts++;
           const view = yield* Effect.promise(() => owner.object.open("settings-audit"));
-          count = Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int }))(view.view).count;
+          count = (yield* Schema.decodeUnknownEffect(Schema.Struct({ count: Schema.Int }))(view.view)).count;
         } else if (move === "alarm") {
           yield* Effect.promise(() => owner.object.due(0));
           yield* Effect.promise(() => owner.object.alarm());
@@ -1289,11 +1366,13 @@ describe("P12 Project configure recovery", () => {
     it(`pinned: ${fault} configure restores the descriptor after an interrupted start`, async () => {
       // A2/A4: the build never waits on its bootstrap's delivery, so it answers whatever the delivery does.
       const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
-      const w = world(fault);
+      const w = await world(fault);
+
       const first = w.project.info().then(
         (value) => ({ value }),
-        (error: unknown) => ({ error }),
+        (cause: unknown) => ({ error: cause }),
       );
+
       await w.entered;
       const result = await first;
       expect("value" in result).toBe(true);
@@ -1312,7 +1391,10 @@ describe("P12 Project configure recovery", () => {
               logged.some((spy) =>
                 spy.mock.calls.some((call) => {
                   const text = inspect(call, { depth: 8 });
-                  return text.includes(descriptor.id) && (fault === "interrupted" || text.includes("LedgerError"));
+
+                  return (
+                    Str.includes(descriptor.id)(text) && (fault === "interrupted" || Str.includes("LedgerError")(text))
+                  );
                 }),
               ),
               `the ${fault} delivery of ${descriptor.id} is logged`,
@@ -1353,7 +1435,7 @@ describe("P12 Project configure recovery", () => {
         await w.project.route(client, "process.send", {
           pid: descriptor.id,
           letter: "after-restore",
-          m: { type: "inc" },
+          m: Tag.cases.inc.make({}),
           sentAt: SENT,
           seen: 0,
         }),
@@ -1371,8 +1453,9 @@ describe("P12 Project configure recovery", () => {
 describe("P12 Process RPC refusal answers", () => {
   for (const reason of ["person_only", "not_granted"] as const) {
     it(`pinned: ${reason} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
-      const w = world();
+      const w = await world();
       await w.project.info();
+
       const { process: pid } = await w.start(),
         client = await w.admit();
 
@@ -1384,22 +1467,23 @@ describe("P12 Process RPC refusal answers", () => {
         .route(client, "process.send", {
           pid,
           letter: "request",
-          m: { type: reason === "person_only" ? "prepare" : "approve" },
+          m: (reason === "person_only" ? Tag.cases.prepare : Tag.cases.approve).make({}),
           sentAt: SENT,
           seen: 0,
         })
         .then(
           (answer) => ({ answer }),
-          (error: unknown) => ({ error }),
+          (cause: unknown) => ({ error: cause }),
         );
+
       // A policy refusal completes the input. An infrastructure error must not replace it.
       expect.soft(result).toMatchObject({ answer: { _tag: "ok", result: { _tag: "accepted" } } });
       expect(w.calls()).toEqual({ signs: 1, commits: reason === "not_granted" ? 1 : 0 });
       expect(await w.project.read("events", 0, "audit")).toEqual([]);
       const inbox = await w.project.read("approvals:1/inbox", 0, "audit");
-      const isReply = Schema.is(Schema.Struct({ m: Schema.Struct({ type: Schema.Literal("write_err") }) }));
+      const isReply = Schema.is(Schema.Struct({ m: Schema.TaggedStruct("write_err", {}) }));
       expect(inbox.filter((row) => isReply(row.body))).toMatchObject([
-        { body: { m: { type: "write_err", reason: reason, error: { _tag: reason } } } },
+        { body: { m: { ...Tag.cases.write_err.make({}), reason: reason, error: { _tag: reason } } } },
       ]);
       const checkpoint = w.process(pid).db.prepare("SELECT checkpoint FROM process_state WHERE process=?").get(pid);
       expect(JSON.parse(String(checkpoint!.checkpoint))).toMatchObject({
@@ -1438,16 +1522,19 @@ const RecoveryFlow = Schema.Struct({
     }),
   ),
 });
+
 type RecoveryFlow = typeof RecoveryFlow.Type;
+
 const FLOW_WAIT = 15_000;
+
 /** The crash that trips P34's decided Worker policy, 5 restarts in 5,000 ms: it goes down, not restarted. */
 const BRAKE = 6;
 
 const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean) => {
-  const end = Date.now() + FLOW_WAIT;
+  const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + FLOW_WAIT;
   let last: unknown = null;
 
-  while (Date.now() < end) {
+  while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
     try {
       const value = await look();
       last = value;
@@ -1459,7 +1546,7 @@ const until = async <A>(message: string, look: () => Promise<A>, done: (value: A
       last = { error: String(error) };
     }
 
-    await new Promise((done) => setTimeout(done, 20));
+    await Effect.runPromise(Effect.sleep("20 millis"));
   }
 
   throw new Error(`${message}: no answer in ${FLOW_WAIT} ms; last observed ${JSON.stringify(last)}`);
@@ -1469,28 +1556,37 @@ const NAME = "poison:1";
 
 /** Runs one flow and checks what must hold after it. */
 const runFlow = async (flow: RecoveryFlow) => {
-  const w = world("healthy", { limit: flow.limit, lost: flow.lost });
+  const w = await world("healthy", { limit: flow.limit, lost: flow.lost });
   await w.project.info();
   const original = await w.startPoison(NAME);
   const client = await w.admit();
-  const route = (method: string, params: unknown) =>
+
+  const route = (method: string, params: Schema.Json | undefined) =>
     w.project.route(client, method, params).then(
       (answer) => ({ answer }),
-      (error: unknown) => ({ error: String(error) }),
+      (cause: unknown) => ({ error: String(cause) }),
     );
+
   const send = (pid: string, letter: string, type: "throw" | "inc") =>
-    route("process.send", { pid, letter, m: { type }, sentAt: SENT, seen: 0 });
+    route("process.send", { pid, letter, m: Tag.cases[type].make({}), sentAt: SENT, seen: 0 });
+
   const restarts = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
       .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("restarted") }))(body));
-  const live = async () => (await w.project.info()).find((row) => row.name === NAME)?.process;
+
+  // A name with no live process throws, so `until` polls again and a check on it fails loudly.
+  const live = async () =>
+    Schema.decodeUnknownSync(Schema.String)((await w.project.info()).find((row) => row.name === NAME)?.process);
+
   const downs = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
       .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("down") }))(body));
+
   const deadRows = async (pids: ReadonlyArray<string>) =>
     (await Promise.all(pids.map((pid) => w.project.read(`${pid}/dead`, 0, "audit")))).flat();
+
   const limit = flow.limit ?? 3;
   const k = Math.min(flow.throws, limit);
   const letter = `p${flow.letter}`;
@@ -1525,7 +1621,7 @@ const runFlow = async (flow: RecoveryFlow) => {
     if (n === BRAKE) {
       const [down] = await until("down", downs, (found) => found.length > 0);
       expect(down).toMatchObject({ process: chain.at(-1), crashes: BRAKE, until: expect.any(Number) });
-      held = Number(Reflect.get(Object(down), "until"));
+      held = Number(Predicate.hasProperty(down, "until") ? down.until : undefined);
 
       // Resends while down wake nothing: no step, no try counted, no restart.
       for (let r = 0; r < Math.max(1, flow.resends); r++) {
@@ -1539,12 +1635,13 @@ const runFlow = async (flow: RecoveryFlow) => {
     const rows = await until(`restart ${n}`, restarts, (found) => found.length >= n);
 
     if (held !== null) {
-      expect(Date.now()).toBeGreaterThanOrEqual(held);
+      expect(DateTime.toEpochMillis(DateTime.nowUnsafe())).toBeGreaterThanOrEqual(held);
     }
 
     expect(rows).toHaveLength(n);
     expect(rows[n - 1]).toMatchObject({ after: chain.at(-1), name: NAME });
-    const next = String(Reflect.get(Object(rows[n - 1]), "process"));
+    const last = rows[n - 1];
+    const next = String(Predicate.hasProperty(last, "process") ? last.process : undefined);
     expect(chain).not.toContain(next);
     chain.push(next);
     await until(`process ${n} live`, live, (pid) => pid === next);
@@ -1626,6 +1723,7 @@ const runFlow = async (flow: RecoveryFlow) => {
   }
 
   expect(await live()).toBe(current);
+
   return { w, current, restarts, live, route };
 };
 
@@ -1659,6 +1757,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
       Effect.promise(async () => {
         const lost = flow.lost ?? { at: 1, side: "after" as const };
         const throws = BRAKE + (flow.throws % 2);
+
         const { w, current, restarts, live, route } = await runFlow({
           ...flow,
           throws,
@@ -1666,12 +1765,13 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
           fault: "none",
           lost,
         });
+
         // A trusted restart with a generated request ID, asked twice: one replacement.
         const before = (await restarts()).length;
         const request = { id: `r${flow.restart}`, build: poisonCode.hash };
         const object = w.process(current).object;
-        await Reflect.apply(Reflect.get(object, "restart"), object, [request]);
-        await Reflect.apply(Reflect.get(object, "restart"), object, [request]);
+        await object.restart(request);
+        await object.restart(request);
         const rows = await until("trusted restart", restarts, (found) => found.length > before);
         expect(rows).toHaveLength(before + 1);
         expect(rows.at(-1)).toMatchObject({ after: current, name: NAME });
@@ -1679,11 +1779,12 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         expect(rows.at(-1)).toMatchObject({ process: next });
         // The restart starts the new init and re-folds the accepted letters (P34, as
         // runner-supervision.test.ts requires): the healthy letters, never the throws.
-        expect(await route("view.open", { pid: next })).toMatchObject({
+        expect(await route("view.open", { pid: next ?? null })).toMatchObject({
           answer: { _tag: "ok", result: { view: { count: flow.healthy } } },
         });
         expect(w.newCalls()).toBeGreaterThan(0);
         expect(w.lostDone()).toBe(lost.at <= w.newCalls());
+
         // A restart whose request ID is the first start's: the Project refuses the reused ID, and
         // that checked refusal crosses the Project RPC and stays a ProcessError.
         const reused = await w
@@ -1691,8 +1792,9 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
           .object.restart({ id: NAME, build: poisonCode.hash })
           .then(
             () => ({ answer: "ok" }),
-            (error: unknown) => ({ error }),
+            (cause: unknown) => ({ error: cause }),
           );
+
         expect(reused).toMatchObject({ error: { _tag: "ProcessError", reason: "id_reused" } });
       }),
     flowOptions,
@@ -1709,7 +1811,9 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
     traceId: TRACE,
     build: "brain-test",
   };
+
   const same = (a: ExitReason, b: ExitReason) => JSON.stringify(a) === JSON.stringify(b);
+
   const Cell = fcExitReason.chain((reason) =>
     fc.record({
       move: fc.nat(),
@@ -1719,32 +1823,41 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
       bad: fcBadReason(reason),
     }),
   );
+
   type Move = "start" | "throw" | "exit" | "bad" | "retry" | "reopen";
 
   it("L1 / L3 / L4: a Project call decodes each reason before it writes, a runner crash arrives whole, and a retry is answered from the ledger", async () => {
     const done = new Set<Move>();
     await fc.assert(
       fc.asyncProperty(fc.array(Cell, { minLength: 4, maxLength: 9 }), async (tape) => {
-        const w = world("healthy");
+        const w = await world("healthy");
         await w.project.info();
         const client = await w.admit();
         // The fold's own record: each name's process chain and each ended process's reason.
         const names: Array<{ name: string; process: string; live: boolean }> = [];
         const exits = new Map<string, ExitReason>();
+
         const exited = async (name: string) =>
           (await w.project.read(`processes/${name}`, 0, "audit"))
             .filter((row) => row._tag === "exited")
-            .map((row) => Object(row.body) as { process: string; reason: unknown })
+            .map(
+              (row) =>
+                // SAFETY: ProcessManager's exit appends each `exited` row to `processes/<name>` with the
+                // body ProcessEvent.cases.exited.make({ process, reason }), and the filter keeps only those.
+                Object(row.body) as { process: string; reason: unknown },
+            )
             .map(({ process, reason }) => [process, reason] as const);
 
         for (const cell of tape) {
           const live = names.filter((n) => n.live);
+
           const options: ReadonlyArray<Move> = [
             ...(names.length < 2 ? (["start"] as const) : []),
             ...(live.length > 0 ? (["throw", "exit", "bad"] as const) : []),
             ...(exits.size > 0 ? (["retry"] as const) : []),
             "reopen",
           ];
+
           const move = options[cell.move % options.length]!;
 
           switch (move) {
@@ -1753,6 +1866,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               names.push({ name, process: await w.startPoison(name), live: true });
               break;
             }
+
             case "throw": {
               // The real runner crashes on a fresh letter and reports it over Project RPC.
               const target = live[cell.pick % live.length]!;
@@ -1760,18 +1874,21 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
                 .route(client, "process.send", {
                   pid: target.process,
                   letter: `throw-${exits.size}`,
-                  m: { type: "throw" },
+                  m: Tag.cases.throw.make({}),
                   sentAt: SENT,
                   seen: 0,
                 })
                 .catch(() => undefined);
               exits.set(target.process, { _tag: "crashed", phase: "step", error: "TypeError" });
+
               const next = await until("successor", w.project.info, (rows) =>
                 rows.some((row) => row.name === target.name && row.process !== target.process),
               );
+
               target.process = next.find((row) => row.name === target.name)!.process;
               break;
             }
+
             case "exit": {
               const target = live[cell.pick % live.length]!;
               const reply = await w.project.processExit(target.process, copied(cell.reason), FROM);
@@ -1780,12 +1897,21 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               target.live = false;
               break;
             }
+
             case "bad": {
               const target = live[cell.pick % live.length]!;
               const before = await exited(target.name);
+
               const reply = await w.project
-                .processExit(target.process, cell.bad as ExitReason, FROM)
-                .catch((error: unknown) => ({ _tag: Object(error)._tag }));
+                .processExit(
+                  target.process,
+                  // SAFETY: not an ExitReason on purpose: ProcessManager's exit decodes the reason before
+                  // its turn opens, and the law sends a bad one past the type to see that decode refuse it.
+                  cell.bad as ExitReason,
+                  FROM,
+                )
+                .catch((cause: unknown) => ({ _tag: Object(cause)._tag }));
+
               expect(reply, `invalid input is a typed refusal: ${JSON.stringify(cell.bad)}`).toMatchObject({
                 _tag: "ProcessError",
               });
@@ -1793,6 +1919,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               expect(await w.project.processIsLive(target.process)).toBe(true);
               break;
             }
+
             case "retry": {
               const [process, reason] = [...exits.entries()][cell.pick % exits.size]!;
               const sent = cell.move % 2 === 0 ? copied(reason) : cell.other;
@@ -1802,6 +1929,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               );
               break;
             }
+
             case "reopen":
               await w.reopenAll();
               break;
@@ -1809,8 +1937,8 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
 
           done.add(move);
           const rows = (await Promise.all(names.map(({ name }) => exited(name)))).flat();
-          expect(Object.fromEntries(rows), "each exit reads back as the reason it was given").toEqual(
-            Object.fromEntries(exits),
+          expect(Rec.fromEntries(rows), "each exit reads back as the reason it was given").toEqual(
+            Rec.fromEntries(exits),
           );
         }
       }),
@@ -1820,7 +1948,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
   }, 600_000);
 });
 
-const mailModel = (w: ReturnType<typeof world>, pid: string) => {
+const mailModel = (w: Awaited<ReturnType<typeof world>>, pid: string) => {
   const db = w.process(pid).db;
   const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='process_state'").get();
 
@@ -1829,18 +1957,19 @@ const mailModel = (w: ReturnType<typeof world>, pid: string) => {
   }
 
   const row = db.prepare("SELECT checkpoint FROM process_state WHERE process=?").get(pid);
+
   return row === undefined ? null : JSON.parse(String(row.checkpoint)).saved.model;
 };
 
 const mailRequest = (pid: string, ref: string) => ({
   pid,
   letter: `start-${ref}`,
-  m: { type: "start", ref, value: 7 },
+  m: { ...Tag.cases.start.make({}), ref, value: 7 },
   sentAt: SENT,
   seen: 0,
 });
 
-const oneExchange = async (w: ReturnType<typeof world>, requester: string, responder: string, ref: string) => {
+const oneExchange = async (w: Awaited<ReturnType<typeof world>>, requester: string, responder: string, ref: string) => {
   await until(
     "the saved requester answers without a view call",
     async () => mailModel(w, requester),
@@ -1849,9 +1978,14 @@ const oneExchange = async (w: ReturnType<typeof world>, requester: string, respo
   expect(mailModel(w, requester)).toMatchObject({ _tag: "answered", ref, value: 8 });
   expect(mailModel(w, responder)).toMatchObject({ answered: 1 });
   const requests = await w.project.read("responder:1/inbox", 0, "audit");
-  expect(requests.filter((row) => Reflect.get(Object(row.body), "m")?.ref === ref)).toHaveLength(1);
+  expect(
+    requests.filter(
+      (row) =>
+        Predicate.hasProperty(row.body, "m") && Predicate.hasProperty(row.body.m, "ref") && row.body.m.ref === ref,
+    ),
+  ).toHaveLength(1);
   const receipts = await w.project.read("requester:1/outbox", 0, "audit");
-  expect(receipts.filter((row) => Reflect.get(Object(row.body), "ref") === ref)).toHaveLength(1);
+  expect(receipts.filter((row) => Predicate.hasProperty(row.body, "ref") && row.body.ref === ref)).toHaveLength(1);
   await until(
     "the answered Send leaves no sender alarm",
     () => w.process(requester).object.savedAlarm(),
@@ -1861,7 +1995,7 @@ const oneExchange = async (w: ReturnType<typeof world>, requester: string, respo
 
 // scenario: only a test-owned platform alarm holds eviction strictly before the target's drain.
 it("scenario: W2h, a target reopened before its alarm fires drains the saved letter once", async () => {
-  const w = world();
+  const w = await world();
   const requester = await w.startMail("requester");
   const responder = await w.startMail("responder");
   const client = await w.admit();
@@ -1880,7 +2014,7 @@ it("scenario: W2h, a target reopened before its alarm fires drains the saved let
 
 // scenario: a held Project RPC puts eviction after the receipt save and before queued reaches the sender.
 it("scenario: W3, an evicted sender retries its owed Send from its alarm and adds no receipt or letter", async () => {
-  const w = world();
+  const w = await world();
   const requester = await w.startMail("requester");
   const responder = await w.startMail("responder");
   const client = await w.admit();
@@ -1937,22 +2071,27 @@ describe("P34c live object accounting", () => {
             }),
             () => Effect.sync(() => vi.useRealTimers()),
           );
+
           const w = yield* Effect.acquireRelease(
-            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
+            Effect.promise(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
           );
+
           yield* Effect.promise(() => w.project.info());
           const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
+
           // The window's socket on the real Connection service: the live caller that counts a refusal (0143).
           const door = yield* Effect.acquireRelease(
             Effect.promise(() => w.door()),
             (door) => Effect.promise(() => door.close()),
           );
+
           // `letter` is the door's own key for the message id (0547 keeps wire names).
           const send = (pid: string, id: string) =>
             Effect.promise(() =>
-              door.call("process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
+              door.call("process.send", { pid, letter: id, m: Tag.cases.inc.make({}), sentAt: SENT, seen: 0 }),
             );
+
           expect(yield* send(pid, "paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
             view: { count: 1 },
@@ -1960,29 +2099,33 @@ describe("P34c live object accounting", () => {
           const local = yield* w.localUsage(pid);
           expect(local.program.writes).toBeGreaterThan(0);
           expect(local.recovery.total).toEqual({ writes: 0, bytes: 0 });
+
           const counts = (db: DatabaseSync) =>
-            Object.fromEntries(
+            Rec.fromEntries(
               db
                 .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
                 .all()
                 .map(({ name }) => [
                   String(name),
-                  db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+                  db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
                 ]),
             );
 
           // Both stores' row counts, read straight around each refused send. The checks between sends
           // (the traced open below, a reopen) write their own span rows, so no count spans them.
           const both = () => ({ project: counts(w.db), process: counts(w.process(pid).db) });
+
           // The first refusal may open this hour's refusal count in `sums`; no other table may grow.
           const withoutSums = ({ project, process }: ReturnType<typeof both>) => ({
             project: { ...project, sums: null },
             process: { ...process, sums: null },
           });
+
           // The door object's refusal counts (0143). The pinned clock keeps every one in SENT's hour, and
           // a quota refusal is counted under `other`, so a count anywhere else is a wrong count.
           const refusals = () => {
             const rows = door.db.prepare("SELECT hour, refused, count FROM sums").all();
+
             return {
               total: rows.reduce((sum, row) => sum + Number(row.count), 0),
               elsewhere: rows.filter((row) => row.hour !== Date.parse(SENT) || row.refused !== "other").length,
@@ -1993,6 +2136,7 @@ describe("P34c live object accounting", () => {
           // counted in `sums`, so neither an unsent span nor a measurements row may land for it.
           const doorRows = () => {
             const rows = counts(door.db);
+
             return { unsent: rows["unsent"] ?? 0, measurements: rows["measurements"] ?? 0 };
           };
 
@@ -2068,21 +2212,26 @@ describe("P34c live object accounting", () => {
             }),
             () => Effect.sync(() => vi.useRealTimers()),
           );
+
           const w = yield* Effect.acquireRelease(
-            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
+            Effect.promise(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
           );
+
           yield* Effect.promise(() => w.project.info());
           const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
+
           const door = yield* Effect.acquireRelease(
             Effect.promise(() => w.door()),
             (door) => Effect.promise(() => door.close()),
           );
+
           // `letter` is the door's own key for the message id (0547 keeps wire names).
           const send = (id: string) =>
             Effect.promise(() =>
-              door.call("process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
+              door.call("process.send", { pid, letter: id, m: Tag.cases.inc.make({}), sentAt: SENT, seen: 0 }),
             );
+
           expect(yield* send("paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
             view: { count: 1 },
@@ -2094,11 +2243,13 @@ describe("P34c live object accounting", () => {
           // window has passed, and its program pays for that write. This law moves the clock less
           // than that window, so any write it sees is the refusal's or the hour's.
           const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
+
           const { policy } = Schema.decodeUnknownSync(
             Schema.fromJsonString(
               Schema.Struct({ policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Finite }) }) }),
             ),
           )(journal?.value);
+
           expect(early + late, "the law moves the clock past the healthy mark's window").toBeLessThan(
             policy.backoff.resetAfterMs,
           );
@@ -2109,6 +2260,7 @@ describe("P34c live object accounting", () => {
               .prepare("SELECT count FROM sums WHERE hour=?")
               .all(at)
               .reduce((sum, row) => sum + Number(row.count), 0);
+
           let turned: number | null = null;
 
           for (const [n, c] of tape.entries()) {
@@ -2121,7 +2273,7 @@ describe("P34c live object accounting", () => {
               // the Project answers it, so that span starts in one hour and ends in the next.
               w.onProjectCall((method) => {
                 if (method === "route" && turned === null) {
-                  turned = Date.now();
+                  turned = DateTime.toEpochMillis(DateTime.nowUnsafe());
                   vi.setSystemTime(hour + late);
                 }
               });

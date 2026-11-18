@@ -49,7 +49,9 @@ first step:
 Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
 Children: <ticket, branch and signed parent head for each child>, or none. Record before starting.
 Start a child at its parent's signed build head. Keep the child's tests until it lands.
-Land the stack with `land.ts stack <top-pr>`, then `gh stack sync --prune`.
+Land the selected prefix with `land.ts stack <top-pr>`. After a parent head changes, coordinate
+with source, queue and writer, then update each open child with `gh pr update-branch <child>`,
+bottom-to-top. The child keeps its tests; its own step owner signs changed tree links again.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
 ```
 
@@ -572,19 +574,24 @@ visible, and never weaken the rules to hide this message.
    refused by `gh pr merge` and by `land.ts arm` (github/gh-stack#591); land it with
    `land.ts stack <top-pr>`, never a bare `gh stack merge`. It runs `arm`'s leak gate and
    `## New names` check on each layer, refuses unless `ci-required` is a success at each layer's
-   head (ticket 1119), then one stack merge pinned to the heads it read. A stack
-   may not be larger than the queue builds at once: `land.ts stack` refuses when more layers are
-   open than main's `max_entries_to_build`, since the queue splits a larger stack and drops its
-   upper layers (ticket 1115). Split it, or land it layer by layer.
+   head (ticket 1119), then rereads the selected ordered prefix, its base, branch links and heads.
+   It asks GitHub's async merge API with the selected top head SHA. A SQUASH merge queue keeps its
+   configured method; without a queue, the request is an explicit squash under the repo's rules.
+   The result says merged, enqueued or pending; pending and enqueued are not merged, and a reported
+   merge is checked against every selected layer. A selected prefix can end at a middle PR while an
+   upper draft stays out of the request.
    Every PR squash-merges, a stacked
-   parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
-   GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):
-   `gh stack init <bottom> ... <top>` adopts the branches, `gh stack submit` opens the PRs,
-   `land.ts stack <top-pr>` lands bottom-up, and `gh stack sync --prune` rebases the rest
-   onto main and pushes. Rebase by hand only locally (`gh stack rebase`, then `gh stack push`),
-   never with the web "Rebase stack" button: it makes unsigned commits. The child's trees stay the
-   same, so its links hold; if a tree changed, that child's steps sign again. A child keeps its own
-   tests.
+   parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md), amended in part
+   by [0599](../../../.decisions/0599-native-stack-upkeep.md)). A stack is a GitHub stack
+   ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)).
+   Link every layer at once, bottom-to-top, with
+   `gh stack link <bottom> <next> ... <top>`. After the source, queue and writer agree on a
+   parent's new head, promptly update each open child with `gh pr update-branch <child>`, then
+   continue up the chain. This adds a merge commit to the child. After a parent squash, GitHub's
+   retarget and rebase are separate. Do not rebase or force-push for child upkeep. If a child's
+   signed tree links changed, only that child's step owner signs them again; the child keeps its
+   tests. A queue may land a bottom-up prefix in one group and later layers in later groups, so a
+   queued request or a merged bottom layer does not mean the selected prefix is complete.
    After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.
    `land.ts merged <pr>` does both (step 10).
    The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.
@@ -690,9 +697,9 @@ what counts as a hit.
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`, except a stacked child moved with `gh stack` (0004): a
-  rewrite breaks every signed link and can drop a push another session made. Bring a branch up to date
-  with a merge of main.
+- Rebase or force-push a stacked child for upkeep. Use `gh pr update-branch <child>` only after the
+  parent head and source, queue and writer agree (0599); it adds a merge commit. For an ordinary
+  branch, bring main in with a merge.
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 
 ## When a run teaches something

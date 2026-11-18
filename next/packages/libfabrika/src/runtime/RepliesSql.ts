@@ -1,21 +1,22 @@
 /**
  * The `Replies` layer over the runtime's own recovery SQL. One SQL transaction reads the row, sends
  * the reply machine its Msg and inserts what it remembers, within the runtime's storage capacity.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import { Effect, Layer, Result, Schema, SchemaIssue } from "effect";
+import * as Arr from "effect/Array";
 import type { Accounting } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
-import { Model, Reply, reply as machine } from "./internal/reply.ts";
+import { Model, Remember, Reply, reply as machine } from "./internal/reply.ts";
 import { Replies, RepliesError } from "./Replies.ts";
 
 const TABLE =
   "CREATE TABLE IF NOT EXISTS process_replies (name TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (name, id))";
 
 const decode = Schema.decodeUnknownResult(Schema.fromJsonString(Reply));
+
 const encode = Schema.encodeSync(Schema.fromJsonString(Reply));
+
 const issues = SchemaIssue.makeFormatterStandardSchemaV1();
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
@@ -34,8 +35,12 @@ const load = (sql: Sql, name: string, id: string): typeof Model.Type => {
   const saved = decode(row.value);
 
   if (Result.isFailure(saved)) {
-    const paths = issues(saved.failure.issue).issues.map((i) => (i.path ?? []).map(String).join(".") || "row");
-    throw badRow(`a stored reply does not decode at ${paths.join(", ")}`);
+    const paths = Arr.map(
+      issues(saved.failure.issue).issues,
+      (i) => Arr.join(Arr.map(i.path ?? [], String), ".") || "row",
+    );
+
+    throw badRow(`a stored reply does not decode at ${Arr.join(paths, ", ")}`);
   }
 
   if (saved.success.name !== name || saved.success.id !== id) {
@@ -59,7 +64,7 @@ const remember = (
   }
 
   const model = load(sql, reply.name, reply.id);
-  const [next] = applyCell(machine, model, { type: "remember", reply });
+  const [next] = applyCell(machine, model, Remember.make({ reply }));
 
   // The machine never forgets: a remember always leaves a remembered Model.
   if (next._tag !== "remembered") {
@@ -96,7 +101,6 @@ const stored = <A>(f: () => A) =>
  * stored row does not decode or disagrees with its key. With `accounting`, each saved reply is
  * charged to the process's recovery room. A quota refusal is never saved as a reply.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (
@@ -106,6 +110,7 @@ export const layer = (
   Layer.succeed(Replies, {
     reply: Effect.fn("replies.reply")(function* (name: string, id: string) {
       const model = yield* stored(() => load(sql, name, id));
+
       return model._tag === "remembered" ? model.reply : null;
     }),
     rememberReply: Effect.fn("replies.remember")(function* (reply: typeof Reply.Type) {
@@ -115,6 +120,7 @@ export const layer = (
             sql.transaction(() =>
               remember(sql, limits.capacity, reply, limits.accounting, clock.currentTimeMillisUnsafe()),
             );
+
           return limits.accounting === undefined ? save() : limits.accounting.protect(save);
         }),
       );
