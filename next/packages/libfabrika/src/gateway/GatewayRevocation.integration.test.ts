@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Match, Redacted, Result, Schema, Stream } from "effect";
 import { WebCrypto } from "effect/crypto";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
@@ -25,7 +25,7 @@ import { Doorbell, Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
-import { Appended, lineFor } from "../ledger/Log.ts";
+import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { ProcessError } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -723,18 +723,19 @@ describe("P17a, revoke stops writes at the final door", () => {
         w.controls.deliver = Effect.fnUntraced(function* (incoming: Incoming) {
           const placing = yield* d.a.accept(incoming);
 
-          if (!Appended.isAnyOf(["placed"])(placing)) {
-            return Sent.cases.refused.make({ reason: placing.reason });
-          }
-
-          return Sent.cases.accepted.make({ rev: placing.rev, pos: placing.pos });
+          return Match.valueTags(placing, {
+            placed: ({ rev, pos }) => Sent.cases.accepted.make({ rev, pos }),
+            refused: ({ reason }) => Sent.cases.refused.make({ reason }),
+          });
         });
         const marker = `settled-retry-${token}`;
         const first = yield* send(d.a, d.old, w, target, marker, text);
         expect(Answer.isAnyOf(["ok"])(first)).toBe(true);
+
         if (Answer.isAnyOf(["ok"])(first)) {
           expect(Schema.is(Sent.cases.accepted)(first.result)).toBe(true);
         }
+
         const inbox = yield* rows(w, `${processes[target]}/inbox`);
         expect(inbox).toHaveLength(1);
         const inputs = yield* rows(w, "gateway/inputs");

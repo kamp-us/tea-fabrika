@@ -78,8 +78,10 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
         // A second fiber at the same fresh time must wait for the first draw. Its source yields,
         // then throws if the generator consumes entropy for a turn that should count up.
         let draws = 0;
+
         const concurrent = Effect.gen(function* () {
           const generator = yield* Id.Generator;
+
           const generated = yield* Effect.forEach([0, 1], () => generator.next(Id.Input), {
             concurrency: 2,
           });
@@ -92,6 +94,7 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
               Effect.flatMap(Effect.yieldNow, () =>
                 Effect.suspend(() => {
                   draws += 1;
+
                   return draws === 1 ? Effect.succeed(bytes(0)(size)) : Effect.die(new Error("unused entropy draw"));
                 }),
               ),

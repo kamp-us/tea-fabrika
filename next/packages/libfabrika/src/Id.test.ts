@@ -1026,6 +1026,7 @@ describe("T518 shared Id generator", () => {
 
   const lower = Schema.String.check(Schema.isPattern(/^[a-z]$/));
   const middle = Schema.String.check(Schema.isPattern(/^[a-z_]$/));
+
   const typePrefix = Arbitrary.schema(
     Schema.Union([
       lower,
@@ -1044,6 +1045,7 @@ describe("T518 shared Id generator", () => {
   const checkSchedule = (schedule: Schedule) =>
     Effect.gen(function* () {
       const validation = yield* Front.Validation;
+
       const { returned, recorded } = yield* Effect.gen(function* () {
         const Specific = Id.make(schedule.type);
         const generator = yield* Id.Generator;
@@ -1070,6 +1072,7 @@ describe("T518 shared Id generator", () => {
         }
 
         const calls = yield* Recorder.calls(Front.Validation, "decode");
+
         return { returned: ids, recorded: calls.map(([, encoded]) => encoded) };
       }).pipe(
         Effect.provide(generatorWith(bytes(schedule.entropy))),
@@ -1123,6 +1126,7 @@ describe("T518 shared Id generator", () => {
         checkSchedule(schedule),
         Effect.sync(() => {
           schedules += 1;
+          expect.hasAssertions();
 
           if (schedules === scheduleOptions.arbitrary.runs) {
             expect(reached.fresh, "a batch on a fresh millisecond").toBeGreaterThan(0);

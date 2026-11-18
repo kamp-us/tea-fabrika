@@ -89,10 +89,12 @@ const unauthenticatedEffect = Arbitrary.schema(Unauthenticated).pipe(
 );
 
 const method = Arbitrary.schema(Schema.Union([Schema.Literals(["gateway.knock", ...METHODS]), Schema.String]));
+
 const jsonRpcId = Schema.Union([
   Schema.String,
   Schema.Int.check(Schema.isBetween({ minimum: -0x80000000, maximum: 0x7fffffff })),
 ]);
+
 const nonnegativeInteger = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 0x7fffffff }));
 
 /** A route that answers `answer` to every request, for a law that reads only the reply. */
