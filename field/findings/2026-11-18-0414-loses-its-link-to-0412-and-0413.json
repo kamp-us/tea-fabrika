@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-0414-loses-its-link-to-0412-and-0413",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0414-jev-at-volume-uses-hand-labels.md",
+    "line": 30
+  },
+  "says": "Our records: slice 4 deleted 0414's still-holds sentence with no plain pointer in its place, so 0414 (a cheap Jev question is measured against hand labels) and 0412 (a Jev use is measured never by accuracy against an ideal) now disagree with no link either way. Ticket text: add one plain sentence to 0414 naming 0412 and 0413 as the home of the floor per question, advice not an action, and never removing a person.",
+  "proof": "At 43b4ba33a65d, `grep -c '0412\\|0413' .decisions/0414-jev-at-volume-uses-hand-labels.md` prints 0 and `grep -n 0414 .decisions/0412-jev-is-measured-by-agreement.md` prints nothing; 0412:3 says 'never by accuracy against an ideal' and 0414:30 says 'measured against hand labels written before the run'.",
+  "cost": "A reader of either record cannot tell that 0414 is a scoped exception to 0412, or that 0412's floor and no-removal rules still apply to it.",
+  "head": "43b4ba33a65de273b28bd4f8ade90fb1bc9e2b13",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}

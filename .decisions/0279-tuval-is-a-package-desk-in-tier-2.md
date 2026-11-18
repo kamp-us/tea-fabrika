@@ -1,35 +1,31 @@
 ---
 id: 0279
-title: In next/, Tuval is the @kampus/tuval package drawn from fabrika's logic, the desk is tezgah's program arriving in Tier 2, and Tier 1 has one fixed layout, focus per window and no desk process
-status: amended-in-part by [0159](0159-fabsh-pipes-summon-join-first.md)
+title: In next/, Tuval is the @kampus/tuval package drawn from fabrika's logic, and the desk is tezgah's program, whose process in the brain holds focus and layout
+status: accepted
 date: 2026-11-01
 tags: [desktop, tuval, tezgah, packages, tier-1, tier-2, next]
 ---
 
-# 0279: In next/, Tuval is the @kampus/tuval package drawn from fabrika's logic, the desk is tezgah's program arriving in Tier 2, and Tier 1 has one fixed layout, focus per window and no desk process
+# 0279: In next/, Tuval is the @kampus/tuval package drawn from fabrika's logic, and the desk is tezgah's program, whose process in the brain holds focus and layout
 
-**What this decides:** where the desktop's code lives in `next/`, and how much of it Tier 1 has.
+**What this decides:** where the desktop's code lives in `next/`, and what the desk is.
 
 ## Context
 
 Changed for `next/` on 2026-11-01, from Tier 1's plan, in
 [the desktop layer](../docs/direction/the-desktop-layer.md). The note's `fabrika/desk` is
-`fabrika/tezgah` since the frame's walk (2026-11-03), as the glossary's `tezgah` row says.
+`fabrika/tezgah` since the frame's walk (2026-11-03), as the glossary's `tezgah` row says. This record first put the desk in Tier 2, behind one fixed
+layout in Tier 1; the owner's order of work
+([0159](0159-fabsh-pipes-summon-join-first.md)) brings the desk program with the second tile, so
+there is no fixed layout first.
 
 ## Decision
 
-**Tuval is a package, and the desk comes in Tier 2.**
+**Tuval is a package, and the desk is a program.**
 
 - Tuval is the `@kampus/tuval` package: fabrika is the logic, and Tuval is what is drawn from it.
   People see "fabrika".
-- The desk is a program, `fabrika/tezgah`, arriving in Tier 2 with split, close and prefix keys.
-- Tier 1 has one fixed layout at wiring, each window keeps its own focus, and there is no desk
-  process.
-
-## Consequences
-
-- Tier 1's windows do not wait on the window manager.
-
-## Amendments
-
-- 2026-11-13: The Tier 1 clause "one fixed layout at wiring, each window keeps its own focus, and there is no desk process" ended with [0159](0159-fabsh-pipes-summon-join-first.md). The desk program comes now, and focus and layout live in its process in the brain, one focus per workspace ([0274](0274-the-desktop-is-a-platform-free-core.md), [0277](0277-size-belongs-to-the-viewer.md)). The rest of this file still holds: Tuval is the `@kampus/tuval` package, and the desk is `fabrika/tezgah`.
+- The desk is a program, `fabrika/tezgah`, with split, close and prefix keys. Its process in the
+  brain holds focus and layout, one focus per workspace
+  ([0274](0274-the-desktop-is-a-platform-free-core.md),
+  [0277](0277-size-belongs-to-the-viewer.md)).
