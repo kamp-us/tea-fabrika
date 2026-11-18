@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0036, 0291, 0292, 0555, 0567, 0587, 0594 and docs/direction/hot-reload.md; body cf0a7c3ed0c4
+Approved by the lead agent, builds 0036, 0052, 0291, 0292, 0555, 0567, 0587, 0594, docs/direction/hot-reload.md and the owner's rulings Q1 and Q2 of 2026-11-18; body 06bb8018064e
 Plancheck-Version: 3
 
 # L10 accounts for every install, and waits on counts, never on quiet
@@ -12,7 +12,8 @@ changed(program, hash);  // the one change a boot or a save owes this program: v
 repeat(program, hash);   // same hash and source as the program's last change, inside its own rebuild
 settle();                // every Rolldown cycle delivered so far has an ended rebuild span: a count
 
-// Each owed change has its own 3 s bound. A repeat never renews it.
+// Amendment 1 (owner ruling Q2): no clock in L10. An owed change is the install of the first
+// rebuild after Rolldown reports the save's change; only the test's own time limit backs it up.
 ```
 
 **Doubts, at the top because they are under 80%:**
@@ -491,9 +492,47 @@ Estimate: 5 steps, $14
 - Whether a product fault hides behind the flake. A controlled trace that shows one stops the tests
   step, and the plan is amended before any product change.
 
+## Amendment 1: the owner's rulings (2026-11-18)
+
+The owner answered both questions yes, relayed by the merge lead (fabrikaa) on 2026-11-18. They are
+owner rulings, not the lead's calls, and they replace open question 1 and the 3 s bound below.
+
+- **Q1, yes.** L10 accepts an install by a program the save does not reach when it is an unchanged
+  repeat: the same hash and source as that program's last change, inside that program's own
+  `watch.rebuild` span. A changed hash from an unreached program still fails. The title change in
+  "What L10 asserted, and what it asserts now" stands.
+- **Q2, yes.** L10 drops the 3 s bound per owed install and waits on events. The owed change is the
+  install of the first rebuild after Rolldown reports the save's `change`: a count with no clock.
+  At boot it is the install of each program's first rebuild. Only the test's own time limit (the
+  `it` timeout) backs up a watcher that never answers. Speed, if it is wanted later, becomes its own
+  measured law.
+
+Why: the cloud proof at 2f388a50 (`field/runs/2026-11-18-l10-boot-drain-cloud-proof.json`) passed
+10 of 10 idle and failed 3 of 3 beside a `pnpm lint` with "an owed install never came". A fixed
+budget for a real build measures the machine (0052). Removing it removes the cause, which is what
+0036 asks, so it does not count as a wider timeout.
+
+**What changes in "The change", applying Q2's principle to every wait L10 owns:**
+
+- `owed` takes installs until the owed program's first rebuild after its `change` report has
+  ended, then requires that rebuild's install to be the owed change. A repeat in that rebuild, or no
+  install in it, fails at once with its own message, never after a timeout.
+- `settle` and `inOwnRebuild` wait on the span-completion queue with no 10 s bound. Those 10 s
+  bounds are the file's existing ones; inside L10 they are the same machine-dependent wait, so
+  Q2's principle covers them. Only the `it` timeout backs them up.
+- The bounds in the other laws of the file (the first L17/L18 law, saveWalk, R1 and L18) are not
+  changed here. Each is listed for the lead as ticket text under 0036's "tests that share the
+  cause".
+- L10d becomes: a repeat never pays an owed change, and the owed change is the install of the
+  first rebuild after its `change` report. Its plant stays: let any install of a pending program
+  pay its owed change.
+- Proof again on the Linux cloud box at the new head: the scenario 5 times, L10 10 times idle and
+  3 times beside a `pnpm lint`, the whole file once, and the plants whose red went through the 3 s
+  bound (P4 and the law plants) once more.
+
 ## Open questions
 
-1. **May L10 accept an install by a program the save does not reach, when it is an unchanged
+1. *Answered yes by the owner, amendment 1.* **May L10 accept an install by a program the save does not reach, when it is an unchanged
    repeat?** That means the same hash and source as that program's last change, made inside that
    program's own rebuild span, with no more rebuilds than Rolldown delivered cycles and no change
    report for the saved file from that program's watcher. A changed hash from an unreached program
