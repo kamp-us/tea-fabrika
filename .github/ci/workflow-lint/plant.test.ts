@@ -19,6 +19,10 @@ it.prop(
 
     const plants = [
       (w: Record<string, unknown>) => {
+        const choice = map(map(map(map(w["on"])["workflow_dispatch"])["inputs"])["case"]);
+        choice["options"] = Schema.decodeUnknownSync(Schema.Array(Schema.String))(choice["options"]).slice(0, -1);
+      },
+      (w: Record<string, unknown>) => {
         map(w["on"])["pull_request"] = {};
       },
       (w: Record<string, unknown>) => {
@@ -26,6 +30,38 @@ it.prop(
       },
       (w: Record<string, unknown>) => {
         map(map(map(w["on"])["workflow_dispatch"])["inputs"])["patch"] = { type: "string" };
+      },
+      (w: Record<string, unknown>) => {
+        map(map(map(map(w["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = ["checklist-pid", "watcher-r1"];
+      },
+      (w: Record<string, unknown>) => {
+        map(map(map(map(w["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = [
+          "checklist-pid",
+          "watcher-r1",
+          "host-pin",
+          "host-discovery-timeout",
+        ];
+      },
+      (w: Record<string, unknown>) => {
+        map(map(map(map(w["on"])["workflow_dispatch"])["inputs"])["case"])["options"] = [
+          "checklist-pid",
+          "watcher-r1",
+          "host-pin",
+          "host-discovery-timeout",
+          "host-requested-pin",
+          "host-pnpm-path",
+          "host-env-order",
+          "checklist-body",
+          "checklist-drop-notify",
+          "checklist-early-complete",
+          "checklist-held-call",
+          "checklist-due-reschedule",
+          "checklist-running-replace",
+          "checklist-running-delete",
+          "checklist-alarm-failure",
+          "checklist-late-failure",
+          "arbitrary-command",
+        ];
       },
       (w: Record<string, unknown>) => {
         map(map(w["jobs"])["exercise"])["runs-on"] = "self-hosted";

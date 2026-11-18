@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-17",
+  "ticket": "1333",
+  "pr": "1590",
+  "parent": null,
+  "active": null,
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "driver_caused": false,
+  "billed": null,
+  "base": "955a82d987cb8583a0a693681c756054e836bf33",
+  "head": "832cfe426cc78e2cace135e58cd28cadbe216070",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "run": "2026-11-17-merge-line-slots-0598-tests2",
+  "started": "2026-11-17T17:21:00-08:00",
+  "ended": "2026-11-17T17:35:15-08:00",
+  "role": "tests",
+  "step": "tests",
+  "outcome": "pass",
+  "why": "Today's CI tooling, decision 0598. Second tests round, on the laptop, finishing what the first round left. S7 is written in workflow-lint/scheduled.integration.test.ts: the generated split now walks every main/proof split from 1 to 8 through the stdin CLI, refuses a private group, an extra job, a changed matrix past PROOF_SLOTS, a pin past its count, a wrong budget and 0595's scheduled-test- name, and a pinned case builds 0595's old shape inline and expects a refusal. The four scheduled.ts plants and P3's type plant were seen red. One unused helper from round one was removed from scheduled.test.ts so lint passes.",
+  "note": "S7's file is an integration file and the test config refuses it on this laptop (decision 0178), so it was not run by vitest here; its builder and cases were run by a plain node script in the scratchpad against the real scheduled.ts (32 generated splits and cases all as expected, the pinned old shape refused), and the file is left to the full run in CI. The S7 plant, putting the 0595 scheduled.ts back, made the old shape print the sentinel and every generated split fail. scheduled.test.ts 282 of 282 and proof.test.ts green, 192 more tests of the files that read scheduled.yaml green, one pnpm typecheck green. The run counts in S7 are 3 and 5 rather than the plan's 100, since each case spawns node processes (about 0.17 s each).",
+  "plants": [
+    {
+      "law": "S2: a main or proof pin past its group count or an unused group is refused",
+      "plant": "Drop the value-in-1..M check in covers() of scheduled.ts",
+      "result": "red"
+    },
+    {
+      "law": "S3: SC16 admits exactly GAP_MINUTES, MAIN_SLOTS and PROOF_SLOTS",
+      "plant": "Admit any extra workflow env key in SC16",
+      "result": "red"
+    },
+    {
+      "law": "S4: SC20 refuses a swap of two legs exactly when some group's first leg is no longer first",
+      "plant": "Drop the first-legs-in-order check in SC20 (firstOnes returns true)",
+      "result": "red"
+    },
+    {
+      "law": "S6: the test job's max-parallel is the count of its ref",
+      "plant": "Accept any max-parallel for the tests job in SC6",
+      "result": "red"
+    },
+    {
+      "law": "P3: outputs(proof, run) without a count does not compile",
+      "plant": "Give count a default of 9 in proof.ts outputs",
+      "result": "red"
+    },
+    {
+      "law": "S7: the stdin CLI refuses the 0595 shape, and confirms any valid split",
+      "plant": "Put the 0595 version of scheduled.ts back (jobSlots on nine scheduled-test- slots)",
+      "result": "red"
+    }
+  ]
+}

@@ -251,6 +251,9 @@ def run_box():
             except PermissionError: live.append(p)
         if pid in live or len(live) >= 8: refuse("running slot limit")
         pid.write_text(str(os.getpid()) + "\n")
+    profile = "REVIEW" if step == "review" else "BUILD"
+    os.environ["CODEX_MODEL"] = os.environ["CODEX_" + profile + "_MODEL"]
+    os.environ["CODEX_EFFORT"] = os.environ["CODEX_" + profile + "_EFFORT"]
     run = name + "-" + step + "-" + uuid.uuid4().hex
     started = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
     status, interrupted, runner = 1, [None], [None]

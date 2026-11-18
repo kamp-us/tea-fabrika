@@ -229,6 +229,7 @@
   "next/packages/libfabrika/src/node/Nemesis.laws.integration.test.ts": 7.6,
   "next/packages/libfabrika/src/node/ProgramMail.integration.test.ts": 34,
   "next/packages/libfabrika/src/node/ProgramMailRuntime.integration.test.ts": 169.1,
+  "next/packages/libfabrika/src/node/QuotaRunner.test.ts": 346.2,
   "next/packages/libfabrika/src/node/RecordPart.integration.test.ts": 1.1,
   "next/packages/libfabrika/src/node/RecordPartResources.integration.test.ts": 1,
   "next/packages/libfabrika/src/node/RecoveryJournal.integration.test.ts": 52.6,

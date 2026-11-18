@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-transport-plan",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1470",
+  "started": "2026-11-15T20:31:01-08:00",
+  "ended": "2026-11-15T20:38:47-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for the mock sweep in next/packages/libfabrika/src/transport (docs/plan/quests/mock-transport-PLAN.md): checkHello's admit and consume become the Admissions service, answerFrame's route becomes Routes, and the WebCrypto edge reads Effect's WebCrypto reference, in two slices, since Gateway.ts is in open pull request 1366. plancheck --draft passes with no open question.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Run in a cloud box by hand, with no subagents. The model, tokens and tool calls were not recorded here.",
+  "step": "plan"
+}
