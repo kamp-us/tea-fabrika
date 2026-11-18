@@ -59,32 +59,44 @@ own sweep. This record settles how. It reads the code itself, not a summary:
 [0029](0029-format-and-names-follow-effect.md) already allows `Module.of(...)` read through a
 namespace import, which this layout makes the normal way in.
 
+The same day, [0034](0034-libfabrika-folders-are-bounded-contexts.md) wanted one folder per bounded
+context in `libfabrika` instead of the one flat `src/`, and [0043](0043-rooms-on-floors.md)
+replaced that before any file moved with one folder per subject, a module
+([0091](0091-modules-and-layers.md) renamed what 0043 called a room). 0043 also makes `internal/`
+private to its module, not to the whole package. [0051](0051-gateway-connection-and-node-by-job.md)
+named the Cloudflare prefix and the `dev` word. The Decision says what holds after all three.
+
 ## Decision
 
-**A library in `next/` has a flat `src/` of PascalCase module files, one concept each, and an
-`index.ts` that re-exports each module as a namespace.**
+**A library in `next/` has PascalCase files, one concept each, and an `index.ts` that re-exports
+each public file as a namespace. Its `src/` is flat, except `libfabrika`'s, which has one folder per
+module, each with its own files and `internal/`.**
 
 - **One concept per file, PascalCase:** `Ledger.ts`, `Mailbox.ts`. The test sits beside it:
-  `Ledger.test.ts`. A second test file for the same module is a prefixed sibling:
+  `Ledger.test.ts`. A second test file for the same file is a prefixed sibling:
   `LedgerSpans.test.ts`. The repo's test infixes stay: `.laws.test.ts`, `.types.test.ts`,
   `.test-support.ts`, `.fixture.ts`.
 - **A variant is a prefixed sibling, not a folder:** `LedgerStore.ts`, `LedgerTransaction.ts`. A
-  platform's version of a piece is a variant too: `NodeStage.ts`, `WorkersGateway.ts`, as Effect's
-  platform packages name `NodeFileSystem` and `BrowserHttpClient`.
-  *The prefix for Cloudflare code is now `Cloudflare`, not `Workers`, and `stage` is `dev`
-  ([0051](0051-gateway-connection-and-node-by-job.md)); the rule of a prefixed variant holds.*
+  platform's version of a piece is a variant too: `CloudflareGateway.ts`, as Effect's platform
+  packages name `NodeFileSystem` and `BrowserHttpClient`. The prefix for Cloudflare code is
+  `Cloudflare`, not `Workers` ([0051](0051-gateway-connection-and-node-by-job.md)).
 - **A folder only for a concept's parts,** beside the file of the same name: `Gateway.ts` +
   `Gateway/Shard.ts`.
-- **Private code goes in `src/internal/`,** camelCase, with every export marked `/** @internal */`.
-  Nothing outside the package imports it, and `package.json` exports none of it.
-- **No folders by area or kind:** no `data/`, `coordination/`, `transport/`, no `services/`,
-  `types/`, `utils/` or `helpers/`.
-- **`index.ts` re-exports each public module as a namespace with a doc tag:**
-  `/** @since 0.0.0 */ export * as Ledger from "./Ledger.ts"`. Callers write `Ledger.make(...)` and
-  `Ledger.Ledger`. `package.json` maps `"./*"` to `"./src/*.ts"`, as Effect's does, so a caller can
-  also import one module by its path (`@kampus/libfabrika/NodeStage`).
+- **`libfabrika`'s `src/` has one folder per module** ([0043](0043-rooms-on-floors.md),
+  [0091](0091-modules-and-layers.md)): a folder is one subject, and a module's layer is a line in
+  `layer-rules.json`, never a folder. Every other library keeps a flat `src/`.
+- **Private code goes in `internal/`,** camelCase, with every export marked `/** @internal */`.
+  In `libfabrika` each module has its own `internal/`, private to that module. In another library,
+  `src/internal/` is private to the package. Nothing outside imports it, and `package.json` exports
+  none of it.
+- **No folders by kind:** no `services/`, `types/`, `utils/` or `helpers/`. Folders by area are
+  gone too, apart from `libfabrika`'s module folders.
+- **`index.ts` re-exports each public file as a namespace with a doc tag:**
+  `/** @since 0.0.0 */ export * as Ledger from "./ledger/Ledger.ts"`. Callers write
+  `Ledger.make(...)` and `Ledger.Ledger`. `package.json` exports each module's files by subpath, as
+  Effect's does, so a caller can also import one file by its path.
 - **The top level still names no platform** (AGENTS.md): `index.ts` re-exports no `Node*` or
-  `Workers*` module. Those are reached only by their own path.
+  `Cloudflare*` file. Those are reached only by their own path.
 
 **Before** (libfabrika on main, 2026-11-09; lowercase folders by area):
 
@@ -103,25 +115,22 @@ next/packages/libfabrika/src/
   node/          build.ts  local-stage.ts  stage.ts  stage-recording.ts
 ```
 
-**After** (one flat `src/`; same files, new names):
+**After** (PascalCase files in one folder per subject; a sketch, and 0043's table says which files
+sit in which module):
 
 ```text
 next/packages/libfabrika/src/
-  index.ts                     export * as Ledger from "./Ledger.ts", one per public module
-  Id.ts  Testing.ts
-  BrainEvent.ts  BrainLife.ts  Entry.ts  Execution.ts  Patch.ts  Program.ts  Runner.ts  State.ts
-  ClientManager.ts  Mailbox.ts  Members.ts  Process.ts  ProcessManager.ts  ProcessStore.ts  ...
-  Ledger.ts  LedgerTransaction.ts  Log.ts  Records.ts  Referee.ts  Sink.ts  Sqlite.ts  Trace.ts  ...
-  Door.ts  DoorNonce.ts  DoorStore.ts
-  Gateway.ts  Hello.ts  Sshsig.ts  Webauthn.ts  Wire.ts  ...
-  Workers.ts  WorkersBox.ts  WorkersGateway.ts  WorkersRuntime.ts  ...
-  NodeBuild.ts  NodeLocalStage.ts  NodeStage.ts  NodeStageRecording.ts
-  internal/                    binary.ts  ledgerStore.ts  platform.ts  ...  each export @internal
-  Ledger.test.ts  Mailbox.test.ts  NodeStage.laws.test.ts  ...  each test beside its module
+  index.ts                     export * as Ledger from "./ledger/Ledger.ts", one per public file
+  Id.ts  Testing.ts  ProcessId.ts  Rev.ts  Sql.ts    the shared names, beside it
+  ledger/      Ledger.ts  LedgerTransaction.ts  Log.ts  Referee.ts  ...
+               internal/  binary.ts  ledgerStore.ts  ...     each export @internal
+               Ledger.test.ts  ...                           each test beside its file
+  gateway/     Gateway.ts  ...
+  processes/   Mailbox.ts  Process.ts  ProcessManager.ts  ...
 ```
 
-The folders by area are gone; the layer each file belongs to now lives only in `layer-rules.json`.
-The move plan holds the full old-to-new table.
+The folders by area are gone, replaced by one folder per subject; the layer each file belongs to
+lives only in `layer-rules.json`. The move plan holds the full old-to-new table.
 
 **Apps are not decided here.** The lean for `next/apps/fabrika` is cheffect's shape: feature
 folders, each beside a same-name module (`Door.ts` + `Door/`). The owner has not decided it.
