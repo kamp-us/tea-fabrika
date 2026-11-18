@@ -1,7 +1,7 @@
 ---
 id: 0035
 title: An agent that finds work outside its task writes one finding row and keeps going, never a fix, a ticket or only a mention
-status: amended-in-part by [0036](0036-a-flaky-test-is-fixed.md), [0090](0090-each-field-row-is-a-file.md)
+status: accepted
 date: 2026-11-09
 tags: [findings, field, agents, tickets, rating, noise, review]
 ---
@@ -9,8 +9,8 @@ tags: [findings, field, agents, tickets, rating, noise, review]
 # 0035: An agent that finds work outside its task writes one finding row and keeps going, never a fix, a ticket or only a mention
 
 **What this decides:** when an agent meets something wrong that its task does not cover, it writes
-one row in `field/findings.jsonl` with proof and goes back to its task; a person rates the row
-later, and only a `fix` becomes a ticket.
+one row, its own file in `field/findings/`, with proof and goes back to its task; a person rates the
+row later, and only a `fix` becomes a ticket.
 
 ```mermaid
 flowchart TD
@@ -18,7 +18,7 @@ flowchart TD
   hole -->|"yes"| private["never in this repo: tell the lead privately"]
   hole -->|"no"| proof{"file and line, how it fails, what it costs?"}
   proof -->|"no"| nothing["write nothing"]
-  proof -->|"yes"| row["one finding row in field/findings.jsonl"]
+  proof -->|"yes"| row["one finding file in field/findings/"]
   row --> task["keep going on the task"]
   row --> rate{"a person rates it"}
   rate -->|"fix"| ticket["rated row, then tracker_file"]
@@ -27,8 +27,9 @@ flowchart TD
 ```
 
 ```ts
-// A sketch of the two rows. The values are made up; field/README.md holds the fields table.
-{_tag: "finding", id: "2026-11-09-f01", date: "2026-11-09",
+// A sketch of the two rows, each its own file. The values are made up; field/README.md holds the
+// fields table.
+{_tag: "finding", id: "2026-11-09-state-written-never-read", date: "2026-11-09",
  by: "build", model: null, rule: "dead_code",                    // who found it, and which rule from the closed list
  location: {path: "next/apps/fabrika/src/stage.ts", line: 41},   // the file and line it is about
  says: "`state` is written by transition and never read",        // what is wrong, in a sentence
@@ -37,7 +38,7 @@ flowchart TD
  head: "9e02a1c…",                                               // the commit it was seen on, full sha
  ticket: "usirin/tea-fabrika#229", pr: null}                     // the work it was found during
 
-{_tag: "rated", finding: "2026-11-09-f01", says: "fix",          // or "noise"
+{_tag: "rated", finding: "2026-11-09-state-written-never-read", says: "fix",          // or "noise"
  by: "owner", date: "2026-11-12", ticket: "usirin/tea-fabrika#501"} // the ticket a fix became; null for noise
 ```
 
@@ -67,9 +68,13 @@ rule stands. Tracker ticket
 **An agent that finds work outside its task writes one finding row and keeps going. It does not fix
 it, does not file a ticket, and does not only mention it in its report.**
 
-- **Where.** Until `next/`'s ledger holds findings (Tier 6), rows go in `field/findings.jsonl`, one
-  JSON object per line, append-only. The fields are in
-  [`field/README.md`](../field/README.md#a-finding).
+- **Where.** Until `next/`'s ledger holds findings (Tier 6), each row is its own small file in
+  `field/findings/`, and its id is its file name: the date plus a short kebab-case slug, as in
+  `2026-11-10-loosening-misses-smaller-generator`. Nothing appends to a shared file and no counter
+  is guessed, so two writers who pick the same slug on the same day add the same path and git shows
+  a plain conflict ([0090](0090-each-field-row-is-a-file.md)). The old
+  `field/findings.jsonl` stays as history, with its old ids, read beside the folder. The fields are
+  in [`field/README.md`](../field/README.md#a-finding).
 - **The shape is the note's proposed `Finding`,** so a row moves into the ledger later with nothing
   lost: `id`, `by`, `rule`, the place, `says` and `head`, plus `date`, and the `ticket` and `pr` it
   was found during. One key differs from the note's sketch: the place is `location`, not `at`.
@@ -90,13 +95,13 @@ it, does not file a ticket, and does not only mention it in its report.**
   | `doc_drift` | a doc and the source disagree |
   | `rule_break` | code that breaks AGENTS.md, a decision or a pattern doc |
 
-  A `flaky_test` row does not wait for its rating: the test is fixed that day, with a ticket
-  ([0036](0036-a-flaky-test-is-fixed.md)). The rest of this file still holds for it.
+  A `flaky_test` row does not wait for its rating: the test is fixed that day, with a ticket, and
+  the lead writes its `rated` row as `fix` the same day ([0036](0036-a-flaky-test-is-fixed.md)).
 
   A finding that fits none is not forced into one. The agent says so in one line of its report, and
-  a new rule is added here by amendment.
+  a new rule is added to this list by editing it, in the pull request of the record that says why.
 - **A person rates each row `fix` or `noise`.** The rating is a row of its own, `_tag: "rated"`,
-  naming the finding's `id`. It is written by a person's tool: by hand, or by the lead session
+  naming the finding's `id`, and it is a file in `field/findings/` too. It is written by a person's tool: by hand, or by the lead session
   writing down the owner's call, until a window exists. The agent that found it never writes it,
   and no agent rates.
 - **A `fix` becomes a tracker ticket,** filed with `tracker_file` by whoever writes the rating, and
@@ -108,10 +113,12 @@ it, does not file a ticket, and does not only mention it in its report.**
 
 **Binding constraints:**
 
-- No agent files a ticket, opens a pull request or changes code for work outside its task.
+- No agent files a ticket, opens a pull request or changes code for work outside its task. A flaky
+  test is the one exception: it gets a ticket and a fix the same day (0036).
 - No agent writes or edits a `rated` row for a finding it wrote.
 - A finding row is never edited or deleted after it lands. A wrong one is rated `noise`.
-- `rule` and the row's keys change only by an amendment here.
+- `rule` and the row's keys change only by editing this record, in the pull request of the record
+  that says why.
 
 ## Consequences
 
@@ -120,28 +127,18 @@ it, does not file a ticket, and does not only mention it in its report.**
   that is mostly noise gets a stricter brief or is dropped.
 - A reviewer still blocks on what its task covers: a broken decision, lost data or a broken law.
   Only its other findings change, from tickets to rows.
-- **Still saying the old rule,** and changed next as lead tooling: the answer format in
-  [the review skill](../.agents/skills/review/SKILL.md) and the standing review brief in
-  [the lead skill](../.agents/skills/lead/SKILL.md), which count filed tickets. Until that lands,
-  this decision wins where they disagree.
+- The answer format in [the review skill](../.agents/skills/review/SKILL.md), the standing review
+  brief in [the lead skill](../.agents/skills/lead/SKILL.md) and the step skills say this rule, and
+  `skillscheck.sh` holds the clause.
 - A step whose owner list does not allow `field/` hands the finished row to the lead in its report,
   as one JSON line, and the lead adds it unchanged the same day, as
   [0013](0013-plan-docs-change-with-the-work.md) does for plan rows.
-- Two pull requests can pick the same `id` on the same day. The one that lands second renumbers its
-  rows before it lands; no rating exists yet, so nothing points at them.
-- CI checks only that each added row is a JSON object, and advises that the file has no detailed
-  schema ([field/README.md](../field/README.md#what-ci-checks)).
-- Not decided here: a detailed schema check for these rows, the window that shows and rates them,
+- CI's `field` job checks a row's core: its keys, the closed `rule` list, `location` and never
+  `at`, and `says`, `proof` and `cost` not empty
+  ([field/README.md](../field/README.md#what-ci-checks)).
+- Not decided here: a schema check for these rows beyond that core, the window that shows and rates them,
   how the same finding is matched when two agents write it, and how many ratings a rule needs
   before its count is trusted. The note lists the last two as open.
-
-## Amendments
-
-- 2026-11-10, tracker ticket 523: the review skill, the lead skill's standing review brief and the
-  step skills now say this rule, and `skillscheck.sh` holds the clause. CI's `field` job now checks
-  a row's core: its keys, the closed `rule` list, `location` and never `at`, and `says`, `proof`
-  and `cost` not empty ([field/README.md](../field/README.md#what-ci-checks)). The two lines under
-  Consequences that say otherwise describe the day this was decided.
 
 ## Records
 

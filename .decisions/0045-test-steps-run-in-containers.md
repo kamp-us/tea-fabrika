@@ -1,19 +1,18 @@
 ---
 id: 0045
-title: A step that needs ports, sockets or its own processes runs in a container with its own network, never behind a hole in the laptop sandbox
-status: amended-in-part by [0594](0594-safe-checks-direct-mac-ci.md)
+title: A step that needs ports, sockets or its own processes and cannot run directly runs in a container with its own network, never behind a hole in the laptop sandbox
+status: accepted
 date: 2026-11-09
 tags: [sandbox, container, docker, network, mutation, stryker, lead, tooling, sockets, loopback]
 ---
 
-# 0045: A step that needs ports, sockets or its own processes runs in a container with its own network, never behind a hole in the laptop sandbox
+# 0045: A step that needs ports, sockets or its own processes and cannot run directly runs in a container with its own network, never behind a hole in the laptop sandbox
 
-**What this decides:** the fence around a step that runs tests or tools is a container with a
-private network, where anything may listen and nothing crosses the edge except what we pass; the
-laptop's own sandbox stays as it is, for steps that only read and edit files.
-
-[0594](0594-safe-checks-direct-mac-ci.md) changes where ordinary safe checks run; the remaining
-container isolation rules below still hold where a check needs that isolation.
+**What this decides:** the fence around a step that runs tests or tools and still needs network
+isolation is a container with a private network, where anything may listen and nothing crosses the
+edge except what we pass; the laptop's own sandbox stays as it is, for steps that only read and
+edit files. Ordinary safe checks need no container: they run directly
+([0594](0594-safe-checks-direct-mac-ci.md)).
 
 **Before:**
 
@@ -94,6 +93,10 @@ private network, and on a Mac that means a Linux container.
 container with `--network none`: Stryker's log server, its workers and the four related test files
 all ran on the container's loopback alone.
 
+[0594](0594-safe-checks-direct-mac-ci.md), decided on 2026-11-16, found that applying this rule to
+every safe tool invocation put independent checks behind the single Docker slot, and moved ordinary
+safe checks out of it. The Decision below says where the line falls now.
+
 **How this fits older texts.** The sweep found no decision this one contradicts.
 
 - [Programs run in a box](../docs/direction/programs-run-in-a-box.md) already says the box is the
@@ -115,9 +118,15 @@ all ran on the container's loopback alone.
 
 ## Decision
 
-**A step that needs ports, sockets or its own processes runs inside a container with its own
-private network; we stop opening the laptop sandbox for it.**
+**A step that needs ports, sockets or its own processes, and so needs network isolation, runs
+inside a container with its own private network; we stop opening the laptop sandbox for it.**
 
+- **Ordinary safe checks run directly, in parallel, with no Docker slot** (0594). That covers
+  format, lint, ordinary tests and scoped temporary-Git checks that signal no real process, under
+  the machine caps. A check that still needs network isolation keeps the rules below.
+- **Launchd, real Electron and real process-signal laws do not run on the owner's laptop.** They
+  use eligible disposable CI: Linux for a portable process-signal law, macOS for a Mac-specific one
+  (0594).
 - **The fence is a container, not a filter.** Inside it anything may listen. Its network is its
   own: `--network none` while test code runs, so it reaches nothing on the laptop and nothing
   outside.
@@ -150,8 +159,10 @@ private network; we stop opening the laptop sandbox for it.**
 ## Consequences
 
 - The mutation step works again, on any lane, without a change to the Claude or Codex row.
-- Lead tooling now needs Docker running on the laptop. The product does not: its daily flow for a
-  person still starts with no Docker.
+- Ordinary safe checks no longer wait for Docker or its single slot.
+- A lead step that needs network isolation needs Docker running on the laptop, and an ordinary
+  safe check does not. The product does not need it either: its daily flow for a person still
+  starts with no Docker.
 - The container needs its own `node_modules` for Linux, so there is an image to build when the
   lockfile changes, and to clean up. `box.sh gc` learns about it
   ([0019](0019-nothing-stale.md)).

@@ -1,15 +1,16 @@
 ---
 id: 0033
-title: Lead tooling under .agents/ follows next/'s code rules, with a ledger of old breaks that only shrinks
-status: amended-in-part by [0070](0070-flow-runner-stays-a-machine.md), [0113](0113-no-shell-or-python-scripts.md)
+title: Lead tooling under .agents/ follows next/'s code rules, and the ledger of its old breaks only shrinks, takes no new entry and goes when empty
+status: accepted
 date: 2026-11-09
 tags: [lead, tooling, lint, agents, ledger, effect, no-promises]
 ---
 
-# 0033: Lead tooling under .agents/ follows next/'s code rules, with a ledger of old breaks that only shrinks
+# 0033: Lead tooling under .agents/ follows next/'s code rules, and the ledger of its old breaks only shrinks, takes no new entry and goes when empty
 
 **What this decides:** the code in `.agents/` is linted with the same rules as `next/`, and what
-already breaks them is listed in a ledger that can only get shorter.
+already breaks them is listed in a ledger that can only get shorter, never gains an entry and is
+deleted when it is empty.
 
 ```mermaid
 flowchart LR
@@ -45,15 +46,25 @@ plan, tests, mutation and review steps. This decision is about how the code read
 It builds on [0023](0023-next-follows-effects-code-style.md) (next/ follows Effect's code style),
 [no Promises](../docs/direction/no-promises.md), and [0031](0031-lane-tooling-dogfoods-fabrikas-primitives.md),
 whose move of `chain.ts` onto `Program.make` is where most of the ledger goes (that move waits, by
-[0070](0070-flow-runner-stays-a-machine.md)). The ledger works like
+[0070](0070-flow-runner-stays-a-machine.md)). The ledger began as a list like
 `unreachable-ledger.json` ([0006](0006-no-unused-exports.md)).
 
 At the start, `.agents/` held about 17k lines: 21 `.ts` files, 1 `.mjs`, 12 `.sh` and 3 `.py`.
 
+Later changes shaped what holds now. On 2026-11-10 the owner let in 12 `agents-ledger.json`
+entries, once, for `fabrika/no-why-key` (tracker ticket 535, [PR 664](https://github.com/usirin/tea-fabrika/pull/664)):
+12 lines under `.agents/` keep the key `why` because they read or write a shape today's version
+owns, and today's code keeps `why` until it is deleted
+([AGENTS.md](../AGENTS.md#before-you-design-anything), "Data keys are short everyday words"). An
+inline ignore would not do, since oxlint reads those files a second time through the skills links
+and reports the comment as unused (finding `2026-11-10-f01`). [0113](0113-no-shell-or-python-scripts.md)
+replaced the "moves when next touched" rule for shell and Python on 2026-11-11, and
+[0168](0168-old-lint-breaks-are-fixed.md) closed the ledger to new entries on 2026-11-13.
+
 ## Decision
 
 **Code under `.agents/` is held to `next/`'s lint rules from today; what already breaks them is in a
-ledger that only shrinks, and new code passes from day one.**
+ledger that only shrinks and takes no new entry, and new code passes from day one.**
 
 - **Same rules.** `.oxlintrc.json`'s `next/**` override also covers `.agents/**/*.ts` and
   `.agents/**/*.mjs`, and its test override `.agents/**/*.test.ts`. A rule that checks its own path
@@ -61,22 +72,23 @@ ledger that only shrinks, and new code passes from day one.**
 - **The ledger.** `agents-ledger.json` names each old break by file, rule and the line's code, never
   a line number, so moving code keeps its entry and changing the line drops it. `pnpm lint` waives
   only what it names. A run over the whole repo writes back only the entries a finding still
-  matched, and CI fails until that pruned file is committed.
-- **Adding an entry is the owner's call,** in a change of its own. This decision authorizes the
-  first ledger, written the day the rules turned on. An entry outside `.agents/` is refused.
+  matched, and CI fails until that pruned file is committed. The breaks it names are worked down to
+  zero, rule by rule, and the file is deleted, with the code that reads it, when it is empty
+  ([0168](0168-old-lint-breaks-are-fixed.md)).
+- **No new entry, ever.** No pull request adds a row to the ledger. An entry outside `.agents/` is
+  refused.
 - **Edges** use the same comment as `next/`:
   `// oxlint-disable-next-line <rule> -- edge: <why>`, one line each.
-- **Shell and Python move to TypeScript and Effect when next touched,** one script at a time, never
-  in one big rewrite.
-  Now replaced: every script is ported now and no new one enters
-  ([0113](0113-no-shell-or-python-scripts.md)); the rest of this decision holds.
+- **No new shell or Python script enters the repo,** and the ones that were there are ported to
+  TypeScript and Effect now, one pull request at a time, not left until next touched
+  ([0113](0113-no-shell-or-python-scripts.md)).
 - **The first big burn-down** is `chain.ts` moving onto `Program.make` under
   [0031](0031-lane-tooling-dogfoods-fabrikas-primitives.md). For now it waits: the runner stays a
   tea machine ([0070](0070-flow-runner-stays-a-machine.md)).
 
 **Binding constraints:**
 
-- No new entry in `agents-ledger.json` without the owner.
+- No new entry in `agents-ledger.json`.
 - No override that turns a `next/` rule off for a non-test `.agents/` file.
 - A change that touches a ledgered line fixes it rather than rewriting the entry.
 
@@ -86,25 +98,6 @@ and the lead's own agents still need to read the scripts.
 ## Consequences
 
 - On the first day, 112 findings in 7 files went into the ledger (counted in the lint PR).
-- A shell or Python script keeps working until someone next changes it; then it moves.
 - Some scripts may need real edges (a `node:` import Effect has no module for, a Promise a platform
   demands); each is one marked line, read at merge.
-- Not decided here: when the shell scripts must all be gone, and lint rules for Python or shell.
-
-## Amendments
-
-- 2026-11-10: **the 12 `agents-ledger.json` entries that `fabrika/no-why-key` needs are allowed,
-  once, for this rule** (owner). Tracker ticket 535, for
-  [PR 664](https://github.com/usirin/tea-fabrika/pull/664) (ticket 337).
-  - **What they are.** 12 lines under `.agents/` that keep the key `why`, because they read or
-    write a shape today's version owns: outcome values in today's `@kampus/pipeline` shape and the
-    lane state file's saved key in `drive.ts`, and test fixtures for `exam-paths.json` and field
-    rows.
-  - **Why they stay.** Today's code keeps `why` until that code is deleted
-    ([AGENTS.md](../AGENTS.md#before-you-design-anything), "Data keys are short everyday words").
-    Each entry leaves with that code.
-  - **Why not an edge comment.** oxlint reads those files a second time through the skills links
-    and reports the inline disable comment as unused (finding `2026-11-10-f01`, in PR 664's field
-    rows).
-  - **What it does not change.** The ledger still only shrinks otherwise. Any other new entry
-    stays the owner's call, in a change of its own.
+- Not decided here: lint rules for Python or shell.
