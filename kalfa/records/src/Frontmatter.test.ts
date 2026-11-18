@@ -15,7 +15,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema } from "effect";
 import { Finding } from "./Finding.ts";
 import * as Frontmatter from "./Frontmatter.ts";
 import { distinct, lineOf, Number4, pad, record, ROOT, slugOf, Words, world } from "./Records.test-support.ts";
@@ -175,7 +175,7 @@ it.effect("L2 scenario: the four records 0605 to 0608, as committed, have no sta
     const tracked = names.map((name) => ({ path: `.decisions/${name}`, symlink: false }));
 
     const found = yield* Frontmatter.check(root).pipe(
-      Effect.provide(Layer.succeed(Tracked, { files: Effect.succeed(tracked) })),
+      Effect.provideService(Tracked, { files: Effect.succeed(tracked) }),
     );
 
     expect(found).toEqual([]);

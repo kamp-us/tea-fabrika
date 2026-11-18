@@ -41,7 +41,7 @@
       "pure": false
     },
     "kalfa-records": {
-      "imports": ["kalfa-config"],
+      "imports": ["kalfa-config", "next-vitest"],
       "pure": false
     }
   },

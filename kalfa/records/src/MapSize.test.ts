@@ -1,87 +1,93 @@
-// L6 of docs/plan/quests/rules-and-records-build-PLAN.md (slice 8, 0608): the map fits its readers' limit. An
-// agent reads the root `AGENTS.md`, then the folder's: a finding comes when the root alone, or the root
-// plus one folder's `AGENTS.md`, is over the limit, and names that chain and its bytes.
+// L6 and L7 of docs/plan/quests/rules-and-records-build-PLAN.md (slice 8), as the lead changed them after
+// slice 6 dropped the byte limit: the map check is advice. Each tracked `AGENTS.md` it reads, the root and each
+// `<folder>/AGENTS.md` one folder down (a symlink is skipped), with more than 200 lines is one `map` finding.
+// The 200 is a constant of MapSize.ts, `maxLines`, cited to https://code.claude.com/docs/en/memory; it is
+// not a setting.
 //
-// Assumed export, `MapSize.ts`: `check(root: string, max: number)`: `Effect<ReadonlyArray<Finding>, E,
-// Tracked | FileSystem | Path>`; a finding is `{ _tag: "map", chain, bytes, max }`, `chain` the repo-relative
-// paths in reading order (`["AGENTS.md"]`, `["AGENTS.md", "next/AGENTS.md"]`), `bytes` their UTF-8 bytes
-// added, and over means more than `max`. The folder files are the tracked `AGENTS.md` one folder down.
+// Assumed exports:
+// - `Finding.ts`: the `map` case is `{ _tag: "map", path, lines, max }`.
+// - `MapSize.ts`: `maxLines` (200) and `check(root: string)`: `Effect<ReadonlyArray<Finding>, E, Tracked |
+//   FileSystem | Path>`, no limit argument. Lines are counted as `wc -l` counts a file that ends in a newline:
+//   `text.split("\n")` without the empty piece after the last newline.
 //
-// The plan leaves one thing open, and this law does not decide it: when the root alone is over the limit,
-// whether the longer chains over the limit are findings too. A finding is exactly a chain over the limit
-// with its true bytes; when the root alone is not over, the findings are exactly the over chains of root
-// plus one folder file.
+// Each run holds a root and up to three folder files with drawn line counts, and in every run the files the
+// check must not read: a symlinked folder file, a file two folders down and a `CLAUDE.md`, all over 200 lines.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import { Finding } from "./Finding.ts";
 import * as MapSize from "./MapSize.ts";
-import { bytesOf, ROOT, world } from "./Records.test-support.ts";
+import { fileLines, ROOT, world } from "./Records.test-support.ts";
 
 const check = { arbitrary: { seed: 119120, runs: runsFor({ fast: 100, full: 300 }) } };
 
 const FOLDERS = ["next/AGENTS.md", "kalfa/AGENTS.md", "docs/AGENTS.md"] as const;
 
-const MOST = 70_000;
+const MOST = 600;
 
-// A size drawn anywhere from 0 to 70,000, within 2 of the limit, or below it: the line between over and not
-// over is crossed as often as any other.
-const Size = Schema.Struct({
-  mode: Schema.Literals([0, 1, 2]),
+// A line count drawn anywhere from 0 to 600, or within 2 of 200, so the line between over and not over is
+// crossed as often as any other.
+const Count = Schema.Struct({
+  near: Schema.Boolean,
   n: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: MOST })),
 });
 
-const sizeFrom = ({ mode, n }: typeof Size.Type, max: number) =>
-  mode === 0 ? n : mode === 1 ? Math.max(0, max + (n % 5) - 2) : n % (max + 1);
+const countFrom = ({ near, n }: typeof Count.Type) => (near ? 200 + (n % 5) - 2 : n);
 
-// Plant: compare each folder file alone, not with the root, so a 20 KB root and a 15 KB folder pass at 32,768.
+// Plant: compare with >= instead of >, or sum the root into each folder file.
 it.effect.prop(
-  "L6 a finding comes when the root, or the root plus one folder file, is over the limit, and names its chain and bytes",
+  "L6 a map finding comes for each AGENTS.md of the root and one folder down that has more than 200 lines, naming its path and its lines",
   {
-    max: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MOST })),
-    size: Size,
-    sizes: Schema.Array(Size).check(Schema.isBetweenLength(0, 3)),
-    twos: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 5000 })),
+    root: Count,
+    folders: Schema.Array(Count).check(Schema.isBetweenLength(0, 3)),
+    width: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 300 })),
   },
-  ({ max, size, sizes, twos }) =>
+  ({ root, folders, width }) =>
     Effect.gen(function* () {
-      const root = sizeFrom(size, max);
-      const folders = sizes.map((each) => sizeFrom(each, max));
-      const files: Record<string, string> = { "AGENTS.md": bytesOf(root, twos), "CLAUDE.md": "@AGENTS.md\n" };
-
-      folders.forEach((bytes, i) => {
-        files[FOLDERS[i]!] = bytesOf(bytes, twos);
-      });
-
-      const chains = [
-        { chain: ["AGENTS.md"], bytes: root },
-        ...folders.map((bytes, i) => ({ chain: ["AGENTS.md", FOLDERS[i]!], bytes: root + bytes })),
+      const counts = [
+        { path: "AGENTS.md", lines: countFrom(root) },
+        ...folders.map((each, i) => ({ path: FOLDERS[i]!, lines: countFrom(each) })),
       ];
 
-      const over = chains.filter(({ bytes }) => bytes > max);
-      const all = yield* MapSize.check(ROOT, max).pipe(Effect.provide(world(ROOT, files)));
+      const files: Record<string, string | { text: string; symlink: true }> = {
+        "CLAUDE.md": fileLines(MOST, width),
+        "next/packages/deep/AGENTS.md": fileLines(MOST, width),
+      };
+
+      for (const { path, lines } of counts) {
+        files[path] = fileLines(lines, width);
+      }
+
+      // A folder file that is a symlink is read once, where it points.
+      files["tools/AGENTS.md"] = { text: fileLines(MOST, width), symlink: true };
+
+      const all = yield* MapSize.check(ROOT).pipe(Effect.provide(world(ROOT, files)));
       const found = all.filter(Finding.guards.map);
 
       expect(found, "only map findings").toHaveLength(all.length);
-      expect(found.length > 0).toBe(over.length > 0);
 
-      const named = found.map((finding) => finding.chain.join(" + "));
+      const expected = counts
+        .filter(({ lines }) => lines > 200)
+        .map(({ path, lines }) => ({ _tag: "map", path, lines, max: 200 }));
 
-      expect(new Set(named).size, "one finding for a chain").toBe(named.length);
+      const order = (a: { path: string }, b: { path: string }) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
-      for (const finding of found) {
-        expect(finding.max).toBe(max);
-
-        const real = chains.find(({ chain }) => chain.join(" + ") === finding.chain.join(" + "));
-
-        expect(real, `${finding.chain.join(" + ")} is a chain an agent reads`).toBeDefined();
-        expect(finding.bytes).toBe(real?.bytes);
-        expect(finding.bytes).toBeGreaterThan(max);
-      }
-
-      if (root <= max) {
-        expect(named.sort()).toEqual(over.map(({ chain }) => chain.join(" + ")).sort());
-      }
+      expect([...found].sort(order)).toEqual(expected.sort(order));
     }),
   check,
+);
+
+// Plant: set `maxLines` to 199.
+it.effect(
+  "L7 scenario: maxLines is 200, a 201-line AGENTS.md is one finding with max 200, and a 200-line one is none",
+  () =>
+    Effect.gen(function* () {
+      expect(MapSize.maxLines).toBe(200);
+
+      const over = yield* MapSize.check(ROOT).pipe(Effect.provide(world(ROOT, { "AGENTS.md": fileLines(201, 10) })));
+      const at = yield* MapSize.check(ROOT).pipe(Effect.provide(world(ROOT, { "AGENTS.md": fileLines(200, 10) })));
+
+      expect(over).toEqual([{ _tag: "map", path: "AGENTS.md", lines: 201, max: 200 }]);
+      expect(at).toEqual([]);
+    }),
 );

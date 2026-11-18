@@ -10,24 +10,17 @@
 //   call fails, so a check that reaches for the real disk or lists a folder is noticed.
 // - Effect's `Path`.
 //
-// `tomlStandIn` is the `Toml` service for the two files a settings load reads here: none (empty text), or the
-// one `[records.map]` table with `max-bytes`. Lint holds the choice of a TOML adapter to the settings module,
-// and these laws are about the limit, not the grammar, so they read the one shape through a stand-in.
-//
-// `cliLayers` adds what the command loads its setting with (that and a digest), and
-// what `Command.runWith` asks of its host: a terminal, the standard streams and a process spawner, none of
+// `cliLayers` adds what `Command.runWith` asks of its host: a terminal, the standard streams and a process spawner, none of
 // which the command may use.
-import { Toml } from "@kalfa/config/Toml";
 import { Effect, FileSystem, Layer, Path, PlatformError, Schema, Stdio, Terminal } from "effect";
-import { Digest } from "effect/crypto";
 import { ChildProcessSpawner } from "effect/process";
 import { Tracked } from "./Tracked.ts";
 
 export const ROOT = "/repo";
 
-export type Entry = string | { readonly text: string; readonly symlink: true };
+type Entry = string | { readonly text: string; readonly symlink: true };
 
-export type Files = Readonly<Record<string, Entry>>;
+type Files = Readonly<Record<string, Entry>>;
 
 const textOf = (entry: Entry) => (typeof entry === "string" ? entry : entry.text);
 
@@ -64,41 +57,9 @@ export const world = (root: string, files: Files) => {
   );
 };
 
-const MAP_TABLE = /^\[records\.map\]\nmax-bytes = (\d+)\n$/;
-
-const nothing = Effect.die(new Error("the stand-in Toml reads no edits"));
-
-export const tomlStandIn = Layer.succeed(
-  Toml,
-  Toml.of({
-    parse: (text) => {
-      const match = MAP_TABLE.exec(text);
-
-      if (text !== "" && match === null) {
-        return Effect.die(new Error("the stand-in Toml reads an empty file or one [records.map] table only"));
-      }
-
-      return Effect.succeed({
-        value: match === null ? {} : { records: { map: { "max-bytes": Number(match[1]) } } },
-        spans:
-          match === null
-            ? []
-            : [
-                { path: ["records", "map"], line: 1 },
-                { path: ["records", "map", "max-bytes"], line: 2 },
-              ],
-      });
-    },
-    set: () => nothing,
-    remove: () => nothing,
-  }),
-);
-
 export const cliLayers = (root: string, files: Files) =>
   Layer.mergeAll(
     world(root, files),
-    tomlStandIn,
-    Digest.layerWebCrypto,
     Stdio.layerTest({}),
     Layer.succeed(
       Terminal.Terminal,
@@ -202,9 +163,5 @@ export const sentence = (words: ReadonlyArray<string>) => `${words.join(" ")}.`;
 /** A file name's slug from drawn words. */
 export const slugOf = (words: ReadonlyArray<string>) => words.slice(0, 3).join("-");
 
-/** A text of exactly `bytes` UTF-8 bytes, `twos` of its characters being two bytes wide, so a char count is not a byte count. */
-export const bytesOf = (bytes: number, twos: number) => {
-  const wide = Math.min(twos, Math.floor(bytes / 2));
-
-  return "é".repeat(wide) + "a".repeat(bytes - 2 * wide);
-};
+/** A file of `count` lines of `width` characters, each ending in a newline: `wc -l` counts `count` of them. */
+export const fileLines = (count: number, width: number) => `${"x".repeat(width)}\n`.repeat(count);

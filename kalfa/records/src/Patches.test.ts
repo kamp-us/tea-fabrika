@@ -13,7 +13,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema } from "effect";
 import { Finding } from "./Finding.ts";
 import * as Patches from "./Patches.ts";
 import {
@@ -264,9 +264,7 @@ it.effect(
 
       const tracked = names.map((name) => ({ path: `.decisions/${name}`, symlink: false }));
 
-      const found = yield* Patches.check(root).pipe(
-        Effect.provide(Layer.succeed(Tracked, { files: Effect.succeed(tracked) })),
-      );
+      const found = yield* Patches.check(root).pipe(Effect.provideService(Tracked, { files: Effect.succeed(tracked) }));
 
       expect(found).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
