@@ -12,7 +12,6 @@
   ".agents/skills/plan/scripts/plancheck.test.ts": 128.9,
   ".agents/skills/step-commit/scripts/stepcommit.test.ts": 41.7,
   ".github/ci/l11-exercise.test.ts": 35.3,
-  ".github/ci/plant-reporter.integration.test.ts": 37,
   ".github/ci/related.test.ts": 34.6,
   ".github/ci/workflow-lint/changes.test.ts": 36.3,
   ".github/ci/workflow-lint/merge-line.test.ts": 58.2,

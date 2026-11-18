@@ -215,13 +215,18 @@ const failQuery = (word: string) => {
   };
 };
 
+declare global {
+  // What `recordShows` keeps on the page: each `pageshow`'s `persisted` flag, once the first has fired.
+  var __shows: Array<boolean> | undefined;
+}
+
 /** Runs in each page before its script: records every `pageshow`'s `persisted` flag. A page restored
  *  from the back/forward cache keeps its heap, so it holds the first load's flag and the restore's. */
 const recordShows = () => {
   addEventListener("pageshow", (event) => {
-    const shows: Array<boolean> = Reflect.get(globalThis, "__shows") ?? [];
+    const shows = globalThis.__shows ?? [];
     shows.push(event.persisted);
-    Reflect.set(globalThis, "__shows", shows);
+    globalThis.__shows = shows;
   });
 };
 
@@ -304,7 +309,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
           yield* playwright("goBack", () => page.goBack({ waitUntil: "commit" }));
 
           const shows = playwright("shows", (): Promise<ReadonlyArray<boolean>> =>
-            page.evaluate(() => Reflect.get(globalThis, "__shows") ?? []).catch(() => []),
+            page.evaluate(() => globalThis.__shows ?? []).catch(() => []),
           );
 
           yield* until(

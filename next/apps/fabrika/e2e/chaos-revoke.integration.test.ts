@@ -269,22 +269,10 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   };
 });
 
-/** A local binding's calls, as the dev command sees them. */
-type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
-
-const invoke = Effect.fn("RevokeTest.control")(function* (
-  binding: Binding,
-  method: string,
-  args: ReadonlyArray<unknown>,
-) {
-  const target = binding[method];
-
-  if (target === undefined) {
-    return yield* WireFailure.make({ cause: new Error(`the binding has no ${method} call`) });
-  }
-
+/** One typed call on the local instance's dev client, its rejection kept as a wire failure. */
+const invoke = Effect.fn("RevokeTest.control")(function* <A>(call: () => Promise<A>) {
   return yield* Effect.tryPromise({
-    try: () => Reflect.apply(target, binding, args),
+    try: call,
     catch: (cause) => WireFailure.make({ cause }),
   });
 });
@@ -374,19 +362,21 @@ const served = Effect.gen(function* () {
     return yield* Effect.die(new Error("the real checklist was not built"));
   }
 
-  const started = yield* invoke(instance.project(PROJECT), "start", [
-    Start.cases.first.make({
-      id: "checklist-start",
-      // P14 slice 2: the real entry boots `checklist:1` itself, so the proof starts its own target
-      // under the next name, owned by this test's root key.
-      name: "checklist:2",
-      code: { program: "fabrika/checklist", hash: source.hash },
-    }),
-    from,
-  ]);
+  const started = yield* invoke(() =>
+    instance.project(PROJECT).start(
+      Start.cases.first.make({
+        id: "checklist-start",
+        // P14 slice 2: the real entry boots `checklist:1` itself, so the proof starts its own target
+        // under the next name, owned by this test's root key.
+        name: "checklist:2",
+        code: { program: "fabrika/checklist", hash: source.hash },
+      }),
+      from,
+    ),
+  );
 
   const { process: pid } = yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started);
-  const read = (stream: string) => invoke(instance.project(PROJECT), "read", [stream, 0, "p17b-audit"]);
+  const read = (stream: string) => invoke(() => instance.project(PROJECT).read(stream, 0, "p17b-audit"));
 
   return { root, old, other, instance, pid, read, built: built.build };
 }).pipe(Effect.provide(NodeServices.layer));
@@ -461,9 +451,10 @@ it.live(
           },
         });
 
-        expect(
-          yield* RevokeTest.invoke(project, "grant", [{ text: grant, armored: yield* root.proof(grant) }]),
-        ).toMatchObject({ _tag: "applied" });
+        const armored = yield* root.proof(grant);
+        expect(yield* RevokeTest.invoke(() => project.grant({ text: grant, armored }))).toMatchObject({
+          _tag: "applied",
+        });
         const other = yield* RevokeTest.connect(instance.url, otherKey, "other");
         expect(other.first.error).toBeUndefined();
 
@@ -480,7 +471,10 @@ it.live(
         expect(before.result).toMatchObject({ _tag: "accepted" });
 
         const hold = (method: string, params: unknown = {}) =>
-          RevokeTest.invoke(project, "route", ["p90-control", method, params, "p90-control"]);
+          RevokeTest.invoke(() =>
+            // @ts-expect-error p90-control is no ConnectionId: only the test's control binding takes it (chaos-revoke.worker.test-support.ts:90)
+            project.route("p90-control", method, params, "p90-control"),
+          );
 
         yield* Effect.acquireRelease(hold("p90.arm", { process: pid }), () => hold("p90.release").pipe(Effect.orDie));
 
@@ -558,9 +552,10 @@ it.live(
               saw: { label: "Old test client", location: "local", method: "command", check: "none" },
             });
 
-            expect(
-              yield* RevokeTest.invoke(project, "grant", [{ text, armored: yield* root.proof(text) }]),
-            ).toMatchObject({ _tag: "applied" });
+            const armored = yield* root.proof(text);
+            expect(yield* RevokeTest.invoke(() => project.grant({ text, armored }))).toMatchObject({
+              _tag: "applied",
+            });
 
             return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
           });

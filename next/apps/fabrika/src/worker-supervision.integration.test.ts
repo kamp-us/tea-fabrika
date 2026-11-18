@@ -158,7 +158,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
             from,
             hash: code!.hash,
             start: async (name) => {
-              const started = await Reflect.get(instance.project(PROJECT), "start")(
+              const started = await instance.project(PROJECT).start(
                 {
                   _tag: "first",
                   id: `start-${name}`,
@@ -393,10 +393,9 @@ const worldScoped = Effect.gen(function* () {
     from,
     hash: code!.hash,
     start: async (name) => {
-      const started = await Reflect.get(instance.project(PROJECT), "start")(
-        { _tag: "first", id: `start-${name}`, name, code: { program: PROGRAM, hash: code!.hash } },
-        from,
-      );
+      const started = await instance
+        .project(PROJECT)
+        .start({ _tag: "first", id: `start-${name}`, name, code: { program: PROGRAM, hash: code!.hash } }, from);
 
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },

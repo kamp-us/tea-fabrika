@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { Stub } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { RpcCallError } from "alchemy/Rpc";
 import type { Layer } from "effect";
@@ -513,20 +514,12 @@ describe("RecordManager.remote, the record object's stub", () => {
   const stub = (answer: () => Effect.Effect<unknown, unknown>) => {
     const calls: Array<{ name: string; method: string }> = [];
 
-    const make = (name: string): RecordCalls =>
-      new Proxy(
-        {},
-        {
-          get: (_, method) =>
-            method === "then"
-              ? undefined
-              : () => {
-                  calls.push({ name, method: String(method) });
+    const make = (name: string) =>
+      Stub.make<RecordCalls>((method) => () => {
+        calls.push({ name, method });
 
-                  return answer();
-                },
-        },
-      ) as RecordCalls;
+        return answer();
+      });
 
     return { make, calls };
   };

@@ -111,9 +111,19 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               continue;
             }
 
-            const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
             let consumers = 0;
             let settingsCalls = 0;
+
+            const w = yield* Effect.acquireRelease(
+              Effect.sync(() =>
+                world(async (wire) => {
+                  settingsCalls++;
+
+                  return StartsTest.reply(wire);
+                }),
+              ),
+              (value) => Effect.sync(() => value.db.close()),
+            );
 
             const bad =
               origin === undefined
@@ -138,55 +148,30 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
 
                 return [];
               },
-              storage: new Proxy(w.ctx.storage, {
-                get: (target, key) => {
-                  if (key === "get") {
-                    return (...args: unknown[]) => {
-                      consumers++;
+              // The storage, with each read a consumer could make counted: `get`, and `sql.exec`.
+              storage: {
+                ...w.ctx.storage,
+                get: (...args: unknown[]) => {
+                  consumers++;
 
-                      return Reflect.apply(target.get, target, args);
-                    };
-                  }
-
-                  if (key === "sql") {
-                    return new Proxy(sql, {
-                      get: (target, key) =>
-                        key === "exec"
-                          ? (...args: unknown[]) => {
-                              consumers++;
-
-                              return Reflect.apply(target.exec, target, args);
-                            }
-                          : Reflect.get(target, key),
-                    });
-                  }
-
-                  return Reflect.get(target, key);
+                  return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
                 },
-              }),
+                sql: {
+                  ...sql,
+                  exec: (...args: unknown[]) => {
+                    consumers++;
+
+                    return Reflect.apply(sql.exec, sql, args);
+                  },
+                  get databaseSize() {
+                    return sql.databaseSize;
+                  },
+                },
+              },
             };
 
-            const env = {
-              ...w.env,
-              INSTANCE: JSON.stringify(bad),
-              PROJECT: new Proxy(w.env.PROJECT, {
-                get: (target, key) =>
-                  key === "getByName"
-                    ? () =>
-                        new Proxy(target.getByName("settings-law"), {
-                          get: (stub, method) =>
-                            method === "settingsStart"
-                              ? async (wire: StartsTest.Input) => {
-                                  settingsCalls++;
-
-                                  return StartsTest.reply(wire);
-                                }
-                              : Reflect.get(stub, method),
-                        })
-                    : Reflect.get(target, key),
-              }),
-            };
-
+            // The world's Project stub counts each `settingsStart` and answers the start it is given.
+            const env = { ...w.env, INSTANCE: JSON.stringify(bad) };
             const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
 
             const local = {
@@ -301,7 +286,9 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
   });
 };
 
-const world = () => {
+/** In-memory platform handles over one SQLite database. The Project stub's `settingsStart` answers
+ *  as `settingsStart` says, the good start by default. */
+const world = (settingsStart: (wire: StartsTest.Input) => Promise<unknown> = async () => StartsTest.reply(config)) => {
   const db = new DatabaseSync(":memory:"),
     sql = nodeSql(db);
 
@@ -359,7 +346,7 @@ const world = () => {
     INSTANCE: JSON.stringify(config),
     PROJECT: {
       getByName: () => ({
-        settingsStart: async () => StartsTest.reply(config),
+        settingsStart,
         route,
         leave: async () => {},
         disconnect: async () => {},
@@ -759,7 +746,12 @@ StartsTest.law(
         id: { ...w.ctx.id, name: JSON.stringify(["settings-law", "spans/0"]) },
         storage: {
           ...w.ctx.storage,
-          sql: new Proxy(raw, { get: (target, key) => (key === "databaseSize" ? size : Reflect.get(target, key)) }),
+          sql: {
+            ...raw,
+            get databaseSize() {
+              return size;
+            },
+          },
         },
       };
 

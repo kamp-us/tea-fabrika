@@ -8,13 +8,6 @@ const text = readFileSync(new URL("../../workflows/check.yaml", import.meta.url)
 
 const Fault = Schema.Literals([
   "fault_history",
-  "fault_assignment",
-  "fault_order",
-  "fault_slot",
-  "fault_depth",
-  "fault_limit",
-  "fault_soft",
-  "fault_upload",
   "matrix_name",
   "selection_report",
   "results_report",
@@ -43,7 +36,7 @@ afterAll(() => {
 });
 
 it.prop(
-  "automatic related coverage rejects omitted workloads, merge-line job groups and false-green selectors",
+  "automatic related coverage rejects omitted workloads, merge-line groups and false-green selectors",
   { fault: Fault },
   ({ fault }) => {
     drawn.add(fault);
@@ -56,41 +49,10 @@ it.prop(
 
     const integration = workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "integration");
 
-    const faults = workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "checklist faults");
-
     switch (fault) {
       case "fault_history":
         delete workflow.jobs.related.steps.find((step: { uses?: string }) => step.uses?.startsWith("actions/checkout@"))
           .with["fetch-depth"];
-        break;
-      case "fault_assignment":
-        faults.env.PLANTS = "{}";
-        break;
-      case "fault_order": {
-        const index = workflow.jobs.related.steps.indexOf(faults);
-        workflow.jobs.related.steps.splice(index, 1);
-
-        const before = workflow.jobs.related.steps.indexOf(integration);
-        workflow.jobs.related.steps.splice(before, 0, faults);
-        break;
-      }
-
-      case "fault_slot":
-        faults.if = "true";
-        break;
-      case "fault_depth":
-        faults.env.FABRIKA_TEST_DEPTH = "fast";
-        break;
-      case "fault_limit":
-        faults["timeout-minutes"] = 18;
-        break;
-      case "fault_soft":
-        faults["continue-on-error"] = true;
-        break;
-      case "fault_upload":
-        workflow.jobs.related.steps.find(
-          (step: { name?: string }) => step.name === "checklist fault observations",
-        ).with.path = "other.json";
         break;
       case "matrix_name":
         workflow.jobs.related.name = `related (\${{ matrix.shard }})`;
@@ -235,15 +197,9 @@ it("scenario: D3 the real workflow has one receipt step, one consumer fault step
 
   const archive = stepOf(workflow, "related", "package archive");
 
-  const order = [
-    "integration",
-    "package receipt",
-    "checklist faults",
-    "tooling",
-    "consumer fault",
-    "package archive",
-    "results",
-  ].map((name) => related.findIndex((candidate) => candidate["name"] === name));
+  const order = ["integration", "package receipt", "tooling", "consumer fault", "package archive", "results"].map(
+    (name) => related.findIndex((candidate) => candidate["name"] === name),
+  );
 
   expect(order.every((at) => at >= 0)).toBe(true);
   expect(order).toEqual(order.toSorted((a, b) => a - b));
@@ -316,16 +272,16 @@ it("scenario: D3 the real workflow has one receipt step, one consumer fault step
   expect(JSON.stringify([receipt, fault, archive])).not.toMatch(/token/i);
 });
 
-it("scenario: D4 select prints exactly the seven outputs from its set step, and related reads them through needs only", () => {
+it("scenario: D4 select prints exactly the six outputs from its set step, and related reads them through needs only", () => {
   expect(lintWorkflow(text)).toEqual([]);
 
   const workflow = parse(text);
 
-  const seven = ["archive", "consumer", "files", "legs", "plants", "projects", "run"];
+  const six = ["archive", "consumer", "files", "legs", "projects", "run"];
 
-  expect(Object.keys(workflow.jobs.select.outputs).toSorted()).toEqual(seven);
+  expect(Object.keys(workflow.jobs.select.outputs).toSorted()).toEqual(six);
 
-  for (const key of seven) {
+  for (const key of six) {
     expect(workflow.jobs.select.outputs[key]).toBe(`\${{ steps.set.outputs.${key} }}`);
   }
 
@@ -393,8 +349,8 @@ const R1_FAULTS: Record<string, Delivery> = {
   receipt_token: (w) => (stepOf(w, "related", "package receipt")["env"].GITHUB_TOKEN = `\${{ github.token }}`),
   receipt_before_integration: (w) =>
     place(w, "related", stepOf(w, "related", "package receipt"), stepOf(w, "related", "integration"), "before"),
-  receipt_after_checklist_faults: (w) =>
-    place(w, "related", stepOf(w, "related", "package receipt"), stepOf(w, "related", "checklist faults"), "after"),
+  receipt_after_tooling: (w) =>
+    place(w, "related", stepOf(w, "related", "package receipt"), stepOf(w, "related", "tooling"), "after"),
   fault_missing: (w) => {
     const steps: Step[] = w.jobs.related.steps;
 

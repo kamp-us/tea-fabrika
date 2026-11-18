@@ -22,7 +22,7 @@ const groupOf = (job: Record<string, unknown>): string => {
   return typeof group === "string" ? group : "";
 };
 
-const OUTPUTS = ["run", "legs", "files", "projects", "plants", "archive", "consumer"];
+const OUTPUTS = ["run", "legs", "files", "projects", "archive", "consumer"];
 
 const selector = (workflow: Record<string, unknown>) => {
   const job = map(map(workflow["jobs"])["select"]);
@@ -198,7 +198,6 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
       "pnpm install --frozen-lockfile",
       INTEGRATION,
       RECEIPT,
-      "node .github/ci/plant-related.ts",
       TOOLING,
       FAULT,
       "node .github/ci/time-table.ts",
@@ -217,22 +216,6 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
       step["continue-on-error"] ===
         undefined, `R1: ${project} runs each selected file at full depth within its existing limit`);
   }
-
-  const faults = commands.find((step) => step["run"] === "node .github/ci/plant-related.ts");
-
-  const integration = commands.find((step) => step["run"] === INTEGRATION);
-  require(faults !== undefined &&
-    integration !== undefined &&
-    commands.indexOf(faults) > commands.indexOf(integration) &&
-    compact(faults["if"]) === "fromJSON(needs.select.outputs.plants)[matrix.shard]!=null" &&
-    faults["timeout-minutes"] === 17 &&
-    faults["continue-on-error"] === undefined &&
-    Object.keys(map(faults["env"])).length === 4 &&
-    compact(map(faults["env"])["FILES"]) === FILES &&
-    map(faults["env"])["FABRIKA_TEST_DEPTH"] === "full" &&
-    map(faults["env"])["PLANTS"] === `\${{ needs.select.outputs.plants }}` &&
-    map(faults["env"])["LEG"] ===
-      `\${{ matrix.shard }}`, "R1: checklist faults follow each leg's ordinary files in its held integration slot and existing limit");
 
   require(steps(related).some(
     (step) =>

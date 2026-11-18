@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-reflect-ban-s15-tests2",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-17T18:09:00-08:00",
+  "ended": "2026-11-17T18:32:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Fix round 1 of slice 15 of the Reflect ban (0554, ticket 1056) in next/ and our tooling, on docs/plan/quests/reflect-ban-PLAN.md law L4 and amendment point 8, on fabrikalfa/reflect-rest from 187b8236a, after the review in field/runs/2026-11-18-reflect-ban-s13-s15-review1.json. oxlint-plugins/advice.test.ts: L4 held what each block of .oxlintrc.json lists, so a glob added to the JSON.parse warn block, which comes after the client/ block, passed it. L4 now holds what each next/ file ends with. It plants one file of fires (JSON.parse, the four Reflect entries, Effect.retry, Stream.retry) in every folder of next/ that holds tracked code, in the stem of every glob of a block that sets the rule, and in a new folder, runs oxlint with the repo's own config, and reads the severity of each fire: that is the last matching override per file, read by oxlint and not by a glob matcher of ours. Each folder must end with JSON.parse and the four restricted at one level, next/ whole, the new folder and client/ with its subfolder at error, and client/ with both retry entries at error. A folder that ends at warn must have a JSON.parse fire in its tree: the real tree is linted with the real config, and the folder one level under a package's src (or src itself, or an app's e2e) that a warn glob is written for must hold a fire, so a glob cannot reach a folder that blocks today and keep the stale warn-line law (T930 L3, per glob) quiet; no list of folders is pinned. Shape 2 of the review: the final setting per file; the config is unchanged and the client/ block stays where it is, so L10's block order is unchanged. A deeper clean folder under a dirty one (node/access under node/**) advises with its parent, as the config has had it, and the law does not hold that.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 23,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "note": "Files changed: oxlint-plugins/advice.test.ts only (the old nameOf helper goes with the old L4); .oxlintrc.json, plants.test.ts and builtin-plants.ts unchanged. The law has one test, about 16 s alone, timeout 180 s. Vitest under CI=1, nice -n 15, maxWorkers 2, TYPESAFE_API_KEY unset, on Node 22: advice.test.ts, plants.test.ts and reflect-disables.test.ts green (275 tests). pnpm format; pnpm lint. One law is green on the config as it stands, so it has no red now; its reds are the plants.",
+  "laws": [
+    {
+      "law": "oxlint-plugins/advice.test.ts: Reflect ban L4 each file of next/ ends with the setting the rule held there before, pinned: every folder of next/ ends with JSON.parse and the ban at one level, new folders and client/ at error with both retry entries, and a folder that advises has JSON.parse fires in its tree",
+      "red": "none on the branch's config: the config is right and the law is green. It is red on each plant below, for the reason the review gives: the file ends at a setting the old L4 did not read."
+    }
+  ],
+  "plants": [
+    {
+      "law": "L4",
+      "plant": "the review's plant: next/packages/libfabrika/** added to the JSON.parse warn block's files; fails with next/packages/libfabrika/src/client starts at zero and blocks: expected 'warning' to be 'error'; restored by copy (cmp)",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/src/access/** added to the JSON.parse warn block's files (a folder where JSON.parse blocks today, client/ not reached); fails with next/packages/libfabrika/src/access advises for JSON.parse and has no JSON.parse fire left; restored by copy (cmp)",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/programs/inbox/src/** added to the JSON.parse warn block's files; fails with next/programs/inbox/src advises for JSON.parse and has no JSON.parse fire left; restored by copy (cmp)",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/src/access/inner/** added to the JSON.parse warn block's files (a deeper folder under a clean one); fails with next/packages/libfabrika/src/access advises for JSON.parse and has no JSON.parse fire left; restored by copy (cmp)",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "(a) the Effect.retry entry dropped from client/'s block; fails with next/packages/libfabrika/src/client keeps Effect.retry: expected undefined to be 'error'; restored by copy (cmp)",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "(b) client/'s block set to warn; fails with next/packages/libfabrika/src/client starts at zero and blocks: expected 'warning' to be 'error'; restored by copy (cmp)",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "(b2) next/packages/libfabrika/src/client/** added to the JSON.parse warn block's files; fails with next/packages/libfabrika/src/client starts at zero and blocks: expected 'warning' to be 'error'; restored by copy (cmp)",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the JSON.parse entry dropped from the next/**/* block; fails with next ends with JSON.parse restricted: expected undefined to be defined; restored by copy (cmp)",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
