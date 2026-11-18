@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-botpush-refuses-unsigned-commits",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/botpush.mjs",
+    "line": 108
+  },
+  "says": "In today's lead tooling, botpush.mjs refuses every branch push when the worktree has no refs/notes/fabrika ('botpush: no refs/notes/fabrika here; sign the commits before pushing'), while decision 0164 has botpush push plain commits with no sign step, after 0161 dropped the step signature.",
+  "proof": "PR 1591's fix round (field/runs/2026-11-18-t753-l16-full-depth-fix1.json) ran botpush.mjs on plain commits in a cloud worktree and got that refusal; botpush.mjs:108-112 checks git rev-parse --verify -q refs/notes/fabrika before any non-draft push. .decisions/0164-the-bot-stays-without-signing.md shows 'node .agents/skills/lead/scripts/botpush.mjs <tree> fabrikalfa/<branch>' after a plain commit, and says no sign step comes back.",
+  "cost": "An agent following 0164 cannot push as the bot and falls back to a plain git push as the person's login, which is the identity 0164 moved agent work away from.",
+  "head": "fc9d4697459463c17efaa266ecc379bb7f2ec58e",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1591"
+}
