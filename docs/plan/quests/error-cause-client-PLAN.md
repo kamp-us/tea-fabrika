@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds the JournalError row of slice 3 of the error-cause plan (0568), as the lead (fabrikaa-merger) approved it; body 428efbcbeb83
 Plancheck-Version: 3
 
 # Plan: `JournalError`'s cause is required, `cause: Schema.Defect()` (ticket 1062, slice 3, the client row)
