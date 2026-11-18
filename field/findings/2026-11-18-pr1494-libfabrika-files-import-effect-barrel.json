@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-pr1494-libfabrika-files-import-effect-barrel",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/control.laws.test.ts",
+    "line": 26
+  },
+  "says": "In next/, PR 1494's new libfabrika files import Effect by name from the barrel, against 0577's namespace form for libraries: cloudflare/control.laws.test.ts:26 (Arbitrary, Effect, Predicate, Redacted, Result, Schema) and runtime/ObjectCalls.ts:5 (type Effect).",
+  "proof": "A comparison of the named `from \"effect\"` imports in next/packages/{libfabrika,tuval,vitest} finds 7 new names against 578ce8e2d7912527e02acd17208581e70b34dcac and 0 against main f79fc38db or 3a46e3e14, all in these two files, which commit f79fc38db (#1494) added; .decisions/0577-libraries-namespace-programs-barrel-imports.md says next/packages/* use `import * as X from \"effect/X\"`. No preferNamespaceImport lock covers cloudflare or runtime, so pnpm typecheck passes.",
+  "cost": "The namespace lock still to come for those folders (E61) gets 7 more names to convert, and the new control-door law file teaches the barrel form.",
+  "head": "0e4ddc0c1ac0c60d1675e5dc23027c8c68c1ef6a",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1562"
+}
