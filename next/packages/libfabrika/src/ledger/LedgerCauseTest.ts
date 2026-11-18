@@ -65,7 +65,7 @@ const callOn = (method: Method) =>
   });
 
 /** A stub whose every call rejects with `failure`. */
-const rejecting = (failure: unknown): LedgerCalls => ({
+const rejecting = (failure: object): LedgerCalls => ({
   // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
   append: () => Promise.reject(failure),
   // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
@@ -75,7 +75,7 @@ const rejecting = (failure: unknown): LedgerCalls => ({
 });
 
 /** A stub whose every call answers `raw`. */
-const answering = (raw: unknown): LedgerCalls => ({
+const answering = (raw: object): LedgerCalls => ({
   // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
   append: () => Promise.resolve(raw),
   // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
@@ -85,7 +85,7 @@ const answering = (raw: unknown): LedgerCalls => ({
 });
 
 /** A valid answer for each call, then one schema-required field damaged. */
-const damaged = (method: Method, rev: number, bad: string): unknown => {
+const damaged = (method: Method, rev: number, bad: string): object => {
   if (method === "append") {
     return { ...Appended.cases.placed.make({ rev, pos: rev }), rev: bad };
   }
@@ -98,7 +98,7 @@ const damaged = (method: Method, rev: number, bad: string): unknown => {
 };
 
 /** The same `Sql`, but its next atomic step throws `failure` once the tables exist. */
-const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm: () => void } => {
+const throwing = (sql: Sql, failure: object): { readonly sql: Sql; readonly arm: () => void } => {
   let armed = false;
 
   return {
@@ -160,16 +160,17 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
       fc.record({ methodsRun: fc.array(methods, { minLength: 1, maxLength: 4 }), failure: failures }),
       ({ methodsRun, failure }) =>
         Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
           const planted = throwing(fresh(), failure);
           const referee = yield* Effect.provide(Referee, RefereeSql.layer(planted.sql).pipe(Layer.provide(ring)));
           // The stub bridges to the real referee, as a Durable Object stub does: through a Promise.
           const calls: LedgerCalls = {
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Durable Object stub answers with a Promise
-            append: (stream, id, raw) => Effect.runPromise(referee.append(stream, id, raw)),
+            append: (stream, id, raw) => Effect.runPromiseWith(context)(referee.append(stream, id, raw)),
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Durable Object stub answers with a Promise
-            read: (stream, after, reader) => Effect.runPromise(referee.read(stream, after, reader)),
+            read: (stream, after, reader) => Effect.runPromiseWith(context)(referee.read(stream, after, reader)),
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Durable Object stub answers with a Promise
-            wait: (stream, after, reader) => Effect.runPromise(referee.wait(stream, after, reader)),
+            wait: (stream, after, reader) => Effect.runPromiseWith(context)(referee.wait(stream, after, reader)),
           };
 
           const remote = LedgerRemote.layer(calls, { reader: READER });

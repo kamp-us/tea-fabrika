@@ -9,9 +9,9 @@ const options = { seed: 119120, numRuns: 10 };
 
 const word = fc.stringMatching(/^[a-z]{8,12}$/).map((s) => `private_${s}`);
 
-const ranges = ["tip", "saved", "diverged", "undone"] as const;
+const ranges = ["tip", "saved", "diverged", "undone", "held"] as const;
 
-const input = fc.record({ word, leak: fc.boolean(), range: fc.constantFrom(...ranges) });
+const input = fc.record({ word, leak: fc.boolean(), range: fc.constantFrom(...ranges), notes: fc.boolean() });
 
 // Real Git and real caller. Only keychain, HTTP and network Git are replaced. The RSA key exists
 // only in this child process's memory. No real key file, login or network request is touched.
@@ -21,23 +21,34 @@ import {generateKeyPairSync} from 'node:crypto';
 import {appendFileSync} from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
 const real = cp.execFileSync;
+// TEST_CALLS, when set, names a file that gets one JSON line per keychain read and per network Git call.
+const log = (line) => { if (process.env.TEST_CALLS) appendFileSync(process.env.TEST_CALLS, JSON.stringify(line) + '\\n'); };
 cp.execFileSync = (cmd, args, options) => {
-  if (cmd === 'security') return Buffer.from(generateKeyPairSync('rsa', {modulusLength: 2048, privateKeyEncoding: {type: 'pkcs8', format: 'pem'}, publicKeyEncoding: {type: 'spki', format: 'pem'}}).privateKey);
-  if (cmd === 'git' && args.includes('ls-remote')) return Buffer.from('');
-  if (cmd === 'git' && args.includes('push')) { appendFileSync(process.env.TEST_PUSH_LOG, 'push\\n'); return Buffer.from(''); }
-  if (cmd === 'git' && args.includes('fetch')) throw new Error('unexpected network Git');
+  if (cmd === 'security') {
+    log({security: true});
+    // TEST_SECURITY: a Linux box has no security command (ENOENT); a Mac can lack the item (exit 44). Both messages carry a made-up marker that must never be printed.
+    if (process.env.TEST_SECURITY === 'missing') { const e = new Error('spawnSync security ENOENT KEY-MARKER'); e.code = 'ENOENT'; throw e; }
+    if (process.env.TEST_SECURITY === 'no-item') { const e = new Error('Command failed: security find-generic-password KEY-MARKER'); e.status = 44; throw e; }
+    return Buffer.from(generateKeyPairSync('rsa', {modulusLength: 2048, privateKeyEncoding: {type: 'pkcs8', format: 'pem'}, publicKeyEncoding: {type: 'spki', format: 'pem'}}).privateKey);
+  }
+  if (cmd === 'git' && args.includes('ls-remote')) { log({lsRemote: true}); return Buffer.from(''); }
+  if (cmd === 'git' && args.includes('push')) { log({push: args.slice(args.indexOf('push') + 1)}); appendFileSync(process.env.TEST_PUSH_LOG, 'push\\n'); return Buffer.from(''); }
+  if (cmd === 'git' && args.includes('fetch')) { log({fetch: true}); throw new Error('unexpected network Git'); }
+  if (cmd === 'git' && args.includes('notes') && args.includes('merge')) log({notesMerge: true});
   return real(cmd, args, options);
 };
-globalThis.fetch = async (url) => ({ok: true, json: async () => String(url).endsWith('access_tokens') ? {token: 'made-up', expires_at: 'never'} : {id: 1}});
+globalThis.fetch = async (url) => { log({http: String(url)}); return {ok: true, json: async () => String(url).endsWith('access_tokens') ? {token: 'made-up', expires_at: 'never'} : {id: 1}}; };
 syncBuiltinESMExports();
 `;
 
 describe("T325 K6 botpush, today's tooling", () => {
-  // Plants: omit the leakgrep call; omit its --commits call. Removed private text and the repo URL
-  // must still push.
+  // Each case runs in a tree with step notes and in one without (decisions 0161 and 0164: plain
+  // commits). Plants: omit the leakgrep call (the "held" range, a leak in a commit an origin ref
+  // already holds, is the one only it catches); omit its --commits call; skip both leak greps when
+  // the tree has no step notes. Removed private text and the repo URL must still push.
   it("scans every submitted commit from the merge base at the requested source", () => {
     fc.assert(
-      fc.property(input, ({ word, leak, range }) => {
+      fc.property(input, ({ word, leak, range, notes }) => {
         const dir = mkdtempSync(join(tmpdir(), "push-"));
 
         try {
@@ -90,6 +101,12 @@ describe("T325 K6 botpush, today's tooling", () => {
               git("checkout", "--detach", source);
             }
 
+            // The change commit is one an origin ref already holds, so the per-commit grep (--commits
+            // ... --not --remotes=origin) skips it, and only the net diff from origin/main carries it.
+            if (range === "held") {
+              git("update-ref", "refs/remotes/origin/held", "HEAD");
+            }
+
             // Decision 0048: each commit is read on its own, so a later commit changes no answer.
             if (range === "undone") {
               writeFileSync(join(dir, "subject.md"), "safe again\n");
@@ -108,7 +125,11 @@ describe("T325 K6 botpush, today's tooling", () => {
             }
 
             const sourceArgs = range === "saved" ? [source] : [];
-            git("notes", "--ref=fabrika", "add", "-m", "throwaway");
+
+            if (notes) {
+              git("notes", "--ref=fabrika", "add", "-m", "throwaway");
+            }
+
             const pushed = join(dir, "pushed");
             writeFileSync(pushed, "");
 
@@ -165,17 +186,21 @@ describe("T325 K6 botpush, today's tooling", () => {
       }),
       {
         ...options,
-        // pinned: earlier commits, a saved source and diverged main must all be scanned.
-        examples: [
-          [{ word: "private_aaaaaaaa", leak: true, range: "tip" }],
-          [{ word: "private_aaaaaaaa", leak: false, range: "tip" }],
-          [{ word: "private_aaaaaaaa", leak: true, range: "saved" }],
-          [{ word: "private_aaaaaaaa", leak: false, range: "saved" }],
-          [{ word: "private_aaaaaaaa", leak: true, range: "diverged" }],
-          [{ word: "private_aaaaaaaa", leak: false, range: "diverged" }],
-          [{ word: "private_aaaaaaaa", leak: true, range: "undone" }],
-          [{ word: "private_aaaaaaaa", leak: false, range: "undone" }],
-        ],
+        // numRuns must cover every pinned example, or fast-check drops the ones past it.
+        numRuns: 24,
+        // pinned: earlier commits, a saved source and diverged main must all be scanned, in a tree with
+        // step notes and in one without.
+        examples: ranges.flatMap((range) =>
+          [true, false].flatMap((notes) =>
+            [true, false].map(
+              (leak) =>
+                // SAFETY: each example is one record of `input`: a word, two booleans and a range.
+                [{ word: "private_aaaaaaaa", leak, range, notes }] as [
+                  typeof input extends fc.Arbitrary<infer T> ? T : never,
+                ],
+            ),
+          ),
+        ),
       },
     );
   });
@@ -348,6 +373,8 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
           ([0, 1, 2] as const).flatMap((races) =>
             [false, true].map(
               (branchRefused) =>
+                // SAFETY: each example is one record of `race`: a server word, a race count
+                // of 0 to 2 and a boolean, the three fields `race` draws.
                 [{ server, races, branchRefused }] as [typeof race extends fc.Arbitrary<infer T> ? T : never],
             ),
           ),
@@ -355,4 +382,189 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
       },
     );
   }, 300_000);
+});
+
+// A tree one commit ahead of origin/main, with step notes or without, and a run of botpush on it
+// under the first shim. The shim's call log says what reached the keychain and the network.
+type Tree = { notes: boolean; branch: string; src?: string; security?: "missing" | "no-item" };
+
+// One line of the shim's call log.
+type Call = { security?: true; lsRemote?: true; fetch?: true; notesMerge?: true; http?: string; push?: string[] };
+
+type Ran = { code: number | null; text: string; stderr: string; calls: Call[] };
+
+const runTree = ({ notes, branch, src, security }: Tree): Ran => {
+  const dir = mkdtempSync(join(tmpdir(), "nonotes-"));
+  // The leak words stay outside the tree, as the checker requires.
+  const words = join(tmpdir(), `words-${dir.split("/").at(-1)}`);
+
+  try {
+    const scripts = join(dir, ".agents/skills/lead/scripts");
+    mkdirSync(scripts, { recursive: true });
+
+    for (const file of ["botpush.mjs", "leakgrep.sh"]) {
+      cpSync(join(import.meta.dirname, file), join(scripts, file));
+    }
+
+    writeFileSync(join(dir, "shim.mjs"), shim);
+    writeFileSync(words, "private_zzzzzzzz\n");
+
+    const git = (...args: string[]) => {
+      const out = spawnSync("git", ["-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", ...args], {
+        cwd: dir,
+        encoding: "utf8",
+      });
+
+      expect(out.status, out.stderr).toBe(0);
+
+      return out.stdout.trim();
+    };
+
+    git("init", "-q");
+    writeFileSync(join(dir, "a.md"), "base\n");
+    git("add", "a.md");
+    git("commit", "-qm", "base");
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    writeFileSync(join(dir, "a.md"), "step\n");
+    git("add", "a.md");
+    git("commit", "-qm", "step");
+
+    if (notes) {
+      git("notes", "--ref=fabrika", "add", "-m", "signed");
+    }
+
+    const calls = join(dir, "calls");
+    const pushed = join(dir, "pushed");
+    writeFileSync(calls, "");
+    writeFileSync(pushed, "");
+
+    const out = spawnSync(
+      process.execPath,
+      ["--import", join(dir, "shim.mjs"), join(scripts, "botpush.mjs"), dir, branch, ...(src ? [src] : [])],
+      {
+        cwd: dir,
+        encoding: "utf8",
+        timeout: 20_000,
+        env: {
+          ...process.env,
+          GH_REPO: "example/repo",
+          FABRIKA_LEAK_WORDS: words,
+          TEST_CALLS: calls,
+          TEST_PUSH_LOG: pushed,
+          TEST_SECURITY: security,
+          TYPESAFE_API_KEY: undefined,
+        },
+      },
+    );
+
+    expect(out.error).toBeUndefined();
+
+    return {
+      code: out.status,
+      text: out.stdout + out.stderr,
+      stderr: out.stderr,
+      calls: readFileSync(calls, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
+    };
+  } finally {
+    rmSync(words, { force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+const notesRef = "refs/notes/fabrika:refs/notes/fabrika";
+
+const pushes = (ran: Ran) => ran.calls.flatMap((c) => (c.push ? [c.push] : []));
+
+const named = (ran: Ran, key: keyof Call) => ran.calls.filter((c) => key in c);
+
+describe("T1610 botpush pushes the notes a tree has, and a plain branch when it has none", () => {
+  // B1 and B2. Every commit is plain (decisions 0161 and 0164), so a tree with no step notes is the
+  // usual case. Plants: restore the notes refusal (no notes then exits 1 and pushes nothing); always
+  // include the notes refspec (the no-notes push then names refs/notes/fabrika); fetch or merge the
+  // remote's notes with no notes of our own; drop --atomic or the notes refspec from the with-notes
+  // push.
+  it("B1 B2 pushes the branch alone without notes, and the notes with the branch atomically with them", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[a-z][a-z0-9-]{1,10}$/), fc.boolean(), fc.boolean(), (name, notes, explicit) => {
+        const branch = `fabrikalfa/${name}`;
+        const ran = runTree({ notes, branch, src: explicit ? "HEAD" : undefined });
+        const url = "https://github.com/example/repo.git";
+
+        expect(ran.code, ran.text).toBe(0);
+        // B1: one push, one refspec for the branch, and the remote's notes never listed, fetched or merged.
+        // B2: with notes, the one atomic push holds the notes first and the branch second.
+        expect(pushes(ran)).toEqual([
+          notes
+            ? ["--atomic", url, notesRef, `HEAD:refs/heads/${branch}`]
+            : ["--atomic", url, `HEAD:refs/heads/${branch}`],
+        ]);
+        expect(
+          {
+            lsRemote: named(ran, "lsRemote").length,
+            fetch: named(ran, "fetch").length,
+            merge: named(ran, "notesMerge").length,
+          },
+          ran.text,
+        ).toEqual({ lsRemote: notes ? 1 : 0, fetch: 0, merge: 0 });
+        expect(ran.text).toContain(notes ? `pushed ${branch} as fabrikalfa[bot];` : "without step notes");
+      }),
+      {
+        ...options,
+        examples: [
+          ["one", false, false],
+          ["one", false, true],
+          ["one", true, false],
+          ["one", true, true],
+        ],
+      },
+    );
+  }, 60_000);
+
+  // B3. A notes-only push of a tree with no notes has nothing to send. Plant: let "-" through when
+  // there are no notes (it then reads the keychain and calls the network).
+  it("B3 scenario: branch - with no step notes refuses before any keychain read or network call", () => {
+    const ran = runTree({ notes: false, branch: "-" });
+
+    expect(ran.code, ran.text).toBe(1);
+    expect(ran.stderr.trim()).toBe("botpush: no step notes to push (no refs/notes/fabrika here)");
+    expect(ran.calls).toEqual([]);
+  });
+
+  // The same branch "-" with notes still pushes the notes alone, as before.
+  it("B3 scenario: branch - with step notes pushes only the notes", () => {
+    const ran = runTree({ notes: true, branch: "-" });
+
+    expect(ran.code, ran.text).toBe(0);
+    expect(pushes(ran)).toEqual([["--atomic", "https://github.com/example/repo.git", notesRef]]);
+  });
+
+  // B5. No keychain (a Linux box) or no item: one plain line and exit 1, the error never printed,
+  // nothing pushed, in both kinds of tree. Plant: let the raw error throw (a stack trace, and the
+  // error's own words, reach the output).
+  it("B5 a failing keychain read exits 1 with one plain line, no stack and no key, and pushes nothing", () => {
+    fc.assert(
+      fc.property(fc.constantFrom<"missing" | "no-item">("missing", "no-item"), fc.boolean(), (security, notes) => {
+        const ran = runTree({ notes, branch: "fabrikalfa/test", security });
+
+        expect(ran.code, ran.text).toBe(1);
+        expect(ran.stderr.trim()).toBe("botpush: cannot read the app key from the keychain");
+        expect(ran.text).not.toMatch(/KEY-MARKER|\n\s+at |Error/);
+        expect(pushes(ran)).toEqual([]);
+        expect(named(ran, "http")).toEqual([]);
+        expect(named(ran, "security")).toHaveLength(1);
+      }),
+      {
+        ...options,
+        examples: [
+          ["missing", false],
+          ["missing", true],
+          ["no-item", false],
+          ["no-item", true],
+        ],
+      },
+    );
+  }, 60_000);
 });

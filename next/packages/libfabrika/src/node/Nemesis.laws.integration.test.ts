@@ -4,14 +4,20 @@ import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
+
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -192,7 +198,7 @@ it.effect.prop(
 
         for (const entries of [batchedRows, singleRows]) {
           expect(entries).toHaveLength(2 * count + 2);
-          expect(entries.map(({ id, stream, rev, pos }) => ({ id, stream, rev, pos }))).toEqual(rows);
+          expect(Arr.map(entries, ({ id, stream, rev, pos }) => ({ id, stream, rev, pos }))).toEqual(rows);
         }
 
         expect(batchedHeads).toEqual(singleHeads);
@@ -212,7 +218,9 @@ const service = Effect.fnUntraced(function* (
   const ledger = yield* reader(sql);
   const failure = options.failure;
   const lower = failure === undefined ? undefined : LedgerError.make({ reason: failure.reason, cause: failure.cause });
-  const affected = failure?.part.startsWith("inbox") ? inbox(name) : `processes/${name}`;
+
+  const affected =
+    failure !== undefined && Function.pipe(failure.part, Str.startsWith("inbox")) ? inbox(name) : `processes/${name}`;
 
   const controlled: Ledger["Service"] = {
     ...ledger,
@@ -220,7 +228,12 @@ const service = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
-        if (lower !== undefined && stream === affected && failure?.part.endsWith("wait")) {
+        if (
+          lower !== undefined &&
+          stream === affected &&
+          failure !== undefined &&
+          Function.pipe(failure.part, Str.endsWith("wait"))
+        ) {
           return yield* lower;
         }
 
@@ -243,7 +256,10 @@ const service = Effect.fnUntraced(function* (
         return captured;
       }),
     read: (stream, after) =>
-      lower !== undefined && stream === affected && failure?.part.endsWith("read")
+      lower !== undefined &&
+      stream === affected &&
+      failure !== undefined &&
+      Function.pipe(failure.part, Str.endsWith("read")) === true
         ? ledger.read(stream, after).pipe(Stream.take(1), Stream.concat(Stream.fail(lower)))
         : ledger.read(stream, after),
   };
@@ -280,9 +296,10 @@ NemesisTest.suite({
           Stream.runCollect(manager.read(Chain.cases.job.make({ process }))),
         ).pipe(Effect.provide(records));
 
-        const health = sql
-          .exec("SELECT * FROM measurements")
-          .filter((row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]));
+        const health = Arr.filter(
+          sql.exec("SELECT * FROM measurements"),
+          (row) => Predicate.isString(row["piece"]) && /nemesis/i.test(row["piece"]),
+        );
 
         return { rows, health };
       }).pipe(Effect.orDie),
@@ -299,7 +316,11 @@ NemesisTest.suite({
     } else {
       sql.exec(
         "UPDATE entries SET pos=? WHERE stream=? AND id=?",
-        kind === "zero" ? 0 : kind === "negative" ? -1 : 1.5,
+        Match.value(kind).pipe(
+          Match.when("zero", () => 0),
+          Match.when("negative", () => -1),
+          Match.orElse(() => 1.5),
+        ),
         inbox("checklist:1"),
         key,
       );

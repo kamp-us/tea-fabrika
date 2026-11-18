@@ -44,6 +44,7 @@ import { paddingLineBetweenStatements } from "./padding-line-between-statements.
 import { preferNamespaceImport } from "./prefer-namespace-import.ts";
 import { preferSchemaArbitrary } from "./prefer-schema-arbitrary.ts";
 import { programPackageLayout } from "./program-package-layout.ts";
+import { reflectDisables } from "./reflect-disables.ts";
 import { runsFromDepth } from "./runs-from-depth.ts";
 import { serviceContract } from "./service-contract.ts";
 import { serviceId } from "./service-id.ts";
@@ -92,6 +93,7 @@ const plugin: Plugin = {
     "one-store-hook": oneStoreHook,
     "one-machine-per-file": oneMachinePerFile,
     "program-package-layout": programPackageLayout,
+    "reflect-disables": reflectDisables,
     "outside-input-constructor": outsideInputConstructor,
     "package-imports": packageImports,
     "padding-line-between-statements": paddingLineBetweenStatements,

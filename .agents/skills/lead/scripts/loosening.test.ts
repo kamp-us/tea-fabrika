@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Match, Predicate } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -78,7 +79,7 @@ const compare = (before: Record<string, File>, after: Record<string, File>, mapp
         mkdirSync(dirname(join(dir, path)), { recursive: true });
         rmSync(join(dir, path), { force: true });
 
-        if (typeof content === "string") {
+        if (Predicate.isString(content)) {
           writeFileSync(join(dir, path), content);
         } else if ("link" in content) {
           symlinkSync(content.link, join(dir, path));
@@ -174,20 +175,20 @@ describe("loosening, today's tooling", () => {
     const base = suite ? (shape.base === "it" ? "describe" : "suite") : shape.base;
     const alias = `law_${v.extra}`;
 
-    const prefix =
-      shape.alias === "import"
-        ? `import {${base} as ${alias}} from 'vitest';\n`
-        : shape.alias === "const"
-          ? `const ${alias} = ${base};\n`
-          : shape.alias === "destructure"
-            ? `import * as checks from 'vitest';\nconst {${base}: ${alias}} = checks;\n`
-            : shape.alias === "extended"
-              ? `const ${alias} = ${suite ? base : `${base}.extend({})`};\n`
-              : shape.alias === "namespace"
-                ? "import * as checks from 'vitest';\n"
-                : "";
+    const prefix = Match.value(shape.alias).pipe(
+      Match.when("import", () => `import {${base} as ${alias}} from 'vitest';\n`),
+      Match.when("const", () => `const ${alias} = ${base};\n`),
+      Match.when("destructure", () => `import * as checks from 'vitest';\nconst {${base}: ${alias}} = checks;\n`),
+      Match.when("extended", () => `const ${alias} = ${suite ? base : `${base}.extend({})`};\n`),
+      Match.when("namespace", () => "import * as checks from 'vitest';\n"),
+      Match.orElse(() => ""),
+    );
 
-    const target = shape.alias === "direct" ? base : shape.alias === "namespace" ? `checks.${base}` : alias;
+    const target = Match.value(shape.alias).pipe(
+      Match.when("direct", () => base),
+      Match.when("namespace", () => `checks.${base}`),
+      Match.orElse(() => alias),
+    );
 
     const options = option
       ? shape.options === "inline"
@@ -770,27 +771,28 @@ describe("loosening, today's tooling", () => {
     (kind) => {
       fc.assert(
         fc.property(input, (v) => {
-          const prelude =
-            kind === "options"
-              ? `const settings = {numRuns: ${v.count}};\n`
-              : kind === "module"
-                ? `import {state} from './product';\n`
-                : `const shared = {check: n => expect(n).toBe(n), get disable() { this.check = () => {}; return ${v.count}; }};\n`;
+          const prelude = Match.value(kind).pipe(
+            Match.when("options", () => `const settings = {numRuns: ${v.count}};\n`),
+            Match.when("module", () => `import {state} from './product';\n`),
+            Match.orElse(
+              () =>
+                `const shared = {check: n => expect(n).toBe(n), get disable() { this.check = () => {}; return ${v.count}; }};\n`,
+            ),
+          );
 
           const before =
             prelude +
-            (kind === "options"
-              ? source(v).replace(`{numRuns: ${v.count}}`, "settings")
-              : kind === "module"
-                ? source(v, "state.check(value);")
-                : source(v, "shared.check(value);"));
+            Match.value(kind).pipe(
+              Match.when("options", () => source(v).replace(`{numRuns: ${v.count}}`, "settings")),
+              Match.when("module", () => source(v, "state.check(value);")),
+              Match.orElse(() => source(v, "shared.check(value);")),
+            );
 
-          const write =
-            kind === "options"
-              ? "settings.numRuns = 1;"
-              : kind === "module"
-                ? "state.check = () => {};"
-                : "shared.check = () => {};";
+          const write = Match.value(kind).pipe(
+            Match.when("options", () => "settings.numRuns = 1;"),
+            Match.when("module", () => "state.check = () => {};"),
+            Match.orElse(() => "shared.check = () => {};"),
+          );
 
           const additions =
             kind === "getter"
@@ -814,19 +816,17 @@ describe("loosening, today's tooling", () => {
     (kind) => {
       fc.assert(
         fc.property(input, (v) => {
-          const before =
-            kind === "return-newline"
-              ? source(v, "return expect(value).toBe(value);")
-              : kind === "regex"
-                ? source(v, "const pattern = /[//]/; expect(value).toBe(value);")
-                : source(v, "return /* same line */ expect(value).toBe(value);");
+          const before = Match.value(kind).pipe(
+            Match.when("return-newline", () => source(v, "return expect(value).toBe(value);")),
+            Match.when("regex", () => source(v, "const pattern = /[//]/; expect(value).toBe(value);")),
+            Match.orElse(() => source(v, "return /* same line */ expect(value).toBe(value);")),
+          );
 
-          const after =
-            kind === "return-newline"
-              ? before.replace("return expect", "return\nexpect")
-              : kind === "regex"
-                ? before.replace("expect(value).toBe(value);", "")
-                : before.replace("same line", "split\nline");
+          const after = Match.value(kind).pipe(
+            Match.when("return-newline", () => before.replace("return expect", "return\nexpect")),
+            Match.when("regex", () => before.replace("expect(value).toBe(value);", "")),
+            Match.orElse(() => before.replace("same line", "split\nline")),
+          );
 
           const got = compare({ [file]: before }, { [file]: after });
           expect(got.code, got.text).toBe(1);

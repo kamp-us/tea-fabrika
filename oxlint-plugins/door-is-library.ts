@@ -1,5 +1,6 @@
 // P17a. Retired app door files may only forward the library's exports.
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { pathIn } from "./match.ts";
 
 // The gateway's three fronts, the names the old door barrel exported (ticket 477). The app's
@@ -21,7 +22,7 @@ export const doorIsLibrary: CreateRule = {
         for (const statement of node.body) {
           if (
             (statement.type === "ExportAllDeclaration" || statement.type === "ExportNamedDeclaration") &&
-            typeof statement.source?.value === "string" &&
+            Predicate.isString(statement.source?.value) &&
             FRONTS.has(statement.source.value) &&
             !("declaration" in statement && statement.declaration !== null)
           ) {

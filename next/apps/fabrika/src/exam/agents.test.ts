@@ -8,7 +8,20 @@ import { checklist } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import * as Programs from "@kampus/libfabrika/runtime/Program";
 import { senderTest } from "@kampus/libfabrika/testing";
-import { Arbitrary, Effect, FileSystem, type Option, Result, Schema } from "effect";
+import {
+  Array as Arr,
+  pipe,
+  Record as Rec,
+  Arbitrary,
+  Effect,
+  FileSystem,
+  Match,
+  type Option,
+  Predicate,
+  Result,
+  Schema,
+  Struct,
+} from "effect";
 
 const SEED = 119120;
 
@@ -77,7 +90,7 @@ const standard: ReadonlyArray<InputDeclaration> = [
   { name: "remove", schema: Schema.Struct({ name: text(1, 80) }), readOnly: false, personOnly: true },
 ];
 
-const personInputs = standard.filter((d) => d.personOnly);
+const personInputs = Arr.filter(standard, (d) => d.personOnly);
 
 const DeclarationCases = Arbitrary.array(
   Arbitrary.schema(
@@ -91,11 +104,14 @@ const DeclarationCases = Arbitrary.array(
   { minLength: 0, maxLength: 16 },
 ).pipe(
   Arbitrary.map((inputs) =>
-    inputs.map((input, i) => ({
+    Arr.map(inputs, (input, i) => ({
       name: `extra${i}`,
       schema: Schema.Struct({
-        [input.field]:
-          input.type === "string" ? Schema.String : input.type === "number" ? Schema.Finite : Schema.Boolean,
+        [input.field]: Match.value(input.type).pipe(
+          Match.when("string", () => Schema.String),
+          Match.when("number", () => Schema.Finite),
+          Match.orElse(() => Schema.Boolean),
+        ),
       }),
       readOnly: input.readOnly,
       personOnly: input.personOnly,
@@ -108,7 +124,7 @@ const DeclarationCases = Arbitrary.array(
 const declarationSets = (inputs: ReadonlyArray<InputDeclaration>) => [
   [],
   inputs,
-  [...personInputs, ...inputs.slice(0, 15).map((d) => ({ ...d, personOnly: true }))],
+  [...personInputs, ...Arr.map(inputs.slice(0, 15), (d) => ({ ...d, personOnly: true }))],
   [...standard, ...inputs.slice(0, 12)],
 ];
 
@@ -116,8 +132,8 @@ const inputSchema = (input: InputDeclaration) =>
   Schema.toJsonSchemaDocument(Schema.Struct({ value: input.schema }), { onExcessProperty: "error" }).schema;
 
 const tools = (actual: ReadonlyArray<Tool>, declarations: ReadonlyArray<InputDeclaration> = standard) => {
-  const publicInputs = declarations.filter((d) => !d.personOnly);
-  expect(actual.map((t) => t.name)).toEqual(["ps", ...publicInputs.map((d) => `checklist_${d.name}`)]);
+  const publicInputs = Arr.filter(declarations, (d) => !d.personOnly);
+  expect(Arr.map(actual, (t) => t.name)).toEqual(["ps", ...Arr.map(publicInputs, (d) => `checklist_${d.name}`)]);
   expect(actual[0]?.inputSchema).toEqual({ type: "object", additionalProperties: false });
   expect(actual[0]?.annotations?.readOnlyHint).toBe(true);
 
@@ -314,11 +330,14 @@ const presence = <A extends Partial<Bridge>>(files: ReadonlySet<string>, law: La
   }
 
   const binding = load();
-  const methods: ReadonlyArray<keyof Bridge> =
-    law === "tools" ? ["tools", "hidden"] : law === "malformed" ? ["malformed", "missing"] : [law];
+  const methods: ReadonlyArray<keyof Bridge> = Match.value(law).pipe(
+    Match.when("tools", () => ["tools", "hidden"] as const),
+    Match.when("malformed", () => ["malformed", "missing"] as const),
+    Match.orElse((other) => [other]),
+  );
 
   for (const name of methods) {
-    if (typeof binding[name] !== "function") {
+    if (!Predicate.isFunction(binding[name])) {
       throw new Error(`missing bridge export: ${name}`);
     }
   }
@@ -367,7 +386,7 @@ it.effect.prop(
       for (const inputs of declarationSets(declarations)) {
         tools(yield* b.tools(inputs), inputs);
 
-        for (const d of inputs.filter((d) => d.personOnly)) {
+        for (const d of Arr.filter(inputs, (d) => d.personOnly)) {
           const name = `checklist_${d.name}`;
           unknownTool(yield* b.hidden(name, input, inputs), name);
         }
@@ -438,13 +457,15 @@ it.effect.prop(
 
 const cleanTools = (declarations: ReadonlyArray<InputDeclaration> = standard): ReadonlyArray<Tool> => [
   { name: "ps", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true } },
-  ...declarations
-    .filter((d) => !d.personOnly)
-    .map((d) => ({
+  ...pipe(
+    declarations,
+    Arr.filter((d) => !d.personOnly),
+    Arr.map((d) => ({
       name: `checklist_${d.name}`,
       inputSchema: inputSchema(d),
       annotations: { readOnlyHint: d.readOnly },
     })),
+  ),
 ];
 
 const checkDeclarations = (
@@ -499,7 +520,7 @@ it.prop(
       expect(() => tools([...cleanTools(), { name, inputSchema: {} }])).toThrow();
     }
 
-    expect(() => tools(cleanTools().map((t) => ({ ...t, annotations: { readOnlyHint: false } })))).toThrow();
+    expect(() => tools(Arr.map(cleanTools(), (t) => ({ ...t, annotations: { readOnlyHint: false } })))).toThrow();
     expect(() => letters(["letter_0000000000e008000000000001", "letter_0000000000e008000000000002"])).toThrow();
     expect(() => letters(["p8-01"])).toThrow();
     const agent = { key: "SHA256:checked-agent", for: "person_0000000000e008000000000001" };
@@ -535,7 +556,7 @@ it.prop(
       for (const [i, tool] of clean.entries()) {
         expect(() =>
           tools(
-            clean.map((t, n) => (n === i ? { ...t, inputSchema: {} } : t)),
+            Arr.map(clean, (t, n) => (n === i ? { ...t, inputSchema: {} } : t)),
             declarations,
           ),
         ).toThrow();
@@ -544,8 +565,7 @@ it.prop(
           continue;
         }
 
-        const d = declarations.filter((d) => !d.personOnly)[i - 1]!;
-
+        const d = Arr.filter(declarations, (d) => !d.personOnly)[i - 1]!;
         const shape = Schema.decodeUnknownSync(
           Schema.Struct({ properties: Schema.Record(Schema.String, Schema.Unknown) }),
         )(inputSchema(d));
@@ -553,13 +573,13 @@ it.prop(
         const bad = { ...shape.properties, value: { type: "object", properties: {} } };
         expect(() =>
           tools(
-            clean.map((t) => (t === tool ? { ...t, inputSchema: { ...inputSchema(d), properties: bad } } : t)),
+            Arr.map(clean, (t) => (t === tool ? { ...t, inputSchema: { ...inputSchema(d), properties: bad } } : t)),
             declarations,
           ),
         ).toThrow();
         expect(() =>
           tools(
-            clean.map((t) =>
+            Arr.map(clean, (t) =>
               t === tool ? { ...t, inputSchema: { ...inputSchema(d), properties: { value: { type: "number" } } } } : t,
             ),
             declarations,
@@ -568,7 +588,7 @@ it.prop(
       }
     }
 
-    const withoutNote = standard.map((d) =>
+    const withoutNote = Arr.map(standard, (d) =>
       d.name === "check" ? { ...d, schema: Schema.Struct({ name: text(1, 80) }) } : d,
     );
 
@@ -588,8 +608,7 @@ it.prop(
 
     for (const inputs of declarationSets(declarations)) {
       const clean = cleanTools(inputs),
-        publicInputs = inputs.filter((d) => !d.personOnly);
-
+        publicInputs = Arr.filter(inputs, (d) => !d.personOnly);
       tools(clean, inputs);
 
       for (const [i, tool] of clean.entries()) {
@@ -602,7 +621,7 @@ it.prop(
 
           mutations.push({ ...schema, properties: { ...properties, value: { ...value, enum: [null] } } });
 
-          for (const [field, fieldSchema] of Object.entries(object(value.properties ?? {}))) {
+          for (const [field, fieldSchema] of Rec.toEntries(object(value.properties ?? {}))) {
             mutations.push({
               ...schema,
               properties: {
@@ -625,7 +644,7 @@ it.prop(
         for (const inputSchema of mutations) {
           expect(() =>
             tools(
-              clean.map((t, n) => (n === i ? { ...t, inputSchema } : t)),
+              Arr.map(clean, (t, n) => (n === i ? { ...t, inputSchema } : t)),
               inputs,
             ),
           ).toThrow();
@@ -636,7 +655,7 @@ it.prop(
     for (const kind of ["zero", "person-only"] as const) {
       expect(() =>
         checkDeclarations((inputs) => {
-          if (kind === "zero" ? inputs.length === 0 : inputs.length > 0 && inputs.every((d) => d.personOnly)) {
+          if (kind === "zero" ? inputs.length === 0 : inputs.length > 0 && Arr.every(inputs, (d) => d.personOnly)) {
             throw new Error(`${kind} inputs rejected`);
           }
 
@@ -696,17 +715,17 @@ it.prop(
       throw new Error(`failed import: ${message}`);
     };
 
-    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+    for (const law of Struct.keys(paths)) {
       expect(presence(new Set(), law, failed)).toBeNull();
 
-      for (const other of Object.keys(paths) as ReadonlyArray<Law>) {
+      for (const other of Struct.keys(paths)) {
         if (other !== law) {
           expect(presence(new Set([paths[other]]), law, failed)).toBeNull();
         }
       }
     }
 
-    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+    for (const law of Struct.keys(paths)) {
       expect(() => presence(new Set([paths[law]]), law, failed)).toThrow("failed import");
     }
 
@@ -720,7 +739,7 @@ it.prop(
       missing: () => Effect.die("control only"),
     };
 
-    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+    for (const law of Struct.keys(paths)) {
       expect(presence(new Set([paths[law]]), law, () => clean)).toBe(clean);
     }
 

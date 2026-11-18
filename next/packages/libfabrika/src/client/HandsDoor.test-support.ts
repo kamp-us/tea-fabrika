@@ -8,10 +8,18 @@
 // `door` is the door in front of it, one in-memory socket per dial: it challenges each socket,
 // answers the hello and the knock as its gate says, and keeps every socket, so a law can read every
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
+
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
+import * as Str from "effect/String";
+
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
 import { MemorySocket } from "./WindowStart.test-support.ts";
@@ -43,7 +51,7 @@ const REFUSED_FIRST = [
 export type FinishMode = "ok" | "unavailable" | "garbled" | (typeof REFUSED_FIRST)[number];
 
 const refusedFirst = (mode: FinishMode): mode is (typeof REFUSED_FIRST)[number] =>
-  REFUSED_FIRST.some((reason) => reason === mode);
+  Arr.some(REFUSED_FIRST, (reason) => reason === mode);
 
 /** One call's outcome at the door: a result, a refusal, or a wait that parks on `target:<key>`. */
 export const Outcome = Schema.TaggedUnion({
@@ -139,25 +147,25 @@ export const brain = () => {
 
   /** Answers one call by `key`, and changes what the call changes. `finish` says how a finish is answered. */
   const call = (key: string, method: string, params: unknown, finish: FinishMode = "ok"): Outcome => {
-    const p = typeof params === "object" && params !== null ? new Map(Object.entries(params)) : new Map();
+    const p = Predicate.isObject(params) ? new Map(Rec.toEntries(params)) : new Map();
 
     const text = (name: string) => {
       const value = p.get(name);
 
-      return typeof value === "string" ? value : "";
+      return Predicate.isString(value) ? value : "";
     };
 
     if (method === "tasks.list") {
-      const mine = [...tasks.values()].filter((s) => s.request.target === key && open(s));
+      const mine = Arr.filter([...tasks.values()], (s) => s.request.target === key && open(s));
 
       return Outcome.cases.result.make({
-        result: { tasks: mine.map((s) => ({ id: s.request.id, process: s.request.process })), rev: rev(key) },
+        result: { tasks: Arr.map(mine, (s) => ({ id: s.request.id, process: s.request.process })), rev: rev(key) },
       });
     }
 
     if (method === "tasks.wait") {
       const after = p.get("after");
-      const n = typeof after === "number" ? after : 0;
+      const n = Predicate.isNumber(after) ? after : 0;
 
       return rev(key) > n
         ? Outcome.cases.result.make({ result: { rev: rev(key) } })
@@ -165,7 +173,8 @@ export const brain = () => {
     }
 
     if (method === "tasks.take") {
-      const candidates = [...tasks.values()].filter(
+      const candidates = Arr.filter(
+        [...tasks.values()],
         (s) => s.request.process === text("process") && s.request.target === key && open(s),
       );
 
@@ -217,11 +226,11 @@ export const brain = () => {
     // A failed wake answers `unavailable` after the finish was saved (slice 3's W1), and a garbled
     // answer comes after it was saved too.
     const answer = (): Outcome =>
-      finish === "unavailable"
-        ? refused("unavailable")
-        : finish === "garbled"
-          ? Outcome.cases.result.make({ result: { saved: "maybe" } })
-          : receipt();
+      Match.value(finish).pipe(
+        Match.when("unavailable", () => refused("unavailable")),
+        Match.when("garbled", () => Outcome.cases.result.make({ result: { saved: "maybe" } })),
+        Match.orElse(() => receipt()),
+      );
 
     if (s.phase === "finished") {
       // A repeat with the same result answers the first receipt, or as the mode says.
@@ -248,7 +257,7 @@ export const brain = () => {
     /** Every task, for a law that reads what the brain ended with. */
     all: () => [...tasks.values()],
     /** An `assigned` answer for `id` naming the executor `key`, as a take for another key would get it. */
-    assignedTo: (id: string, key: string): unknown => {
+    assignedTo: (id: string, key: string): typeof TakeReply.Type | null => {
       const s = tasks.get(id);
 
       return s === undefined
@@ -353,11 +362,11 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       state.hellos.push(call.params);
       const said = gate.hello();
       on.receive(
-        said._tag === "refuse"
-          ? failed(call.id, said.reason)
-          : said._tag === "not_granted"
-            ? failed(call.id, "not_granted")
-            : JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(key) }),
+        HelloAnswer.match(said, {
+          refuse: ({ reason }) => failed(call.id, reason),
+          not_granted: () => failed(call.id, "not_granted"),
+          admit: () => JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(key) }),
+        }),
       );
 
       return;
@@ -372,7 +381,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       return;
     }
 
-    if (!call.method.startsWith("tasks.")) {
+    if (!Function.pipe(call.method, Str.startsWith("tasks."))) {
       return;
     }
 
@@ -425,8 +434,8 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
     /** A program asks the client's key: the brain saves it, and each parked wait past its rev is rung. */
     request: (process: string, n: number) => {
       const id = b.request(key, process, n);
-      const ringing = state.parked.filter((p) => b.rev(key) > p.after);
-      state.parked = state.parked.filter((p) => !ringing.includes(p));
+      const ringing = Arr.filter(state.parked, (p) => b.rev(key) > p.after);
+      state.parked = Arr.filter(state.parked, (p) => !ringing.includes(p));
 
       for (const p of ringing) {
         p.on.receive(JSON.stringify({ jsonrpc: "2.0", id: p.id, result: { rev: b.rev(key) } }));

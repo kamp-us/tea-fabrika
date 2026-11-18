@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-safety-2-review3",
+  "ticket": "1057",
+  "pr": null,
+  "branch": "fabrikalfa/antislop-require-safety-comment-2",
+  "started": "2026-11-16T00:26:28-08:00",
+  "ended": "2026-11-16T00:37:43-08:00",
+  "parent": "2026-11-16-antislop-safety-2-build2",
+  "active": null,
+  "role": "review",
+  "step": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of anti-slop judgment slice AS-require-safety-comment-2 (decisions 0561 and 0563) at c6a14074d, after pull request 1366 merged: merge-ready. Only the slice's own commits were judged: bb0ecc0ce against its merge parent f6875dfdb, and c6a14074d against b1caf7a5b. The merges bring in main's own changes. bb0ecc0ce adds SAFETY comments in six exam files and drops three `delivery(...) as Incoming` casts in RuntimeCauseTest.ts. Those three drops change nothing at run time: the cast was type-only, and ProgramRunner's msg takes `input: unknown` (Runner.ts:484), so the argument's type was never needed. The unused Incoming import went with them. No line changes except comments, line splits, the three drops and that import. No assertion is deleted or narrowed, and no disable line is added. c6a14074d adds six comment-only SAFETY lines in Runner.ts. Each new comment was read against its code, and each states a true fact. Context's mapUnsafe is ReadonlyMap<string, any> (effect Context.d.ts:528). Both program tables are written only from built code rows. runtime-quotas' required() is Option.getOrThrow. Runner.integration's fault object widens only starting literals. connection.ts calls exactly deserializeAttachment, serializeAttachment, send and close on its socket, and acceptWebSocket only in its fetch upgrade. RuntimeCauseTest's wrong Model draws a string, a boolean or a non-integer double (line 659). In Runner.ts, operands and withoutInput return for every non-object, null and array (lines 292 and 321). catchUp's `fresh` is the Array<Dispatched> made at line 1407. The QuotaWaiting path returns after waitForRoom and folds no letter (lines 2265-2283). The scratch rule run counts 0 hits in the four folders.",
+  "hits": { "atHead": 0, "pr1366": 0, "castsRemovedThisRound": 3, "safetyLinesRunnerTs": 6, "examHitsThisRound": 38 },
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Read-only apart from this row; a scratch git worktree of origin/main was made outside the repo and removed. Laws run one at a time with Node 26.13.0 at c6a14074d, the 0178 guard refused none, all green: node/ErrorCause (29), runtime-quotas.laws (2), runtime/Runner.integration (117), RunnerSupervision.integration (60), RecoveryGaps.integration (12, 1 skipped as written), RunnerRecovery.laws (4), runtime-recovery.laws.integration (13), local-instance.integration (3), worker-quotas.integration (3). One pnpm typecheck, exit 0. loosening.sh b1caf7a5b..c6a14074d: 0 hits. On f6875dfdb..bb0ecc0ce: 6 unrecognized-change hits, one per touched exam file, all comments, line splits and the three type-only drops; no law is loosened. On 3c1b69afe..bb0ecc0ce the range holds main's merged pull requests (renames, removed laws and tighter bounds in other files), which are main's and not this slice's. instance-wire.integration.test.ts 'pinned: checklist stays reachable after its first add on the real dev.ts' fails the same way on the branch and on origin/main 5c94f12f4. Both runs show 1 failed and 14 passed. The failure is spawn ssh-keygen ENOENT in p14.test-support.ts homeWithCredential, and this box has no ssh-keygen. So it is the box's fault, not the slice's. git merge-tree with origin/main 5c94f12f4: clean. No pull request opened."
+}

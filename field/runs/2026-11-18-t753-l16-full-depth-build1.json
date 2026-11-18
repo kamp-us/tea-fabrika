@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t753-l16-full-depth-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1591",
+  "started": "2026-11-17T17:49:00-08:00",
+  "ended": "2026-11-17T18:23:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "fail",
+  "why": "In next/, built parts A and B of docs/plan/quests/t753-l16-full-depth-PLAN.md and every new law is green (A1 to A5, A6, B1 to B3, and the listed must-stay-green files). L16 alone at full depth went from a median of 38.3 s (lead's five runs: 37.2, 38.4, 39.5, 37.3, 38.3) to 26.5 to 26.8 s, over the plan's bar of 25 s alone, so the plan's own rule applies: the build stops and returns its numbers and a profile to the lead. After A only: 37.3, 36.0, 34.0, 34.7 s. After A and B: 27.2, 27.1, 27.3 s, and 26.8, 26.5, 26.6 s after the Sink fix below. A saved about 3 s of the 5 to 14 s the plan hoped for; B saved about 8 s, twice the 4 s the lead's hack measured.",
+  "note": "Started time is the first observed shell timestamp. Usage and cost are not recorded. Loaded cells and the CI related time are the lead's. The profile of a full-depth run after A and B (29.2 s under the profiler) shows Sink.ts at 22.8% of time (commitOpen 13.6%, ended 6.4%), NodeSqlite exec 16% self, QuotasSql 17%, ledgerStore 16%, Schema decode and construct about 14%. A batch commit still costs about 47 microseconds per span, which is per-row work (build the row, encode it, two INSERTs), not per-transaction work: commits fell about 4.7 times and the sink's time fell about 40%, so row cost is what is left. Two calls differ from the plan: the batch also installs a collecting tracer over whatever tracer runs, keeping a span the running tracer already made through this sink and making its own otherwise, because U3 and the desktop brain call batch with no sink tracer installed and U3 is a must-stay-green law; and the snapshot is dropped only by start, exit and down, not by ack, dead, monitor, demonitor or leave, because those write lines status never reads and dropping on ack put an inc at 4 reads against B1's budget of 3. B2's three snapshot plants (exit does not drop it, kept past a step, live without the process id) stay green, so B2 does not bite on them. Another agent's commit 3d4afe341 (type fixes to the three test files) landed in this worktree while the build ran; the build did not touch test files.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "d54d299ba5e83f94ec87a80906568498b59e0f40",
+  "timings": {
+    "box": "4-core cloud box, Node 26.13.0, law alone at full depth, nice 15, one worker",
+    "beforeMs": [37200, 38400, 39500, 37300, 38300],
+    "afterAMs": [37296, 35964, 33960, 34685],
+    "afterABMs": [27170, 27078, 27277],
+    "afterABFinalMs": [26793, 26524, 26641]
+  },
+  "plants": [
+    { "law": "A2 a flush inside a batch ships every span the batch ended before it", "plant": "flush skips the open batch", "result": "red" },
+    { "law": "A3 a batched span keeps every wrapping tracer's attributes", "plant": "the batch's tracer ignores the running tracer", "result": "red" },
+    { "law": "A4 a batch belongs to its sink, and a late span lands at once", "plant": "the batch ignores whose sink opened it", "result": "red" },
+    { "law": "A4 a batch belongs to its sink, and a late span lands at once", "plant": "the closed check is dropped", "result": "red" },
+    { "law": "A6 every Process call and wrapped Project call commits its spans in one transaction", "plant": "attributed does not batch", "result": "red" },
+    { "law": "A6 every Process call and wrapped Project call commits its spans in one transaction", "plant": "wrapped does not batch", "result": "red" },
+    { "law": "B1 each serial step makes at most one lifecycle read beyond the reads for at", "plant": "every check reads fresh", "result": "red" },
+    { "law": "B2 what a runner answers follows the process table", "plant": "exit does not drop the snapshot", "result": "green" },
+    { "law": "B2 what a runner answers follows the process table", "plant": "the snapshot is kept past a step's end", "result": "green" },
+    { "law": "B2 what a runner answers follows the process table", "plant": "live does not compare the process id", "result": "green" }
+  ]
+}

@@ -9,7 +9,9 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { Effect, Formatter, Result, Schedule, Schema } from "effect";
+import type { Duration } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import * as Progress from "./progress.ts";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
@@ -318,7 +320,7 @@ type JobTimings = {
 };
 
 const jobOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.Effect<JobTimings> =>
-  id
+  id !== undefined && id !== ""
     ? io.job(id).pipe(
         Effect.map((input): JobTimings => {
           const queueWait = readQueueWait(input);
@@ -334,9 +336,13 @@ const jobOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.Ef
     : Effect.succeed({ steps: unavailable("JOB_ID is not set") });
 
 const filesOf = (path: string | undefined, root: string, io: Io): Effect.Effect<Section<TestFile>> =>
-  path
+  path !== undefined && path !== ""
     ? io.read(path).pipe(
-        Effect.flatMap((text) => Effect.try({ try: () => JSON.parse(text), catch: (cause) => Unread.make({ cause }) })),
+        Effect.flatMap((text) =>
+          Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+            Effect.mapError((cause) => Unread.make({ cause })),
+          ),
+        ),
         Effect.map((report) => readFiles(report, root)),
         Effect.catch(() => Effect.succeed(unavailable<TestFile>("the report could not be read"))),
       )
@@ -376,27 +382,26 @@ export const collect = (
     })),
   );
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] !== undefined &&
+  process.argv[1] !== "" &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   const env = process.env;
   const api = env["GITHUB_API_URL"] ?? "https://api.github.com";
 
   const io: Io = {
+    // Any answer but a 2xx, a network failure or no answer within 5 s is the same Unread.
     job: (id) =>
-      Effect.tryPromise({
-        try: async (signal) => {
-          const answer = await fetch(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
-            headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
-            signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-          });
-
-          if (!answer.ok) {
-            throw new Error(`GitHub answered ${answer.status}`);
-          }
-
-          return answer.json();
-        },
-        catch: (cause) => Unread.make({ cause }),
-      }),
+      HttpClient.get(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
+        headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
+      }).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap((answer) => answer.json),
+        Effect.timeout("5 seconds"),
+        Effect.mapError((cause) => Unread.make({ cause })),
+        Effect.provide(FetchHttpClient.layer),
+      ),
     read: (path) => Effect.try({ try: () => readFileSync(path, "utf8"), catch: (cause) => Unread.make({ cause }) }),
   };
 
@@ -406,10 +411,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     Effect.try({
       try: () => {
         const text = markdown(timings);
-        writeFileSync(join(env["RUNNER_TEMP"] ?? ".", fileName(timings)), `${JSON.stringify(timings)}\n`);
+        writeFileSync(join(env["RUNNER_TEMP"] ?? ".", fileName(timings)), `${Formatter.formatJson(timings)}\n`);
         console.log(text);
 
-        if (env["GITHUB_STEP_SUMMARY"]) {
+        if (env["GITHUB_STEP_SUMMARY"] !== undefined && env["GITHUB_STEP_SUMMARY"] !== "") {
           appendFileSync(env["GITHUB_STEP_SUMMARY"], text);
         }
       },

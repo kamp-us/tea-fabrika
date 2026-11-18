@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e95-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:33:36-08:00",
+  "ended": "2026-11-16T01:49:29-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E95 (runEffectInsideEffect), folder app:src of next/apps/fabrika, in next/. Branch fabrikalfa/effect-e95, made from the stack top fabrikalfa/test-sqlite-store at eeb8ecdbb. Recounted with only runEffectInsideEffect at error through --lspconfig on next/apps/fabrika/tsconfig.json: 36 hits in the project, 34 in app:src (the plan said 19) and 2 in app:e2e (page-runtime.laws.visual.test.ts:237 and :337, E46's folder, not this slice). Every app:src hit sits in a test file, so no product hit is left for a build. None is in a file of PR 1366 that waits on it (1366 is merged). Fixed 20 by hand with the Edit tool, no quick-fix client and no codemod: where the callback is a plain function the platform or fast-check calls (a fetch or crypto.subtle spy, a disk reopen, a watch poll, a connect handed to an async test body, a fast-check command), the Effect now reads its services once with Effect.context() and runs the inner effect with Effect.runSyncWith or Effect.runPromiseWith on them; where the code was already inside an Effect it now yields the effect directly (file-services L11 Effect.exit(cli.work), start-child's L10 alarm scenario). door.integration.test.ts:868 already captured projectContext and provided it, so it became Effect.runPromiseWith(projectContext). Left 14, all in next/apps/fabrika/src/runtime-quotas.laws.test.ts (lines 314, 316, 318, 360, 430, 431, 432, 433, 435, 443, 444, 445, 446, 447): they are the env stand-ins for workerd RPC into a Project or Process Durable Object and for the Worker Loader program box. In real workerd each call runs on the callee object's own runtime, not the caller's fiber, and the law runs under it.effect.prop with TestClock, so passing the caller's services would move the objects' clock, spans and logs onto the test's and change what the law holds. The right fix is a reasoned ignore line, which this slice may not add. The line, as it would read above each of the 14 calls: // @effect-diagnostics-next-line runEffectInsideEffect:off -- a stand-in for a workerd RPC into another object, which runs on that object's own services, not the caller's. Report: hits met 34, fixed by quick fix 0, hand edits 20, left 14, waiting on 1366 0. Lock for later: app:src (next/apps/fabrika/tsconfig.json overrides) once the 14 lines land.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Recount after the fix: 16 in the project, 14 in app:src (the runtime-quotas stand-ins above) and the 2 app:e2e hits, and no other error from the check run. Files: next/apps/fabrika/src/{door-recovery.integration,door.integration,file-services.laws.integration,hands-client,local-instance.integration,memory-replace.laws.integration,start-child.laws.integration,worker-mail.integration,worker-monitor.integration}.test.ts. Tests run at base eeb8ecdbb plus this diff, in the box, nice -n 15 vitest: hands-client.test.ts 2 passed; door-recovery, file-services.laws, local-instance integration 37 passed; door.integration 153 passed; worker-mail and worker-monitor integration 9 passed; memory-replace.laws.integration 2 passed; start-child.laws.integration 22 passed, 1 failed: L11 'every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs' timed out at 60 s. It times out the same way with this slice's two run calls in that law put back to Effect.runPromise, so the timeout is not this change; it is a separate finding. No law was added or changed, so no plant: the check's own count is this slice's evidence. No pull request, per the one-PR-per-sweep ruling.",
+  "plants": [],
+  "step": "tests"
+}

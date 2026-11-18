@@ -7,7 +7,7 @@ import { AuthProvidersLive } from "alchemy/Auth/Registry";
 import { deploy } from "alchemy/Deploy";
 import * as Interaction from "alchemy/Interaction";
 import { localState } from "alchemy/State/LocalState";
-import { ByteSize, DateTime, Effect, Layer, Option, Path } from "effect";
+import { ByteSize, DateTime, Effect, Formatter, Layer, Option, Path } from "effect";
 import { stack } from "../alchemy.run.ts";
 import type { Built } from "./build.ts";
 import { Settings, type Options } from "./settings.ts";
@@ -36,9 +36,7 @@ export const startDev = Effect.fn("instance.startDev")(function* (built: Omit<Bu
     ...(options.mail === undefined ? {} : { mail: options.mail }),
     ...(options.starts === undefined ? {} : { starts: options.starts }),
   });
-
-  const checked = yield* readSettings({ INSTANCE: JSON.stringify(config) });
-
+  const checked = yield* readSettings({ INSTANCE: Formatter.formatJson(config) });
   return yield* start(
     {
       name: config.name,

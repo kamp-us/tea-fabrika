@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-p19-l13-times-out-once-after-the-settings-merge",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/e2e/electron-launchd.visual.test.ts",
+    "line": 74
+  },
+  "says": "In next/, the host law 'scenario: L13 unsigned Electron's real brain survives controller death, restarts and fully stops' timed out after 5 s on its first attempt and passed on its second at the same head, on pull request 1494 at 17c1ae830; effect-e88 failed it the same way minutes later. Both heads had just merged main with PR 1427 (each app gets its own settings files), which L13's P19Launchd.test-support.ts imports; neither branch's own diff reaches L13's import chain beyond an export.",
+  "proof": "Host run https://github.com/kamp-us/tea-fabrika/actions/runs/44243040878 job 134595233763, attempt 1: TimeoutError 'Operation timed out after 5s' about 8 s into L13, with no launchd line seen for the test's job; attempt 2 of the same run, same head, passed. Host run https://github.com/kamp-us/tea-fabrika/actions/runs/44243735833 (fabrikalfa/effect-e88, e85cee196) failed L13 with the same timeout and no launchd lines; that branch's next head passed.",
+  "cost": "Any pull request whose host job runs L13 can go red for no fault of its change, and a rerun hides it, which 0036 forbids. Fixing L13 is its own ticket; this row only records the sighting.",
+  "head": "17c1ae83048079cbd38a4561e4eab416d67539d2",
+  "ticket": null,
+  "pr": null
+}

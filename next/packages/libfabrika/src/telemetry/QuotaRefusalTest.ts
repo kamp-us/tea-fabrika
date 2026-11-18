@@ -1,8 +1,13 @@
 // P34c Q9, next/. Real sink and SQL; the archive double only records external I/O.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
-import type { Scope } from "effect";
-import { TestClock } from "effect/testing";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+
 import type { Sql } from "../Sql.ts";
 import { Archive, sha256 } from "./Archive.ts";
 import { RecordManager } from "./Records.ts";
@@ -24,12 +29,12 @@ const Tape = Schema.Array(Schema.Struct({ pick: Nat, reopen: Schema.Boolean })).
 );
 
 const counts = (sql: Sql) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     sql
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .map(({ name }) => [
         String(name),
-        sql.exec(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`)[0]?.n,
+        sql.exec(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`)[0]?.n,
       ]),
   );
 

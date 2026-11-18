@@ -9,7 +9,7 @@ import {
   pinsFolder,
   questKeyed,
   startHead,
-  wipOf,
+  wipBranch,
   workspaceGlobs,
 } from "./quest.ts";
 
@@ -26,7 +26,7 @@ describe("quest rules, today's tooling", () => {
     fc.assert(
       fc.property(branch, fc.nat({ max: 3 }), (b, n) => {
         const quest = b + "-wip".repeat(n);
-        const to = wipOf(quest);
+        const to = wipBranch(quest);
         expect(to).toMatch(/(?<!-wip)-wip$/);
         expect(to.replace(/-wip$/, "")).toBe(b);
 

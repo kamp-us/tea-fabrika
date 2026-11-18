@@ -1,7 +1,10 @@
 // T843, next/. The driver owner supplies a scoped persistent Sql and its reopen operation (0062).
 import { describe, expect, it } from "@effect/vitest";
 import { Duration, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import * as RateLimiter from "effect/persistence/RateLimiter";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import * as RateLimiterSql from "./RateLimiterSql.ts";
@@ -27,7 +30,7 @@ const consume = (sql: Sql, key: string, policy: { limit: number; window: number 
 const failedWrites = (sql: Sql, cause: Error): Sql => ({
   ...sql,
   exec: (query, ...params) => {
-    if (/INSERT|UPDATE/u.test(query) && query.includes("gateway_limits")) {
+    if (/INSERT|UPDATE/u.test(query) && Str.includes("gateway_limits")(query)) {
       throw cause;
     }
 
@@ -56,11 +59,11 @@ export const suite = (rig: Rig): void => {
               return result;
             },
             exec: (query, ...params) => {
-              if (query.includes("gateway_limits") && /SELECT/iu.test(query)) {
+              if (Str.includes("gateway_limits")(query) && /SELECT/iu.test(query)) {
                 events.push("read");
               }
 
-              if (query.includes("gateway_limits") && /INSERT|UPDATE|DELETE/iu.test(query)) {
+              if (Str.includes("gateway_limits")(query) && /INSERT|UPDATE|DELETE/iu.test(query)) {
                 events.push("write");
               }
 
@@ -105,12 +108,19 @@ export const suite = (rig: Rig): void => {
             const known = [...history.keys()];
 
             const sender =
-              known.length && pick % 3 === 0
+              known.length > 0 && pick % 3 === 0
                 ? Option.getOrThrow(Option.fromUndefinedOr(known[pick % known.length]))
                 : `key-${pick % 4}`;
 
             const saved = history.get(sender);
-            const moves = ["take", "same", "reopen", "skip", "change", ...(saved ? ["back", "expiry"] : [])];
+            const moves = [
+              "take",
+              "same",
+              "reopen",
+              "skip",
+              "change",
+              ...(saved !== undefined ? ["back", "expiry"] : []),
+            ];
             const move = Option.getOrThrow(Option.fromUndefinedOr(moves[pick % moves.length]));
 
             if (move === "reopen") {
@@ -121,11 +131,11 @@ export const suite = (rig: Rig): void => {
               now += policy.window * 3;
             }
 
-            if (move === "back" && saved) {
+            if (move === "back" && saved !== undefined) {
               now = saved.at - 1;
             }
 
-            if (move === "expiry" && saved) {
+            if (move === "expiry" && saved !== undefined) {
               now = saved.until;
             }
 
@@ -142,17 +152,16 @@ export const suite = (rig: Rig): void => {
             }
 
             const old = history.get(sender);
-            const same = old?.policy === JSON.stringify(policy);
-            const at = old ? Math.max(now, old.at) : now;
-
+            const same = old?.policy === Formatter.formatJson(policy);
+            const at = old !== undefined ? Math.max(now, old.at) : now;
             const row =
-              old && same
+              old !== undefined && same
                 ? old
                 : {
                     times: [],
                     until: (Math.floor(at / policy.window) + 1) * policy.window,
                     at,
-                    policy: JSON.stringify(policy),
+                    policy: Formatter.formatJson(policy),
                   };
 
             const allowed = row.times.length < policy.limit;
@@ -177,10 +186,12 @@ export const suite = (rig: Rig): void => {
             const rows = store.sql.exec("SELECT sender,until,value FROM gateway_limits");
             expect(rows).toHaveLength(history.size);
             expect(rows.length).toBeLessThanOrEqual(4);
-            expect(new Set(rows.map((r) => r.sender)).size).toBe(rows.length);
+            expect(new Set(Arr.map(rows, (r) => r.sender)).size).toBe(rows.length);
 
             for (const r of rows) {
-              const envelope = JSON.parse(String(r.value));
+              const envelope = yield* Schema.decodeUnknownEffect(
+                Schema.fromJsonString(Schema.Struct({ v: Schema.Json, build: Schema.Json })),
+              )(String(r.value));
               expect(envelope.v).toBe(1);
               expect(envelope.build).toBe("t843-test");
               expect(String(r.value)).not.toContain("request");

@@ -7,7 +7,21 @@
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Cause, Effect, Exit, FileSystem, Path, PlatformError, Ref } from "effect";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Cause,
+  Effect,
+  Exit,
+  FileSystem,
+  Formatter,
+  Order,
+  Path,
+  PlatformError,
+  Ref,
+} from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { stored } from "./stored.test-support.ts";
@@ -27,8 +41,8 @@ const homes = fc
 const byLabel = ([a]: readonly [string, string], [b]: readonly [string, string]) => (a < b ? -1 : a > b ? 1 : 0);
 
 describe("stored", () => {
-  it("[secrets] files renamed into place under a listing never fail the scan, and the stopped pass reads each file's last write", async () => {
-    await fc.assert(
+  it("[secrets] files renamed into place under a listing never fail the scan, and the stopped pass reads each file's last write", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({ secret: fc.stringMatching(/^[A-Za-z0-9]{24,40}$/), home: homes }),
         ({ secret, home: { files, renamed } }) =>
@@ -50,7 +64,7 @@ describe("stored", () => {
                 const last = (name: string) => JSON.stringify(`stopped_${secret}_${name}`);
 
                 for (const name of files) {
-                  yield* write(name, JSON.stringify("start"));
+                  yield* write(name, Formatter.formatJson("start"));
                 }
 
                 const fs: FileSystem.FileSystem = {
@@ -62,7 +76,7 @@ describe("stored", () => {
                       }
 
                       for (const name of renamed) {
-                        yield* real.writeFileString(path.join(dir, `${name}.tmp`), JSON.stringify("listed"));
+                        yield* real.writeFileString(path.join(dir, `${name}.tmp`), Formatter.formatJson("listed"));
                       }
 
                       const names = yield* real.readDirectory(folder, options);
@@ -84,20 +98,32 @@ describe("stored", () => {
                   Effect.provideService(FileSystem.FileSystem, fs),
                 );
 
-                expect([...disk.running].toSorted()).toEqual(files.map((name) => `/${name}`).toSorted());
-                expect(disk.raw.filter(([label]) => !label.startsWith("home (running)")).toSorted(byLabel)).toEqual(
-                  files.map((name): readonly [string, string] => [`home /${name}`, last(name)]).toSorted(byLabel),
+                expect(Arr.sort(disk.running, Order.String)).toEqual(
+                  Arr.sort(
+                    Arr.map(files, (name) => `/${name}`),
+                    Order.String,
+                  ),
+                );
+                expect(
+                  Arr.sort(
+                    Arr.filter(disk.raw, ([label]) => !pipe(label, Str.startsWith("home (running)"))),
+                    byLabel,
+                  ),
+                ).toEqual(
+                  Arr.sort(
+                    Arr.map(files, (name): readonly [string, string] => [`home /${name}`, last(name)]),
+                    byLabel,
+                  ),
                 );
               }),
             ).pipe(Effect.provide(NodeServices.layer)),
           ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
+    ));
 
-  it("[secrets] a row deleted from a WAL database that the stop folds away is still found, by the running pass", async () => {
-    await fc.assert(
+  it("[secrets] a row deleted from a WAL database that the stop folds away is still found, by the running pass", () =>
+    fc.assert(
       fc.asyncProperty(fc.stringMatching(/^[A-Za-z0-9]{24,40}$/), (secret) =>
         Effect.runPromise(
           Effect.scoped(
@@ -117,14 +143,17 @@ describe("stored", () => {
               db.exec("DELETE FROM spans");
 
               for (let n = 0; n < 20; n++) {
-                insert.run("x".repeat(sentinel.length));
+                insert.run(pipe("x", Str.repeat(sentinel.length)));
               }
 
               const disk = yield* stored({ dir, stop: Effect.sync(() => db.close()) }, new Map(), []);
-              const holders = disk.raw.filter(([, text]) => text.includes(sentinel)).map(([label]) => label);
+              const holders = Arr.map(
+                Arr.filter(disk.raw, ([, text]) => pipe(text, Str.includes(sentinel))),
+                ([label]) => label,
+              );
 
               // The clean stop folds the WAL into the database and deletes it, and the row is gone.
-              expect(holders.filter((label) => !label.startsWith("home (running)"))).toEqual([]);
+              expect(Arr.filter(holders, (label) => !pipe(label, Str.startsWith("home (running)")))).toEqual([]);
               expect(disk.running).toContain("/brain.records.sqlite-wal");
               expect(holders).toContain("home (running) /brain.records.sqlite-wal");
             }),
@@ -132,11 +161,10 @@ describe("stored", () => {
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 10 }) },
-    );
-  });
+    ));
 
-  it("[secrets] every file the running pass reads is an output L17 checks, the span queue's WAL with its deleted row included", async () => {
-    await fc.assert(
+  it("[secrets] every file the running pass reads is an output L17 checks, the span queue's WAL with its deleted row included", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({
           secret: fc.stringMatching(/^[A-Za-z0-9]{24,40}$/),
@@ -154,7 +182,7 @@ describe("stored", () => {
                 yield* fs.makeDirectory(path.join(dir, "records"));
 
                 for (const name of files) {
-                  yield* fs.writeFileString(path.join(dir, name), JSON.stringify(`${name}_${secret}`));
+                  yield* fs.writeFileString(path.join(dir, name), Formatter.formatJson(`${name}_${secret}`));
                 }
 
                 const db = yield* spanQueue(path.join(dir, "brain.records.sqlite"));
@@ -165,18 +193,25 @@ describe("stored", () => {
                 db.exec("DELETE FROM spans");
 
                 for (let n = 0; n < 20; n++) {
-                  insert.run("x".repeat(sentinel.length));
+                  insert.run(pipe("x", Str.repeat(sentinel.length)));
                 }
 
                 const disk = yield* stored({ dir, stop: Effect.sync(() => db.close()) }, new Map(), []);
-                const running = disk.raw.filter(([label]) => label.startsWith("home (running)"));
-                const labels = new Set(disk.outputs.map(([label]) => label));
+                const running = Arr.filter(disk.raw, ([label]) => pipe(label, Str.startsWith("home (running)")));
+                const labels = new Set(Arr.map(disk.outputs, ([label]) => label));
 
                 expect(running.length).toBeGreaterThan(0);
-                expect(running.map(([label]) => label).filter((label) => !labels.has(label))).toEqual([]);
                 expect(
-                  disk.outputs.some(
-                    ([label, text]) => label === "home (running) /brain.records.sqlite-wal" && text.includes(sentinel),
+                  Arr.filter(
+                    Arr.map(running, ([label]) => label),
+                    (label) => !labels.has(label),
+                  ),
+                ).toEqual([]);
+                expect(
+                  Arr.some(
+                    disk.outputs,
+                    ([label, text]) =>
+                      label === "home (running) /brain.records.sqlite-wal" && pipe(text, Str.includes(sentinel)),
                   ),
                   "the WAL's deleted row is an output",
                 ).toBe(true);
@@ -185,11 +220,10 @@ describe("stored", () => {
           ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 10 }) },
-    );
-  });
+    ));
 
-  it("[secrets] only a file gone in the running pass is passed over: any other failure, in either pass, fails the scan", async () => {
-    await fc.assert(
+  it("[secrets] only a file gone in the running pass is passed over: any other failure, in either pass, fails the scan", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.uniqueArray(fc.constantFrom(...NAMES), { minLength: 1 }).chain((files) =>
           fc.record({
@@ -212,7 +246,7 @@ describe("stored", () => {
                 yield* real.makeDirectory(path.join(dir, "records"));
 
                 for (const name of files) {
-                  yield* real.writeFileString(path.join(dir, name), JSON.stringify(name));
+                  yield* real.writeFileString(path.join(dir, name), Formatter.formatJson(name));
                 }
 
                 const target = path.join(dir, failing);
@@ -242,17 +276,21 @@ describe("stored", () => {
                   Effect.provideService(FileSystem.FileSystem, fs),
                   Effect.exit,
                 );
-
-                const all = files.map((name) => `/${name}`).toSorted();
-
+                const all = Arr.sort(
+                  Arr.map(files, (name) => `/${name}`),
+                  Order.String,
+                );
                 // What the scan did: the files each pass read, or the error it failed with.
                 const seen = Exit.match(exit, {
                   onSuccess: (disk) => ({
-                    running: [...disk.running].toSorted(),
-                    stopped: disk.raw
-                      .filter(([label]) => !label.startsWith("home (running)"))
-                      .map(([label]) => label.slice("home ".length))
-                      .toSorted(),
+                    running: Arr.sort(disk.running, Order.String),
+                    stopped: Arr.sort(
+                      Arr.map(
+                        Arr.filter(disk.raw, ([label]) => !pipe(label, Str.startsWith("home (running)"))),
+                        ([label]) => pipe(label, Str.slice("home ".length)),
+                      ),
+                      Order.String,
+                    ),
                   }),
                   onFailure: (cause) => {
                     const error = Cause.squash(cause);
@@ -269,7 +307,7 @@ describe("stored", () => {
 
                 expect(seen, `${reason} on ${method} in the ${pass} pass`).toEqual(
                   pass === "running" && reason === "NotFound"
-                    ? { running: all.filter((file) => file !== `/${failing}`), stopped: all }
+                    ? { running: Arr.filter(all, (file) => file !== `/${failing}`), stopped: all }
                     : { failed: reason, method, path: target },
                 );
               }),
@@ -277,6 +315,5 @@ describe("stored", () => {
           ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 4, full: 40 }) },
-    );
-  });
+    ));
 });

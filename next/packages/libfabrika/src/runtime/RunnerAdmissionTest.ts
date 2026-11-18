@@ -1,10 +1,27 @@
-import { applyCell } from "@demlik/tea";
 // P13 slice 2, next/. Runtime laws take real stores from the module that owns their driver (0062).
+import { applyCell } from "@demlik/tea";
+
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
-import { TestClock } from "effect/testing";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
@@ -93,8 +110,8 @@ const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 // SQL columns and span fields can hold another JSON document.
-const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
-  if (typeof value === "string") {
+const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+  if (Predicate.isString(value)) {
     const prior = cache.get(value);
 
     if (prior !== undefined) {
@@ -106,7 +123,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     const result = [
       value,
       ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
-      ...Array.from(value.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
+      ...Array.from(Str.matchAll(/https?:\/\/[^\s"<>\\]+/gu)(value), ([url]) =>
         Result.getOrElse(
           Result.try(() => decodeURIComponent(decodeURIComponent(url))),
           () => url,
@@ -119,11 +136,8 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     return result;
   }
 
-  return Array.isArray(value)
-    ? value.flatMap((part) => texts(part, cache))
-    : value !== null && typeof value === "object"
-      ? Object.values(value).flatMap((part) => texts(part, cache))
-      : [];
+  // An array's values are its items, in order, so one branch reads arrays and objects alike.
+  return Predicate.isObjectKeyword(value) ? Arr.flatMap(Rec.values(value), (part) => texts(part, cache)) : [];
 };
 
 const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: ReadonlyArray<Cell>, reached: Set<string>) {
@@ -145,7 +159,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
 
     const sql: Sql = {
       exec: (query, ...params) => {
-        if (cut !== "" && WRITE.test(query) && query.includes(cut)) {
+        if (cut !== "" && WRITE.test(query) && Str.includes(cut)(query)) {
           cut = "";
           hits++;
           throw new Error("SQLITE_IOERR");
@@ -166,16 +180,13 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
   for (const [n, cell] of tape.entries()) {
     const j = model.journal;
 
-    const options =
-      j._tag === "idle"
-        ? ["begin", "crash"]
-        : j._tag === "checking"
-          ? ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]
-          : j._tag === "stepping"
-            ? ["finished", "crash"]
-            : j._tag === "writing_reply"
-              ? ["reply_written", "crash"]
-              : ["attempt_cleared", "crash"];
+    const options = Match.value(j).pipe(
+      Match.tag("idle", () => ["begin", "crash"]),
+      Match.tag("checking", () => ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]),
+      Match.tag("stepping", () => ["finished", "crash"]),
+      Match.tag("writing_reply", () => ["reply_written", "crash"]),
+      Match.orElse(() => ["attempt_cleared", "crash"]),
+    );
 
     const move = nth(options, cell.move);
     reached.add(`${move}:${j._tag}`);
@@ -215,7 +226,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
     } else if (j._tag === "checking") {
       const input = pending.get(j.attempt.letter);
       expect(input).toBeDefined();
-      const delivery = Schema.decodeUnknownSync(Schema.Json)(input);
+      const delivery = yield* Schema.decodeUnknownEffect(Schema.Json)(input);
 
       if (move === "admit" || move === "fail_receipt" || move === "fail_journal") {
         message = {
@@ -257,7 +268,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       message = { type: move, seq: j.attempt.seq };
     }
 
-    const msg = Schema.decodeUnknownSync(Schema.toType(supervisor.msg))(message);
+    const msg = yield* Schema.decodeUnknownEffect(Schema.toType(supervisor.msg))(message);
     const before = model;
     const next = applyCell(supervisor, model, msg)[0];
 
@@ -324,6 +335,7 @@ const walk = Effect.fnUntraced(function* (
     build: "test",
   };
 
+  // SAFETY: expected starts unset; a law sets it to the Incoming it waits for.
   const control = { cut: "", hits: 0, checks: 0, updates: 0, mode: "", expected: null as Incoming | null };
   let serial = 0;
   let booted = false;
@@ -340,27 +352,24 @@ const walk = Effect.fnUntraced(function* (
 
         const admission =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
-
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"stepping"')(p));
         const reply = /process_replies/.test(query);
 
         const cleanup =
-          /process_activity/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
-
+          /process_activity/.test(query) &&
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"idle"')(p));
         const activity =
           /process_activity/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
-
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"stepping"')(p));
         const refusal =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"writing_reply"'));
-
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"writing_reply"')(p));
         const abandonment =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"clearing_attempt"'));
-
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"clearing_attempt"')(p));
         const replyComplete =
-          /process_recovery/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+          /process_recovery/.test(query) &&
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"idle"')(p));
 
         if (
           control.cut === "all" ||
@@ -613,38 +622,48 @@ const walk = Effect.fnUntraced(function* (
   const check = Effect.fnUntraced(function* () {
     const saved = yield* live.journal.load;
     expect((yield* live.runner.open("verify")).view, "only accepted inputs change the model").toEqual({
-      versions: Object.fromEntries(versions),
+      versions: Rec.fromEntries(versions),
     });
 
     for (const prior of failures) {
       expect(yield* live.journal.input(prior.id), "earlier failure evidence stays exact").toEqual(prior);
     }
 
-    expect(saved?.receipts.filter((r) => r.tries > 0).every((r) => r.errors.length === r.tries)).toBe(true);
-
-    const records = live.raw
-      .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .flatMap(({ name }) => live.raw.exec(`SELECT * FROM "${name}"`));
-
-    const outputs = [...writes, ...records.map((row) => JSON.stringify(row)), ...errors, ...monitor.text()].flatMap(
-      (output) => texts(output, decoded),
+    expect(
+      saved === null
+        ? undefined
+        : Arr.every(
+            Arr.filter(saved.receipts, (r) => r.tries > 0),
+            (r) => r.errors.length === r.tries,
+          ),
+    ).toBe(true);
+    const records = Arr.flatMap(
+      live.raw.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"),
+      ({ name }) => live.raw.exec(`SELECT * FROM "${name}"`),
     );
+    const written = [...writes, ...Arr.map(records, (row) => JSON.stringify(row)), ...errors, ...monitor.text()];
+    const outputs = Arr.flatMap(written, (output) => texts(output, decoded));
 
     for (const body of refusedBodies) {
-      const forms = [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body), body.slice(0, 14)];
+      const forms = [
+        body,
+        Str.slice(1, -1)(Formatter.formatJson(body)),
+        encodeURIComponent(body),
+        Str.slice(0, 14)(body),
+      ];
       expect(
-        outputs.filter((output) => forms.some((form) => output.includes(form))),
+        Arr.filter(outputs, (output) => Arr.some(forms, (form) => Str.includes(form)(output))),
         "input text leaked",
       ).toEqual([]);
     }
   });
 
   for (const cell of tape) {
-    const unansweredFailures = failures.filter(
-      (failed) => !answers.some((answered) => answered.input.id === failed.id),
+    const unansweredFailures = Arr.filter(
+      failures,
+      (failed) => !Arr.some(answers, (answered) => answered.input.id === failed.id),
     );
-
-    const available = enabled.filter((move) =>
+    const available = Arr.filter(enabled, (move) =>
       move === "refuse_failed"
         ? unansweredFailures.length > 0
         : move === "retry" || move === "reuse"
@@ -672,8 +691,7 @@ const walk = Effect.fnUntraced(function* (
 
     if (move === "legacy_refuse" || move === "invalid") {
       const original = yield* input(cell, true);
-      const message = Schema.decodeUnknownSync(Save)(original.envelope.input);
-
+      const message = yield* Schema.decodeUnknownEffect(Save)(original.envelope.input);
       const delivery =
         move === "legacy_refuse"
           ? { ...original, envelope: { ...original.envelope, id: `in-${yield* ids.next(Id.Process)}-${serial}` } }
@@ -708,8 +726,8 @@ const walk = Effect.fnUntraced(function* (
     if (move === "refuse_failed") {
       const prior = nth(unansweredFailures, cell.pick);
       const old = yield* live.journal.receipt(prior.id);
-      const message = Schema.decodeUnknownSync(Save)(prior.envelope.input);
-      const advance = yield* input({ ...cell, pick: Number(message.note.slice(1)) }, false);
+      const message = yield* Schema.decodeUnknownEffect(Save)(prior.envelope.input);
+      const advance = yield* input({ ...cell, pick: Number(Str.slice(1)(message.note)) }, false);
       control.expected = advance;
       const advanced = yield* live.runner.msg(advance);
       expect(advanced._tag).toBe("accepted");
@@ -732,29 +750,28 @@ const walk = Effect.fnUntraced(function* (
       const prior = nth(answers, cell.pick);
       const component = Math.floor(cell.pick / answers.length) % 4;
 
-      const changed =
-        component === 0
-          ? { ...prior.input, seen: prior.input.seen + 1 }
-          : component === 1
-            ? { ...prior.input, sentAt: "2026-11-11T00:00:01Z" }
-            : component === 2
-              ? {
-                  ...prior.input,
-                  envelope: {
-                    ...prior.input.envelope,
-                    input: {
-                      ...Schema.decodeUnknownSync(Save)(prior.input.envelope.input),
-                      body: `changed-${cell.pick}`,
-                    },
-                  },
-                }
-              : {
-                  ...prior.input,
-                  envelope: {
-                    ...prior.input.envelope,
-                    by: Writer.cases.person.make({ key: owner.key, for: "different-fixture-writer" }),
-                  },
-                };
+      const changed = yield* Match.value(component).pipe(
+        Match.when(0, () => Effect.succeed({ ...prior.input, seen: prior.input.seen + 1 })),
+        Match.when(1, () => Effect.succeed({ ...prior.input, sentAt: "2026-11-11T00:00:01Z" })),
+        Match.when(2, () =>
+          Effect.map(Schema.decodeUnknownEffect(Save)(prior.input.envelope.input), (save) => ({
+            ...prior.input,
+            envelope: {
+              ...prior.input.envelope,
+              input: { ...save, body: `changed-${cell.pick}` },
+            },
+          })),
+        ),
+        Match.orElse(() =>
+          Effect.succeed({
+            ...prior.input,
+            envelope: {
+              ...prior.input.envelope,
+              by: Writer.cases.person.make({ key: owner.key, for: "different-fixture-writer" }),
+            },
+          }),
+        ),
+      );
 
       const retried = move === "retry" ? prior.input : changed;
       // Accepted placement permits new clocks on a resend; its body stays bound.
@@ -793,7 +810,7 @@ const walk = Effect.fnUntraced(function* (
                       : "";
 
     if (refusing) {
-      refusedBodies.push(Schema.decodeUnknownSync(Save)(fresh.envelope.input).body);
+      refusedBodies.push((yield* Schema.decodeUnknownEffect(Save)(fresh.envelope.input)).body);
     }
 
     const exit = yield* Effect.exit(live.runner.msg(fresh));
@@ -844,12 +861,18 @@ const walk = Effect.fnUntraced(function* (
       if (move === "check_throw" || move === "update_throw") {
         failures.push(fresh);
         const saved = yield* live.journal.load;
-        expect(saved?.receipts.find((r) => r.letter === fresh.id)).toMatchObject({
+        expect(
+          saved === null
+            ? undefined
+            : Option.getOrUndefined(Arr.findFirst(saved.receipts, (r) => r.letter === fresh.id)),
+        ).toMatchObject({
           input: fresh,
           tries: 1,
           errors: [move === "check_throw" ? "RangeError" : "TypeError"],
         });
-        expect(saved?.observations.filter((o) => o.letter === fresh.id)).toHaveLength(1);
+        expect(saved === null ? undefined : Arr.filter(saved.observations, (o) => o.letter === fresh.id)).toHaveLength(
+          1,
+        );
         expect(saved?.crashes).toBe((before?.crashes ?? 0) + 1);
       }
 
@@ -862,7 +885,10 @@ const walk = Effect.fnUntraced(function* (
         }
 
         control.cut = "";
-        expect((yield* live.journal.load)?.receipts.some((r) => r.letter === fresh.id && r.tries > 0)).toBe(false);
+        const loaded = yield* live.journal.load;
+        expect(
+          loaded === null ? undefined : Arr.some(loaded.receipts, (r) => r.letter === fresh.id && r.tries > 0),
+        ).toBe(false);
       }
 
       control.mode = "";
@@ -882,10 +908,16 @@ const walk = Effect.fnUntraced(function* (
 
       if (move === "lost_observation") {
         const saved = yield* live.journal.load;
-        expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "fresh")).toHaveLength(0);
-        expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "interrupted")).toHaveLength(
-          sameRunner ? 0 : 1,
-        );
+        expect(
+          saved === null
+            ? undefined
+            : Arr.filter(saved.observations, (o) => o.letter === fresh.id && o.phase === "fresh"),
+        ).toHaveLength(0);
+        expect(
+          saved === null
+            ? undefined
+            : Arr.filter(saved.observations, (o) => o.letter === fresh.id && o.phase === "interrupted"),
+        ).toHaveLength(sameRunner ? 0 : 1);
       }
 
       if (
@@ -930,14 +962,23 @@ const walk = Effect.fnUntraced(function* (
 
         if (move === "lost_observation") {
           const saved = yield* live.journal.load;
-          expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "fresh")).toHaveLength(0);
-          expect(saved?.receipts.find((r) => r.letter === fresh.id)?.errors ?? []).toEqual([]);
+          expect(
+            saved === null
+              ? undefined
+              : Arr.filter(saved.observations, (o) => o.letter === fresh.id && o.phase === "fresh"),
+          ).toHaveLength(0);
+          expect(
+            (saved === null
+              ? undefined
+              : Option.getOrUndefined(Arr.findFirst(saved.receipts, (r) => r.letter === fresh.id))
+            )?.errors ?? [],
+          ).toEqual([]);
         }
 
         answers.push({ input: fresh, first: answer });
 
         if (!refusing) {
-          const m = Schema.decodeUnknownSync(Save)(fresh.envelope.input);
+          const m = yield* Schema.decodeUnknownEffect(Save)(fresh.envelope.input);
           versions.set(m.note, (versions.get(m.note) ?? 0) + 1);
         }
       }
@@ -951,7 +992,7 @@ const walk = Effect.fnUntraced(function* (
       answers.push({ input: fresh, first: answer });
 
       if (!refusing) {
-        const m = Schema.decodeUnknownSync(Save)(fresh.envelope.input);
+        const m = yield* Schema.decodeUnknownEffect(Save)(fresh.envelope.input);
         versions.set(m.note, (versions.get(m.note) ?? 0) + 1);
       }
     }
@@ -969,7 +1010,7 @@ const walk = Effect.fnUntraced(function* (
   }
 
   const letters = yield* Stream.runCollect(live.mailbox.read(NAME, 0));
-  expect(letters.length).toBe([...versions.values()].reduce((a, b) => a + b, 0));
+  expect(letters.length).toBe(Arr.reduce([...versions.values()], 0, (a, b) => a + b));
   yield* check();
 });
 

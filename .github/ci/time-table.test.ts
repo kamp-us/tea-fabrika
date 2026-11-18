@@ -1,9 +1,10 @@
 import { relative, resolve } from "node:path";
-import { it as effectIt } from "@effect/vitest";
+import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { type Duration, Effect, Schema } from "effect";
+import { DateTime, Effect, Record as Rec, Schema } from "effect";
+import type { Duration } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import {
   Unread,
   collect,
@@ -20,6 +21,15 @@ import {
   type Timings,
   TRIES,
 } from "./time-table.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // Today's CI, both workflows. Covers time-table.ts, each test leg's time table. Inputs are shaped as
 // GitHub's jobs API and Vitest's JSON reporter write them; every other input is broken. Each plant
@@ -87,7 +97,7 @@ const env = {
   REPORT: "/runner/temp/next.json",
 };
 
-const io = (answer: () => unknown, report: () => string): Io => ({
+const io = <A>(answer: () => A, report: () => string): Io => ({
   job: () => Effect.sync(answer),
   read: () => Effect.sync(report),
 });
@@ -108,7 +118,7 @@ const rowsUnder = (text: string, heading: string): string[] => {
 };
 
 // A time as the jobs API writes it, to the second: 2026-11-14T10:00:00Z.
-const iso = (seconds: number) => new Date(seconds * 1000).toISOString().replace(".000Z", "Z");
+const iso = (seconds: number) => DateTime.formatIso(DateTime.makeUnsafe(seconds * 1000)).replace(".000Z", "Z");
 
 // A jobs API step: started or not, ended or not, with a conclusion once GitHub gives one. Names are
 // single-spaced, so a table cell holds them as they are.
@@ -228,39 +238,47 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
   );
 });
 
-it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, every step and every file, and no test output", async () => {
-  // Plant: take the sha from GITHUB_SHA, a pull request's merge commit, instead of HEAD.
-  const report = { testResults: [testFile("next/a.test.ts", 5000, 2500, 3), testFile("next/b.test.ts", 5000, 500, 1)] };
+it.live(
+  "format: TT3: a leg's artifact holds the run, the event, the head, the leg, every step and every file, and no test output",
+  () =>
+    Effect.gen(function* () {
+      // Plant: take the sha from GITHUB_SHA, a pull request's merge commit, instead of HEAD.
+      const report = {
+        testResults: [testFile("next/a.test.ts", 5000, 2500, 3), testFile("next/b.test.ts", 5000, 500, 1)],
+      };
 
-  const timings = await timingsOf(
-    { ...env, GITHUB_SHA: "m".repeat(40) },
-    io(
-      () => job,
-      () => JSON.stringify(report),
-    ),
-  );
+      const timings = yield* promised(() =>
+        timingsOf(
+          { ...env, GITHUB_SHA: "m".repeat(40) },
+          io(
+            () => job,
+            () => JSON.stringify(report),
+          ),
+        ),
+      );
 
-  expect(timings).toEqual({
-    run: "43633120187",
-    attempt: "1",
-    workflow: "check",
-    event: "pull_request",
-    sha: "a".repeat(40),
-    job: "next",
-    leg: "3",
-    queueWait: { created: "2026-11-14T09:59:56Z", started: "2026-11-14T10:00:00Z", seconds: 4 },
-    steps: readSteps(job),
-    files: {
-      _tag: "read",
-      rows: [
-        { path: "next/a.test.ts", seconds: 2.5, tests: 3, result: "passed" },
-        { path: "next/b.test.ts", seconds: 0.5, tests: 1, result: "passed" },
-      ],
-    },
-  });
-  expect(JSON.stringify(timings)).not.toContain("test output");
-  expect(fileName(timings)).toBe("timings-next-3.json");
-});
+      expect(timings).toEqual({
+        run: "43633120187",
+        attempt: "1",
+        workflow: "check",
+        event: "pull_request",
+        sha: "a".repeat(40),
+        job: "next",
+        leg: "3",
+        queueWait: { created: "2026-11-14T09:59:56Z", started: "2026-11-14T10:00:00Z", seconds: 4 },
+        steps: readSteps(job),
+        files: {
+          _tag: "read",
+          rows: [
+            { path: "next/a.test.ts", seconds: 2.5, tests: 3, result: "passed" },
+            { path: "next/b.test.ts", seconds: 0.5, tests: 1, result: "passed" },
+          ],
+        },
+      });
+      expect(JSON.stringify(timings)).not.toContain("test output");
+      expect(fileName(timings)).toBe("timings-next-3.json");
+    }),
+);
 
 // What GitHub or a leg could hand over instead: nothing, the wrong JSON, or a near miss.
 const broken = fc.oneof(
@@ -276,7 +294,9 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
   // Plant: let readFiles skip a broken entry and call the rest read, as shard-times.ts does.
   fc.assert(
     fc.property(broken, broken, (steps, files) => {
+      // SAFETY: `broken` may be anything; the optional `steps` key is only probed, and read through `Array.isArray`.
       const isJob = Array.isArray((steps as { steps?: unknown } | null)?.steps);
+      // SAFETY: `broken` may be anything; the optional `testResults` key is only probed, and read through `Array.isArray`.
       const isReport = Array.isArray((files as { testResults?: unknown } | null)?.testResults);
       fc.pre(!isJob || readSteps(steps)._tag === "unavailable");
       fc.pre(!isReport || readFiles(files, root)._tag === "unavailable");
@@ -304,10 +324,11 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
   );
 });
 
-it("TT5: whatever the environment holds and whatever GitHub or the report file answer, the leg's timings come back", async () => {
+it("TT5: whatever the environment holds and whatever GitHub or the report file answer, the leg's timings come back", () => {
   // Plant: let a failed read escape collect as a defect, as a bare JSON.parse of a missing report would.
-  const key = fc.constantFrom(...Object.keys(env));
-  await fc.assert(
+  const key = fc.constantFrom(...Rec.keys(env));
+
+  return fc.assert(
     fc.asyncProperty(
       fc.uniqueArray(key),
       fc.oneof(broken, fc.constant(job)),
@@ -315,7 +336,7 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
       fc.oneof(fc.string(), fc.constant("{}"), fc.constant('{"testResults":[]}')),
       fc.boolean(),
       async (dropped, answer, apiThrows, report, readThrows) => {
-        const partial = Object.fromEntries(Object.entries(env).filter(([name]) => !dropped.includes(name)));
+        const partial = Rec.fromEntries(Rec.toEntries(env).filter(([name]) => !dropped.includes(name)));
 
         const timings = await timingsOf(partial, {
           job: () =>
@@ -345,7 +366,7 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
   );
 });
 
-it("TT6: the jobs API is asked again, a pause apart, until the steps before this one show an end, at most TRIES times", async () => {
+it("TT6: the jobs API is asked again, a pause apart, until the steps before this one show an end, at most TRIES times", () => {
   // Plant: read the answer once, so the step just before is timed as never ended.
   const running = structuredClone(job);
   running.steps[1]!.completed_at = null;
@@ -354,7 +375,7 @@ it("TT6: the jobs API is asked again, a pause apart, until the steps before this
 
   // How many answers come before the step just before the time table shows its end: none, some, or
   // more than the tries allow.
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(fc.integer({ min: 0, max: TRIES + 3 }), async (late) => {
       const asked: number[] = [];
 
@@ -419,7 +440,7 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
   );
 });
 
-effectIt.effect.prop(
+it.effect.prop(
   "TT8: queue wait uses a started job's created and started times, and leaves pending placeholders out",
   {
     status: Schema.Literals(["in_progress", "completed"]),
@@ -548,7 +569,7 @@ it("TT8: ignores pending placeholders and rejects jobs without valid queue timin
 });
 
 // The existing timing properties above keep their generators, assertions and run counts.
-effectIt.effect.prop(
+it.effect.prop(
   "P3 missing or broken final results preserve independent progress and never invent file timings",
   { count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })), broken: Schema.Boolean },
   ({ count, broken }) =>

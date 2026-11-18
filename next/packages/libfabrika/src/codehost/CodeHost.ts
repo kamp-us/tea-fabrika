@@ -1,9 +1,11 @@
 /**
  * Pinned code-host reads, updates and squash merges.
  */
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 /**
  * Schema for a positive change number.
@@ -36,7 +38,9 @@ export const Tree = Id.pipe(Schema.brand("Tree"));
 export const Path = Schema.String.check(
   Schema.makeFilter(
     (p) =>
-      (p !== "" && !p.includes("\u0000") && p.split("/").every((s) => s !== "" && s !== "." && s !== "..")) ||
+      (p !== "" &&
+        !Str.includes("\u0000")(p) &&
+        Arr.every(Str.split("/")(p), (s) => s !== "" && s !== "." && s !== "..")) ||
       "not a git path",
   ),
 );
@@ -52,7 +56,7 @@ export const Change = Schema.TaggedUnion({
     head: Commit,
     state: Schema.Literals(["open", "draft", "closed", "merged"]),
     // null means the host could not list every path; a partial list cannot lighten a change.
-    paths: Schema.NullOr(Schema.Array(Path)),
+    paths: Path.pipe(Schema.Array, Schema.NullOr),
   },
   missing: { change: ChangeId },
 });

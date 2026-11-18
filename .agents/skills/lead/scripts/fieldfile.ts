@@ -25,7 +25,7 @@
 // and a type), so neither can save a JSON row under its own id.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Console, Effect, FileSystem, Path, Predicate, Result, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 
 export const Log = Schema.Literals(["notes", "runs", "findings"]);
@@ -86,7 +86,7 @@ export const saved = (log: Log, row: Row): Result.Result<Saved, Refused> => {
 
   const name = `${String(row["date"])}-${String(run)}`;
 
-  return typeof run === "string" && Schema.is(Day)(row["date"]) && Schema.is(Dated)(name)
+  return Predicate.isString(run) && Schema.is(Day)(row["date"]) && Schema.is(Dated)(name)
     ? Result.succeed({ name, row: { ...row, run: name } })
     : refuse(`a run row needs its date and a \`run\` of lowercase words, got ${JSON.stringify(run)}`);
 };

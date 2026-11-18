@@ -1,5 +1,7 @@
 #!/bin/sh
 # stepcommit.sh [--commit-only] <step> <ticket> <subject> <file>...
+# <step> is tests, build, mutation, lead, or fix (a 0177 fix round: one agent writes the law and the
+# fix, so it may hold exam paths and takes tests' and build's paths; it signs nothing).
 # The unsigned route is for boxes; MAIN signs the saved run at fetch.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -13,7 +15,7 @@ def refuse(why, code=1):
     print("stepcommit: " + why, file=sys.stderr); sys.exit(code)
 if len(args) < 4: refuse("name step, ticket, subject and named paths", 2)
 step, ticket, subject, *paths = args
-if step not in ("tests", "build", "mutation", "lead"): refuse("unknown step " + step, 2)
+if step not in ("tests", "build", "mutation", "lead", "fix"): refuse("unknown step " + step, 2)
 role = "tests" if step == "mutation" else step
 def git(*args, **kw):
     return subprocess.run(["git", *args], capture_output=True, **kw)
@@ -39,15 +41,127 @@ branch = git("branch", "--show-current").stdout.decode().strip()
 if step == "lead" and not only:
     quest = branch.removesuffix("-wip")
     # gh pr list --json commits asks for every author too, which GitHub refuses as too big.
-    query = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100){totalCount nodes{number headRefName commits(first:250){totalCount nodes{commit{oid}}}}}}}"
+    query = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100){totalCount nodes{number headRefName baseRefOid headRefOid commits(first:100){totalCount nodes{commit{oid}}}}}}}"
     cannot = "open PRs cannot be read, so a lead link cannot be checked: "
-    try: listed = subprocess.run(["gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}", "-f", "query=" + query], capture_output=True, text=True)
-    except OSError as e: refuse(cannot + str(e), 5)
-    if listed.returncode: refuse(cannot + listed.stderr.strip(), 5)
-    try: prs = json.loads(listed.stdout)["data"]["repository"]["pullRequests"]
-    except (ValueError, KeyError, TypeError): refuse(cannot + "unexpected answer", 5)
-    if prs["totalCount"] > len(prs["nodes"]) or any(pr["commits"]["totalCount"] > len(pr["commits"]["nodes"]) for pr in prs["nodes"]):
-        refuse(cannot + "more open PRs or commits than one read holds", 5)
+    sha1 = re.compile(r"[0-9a-f]{40}\Z")
+    def read_prs():
+        try:
+            listed = subprocess.run(
+                ["gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}", "-f", "query=" + query],
+                capture_output=True,
+                text=True,
+            )
+        except OSError as e: refuse(cannot + str(e), 5)
+        if listed.returncode: refuse(cannot + listed.stderr.strip(), 5)
+        try:
+            response = json.loads(listed.stdout)
+            if not isinstance(response, dict) or response.get("errors"):
+                refuse(cannot + "unexpected answer", 5)
+            prs = response["data"]["repository"]["pullRequests"]
+            nodes, total = prs["nodes"], prs["totalCount"]
+        except (ValueError, KeyError, TypeError): refuse(cannot + "unexpected answer", 5)
+        if not isinstance(nodes, list) or type(total) is not int or total != len(nodes):
+            refuse(cannot + "more open PRs than one read holds or an invalid PR count", 5)
+        numbers = set()
+        for pr in nodes:
+            try:
+                number, head = pr["number"], pr["headRefName"]
+                commits, expected = pr["commits"]["nodes"], pr["commits"]["totalCount"]
+            except (KeyError, TypeError): refuse(cannot + "unexpected PR row", 5)
+            if type(number) is not int or number < 1 or number in numbers or not isinstance(head, str) or not head:
+                refuse(cannot + "invalid or duplicate PR row", 5)
+            numbers.add(number)
+            if not isinstance(commits, list) or type(expected) is not int or expected < len(commits):
+                refuse(cannot + "invalid PR commit count", 5)
+            seen = set()
+            for item in commits:
+                try: oid = item["commit"]["oid"]
+                except (KeyError, TypeError): refuse(cannot + "unexpected PR commit", 5)
+                if not isinstance(oid, str) or not sha1.fullmatch(oid):
+                    refuse(cannot + "invalid PR commit SHA", 5)
+                if oid in seen: refuse(cannot + "repeated PR commit SHA", 5)
+                seen.add(oid)
+        return prs
+
+    def pr_snapshot(prs):
+        return tuple(
+            (
+                pr["number"],
+                pr["headRefName"],
+                pr.get("baseRefOid"),
+                pr.get("headRefOid"),
+                pr["commits"]["totalCount"],
+                tuple(item["commit"]["oid"] for item in pr["commits"]["nodes"]),
+            )
+            for pr in prs["nodes"]
+        )
+
+    def compare_pr(pr, expected):
+        base, head = pr.get("baseRefOid"), pr.get("headRefOid")
+        if (
+            not isinstance(base, str)
+            or not sha1.fullmatch(base)
+            or not isinstance(head, str)
+            or not sha1.fullmatch(head)
+        ):
+            refuse(cannot + f"PR {pr['number']} has invalid frozen refs", 5)
+        endpoint = f"repos/{{owner}}/{{repo}}/compare/{base}...{head}?per_page=100"
+        try:
+            compared = subprocess.run(
+                ["gh", "api", "--paginate", "--slurp", endpoint], capture_output=True, text=True
+            )
+        except OSError as e: refuse(cannot + str(e), 5)
+        if compared.returncode: refuse(cannot + "compare request failed: " + compared.stderr.strip(), 5)
+        try: pages = json.loads(compared.stdout)
+        except ValueError: refuse(cannot + "compare response was not valid JSON", 5)
+        page_count = (expected + 99) // 100
+        if not isinstance(pages, list) or len(pages) != page_count:
+            refuse(cannot + f"PR {pr['number']} compare pages are incomplete", 5)
+        oids, seen = [], set()
+        for index, page in enumerate(pages):
+            if (
+                not isinstance(page, dict)
+                or type(page.get("ahead_by")) is not int
+                or page["ahead_by"] != expected
+                or type(page.get("total_commits")) is not int
+                or page["total_commits"] != expected
+            ):
+                refuse(cannot + f"PR {pr['number']} compare count changed", 5)
+            base_commit = page.get("base_commit")
+            if not isinstance(base_commit, dict) or base_commit.get("sha") != base:
+                refuse(cannot + f"PR {pr['number']} compare refs changed", 5)
+            commits = page.get("commits")
+            page_size = min(100, expected - index * 100)
+            if not isinstance(commits, list) or len(commits) != page_size:
+                refuse(cannot + f"PR {pr['number']} compare page is incomplete", 5)
+            for commit in commits:
+                oid = commit.get("sha") if isinstance(commit, dict) else None
+                if not isinstance(oid, str) or not sha1.fullmatch(oid):
+                    refuse(cannot + f"PR {pr['number']} compare has an invalid commit SHA", 5)
+                if oid in seen: refuse(cannot + f"PR {pr['number']} compare repeats a commit SHA", 5)
+                seen.add(oid)
+                oids.append(oid)
+        if len(oids) != expected or not oids or oids[-1] != head:
+            refuse(cannot + f"PR {pr['number']} compare count or tip changed", 5)
+        return oids
+
+    prs = read_prs()
+    before = pr_snapshot(prs)
+    commits_by_pr, used_compare = {}, False
+    for pr in prs["nodes"]:
+        listed_commits = pr["commits"]["nodes"]
+        expected = pr["commits"]["totalCount"]
+        if len(listed_commits) == expected:
+            commits_by_pr[pr["number"]] = [item["commit"]["oid"] for item in listed_commits]
+        else:
+            compared_commits = compare_pr(pr, expected)
+            listed_oids = {item["commit"]["oid"] for item in listed_commits}
+            if not listed_oids.issubset(set(compared_commits)):
+                refuse(cannot + f"PR {pr['number']} compare omitted a listed PR commit", 5)
+            commits_by_pr[pr["number"]] = compared_commits
+            used_compare = True
+    if used_compare and pr_snapshot(read_prs()) != before:
+        refuse(cannot + "open PR data changed during the check", 5)
     notes = dict(reversed(l.split()) for l in git("notes", "--ref=fabrika", "list").stdout.decode().splitlines() if len(l.split()) == 2)
     def ticket_of(sha):
         if sha not in notes: return None
@@ -56,7 +170,7 @@ if step == "lead" and not only:
         return note.get("ticket") if isinstance(note, dict) else None
     for pr in prs["nodes"]:
         other = pr["headRefName"].removesuffix("-wip")
-        if other != quest and any(ticket_of(c["commit"]["oid"]) == ticket for c in pr["commits"]["nodes"]):
+        if other != quest and any(ticket_of(oid) == ticket for oid in commits_by_pr[pr["number"]]):
             refuse(f"stale_link: ticket {ticket}'s open PR {pr['number']} is on {pr['headRefName']}; a lead link here would make that PR's lead links stale. Sign under a lead ticket of your own instead.", 5)
 # A box tree sits in BOXES/box (lead/scripts/quest.ts boxTree); a sign worktree, and an older tree, in BOXES.
 boxes = pathlib.Path(os.environ.get("BOXES", str(root.parent.parent if root.parent.name == "box" else root.parent)))
@@ -98,7 +212,7 @@ def unlisted_exam(paths):
     # checkout's, so a step cannot widen the exam to take a path. exam.py prints "path<TAB>glob" per
     # hit and exits 1; any other answer allows nothing.
     unlisted = [p for p in paths if owner_of(p) is None]
-    if step != "tests" or not unlisted: return set()
+    if step not in ("tests", "fix") or not unlisted: return set()
     listed = git("show", state.get("base", "") + ":exam-paths.json")
     if listed.returncode: return set()
     with tempfile.NamedTemporaryFile(suffix=".json") as exam_list:
@@ -112,8 +226,10 @@ def check(paths):
         if exam.returncode: refuse("a build may not commit exam paths; answer send to tests", 3)
     if owners is not None:
         exam = unlisted_exam(paths)
+        # mutation takes tests' paths too; a fix round (0177) is tests and build in one agent.
+        mine = {"mutation": {"mutation", "tests"}, "fix": {"tests", "build"}}.get(step, {step})
         for p in paths:
-            if owner_of(p) != step and not (step == "mutation" and owner_of(p) == "tests") and p not in exam:
+            if owner_of(p) not in mine and p not in exam:
                 refuse("not_owner: " + p)
 check(named)
 # A case-only rename on a disk that ignores case (id.ts to Id.ts): git keeps the index's old name
@@ -171,15 +287,15 @@ if not coauthor:
     coauthor = f"{name} <{email}>"
 commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", "-m", subject, "-m", "Co-authored-by: " + coauthor])
 if commit.returncode: sys.exit(commit.returncode)
-if not only:
+if not only and step != "fix":
     # STEPCOMMIT_SIGNER: drive.ts names main's own signer when the tree holds an agent's edits.
     signer = os.environ.get("STEPCOMMIT_SIGNER", "pnpm commits").split()
     signed = subprocess.run([*signer, "sign", "--step", role, "--ticket", ticket, "--key", str(pathlib.Path.home() / ".fabrika/step-keys" / role)])
     if signed.returncode: sys.exit(signed.returncode)
 subprocess.run(["git", "log", "--oneline", "-1"])
-# 0134: a signed commit leaves the laptop now. A box's commit (STEPCOMMIT_BOX, a detached sign
+# 0134: a commit leaves the laptop now. A box's commit (STEPCOMMIT_BOX, a detached sign
 # worktree) is pushed by the quest's host part right after: drive.ts's pushing phase, the host step.
 if not only and not named_box:
     publisher = os.environ["STEPCOMMIT_PUBLISHER"].split() if os.environ.get("STEPCOMMIT_PUBLISHER") else ["node", str(here / "../../lead/scripts/publish.ts")]
-    if subprocess.run([*publisher, branch]).returncode: refuse(f"committed and signed, but not pushed (0134); run node .agents/skills/lead/scripts/publish.ts {branch or '<branch>'} where the push can run", 6)
+    if subprocess.run([*publisher, branch]).returncode: refuse(f"committed{'' if step == 'fix' else ' and signed'}, but not pushed (0134); run node .agents/skills/lead/scripts/publish.ts {branch or '<branch>'} where the push can run", 6)
 PY

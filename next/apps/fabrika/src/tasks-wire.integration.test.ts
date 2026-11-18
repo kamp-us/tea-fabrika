@@ -1,78 +1,35 @@
 // A14, next/. Host-only under 0045: real sockets, workerd and persistent object storage are the subject.
 // This scenario executes no child command. The isolated local instance uses generated keys only.
-// edge: Node crypto creates test identities; these keys never touch a file or an account.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+// Effect's Signature makes the test identities (person-key.test-support.ts); these keys never touch a
+// file or an account.
 import { NodeServices } from "@effect/platform-node";
 import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task, Result } from "@kampus/libfabrika/tasks/Task";
-import { Effect, FileSystem, Path, Queue, Schema } from "effect";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import { Effect, FileSystem, Path, Queue, Schema, Array as Arr, String as Str, Formatter } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { FetchHttpClient, HttpBody, HttpClient } from "effect/http";
+
+import { keptEnv } from "./env.test-support.ts";
+
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { programs } from "./table.ts";
 import type { Project as SeededProject } from "./tasks-wire.test-support.ts";
 
+class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
 
 const SENT = "2026-11-12T10:00:00.000Z";
-
-const field = (v: string | Uint8Array) => {
-  const b = Buffer.from(v);
-  const n = Buffer.alloc(4);
-  n.writeUInt32BE(b.length);
-
-  return Buffer.concat([n, b]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x;
-
-  if (raw === undefined) {
-    throw new Error("test public key has no x coordinate");
-  }
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    sign: (value: string) => {
-      const body = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(value).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, body, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packed
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
@@ -86,19 +43,16 @@ type Frame = typeof Frame.Type;
 
 class Closed extends Schema.TaggedError<Closed>()("Closed", { code: Schema.Int }) {}
 
-const socket = Effect.fnUntraced(function* (
-  url: string,
-  key: ReturnType<typeof identity>,
-  tab: string,
-  authorized = true,
-) {
+const socket = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity, tab: string, authorized = true) {
   const inbox = yield* Queue.unbounded<Frame | Closed>();
   const frames: Array<Frame> = [];
   let closed: Closed | undefined;
 
   const ws = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const ws = new WebSocket(`${url.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+      const ws = new WebSocket(
+        `${Str.replace(/^http/, "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+      );
       ws.addEventListener("message", (event) => {
         const f = Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data));
         frames.push(f);
@@ -116,13 +70,13 @@ const socket = Effect.fnUntraced(function* (
 
   let next = 0;
 
-  const call = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     if (closed !== undefined) {
       return yield* closed;
     }
 
     const id = ++next;
-    ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    ws.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
 
     while (true) {
       const frame = yield* Queue.take(inbox).pipe(Effect.timeout("20 seconds"));
@@ -149,8 +103,7 @@ const socket = Effect.fnUntraced(function* (
     challenge = frame;
   } while (challenge.method !== "challenge");
 
-  const { nonce } = Schema.decodeUnknownSync(Schema.Struct({ nonce: Schema.String }))(challenge.params);
-
+  const { nonce } = yield* Schema.decodeUnknownEffect(Schema.Struct({ nonce: Schema.String }))(challenge.params);
   const answer = yield* call("initialize", {
     versions: [1],
     has: ["git"],
@@ -162,7 +115,7 @@ const socket = Effect.fnUntraced(function* (
     platform: "headless",
     os: "linux",
     sentAt: SENT,
-    signed: key.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+    signed: yield* key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
 
   expect(answer.error === undefined).toBe(authorized);
@@ -190,9 +143,9 @@ it.live(
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "tasks-wire-" });
       const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
-      const root = identity(),
-        hands = identity(),
-        other = identity();
+      const root = yield* SshsigTest.identity,
+        hands = yield* SshsigTest.identity,
+        other = yield* SshsigTest.identity;
 
       const selected: typeof SeededProject.selected = hands.fingerprint;
       const app = path.resolve(import.meta.dirname, "..");
@@ -201,12 +154,15 @@ it.live(
       // Only a generated public fingerprint enters the bundle; no key material or extra wire method.
       yield* fs.writeFileString(
         entry,
-        [
-          // Every entrypoint brain.ts exports: a Process is configured only with its IsolateTail.
-          `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
-          `import { Project as SeededProject } from ${JSON.stringify(path.join(app, "src/tasks-wire.test-support.ts"))};`,
-          `export class Project extends SeededProject { static selected = ${JSON.stringify(selected)}; }`,
-        ].join("\n"),
+        Arr.join(
+          [
+            // Every entrypoint brain.ts exports: a Process is configured only with its IsolateTail.
+            `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
+            `import { Project as SeededProject } from ${Formatter.formatJson(path.join(app, "src/tasks-wire.test-support.ts"))};`,
+            `export class Project extends SeededProject { static selected = ${Formatter.formatJson(selected)}; }`,
+          ],
+          "\n",
+        ),
       );
 
       const built = yield* build({
@@ -218,21 +174,13 @@ it.live(
         files: [],
       });
 
-      const oldHome = process.env.ALCHEMY_HOME;
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          if (oldHome === undefined) {
-            delete process.env.ALCHEMY_HOME;
-          } else {
-            process.env.ALCHEMY_HOME = oldHome;
-          }
-        }),
-      );
+      // localInstance sets ALCHEMY_HOME; it goes back as it was when the scope closes.
+      yield* keptEnv(["ALCHEMY_HOME"]);
 
       const running = yield* localInstance(
         built,
         // The settings fixture names the same gateway budget, 100,000 a minute.
-        RecordWireTest.startupFixture({
+        yield* RecordWireTest.startupFixture({
           home,
           name: "tasks-wire",
           person: PERSON,
@@ -249,7 +197,7 @@ it.live(
       // seeded task names `wire:1`, so the world starts it: a finish wakes that name (P39 slice 3).
       const requester = yield* Effect.tryPromise({
         try: () =>
-          Reflect.get(running.project("tasks-wire"), "start")(
+          running.project("tasks-wire").start(
             {
               _tag: "first",
               id: "start-wire",
@@ -266,12 +214,12 @@ it.live(
               build: built.build,
             },
           ),
-        catch: (cause: unknown) => new Error("requester start failed", { cause }),
+        catch: (cause: unknown) => CallError.make({ message: "requester start failed", cause }),
       });
 
       expect(requester).toMatchObject({ process: expect.any(String) });
 
-      const grant = Effect.fnUntraced(function* (key: ReturnType<typeof identity>, id: string) {
+      const grant = Effect.fnUntraced(function* (key: SshsigTest.Identity, id: string) {
         const value = grantText({
           id,
           key: key.raw,
@@ -281,26 +229,20 @@ it.live(
           sentAt: SENT,
           saw: { label: "test", location: "test", code: "1234", method: "command", check: "touch", has: ["git"] },
         });
+        const armored = yield* root.proof(value);
 
-        const reply = yield* Effect.tryPromise({
-          try: () =>
-            fetch(`${url}/grant`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ text: value, armored: root.sign(value) }),
-            }),
-          catch: (cause: unknown) => new Error("grant failed", { cause }),
-        });
+        const reply = yield* HttpClient.post(`${url}/grant`, { body: HttpBody.jsonUnsafe({ text: value, armored }) });
 
-        expect(reply.ok).toBe(true);
+        expect(reply.status >= 200 && reply.status < 300).toBe(true);
       });
 
       yield* grant(hands, "hands");
       yield* grant(other, "other");
       const first = yield* socket(url, hands, "first");
-      expect(first.frames.filter((f) => f.method?.startsWith("tasks."))).toEqual([]);
-
-      const taken = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(
+      expect(
+        Arr.filter(first.frames, (f) => f.method !== undefined && Str.startsWith("tasks.")(f.method) === true),
+      ).toEqual([]);
+      const taken = yield* Schema.decodeUnknownEffect(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );
 
@@ -336,9 +278,9 @@ it.live(
       expect(
         ok(yield* resumed.call("tasks.finish", { ...resource, execution, result, sentAt: "retry", seen: 0 })),
       ).toEqual(finished);
-      const read = Schema.decodeUnknownSync(Task)(ok(yield* resumed.call("tasks.read", resource)));
+      const read = yield* Schema.decodeUnknownEffect(Task)(ok(yield* resumed.call("tasks.read", resource)));
       expect(read.state).toMatchObject({ _tag: "finished", result, assignment: taken.task.state.assignment });
-      expect(read.events.map((e) => e.event)).toEqual(["requested", "taken", "started", "finished"]);
+      expect(Arr.map(read.events, (e) => e.event)).toEqual(["requested", "taken", "started", "finished"]);
       expect(ok(yield* resumed.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({
         _tag: "idle",
       });
@@ -351,16 +293,9 @@ it.live(
         sentAt: SENT,
         saw: { label: "test", location: "test", method: "command", check: "touch" },
       });
+      const armored = yield* root.proof(revoke);
 
-      yield* Effect.tryPromise({
-        try: () =>
-          fetch(`${url}/grant`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: revoke, armored: root.sign(revoke) }),
-          }),
-        catch: (cause: unknown) => new Error("revoke failed", { cause }),
-      });
+      yield* HttpClient.post(`${url}/grant`, { body: HttpBody.jsonUnsafe({ text: revoke, armored }) });
 
       for (const [method, params] of [
         ["tasks.finish", { ...resource, execution, result, sentAt: "revoked", seen: 0 }],
@@ -377,6 +312,10 @@ it.live(
       }
 
       yield* socket(url, hands, "revoked", false);
-    }).pipe(Effect.scoped, Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer)),
+    }).pipe(
+      Effect.scoped,
+      Effect.provide([SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
+      Effect.provide(NodeServices.layer),
+    ),
   180_000,
 );

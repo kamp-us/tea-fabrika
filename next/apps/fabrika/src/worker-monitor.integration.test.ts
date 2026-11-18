@@ -7,17 +7,29 @@
 // the watched program exits and when its parent stops it with `stop_child`.
 // Host-only: it starts a real instance, so it runs in CI's full run only, never on the laptop
 // (0536, 0178).
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
-import { Effect, Schema, Scope } from "effect";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import {
+  Effect,
+  FileSystem,
+  Path,
+  Predicate,
+  Schema,
+  Scope,
+  Array as Arr,
+  String as Str,
+  Duration,
+  DateTime,
+  Option,
+  Record as Rec,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { expect, it } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -32,58 +44,8 @@ const PROJECT = "m13-watch";
 /** Bounded waits tied to observable facts. */
 const WAIT = 25_000;
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    n = Buffer.alloc(4);
-
-  n.writeUInt32BE(body.length);
-
-  return Buffer.concat([n, body]);
-};
-
 /** The founder's key, and its signature over the door's hello. */
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-type Key = ReturnType<typeof identity>;
+type Key = SshsigTest.Identity;
 
 // The two programs, as source the real app build bundles. The reader watches the name it is told,
 // ends the watch it is told to forget, and keeps every answer and DOWN it folds, in order; the writer
@@ -164,14 +126,17 @@ export const program = Program.make({name: "m13/parent", machine, state: {v: 1, 
 // The instance's private local capability, read call by call as worker-mail's test reads it.
 type Instance = any;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
+
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {
-  const end = Date.now() + WAIT;
+  const end = now() + WAIT;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -209,13 +174,13 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
-      const index = frames.findIndex(match);
+    while (now() < end) {
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -228,7 +193,7 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
 
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -248,7 +213,7 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+        signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
       })
     ).error,
   ).toBeUndefined();
@@ -263,36 +228,20 @@ type Fixture = {
 
 /** One local instance on workerd in a temp home, with the reader and the writer built into it. */
 const world = async (test: (instance: Instance, fixture: Fixture) => Promise<void>) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
 
   return Effect.runPromise(
     Effect.gen(function* () {
-      const home = yield* Effect.acquireRelease(
-        Effect.sync(() => mkdtempSync(join(tmpdir(), "m13w-"))),
-        (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-      );
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "m13w-" });
 
-      const key = identity();
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
-      symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+      const key = yield* SshsigTest.identity;
+      yield* scopedEnv({ FABRIKA_HOME: home });
+      yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
       for (const [role, source] of [
@@ -300,12 +249,12 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
         ["writer", WRITER],
         ["parent", PARENT],
       ] as const) {
-        const path = join(home, `${role}.ts`);
-        writeFileSync(path, source);
-        selections[`m13/${role}`] = path;
+        const file = path.join(home, `${role}.ts`);
+        yield* fs.writeFileString(file, source);
+        selections[`m13/${role}`] = file;
       }
 
-      const built = yield* build({ out: join(home, "dist"), programs: selections });
+      const built = yield* build({ out: path.join(home, "dist"), programs: selections });
 
       yield* Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
@@ -313,7 +262,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
 
         const instance = yield* localInstance(
           built,
-          RecordWireTest.startupFixture({
+          yield* RecordWireTest.startupFixture({
             home,
             name: PROJECT,
             person: PERSON,
@@ -325,6 +274,8 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
         );
 
         const scope = yield* Effect.scope;
+        // `test` is a plain async function, so `connect` runs with this world's services.
+        const context = yield* Effect.context();
 
         const from: From = {
           by: key.fingerprint,
@@ -339,13 +290,13 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
         yield* Effect.promise(() =>
           test(instance, {
             connect: (tab) =>
-              Effect.runPromise(
+              Effect.runPromiseWith(context)(
                 Effect.gen(function* () {
                   const socket = yield* Effect.acquireRelease(
                     Effect.sync(
                       () =>
                         new WebSocket(
-                          `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                          `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
                         ),
                     ),
                     (socket) => Effect.sync(() => socket.close()),
@@ -355,15 +306,12 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
             start: async (name) => {
-              const program = `m13/${name.split(":")[0]}`;
+              const program = `m13/${Str.split(name, ":")[0]}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
-
-              const started = await Reflect.get(instance.project(PROJECT), "start")(
-                { _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } },
-                from,
-              );
-
+              const started = await instance
+                .project(PROJECT)
+                .start({ _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } }, from);
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             },
           }),
@@ -379,15 +327,15 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
 };
 
 /** One letter from the door's client to a process. */
-const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
+const letter = (pid: string, id: string, m: Schema.Json) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
 
 /** Whether a pushed view update carries a log row of this type, however the update is cut. */
 const carries = (value: unknown, type: string): boolean =>
-  Array.isArray(value)
-    ? value.some((item) => carries(item, type))
-    : typeof value === "object" &&
-      value !== null &&
-      (Reflect.get(value, "type") === type || Object.values(value).some((item) => carries(item, type)));
+  Arr.isArray(value)
+    ? Arr.some(value, (item) => carries(item, type))
+    : Predicate.isObject(value) &&
+      ((Predicate.hasProperty(value, "type") && value.type === type) ||
+        Arr.some(Rec.values(value), (item) => carries(item, type)));
 
 /** The next view update the brain pushes for `pid` whose rows hold one of this type. It asks nothing. */
 const pushed = (client: Awaited<ReturnType<typeof wire>>, pid: string, type: string) =>
@@ -404,9 +352,10 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     const reader = await fixture.start("reader:1");
     const writer = await fixture.start("writer:1");
     const client = await fixture.connect("watch");
+    // SAFETY: the reader program's Model above holds `log` as an array, and `[]` stands in until a view arrives.
     const log = async () => ((await client.call("view.open", { pid: reader })).result?.view?.log ?? []) as any[];
 
-    const send = async (pid: string, id: string, m: unknown) =>
+    const send = async (pid: string, id: string, m: Schema.Json) =>
       expect(await client.call("process.send", letter(pid, id, m))).toMatchObject({ result: { _tag: "accepted" } });
 
     // The refusal is reply data across the Project's RPC, and the reader folds it as the Cmd's error.
@@ -419,7 +368,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     await send(reader, "watch-1", { type: "watch", name: "writer:1" });
     await send(reader, "watch-2", { type: "watch", name: "writer:1" });
     const answered = await until("the reader folds both monitor answers", log, (rows) => rows.length > 2);
-    const watched = (ref: unknown) => ({ type: "monitor_ok", ref, process: writer, name: "writer:1" });
+    const watched = (ref: string) => ({ type: "monitor_ok", ref, process: writer, name: "writer:1" });
     expect(answered, "M13: each watch is answered monitor_ok, bound to the writer's life").toEqual([
       ...refused,
       watched(expect.stringMatching(new RegExp(`^${reader}/`))),
@@ -439,7 +388,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     await client.call("process.send", letter(writer, "quit-1", { type: "quit" }));
 
     const folded = await until("the reader folds the writer's DOWN", log, (rows) =>
-      rows.some((r) => r.type === "DOWN" && r.ref === kept),
+      Arr.some(rows, (r) => r.type === "DOWN" && r.ref === kept),
     );
 
     expect(
@@ -503,7 +452,7 @@ it("scenario: M16, a watcher that only waits folds one DOWN with shutdown when t
     const reader = await fixture.start("reader:1");
     const client = await fixture.connect("stopped");
 
-    const send = async (pid: string, id: string, m: unknown) => {
+    const send = async (pid: string, id: string, m: Schema.Json) => {
       const answer = await client.call("process.send", letter(pid, id, m));
       expect(Sent.guards.accepted(answer.result), `M16: ${id} is accepted, got ${JSON.stringify(answer)}`).toBe(true);
     };

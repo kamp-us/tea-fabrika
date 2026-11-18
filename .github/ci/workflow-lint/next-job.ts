@@ -1,3 +1,4 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's next job: its legs (E1, E10), each leg's
 // `--shard` (E2), the vitest and end-to-end steps (E3, E11), and its pinned commands.
 import {
@@ -47,7 +48,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   const expectedLegs = [...Array.from({ length: e2eCount }, (_, i) => `${E2E_PREFIX}${i + 1}`), ...VITEST_LEGS];
   require(e2eCount >= 1 &&
     JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
-    Object.keys(matrix).length ===
+    Rec.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
   // Eligible visual tests run automatically on the PR, queue and main line.
   const { when, plain } = fallbacks(nextJob);
@@ -100,7 +101,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   require(compact(testStep?.["if"]) ===
     compact(`!${ON_E2E}`), "next's vitest step runs only on the numbered legs, and has no other guard");
   // A larger denominator leaves a share of the files on no machine; a smaller one fails a leg.
-  require(typeof shard === "string" &&
+  require(Predicate.isString(shard) &&
     new RegExp(`^${SHARD_OF}/${denominator("vitest", VITEST_LEGS.length)}$`).test(
       shard,
     ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
@@ -109,7 +110,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
     "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes changes' files, else filter, with the fallback next/");
-  require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
+  require(JSON.stringify(Rec.keys(map(testStep?.["env"])).toSorted()) ===
     JSON.stringify([
       "FABRIKA_TEST_DEPTH",
       "FILTER",
@@ -119,7 +120,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
   require(map(e2eStep?.["env"])["FABRIKA_TEST_DEPTH"] === "full", "E11: visual laws run at full depth");
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
-  require(typeof e2eShard === "string" &&
+  require(Predicate.isString(e2eShard) &&
     new RegExp(`^${SHARD_OF}/${denominator("e2e", e2eCount)}$`).test(
       e2eShard,
     ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");

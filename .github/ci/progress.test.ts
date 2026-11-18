@@ -8,6 +8,7 @@ import {
   FileSystem,
   Layer,
   ManagedRuntime,
+  Match,
   Path,
   PlatformError,
   Result,
@@ -259,11 +260,11 @@ it.prop(
 
       if (result._tag !== "unavailable") {
         expect(result.events).toEqual(
-          damage === "duplicate"
-            ? [events[0]]
-            : damage === "gap"
-              ? events.map((row) => ({ ...row, seq: row.seq + 1 }))
-              : events,
+          Match.value(damage).pipe(
+            Match.when("duplicate", () => [events[0]]),
+            Match.when("gap", () => events.map((row) => ({ ...row, seq: row.seq + 1 }))),
+            Match.orElse(() => events),
+          ),
         );
         expect(result.complete).toBe(damage === "none");
         expect(result.start).toEqual({ seq: 0, at: 0 });
@@ -657,12 +658,24 @@ it.effect.prop(
         expect(writes[index + 1]!.flag).toBe("a");
         expect(writes[index + 1]!.text.split("\n")).toHaveLength(2);
         expect(Object.keys(line).toSorted()).toEqual(
-          (line._tag === "hook"
-            ? ["_tag", "at", "column", "file", "hook", "id", "line", "phase", "project", "seq"]
-            : line._tag === "test"
-              ? ["_tag", "at", "column", "file", "id", "line", "phase", "project", "seq"]
-              : ["_tag", "at", "file", "id", "phase", "project", "seq"]
-          ).toSorted(),
+          Match.value(line._tag)
+            .pipe(
+              Match.when("hook", () => [
+                "_tag",
+                "at",
+                "column",
+                "file",
+                "hook",
+                "id",
+                "line",
+                "phase",
+                "project",
+                "seq",
+              ]),
+              Match.when("test", () => ["_tag", "at", "column", "file", "id", "line", "phase", "project", "seq"]),
+              Match.orElse(() => ["_tag", "at", "file", "id", "phase", "project", "seq"]),
+            )
+            .toSorted(),
         );
       }
 

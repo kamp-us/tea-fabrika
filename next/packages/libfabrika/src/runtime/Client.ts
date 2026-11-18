@@ -16,6 +16,7 @@
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { apply } from "./Patch.ts";
 import { Sent } from "./Runner.ts";
@@ -154,7 +155,10 @@ const dated = (
   n: number,
   stamp: { readonly letter: string; readonly sentAt: string; readonly traceId?: string },
 ): Client => {
-  const at = c.pending.findIndex((p) => p.n === n);
+  const at = Option.getOrElse(
+    Arr.findFirstIndex(c.pending, (p) => p.n === n),
+    () => -1,
+  );
   const slot = c.pending[at];
 
   if (slot === undefined || slot._tag !== "dating") {
@@ -171,8 +175,7 @@ const dated = (
     sentAt: stamp.sentAt,
     ...(stamp.traceId === undefined ? {} : { traceId: stamp.traceId }),
   });
-
-  return { ...c, pending: c.pending.map((p, i) => (i === at ? ready : p)) };
+  return { ...c, pending: Arr.map(c.pending, (p, i) => (i === at ? ready : p)) };
 };
 
 /** Settles `letter` only on its own terminal answer. Every other answer keeps it for a resend. */
@@ -181,8 +184,7 @@ const reply = (c: Client, letter: string, answer: Pick<typeof Reply.Type, "_tag"
     return c;
   }
 
-  const kept = c.pending.filter((p) => p._tag !== "ready" || p.letter !== letter);
-
+  const kept = Arr.filter(c.pending, (p) => p._tag !== "ready" || p.letter !== letter);
   return kept.length === c.pending.length ? c : { ...c, pending: kept };
 };
 
@@ -385,7 +387,7 @@ export const foldName = (
   entries: ReadonlyArray<unknown>,
   name: string,
   by: (writer: string) => boolean,
-): NameFold => entries.reduce<NameFold>((acc, raw) => foldEntry(acc, raw, name, by), fold);
+): NameFold => Arr.reduce(entries, fold, (acc, raw) => foldEntry(acc, raw, name, by));
 
 /**
  * Returns the live process a registered name points at, from its `processes/<name>` entries as read:

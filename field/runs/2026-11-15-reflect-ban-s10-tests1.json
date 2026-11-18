@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s10-tests1",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-15T23:54:18-08:00",
+  "ended": "2026-11-16T00:15:25-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 10 of the Reflect ban (0554, ticket 1056) in next/, libfabrika's cloudflare/ folder, on docs/plan/quests/reflect-ban-PLAN.md signed at 4e9601147 with amendment point 7. Met 28 fires in 5 files, as point 7 counted them. Fixed 27 by hand in the four tests-owned files: platform.test.ts 19 (kind 3: an assert instanceof, then the typed field; kind 5: the clients' calls by name from Object.entries, called with Reflect.apply as before; kind 9: the three hand-written stubs rejecting, answeringProcess and answering become Stub.make, each use naming its type), readers.laws.test.ts 5 (kind 9: the storage and sql wrappers become plain objects, with databaseSize as a getter; the Project wrapper goes, and world() takes the settingsStart answer instead), ObjectService.test.ts 2 (kind 3), error-cause.test.ts 1 (kind 9: its rejecting helper and the Project wrapper become Stub.make). Left 1, control.ts:124, a build row (kind 5, the typed table). The stubs with no fire became Stub.make too: ObjectService.test.ts's two guards, alarm.laws.test.ts's four, index.test.ts's one (split into a Project and a Connection stub, since each use names its type), p14.test.ts's one (one stub per namespace) and telemetry/Records.integration.test.ts's one, which fits RecordCalls with no @ts-expect-error. Eight kind 10 @ts-expect-error lines, each with its reason: six on a settingsStart member answering StartsTest.reply (the wire reply, its value unknown, which ProjectBinding's settingsStart type refuses; point 7 expected these to fit), one on platform.test.ts's Connection stub answering the bridge's error envelope, one on p14.test.ts's Connection stub answering { _tag: \"ok\" }. New law L8 in cloudflare/control.laws.test.ts. cloudflare/** joins the Reflect block where JSON.parse still advises in .oxlintrc.json, one line; every other line kept. No disable line for the rule in cloudflare/. Started without the mock sweep's cloudflare slice 2 (fabrikalfa/mock-cloudflare-s2), which is not on origin and edits the same files: whichever lands later carries the other's lines.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Laws: L8 'each allowed name reaches its own object with the decoded arguments; any other name is refused before a call' (200 runs, seed 119120, each run up to 12 requests over all three targets; coverage requires every allowed name asked, each target refused a name and each target's object really called) is green on today's control.ts, since the door already does this through Reflect; its red is the plant. L5 is red now, for control.ts only: pnpm lint fails on control.ts:124:65 'Reflect.get' and on nothing else, which the build clears. Ran green at the step's tree, one file at a time under nice -n 15 --maxWorkers=3: platform.test.ts 9, control.laws.test.ts 1, error-cause.test.ts 12, readers.laws.test.ts 39, p14.test.ts 1, index.test.ts 3, ObjectService.test.ts 3, alarm.laws.test.ts 2, telemetry/Records.integration.test.ts 22 (no 0178 refusal). tsc --noEmit -p next/packages/libfabrika 0 errors; one pnpm typecheck at the end, exit 0; pnpm format; the ratchet exit 0; pnpm lint red only on control.ts:124. The build must export nothing new.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "L8",
+      "plant": "control.ts: savedAlarm dropped from methods.process; vitest control.laws.test.ts fails with 'process.savedAlarm is a name the door calls: expected unknown_method not to be unknown_method'; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L5",
+      "plant": "platform.test.ts:370: the old expect(Reflect.get(Object(thrown), \"name\")) line put back; node oxlint-plugins/lint.ts exit 1 with platform.test.ts:370:14 eslint(no-restricted-properties); restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L5",
+      "plant": "platform.test.ts:370: the same line under an oxlint-disable-next-line eslint/no-restricted-properties; lint.ts exit 1 with fabrika(reflect-disables) on platform.test.ts, which may hold 0; restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
