@@ -1,7 +1,7 @@
 ---
 id: 0159
 title: The next thing built in next/ is the four primitives, fabsh, pipes, summon and join, working for real with whatever they need, so fabrika is built inside fabrika, never thin slices of them behind the rest of Tier 1
-status: amended-in-part by [0181](0181-the-alchemy-port-keeps-a-slot.md), [0185](0185-tier-2-runs-agents-after-the-four-primitives.md)
+status: accepted
 date: 2026-11-13
 tags: [plan, tiers, tier-1, fabsh, pipes, summon, join, rooms, order, next]
 ---
@@ -73,55 +73,16 @@ working for real, with whatever they need.**
 - **Whatever they need is in scope,** from whatever tier the plan had it in: the window that shows
   a program, a second tile and the keys to move between tiles, the link to the agent harnesses,
   rooms.
-- **The order:** the window, then `fabsh` on screen, then pipes, working first for `fabsh`'s
-  built-ins, then `summon` and `join`.
-- **A program with its own React view is not part of done.** The tracker and the ticket page are
-  the first work after it, built inside fabrika.
-- **The purpose is the test.** Once this works, the next work is built inside fabrika, by talking
-  to a summoned agent there.
-- **Tier 1 changes to enable this.** The rows this scope needs come first. The rows it does not
-  need wait. Nothing leaves the plan, and this file reopens no decided design.
-
-**Binding constraints**
-
-- A plan, a walk or a recommendation about what comes next starts from this scope, never from the
-  tier a piece was in before 2026-11-13.
-- No plan answers this scope with a thin slice or a stub of `fabsh`, pipes, `summon` or `join`.
-- Nothing is added to done without the owner.
-- A Tier 1 row this scope does not need never blocks it.
-
-## Consequences
-
-- [The tiers](../docs/plan/tiers.md) and [the plan](../docs/plan/README.md) get a dated line and a
-  note at the top now. The changed Tier 1 (which rows come first, which wait, and what moves
-  forward from Tiers 2 and 5) is its own pull request, read by the owner. Until it lands, this file
-  wins where the plan files differ.
-- The cost: the rows that wait land later, and work in flight on them is finished or parked by the
-  changed plan, row by row. That plan says what waiting loses, if anything is lost for good.
-- 0137 stands: the checklist stays the example program, and its window finishes first.
-- The decided parts stay as decided: `fabsh` is a regular program, a pipe is shell writing over
-  saved mail, the summon line is the one way to start an agent, every room is readable by everyone
-  on the project, and the Tier 5 laws hold for any agent fabrika starts.
-- Not decided here: whether the second tile arrives as the desk program or as a fixed layout
-  first; what a `fabsh` line may contain beyond the lines above; the verb `join`; two agents with
-  one name in a room; how a pipe carries one program's output to the next one's input;
-  where a summoned agent runs (0078's default, the laptop, holds until hands say otherwise); which
-  program is built first inside fabrika.
-
-## Amendments
-
-- 2026-11-13 (owner): no shortcut for any piece the four primitives need. Each is built the way
+- **No shortcut for any piece the four primitives need** (owner, 2026-11-13). Each is built the way
   its decision or note designs it, and today's version shows what working means for it. So the
-  second tile comes with the desk program ([0279](0279-tuval-is-a-package-desk-in-tier-2.md)), with
-  split, close and the prefix key, never a fixed layout first. That call was listed above as not
-  decided.
-- 2026-11-13 (lead, a narrowing of this file's own words): the bullet about a program with its own
-  React view names the programs the four primitives do not need, such as the tracker and the
-  ticket page. A piece the four need is in scope even when it has a view of its own: `fabsh`'s
-  view, the desk, and wherever a room's talk is shown.
-- 2026-11-13 (owner): done is seen in the Electron app and in a browser tab. The two are built side
-  by side from the first piece that draws, and a piece that draws is not done until it works in
-  both.
+  second tile comes with the desk program ([0279](0279-tuval-is-a-package-desk-in-tier-2.md)),
+  with split, close and the prefix key, never a fixed layout first.
+- **The Alchemy port keeps a slot beside the four primitives,** as its own lane, until no plain
+  platform class is left in the brain. It is part of this plan and never filler that waits for a
+  free slot ([0181](0181-the-alchemy-port-keeps-a-slot.md)).
+- **Done is seen in the Electron app and in a browser tab** (owner, 2026-11-13). The two are built
+  side by side from the first piece that draws, and a piece that draws is not done until it works
+  in both.
   - Why: work built for a browser tab alone can meet the app late, find something broken there,
     and need a deep change. Building both from the start finds it while the piece is small.
   - This is the bar the plan already had: a tier's demo works in a browser tab and an Electron
@@ -155,9 +116,45 @@ working for real, with whatever they need.**
       [0014](0014-the-lead-merges-when-every-step-passed.md)). Whether one yes may cover the quick
       deploys that follow is not decided here.
     - P24 needs P16, P17 and P21: P16 is already needed, P17 is done, and P21 comes as above.
-  - **Recovery and the rest of the cloud rows (P26, P27, P28, P29, P36) are the first work after
-    done,** ahead of the programs with their own view. This changes the bullet above that puts the
-    tracker and the ticket page first after done: they follow these rows. Until then daily work in
-    `next/` lives only in the laptop's ledger, and the owner accepts that.
-    Changed by [0185](0185-tier-2-runs-agents-after-the-four-primitives.md) the same day: these rows
-    wait behind Tier 2, which comes right after the 4 primitives.
+  - **Recovery and the rest of the cloud rows (P26, P27, P28, P29, P36) wait behind Tier 2,** which
+    comes right after the 4 primitives ([0185](0185-tier-2-runs-agents-after-the-four-primitives.md)),
+    and come ahead of the programs with their own view. Until recovery lands, daily work in `next/`
+    lives only in the laptop's ledger, and the owner accepts that.
+- **This milestone is named "4 primitives"** (the changed Tier 1). Tier 2 comes right after it and
+  is where hands and an agent fabrika starts are built for real, never before or beside it
+  ([0185](0185-tier-2-runs-agents-after-the-four-primitives.md)).
+- **The order:** the window, then `fabsh` on screen, then pipes, working first for `fabsh`'s
+  built-ins, then `summon` and `join`.
+- **A program with its own React view that the four primitives do not need is not part of done,**
+  such as the tracker and the ticket page. A piece the four need is in scope even when it has a
+  view of its own: `fabsh`'s view, the desk, and wherever a room's talk is shown. The tracker and
+  the ticket page are built inside fabrika after the recovery and cloud rows above.
+- **The purpose is the test.** Once this works, the next work is built inside fabrika, by talking
+  to a summoned agent there.
+- **Tier 1 changes to enable this.** The rows this scope needs come first. The rows it does not
+  need wait. Nothing leaves the plan, and this file reopens no decided design.
+
+**Binding constraints**
+
+- A plan, a walk or a recommendation about what comes next starts from this scope, never from the
+  tier a piece was in before 2026-11-13.
+- No plan answers this scope with a thin slice or a stub of `fabsh`, pipes, `summon` or `join`.
+- Nothing is added to done without the owner.
+- A Tier 1 row this scope does not need never blocks it.
+
+## Consequences
+
+- [The tiers](../docs/plan/tiers.md) and [the plan](../docs/plan/README.md) get a dated line and a
+  note at the top now. The changed Tier 1 (which rows come first, which wait, and what moves
+  forward from Tiers 2 and 5) is its own pull request, read by the owner. Until it lands, this file
+  wins where the plan files differ.
+- The cost: the rows that wait land later, and work in flight on them is finished or parked by the
+  changed plan, row by row. That plan says what waiting loses, if anything is lost for good.
+- 0137 stands: the checklist stays the example program, and its window finishes first.
+- The decided parts stay as decided: `fabsh` is a regular program, a pipe is shell writing over
+  saved mail, the summon line is the one way to start an agent, every room is readable by everyone
+  on the project, and the Tier 5 laws hold for any agent fabrika starts.
+- Not decided here: what a `fabsh` line may contain beyond the lines above; the verb `join`; two agents with
+  one name in a room; how a pipe carries one program's output to the next one's input;
+  where a summoned agent runs (0078's default, the laptop, holds until hands say otherwise); which
+  program is built first inside fabrika.
