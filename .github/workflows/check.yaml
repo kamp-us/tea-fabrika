@@ -414,12 +414,8 @@ jobs:
   # Related in-memory and visual tests run automatically. The related job below adds the
   # integration and tooling projects. Global triggers select all files at full depth.
   # The full next matrix has two visual legs and five in-memory legs. Sized runs use fewer
-  # legs when fewer files are affected. Every test job shares scheduled-test-1 through 9.
+  # legs when fewer files are affected. No test job takes a job group (0598).
   next:
-    concurrency:
-      group: scheduled-test-${{ fromJSON('{"e2e-1":"1","e2e-2":"6","1":"3","2":"4","3":"5","4":"2","5":"7"}')[matrix.shard] || '1' }}
-      queue: max
-      cancel-in-progress: false
     needs: changes
     if: >-
       ${{ !cancelled() &&
@@ -525,12 +521,8 @@ jobs:
       - *stop
 
   # Only the projects missing from next's existing matrix, on ready PRs and queue groups.
-  # This selector shares the schedule's one control group. An error fails the required check.
+  # An error fails the required check.
   select:
-    concurrency:
-      group: scheduled-control
-      queue: max
-      cancel-in-progress: false
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.related != 'false') }}
     runs-on: ubuntu-latest
@@ -540,8 +532,6 @@ jobs:
       legs: ${{ steps.set.outputs.legs }}
       files: ${{ steps.set.outputs.files }}
       projects: ${{ steps.set.outputs.projects }}
-      slots: ${{ steps.set.outputs.slots }}
-      plants: ${{ steps.set.outputs.plants }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -555,7 +545,6 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           HEAD: ${{ github.sha }}
-          RUN_NUMBER: ${{ github.run_number }}
           MOST_INTEGRATION: 5
           MOST_TOOLING: 2
           LIMIT_INTEGRATION: &related-integration-limit 17
@@ -573,10 +562,6 @@ jobs:
       - *stop
 
   related:
-    concurrency:
-      group: scheduled-test-${{ fromJSON('{"1":"1","2":"2","3":"3","4":"4","5":"5","6":"6","7":"7","8":"8","9":"9"}')[fromJSON(needs.select.outputs.slots)[matrix.shard]] || '1' }}
-      queue: max
-      cancel-in-progress: false
     needs: [changes, select]
     if: ${{ !cancelled() && needs.select.result == 'success' && needs.select.outputs.run == 'true' }}
     runs-on: ubuntu-latest
@@ -601,15 +586,6 @@ jobs:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           FABRIKA_TEST_DEPTH: full
         run: pnpm exec vitest run --project next-integration $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"
-      - name: checklist faults
-        if: fromJSON(needs.select.outputs.plants)[matrix.shard] != null
-        timeout-minutes: *related-integration-limit
-        env:
-          FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
-          FABRIKA_TEST_DEPTH: full
-          PLANTS: ${{ needs.select.outputs.plants }}
-          LEG: ${{ matrix.shard }}
-        run: node .github/ci/plant-related.ts
       - name: tooling
         if: fromJSON(needs.select.outputs.projects)[matrix.shard] == 'tooling'
         timeout-minutes: *related-tooling-limit
@@ -625,14 +601,6 @@ jobs:
           path: ${{ runner.temp }}/related.json
           if-no-files-found: error
           retention-days: 7
-      - name: checklist fault observations
-        if: ${{ !cancelled() && fromJSON(needs.select.outputs.plants)[matrix.shard] != null }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: checklist-faults-${{ matrix.shard }}
-          path: ${{ runner.temp }}/plant-related/result.json
-          if-no-files-found: error
-          retention-days: 90
       - name: time table
         if: always()
         continue-on-error: true

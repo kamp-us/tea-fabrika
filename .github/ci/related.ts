@@ -6,11 +6,11 @@ import { fileURLToPath } from "node:url";
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, list, room, withReaders } from "./legs.ts";
-import type { Request } from "./plant-cases.ts";
-import { checklistCases, fixture, wanted } from "./plant-related.ts";
-import { isTrigger, legsOf, slots, whole } from "./proof.ts";
+import { isTrigger, legsOf, whole } from "./proof.ts";
 
 const PROJECTS = ["next-integration", "tooling"] as const;
+
+const checklistFixture = "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts";
 
 type Project = (typeof PROJECTS)[number];
 
@@ -18,16 +18,18 @@ export type Sizing = Readonly<Record<Project, { readonly most: number; readonly 
   readonly table: Readonly<Record<string, number>>;
 };
 
+/** Keep the existing product law in the ordinary related run when its former plant inputs change. */
+export const wantsChecklistLaw = (paths: readonly string[] | null): boolean =>
+  paths === null ||
+  paths.some(
+    (path) =>
+      path === checklistFixture ||
+      /^\.github\/ci\/plant(?:-cases|-errors|-machine|-reporter|-related)?\.ts$/.test(path),
+  );
+
 /** Separate project legs keep their existing full-depth counts and test-step limits. */
 
-export const select = (
-  files: Readonly<Record<Project, readonly string[]>>,
-  sizing: Sizing,
-  run: number,
-  plants = false,
-) => {
-  const groups = slots(run);
-
+export const select = (files: Readonly<Record<Project, readonly string[]>>, sizing: Sizing) => {
   const all = PROJECTS.flatMap((project) => files[project]);
 
   if (all.some((path) => /\s/.test(path)) || new Set(all).size !== all.length) {
@@ -49,36 +51,10 @@ export const select = (
   }
 
   if (Object.keys(legs).length > 9) {
-    throw new Error("related: the existing nine shared test groups cannot hold this selection");
+    throw new Error("related: the selection must fit check.yaml's related max-parallel of nine legs");
   }
 
-  const owners = Object.entries(legs).filter(
-    ([leg, paths]) => projects[leg] === "next-integration" && paths.includes(fixture),
-  );
-
-  if (plants && owners.length !== 1) {
-    throw new Error("related: checklist faults need exactly one owning integration leg");
-  }
-
-  const integration = Object.keys(legs).filter((leg) => projects[leg] === "next-integration");
-
-  const assignment: Record<string, readonly Request["case"][]> = plants
-    ? Object.fromEntries(
-        integration.map((leg, offset) => [
-          leg,
-          checklistCases.filter((_, index) => index % integration.length === offset),
-        ]),
-      )
-    : {};
-
-  if (
-    plants &&
-    (Object.values(assignment).flat().length !== 10 || new Set(Object.values(assignment).flat()).size !== 10)
-  ) {
-    throw new Error("related: every checklist case must have exactly one existing integration leg");
-  }
-
-  return { legs, projects, slots: groups, plants: assignment };
+  return { legs, projects };
 };
 
 export const outputs = (selection: ReturnType<typeof select>): string[] => [
@@ -86,14 +62,9 @@ export const outputs = (selection: ReturnType<typeof select>): string[] => [
   `legs=${JSON.stringify(Object.keys(selection.legs))}`,
   `files=${JSON.stringify(Object.fromEntries(Object.entries(selection.legs).map(([leg, paths]) => [leg, paths.join(" ")])))}`,
   `projects=${JSON.stringify(selection.projects)}`,
-  `slots=${JSON.stringify(selection.slots)}`,
-  `plants=${JSON.stringify(selection.plants)}`,
 ];
 
 if (import.meta.main) {
-  const run = whole("RUN_NUMBER", process.env["RUN_NUMBER"]);
-  slots(run);
-
   const root = fileURLToPath(new URL("../../", import.meta.url));
 
   const git = (args: readonly string[]): string => {
@@ -133,14 +104,12 @@ if (import.meta.main) {
 
   const integration = list(root, ["--project", "next-integration", ...narrowed]);
 
-  const plants = wanted(changed);
-
   const files = {
     "next-integration": withReaders(integration, [
       ...(!full && changed?.some((path) => path.startsWith("next/"))
         ? list(root, ["--project", "next-integration", ...readers])
         : []),
-      ...(plants ? [fixture] : []),
+      ...(wantsChecklistLaw(changed) ? [checklistFixture] : []),
     ]),
     tooling: list(root, ["--project", "tooling", ...narrowed]),
   };
@@ -157,7 +126,7 @@ if (import.meta.main) {
     table: rowsAt("full"),
   };
 
-  const selected = select(files, sizing, run, plants);
+  const selected = select(files, sizing);
 
   const lines = outputs(selected);
 

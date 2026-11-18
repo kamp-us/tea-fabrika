@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-stepcommit-has-no-fix-round-route",
+  "date": "2026-11-18",
+  "by": "ci-weight-rows-lead",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": ".agents/skills/step-commit/scripts/stepcommit.sh",
+    "line": 112
+  },
+  "says": "In today's lead tooling, stepcommit.sh refuses a build-step commit that touches an exam path ('a build may not commit exam paths; answer send to tests', exit 3), and offers no step for a fix round, where decision 0177 has one agent write the law and the fix together.",
+  "proof": "stepcommit.sh:112; the fix round of PR 1588 (commit f1f6e1374, which changes .github/ci/shard-times.test.ts and vitest.shards.ts) was refused and committed with a plain git commit.",
+  "cost": "Every fix round that touches a law bypasses the commit script, so its owner checks do not run on that commit.",
+  "head": "f1f6e1374b42782bc5cb83f92d9a8a32ceace035",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1588"
+}
