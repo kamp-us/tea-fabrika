@@ -2785,7 +2785,6 @@
       // 0561: every type cast carries a `SAFETY:` comment that says the fact the compiler cannot see.
       "files": [
         ".agents/**",
-        "next/apps/fabrika/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/client/**",
@@ -2944,7 +2943,6 @@
       // 0567: a ternary chain over one value's literals is a Match.
       "files": [
         ".github/ci/**",
-        "next/apps/fabrika/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
