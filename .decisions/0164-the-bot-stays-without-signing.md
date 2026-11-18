@@ -75,8 +75,7 @@ tooling, and that a step's agent keeps running in a box.
 
 This amends 0161 in part: its "no bot" half goes, and its "no step signature" half stands. It
 amends 0162 in part: "the bot is gone" no longer holds, and the push in its landing line is the
-bot's. It amends 0407 in part: pull requests now open as the bot. 0401, 0405 and 0406 hold as
-written, in the hand-run tooling again.
+bot's. It amends 0407 in part: pull requests now open as the bot.
 
 ## Decision
 
