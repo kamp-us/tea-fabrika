@@ -57,8 +57,8 @@ entries, once, for `fabrika/no-why-key` (tracker ticket 535, [PR 664](https://gi
 owns, and today's code keeps `why` until it is deleted
 ([AGENTS.md](../AGENTS.md#before-you-design-anything), "Data keys are short everyday words"). An
 inline ignore would not do, since oxlint reads those files a second time through the skills links
-and reports the comment as unused (finding `2026-11-10-f01`). [0113](0113-no-shell-or-python-scripts.md)
-replaced the "moves when next touched" rule for shell and Python on 2026-11-11, and
+and reports the comment as unused (finding `2026-11-10-f01`).
+[0113](0113-no-shell-or-python-scripts.md) replaced the "moves when next touched" rule for shell and Python on 2026-11-11, and
 [0168](0168-old-lint-breaks-are-fixed.md) closed the ledger to new entries on 2026-11-13.
 
 ## Decision

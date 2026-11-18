@@ -136,8 +136,8 @@ it, does not file a ticket, and does not only mention it in its report.**
 - CI's `field` job checks a row's core: its keys, the closed `rule` list, `location` and never
   `at`, and `says`, `proof` and `cost` not empty
   ([field/README.md](../field/README.md#what-ci-checks)).
-- Not decided here: a schema check for these rows beyond that core, the window that shows and rates them,
-  how the same finding is matched when two agents write it, and how many ratings a rule needs
+- Not decided here: a schema check for these rows beyond that core, the window that shows and
+  rates them, how the same finding is matched when two agents write it, and how many ratings a rule needs
   before its count is trusted. The note lists the last two as open.
 
 ## Records

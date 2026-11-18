@@ -133,7 +133,7 @@ The folders by area are gone, replaced by one folder per subject; the layer each
 lives only in `layer-rules.json`. The move plan holds the full old-to-new table.
 
 **Apps are not decided here.** The lean for `next/apps/fabrika` is cheffect's shape: feature
-folders, each beside a same-name module (`Door.ts` + `Door/`). The owner has not decided it.
+folders, each beside a same-name file (`Gateway.ts` + `Gateway/`). The owner has not decided it.
 
 Binding constraints:
 
@@ -144,12 +144,12 @@ Binding constraints:
 
 ## Consequences
 
-- The move to this layout was split into small pull requests that each landed whole. It touched
-  every file in `libfabrika`, every import of it in `next/apps/fabrika` and `next/programs/counter`,
-  the path-bearing configs (`layer-rules.json`, `exam-paths.json`, `fixtures/next/p10`) and the lint
+- One move, split into small pull requests that each land whole, per its plan. It touches every
+  file in `libfabrika`, every import of it in `next/apps/fabrika` and `next/programs/counter`, the
+  path-bearing configs (`layer-rules.json`, `exam-paths.json`, `fixtures/next/p10`) and the lint
   rules that name a libfabrika path.
-- Callers use namespaces (`Ledger.Ledger`) in place of named imports
-  (`import {Ledger} from "@kampus/libfabrika/data"`). Longer at each use; one way in for every file.
+- Callers move from named imports (`import {Ledger} from "@kampus/libfabrika/data"`) to namespaces
+  (`Ledger.Ledger`). Longer at each use; one way in for every file.
 - The path shows a file's subject and not its layer. A reader learns the layer from
   `layer-rules.json` or the lint error. That is the cost.
 - 0023's "PascalCase module files plus `internal/` and the namespace barrel" item is closed by this

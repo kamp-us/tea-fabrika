@@ -187,8 +187,8 @@ caller's stub answers with an Effect, and Alchemy's bridge is the one place a Pr
     Layer" show `fetch` as an Effect returned from the implementation, and "Self Entrypoints &
     ctx.props" shows `yield* ctx.props`. `Workers/WorkerEntrypoint.ts`: a binding with no
     entrypoint name targets the default export and can carry `props`.
-    `Workers/DurableObjectStorage.ts`: `transaction` takes an Effect, and a typed failure, a defect or an interruption rolls it back.
-    It runs the platform's `transaction`, not `transactionSync`.
+    `Workers/DurableObjectStorage.ts`: `transaction` takes an Effect, and a typed failure, a defect
+    or an interruption rolls it back. It runs the platform's `transaction`, not `transactionSync`.
   - **Not run, so not known.** Nobody here has run an Effect `fetch` or `ctx.props` this way.
     Alchemy's source says `props` on a service binding are delivered locally and dropped on a real
     deploy for now (the `props` option's comment in `Workers/WorkerEntrypoint.ts`). Whether

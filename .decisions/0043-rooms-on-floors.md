@@ -246,8 +246,9 @@ The rules:
 11. **`runtime/`, `gateway/` and `access/` import no `ledger/` file** (owner, 2026-11-10). The
     principle: each layer offers Effect services of its own that give the layer above
     higher-level functions, in its own words, and the layer above never sees what is two layers
-    down. It holds for every module, with no exemption. Where a module needs something from two layers down, the
-    layer between adds a service for it, and that service names none of the lower module's types.
+    down. It holds for every module, with no exemption. Where a module needs something from two
+    layers down, the layer between adds a service for it, and that service names none of the lower
+    module's types.
     Nothing in the ledger's row of the exam is loosened. What main said, read at `9407cf46`:
     - `app/runner.ts` never uses the `Ledger` service. It names `LedgerError` 19 times: one import
       (`:31`), three types (`:159`, `:1189`, `:1691`) and 15 places where it builds one itself, such

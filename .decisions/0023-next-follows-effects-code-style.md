@@ -133,12 +133,12 @@ The Ours column is as read on 2026-11-09, except where a cell names a file and k
   is added with its own.
 - **Follow, each as its own lead-tooling or sweep ticket:** the import style, inline type imports,
   generic array types and `no-console` in libraries; PascalCase files with `internal/` and the
-  namespace barrel, as [0032](0032-libraries-take-effects-file-layout.md) lays them out; doc comments
-  on every public export, minus the two tags.
+  namespace barrel, as [0032](0032-libraries-take-effects-file-layout.md) lays them out; doc
+  comments on every public export, minus the two tags.
 - **What holds the doc comments.** Effect's checker (`packages/tools/jsdocs`) is private, not on
   npm. Copied into a scratch folder with `effect@4.1.2`, `glob` and TypeScript 5.9 (it needs the
-  TypeScript JS API; the TypeScript we use, `pnpm-lock.yaml`'s `typescript` entry, has none), it ran on both trees. On Effect's own 144 modules
-  in `packages/effect/src` it reports one file, `StandardSchema.ts`, which Effect's config excludes,
+  TypeScript JS API; the TypeScript we use, `pnpm-lock.yaml`'s `typescript` entry, has none), it
+  ran on both trees. On Effect's own 144 modules in `packages/effect/src` it reports one file, `StandardSchema.ts`, which Effect's config excludes,
   so 0 false alarms. On `next/packages/libfabrika/src` it reports 92 places; a hand read of 20
   (seed 119120) found 20 real exports missing a doc or its tags, 2 of them in `*.test-support.ts`
   files a config would exclude. Oxlint 1.90.0's `jsdoc` plugin has no rule that requires a doc on an

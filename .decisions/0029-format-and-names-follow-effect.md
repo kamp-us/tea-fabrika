@@ -102,8 +102,8 @@ Binding constraints:
   since both touch every file. A paused lane runs `pnpm format` after it merges main.
 - Indents are narrower than the repo's earlier tabs. A reader who wants a wider indent can no longer
   set it in the editor; that is the cost the owner accepted.
-- 0023's table holds these rows with their outcomes: indent, line width, semicolons, trailing commas,
-  spaces in braces, generator star (kept), bare `of`, plural service names.
+- 0023's table holds these rows with their outcomes: indent, line width, semicolons, trailing
+  commas, spaces in braces, generator star (kept), bare `of`, plural service names.
 - Not decided here: any other format setting, and whether shared test suites are how lower-layer
   modules test against a database (still open, ticket 640).
 

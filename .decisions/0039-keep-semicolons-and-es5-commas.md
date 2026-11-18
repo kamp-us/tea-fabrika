@@ -55,8 +55,8 @@ line width narrower than Effect's.
 
 This amends 0029 in part, and with it the semicolon and trailing comma rows of
 [0023](0023-next-follows-effects-code-style.md)'s table. Ticket 498 is this record, and ticket 503
-the change of `trailingComma` from `"es5"` to `"all"` the same day. This record first said `"es5"`: a
-comma in objects and arrays, none in function parameters or call arguments
+the change of `trailingComma` from `"es5"` to `"all"` the same day. This record first said
+`"es5"`: a comma in objects and arrays, none in function parameters or call arguments
 ([PR 704](https://github.com/usirin/tea-fabrika/pull/704)). The owner changed that part after
 reading that pull request. Ticket 466's sweep takes the settings.
 
