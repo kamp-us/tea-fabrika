@@ -8,6 +8,12 @@
 // file, frontmatter included, `form` one of "amendments", "still-holds" and "carried-forward". It reads the
 // tracked `.decisions/NNNN-slug.md` files only.
 //
+// The still-holds and carried-forward forms are read as a block, not a line (the lead's rule after the finding
+// on .decisions/0414): prose outside fenced code with inline code removed, each Markdown link replaced by its
+// text, consecutive lines joined with single spaces, a block ending at a blank line, a heading line and the
+// start of a list item (`- `, `* `, `+ `, `1. `). The finding's `line` is the file line where the match
+// begins, the line that holds "rest" or "carried". The `## Amendments` heading stays a per-line match.
+//
 // Each run builds one record that holds every positive form, every form in a fence and in inline code, and
 // a history line, in a generated order among generated prose, so each case is reached in every run.
 import { NodeServices } from "@effect/platform-node";
@@ -80,7 +86,72 @@ type Block =
       readonly inside: ReadonlyArray<{ readonly form: Form; readonly phrasing: number }>;
     }
   | { readonly _tag: "inline"; readonly form: Form; readonly phrasing: number; readonly lead: string }
-  | { readonly _tag: "history"; readonly id: string; readonly date: string };
+  | { readonly _tag: "history"; readonly id: string; readonly date: string }
+  | {
+      readonly _tag: "text";
+      readonly lines: ReadonlyArray<string>;
+      readonly hit: { readonly at: number; readonly form: Form } | undefined;
+    };
+
+/** Shapes of a still-holds or carried-forward line over a line break, with Markdown links in them. */
+const MULTI = 7;
+
+const multi = (variant: number, a: string, b: string, name: string): Block => {
+  const one = `[${a}](${a}-${name}.md)`;
+  const two = `[${b}](./${b}-${name}.md)`;
+  const still = { at: 0, form: "still-holds" } as const;
+
+  switch (variant % MULTI) {
+    case 0:
+      // 0414's shape: the second link opens the next line.
+      return { _tag: "text", lines: [`The rest of ${one} and`, `${two} holds: a floor per question.`], hit: still };
+    case 1:
+      return { _tag: "text", lines: [`The rest of [${a}](./${a}-${name}.md) still`, "holds as written."], hit: still };
+    case 2:
+      // The break falls inside a link's text.
+      return { _tag: "text", lines: [`The rest of [${a} and`, `${b}](${a}-${name}.md) holds.`], hit: still };
+    case 3:
+      // A reference-style link, its definition after a blank line.
+      return {
+        _tag: "text",
+        lines: [`The rest of [${a}][r${a}] and the`, "other record holds.", "", `[r${a}]: ./${a}-${name}.md`],
+        hit: still,
+      };
+    case 4:
+      // 0414 itself: a list item whose second line holds "rest".
+      return {
+        _tag: "text",
+        lines: [
+          "- It is measured against hand labels, for the",
+          `  false alarms. The rest of ${one} and`,
+          `  ${two} holds: a floor per question.`,
+        ],
+        hit: { at: 1, form: "still-holds" },
+      };
+    case 5:
+      return {
+        _tag: "text",
+        lines: ["The rule is carried", `forward from ${one}.`],
+        hit: { at: 0, form: "carried-forward" },
+      };
+    default:
+      return { _tag: "text", lines: [`1. The rest of ${one} and`, `   ${two} still holds.`], hit: still };
+  }
+};
+
+const SPLITS = ["bullets", "heading", "paragraphs"] as const;
+
+/** "rest" in one block and "holds" in the next: no finding, whatever separates them. */
+const split = (kind: (typeof SPLITS)[number], marker: string): Block => ({
+  _tag: "text",
+  lines:
+    kind === "bullets"
+      ? [`${marker} The rest of the table is small`, `${marker} the next rule holds as written.`]
+      : kind === "heading"
+        ? ["The rest of the table is small,", "### Later", "holds as written."]
+        : ["The rest of the table is small,", "", "holds as written."],
+  hit: undefined,
+});
 
 /** Lines of a body, and the hits among them, counted from the body's first line. */
 const render = (blocks: ReadonlyArray<Block>) => {
@@ -111,6 +182,13 @@ const render = (blocks: ReadonlyArray<Block>) => {
       case "history":
         lines.push(`${block.id} was superseded on ${block.date}.`);
         break;
+      case "text":
+        if (block.hit !== undefined) {
+          hits.push({ line: lines.length + block.hit.at, form: block.hit.form });
+        }
+
+        lines.push(...block.lines);
+        break;
     }
 
     lines.push("");
@@ -119,11 +197,14 @@ const render = (blocks: ReadonlyArray<Block>) => {
   return { lines, hits };
 };
 
-const SPOTS = 12;
+const SPOTS = 22;
+
+/** The ways a list item starts. */
+const MARKERS = ["-", "*", "+", "1."] as const;
 
 const Extra = Schema.Struct({
   at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 40 })),
-  kind: Schema.Literals(["prose", "hit", "inline", "history", "fence"]),
+  kind: Schema.Literals(["prose", "hit", "inline", "history", "fence", "multi", "split"]),
   form: Schema.Literals(FORMS),
   phrasing: Phrasing,
   words: Words,
@@ -146,6 +227,8 @@ const Blocks = Schema.Struct({
 const arrange = (d: typeof Blocks.Type): ReadonlyArray<Block> => {
   const lead = sentence(d.words);
   const id = pad(d.number);
+  const other = pad((d.number % 9999) + 1);
+  const name = slugOf(d.words);
 
   const wanted: ReadonlyArray<Block> = [
     ...FORMS.map((form, i): Block => ({ _tag: "hit", form, phrasing: d.phrasings[i]! })),
@@ -161,6 +244,9 @@ const arrange = (d: typeof Blocks.Type): ReadonlyArray<Block> => {
     { _tag: "prose", text: lead },
     { _tag: "prose", text: lead },
     { _tag: "prose", text: lead },
+    // Every shape over a line break, each in every run, and every way to keep "rest" and "holds" apart.
+    ...Array.from({ length: MULTI }, (_, i) => multi(i, id, other, name)),
+    ...SPLITS.map((kind, i) => split(kind, MARKERS[d.phrasings[12 + i]! % MARKERS.length]!)),
   ];
 
   const placed = d.keys
@@ -178,12 +264,16 @@ const arrange = (d: typeof Blocks.Type): ReadonlyArray<Block> => {
             ? { _tag: "inline", form: extra.form, phrasing: extra.phrasing, lead: sentence(extra.words) }
             : extra.kind === "history"
               ? { _tag: "history", id, date: d.date }
-              : {
-                  _tag: "fence",
-                  fence: d.fence,
-                  info: d.info,
-                  inside: [{ form: extra.form, phrasing: extra.phrasing }],
-                };
+              : extra.kind === "multi"
+                ? multi(extra.phrasing, id, other, name)
+                : extra.kind === "split"
+                  ? split(SPLITS[extra.phrasing % SPLITS.length]!, MARKERS[extra.at % MARKERS.length]!)
+                  : {
+                      _tag: "fence",
+                      fence: d.fence,
+                      info: d.info,
+                      inside: [{ form: extra.form, phrasing: extra.phrasing }],
+                    };
 
     placed.splice(extra.at % (placed.length + 1), 0, block);
   }
@@ -191,7 +281,8 @@ const arrange = (d: typeof Blocks.Type): ReadonlyArray<Block> => {
   return placed;
 };
 
-// Plant: stop skipping fenced code, so the fenced forms (0605's own opening block) are findings.
+// Plants: stop skipping fenced code, so the fenced forms (0605's own opening block) are findings; or match line
+// by line again, so every shape over a line break is missed.
 it.effect.prop(
   "L3 an Amendments heading, a still-holds line and a carried-forward line are patch findings; the same text in fenced or inline code, a history line, and a plan file outside .decisions are none",
   {
@@ -267,5 +358,28 @@ it.effect(
       const found = yield* Patches.check(root).pipe(Effect.provideService(Tracked, { files: Effect.succeed(tracked) }));
 
       expect(found).toEqual([]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+/** The line of the one still-holds finding in .decisions/0414, "The rest of [0412](...) and", in a list item. */
+const LINE_0414 = 31;
+
+// Plant: match line by line again, so the line break and the `.md` dots of the links hide the match.
+it.effect(
+  'L3 scenario: the committed .decisions/0414 has exactly one still-holds finding, at the line that holds "rest"',
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = path.resolve(import.meta.dirname, "../../..");
+      const names = (yield* fs.readDirectory(path.join(root, ".decisions"))).filter((name) => /^0414-/.test(name));
+
+      expect(names).toHaveLength(1);
+
+      const tracked = names.map((name) => ({ path: `.decisions/${name}`, symlink: false }));
+
+      const found = yield* Patches.check(root).pipe(Effect.provideService(Tracked, { files: Effect.succeed(tracked) }));
+
+      expect(found).toEqual([{ _tag: "patch", path: tracked[0]!.path, line: LINE_0414, form: "still-holds" }]);
     }).pipe(Effect.provide(NodeServices.layer)),
 );
