@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-cloudflare-tests1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1637",
+  "started": "2026-11-18T11:26:30-08:00",
+  "ended": "2026-11-18T12:10:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Tests step for slices 1 and 2 of docs/plan/quests/mock-cloudflare-PLAN.md, in next/ (branch fabrikalfa/mock-cloudflare). Part A: merged origin/fabrikalfa/mock-cloudflare-s2 (slice 2's laws) into the branch and resolved the six conflicting test files against main's quotas (1366) and reflect slices 2 to 14 code: Recorder on Waits and Dispatcher with the live members from WaitsLive and DispatcherLive, main's own M1 observer (the real GatewayWaits behind a Recorder with Effect.onExit) kept and M2 reading the actual dispatch's exit the same way (plan amendment 2026-11-17), SinkLayer and RunnerLayer handed in, WebCrypto.layer with a rejecting crypto, the four ./objects.ts mocks and vi.mock(\"effect\") gone. Those laws stay red until the build writes WaitsLive, Waits, DispatcherLive, Dispatcher, SinkLayer, RunnerLayer, ProcessObject.implementation and recordPartImplementation (Cannot find module / no exported member). Part B: M3 and M4 (readers world on Stub.make, 6 vi.fn gone, route answered through w.answer, frames kept in sent), M5 (t863 L1 reads the sink's records: a measurements row per kept runtime.rpc span and a sums count per refused one; all spans reach the store, so M5 stays and is not weakened), M6 (the span attribute, process.stdout and process.stderr spies gone; the console spy stays), M12 (eslint/no-console at error for libfabrika/src/** but *.test.ts) and M13 (the two process entries in a copy after each of the three blocks that reach libfabrika, and the one disable line in JournalSqlite.child.test-support.ts), with their plants in oxlint-plugins. M7 (ProjectAuditTest.ts on Stub.make) is stopped: it imports @kampus/vitest, which layer-rules.json does not let next-workers import, and that file is outside the plan's files table. M11 is out of this sweep and no lock block was written.",
+  "note": "This container has Node 22 and the local-limit guard pins Node 26, so a Node 26.13.0 binary was downloaded to the scratchpad and put first on PATH for every run. Slice 2 laws and the cloudflare laws that read WaitsLive could not load here, so the Part B plants on connection.test.ts, entry-flows.laws.test.ts and readers.laws.test.ts ran on scratch copies of those files (the dropped imports, or main's objects.ts mock for the RecordPart path) beside the unchanged product, and each product file was restored by copy. A typecheck with temporary stubs for the missing product names found no error in any test file. Started time is approximate (the first fetch of the branch). Slice 2's own plants are after build; they are in field/runs/2026-11-16-mock-cloudflare-s2-tests.json and -tests2.json.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "connection.test.ts: t863 L1 (M5)",
+      "plant": "routed also tags a bad_input answer refused (connection.ts)",
+      "result": "red"
+    },
+    {
+      "law": "connection.test.ts: t863 L1 (M5)",
+      "plant": "process.send routes outside its runtime.rpc span (connection.ts)",
+      "result": "red"
+    },
+    {
+      "law": "connection.test.ts: t863 L1 (M5)",
+      "plant": "routed stops tagging a reserved answer refused (connection.ts)",
+      "result": "red"
+    },
+    {
+      "law": "entry-flows.laws.test.ts: L10 [secrets] flows (M6)",
+      "plant": "Effect.logError of the cause on a refused start and on a failed lookup in SettingsStartsLedger.ts, read through the retained console spy",
+      "result": "red"
+    },
+    {
+      "law": "entry-flows.laws.test.ts: L10 [secrets] flows (M6)",
+      "plant": "connection.probe sets the env secret as a span attribute, read through the spans rows and Record calls",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: processDescriptor checks the saved value before returning it (M3)",
+      "plant": "processDescriptor returns storage.get's value without its decode (runtime.ts)",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: Connection ready RPC decoding fails in the typed channel before the wait refusal is sent (M4)",
+      "plant": "the fake socket's send drops its frame",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: the laws that build a connection (M4)",
+      "plant": "gatewayLogic calls ctx.storage.list() (connection.ts)",
+      "result": "red"
+    },
+    {
+      "law": "RunnerAdmission.integration.test.ts via ProjectAuditTest.ts (M7, stopped)",
+      "plant": "projectLayer reads ctx.storage.get, which the driver did not wire",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: M12 raw console calls (M12)",
+      "plant": "excludeFiles of the libfabrika no-console block widened to every .ts file",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: M13 process stdout and stderr (M13)",
+      "plant": "drop the two process entries from the next/**/* copy (libfabrika/src/**)",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: M13 process stdout and stderr (M13)",
+      "plant": "drop the two process entries from the warn-list copy",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: M13 process stdout and stderr (M13)",
+      "plant": "drop the two process entries from the client/** copy",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: M13 process stdout and stderr (M13)",
+      "plant": "a libfabrika block after the others that lists only the two process entries",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/lint.ts on SettingsStartsLedger.ts (M13 plant c)",
+      "plant": "process.stdout.write(...) added to a product file",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/lint.ts on SettingsStartsLedger.ts (M12)",
+      "plant": "console.log(...) added to a product file",
+      "result": "red"
+    }
+  ]
+}

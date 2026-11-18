@@ -15,8 +15,23 @@ import type { Command, Result } from "../tasks/Task.ts";
 import type * as CommandsFront from "./Commands.ts";
 import type { Commands } from "./Commands.ts";
 import type * as JournalFront from "./Journal.ts";
-import type { Entry, Journal, JournalError } from "./Journal.ts";
+import { type Entry, type Journal, JournalError } from "./Journal.ts";
 import type * as JournalStore from "./JournalStore.ts";
+
+/**
+ * T1062 slice 3, L3 (docs/plan/quests/error-cause-client-PLAN.md, decision 0568): the one product
+ * maker of JournalError passes the store's failure (`JournalStore.ts:13-14`), so its cause is
+ * required and no other site can leave it out. Never called.
+ * Plant: make `Journal.ts:57` `Schema.optional(Schema.Defect())` again; the `@ts-expect-error` goes
+ * unused and the typecheck fails.
+ */
+const uncaused = (cause: unknown) => {
+  // @ts-expect-error every maker of JournalError has a cause, so the field is required (0568).
+  const bare = JournalError.make({ reason: "storage" });
+  const kept = JournalError.make({ reason: "bad_entry", cause });
+
+  return { bare, kept };
+};
 
 it("type: T1 Journal and Commands speak their own errors and shared names only, never KeyValueStore's or PlatformError", () => {
   // The journal's two calls, as the contract writes them: one entry per task, read or written.
@@ -56,4 +71,10 @@ it("type: T1 Journal and Commands speak their own errors and shared names only, 
   expectTypeOf<"layer" extends keyof typeof CommandsFront ? true : false>().toEqualTypeOf<false>();
   // The error is a schema value of its own, so a client can save or show it as the module wrote it.
   expectTypeOf<JournalError>().toEqualTypeOf<JournalError>();
+});
+
+it("type: T1062 L3 a JournalError is never made without its cause, and its cause is any value", () => {
+  expectTypeOf<JournalError["cause"]>().toEqualTypeOf<unknown>();
+  expectTypeOf<ReturnType<typeof uncaused>["kept"]>().toEqualTypeOf<JournalError>();
+  expectTypeOf(uncaused).toBeFunction();
 });

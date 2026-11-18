@@ -1,0 +1,44 @@
+{
+  "name": "@kalfa/records",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The checks on our records (decisions 0605 to 0607, and 0610 for the map): a decision has one of two statuses, no record patches another, no link lands on a superseded record, and the map of instruction files fits its readers' limit.",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    "./Status": "./src/Status.ts",
+    "./Frontmatter": "./src/Frontmatter.ts",
+    "./Finding": "./src/Finding.ts",
+    "./cli": "./src/cli.ts",
+    "./package.json": "./package.json"
+  },
+  "kalfa": {
+    "cli": "./cli"
+  },
+  "dependencies": {
+    "mdast-util-from-markdown": "catalog:",
+    "mdast-util-gfm": "catalog:",
+    "micromark-extension-gfm": "catalog:",
+    "oxc-parser": "catalog:",
+    "yaml": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@kampus/vitest": "workspace:*",
+    "@types/mdast": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

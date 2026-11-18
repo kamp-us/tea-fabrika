@@ -409,8 +409,9 @@ describe("the real rule file on planted trees", () => {
   // since the parts above the library may import it and it imports none of them, tests included.
   // This holds a file a row claims. A library file no row claims, a test or a file outside `src/`,
   // is held by name in `fabrika/package-imports`, whose library part covers the whole package.
-  // Plant: put the tuval and program rows below `next-node` again, as they were. The node test's
-  // tuval import then reads as downward and passes.
+  // Plant: put the tuval and program rows below the node and workers rows again, as they were; the
+  // plant moves `next-node` through `next-workers` as one block, the project audit test row
+  // between them included. The node test's tuval import then reads as downward and passes.
   it.effect("scenario: tuval's folders, a program's box and window, and nothing above the library", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
@@ -460,16 +461,22 @@ describe("the real rule file on planted trees", () => {
         () => new Error("the real layer rules have a next-node row"),
       );
 
+      const workers = Option.getOrThrowWith(
+        Arr.findFirstIndex(REAL.layers, (row) => row.name === "next-workers"),
+        () => new Error("the real layer rules have a next-workers row"),
+      );
+
       const below = [
         ...REAL.layers.slice(0, 1),
-        ...REAL.layers.slice(node, node + 2),
+        ...REAL.layers.slice(node, workers + 1),
         ...REAL.layers.slice(1, node),
-        ...REAL.layers.slice(node + 2),
+        ...REAL.layers.slice(workers + 1),
       ];
 
-      expect(Arr.map(below, (row) => row.name).slice(0, 4)).toEqual([
+      expect(Arr.map(below, (row) => row.name).slice(0, 5)).toEqual([
         "next-apps",
         "next-node",
+        "next-workers-project-audit-test",
         "next-workers",
         "next-program-windows",
       ]);

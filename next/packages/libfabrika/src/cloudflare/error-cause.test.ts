@@ -1,5 +1,6 @@
 import { Stub } from "@kampus/vitest";
 import { RpcCallError } from "alchemy/Rpc";
+import { WebCrypto } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
@@ -28,6 +29,7 @@ import { fetch, workerLoader } from "./index.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 import { recordWrite } from "./record.ts";
 import { type BrainOptions, checkedPut, type Env, processDescriptor, processRuntime } from "./runtime.ts";
+import * as WaitsLive from "./WaitsLive.ts";
 
 // Only the platform base class is fake, as in runner-reply.laws.test.ts.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -53,6 +55,11 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 
 /** A platform call that rejects with `failure`: what each stub below answers for any method name. */
 const rejects = (failure: unknown) => () => Promise.reject(failure);
+
+/** A platform member a law did not hand in: any call to it fails the law. */
+const unexpected = (method: string): never => {
+  throw new Error(`unexpected platform call: ${method}`);
+};
 
 /** A platform value built from plain parts: the adapter reads only the parts each law gives. */
 // SAFETY: each law hands `fake` the parts the adapter reads for it, and the adapter reads nothing else.
@@ -288,29 +295,31 @@ describe("T695, the object adapters keep what failed", () => {
       }),
   );
 
-  // C1, runtime.ts:223. Plant: `const fail = () => new LedgerError({ reason: "crypto" })`.
+  // C1, runtime.ts's checkedPut. The crypto is handed in through Effect's `WebCrypto` reference,
+  // as a platform fake whose digest rejects. Plants: `const fail = () => new LedgerError({ reason:
+  // "crypto" })`; and `checkedPut` calling `globalThis.crypto.subtle.digest` past the reference, so
+  // the real digest answers and the put fails `bad_row` instead.
   law(
     "C1: a bucket put whose digest rejects fails `crypto` with the rejected value as its cause",
     fc.record({ failure: failures, body: fc.uint8Array({ maxLength: 32 }), key: fc.string() }),
     ({ failure, body, key }) =>
-      Effect.acquireUseRelease(
-        Effect.sync(() => vi.spyOn(crypto.subtle, "digest").mockRejectedValue(failure)),
-        () =>
-          Effect.gen(function* () {
-            const error = yield* Effect.flip(
-              checkedPut(
-                Stub.make<R2Bucket>(() => rejects(new Error("unused"))),
-                key,
-                body,
-                "00",
-              ),
-            );
+      Effect.gen(function* () {
+        const rejectingCrypto = Stub.make<typeof globalThis.crypto>(unexpected, {
+          subtle: Stub.make<SubtleCrypto>(unexpected, { digest: () => Promise.reject(failure) }),
+        });
 
-            expect(error.reason).toBe("crypto");
-            expect(error.cause).toBe(failure);
-          }),
-        (spy) => Effect.sync(() => spy.mockRestore()),
-      ),
+        const error = yield* Effect.flip(
+          checkedPut(
+            Stub.make<R2Bucket>(() => rejects(new Error("unused"))),
+            key,
+            body,
+            "00",
+          ),
+        ).pipe(Effect.provide(WebCrypto.layer(rejectingCrypto)));
+
+        expect(error.reason).toBe("crypto");
+        expect(error.cause).toBe(failure);
+      }),
   );
 
   // C6, runtime.ts:226: a hash that differs is refused with no underlying failure.
@@ -361,7 +370,7 @@ describe("T695, the object adapters keep what failed", () => {
                   }),
                 (runtime) => Effect.promise(() => runtime.dispose()),
               )
-            : Effect.scoped(Layer.build(connectionLayer(state, env, config))),
+            : Effect.scoped(Layer.build(connectionLayer(state, env, config).pipe(Layer.provide(WaitsLive.layer)))),
         );
 
         expect(error).toBeInstanceOf(LedgerError);

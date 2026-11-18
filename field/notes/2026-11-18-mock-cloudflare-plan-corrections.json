@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-18-mock-cloudflare-plan-corrections",
+  "date": "2026-11-18",
+  "quests": ["kamp-us/tea-fabrika#1637"],
+  "stage": "plan",
+  "kind": "friction",
+  "person": false,
+  "primitive": "Gather",
+  "what": "The mock sweep's cloudflare plan (docs/plan/quests/mock-cloudflare-PLAN.md), approved on 2026-11-15 and amended to 2026-11-17, met six facts that had changed by its tests and build on 2026-11-18. (1) Dropping the entry-flows console spy needed a change to patches/effect@4.1.3.patch, which also changes that patch's hash in pnpm-lock.yaml, a file the plan does not list; the warnLines reader it builds on had not landed either. (2) control.laws.test.ts calls control directly, so it needed a DispatcherLive.layer provide, outside the plan. (3) M7's Stub.make import in ProjectAuditTest.ts, a test-support file, needed its own row in layer-rules.json, outside the plan. (4) Three no-restricted-properties blocks reach libfabrika, not five: main had merged the list blocks since the plan counted at 0683861. (5) M5's plant names a rate_limited answer that the answer cases do not have, so bad_input took its place. (6) brain.ts needed a ./workers/DispatcherLive package export the plan's package.json row did not name.",
+  "cause": "The plan named its files from main at f7169af and 0683861 and was run three days later, after reflect slices 9 to 14, the quotas slice and the lint block merge had landed. Its files table lists the files a change edits, but not the files that call what it changes (control.laws.test.ts), the files a changed file's hash lives in (pnpm-lock.yaml), or the layer rows a new import needs.",
+  "fix": "A plan's Gather step lists, for every changed export or requirement, its callers on main at the step's start, and for a patched package, pnpm-lock.yaml. The lead takes the counts again before each step, as the plan itself asks. Here the coordinator answered each outside-plan file by mail: (1) left to the app-e2e slice, which owns the patch and the lockfile; (2) yes; (3) yes, as a row of its own, never next-vitest on the next-workers row.",
+  "test": "On the next sweep plan, count the outside-plan files its tests and build steps need. This one needed three, plus one export line.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1637"]
+}

@@ -26,6 +26,7 @@ import { runsFor, Stub } from "@kampus/vitest";
 import { Arbitrary, Effect, Match, Predicate, Redacted, Result, Schema } from "effect";
 import type { ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
 import { control, Payloads } from "./control.ts";
+import * as DispatcherLive from "./DispatcherLive.ts";
 import type { Env } from "./runtime.ts";
 
 const SEED = 119120;
@@ -197,7 +198,7 @@ const ask = Effect.fnUntraced(function* (env: Env, body: string) {
     env,
     Redacted.make(TOKEN),
     {},
-  );
+  ).pipe(Effect.provide(DispatcherLive.layer));
 
   const text = yield* Effect.tryPromise({ try: () => response.text(), catch: (cause) => new Unread({ cause }) });
 

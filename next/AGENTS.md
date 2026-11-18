@@ -36,6 +36,9 @@ say the fix. A module imports only from lower layers: it prints `[upward]`, and 
 [0043](../.decisions/0043-rooms-on-floors.md) and [0091](../.decisions/0091-modules-and-layers.md).
 A part imports only the parts its row in `layer-rules.json` lists, and every library and tuval file
 has a row (a row's `imports`, and `roots`).
+`eslint/no-console`, on for `next/packages/libfabrika/src` but its `*.test.ts` files, does not say
+the fix either: libfabrika writes output only through Effect's `Console`, and a real exception takes
+a disable line with its reason ([0592](../.decisions/0592-libfabrika-writes-output-only-through-effects-console.md)).
 
 A Promise edge the platform demands is one line, marked
 `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, and the lead reads each one at

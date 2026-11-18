@@ -1,0 +1,46 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-rules-and-records-s8-review1-recheck1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1634",
+  "started": "2026-11-18T12:14:46-08:00",
+  "ended": "2026-11-18T12:22:00-08:00",
+  "parent": "2026-11-18-rules-and-records-s8-fix1",
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Recheck of slice 8 of docs/plan/quests/rules-and-records-build-PLAN.md, today's tooling (kalfa/records), at fb60748fb after the fix round. All eight faults are fixed. No law reads a committed record. The link check reads Markdown with micromark and comments with oxc-parser, so a wrapped link, a comment after a backtick regex literal, a file oxc cannot parse, UTF-16 text and CRLF lines each give their finding on a scratch fixture. It names the live record at the end of the chain (0097 to 0162). A bad successor is reported at its own line. Headings, cells and 1) items are blocks. Rule 10 as built holds its number half: a plant that drops the date rule or the reference rule is red. Its link half is not reached: a plant that drops the record-link test stays green at full depth, and a reference-style link with word text to a record is no reference (one finding row). On main and on the branch, no real patch depends on that half today. lint:promise-types passes alone with 0 findings, and lint:reach, versions, kind, boundaries and dead pass.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Usage and cost are not recorded. Node 26.13.0 outside the repo for every node, pnpm and vitest command. Plants ran in a scratch copy of kalfa/records outside the repo, with its node_modules linked; none touched the branch. The check on the checkout now takes about 9 seconds, against about 2 before the fix.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "costUsd": null,
+  "billed": null,
+  "base": "fb60748fb65abf3ad7b8272911be8dc0ad76109b",
+  "plants": [
+    {
+      "law": "L2, kalfa/records/src/Frontmatter.test.ts:41",
+      "plant": "kalfa/records/src/Status.ts:67, every failed decode reported at the status line",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:143",
+      "plant": "kalfa/records/src/Markdown.ts:128, link definitions never read",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:143",
+      "plant": "kalfa/records/src/Comments.ts:50, quotes no longer open a string in shell and YAML",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:327",
+      "plant": "kalfa/records/src/Patches.ts:67, a link to a record no longer counts as a record reference",
+      "result": "green"
+    }
+  ]
+}

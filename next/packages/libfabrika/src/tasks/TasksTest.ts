@@ -227,6 +227,16 @@ export const BAD_REQUEST: ReadonlyArray<readonly [string, unknown]> = [
   ["traceId", "XYZ"],
 ];
 
+/** A request with one valid field made undecodable in a way `makeEffect` would hide: its command has no `_tag`. */
+const TAGLESS_COMMAND: ReadonlyArray<(request: Request) => object> = [
+  (request) => ({ ...request, command: {} }),
+  (request) => {
+    const { _tag: _gone, ...bare } = request.command;
+
+    return { ...request, command: bare };
+  },
+];
+
 export const BAD_EXECUTOR: ReadonlyArray<readonly [string, unknown]> = [
   ["key", ""],
   ["key", MISSING],
@@ -234,6 +244,18 @@ export const BAD_EXECUTOR: ReadonlyArray<readonly [string, unknown]> = [
   ["has", "git"],
   ["has", [""]],
   ["build", MISSING],
+];
+
+/** Invalid executions for `started` and `finish`, one per pick: empty text, a number, `null`, nothing. Boxed, as `choose` refuses an `undefined` item. */
+const BAD_EXECUTION: ReadonlyArray<readonly [unknown]> = [[""], [7], [null], [undefined]];
+
+/** Invalid replacements for each field a collection decodes, one per pick. */
+const BAD_COLLECTION: ReadonlyArray<readonly [string, unknown]> = [
+  ["process", ""],
+  ["process", "not-a-process"],
+  ["process", MISSING],
+  ["letter", ""],
+  ["letter", MISSING],
 ];
 
 export const BAD_RESULT: ReadonlyArray<readonly [string, unknown]> = [
@@ -321,7 +343,11 @@ type Move =
   | "collect_again"
   | "collect_conflict"
   | "collect_other"
-  | "collect_early";
+  | "collect_early"
+  | "start_bad"
+  | "finish_bad"
+  | "collect_bad"
+  | "request_bad";
 
 type Phase = "requested" | "assigned" | "started" | "finished" | "collected";
 
@@ -483,6 +509,10 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
     collect_conflict: collected,
     collect_other: done,
     collect_early: requested || assigned || started,
+    start_bad: any,
+    finish_bad: any,
+    collect_bad: any,
+    request_bad: fresh,
   };
 
   return Arr.filter(moves, (move) => can[move]);
@@ -815,6 +845,41 @@ const walk = (
           break;
         }
 
+        case "start_bad":
+        case "finish_bad": {
+          // A saved task in any phase, so no state refusal can answer before the decode does.
+          const saved = on(["requested", "assigned", "started", "finished", "collected"]);
+          // SAFETY: the execution is broken on purpose, so the law sees the store refuse it.
+          const [execution] = choose(BAD_EXECUTION, cell.variant) as readonly [string];
+
+          const answer =
+            move === "start_bad"
+              ? yield* tasks((j) => j.started(saved.request.id, execution, recorded))
+              : yield* tasks((j) => j.finish(saved.request.id, execution, cell.result, recorded));
+
+          refused(answer, "a start or a finish whose execution does not decode", "bad_input");
+          break;
+        }
+
+        case "collect_bad": {
+          const saved = on(["requested", "assigned", "started", "finished", "collected"]);
+          const good = { process: saved.request.process, letter: `${saved.request.id}/answer` };
+          // SAFETY: the collection is broken on purpose, so the law sees the store refuse it.
+          const collection = broken(good, cell.variant, BAD_COLLECTION) as Collection;
+          const answer = yield* tasks((j) => j.collected(saved.request.id, collection, recorded));
+          refused(answer, "a collect whose collection does not decode", "bad_input");
+          break;
+        }
+
+        case "request_bad": {
+          // A fresh id: nothing is saved under it, so no conflict or state refusal can answer before the decode does.
+          const request = choose(tape.requests, world.next);
+          // SAFETY: the command is broken on purpose, so the law sees the store refuse a request `makeEffect` would mend.
+          const bad = choose(TAGLESS_COMMAND, cell.variant)(request) as Request;
+          refused(yield* tasks((j) => j.request(bad, recorded)), "a request whose command has no tag", "bad_input");
+          break;
+        }
+
         case "cut_before":
         case "cut_after": {
           fault.at = move === "cut_before" ? "before" : "after";
@@ -1064,6 +1129,15 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       open,
       [...LIFE, "bad"],
       ["bad", "request_new", "take_ok"],
+    );
+    // Plants (run once, never kept): `started` or `collected` keeps `Msg.cases.<case>.make` and throws; a `badInput`
+    // that answers `storage` instead of `bad_input`; `request` keeps `Msg.cases.request.makeEffect({ request })` with no field
+    // decode, which fills a missing command tag from its default and accepts the request.
+    prop(
+      "L8b: a request whose command has no tag, or a start, finish or collect whose execution or collection does not decode, is refused bad_input and changes no task",
+      open,
+      [...LIFE, "collect_ok", "request_bad", "start_bad", "finish_bad", "collect_bad"],
+      ["request_bad", "start_bad", "finish_bad", "collect_bad", "take_ok", "reopen"],
     );
     prop(
       "J2: a collected event survives reopen; an equal retry answers the first receipt; a different collection is refused and writes nothing",
