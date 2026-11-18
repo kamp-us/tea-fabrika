@@ -341,7 +341,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "next-vitest"
       ]
     },
     {
