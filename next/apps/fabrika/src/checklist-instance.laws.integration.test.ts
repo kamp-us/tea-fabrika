@@ -374,6 +374,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
                   const current = entry;
                   const work: AlarmWork = { at, done: Deferred.makeUnsafe<void, AlarmFailure>() };
                   alarms.add(work);
+
                   const timer = setTimeout(
                     () => {
                       current.scheduled = undefined;
@@ -400,6 +401,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
                     },
                     Math.max(0, at - Date.now()),
                   );
+
                   current.scheduled = { timer, work };
                 }
               });
