@@ -1,7 +1,7 @@
 ---
 id: 0135
 title: A laws file may restate a program's shapes by hand, and pins each one to the schema's type so drift fails the typecheck
-status: amended-in-part by [0562](0562-nothing-teaches-the-wrong-shape.md)
+status: accepted
 date: 2026-11-11
 tags: [tests, laws, schema, types, exam, programs]
 ---
@@ -22,8 +22,6 @@ expectTypeOf<Model>().toEqualTypeOf<typeof checklist.state.schema.Type>();
 **What this decides:** whether a test may write a program's Model, Msg and state types by hand, and
 what keeps the hand-written copy true.
 
-*[0562](0562-nothing-teaches-the-wrong-shape.md) ends the hand-written `_tag` inside a restated shape; the rest of this file still holds.*
-
 ## Context
 
 The checklist's laws file (pull request 987) restates the program's `State`, `Item`, `Model` and
@@ -42,6 +40,8 @@ the program's schema.**
 - In a laws file, each restated type has one `expectTypeOf<Copy>().toEqualTypeOf<...>()` line
   against the type the program exposes (its state schema, its machine's Msg). A drift then fails
   the typecheck in CI.
+- A restated shape holds no hand-written `_tag`: it is held like any other hand-written `_tag`
+  ([0562](0562-nothing-teaches-the-wrong-shape.md)).
 - A shape the program does not expose in any type is not restated as a guess: the laws use it
   through the program's own values.
 - We count how often a pin goes red or a copy differs at merge, and report it in a field note. If

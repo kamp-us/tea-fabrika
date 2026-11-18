@@ -1,7 +1,7 @@
 ---
 id: 0046
 title: In next/, every state machine is a tea machine and a file exports at most one, or one factory of one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
-status: amended-in-part by [0567](0567-a-tagged-value-is-matched.md), [0601](0601-program-make-with-optional-pipes.md)
+status: accepted
 date: 2026-11-09
 tags: [state-machine, tea, file-layout, lint, properties, elm, next]
 ---
@@ -27,7 +27,7 @@ stateDiagram-v2
 ```
 
 ```ts
-// Before: main today (next/packages/libfabrika/src/). One machine, spread over three files.
+// Before: main on 2026-11-09 (next/packages/libfabrika/src/). One machine, spread over three files.
 
 // coordination/recovery.ts:98-104: the Model, away from its update.
 export const Supervision = Schema.Struct({
@@ -63,16 +63,19 @@ hand in the runner, in nine places.
 named type with its transitions in one place. It left two things open: which form a small machine
 takes, and where "one place" is. The owner settled both on 2026-11-09. Tracker ticket 508.
 
-**This record amends 0037 in part.** 0037 let a machine whose state need not survive a restart be
-"a tagged union plus one transition function, in memory". That option is removed. The rest of 0037
-holds as written: the two tests that say what a machine is, the three places one hides, the third
-test, the plan's question and its binding constraints. By
-[the adr skill's table](../.agents/skills/adr/SKILL.md#4-supersede-or-amend) that is
-`amended-in-part`, and 0037's status line now says so.
+**This record changed 0037 in part.** 0037 let a machine whose state need not survive a restart be
+"a tagged union plus one transition function, in memory". That option is removed, and 0037's text
+now says every machine is a tea machine.
 
-A tea machine is one made with `Machine.make` from `@demlik/tea/effect` (tea 0.25.0, the installed
-version). `next/` has three outside its tests on main: `app/supervisor.ts:69`, `app/brain-life.ts:35`
-and `next/programs/counter/src/program.ts:15`.
+A tea machine is one made with `Machine.make` from `@demlik/tea/effect` (tea is the
+`@demlik/tea` entry of `pnpm-workspace.yaml`'s default catalog). `next/` had three outside its
+tests on main on 2026-11-09: `app/supervisor.ts:69`, `app/brain-life.ts:35` and
+`next/programs/counter/src/program.ts:15`.
+
+Three later records changed parts of this one, and the Decision below says what holds now:
+[0567](0567-a-tagged-value-is-matched.md) on how a handler picks the next state,
+[0578](0578-tea-cell-answers-a-step.md) on what it returns, and
+[0601](0601-program-make-with-optional-pipes.md) on how a program is written.
 
 Why:
 
@@ -110,8 +113,21 @@ the machine's Model, its Msg and its update, with no input or output code.**
 
 Rule 1, the form:
 
-- **Everything that passes 0037's two tests is written with `Machine.make`.** No machine is hidden,
-  and none is a plain tagged union with one transition function. Small is no exception.
+- **Everything that passes 0037's two tests is a tea machine,** written with `Machine.make`. No
+  machine is hidden, and none is a plain tagged union with one transition function. Small is no
+  exception. A program is the one other way: it is written with `Program.make`, whose `make` makes
+  its tea machine, and its functions may call services
+  ([0601](0601-program-make-with-optional-pipes.md)).
+- **An `update` handler answers a `Step`,** `Step.stay`, `Step.to` or `Step.run`, never the
+  `[model, cmds]` tuple, and the Effect entry's `Machine.make` turns each `Step` into tea's tuple
+  once ([0578](0578-tea-cell-answers-a-step.md)). This file's examples show the tuple, which the
+  sweep of the return sites changes.
+- **An `update` handler matches the state it holds, and never compares `_tag` by hand**
+  ([0567](0567-a-tagged-value-is-matched.md)). It uses the union's own matcher first
+  (`Union.match`, `Union.matchOrElse`, `Union.isAnyOf`) and Effect's `Match` module second. A state
+  missing from `Union.match` is a type error of one line that names it, so the compiler forces a
+  new state through a handler that matches. A ternary nests at most two deep
+  ([0558](0558-no-ternary-deeper-than-two.md)).
 - **0037's third test stays.** State that must survive a restart, or be seen by another party, is
   stored data that recovery reads. What gets stored is the machine's Model, and the update decides
   every change to it. The code that saves it only saves.
@@ -123,13 +139,42 @@ Rule 2, the file:
   value that names a request, and it runs nothing.
 - **What it never holds.** No service call, no storage, no clock, no handler that runs a Cmd. The
   code that drives the machine (reads the clock, saves the Model, runs the Cmds) lives in another
-  file.
+  file. A program's functions are not a machine's file: they may call services
+  ([0601](0601-program-make-with-optional-pipes.md)).
 - **Nothing outside the file builds or edits the Model by hand.** Other code gets a new Model by
   sending a Msg through the machine. A spread that changes a control-state field, or a `make` of a
   state case, outside the machine's file is what this forbids. A change the machine has no Msg for
   gets a Msg.
 - **A small private helper machine may share its parent's file.** Private means not exported and
   used only by the machine in that file. The day a second file needs it, it gets a file of its own.
+- **A file may export a machine factory in place of a machine:** one function that takes a config
+  and returns one tea machine. It is for a machine that needs something from its caller that a Msg
+  cannot carry, such as each program's own schema checks. Tracker ticket 534.
+
+  ```ts
+  // A sketch. One file, one export: the factory. The names are examples.
+  export const clientMachineFor = (checks: Checks) =>
+    Machine.make({model: Client, msg: Msg, cmds: [] /* init, and an update that reads `checks` */});
+  ```
+
+  - **One machine or one factory, never both.** A file exports one machine, or one factory of one
+    machine. A factory never returns more than one machine.
+  - **The rest of this rule applies to it.** The factory's Model, Msg and update live in that
+    file, with no input or output code, and nothing outside the file builds or edits the Model by
+    hand. The config is read by the update; it is not a way to pass in a service, storage or a
+    clock.
+  - **The known way.** Elm's reusable-view pattern: the caller passes a config value, and the
+    functions in it stay out of the `Model` and the `Msg`. The elm-sortable-table README says this
+    under [Usage Rules](https://github.com/evancz/elm-sortable-table#usage-rules) ("never put
+    functions in your `Model` or `Msg` types", read at its source on 2026-11-10). Two things about
+    this source, said plainly: the package is deprecated and not published for Elm 0.19 and above,
+    and its config holds `view` functions. A config that an `update` reads is our use of the same
+    idea, not something that README shows.
+  - **First user.** Lane P14's `clientMachineFor(checks)`, tracker ticket 286. It was on that
+    lane's branch, not on main, and the pushed branch did not hold that name yet when this was
+    written.
+  - **The word** is the industry's "factory": a function that makes a value. A row for
+    `machine factory` is in the glossary (Records).
 - **Why the allowance.** The owner did not want a blanket one-per-file rule in the style of the old
   one-React-component-per-file lint rule. That rule scatters tiny helpers over many files, and a
   reader then opens five files to follow one. The rule here counts what a file exports, not what it
@@ -164,9 +209,10 @@ machine (`app/runner.ts:271-272`).
 ## Consequences
 
 - **It becomes a lint rule,** tracker ticket 509. The rule counts the exported `Machine.make` calls
-  in a file and fails on more than one. A machine that is not exported is a private helper, so the
-  allowance needs no extra code: the day a second file needs the helper it must be exported, and the
-  rule fires. Until the rule exists, the plan and the review are the check.
+  in a file and fails on more than one, and it accepts one exported function that returns one (the
+  factory). A machine that is not exported is a private helper, so the allowance needs no extra
+  code: the day a second file needs the helper it must be exported, and the rule fires. Until the
+  rule exists, the plan and the review are the check.
 - **Two parts of rule 2 may not fit a syntax rule:** "no input or output code in the file" and "no
   hand edit of the Model outside it". Ticket 509 says which it can check and what is left to review.
   Nobody has measured the rule's false alarms yet, and it blocks only at about 0%.
@@ -177,7 +223,7 @@ machine (`app/runner.ts:271-272`).
   supervisor, experiment 246 sizes it at about 3 files and 200 lines, with saved rows to migrate.
 - **Not verified: a tea machine stepped inside a synchronous storage transaction.** Some small
   machines live there, such as the span sink's table latch (`data/sink.ts:268-277`), where nothing
-  may be awaited and no runtime runs. What was read, in the installed tea 0.25.0:
+  may be awaited and no runtime runs. What was read, in tea 0.25.0, the version read for this record:
   - `applyCell(machine, state, msg)` from `@demlik/tea` is a plain exported function. It finds the
     update cell and calls it, returns `[next, cmds]`, and starts no runtime, no Promise and no
     Effect.
@@ -186,82 +232,19 @@ machine (`app/runner.ts:271-272`).
   - So the reading says it works. Nobody has run one inside `sql.transaction`, and nobody has
     checked that `data/` may import tea under the layer rules. The first small machine built this
     way settles both. This is about how such a machine is called, not whether it is a tea machine.
-- **A new state is not forced through every handler by the compiler** (2026-11-10, the amendment
-  below). A handler that picks the next state with a plain conditional still compiles when the
-  Model gains a case. The machine's property tests carry that check.
-- **The lint rule must accept two forms** (2026-11-10, the factory amendment below): one exported
-  `Machine.make` call, or one exported function that returns one. Tracker ticket 509 carries that.
+- **One machine per factory call is not something a count of exports proves,** so ticket 509 says
+  whether the rule can check it or review does.
 - Not decided here: the folder a machine's file sits in ([0043](0043-rooms-on-floors.md) does), the names of the new
   Msgs and cases, the order the 13 machines are done in, and today's version, which this record does
   not touch.
 
-## Amendments
-
-- 2026-11-15: [0578](0578-tea-cell-answers-a-step.md) says a cell answers a `Step`, not the
-  `[model, cmds]` tuple that this file's examples show. The examples change with the sweep.
-
-- 2026-11-15: [0567](0567-a-tagged-value-is-matched.md) supersedes the amendment just below, the
-  one on how an `update` handler picks the next state. The rest of this file holds as written.
-
-- 2026-11-10: **an `update` handler picks the next state with a plain conditional on the state's
-  `_tag`,** the form `next/packages/libfabrika/src/app/brain-life.ts` has today. It does not use
-  Effect's `Match` module or the Model's own `Schema.TaggedUnion` `.match` for that. Tracker
-  ticket 524.
-
-  ```ts
-  // app/brain-life.ts:59, the form that stays.
-  stop: (s) => [terminal(s) ? s : BrainState.cases.stopping.make({}), []],
-  ```
-
-  - **What was tried.** Every handler written as
-    `Match.type<Model>().pipe(Match.tag(...), Match.exhaustive)`, against tea 0.25.0 and effect
-    4.1.2. It type-checks, and it does catch a state missing from a handler.
-  - **Why it was not taken.** Each handler must list every state that stays as it is, so the code
-    reads noisier, and the compile error for a missing state is about ten lines of type noise.
-  - **The cost, accepted.** The compiler does not force a new state through every handler. The
-    machine's property tests carry that (Consequences).
-  - **What it does not cover.** Only the transition code inside `update`. `Match` and `.match`
-    anywhere else are untouched.
-  - **Later.** [0558](0558-no-ternary-deeper-than-two.md) caps how deep such a conditional nests
-    when it is a ternary: 2. Everything above still holds.
-
-- 2026-11-10: **a file may export a machine factory in place of a machine:** one function that
-  takes a config and returns one tea machine. It is for a machine that needs something from its
-  caller that a Msg cannot carry, such as each program's own schema checks. Tracker ticket 534.
-
-  ```ts
-  // A sketch. One file, one export: the factory. The names are examples.
-  export const clientMachineFor = (checks: Checks) =>
-    Machine.make({model: Client, msg: Msg, cmds: [] /* init, and an update that reads `checks` */});
-  ```
-
-  - **One machine or one factory, never both.** A file exports one machine, or one factory of one
-    machine. A factory never returns more than one machine.
-  - **Rule 2 holds as written.** The factory's Model, Msg and update live in that file, with no
-    input or output code, and nothing outside the file builds or edits the Model by hand. The
-    config is read by the update; it is not a way to pass in a service, storage or a clock.
-  - **The known way.** Elm's reusable-view pattern: the caller passes a config value, and the
-    functions in it stay out of the `Model` and the `Msg`. The elm-sortable-table README says this
-    under [Usage Rules](https://github.com/evancz/elm-sortable-table#usage-rules) ("never put
-    functions in your `Model` or `Msg` types", read at its source on 2026-11-10). Two things about
-    this source, said plainly: the package is deprecated and not published for Elm 0.19 and above,
-    and its config holds `view` functions. A config that an `update` reads is our use of the same
-    idea, not something that README shows.
-  - **First user.** Lane P14's `clientMachineFor(checks)`, tracker ticket 286. It is on that lane's
-    branch, not on main, and the pushed branch did not hold that name yet when this was written.
-  - **The cost.** The lint rule for this record (tracker ticket 509) must accept both forms
-    (Consequences). One machine per call is not something a count of exports proves, so ticket 509
-    says whether the rule can check it or review does.
-  - **The word** is the industry's "factory": a function that makes a value. A row for
-    `machine factory` is in the glossary (Records).
-
 ## Records
 
-- [0037](0037-implicit-state-machines-made-explicit.md): status `amended-in-part`, and a one-line
-  pointer.
+- [0037](0037-implicit-state-machines-made-explicit.md): its form line and its third test say a
+  tea machine.
 - [`.glossary/TERMS.md`](../.glossary/TERMS.md): no word is coined. The rows `explicit machine` and
   `machine` (Runtime) lose the plain form.
 - [`.glossary/TERMS.md`](../.glossary/TERMS.md), 2026-11-10: the row `machine factory` (Runtime), for
-  the factory amendment.
+  the factory.
 - AGENTS.md: one line. [Experiment 246](../experiments/246-implicit-state-machines-in-next.md): one
   dated note.

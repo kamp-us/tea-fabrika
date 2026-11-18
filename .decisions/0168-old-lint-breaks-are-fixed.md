@@ -1,7 +1,7 @@
 ---
 id: 0168
 title: An old lint break is fixed, never kept in a list file and never marked as debt, and a new rule turns on where its breaks are at zero
-status: amended-in-part by [0524](0524-no-list-lets-broken-code-pass.md)
+status: accepted
 date: 2026-11-13
 tags: [lint, oxlint, ledger, inline-ignore, effect, guidelines, exam, foundations]
 ---
@@ -60,8 +60,7 @@ file, and it is not marked on its line as debt.
 - `AGENTS.md` already has the inline form for a line that is right:
   `// oxlint-disable-next-line <rule> -- <why>`, and edges are marked the same way. That stays.
 
-This supersedes the list-file half of 0033: its rule that `.agents/` code follows `next/`'s rules
-stands.
+This supersedes the list-file half of 0033.
 
 ## Decision
 
@@ -75,8 +74,11 @@ as debt, and a new rule turns on where its breaks are at zero (owner, 2026-11-13
 - **A new rule starts at zero.** Its breaks are fixed first. Where that is too much for one pull
   request, the rule turns on folder by folder, each folder when it reaches zero, so the gate
   closes behind the work.
-- **code-graph's list stays.** `unreachable-ledger.json`, the list for exports nobody uses, is
-  how code-graph works, so it is kept ([0006](0006-no-unused-exports.md)). It still only shrinks.
+- **It holds in every folder and every check, in both versions** ([0524](0524-no-list-lets-broken-code-pass.md)):
+  a list is any file or config place a check reads to pass named broken code, and each is emptied by
+  fixing the code, then deleted with its reader. A code-graph file stays only where no entry can
+  hide a finding: `unreachable-ledger.json`, the list for exports nobody uses
+  ([0006](0006-no-unused-exports.md)), is deleted and a law keeps it absent.
 - **One inline ignore stays:** `edge:`, for a line that is right where the rule does not fit, with
   its reason. It is not a way to postpone a fix.
 - **Fast track.** A pull request that fixes listed breaks carries out this decision, so it merges

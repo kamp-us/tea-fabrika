@@ -1,7 +1,7 @@
 ---
 id: 0177
 title: After a review sends a lane back, one fix agent writes the law and the fix together, and the same reviewer is resumed to check only that fix
-status: amended-in-part by [0564](0564-lead-decides-further-fix-rounds.md)
+status: accepted
 date: 2026-11-13
 tags: [lead, lane, review, send, fix, recheck, tests, build, exam, hand-run]
 ---
@@ -31,7 +31,7 @@ flowchart TD
   fix --> again["the same reviewer, resumed, checks only that fix"]
   again --> how{"sent back?"}
   how -- "no" --> land["the lane lands"]
-  how -- "yes" --> stop["its second sent-back review: the lane stops"]
+  how -- "yes" --> stop["its second sent-back review: the lane stops, or the lead decides one more fix round"]
 ```
 
 ```text
@@ -47,10 +47,6 @@ Recheck for ticket 277. New head: <sha>. Check the fix for the faults you named.
 Three fresh agents become one, and the reviewer is not started again from nothing. The first pass
 does not move.
 
-Since 2026-11-15 a second send-back does not always stop the lane: the lead may decide one more fix
-round, of the same shape ([0564](0564-lead-decides-further-fix-rounds.md)). The rest of this file
-holds.
-
 ## Context
 
 - A lane's first pass is plan, tests, build and one review, each by its own fresh agent
@@ -65,9 +61,9 @@ holds.
 - **How it fits older decisions.**
   - It amends [0161](0161-no-step-signing-by-hand.md) in one place. 0161 kept "nobody writes their
     own exam" as practice: tests are written before the build, by a different agent. That no
-    longer holds on a fix round. The rest of 0161 stands.
+    longer holds on a fix round.
   - [0176](0176-second-send-back-stops-lane.md) says where the loop ends: the second sent-back
-    review stops the lane.
+    review stops the lane, unless the lead decides one more fix round.
   - [0066](0066-mutation-runs-on-a-schedule.md) stands: the hourly mutation run on main is one of
     the two guards left on a fix round's test.
 
@@ -80,7 +76,9 @@ reviewer is resumed, with what it already read, to check only that fix (owner, 2
   step and build step.
 - The same reviewer is resumed, with what it already read. It checks only that fix.
 - If it sends the lane back again, that is the second sent-back review, and the lane stops
-  ([0176](0176-second-send-back-stops-lane.md)).
+  ([0176](0176-second-send-back-stops-lane.md)), unless the lead decides one more fix round, of the
+  same shape: one fix agent and the same reviewer resumed
+  ([0564](0564-lead-decides-further-fix-rounds.md)).
 - The first pass is unchanged: plan, tests, build, one review, each by its own fresh agent.
 - A review that answers `send plan` is not a fix round. It goes back to the plan step, as today.
 

@@ -47,7 +47,7 @@ outside our own computers, each on its person's own key, was ruled on 2026-10-25
   happens, with nothing to think about first.
 - **It comes after the 4 primitives, never before or beside them.**
 - **It comes right after them. Recovery and the other cloud rows (P26, P27, P28, P29, P36) wait
-  behind Tier 2.** This amends 0159's amendment of 2026-11-13, which made those rows the first work
+  behind Tier 2** (owner, 2026-11-13). This changes 0159's rule that made those rows the first work
   after the 4 primitives. None of them leaves the plan. The owner's reason: losing the laptop in
   the coming weeks is unlikely, and the owner keeps direct access to the instance's Worker on
   Cloudflare, so its data can be reached without a recovery flow.
@@ -71,10 +71,3 @@ outside our own computers, each on its person's own key, was ruled on 2026-10-25
   experiment picks.
 - When recovery and the other cloud rows are built, beyond "after Tier 2".
 - What is left in Tiers 4 and 5 once this moves.
-
-## Amendments
-
-- 2026-11-13 (owner): Tier 2 comes right after the 4 primitives, and recovery and the other cloud
-  rows (P26, P27, P28, P29, P36) wait behind it. The bullet under Decision, the line under
-  Consequences and the "Not decided here" item on that order were added the same day, after this
-  file first landed.
