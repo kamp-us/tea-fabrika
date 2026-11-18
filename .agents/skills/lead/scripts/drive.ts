@@ -874,9 +874,27 @@ export type Env = {
   readonly MAIN: string;
   readonly BOXES: string;
   readonly GH_REPO: string;
-  /** The model a Codex box runs and its effort (env.sh, decision 0022). */
+  /** The coordination and judgment model and effort (env.sh, decision 0022). */
   readonly CODEX_MODEL: string;
   readonly CODEX_EFFORT: string;
+  /** Role profiles resolved by env.sh. `prepare` refuses a missing profile. */
+  readonly CODEX_PLAN_MODEL?: string | undefined;
+  readonly CODEX_PLAN_EFFORT?: string | undefined;
+  readonly CODEX_BUILD_MODEL?: string | undefined;
+  readonly CODEX_BUILD_EFFORT?: string | undefined;
+  readonly CODEX_REVIEW_MODEL?: string | undefined;
+  readonly CODEX_REVIEW_EFFORT?: string | undefined;
+};
+
+/** Read the role profile env.sh resolved; the old coordination profile is never a role fallback. */
+const codexProfile = (env: Env, step: StepName) => {
+  const model =
+    step === "plan" ? env.CODEX_PLAN_MODEL : step === "review" ? env.CODEX_REVIEW_MODEL : env.CODEX_BUILD_MODEL;
+
+  const effort =
+    step === "plan" ? env.CODEX_PLAN_EFFORT : step === "review" ? env.CODEX_REVIEW_EFFORT : env.CODEX_BUILD_EFFORT;
+
+  return model && effort ? { model, effort } : null;
 };
 
 export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
@@ -898,17 +916,41 @@ const writtenReport = (ask: Ask) => {
 export const loadEnv = (): Env => {
   const r = sh("sh", [
     "-c",
-    '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$CODEX_MODEL" "$CODEX_EFFORT"',
+    '. "$0" && printf "%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$FABRIKA_COORD_MODEL" "$FABRIKA_COORD_EFFORT" "$CODEX_PLAN_MODEL" "$CODEX_PLAN_EFFORT" "$CODEX_BUILD_MODEL" "$CODEX_BUILD_EFFORT" "$CODEX_REVIEW_MODEL" "$CODEX_REVIEW_EFFORT"',
     join(HERE, "env.sh"),
   ]);
 
-  const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = r.out.split("\n");
+  const [
+    MAIN = "",
+    BOXES = "",
+    GH_REPO = "",
+    CODEX_MODEL = "",
+    CODEX_EFFORT = "",
+    CODEX_PLAN_MODEL,
+    CODEX_PLAN_EFFORT,
+    CODEX_BUILD_MODEL,
+    CODEX_BUILD_EFFORT,
+    CODEX_REVIEW_MODEL,
+    CODEX_REVIEW_EFFORT,
+  ] = r.out.split("\n");
 
   if (r.code !== 0 || !MAIN) {
     throw new Error(`env.sh failed: ${r.err}`);
   }
 
-  return { MAIN, BOXES, GH_REPO, CODEX_MODEL, CODEX_EFFORT };
+  return {
+    MAIN,
+    BOXES,
+    GH_REPO,
+    CODEX_MODEL,
+    CODEX_EFFORT,
+    CODEX_PLAN_MODEL,
+    CODEX_PLAN_EFFORT,
+    CODEX_BUILD_MODEL,
+    CODEX_BUILD_EFFORT,
+    CODEX_REVIEW_MODEL,
+    CODEX_REVIEW_EFFORT,
+  };
 };
 
 // Shapes that leak on any machine: home and temp folders, key prefixes, private keys, em dashes.
@@ -1482,6 +1524,12 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         const { ask } = e;
         const notes: string[] = [];
         const ended = new Date().toISOString();
+
+        const profileNote =
+          ask.agent === "claude"
+            ? ""
+            : ` Requested profile: model ${ask.model}, effort ${ask.effort ?? "unknown"}; effective API context unknown.`;
+
         dropView(env, ask.box);
 
         // The saved files are scrubbed first (redact.sh prints only a count), then the field row,
@@ -1504,7 +1552,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
               model: ask.model,
               effort: ask.effort,
               outcome: rowOf(e.outcome),
-              reason: `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}${faultNote(e.outcome, e.reason)}. ${e.reason}`,
+              reason: `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}${faultNote(e.outcome, e.reason)}. ${e.reason}${profileNote}`,
               started: new Date(ask.started),
               ended: new Date(ended),
               spent: e.spent,
@@ -2072,7 +2120,7 @@ export interface StepArgs {
   readonly brief: string;
   readonly agent: AgentName;
   readonly sandbox?: Sandbox | undefined;
-  /** Claude's model; a Codex box runs env.sh's CODEX_MODEL. */
+  /** Claude's model; a Codex step uses its resolved role profile from env.sh. */
   readonly model?: string | undefined;
   readonly electron: boolean;
   readonly ticket?: string | undefined;
@@ -2130,7 +2178,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   }
 
   if (agent !== "claude" && p.model !== undefined) {
-    return usageError("--model is for --agent claude; a Codex box reads CODEX_MODEL");
+    return usageError("--model is for --agent claude; a Codex step uses its role profile from env.sh");
   }
 
   // A chain holds its quest already; a step run alone takes it here, before any box is made.
@@ -2200,17 +2248,34 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError(`${base.slice(0, 8)} shares no history with origin/main`);
   }
 
+  const claude = agent === "claude";
+  let model: string;
+  let effort: string | null;
+
+  if (claude) {
+    model = p.model ?? "sonnet";
+    effort = null;
+  } else {
+    const profile = codexProfile(env, step);
+
+    if (profile === null) {
+      return usageError(`env.sh did not resolve the Codex profile for ${step}`);
+    }
+
+    model = profile.model;
+    effort = profile.effort;
+  }
+
   const box = RunId.next(quest, step, runNames(env.BOXES, quest));
   const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
-  const claude = agent === "claude";
 
   const ask: Ask = {
     quest,
     step,
     agent,
     ...(p.sandbox === undefined ? {} : { sandbox: p.sandbox }),
-    model: claude ? (p.model ?? "sonnet") : env.CODEX_MODEL,
-    effort: claude ? null : env.CODEX_EFFORT,
+    model,
+    effort,
     ticket,
     plan,
     branch,
