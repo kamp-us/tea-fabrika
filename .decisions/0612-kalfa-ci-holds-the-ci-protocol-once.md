@@ -53,7 +53,7 @@ On 2026-11-18 the owner ruled that the protocol lives once, in `@kalfa/ci`, and 
 built in one place and everything uses it.
 
 It builds on [0585](0585-kalfa-is-six-domain-packages.md), which made `@kalfa/ci` the home of CI
-tooling (legs, changes, checks, ship), and on [0556](0556-kalfa-holds-our-tooling-packages.md) and
+tooling (legs, changes, checks), and on [0556](0556-kalfa-holds-our-tooling-packages.md) and
 [0601](0601-program-make-with-optional-pipes.md), which say a `@kalfa` package may be a protocol
 that others use. It follows [0231](0231-ledger-and-codehost-are-separate.md), where code reaches
 the code host through a typed service and never a direct `gh` call. The sev behavior in
@@ -95,7 +95,7 @@ code beside it, and GitHub Actions is one Layer at `@kalfa/ci/github`. Every use
 - Admission and preemption are pure functions of the runs and their classes, with no clock, network
   or file in them, so a test runs them as plain values.
 - A priority class is an ordered, closed set. A run has exactly one class.
-- `@kalfa/ci` stays one of the five packages of 0585. The Layer is a subpath, `@kalfa/ci/github`,
+- `@kalfa/ci` stays one of the six packages of 0585. The Layer is a subpath, `@kalfa/ci/github`,
   never a new package.
 
 ## Consequences
