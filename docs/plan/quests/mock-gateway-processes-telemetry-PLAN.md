@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0054, 0554, 0555, 0557, 0579, 0587, 0589, 0594; body 5620c14197c8
+Approved by the lead agent, builds 0043, 0054, 0554, 0555, 0557, 0579, 0587, 0589, 0594; body 06d9e86edc54
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `gateway`, `processes` and `telemetry`, in next/ (ticket 1067's sweep)
@@ -35,6 +35,12 @@ ruling: `Id.Generator.layer` keeps its own random source, so the law builds the 
 `makeGenerator` through lib-top's `generatorWith`. Each slice lands on the sweep's one fold branch,
 and the lock is node's M1. The sections below are amended in place; what they said before is kept
 where it explains a law.
+
+**Amendment (2026-11-18, merger ruling 05:11:20 UTC).** The shared crypto test helper now lives in
+`telemetry/`. The existing `next-crypto-test-support` row names that exact file; only its path
+changes. Its imports and all other layer rows stay as they are. The gateway and telemetry test
+imports keep the same helper behavior and assertions. The Files table assigns `layer-rules.json` to
+tests for this one row change.
 
 ## Doubts, read these first
 
@@ -168,9 +174,9 @@ the reference's Promise (amended 2026-11-15; the first version removed them). Th
 ### The pausing layer the three gateway laws share
 
 ```ts
-// next/packages/libfabrika/src/crypto.test-support.ts, new: gateway and telemetry both read it,
-// so it sits at the top of src/, beside Id.test-support.ts, not inside one module. A sketch. Amended
-// 2026-11-15: a stand-in crypto for the WebCrypto reference, in place of a Digest layer.
+// next/packages/libfabrika/src/telemetry/Crypto.test-support.ts, new: gateway and telemetry both read
+// it, so the exact layer row names the helper inside telemetry/. A sketch. Amended 2026-11-15: a
+// stand-in crypto for the WebCrypto reference, in place of a Digest layer.
 /** The real crypto, except the first digest of bytes that hold `marker` waits for `release`. */
 export const paused = (marker: string, entered: () => void, release: Promise<void>): Crypto => {
   let once = false;
@@ -384,8 +390,9 @@ Amended 2026-11-15: the `Digest` provides in 34 files (31 tests and 3 edges) are
 | next/packages/libfabrika/src/telemetry/Archive.ts | build | 2 | `sha256` reads `WebCrypto.WebCrypto` in place of `globalThis.crypto`; its `tryPromise` keeps `SinkError` `storage` (amended 2026-11-15) |
 | next/packages/libfabrika/src/gateway/Gateway.ts | build | 4 | `fingerprint` and `hash` read `WebCrypto.WebCrypto`; `LedgerError` `crypto` stays the `tryPromise`'s typed failure (amended 2026-11-15) |
 | .oxlintrc.json | tests | 15 | the new block, with `gateway/**` and `telemetry/**` |
+| layer-rules.json | tests | 1 | retarget only `next-crypto-test-support` to the telemetry helper path; preserve its imports and every other row |
 | .patterns/effect-crypto-through-services.md | build | docs | with the write-pattern skill: the failure line corrected, the rule "a hash whose failure stays typed reads `crypto.subtle` through the `WebCrypto` reference" (amended 2026-11-15; was `catchDefect`), `Archive.ts` and the gateway's hashes out of "Not yet", the lock under "Holds it" |
-| next/packages/libfabrika/src/crypto.test-support.ts | tests | tests | new (amended 2026-11-15): `paused` and `rejecting`, stand-in crypto objects on `Stub.make` |
+| next/packages/libfabrika/src/telemetry/Crypto.test-support.ts | tests | tests | new (amended 2026-11-15; moved by the 2026-11-18 merger ruling): `paused` and `rejecting`, stand-in crypto objects on `Stub.make` |
 | next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts | tests | tests | M1: `paused(...)` through `WebCrypto.layer`, `world`/`setup` take the crypto, the three spies go |
 | next/packages/libfabrika/src/telemetry/ErrorCause.test.ts | tests | tests | M2: `digestRejects` becomes `rejecting(failure)` through `WebCrypto.layer`; the `vi` import goes |
 | oxlint-plugins/builtin-plants.ts | tests | tests | M4: its lines join node's `VI_METHODS` set (amended 2026-11-15; was a `VI` plant of its own); and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
@@ -400,15 +407,17 @@ Slice 2, after the top-level folder's `Id.Generator` change: processes.
 | .oxlintrc.json | tests | 1 | `processes/**` joins the block |
 
 - `Archive.ts`, `ErrorCause.test.ts`, `ProcessIdGenerator.test.ts` and `GatewayRevocation.integration.test.ts`
-  are not in 1366's diff, nor is `crypto.test-support.ts`. `Gateway.ts` is, and so are `cloudflare/runtime.ts`
+  are not in 1366's diff, nor is `telemetry/Crypto.test-support.ts`. `Gateway.ts` is, and so are
+  `cloudflare/runtime.ts`
   and `runtime/Runner.integration.test.ts`, which this quest no longer changes (amended 2026-11-15), and so are these in the three folders: `processes/ProcessManager.ts`, `ProgramMail.ts`,
   `ProgramMailLedger.ts`, `Quotas.ts`, `QuotasSql.ts`, `QuotasTest.ts`, `internal/programMail.test.ts`,
   `internal/quota.ts`, `internal/quota.test.ts`, `telemetry/QuotaRefusalTest.ts` and `telemetry/Sink.ts`.
   This quest changes none of those last eleven. Read with `pull_request_read get_files`, 57 files,
   one page, on 2026-11-15.
-- Every file stays where it is. The one new file (amended 2026-11-15) is test support at the top
-  of libfabrika's `src/`, read by two of its modules. `WebCrypto` and `SecureRandom` are Effect's,
-  so the libfabrika test in `next/AGENTS.md` does not move anything.
+- Every product file stays where it is. The one new test helper (amended by the 2026-11-18 merger
+  ruling) lives inside `telemetry/` and is read by gateway and telemetry tests. Its specific layer
+  row names only that helper. `WebCrypto` and `SecureRandom` are Effect's, so the libfabrika test in
+  `next/AGENTS.md` does not move anything.
 
 ## Waits
 
@@ -541,7 +550,7 @@ as it was asked. The `SecureRandom` half is lib-top's, whose plan keeps `IdError
 
 ## Existing tools
 
-- `next/packages/libfabrika/src/crypto.test-support.ts` paused helper: searched the current
+- `next/packages/libfabrika/src/telemetry/Crypto.test-support.ts` paused helper: searched the current
   GatewayRevocation.integration.test.ts pause gate and the installed WebCrypto Reference.
   Reuse its Deferred gate and BufferSource conversion through Stub.make, replacing only the
   global spy. Effect supplies the injected Reference, not this law's marker-specific gate.

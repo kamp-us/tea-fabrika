@@ -621,6 +621,7 @@ const prop = <A>(
         const context = yield* Effect.context<never>();
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
         const property = fc.asyncProperty(arbitrary, (c) => Effect.runPromiseWith(context)(Effect.scoped(law(c))));
+
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 25, full: 100 }),

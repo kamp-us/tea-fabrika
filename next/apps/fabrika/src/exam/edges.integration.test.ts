@@ -77,6 +77,7 @@ describe("asks", () => {
         [OTHER]: file(EDGE, CALL),
       },
     );
+
     expect(Arr.map(found, (e) => [e.path, e.line])).toEqual([
       [OTHER, 3],
       [PRODUCT, 5],

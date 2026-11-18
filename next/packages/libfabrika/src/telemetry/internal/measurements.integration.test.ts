@@ -75,7 +75,9 @@ const KEEP = 336 * H;
 const D = Date.UTC(2026, 9, 23);
 
 const hourStart = (at: number) => Math.floor(at / H) * H;
+
 const utcDay = (at: number) => Str.slice(0, 10)(DateTime.formatIso(DateTime.makeUnsafe(at)));
+
 const fileKey = (day: string) => `measurements/${OBJECT}/${day}.jsonl`;
 
 const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
@@ -100,6 +102,7 @@ const bucket = (lie = false) => {
     },
     head: (key) => {
       const body = stored.get(key);
+
       return Promise.resolve(body === undefined ? null : { sha256: lie ? Str.repeat(64)("0") : hex(body) });
     },
   };
@@ -109,6 +112,7 @@ const bucket = (lie = false) => {
       Arr.filter(Str.split(new TextDecoder().decode(stored.get(key)), "\n"), (line) => Str.trim(line) !== ""),
       (line) => JSON.parse(line) as Record<string, unknown>,
     );
+
   return { calls, stored, puts, lines };
 };
 
@@ -164,6 +168,7 @@ const rollup = (spans: ReadonlyArray<Raw & { readonly lag: number | null }>) => 
     const ms = Arr.map(group, (s) => s.ms).sort((x, y) => x - y);
     const n = ms.length;
     const lags = Arr.flatMap(group, (s) => (s.lag === null ? [] : [s.lag]));
+
     return {
       _tag: "metric",
       piece: group[0]?.piece,
@@ -209,6 +214,7 @@ describe("p101, measurements in two levels", () => {
       doorLag: fc.option(fc.integer({ min: 0, max: 500 }), { nil: undefined }),
       decoy: fc.boolean(),
     });
+
     return fc.assert(
       fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) =>
         Effect.runPromise(
@@ -522,6 +528,7 @@ describe("p101, no raw row is ever lost", () => {
       ok: fc.boolean(),
       flush: fc.boolean(),
     });
+
     return fc.assert(
       fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) => {
         const r2 = bucket();
@@ -536,14 +543,17 @@ describe("p101, no raw row is ever lost", () => {
               const check = (now: number) => {
                 // The sink's own `sink.archive` rows are measurements too, but no span wrote them.
                 const spanRows = (r: Raw) => r.piece !== ARCHIVE;
+
                 const local = Arr.filter(
                   Arr.map(db.prepare(`SELECT piece, at, ms, ok FROM measurements`).all(), raw),
                   spanRows,
                 );
+
                 const archived = Arr.filter(
                   Arr.flatMap([...r2.stored.keys()], (k) => Arr.map(r2.lines(k), raw)),
                   spanRows,
                 );
+
                 expect(Arr.map([...local, ...archived], key).sort(), "none missing, none twice").toEqual(
                   Arr.map(written, key).sort(),
                 );
@@ -634,6 +644,7 @@ describe("p101, an archive that fails is never silent", () => {
             const failing = {
               put: () => Effect.fail(new SinkError({ reason: "unreachable", held: 0 })),
             };
+
             const wrong = { put: () => Effect.succeed({ sha256: Str.repeat(64)("0") }) };
             const liar = bucket(true);
 
@@ -676,10 +687,12 @@ describe("p101, an archive that fails is never silent", () => {
               expect(count(db, "measurements", inDay(D))).toBe(0);
               expect(r2.lines(fileKey("2026-10-23"))).toHaveLength(8);
               expect(archiveRows(db), "the good archive writes its own row").toEqual([...seen, ARCHIVED_OK]);
+
               const joins = Arr.map(
                 db.prepare(`SELECT "spanId" FROM measurements WHERE piece = '${ARCHIVE}'`).all(),
                 (row) => row["spanId"],
               );
+
               expect(joins, "a flush outside any span joins none").toEqual(Arr.map(seen, () => null).concat(null));
             }).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))));
           }),

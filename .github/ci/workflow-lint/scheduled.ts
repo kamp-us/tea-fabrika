@@ -1,4 +1,4 @@
-// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC20).
+// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC22).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,12 +22,6 @@ import {
   VISUAL_FILES,
 } from "./shared.ts";
 import { TIME_TABLE, timed } from "./time-tables.ts";
-
-// Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
-// `tooling` project alone: next/ and the three trees of today's tests are projects of their own, and
-// a project ignores `--exclude` (vitest.config.ts; merge-line.test.ts holds the tooling project's
-// globs). No call in check.yaml runs it (0539).
-const TOOLING_PROJECT = "--project tooling";
 
 // The full run (0534, 0581): scheduled.yaml runs all of next/ and every tooling test on main, and a
 // red run opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull
@@ -131,6 +125,26 @@ const TOOLING_LEG = "tooling-";
 
 const ON_TOOLING = `startsWith(matrix.shard, '${TOOLING_LEG}')`;
 
+// Main's full run keeps the tested @kalfa/config archive (0602's amendment, SC22). Every numbered
+// vitest leg checks its own report with the receipt; the one whose report holds the package law
+// (the receipt says `kept`) uploads exactly the two files that law's run wrote.
+const RECEIPT = "node .github/ci/related.ts --receipt";
+
+const ON_NUMBERED = `!${ON_E2E} && !${ON_TOOLING}`;
+
+const RECEIPT_IF = `success() && ${ON_MAIN} && ${ON_NUMBERED}`;
+
+const ARCHIVE_IF = `success() && ${ON_MAIN} && steps.receipt.outputs.kept == 'true'`;
+
+const DELIVERY = `\${{ runner.temp }}/kalfa-config-package`;
+
+// Both names, the delivery folder's and the archive's, start with this.
+const KEPT = "kalfa-config-";
+
+const ARCHIVE_NAME = `${KEPT}\${{ github.sha }}-attempt-\${{ github.run_attempt }}`;
+
+const ARCHIVE_PATHS = [`${DELIVERY}/kalfa-config-0.0.0.tgz`, `${DELIVERY}/receipt.json`];
+
 // On every branch: the report job fails unless the run is green, so a red run with no failed job
 // still ends `failure`. scheduled.mjs writes the issue on main alone.
 // A run whose gate said `false` skips the report too, so it leaves the issue as it was; a gate that
@@ -173,6 +187,35 @@ const RUN_NUMBER = `\${{ github.run_number }}`;
 
 const RECORD = `\${{ runner.temp }}/proof-set.json`;
 
+// The hand start's two inputs (0590, ticket 1161): `scope`, `changed` by default, and `law`, empty by
+// default, which only select's set step reads, as `SCOPE` and `LAW` (SC17, SC21). The default is
+// 0590's ruling, not a free setting (0069): a default of `full` would make every hand start the full
+// set, so the lint holds it the way SC16 holds the gap's floor.
+const SELECT_READS = { SCOPE: "inputs.scope", LAW: "inputs.law" };
+
+// Whether `value` is exactly the `${{ }}` expression `read`, its spacing free. A bare `inputs.scope` is
+// text the step would get as words, not a read of the input.
+const readsOnly = (value: unknown, read: string): boolean =>
+  Predicate.isString(value) && /^\s*\$\{\{[\s\S]*\}\}\s*$/.test(value) && compact(value) === read;
+
+// A read of the inputs, each pattern one way to reach them: the `inputs` context (and
+// `github.event.inputs`); the whole `github` context, as a bare name or the `.*` filter; and the whole
+// `github.event`, bare or the `.*` filter. A property of either (`github.ref`, `github.event_name`) is
+// no read. GitHub's context and function names are case-insensitive, and an index with a quoted name
+// reads the same as a dot (`github['event']`, `github['*']`), so `readsInputs` writes it as a dot first.
+const READS_INPUTS = [
+  /\binputs\b/i,
+  /(?<![\w./-])github\b(?![\w-])(?!\s*\.)/i,
+  /\bgithub\s*\.\s*\*/i,
+  /\bgithub\s*\.\s*event\b(?!\s*\.\s*\w)/i,
+];
+
+const readsInputs = (text: string): boolean => {
+  const dotted = text.replace(/\[\s*'([^']*)'\s*\]/g, ".$1");
+
+  return READS_INPUTS.some((reads) => reads.test(dotted));
+};
+
 // `tests` runs after a skipped `select`, on main, or after one that said `full`.
 const TESTS_IF = `\${{ !cancelled() && ${STARTED} && (needs.${SELECT_JOB}.result == 'skipped' || needs.${SELECT_JOB}.outputs.scope == 'full') }}`;
 
@@ -202,20 +245,33 @@ const REPORT_ENV = {
 
 const RESULTS = '--outputFile.json="$RUNNER_TEMP/results.json"';
 
-const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions ${RESULTS}`;
+const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts ${RESULTS}`;
 
 // Every layer of next/ (0536): the vitest legs run the in-memory and the real-resource projects, and
 // the e2e legs the visual one. A project, not a path, picks the files: `next/` as a path would start
-// `next-visual` on legs with no Chromium, and a project ignores `--exclude`.
-const WHOLE_NEXT = `pnpm exec vitest run --project next --project next-integration --shard "$SHARD" ${REPORTERS}`;
+// `next-visual` on legs with no Chromium, and a project ignores `--exclude`. The vitest legs read
+// their projects from the ref (NEXT_PROJECTS): main's full run never drops a real-resource law, and
+// a branch's full set, a proof run, starts none (0602).
+const WHOLE_NEXT = `pnpm exec vitest run $PROJECTS --shard "$SHARD" ${REPORTERS}`;
+
+const NEXT_PROJECTS = `\${{ ${ON_MAIN} && '--project next --project next-integration' || '--project next' }}`;
 
 const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
 
-const WHOLE_TOOLING = `pnpm exec vitest run ${TOOLING_PROJECT} --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+// Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
+// tooling projects alone: next/ and the three trees of today's tests are projects of their own, and
+// a project ignores `--exclude` (vitest.config.ts; merge-line.test.ts holds the tooling projects'
+// globs). The tooling legs read their projects from the ref (TOOLING_PROJECTS), as the vitest legs
+// do: main's full run runs `tooling` and `tooling-integration`, the tooling laws that start a
+// process (0584), and a branch's full set, a proof run, runs `tooling` alone (0602).
+const WHOLE_TOOLING = `pnpm exec vitest run $PROJECTS --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
 
-// A changed leg's one command: its own list, `$FILES` from `select`, over every project CI runs and
-// proof.ts lists, today's left out (0533). No `--changed` and no `--shard`: the list is the leg.
-const CHANGED_RUN = `pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling $FILES ${REPORTERS}`;
+const TOOLING_PROJECTS = `\${{ ${ON_MAIN} && '--project tooling --project tooling-integration' || '--project tooling' }}`;
+
+// A changed leg's one command: its own list, `$FILES` from `select`, over every project proof.ts
+// lists: today's left out (0533), and `next-integration`, which only main's full run runs (0602). No
+// `--changed` and no `--shard`: the list is the leg.
+const CHANGED_RUN = `pnpm exec vitest run --project next --project next-visual --project tooling $FILES ${REPORTERS}`;
 
 // The schedule's test depth (pull request 1274): its laws run their full case count.
 const DEPTH = "full";
@@ -226,7 +282,10 @@ const SUITES = { next: [WHOLE_NEXT, WHOLE_E2E], tooling: [WHOLE_TOOLING] } as co
 
 // The test job's own limit is a leg's test step limit and this many minutes more. In green runs
 // 43765797242, 43734956911 and 43734841211 the steps before a test step took at most 56 s in all
-// and the three after it at most 7 s, against their 2 minutes of step limits.
+// (chromium's included). A numbered vitest leg runs five steps after `vitest`, with 4 minutes of step
+// limits against these 3 (the plan's call): on four green main full runs (44268160795, 44250937513,
+// 44242548956, 44232082653) they took 35 to 85 s, so a leg reaches this limit only if vitest passes
+// late and a later step hangs.
 const BACKSTOP = 3;
 
 /**
@@ -367,6 +426,121 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
       pins?.proof,
       proof,
     ), `SC20: the test job's first ${MAIN_SLOTS} legs take main's groups 1 to ${MAIN_SLOTS} in order, and its first ${PROOF_SLOTS} legs the proof groups 1 to ${PROOF_SLOTS}, each leg once, so no group waits empty`);
+};
+
+/**
+ * SC21. The hand start's two inputs, and who reads them (0590, ticket 1161). On main `select` never
+ * runs (SC17), so `scope` does nothing there: no other step, `if`, group or env may read the inputs.
+ */
+const dispatchInputs = (workflow: Record<string, unknown>, require: Require): void => {
+  const inputs = map(map(map(workflow["on"])["workflow_dispatch"])["inputs"]);
+  const scope = map(inputs["scope"]);
+  const law = map(inputs["law"]);
+
+  const described = (input: Record<string, unknown>) =>
+    Predicate.isString(input["description"]) && input["description"] !== "";
+
+  require(JSON.stringify(Rec.keys(inputs).toSorted()) === JSON.stringify(["law", "scope"]) &&
+    scope["type"] === "choice" &&
+    scope["required"] === true &&
+    scope["default"] === "changed" &&
+    JSON.stringify(scope["options"]) === JSON.stringify(["changed", "full"]) &&
+    described(scope) &&
+    law["type"] === "string" &&
+    law["required"] === false &&
+    law["default"] === "" &&
+    described(
+      law,
+    ), "SC21: a hand start takes scope, changed or full and changed by default, and law, text that is empty by default, and no other input, each with a description");
+
+  // Everything but `on`, with select's set step's SCOPE and LAW taken out, reads no input.
+  const rest = structuredClone(workflow);
+  Reflect.deleteProperty(rest, "on");
+  const set = steps(map(map(rest["jobs"])[SELECT_JOB])).find((s) => s["id"] === SELECT_STEP);
+  Reflect.deleteProperty(map(set?.["env"]), "SCOPE");
+  Reflect.deleteProperty(map(set?.["env"]), "LAW");
+  require(!readsInputs(
+    JSON.stringify(rest),
+  ), "SC21: only select's set step reads the hand start's inputs, as SCOPE and LAW, so main's runs never read scope");
+};
+
+/**
+ * SC22. Main's full run keeps the tested @kalfa/config archive, once, on the leg that ran the package
+ * law (0602's amendment). In `tests` one `package receipt` step runs right after the vitest step, on
+ * main's ref and the numbered legs, and one `package archive` upload runs right after it, on main's
+ * ref and the receipt's `kept`: each with `success()`, a one-minute limit and no key beyond the ones
+ * named, so no env, token or `continue-on-error` can reach them. No other step of any job runs the
+ * receipt, names the delivery folder or uploads a `kalfa-config-` name.
+ */
+const keptArchive = (jobs: Record<string, unknown>, require: Require): void => {
+  const tests = steps(map(jobs[TESTS_JOB]));
+  const vitest = tests.findIndex((s) => s["run"] === WHOLE_NEXT);
+  const receipts = tests.filter((s) => s["run"] === RECEIPT);
+
+  const uploadsKept = (s: Record<string, unknown>) => {
+    const name = map(s["with"])["name"];
+
+    return uses(s, "actions/upload-artifact") && Predicate.isString(name) && name.startsWith(KEPT);
+  };
+
+  const archives = tests.filter((s) => s["name"] === "package archive" || uploadsKept(s));
+
+  const [receipt] = receipts,
+    [archive] = archives;
+
+  const sameKeys = (step: Record<string, unknown>, keys: readonly string[]) =>
+    JSON.stringify(Rec.keys(step).toSorted()) === JSON.stringify(keys.toSorted());
+
+  require(receipts.length === 1 &&
+    receipt !== undefined &&
+    receipt["name"] === "package receipt" &&
+    receipt["id"] === "receipt" &&
+    compact(receipt["if"]) === compact(RECEIPT_IF) &&
+    receipt["timeout-minutes"] === 1 &&
+    sameKeys(receipt, ["name", "id", "if", "timeout-minutes", "run"]) &&
+    vitest >= 0 &&
+    tests.indexOf(receipt) ===
+      vitest +
+        1, `SC22: ${TESTS_JOB} runs ${RECEIPT} once, as the step named package receipt right after the vitest step, on main's ref and the numbered legs only, within a minute, with no env, token or continue-on-error`);
+
+  const given = map(archive?.["with"]);
+
+  const paths = Predicate.isString(given["path"])
+    ? given["path"]
+        .trim()
+        .split(/\r?\n/)
+        .map((path) => path.trim())
+    : [];
+
+  const days = given["retention-days"];
+
+  require(archives.length === 1 &&
+    archive !== undefined &&
+    receipt !== undefined &&
+    archive["name"] === "package archive" &&
+    uses(archive, "actions/upload-artifact") &&
+    compact(archive["if"]) === compact(ARCHIVE_IF) &&
+    archive["timeout-minutes"] === 1 &&
+    sameKeys(archive, ["name", "if", "timeout-minutes", "uses", "with"]) &&
+    sameKeys(given, ["name", "path", "if-no-files-found", "retention-days"]) &&
+    given["name"] === ARCHIVE_NAME &&
+    JSON.stringify(paths) === JSON.stringify(ARCHIVE_PATHS) &&
+    given["if-no-files-found"] === "error" &&
+    Predicate.isNumber(days) &&
+    Number.isInteger(days) &&
+    days >= 1 &&
+    tests.indexOf(archive) ===
+      tests.indexOf(receipt) +
+        1, `SC22: ${TESTS_JOB} uploads the archive once, as the step named package archive right after the receipt, on main's ref and the receipt's kept, with the two exact paths and the archive's name, if-no-files-found: error, a retention of whole days and a minute's limit`);
+
+  require(Rec.values(jobs).every((job) =>
+    allSteps(map(job)).every(
+      (s) =>
+        s === receipt ||
+        s === archive ||
+        (!(Predicate.isString(s["run"]) && s["run"].includes("--receipt")) && !JSON.stringify(s).includes(KEPT)),
+    ),
+  ), `SC22: no other step of any job runs the receipt, names the delivery folder or uploads a name starting ${KEPT}`);
 };
 
 /**
@@ -581,7 +755,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // `true` (0590): a push to main, the catch-up and a hand start on main skip it, so SC15's `tests`
   // runs every test there. It runs proof.ts once, in a step whose outputs are the job's,
   // with the most legs at once (`MOST`, the `changed` matrix's `max-parallel` and PROOF_SLOTS, SC6, SC19), the legs' test
-  // step limit (`LIMIT`, next's, SC18) and where its record goes, and no token. It checks out the
+  // step limit (`LIMIT`, next's, SC18), where its record goes and the hand start's two inputs (`SCOPE`
+  // and `LAW`, read as `inputs.scope` and `inputs.law`, SC21), and no token. It checks out the
   // whole history, to diff the branch with origin/main from their merge base, and keeps the record
   // as `proof-set` after a red step too.
   const commandsOf = (job: Record<string, unknown>) =>
@@ -592,7 +767,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const selectRuns = selectSteps.filter((s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile");
   const selectEnv = map(selectRuns[0]?.["env"]);
   const selectOutputs = { ...SELECT_OUTPUTS, slots: SLOT_OUTPUT };
-  const selectKeys = ["MOST", "LIMIT", "RECORD", "RUN_NUMBER"];
+  const selectKeys = ["MOST", "LIMIT", "RECORD", "RUN_NUMBER", "SCOPE", "LAW"];
   const selectCheckouts = selectSteps.filter((s) => uses(s, "actions/checkout"));
   const records = selectSteps.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === RECORD);
   require(SELECT_JOB in jobs &&
@@ -606,6 +781,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(Object.keys(selectEnv)) === JSON.stringify(selectKeys) &&
     selectEnv["RUN_NUMBER"] === RUN_NUMBER &&
     selectEnv["RECORD"] === RECORD &&
+    readsOnly(selectEnv["SCOPE"], SELECT_READS.SCOPE) &&
+    readsOnly(selectEnv["LAW"], SELECT_READS.LAW) &&
     selectCheckouts.length === 1 &&
     map(selectCheckouts[0]?.["with"])["fetch-depth"] === 0 &&
     records.length === 1 &&
@@ -617,9 +794,9 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ), `SC17: ${SELECT_JOB} runs ${SELECT} once, only on a hand start on a branch other than main, after the gate said start=true, with the whole history, and keeps its record as proof-set`);
 
   // SC18. `changed` runs a changed set's legs (0590): only when `select` said `changed` with a leg,
-  // so it and `tests` never run in one run, each leg exactly its own list over every project CI
-  // runs, at next's test step limit with the same backstop, chromium first when its list holds a
-  // visual file, and nothing else.
+  // so it and `tests` never run in one run, each leg exactly its own list over every project
+  // proof.ts lists, `next-integration` not among them (0602), at next's test step limit with the
+  // same backstop, chromium first when its list holds a visual file, and nothing else.
   const changed = map(jobs[CHANGED_JOB]);
   const changedSteps = steps(changed);
   const changedRuns = changedSteps.filter((s) => s["run"] === CHANGED_RUN);
@@ -631,7 +808,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     Object.keys(map(map(changed["strategy"])["matrix"])).length === 1 &&
     changedRuns.length === 1 &&
     JSON.stringify(map(changedRuns[0]?.["env"])) ===
-      JSON.stringify({ FILES: `\${{ ${LEG_FILES} }}`, FABRIKA_TEST_DEPTH: DEPTH }) &&
+      JSON.stringify({ FILES: `\${{ ${LEG_FILES} }}`, LEG: `\${{ matrix.shard }}`, FABRIKA_TEST_DEPTH: DEPTH }) &&
     !("if" in (changedRuns[0] ?? {})) &&
     Predicate.isNumber(nextLimitHere) &&
     changedRuns[0]?.["timeout-minutes"] === nextLimitHere &&
@@ -643,7 +820,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(commandsOf(changed).toSorted()) ===
       JSON.stringify(
         ["pnpm install --frozen-lockfile", chromium, CHANGED_RUN, TIME_TABLE].toSorted(),
-      ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over every project at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
+      ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (0602), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
 
   const changedKept = changedSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
@@ -739,6 +916,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   ), `SC6: its jobs take at most ${BUDGET} machines at once, half of the 20 runners`);
 
   jobSlots(workflow, require);
+  dispatchInputs(workflow, require);
 
   // SC7. All of next/ on check.yaml's full matrix, each leg's `/N` its kind's count, nothing
   // narrowed. A `--changed`, a `$FILTER` or a list would make it the merge line's selection again.
@@ -763,7 +941,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
   require(vitest.length === 1 &&
     compact(vitest[0]?.["if"]) === compact(`!${ON_E2E} && !${ON_TOOLING}`) &&
     map(vitest[0]?.["env"])["SHARD"] ===
-      `\${{ matrix.shard }}/${vitestCount}`, "SC7: next runs vitest over the next and next-integration projects once, on the numbered legs, each its share of them");
+      `\${{ matrix.shard }}/${vitestCount}`, "SC7: next runs vitest once, on the numbered legs, each its share of them");
+  require(compact(map(vitest[0]?.["env"])["PROJECTS"]) ===
+    compact(
+      NEXT_PROJECTS,
+    ), "SC7: next's vitest legs run the next and next-integration projects on main, and next alone on a branch's full set, which runs no real-resource law (0602)");
   require(e2e.length === 1 &&
     compact(e2e[0]?.["if"]) === ON_E2E &&
     map(e2e[0]?.["env"])["SHARD"] ===
@@ -782,12 +964,25 @@ export const lintScheduled = (text: string, check: string): string[] => {
       JSON.stringify(
         Array.from({ length: toolingLegs.length }, (_, i) => `${TOOLING_LEG}${i + 1}`),
       ), "SC8: the tooling legs run every tooling test once, legs tooling-1 to tooling-N, each its share of them");
+  require(compact(map(toolingRuns[0]?.["env"])["PROJECTS"]) ===
+    compact(
+      TOOLING_PROJECTS,
+    ), "SC8: the tooling legs run the tooling and tooling-integration projects on main, and tooling alone on a branch's full set, which runs no tooling law that starts a process (0602)");
 
   // SC9. The commands are only these: no step runs another test command or narrows one.
   require(JSON.stringify(commandsOf(tests).toSorted()) ===
     JSON.stringify(
-      ["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E, WHOLE_TOOLING, TIME_TABLE].toSorted(),
-    ), "SC9: the test job runs only its install, its whole-suite commands and its time table");
+      [
+        "pnpm install --frozen-lockfile",
+        WHOLE_NEXT,
+        RECEIPT,
+        chromium,
+        WHOLE_E2E,
+        WHOLE_TOOLING,
+        TIME_TABLE,
+      ].toSorted(),
+    ), "SC9: the test job runs only its install, its whole-suite commands, the package receipt and its time table");
+  keptArchive(jobs, require);
 
   // SC10. The test job keeps each leg's Vitest report after a red step, so the report job can name
   // the failing tests.
@@ -805,12 +1000,16 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC11. Every test leg runs at full depth: a law that reads FABRIKA_TEST_DEPTH runs its full case
   // count here, and unset means `fast`, as on the merge line (pull request 1274).
-  for (const command of [WHOLE_NEXT, WHOLE_E2E, WHOLE_TOOLING]) {
+  for (const [legs, command] of [
+    ["next's vitest legs", WHOLE_NEXT],
+    ["the e2e legs", WHOLE_E2E],
+    ["the tooling legs", WHOLE_TOOLING],
+  ] as const) {
     const found = Rec.values(jobs).flatMap((job) => steps(map(job)).filter((s) => s["run"] === command));
     require(found.length > 0 &&
       found.every(
         (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,
-      ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
+      ), `SC11: every step of ${legs} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }
 
   // SC12. SC2's group holds every run on the same ref, so a waiting run is

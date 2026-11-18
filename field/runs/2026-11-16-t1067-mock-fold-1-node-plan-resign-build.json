@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1067-mock-fold-1-node-plan-resign-build",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:25:41-08:00",
+  "ended": "2026-11-16T01:26:34-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Mock sweep fold 1, stack layer 7 (decision 0555), one merge only, on fabrikalfa/mock-fold-1 from its head da9bda73. Merged fabrikalfa/mock-plans at 4a17276e with --no-ff; merge commit 07688081. The earlier plans head eb7e5610 was already in the fold, and the range eb7e5610..4a17276e is two commits that change only docs/plan/quests/mock-node-PLAN.md; the merge was clean. The plan's new text: the contract file is named cloudflare/ObjectCalls.ts in place of Objects.ts, which differs only in letter case from cloudflare/objects.ts (TS1261), kept as the record marked wrong; the node/*.ts lock block's eslint/no-restricted-properties is at error, not warn, since those files have no JSON.parse fire (0523), and it writes out Data.TaggedError and JSON.parse again; the plan is re-signed with 0523 added, body 882bc2bf5d8c.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 1,
+  "note": "loosening.sh from da9bda73 to the merge commit: 0 hits in 0 exam files. plancheck.sh --approved docs/plan/quests/mock-node-PLAN.md at the merge: exit 0, plan-sha256 882bc2bf5d8c..., with one advice line (line 586: the Validation section tells a boxed step to run --changed or a typecheck). No conflict, so no hand resolution. The merge adds no disable line, lock line or list entry; the plan text describes the lock's level for the tests step, which is the plans branch's own content. Not run by this step, as briefed: pnpm lint, pnpm typecheck and every test, which the coordinator runs.",
+  "step": "build"
+}

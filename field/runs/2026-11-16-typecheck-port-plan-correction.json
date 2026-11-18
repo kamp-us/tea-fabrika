@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-typecheck-port-plan-correction",
+  "ticket": "766",
+  "pr": "kamp-us/tea-fabrika#1506",
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's tooling: corrected the approved typecheck-port plan to follow decision 0567. Known unions use their own matcher, then Effect Match. Predicate.isTagged is only for unknown inputs. Typed PlatformError reasons use catchReason even where the upstream lint rule exempts catchIf. The already repaired source was independently rechecked at 40fde7ba34130b4338e64c4eab96ff67aabf8767; this lead change writes only the corrected plan, not source or law behavior. The approved plan body is 26106961aa6e.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [],
+  "note": "The lead read the changed plan section, governing 0567 and complete plan diff. Approved plancheck and whitespace check passed. Compiler and actual protected integration proof remain separate. No new exemption, weaker assertion, owner ruling or claimed runtime proof."
+}

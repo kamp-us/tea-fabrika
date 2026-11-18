@@ -1,0 +1,136 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1161-tests1",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623",
+  "started": "2026-11-18T05:04:00-08:00",
+  "ended": "2026-11-18T05:27:58-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In today's tooling (.github/), wrote slice 1 of docs/plan/quests/t1161-scheduled-dispatch-scope-PLAN.md: scheduled.yaml's hand start gets a scope input (changed by default, or full) and a law input, proof.ts reads them (askOf, inProjects, the ask in the choice, the record and the summary), and workflow-lint/scheduled.ts gets SC21 and a wider SC17. Laws P6 to P13 are in proof.test.ts and S8 to S12 in scheduled.test.ts. Before the product edits P6, P8, P9, P10, P11 and P13 were red for the plan's reasons (a record without asked, askOf and inProjects missing) and S8, S9 and S12 were red once scheduled.yaml carried the inputs and the rule did not exist; the plan puts every slice 1 file under the exam path, so this step then wrote the product and all 320 tests of the two files are green. Each law's plant was run once and restored. D1 (one real dispatch at the default scope) is the lead's.",
+  "note": "Started time is approximate (first observed container clock); usage and cost are not recorded. Model and effort are the requested values. This container has Node 22 where the pin is Node 26, so tests ran with CI=1 for the local-limit guard. git pull --ff-only hung on the network and was stopped; the worktree was already at the brief's head 7f4f47968. P12 is a type law: its plant was run through one narrow tsc over .github/ci (nice, one process), not pnpm typecheck; the same tsc passes on the final files. No test clones a repo; proof.ts's main block is never run by a test.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "7f4f47968a5564c4e0940388313af09341550b21",
+  "plants": [
+    {
+      "law": "P6 the run tests the full set exactly when a rerun trigger is touched or the ask is full",
+      "plant": "choose reads only the triggers, so a full ask with no trigger splits a list",
+      "result": "red"
+    },
+    {
+      "law": "P7 with a changed ask a rerun trigger still runs the full set",
+      "plant": "choose lets a changed ask skip the trigger check, so .oxlintrc.json gives changed legs",
+      "result": "red"
+    },
+    {
+      "law": "P8 askOf accepts exactly changed with no law, and full with a law isLaw holds",
+      "plant": "askOf reads a missing SCOPE as changed",
+      "result": "red"
+    },
+    {
+      "law": "P9 a law with a leading dash or whitespace is refused before isLaw is called",
+      "plant": "the dash check is dropped, so --project=today reaches isLaw",
+      "result": "red"
+    },
+    {
+      "law": "P9 a law with a leading dash or whitespace is refused before isLaw is called",
+      "plant": "the whitespace check is dropped",
+      "result": "red"
+    },
+    {
+      "law": "P10 inProjects asks the lister for exactly the four projects and the path",
+      "plant": "includes becomes a substring match",
+      "result": "red"
+    },
+    {
+      "law": "P10 inProjects asks the lister for exactly the four projects and the path",
+      "plant": "the lister is given only the path, with no project flags",
+      "result": "red"
+    },
+    {
+      "law": "P11 a full ask's summary names its law and says it was asked by hand",
+      "plant": "summary drops the law",
+      "result": "red"
+    },
+    {
+      "law": "P11 a full ask's summary names its law and says it was asked by hand",
+      "plant": "summary drops the trigger lines",
+      "result": "red"
+    },
+    {
+      "law": "P12 a changed record cannot carry a full ask",
+      "plant": "the changed variant's asked is typed as Ask, so the ts-expect-error line is unused (tsc: TS2578)",
+      "result": "red"
+    },
+    {
+      "law": "P13 the records keep their keys",
+      "plant": "the full record drops asked",
+      "result": "red"
+    },
+    {
+      "law": "P13 the records keep their keys",
+      "plant": "the full record drops changed",
+      "result": "red"
+    },
+    {
+      "law": "P13 the records keep their keys",
+      "plant": "the changed record drops asked",
+      "result": "red"
+    },
+    {
+      "law": "S8 each SC21 input plant gives SC21's error",
+      "plant": "SC21's whole input check is dropped",
+      "result": "red"
+    },
+    {
+      "law": "S8 each SC21 input plant gives SC21's error",
+      "plant": "SC21's default check is dropped",
+      "result": "red"
+    },
+    {
+      "law": "S8 each SC21 input plant gives SC21's error",
+      "plant": "SC21's options check is dropped",
+      "result": "red"
+    },
+    {
+      "law": "S9 an inputs read anywhere but select's set step gives SC21's error",
+      "plant": "SC21's read check scans only tests's if, so the gate's env reading inputs.scope passes",
+      "result": "red"
+    },
+    {
+      "law": "S10 each SC17 plant gives SC17's error",
+      "plant": "SC17's key list admits any extra key, so the seventh key passes",
+      "result": "red"
+    },
+    {
+      "law": "S10 each SC17 plant gives SC17's error",
+      "plant": "SC17's two value checks are dropped (SCOPE literal full, github.event.inputs, swapped)",
+      "result": "red"
+    },
+    {
+      "law": "S10 each SC17 plant gives SC17's error",
+      "plant": "SC17's key list and both value checks are dropped (missing SCOPE or LAW)",
+      "result": "red"
+    },
+    {
+      "law": "S11 a schedule varied only where its meaning holds passes, with the inputs' spacing and descriptions varied",
+      "plant": "SC17 compares SCOPE without compact, so ${{inputs.scope}} fails",
+      "result": "red"
+    },
+    {
+      "law": "S12 main never reads scope",
+      "plant": "SC21's read check is dropped, so the plant on tests's if gives SC15's error alone",
+      "result": "red"
+    }
+  ]
+}

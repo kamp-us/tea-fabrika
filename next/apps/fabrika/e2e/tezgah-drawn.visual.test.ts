@@ -151,6 +151,7 @@ describe("T1: the tezgah helpers' reads never wait", () => {
                         yield* Effect.promise(() => page.setContent(html(shape)));
                         const held = names(shape);
                         const gone = new Set<string>();
+
                         const plan = Arr.map(leaves, (l) => {
                           const among = l.part === "region" ? held.regions : held.strips;
 
@@ -158,6 +159,7 @@ describe("T1: the tezgah helpers' reads never wait", () => {
                         });
 
                         const seen = { n: 0 };
+
                         const spied = counting(
                           page,
                           (n) =>

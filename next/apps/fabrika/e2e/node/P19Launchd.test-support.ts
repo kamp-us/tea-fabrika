@@ -2,6 +2,7 @@ import { createRequire } from "node:module"; // edge: Electron exports its execu
 // P19 next/. Host-only. The guard is a separate process, so worker SIGKILL cannot skip cleanup; its
 // own entry is P19Guard.test-support.ts, so the guard's bundle carries no compiler.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as Snapshot from "@kalfa/config/Snapshot";
 import { BrainControl } from "@kampus/libfabrika/desktop/BrainControl";
 import {
   BrainProbe,
@@ -18,7 +19,6 @@ import * as ServiceLaunchd from "@kampus/libfabrika/node/launchd/BrainServiceLau
 import * as ProcessGroups from "@kampus/libfabrika/node/launchd/ProcessGroups.test-support";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Sources from "@kampus/libfabrika/settings/Fabrika";
-import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import { Written } from "@kampus/libfabrika/telemetry/Records";
 import {
   Array as Arr,
@@ -315,6 +315,7 @@ export const phases = Effect.fn("P19Host.phases")(function* (file: string, guard
 export const check = Effect.fn("P19Host.check")(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const optIn = yield* Env.String("FABRIKA_P19_HOST").pipe(Env.withDefault(""));
   yield* checked(process.platform === "darwin" && optIn === "1", "host-opt-in-required");
   const app = path.resolve(import.meta.dirname, "../..");
@@ -367,6 +368,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   );
   yield* bundle(`import ${Formatter.formatJson(helper)};`, controllerFile, root);
   yield* bundle(`import ${Formatter.formatJson(guardEntry)};`, guardFile, root);
+
   const spec = yield* Schema.decodeEffect(BrainSpec)({
     home,
     executable,
@@ -375,6 +377,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     url,
     build: built.build,
   });
+
   yield* fs.writeFileString(`${home}/spec.json`, yield* Schema.encodeEffect(Schema.fromJsonString(BrainSpec))(spec));
   yield* fs.writeFileString(
     `${home}/snapshot.json`,
@@ -404,7 +407,9 @@ export const check = Effect.fn("P19Host.check")(function* () {
     stopTimeout: Number(settings.values["desktop.brain-stop-timeout"]),
     poll: Number(settings.values["desktop.brain-poll"]),
   });
+
   yield* fs.writeFileString(`${home}/guard.json`, Formatter.formatJson(config));
+
   const watcher = yield* ChildProcess.make(process.execPath, [guardFile, "p19:guard", `${home}/guard.json`], {
     cwd: root,
     detached: true,
@@ -480,6 +485,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
         const observed = yield* fs
           .readFileString(`${home}/groups.json`)
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProcessGroups.Saved))));
+
         return Arr.every(expected, (group) => observed.includes(group));
       }),
       config.stopTimeout,
@@ -603,6 +609,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   yield* wait(fs.exists(`${home}/guard.result`), config.stopTimeout * 3);
   yield* checked((yield* watcher.exitCode) === 0, "guard-reported-leftovers");
   const ready = yield* fs.readFileString(`${home}/ready.json`);
+
   const record = yield* progress.done({
     // The groups the guard saved, each decoded as above 1, so a reader sees what a signal could reach.
     groups: owned,
@@ -611,6 +618,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     versions: yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(ready),
     settings,
   });
+
   const leftovers: ReadonlyArray<string> = [];
 
   return { starts: record.starts, guardMs, replacement: true, controllerDeath: true, normalExit: true, leftovers };

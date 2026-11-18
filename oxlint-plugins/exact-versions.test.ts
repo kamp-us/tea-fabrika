@@ -4,9 +4,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Array as Arr, pipe, Record as Rec } from "effect";
+import { afterAll, describe, expect, it } from "@effect/vitest";
+import { Array as Arr, pipe, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
-import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "exact-versions.ts");
 
@@ -265,6 +265,83 @@ describe("a named catalog's pointer", () => {
       runs,
     );
   });
+});
+
+// P3 (slice 1 of the kalfa program plan): a `patchedDependencies` row is keyed on one exact
+// version, never a bare name or a range, which pnpm would apply to whatever version it installs, a
+// later release included. A row at a version nothing installs is pnpm's own refusal, so this check
+// passes it: the install fails with ERR_PNPM_UNUSED_PATCH, which is how the bump that takes demlik's
+// next release finds tea's old 0.29.0 row (0569, and 0040: the existing tool wins). Plants, each run
+// once: (a) `inWorkspace` reads no `patchedDependencies`; (b) `refusedPatches` takes any text after
+// the `@` as a version; (c) a row at a version no catalog pins is refused, as pnpm already does.
+describe("a patchedDependencies row", () => {
+  const Lower = Schema.String.check(Schema.isPattern(/^[a-z]{1,6}$/));
+  const Part = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 }));
+  const Version = Schema.Struct({ major: Part, minor: Part, patch: Part });
+  const Package = { name: Lower, scope: Lower, scoped: Schema.Boolean };
+
+  /** Every range or tag form a row could be keyed on, each one checked in every run. */
+  const RANGES = ["^", "~", ">=", "*", "latest", "1.x", " || 9.9.9", "workspace:*"];
+
+  const exact = ({ major, minor, patch }: typeof Version.Type) => `${major}.${minor}.${patch}`;
+
+  /** One package name per suffix, scoped or not, so the keys of one workspace never collide. */
+  const named = ({ name, scope, scoped }: { name: string; scope: string; scoped: boolean }, suffix: string) =>
+    scoped ? `@${scope}/${name}${suffix}` : `${name}${suffix}`;
+
+  const workspace = (pins: readonly (readonly [string, string])[], keys: readonly string[]) =>
+    [
+      "catalog:",
+      ...Arr.map(pins, ([key, version]) => `  '${key}': ${version}`),
+      "patchedDependencies:",
+      ...Arr.map(keys, (key, i) => `  '${key}': patches/${i}.patch`),
+      "",
+    ].join("\n");
+
+  it.prop(
+    "passes a row keyed on one exact version, the catalog's or one no catalog pins, which pnpm refuses at install",
+    { ...Package, pinned: Version, patched: Version },
+    (drawn) => {
+      const [a, b] = [named(drawn, "a"), named(drawn, "b")];
+
+      const pins = [
+        [a, exact(drawn.pinned)],
+        [b, exact(drawn.pinned)],
+      ] as const;
+
+      const keys = [`${a}@${exact(drawn.pinned)}`, `${b}@${exact(drawn.patched)}`];
+      expect(run({ "pnpm-workspace.yaml": workspace(pins, keys) })).toEqual({
+        status: 0,
+        said: expect.stringContaining("every version exact"),
+      });
+    },
+    { arbitrary: { runs: 10 } },
+  );
+
+  it.prop(
+    "refuses a bare name, each range form and an empty version, naming each, and passes the exact row beside them",
+    { ...Package, version: Version },
+    (drawn) => {
+      const good = `${named(drawn, "a")}@${exact(drawn.version)}`;
+
+      const bad = [
+        named(drawn, "b"),
+        `${named(drawn, "c")}@`,
+        ...Arr.map(RANGES, (range, i) => `${named(drawn, `r${i}`)}@${range}${exact(drawn.version)}`),
+        ...Arr.map(RANGES, (range, i) => `${named(drawn, `t${i}`)}@${range}`),
+      ];
+
+      const { status, said } = run({ "pnpm-workspace.yaml": workspace([], [good, ...bad]) });
+      expect(status).toBe(1);
+
+      for (const key of bad) {
+        expect(said).toContain(`pnpm-workspace.yaml: patchedDependencies: ${key}:`);
+      }
+
+      expect(said).not.toContain(`pnpm-workspace.yaml: patchedDependencies: ${good}:`);
+    },
+    { arbitrary: { runs: 10 } },
+  );
 });
 
 describe("what must never read as clean", () => {

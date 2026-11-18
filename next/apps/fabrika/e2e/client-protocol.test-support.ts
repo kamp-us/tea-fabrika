@@ -42,6 +42,13 @@ import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
 import { type Dev, grant, type Home, PERSON, reader, type Waiting } from "./p14.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  press: {},
+});
+
 /** The registered name of the checklist's process: the headless tile shows it, and its streams are
  *  read by it. */
 const PROCESS = "checklist:1";
@@ -139,6 +146,7 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
     const r = yield* reader(h, dev);
     const inbox = yield* r.read(`${PROCESS}/inbox`);
     const sent = Arr.filter(inbox, (e) => named(e.body) === "milk");
+
     return { first, kept, sent: sent.length };
   });
 
@@ -223,11 +231,19 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       ).pipe(Effect.orDie),
       live: Effect.map(state, (s) => s.link._tag === "online"),
       add: (name) =>
-        run.dispatch({ type: "press", tile: "tile_1", m: { type: "add", name }, via: "button" }).pipe(Effect.orDie),
+        run
+          .dispatch({
+            ...Tag.cases.press.make({}),
+            tile: "tile_1",
+            m: { ...Tag.cases.add.make({}), name },
+            via: "button",
+          })
+          .pipe(Effect.orDie),
       shown: Effect.map(state, (s) => {
         const pid = s.tiles[0]?.last;
         const view = pid !== null && pid !== undefined && pid !== "" ? s.client.views[pid]?.view : undefined;
         const data = Option.getOrUndefined(Schema.decodeOption(checklistWindow.data)(view));
+
         return Arr.map(data?.items ?? [], (i) => ({ name: i.name, checked: i.state === "checked" }));
       }),
       dials: count,
@@ -334,6 +350,7 @@ export const served = (h: Home) =>
         port,
       }),
     ).pipe(Effect.provide(localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto))));
+
     const control = instance.project(PROJECT);
     // The private binding already speaks the project's public ledger-call protocol.
     const { append, read, wait } = control;
@@ -351,7 +368,9 @@ export const served = (h: Home) =>
         Effect.provide(ledger),
         Effect.orDie,
       );
+
     const blob = Buffer.from(Str.split(h.publicKey, " ")[1] ?? "", "base64");
+
     const from = () => ({
       by: `SHA256:${pipe(createHash("sha256").update(blob).digest("base64"), Str.replace(/=+$/, ""))}`,
       for: PERSON,
@@ -421,6 +440,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     );
     const ended = yield* backend.state;
     const endedBody = yield* backend.body;
+
     const started = yield* invoke("start", () =>
       s.control.start(
         Start.cases.again.make({
@@ -433,6 +453,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
         s.from(),
       ),
     );
+
     const second = String(read(started).process);
     yield* until(
       `${backend.name}: the tile is online on the successor`,
@@ -450,12 +471,14 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       Effect.map(backend.shown, (rows) => Arr.some(rows, (r) => r.name === "milk" && !r.checked)),
       backend.last,
     );
+
     const restarted = Option.getOrUndefined(
       Arr.findFirst(
         yield* s.facts(`processes/${PROCESS}`),
         (f) => f._tag === "restarted" && read(f.body).process === second,
       ),
     );
+
     const sent = Arr.filter(yield* s.facts(`${PROCESS}/inbox`), (f) => named(f.body) === "milk");
     const watches = Arr.filter(yield* s.facts("processes"), (f) => f._tag === "monitored" && watcher(f.body) === tab);
 
@@ -463,6 +486,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
 
     const ends = (stream: ReadonlyArray<Fact>) =>
       Arr.filter(stream, (f) => f._tag === "demonitored" && watcher(f.body) === tab);
+
     yield* until(
       `${backend.name}: its session's watch ended after the close`,
       Effect.map(s.facts("processes"), (all) => ends(all).length > 0),

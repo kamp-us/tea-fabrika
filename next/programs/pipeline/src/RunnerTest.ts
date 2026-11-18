@@ -17,6 +17,13 @@ import type { Scope, Tracer } from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  abandon: {},
+  checks_err: {},
+});
+
 type Model = ReturnType<typeof merger>["machine"]["model"]["Type"];
 
 type Saved = { readonly name: string; readonly at: number };
@@ -211,7 +218,7 @@ export const suite = (driver: Driver) =>
         } else if (move === "busy") {
           yield* r.h.land(`busy${m.n}`);
         } else if (move === "abandon") {
-          yield* r.h.deliver(Mail.Abandon.make({ type: "abandon", ref: state.job.ref }));
+          yield* r.h.deliver(Mail.Abandon.make({ ref: state.job.ref }));
         } else if (move === "fault") {
           if (state._tag === "checking" && cell.pick % 3 !== 0) {
             yield* r.h.ci.fail(
@@ -298,7 +305,7 @@ export const suite = (driver: Driver) =>
         for (const reason of ["unavailable", "handler_failed"]) {
           expect(failures).toContainEqual(
             expect.objectContaining({
-              type: "checks_err",
+              ...Tag.cases.checks_err.make({}),
               cmd: expect.objectContaining({ start: true }),
               error: Schema.TaggedStruct(reason, {}).make({}),
             }),

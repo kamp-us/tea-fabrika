@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import type * as Types from "effect/Types";
 import * as Id from "../Id.ts";
 import { isJsonObject } from "../runtime/Patch.ts";
 import { ClientKey } from "../transport/ClientKey.ts";
@@ -45,8 +46,8 @@ const Failure = Schema.TaggedUnion({
 const F = Failure.cases;
 
 /** The socket's Msgs the hands machine reads: a failure to open shows as its close. */
-const forHands = (m: DialMsg): m is Exclude<DialMsg, { readonly type: "socket_failure" }> =>
-  m.type !== "socket_failure";
+const forHands = (m: DialMsg): m is Exclude<DialMsg, Types.ExtractTag<DialMsg, "socket_failure">> =>
+  m._tag !== "socket_failure";
 
 /** A call that says what the client has `seen` also says when it was sent, on the client's own clock. */
 const stamped = (params: Schema.Json, sentAt: string): Schema.Json =>

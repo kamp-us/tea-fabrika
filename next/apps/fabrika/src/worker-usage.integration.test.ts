@@ -28,6 +28,16 @@ import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  idle: {},
+  remove: {},
+  rename: {},
+  spin: {},
+});
+
 const PROJECT = "isolate-usage-test";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -75,6 +85,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
       const socket = new WebSocket(
         `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
       );
+
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -90,6 +101,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
     until(
       Effect.sync(() => {
         const at = Arr.findFirstIndex(frames, match);
+
         return Option.isNone(at) ? undefined : frames.splice(at.value, 1)[0];
       }),
       (frame) => frame !== undefined || socket.readyState === WebSocket.CLOSED,
@@ -108,6 +120,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
   const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const id = ++serial;
     socket.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
+
     return yield* next((frame) => frame.id === id);
   });
 
@@ -140,7 +153,7 @@ const spinSource = Arr.join(
     'import {Machine} from "@demlik/tea/effect";',
     'import {Schema} from "effect";',
     "const Model=Schema.Struct({checksum: Schema.Int});",
-    'const Msg=Schema.Struct({type: Schema.Literals(["idle","spin"])});',
+    "const Msg=Schema.TaggedUnion({idle: {}, spin: {}});",
     "const machine=Machine.make({model: Model, msg: Msg, cmds: [], init: (s)=>[s??{checksum:0},[]], update: {idle:s=>[s,[]], spin:s=>{let checksum=s.checksum;for(let i=0;i<40000000;i++){checksum=(checksum+i)|0;}return [{checksum},[]];}}});",
     'export const program={name:"usage/spin",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{idle:{_tag:"write",schema:Msg,description:"Idle",personOnly:false},spin:{_tag:"write",schema:Msg,description:"Spin",personOnly:false}},outputs:{},writes:{},wake:()=>null};',
   ],
@@ -264,6 +277,7 @@ const read = (world: World["Service"], process: string) =>
   Effect.gen(function* () {
     // A later runner call flushes already delivered tails to the public JobRecord.
     yield* call(() => world.instance.process(process).open("usage-probe"));
+
     const page = yield* invoke(
       world.instance.record(PROJECT, `job/${process}/0`),
       "read",
@@ -299,7 +313,7 @@ const checkHealth = (home: string, spans: ReadonlyArray<SpanRow>) =>
 const spinSample = Effect.gen(function* () {
   const world = yield* World;
   const spin = yield* start(world, "spin:1", "usage/spin");
-  yield* world.send(spin, "idle", { type: "idle" });
+  yield* world.send(spin, "idle", Tag.cases.idle.make({}));
 
   const idle = yield* until(
     read(world, spin),
@@ -307,13 +321,14 @@ const spinSample = Effect.gen(function* () {
     "the idle update produced no isolate.cpu row",
   );
 
-  yield* world.send(spin, "spin", { type: "spin" });
+  yield* world.send(spin, "spin", Tag.cases.spin.make({}));
 
   const busy = yield* until(
     read(world, spin),
     (rows) => cpu(rows, "update").length === 2,
     "the spinning update produced no second isolate.cpu row",
   );
+
   const baseline = Arr.map(cpu(idle, "update"), duration);
   const later = Arr.filter(cpu(busy, "update"), (row) => !Arr.some(idle, (old) => old.spanId === row.spanId));
   expect(later).toHaveLength(1);
@@ -345,9 +360,9 @@ it.layer(
         // P14 slice 2: the app boots `checklist:1` itself, so this scenario starts its own under the
         // next name and measures only the steps it sent.
         const checklist = yield* start(world, "checklist:2", "fabrika/checklist");
-        yield* send(checklist, "add", { type: "add", name: "milk" });
-        yield* send(checklist, "rename", { type: "rename", name: "milk", to: "bread" });
-        yield* send(checklist, "remove", { type: "remove", name: "bread" });
+        yield* send(checklist, "add", { ...Tag.cases.add.make({}), name: "milk" });
+        yield* send(checklist, "rename", { ...Tag.cases.rename.make({}), name: "milk", to: "bread" });
+        yield* send(checklist, "remove", { ...Tag.cases.remove.make({}), name: "bread" });
 
         const updated = yield* until(
           read(world, checklist),
@@ -367,6 +382,7 @@ it.layer(
             build: built.programs["fabrika/checklist"]?.hash ?? "missing",
           }),
         );
+
         const started = yield* until(
           call(() => instance.project(PROJECT).read("processes/checklist:2", 0, "usage-probe")).pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(lifecycle)),
@@ -374,6 +390,7 @@ it.layer(
           (rows) => Arr.some(rows, (row) => row.body.after === checklist),
           "restart recorded no successor within 10 seconds",
         );
+
         const successor = Option.getOrUndefined(Arr.findFirst(started, (row) => row.body.after === checklist))?.body
           .process;
 

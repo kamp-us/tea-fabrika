@@ -230,6 +230,7 @@ export const suite = (database: Database) =>
                 Match.when(1, () => "save" as const),
                 Match.orElse(() => "cleanup" as const),
               );
+
               armed = mode;
               hit = false;
               frames.length = 0;
@@ -246,6 +247,7 @@ export const suite = (database: Database) =>
               yield* watches.open("held", whole);
               const [row] = Arr.filter(rows(sql), (r) => r.name === "counter:fault");
               expect(row).toBeDefined();
+
               const column = Option.getOrUndefined(
                 Arr.findFirst(
                   Rec.keys(row ?? {}),

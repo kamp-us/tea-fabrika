@@ -76,6 +76,7 @@ const options = { arbitrary: { seed: 119120, runs: 20, size: 60 } };
 const POLICY = { reason: "crashed", crashes: 1, until: 0 };
 
 const toW = Recipient.cases.process.make({ process: W });
+
 const brainSide = (process: string) => process === "processes" || Str.startsWith("processes/")(process);
 
 const seed = (store: Storage, name = "counter:1") =>

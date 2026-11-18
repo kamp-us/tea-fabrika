@@ -14,6 +14,16 @@ import { expectTypeOf } from "vitest";
 import { Attached, Wait } from "../Wire.ts";
 import { connection } from "./connection.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  answered: {},
+  finished: {},
+  observed: {},
+  started: {},
+  waited: {},
+});
+
 const SEED = 119120;
 
 const RUNS = 100;
@@ -29,11 +39,11 @@ type Saved = typeof Attached.Type;
 type W = typeof Wait.Type;
 
 type Msg =
-  | { readonly type: "observed"; readonly attached: Saved }
-  | { readonly type: "started" }
-  | { readonly type: "finished" }
-  | { readonly type: "waited"; readonly wait: W }
-  | { readonly type: "answered"; readonly wait: W };
+  | { readonly _tag: "observed"; readonly attached: Saved }
+  | { readonly _tag: "started" }
+  | { readonly _tag: "finished" }
+  | { readonly _tag: "waited"; readonly wait: W }
+  | { readonly _tag: "answered"; readonly wait: W };
 
 const bytes = (value: Saved) => new TextEncoder().encode(JSON.stringify(value)).length;
 
@@ -87,7 +97,7 @@ const held = (model: Model): ReadonlyArray<W> => (model._tag === "idle" || model
 
 /** What the driver saved before this machine, for one Msg. `null` is an attachment never read. */
 const reference = (saved: Saved | null, msg: Msg): Saved | null => {
-  if (msg.type === "observed") {
+  if (msg._tag === "observed") {
     return msg.attached;
   }
 
@@ -95,18 +105,19 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
     return saved;
   }
 
-  if (msg.type === "started") {
+  if (msg._tag === "started") {
     return saved.busy ? saved : { ...saved, busy: true };
   }
 
-  if (msg.type === "finished") {
+  if (msg._tag === "finished") {
     return saved.busy ? { ...saved, busy: false } : saved;
   }
 
   const wait = msg.wait;
 
-  if (msg.type === "waited") {
+  if (msg._tag === "waited") {
     const next = { ...saved, waits: [...saved.waits, wait] };
+
     return Arr.some(saved.waits, (w) => w.id === wait.id) || next.waits.length > MAX_WAITS || bytes(next) > MAX_BYTES
       ? saved
       : next;
@@ -121,7 +132,9 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
 // fast-check, not a Schema arbitrary: the walk aims text at the encoded limit and draws ids from
 // the folded state, which Wait's and Attached's own arbitraries cannot do.
 const units = ["a", "Z", "7", "é", "ß", "€", "流", "😀", "𝄞"];
+
 const text = fc.array(fc.constantFrom(...units), { maxLength: 6 }).map((s) => Arr.join(s, ""));
+
 const id = fc.oneof(text, fc.integer({ min: -3, max: 80 }));
 
 const streams = ["events", "counter:1/inbox", "ünï/流", "😀"];
@@ -192,6 +205,7 @@ const sized = (size: number, unit: string) => {
   const width = new TextEncoder().encode(unit).length;
   const count = Math.max(0, Math.floor(size / width) - 1);
   const head = Str.repeat(count)(unit);
+
   return head + Str.repeat(Math.max(0, size - count * width))("x");
 };
 
@@ -211,38 +225,38 @@ const next = (fold: Fold, choice: Choice): Msg => {
 
   if (saved !== null && saved.waits.length >= 6 && move >= 3) {
     // A crowded connection mostly keeps adding, so walks reach the 64-wait limit.
-    return { type: "waited", wait: fresh };
+    return { ...Tag.cases.waited.make({}), wait: fresh };
   }
 
   if (move < 8 || (fold.saved === null && move < 50)) {
-    return { type: "observed", attached: choice.observation };
+    return { ...Tag.cases.observed.make({}), attached: choice.observation };
   }
 
   if (fold.saved === null) {
     // Nothing read yet: every other Msg is stale.
     return at<Msg>(
       [
-        { type: "started" },
-        { type: "finished" },
-        { type: "waited", wait: choice.wait },
-        { type: "answered", wait: choice.wait },
+        Tag.cases.started.make({}),
+        Tag.cases.finished.make({}),
+        { ...Tag.cases.waited.make({}), wait: choice.wait },
+        { ...Tag.cases.answered.make({}), wait: choice.wait },
       ],
       move,
     );
   }
 
   if (move < 22) {
-    return { type: move % 2 === 0 ? "started" : "finished" };
+    return (move % 2 === 0 ? Tag.cases.started : Tag.cases.finished).make({});
   }
 
   if (move < 34 && saved !== null && saved.waits.length > 0) {
     // A wait the driver still holds.
-    return { type: "answered", wait: at(saved.waits, pick) };
+    return { ...Tag.cases.answered.make({}), wait: at(saved.waits, pick) };
   }
 
   if (move < 40 && fold.completed.length > 0) {
     // A late reply for a wait that may already be answered.
-    return { type: "answered", wait: at(fold.completed, pick) };
+    return { ...Tag.cases.answered.make({}), wait: at(fold.completed, pick) };
   }
 
   if (move < 46 && saved !== null && saved.waits.length > 0) {
@@ -251,25 +265,25 @@ const next = (fold: Fold, choice: Choice): Msg => {
     const other = choice.wait.stream === old.stream && choice.wait.after === old.after;
 
     return {
-      type: move % 2 === 0 ? "answered" : "waited",
+      ...(move % 2 === 0 ? Tag.cases.answered : Tag.cases.waited).make({}),
       wait: { ...choice.wait, id: old.id, after: other ? old.after + 1 : choice.wait.after },
     };
   }
 
   if (move < 56 && saved !== null) {
-    return { type: "waited", wait: boundary(saved, choice) };
+    return { ...Tag.cases.waited.make({}), wait: boundary(saved, choice) };
   }
 
   if (move < 62 && saved !== null && saved.waits.length > 0) {
     // A duplicate of a saved wait.
-    return { type: "waited", wait: at(saved.waits, pick) };
+    return { ...Tag.cases.waited.make({}), wait: at(saved.waits, pick) };
   }
 
   if (move < 66) {
-    return { type: "answered", wait: choice.wait };
+    return { ...Tag.cases.answered.make({}), wait: choice.wait };
   }
 
-  return { type: "waited", wait: fresh };
+  return { ...Tag.cases.waited.make({}), wait: fresh };
 };
 
 /** Fold one walk through the machine, checking each step against the reference. */
@@ -295,7 +309,7 @@ const walk = (
     expect(cmds).toEqual([]);
     expect(after).toEqual(expected(to));
 
-    if (to === fold.saved && msg.type !== "observed") {
+    if (to === fold.saved && msg._tag !== "observed") {
       // A refused or stale Msg hands back the same Model, so the driver saves and answers nothing.
       expect(after).toBe(model);
     }
@@ -303,7 +317,7 @@ const walk = (
     each({ before: model, after, msg, from: fold.saved, to, fold });
     const kept = to?._tag === "online" ? to.waits : [];
     const gone = fold.saved?._tag === "online" ? Arr.filter(fold.saved.waits, (w) => !kept.includes(w)) : [];
-    fold = { saved: to, completed: [...fold.completed, ...gone, ...(msg.type === "waited" ? [msg.wait] : [])] };
+    fold = { saved: to, completed: [...fold.completed, ...gone, ...(msg._tag === "waited" ? [msg.wait] : [])] };
     model = after;
   }
 
@@ -338,9 +352,9 @@ describe("T703 connection machine laws", () => {
     fc.assert(
       fc.property(Walk, (choices) => {
         walk(choices, ({ before, after, msg }) => {
-          seen.add(`${before._tag}:${msg.type}:${after === before ? "same" : after._tag}`);
+          seen.add(`${before._tag}:${msg._tag}:${after === before ? "same" : after._tag}`);
           // Only `observed` may replace the metadata, and a Msg about one wait leaves the others alone.
-          const moved = msg.type === "observed" ? before : after;
+          const moved = msg._tag === "observed" ? before : after;
           expect(metadata(moved)).toEqual(metadata(before));
           const wait = "wait" in msg ? msg.wait : undefined;
           const unrelated = (w: W) => wait === undefined || w.id !== wait.id;
@@ -379,7 +393,7 @@ describe("T703 connection machine laws", () => {
     fc.assert(
       fc.property(Walk, (choices) => {
         walk(choices, ({ before, after, msg, from }) => {
-          if (msg.type !== "waited" || from?._tag !== "online") {
+          if (msg._tag !== "waited" || from?._tag !== "online") {
             return;
           }
 
@@ -435,7 +449,7 @@ describe("T703 connection machine laws", () => {
     fc.assert(
       fc.property(Walk, (choices) => {
         walk(choices, ({ before, after, msg, from, fold }) => {
-          if (msg.type !== "answered" || from?._tag !== "online") {
+          if (msg._tag !== "answered" || from?._tag !== "online") {
             return;
           }
 
@@ -489,7 +503,7 @@ describe("T703 connection machine laws", () => {
         // The attachment is the durable copy: JSON out, decoded back, observed by a fresh machine.
         const saved = Schema.decodeUnknownSync(Attached)(JSON.parse(JSON.stringify(projected(model))));
         const [fresh] = connection.init(null, {});
-        const [back] = applyCellChecked(connection, fresh, { type: "observed", attached: saved });
+        const [back] = applyCellChecked(connection, fresh, { ...Tag.cases.observed.make({}), attached: saved });
         expect(back).toEqual(model);
         restored.add(model._tag);
         let left = back;

@@ -108,18 +108,17 @@ const ReaderModel = Schema.Struct({ log: Schema.Array(Schema.Json) });
 
 type ReaderModel = typeof ReaderModel.Type;
 
-const ReaderMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("watch"), name: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("forget"), ref: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("rows"), life: Schema.String, n: Schema.Int }),
-  Schema.Struct({
-    type: Schema.Literal("DOWN"),
+const ReaderMsg = Schema.TaggedUnion({
+  watch: { name: Schema.String },
+  forget: { ref: Schema.String },
+  rows: { life: Schema.String, n: Schema.Int },
+  DOWN: {
     ref: Schema.String,
     process: Schema.String,
     name: Schema.optionalKey(Schema.String),
     reason: Schema.Json,
-  }),
-]);
+  },
+});
 
 const logged = (s: ReaderModel, entry: Schema.Json): ReaderModel => ({ log: [...s.log, entry] });
 
@@ -406,6 +405,7 @@ const host = Effect.fnUntraced(function* (
         const reader =
           Option.getOrUndefined(Arr.findFirst([...world.readers], ([, r]) => r.pid === watch.watcher.process))?.[0] ??
           "";
+
         const asked = world.asked.get(watch.id) ?? { reader, watcher: watch.watcher.process, tries: 0 };
         asked.tries++;
         world.asked.set(watch.id, asked);
@@ -693,10 +693,12 @@ const walk = (
     for (const cell of cells) {
       const live = Arr.filter(TARGETS, (t) => world.targets.get(t)?.live === true);
       const ended = Arr.filter(TARGETS, (t) => world.targets.get(t)?.live === false);
+
       const watching = Arr.filter(
         [...world.watches.values()],
         (w) => w.state === "live" && world.readers.get(w.reader)?.pid === w.watcher,
       );
+
       const possible = Arr.filter(
         moves,
         (move) =>
@@ -751,7 +753,7 @@ const walk = (
           }
 
           const before = new Set(world.asked.keys());
-          yield* say(reader, { type: "watch", name });
+          yield* say(reader, ReaderMsg.cases.watch.make({ name }));
           world.fault.race = undefined;
           world.fault.overtake = undefined;
 
@@ -790,7 +792,7 @@ const walk = (
               command: `${from}/${n}/0`,
               source: { name, process: from },
               to: reader,
-              m: { type: "rows", life: from, n },
+              m: ReaderMsg.cases.rows.make({ life: from, n }),
               from: writerFrom(),
             }),
           ).pipe(Effect.provide(life.context), Effect.result);
@@ -856,6 +858,7 @@ const walk = (
               : kind === "foreign" && foreign.length > 0
                 ? choose(foreign, cell.alt).ref
                 : `${watcher}/${90_000 + world.n}/0`;
+
           const actual = Arr.some(own, (w) => w.ref === ref)
             ? "own"
             : Arr.some(foreign, (w) => w.ref === ref)
@@ -863,7 +866,7 @@ const walk = (
               : "unknown";
 
           world.forgets.push({ watcher, ref, kind: actual });
-          yield* say(reader, { type: "forget", ref });
+          yield* say(reader, ReaderMsg.cases.forget.make({ ref }));
           done.add(`forget:${actual}`);
           break;
         }
@@ -875,7 +878,7 @@ const walk = (
           const gate = { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() };
           world.fault.gate = gate;
           world.forgets.push({ watcher: watch.watcher, ref: watch.ref, kind: "own" });
-          const fiber = yield* Effect.forkChild(say(watch.reader, { type: "forget", ref: watch.ref }));
+          const fiber = yield* Effect.forkChild(say(watch.reader, ReaderMsg.cases.forget.make({ ref: watch.ref })));
           const entered = yield* Deferred.await(gate.entered).pipe(Effect.timeoutOption(LIMIT));
           expect(Option.isSome(entered), "the demonitor reached the brain").toBe(true);
           yield* end(watch.target, cell.reason);
@@ -989,6 +992,7 @@ const walk = (
             Arr.findFirstIndex(log, (e) => e.type === "monitor_ok" && e.ref === entry.ref),
             () => -1,
           );
+
           expect(answered, `M3: in ${pid}, the answer for ${entry.ref} folds before its DOWN`).toBeGreaterThanOrEqual(
             0,
           );
@@ -1007,6 +1011,7 @@ const walk = (
       if (watch.state === "canceled") {
         // M8: no DOWN for a canceled ref folds after its cancel, including one already saved.
         expect(downs.length, `M8: ${label}: no DOWN folds after its demonitor`).toBe(watch.downsAtCancel ?? 0);
+
         const canceled = Arr.filter(
           rows,
           (r) =>
@@ -1059,10 +1064,12 @@ const walk = (
         name: watch.target,
         reason,
       });
+
       const last = Option.getOrElse(
         Arr.findLastIndex(log, (e) => e.type === "rows" && e.life === watch.process),
         () => -1,
       );
+
       expect(last < (downs[0]?.index ?? -1), `M2: ${label}: no message from the ended life folds after its DOWN`).toBe(
         true,
       );

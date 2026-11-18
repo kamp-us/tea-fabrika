@@ -71,6 +71,7 @@ const key = Effect.fnUntraced(function* () {
   blob.set(raw, 19);
   const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
   const fingerprint = `SHA256:${pipe(Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))), Str.replace(/=+$/, ""))}`;
+
   return {
     raw: Base64Url.encode(raw),
     line,
@@ -342,6 +343,7 @@ it.effect.prop(
 const changes = Effect.fnUntraced(function* (w: World, c: DoorCall) {
   const joining = yield* key(),
     label = pipe(c.name, Str.slice(0, 96));
+
   return {
     granted: grantText({
       id: "grant_0000000000e008000000000002",
@@ -731,6 +733,7 @@ it.effect.prop(
 
       const dispatch = Effect.fnUntraced(function* (method: string) {
         const h = handler.get(method);
+
         return h !== undefined ? { _tag: "ok", result: yield* h() } : { _tag: "refused", reason: "unknown_method" };
       });
 
@@ -810,6 +813,7 @@ it.prop(
     expect(
       presence(present, () => {
         loads++;
+
         return clean;
       }),
     ).toBe(clean);

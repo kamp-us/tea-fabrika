@@ -21,7 +21,7 @@ import type { tezgahMachine } from "./program.ts";
 
 type Row = (typeof commands)[number];
 
-type Did = Extract<typeof tezgahMachine.msg.Type, { readonly type: "did" }>;
+type Did = Extract<typeof tezgahMachine.msg.Type, { readonly _tag: "did" }>;
 
 const PLATFORMS = ["browser", "electron", "headless"] as const;
 

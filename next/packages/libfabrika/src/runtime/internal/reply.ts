@@ -25,12 +25,13 @@ export const Model = Schema.TaggedUnion({
   remembered: { reply: Reply },
 });
 
-const Msg = Schema.Struct({ type: Schema.Literal("remember"), reply: Reply });
+/** @internal The one Msg: remember a reply. */
+export const Remember = Schema.TaggedStruct("remember", { reply: Reply });
 
 /** @internal */
 export const reply = Machine.make({
   model: Model,
-  msg: Msg,
+  msg: Remember,
   cmds: [],
   init: (saved) => [saved ?? Model.cases.empty.make({}), []],
   update: {

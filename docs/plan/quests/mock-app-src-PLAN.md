@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0042, 0054, 0524, 0538, 0555, 0579, 0589, 0594; body 1e463bb3bec1
+Approved by the lead agent, builds 0042, 0054, 0524, 0538, 0555, 0579, 0589, 0594; body 086af7416e9d
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `next/apps/fabrika/src`, in next/: 5 `vi.fn`, 14 `toHaveBeenCalled*` and 23 `vi.spyOn` go, in five slices on the sweep's one pull request
@@ -586,6 +586,7 @@ plant is what the review runs once to see it red.
 | A1. `dev` refuses every invalid parent with `parent_gone` before any `makeDirectory` | test | fc.oneof: the four invalid-parent shapes, as today, 4 runs (30 at full depth) | in `next/apps/fabrika/dev.ts`, call `fs.makeDirectory(home)` before the parent check: the recorded list is not `[]` | next/apps/fabrika/src/file-services.laws.integration.test.ts |
 | A2. The grant command fetches nothing on a bad URL, a usage error or an unknown flag | test | fc.oneof: the bad URLs, as today, with fc.string and fc.integer for the usage law and fc.uuid for flags, 3 runs each (20, 25 and 10 at full depth) | in `next/apps/fabrika/grant.ts`, fetch the target before parsing the URL: `sent` is not `[]` | next/apps/fabrika/src/grant-readers.laws.test.ts |
 | A3. Each grant mode sends exactly its GET and POST, and prints `Granted <key> to <for>` once on `applied` and nothing else | test | fc.constantFrom: the modes, as today, 3 runs (12 at full depth) | print the line on `refused` too, or print a second line: `logLines` differs | next/apps/fabrika/src/grant-readers.laws.test.ts |
+| A3b. The grant entry rejects direct console calls | lint | lint | Remove only the grant no-console override from a temporary config copy. The expected diagnostic disappears | .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | A4. p27: a granted, revoked or added grant with a wrong `to` never calls `ClientManager.write` and founds nothing | test | Effect Arbitrary: Grant.fields.to | in `next/packages/libfabrika/src/gateway/Gateway.ts`, write the client before the ledger check (the plant is made on a scratch copy; that file is in PR 1366 and is not changed) | next/apps/fabrika/src/door.integration.test.ts |
 | A5. Amendment 2026-11-15 (the lead's ruling): A5 moves to the 0042 Alchemy mocks plan and does not land in this sweep (see "Slice 1"). p33 loader: the loader records the real config and answers typed `no_program` for an unknown name | test | fc.string: the source, with fc.uuid for the process, as today, 3 runs | answer the bare short name: the `no_program` check is red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
 | A6. The lock refuses `vi.fn` and `vi.spyOn` in the files at zero and nowhere else in the folder; a file at zero for all five is in the five-method block and refuses all five (amendment 2026-11-15, ruling 2). Amendment 2026-11-15 (the laptop lead's ruling): A6 does not land in this sweep; it lands with the folder's whole lock once the folder is at zero | test | scenario: the real oxlint over a planted `vi.fn()` in a locked file and in an unlocked file of the folder, through `plantIn` | delete the new override: the locked row stops firing | oxlint-plugins/plants.test.ts |
@@ -648,6 +649,9 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 | next/apps/fabrika/src/exam/ | tests | tests | the same folder |
 | next/apps/fabrika/src/file-services.laws.integration.test.ts | tests | tests | slice 1: A1; slice 5 (amendment 2026-11-16): the env stubs go to `ConfigProvider`, dev.ts's `main` is run with its args, and L11 gains a fixed `examples` entry that draws the `env` case |
 | next/apps/fabrika/src/grant-readers.laws.test.ts | tests | tests | slice 1: A2, A3 |
+| .oxlintrc.json | tests | tests | A3b: enable the existing built-in no-console rule only for the grant entry |
+| oxlint-plugins/builtin-plants.ts | tests | tests | A3b: fixed refused and allowed source |
+| oxlint-plugins/plants.test.ts | tests | tests | A3b: exact path diagnostics and copied-config control |
 | next/apps/fabrika/src/door.integration.test.ts | tests | tests | slice 1: A4; slice 3: C1 to C4 |
 | next/apps/fabrika/src/instance-one-file.integration.test.ts | tests | tests | slice 2: B3 (amendment 2026-11-15: slice 1's A5 moves to the 0042 Alchemy mocks plan) |
 | .oxlintrc.json | tests | none | slices 1 to 4: the override, its `files` growing, then the folder glob |
@@ -703,6 +707,8 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 
 ## Existing tools
 
+- A3b: searched the installed oxlint rules and the existing built-in path tests. Use the built-in `eslint/no-console` rule with one exact file override. The runtime law uses the existing Effect TestConsole for command output. A raw global console call during module import runs before that runtime.
+
 Amendment 2026-11-16: these searches confirm the helpers already chosen above; they add no API or behavior.
 
 - `next/packages/libfabrika/src/gateway/InputNames.ts`: searched `gateway/Gateway.ts` and the gateway module for an input-naming service; found `Options.inputs.name`, a plain callback invoked while accepting an input. Reuse that program mapping as the service's implementation, so the already-planned Recorder can watch it. `Recorder.layer` records Effect service members, not this plain callback.
@@ -735,6 +741,8 @@ Amendment 2026-11-16: these searches confirm the helpers already chosen above; t
   The before count (5, 14, 23 at `f7169af`) goes in each slice's run row.
 
 ## Validation
+
+**A3b amendment, 2026-11-18.** The approved grant-only rule supplements A3. Every runtime law and its workload stays. The sole shared lint writer for PR 1504 owns these three paths. Bring the reviewed, signed delta into the mock sweep before replacing A3's spy. Automatic changed/related GitHub CI must run the existing lint suite, including the real-config and copied-config checks, and the full-depth grant runtime file. Record both outcomes before calling the replacement proved. Keep the rest of the lint config and the grant command unchanged. All validation uses automatic GitHub CI.
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc

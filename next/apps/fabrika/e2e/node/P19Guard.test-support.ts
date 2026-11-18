@@ -77,6 +77,7 @@ export const processes = Effect.fn("P19Host.processes")(function* () {
   return yield* Schema.decodeUnknownEffect(Schema.Array(ProcessGroups.Row))(
     Arr.map(Arr.filter(Str.split(Str.trim(out.stdout), "\n"), Boolean), (line) => {
       const [pid, parent, group] = Arr.map(Str.split(Str.trim(line), /\s+/), Number);
+
       return { pid, parent, group };
     }),
   );

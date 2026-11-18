@@ -3,13 +3,13 @@
  * check them whole, resolve the four sources and make the snapshot the process keeps. It returns
  * all of that or one `SettingsError`, so nothing starts on settings that were not checked.
  */
+import * as Files from "@kalfa/config/Files";
+import * as Load from "@kalfa/config/Load";
+import { Toml } from "@kalfa/config/Toml";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Declarations from "../../settings/Declarations.ts";
 import { Fabrika } from "../../settings/Fabrika.ts";
-import * as Files from "../../settings/Files.ts";
-import * as Load from "../../settings/Load.ts";
-import { Toml } from "../../settings/Toml.ts";
 
 interface Place {
   /** Where the file is read from. */

@@ -22,7 +22,7 @@ import { testConfig } from "../vitest.config.ts";
 const root = resolve(import.meta.dirname, "..");
 const options = { seed: 325, numRuns: 4 };
 const configUrl = pathToFileURL(join(root, "vitest.config.ts")).href;
-// A compiler name no process has, so the laptop wait in typecheck.sh never holds up a law whose
+// A compiler name no process has, so the laptop wait in typecheck.ts never holds up a law whose
 // subject is something else, even while a real tsgo runs on the machine.
 const idle = "tc-idle-compiler";
 
@@ -160,34 +160,33 @@ describe("T325 K9 machine caps, today's tooling", () => {
   });
 
   // R4 finding 4. With no lock named, every shell gets the same system file, whatever its TMPDIR.
-  // A stand-in python3 prints the lock it was given, so no law here waits on the person's real lock.
-  // Plant: default the lock to a file under TMPDIR.
-  it("R4 gives every shell one fixed lock file, whatever its TMPDIR", () => {
-    fc.assert(
-      fc.property(fc.stringMatching(/^[a-z]{2,8}$/), (suffix) => {
+  // The program runs here, in the test process, on its test layers: TMPDIR is set both in this
+  // process's environment and in the config's, and the law reads the path the lock was handed.
+  // Nothing takes the person's real lock or waits behind a real typecheck (ticket 1008). Ticket 766
+  // changed this body from a stand-in python3 that printed the exported path; the lead checked by
+  // hand that the change is no loosening (docs/plan/quests/port-typecheck-PLAN.md, "Laws").
+  // Plant: default the lock to a file under os.tmpdir().
+  it("R4 gives every shell one fixed lock file, whatever its TMPDIR", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.stringMatching(/^[a-z]{2,8}$/), async (suffix) => {
         const dir = mkdtempSync(join(tmpdir(), "tc-r4-"));
+        const before = process.env["TMPDIR"];
 
         try {
-          const bin = join(dir, "bin"),
-            temp = join(dir, suffix);
-          mkdirSync(bin);
+          const temp = join(dir, suffix);
           mkdirSync(temp);
-          writeFileSync(join(bin, "python3"), `#!/bin/sh\nprintf '%s' "$FABRIKA_TYPECHECK_LOCK"\n`, { mode: 0o755 });
-          const ran = spawnSync("sh", [join(root, "scripts/typecheck.sh")], {
-            cwd: root,
-            encoding: "utf8",
-            timeout: 10_000,
-            env: {
-              ...process.env,
-              PATH: `${bin}:${process.env.PATH}`,
-              TMPDIR: temp,
-              FABRIKA_TYPECHECK_LOCK: undefined,
-              TYPESAFE_API_KEY: undefined,
-            },
-          });
-          expect(ran.status, ran.stderr).toBe(0);
-          expect(ran.stdout).toBe("/tmp/fabrika-typecheck.lock");
+          process.env["TMPDIR"] = temp;
+          // Imported here, so the other caps laws in this file run while the port is missing.
+          const { programOnTestLayers } = await import("./typecheck/test-helper.ts");
+          const ran = await programOnTestLayers({ TMPDIR: temp, PATH: process.env["PATH"] ?? "" });
+          expect(ran).toEqual({ code: 0, paths: ["/tmp/fabrika-typecheck.lock"] });
         } finally {
+          if (before === undefined) {
+            delete process.env["TMPDIR"];
+          } else {
+            process.env["TMPDIR"] = before;
+          }
+
           rmSync(dir, { recursive: true, force: true });
         }
       }),
@@ -234,10 +233,10 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 
             const start = (id: string, temp: string) => {
               mkdirSync(temp, { recursive: true });
-              const child = spawn("sh", [join(root, "scripts/typecheck.sh")], {
+              const child = spawn(process.execPath, [join(root, "scripts/typecheck.ts")], {
                 cwd: root,
                 detached: true,
-                stdio: "ignore",
+                stdio: ["ignore", "ignore", "pipe"],
                 env: {
                   ...process.env,
                   PATH: `${bin}:${process.env.PATH}`,
@@ -251,8 +250,14 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
                 },
               });
               children.push(child);
+              child.stderr!.on("data", (chunk: Buffer) => {
+                said.set(id, (said.get(id) ?? "") + chunk.toString());
+              });
               return child;
             };
+            // What each wrapper wrote to stderr. The waiting line, 1419's, is the sign that a
+            // wrapper has started and found the lock held (ticket 766, see below).
+            const said = new Map<string, string>();
             const until = async (test: () => boolean) => {
               const end = Date.now() + 3_000;
 
@@ -274,7 +279,15 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
             const second = start("b", ended === "group" ? temp : join(dir, `${suffix}-other`));
 
             if (ended !== "group") {
-              await new Promise((r) => setTimeout(r, 250));
+              // Ticket 766: a fixed 250 ms pause here passed with no lock at all once the wrapper
+              // became node, which reaches its first command about 600 ms after it starts (measured
+              // in a Linux box, 2026-11-16). So the law waits until b says it waits, or its compiler
+              // starts, whichever comes first.
+              await until(
+                () =>
+                  (said.get("b") ?? "").startsWith("typecheck: waiting for ") ||
+                  readFileSync(events, "utf8").includes("start b"),
+              );
               expect(readFileSync(events, "utf8"), "two fake compilers overlapped").toBe("start a\n");
               writeFileSync(join(dir, "release-a"), "");
 
@@ -890,7 +903,7 @@ exit 0
           mkdirSync(modules);
         }
 
-        const result = spawnSync("sh", [join(root, "scripts/typecheck.sh")], {
+        const result = spawnSync(process.execPath, [join(root, "scripts/typecheck.ts")], {
           cwd: work,
           encoding: "utf8",
           timeout: 10_000,
@@ -947,8 +960,8 @@ exit 0
   // controlled stand-ins. No real typecheck runs; overlapping wrappers must serialize their work.
   it("holds one typecheck lock through success, failure and an interrupted waiter", async () => {
     expect(
-      existsSync(join(root, "scripts/typecheck.sh")),
-      "typecheck.sh is absent, so typechecks have no shared lock",
+      existsSync(join(root, "scripts/typecheck.ts")),
+      "typecheck.ts is absent, so typechecks have no shared lock",
     ).toBe(true);
     await fc.assert(
       fc.asyncProperty(
@@ -976,7 +989,7 @@ exit 0
             const events = join(dir, "events");
             writeFileSync(events, "");
             const start = (id: string, code: number) => {
-              const child = spawn("sh", [join(root, "scripts/typecheck.sh")], {
+              const child = spawn(process.execPath, [join(root, "scripts/typecheck.ts")], {
                 cwd: root,
                 detached: true,
                 env: {
@@ -991,11 +1004,16 @@ exit 0
                   TEST_RELEASE: join(dir, `release-${id}`),
                   TYPESAFE_API_KEY: undefined,
                 },
-                stdio: "ignore",
+                stdio: ["ignore", "ignore", "pipe"],
               });
               children.push(child);
+              child.stderr!.on("data", (chunk: Buffer) => {
+                said.set(id, (said.get(id) ?? "") + chunk.toString());
+              });
               return child;
             };
+            // What each wrapper wrote to stderr; its waiting line, 1419's, says it found the lock held.
+            const said = new Map<string, string>();
             const until = async (test: () => boolean) => {
               const end = Date.now() + 3_000;
 
@@ -1008,7 +1026,15 @@ exit 0
             const first = start("a", code);
             await until(() => readFileSync(events, "utf8").includes("start a"));
             const second = start("b", 0);
-            await new Promise((r) => setTimeout(r, 100));
+            // Ticket 766: a fixed 100 ms pause passed with no lock at all once the wrapper became
+            // node, which reaches its first command about 600 ms after it starts, and a cancel then
+            // stopped a wrapper that had not yet reached the lock. So the law waits until b says it
+            // waits, or its compiler starts.
+            await until(
+              () =>
+                (said.get("b") ?? "").startsWith("typecheck: waiting for ") ||
+                readFileSync(events, "utf8").includes("start b"),
+            );
             expect(readFileSync(events, "utf8")).toBe("start a\n");
 
             if (cancel) {

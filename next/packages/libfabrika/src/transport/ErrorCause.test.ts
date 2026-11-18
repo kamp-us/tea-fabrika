@@ -1,18 +1,33 @@
 // T695, next/. The transport's WebCrypto edge and its passkey writer keep the failure they translate
-// (decision 0043 rule 12). Audit sites: `internal/binary.ts:81` (the one callback digest, importKey
+// (decision 0043 rule 12). Audit sites: `internal/binary.ts:106` (the one callback digest, importKey
 // and verify share) and `Webauthn.ts:176` (client data that does not decode). Each run makes its
-// own passkey and signs with it, so only the client data is damaged.
-import { describe, expect, it, vi } from "@effect/vitest";
+// own passkey and signs with it, so only the client data is damaged. A rejection is injected through
+// Effect's own `WebCrypto` reference with a stand-in `Crypto`, so nothing is spied on (0555, ticket
+// 1067 slice 1).
+import { describe, expect, it } from "@effect/vitest";
+import * as Arbitrary from "effect/Arbitrary";
+import * as WebCrypto from "effect/crypto/WebCrypto";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
+import { checkHello, helloText } from "./Hello.ts";
 import { subtle } from "./internal/binary.ts";
+import * as Rejecting from "./internal/rejecting.test-support.ts";
+import { digest, freshKey, write } from "./Sshsig.test-support.ts";
 import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 const RUNS = 100;
+
+const effectOptions = { arbitrary: { runs: RUNS } };
+
+const GeneratedFailure = Schema.TaggedUnion({
+  error: { message: Schema.String },
+  dom: { message: Schema.String },
+  object: { code: Schema.String, detail: Schema.Json },
+});
 
 /** A property over generated input, each run an Effect on the real code. */
 const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
@@ -23,13 +38,7 @@ const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effec
     ),
   );
 
-const failures: fc.Arbitrary<object> = fc.oneof(
-  fc.string().map((message) => new Error(message)),
-  fc.string().map((message) => new DOMException(message, "OperationError")),
-  fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
-);
-
-type Method = "digest" | "importKey" | "verify";
+type Method = Rejecting.Method;
 
 /** One WebCrypto call through the transport's edge, with arguments of the right shape. */
 const call = (method: Method, bytes: Uint8Array<ArrayBuffer>) => {
@@ -44,28 +53,36 @@ const call = (method: Method, bytes: Uint8Array<ArrayBuffer>) => {
   return subtle("verify", { name: "ECDSA", hash: "SHA-256" }, {} as CryptoKey, bytes, bytes);
 };
 
-/** A spy on one WebCrypto method that rejects with `failure`, restored when the Effect ends. */
+/** `work` on a WebCrypto whose one `method` rejects with `failure`; every other call is the real one. */
 const rejecting = <A, E>(method: Method, failure: object, work: Effect.Effect<A, E>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => vi.spyOn(crypto.subtle, method).mockRejectedValue(failure)),
-    () => work,
-    (spy) => Effect.sync(() => spy.mockRestore()),
-  );
+  work.pipe(Effect.provide(WebCrypto.layer(Rejecting.crypto(method, failure))));
 
 describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
-  // C5, internal/binary.ts:81. Plant: `const fail = () => WebCryptoError.make({})`.
-  law(
+  // C5, internal/binary.ts:106. Plant: `const fail = () => WebCryptoError.make({ cause: undefined })`.
+  // C5 injects its rejection through `WebCrypto.layer`, so C6's plant (read the global again) reds
+  // it too.
+  it.effect.prop(
     "C5: a generated rejection on any WebCrypto call is WebCryptoError with that very value as its cause",
-    fc.record({
-      steps: fc.array(
-        fc.record({ method: fc.constantFrom<Method>("digest", "importKey", "verify"), failure: failures }),
-        {
-          minLength: 1,
-          maxLength: 4,
-        },
+    {
+      steps: Arbitrary.array(
+        Arbitrary.all({
+          method: Arbitrary.schema(Schema.Literals(["digest", "importKey", "verify"])),
+          failure: Arbitrary.schema(GeneratedFailure).pipe(
+            Arbitrary.map(
+              GeneratedFailure.match({
+                error: ({ message }) => new Error(message),
+                dom: ({ message }) => new DOMException(message, "OperationError"),
+                object: ({ code, detail }) => ({ code, detail }),
+              }),
+            ),
+          ),
+        }),
+        { minLength: 1, maxLength: 4 },
       ),
-      bytes: fc.uint8Array({ maxLength: 65 }).map((b) => new Uint8Array(b)),
-    }),
+      bytes: Arbitrary.array(Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))), {
+        maxLength: 65,
+      }).pipe(Arbitrary.map((values) => new Uint8Array(values))),
+    },
     ({ steps, bytes }) =>
       Effect.gen(function* () {
         for (const { method, failure } of steps) {
@@ -76,6 +93,58 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
           expect(error._tag).toBe("WebCryptoError");
           expect((error as { readonly cause?: unknown }).cause).toBe(failure);
         }
+      }),
+    effectOptions,
+  );
+
+  // C6, internal/binary.ts:105: the edge reads the provided `WebCrypto`, never the global. A hello
+  // that passes every check before its fingerprint reaches `digest`, which the stand-in rejects, so
+  // `checkHello` fails with WebCryptoError carrying that rejection, and admission is never reached
+  // (its stand-in dies). Plant: read `globalThis.crypto.subtle` in `binary.ts` again; the real
+  // digest answers, the hello reaches admission, and the law dies there.
+  it.effect(
+    "C6 scenario: with a WebCrypto whose digest rejects, checkHello on a signed hello fails with WebCryptoError",
+    () =>
+      Effect.gen(function* () {
+        const url = "https://fabrika.test/project-a";
+        const tab = "tab-a";
+        const nonce = "nonce-a";
+        const key = yield* freshKey();
+        const signed = yield* write(key, helloText({ url, tab, nonce }));
+        const hash = yield* digest("SHA-256", key.publicKey);
+        const failure = new DOMException("digest refused", "OperationError");
+
+        const error = yield* Effect.flip(
+          rejecting(
+            "digest",
+            failure,
+            checkHello({
+              hello: {
+                versions: [2],
+                has: [],
+                ping: "30s",
+                key: Buffer.from(key.publicKey).toString("base64url"),
+                tab,
+                nonce,
+                platform: "browser",
+                os: "linux",
+                sentAt: "2026-11-08T04:00:00.000Z",
+                signed,
+              },
+              url,
+              tab,
+              nonce,
+              name: `SHA256:${Buffer.from(hash).toString("base64").replace(/=+$/, "")}`,
+              versions: [2],
+              ping: { min: 10_000, max: 60_000 },
+              consume: () => true,
+              admit: () => Effect.die("C6: admission must not be reached once digest is refused"),
+            }),
+          ),
+        );
+
+        expect(error._tag).toBe("WebCryptoError");
+        expect((error as { readonly cause?: unknown }).cause).toBe(failure);
       }),
   );
 });

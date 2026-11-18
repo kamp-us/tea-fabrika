@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-fieldrow-ts-and-py-differ-off-box-inputs",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/fieldrow.ts",
+    "line": 299
+  },
+  "says": "In today's lead tooling, fieldrow.ts gives a different row or exit from main's fieldrow.py on inputs box.sh never sends: an empty --step is written as step \"\" where Python leaves the step keys out, a token count written 5.0 or 1e2 is summed and a true is skipped where Python skips the first and counts true as 1, a --started ending in Z is refused, and an empty .redacted receipt is written as redacted 0 where Python fails.",
+  "proof": "git show origin/main:.agents/skills/lead/scripts/fieldrow.py into a scratch folder, then the same arguments to python3 -I fieldrow.py and node fieldrow.ts: --step \"\" gives no step key against \"step\":\"\"; usage {input_tokens:5.0,cached_input_tokens:0,output_tokens:1} gives \"billed\": null against \"billed\":6; --started 2026-11-16T17:05:00Z gives \"started\": \"2026-11-16T17:05:00+00:00\" against exit 1 'fieldrow: --started is not a time with an offset'; an empty receipt gives ValueError exit 1 against \"redacted\":0 exit 0. On 200 generated cases shaped as box.sh calls it, every row agreed.",
+  "cost": "A later caller that is not box.sh, or a row rebuilt from an odd events file, gets a different row than the script it replaced; the empty-receipt case records zero redactions where the count is unknown.",
+  "head": "8e0929db6a039bd030568eb03217072472850d97",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": "kamp-us/tea-fabrika#1517"
+}

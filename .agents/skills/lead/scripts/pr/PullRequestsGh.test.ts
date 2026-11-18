@@ -7,14 +7,14 @@ import * as PullRequestsGh from "./PullRequestsGh.ts";
 
 const text = { title: 'T1131: exact "title"', body: "First line.\n\nSecond line." };
 
-const handle = (code: number) =>
+const handle = (code: number, out = "https://github.com/owner/repo/pull/71\n") =>
   ChildProcessSpawner.makeHandle({
     pid: ChildProcessSpawner.ProcessId(1),
     exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(code)),
     isRunning: Effect.succeed(false),
     kill: () => Effect.die("fixture never signals a process"),
     stdin: Sink.drain,
-    stdout: Stream.make(new TextEncoder().encode("https://github.com/owner/repo/pull/71\n")),
+    stdout: Stream.make(new TextEncoder().encode(out)),
     stderr: Stream.empty,
     all: Stream.empty,
     getInputFd: () => Sink.drain,
@@ -29,6 +29,8 @@ const layers = (code: number) => {
 
   return Layer.merge(spawner, PullRequestsGh.layer("owner/repo", ".").pipe(Layer.provide(spawner)));
 };
+
+const commandArgs = (command: ChildProcess.StandardCommand) => command.args.map(String);
 
 describe("PullRequestsGh draft actor selection", () => {
   it.effect.prop(
@@ -48,7 +50,7 @@ describe("PullRequestsGh draft actor selection", () => {
 
         if (branch.startsWith("fabrikalfa/")) {
           expect(command.command).toBe("node");
-          expect(command.args).toEqual([
+          expect(commandArgs(command)).toEqual([
             expect.stringMatching(/\/botpush\.mjs$/),
             "--draft",
             "owner/repo",
@@ -64,7 +66,7 @@ describe("PullRequestsGh draft actor selection", () => {
           expect(yield* Stream.mkString(Stream.decodeText(input))).toBe(JSON.stringify(text));
         } else {
           expect(command.command).toBe("gh");
-          expect(command.args).toEqual([
+          expect(commandArgs(command)).toEqual([
             "pr",
             "create",
             "-R",

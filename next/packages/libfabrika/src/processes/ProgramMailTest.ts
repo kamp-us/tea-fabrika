@@ -43,6 +43,14 @@ import { ProcessManager } from "./ProcessManager.ts";
 import { type Grants, type MailRefusal, ProgramMail, ProgramMailError, type Receipt } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  land: {},
+  letter: {},
+  request: {},
+});
+
 /** One real store. `reopen` closes it and opens the same database again, keeping only its rows. */
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
@@ -154,17 +162,17 @@ type World = {
 
 /** Values Schema.Json refuses: a function, a bigint, a symbol, `undefined`. */
 const BAD: ReadonlyArray<() => object | undefined> = [
-  () => ({ type: "request", f: () => 1 }),
+  () => ({ ...Tag.cases.request.make({}), f: () => 1 }),
   () => [1n],
   () => undefined,
-  () => ({ type: "request", s: Symbol("x") }),
+  () => ({ ...Tag.cases.request.make({}), s: Symbol("x") }),
 ];
 
 const Cell = fc.record({
   move: fc.nat(),
   pick: fc.nat(),
   alt: fc.nat(),
-  m: fc.jsonValue({ maxDepth: 2 }).map((m) => copied({ type: "request", body: m })),
+  m: fc.jsonValue({ maxDepth: 2 }).map((m) => copied({ ...Tag.cases.request.make({}), body: m })),
   clock: fc.integer({ min: 0, max: 86_400_000 }),
   build: fc.constantFrom("build-a", "build-b", "build-c"),
   trace: fc.stringMatching(/^[0-9a-f]{32}$/),
@@ -487,7 +495,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           const changed =
             cell.alt % 2 === 0 || others.length === 0
-              ? { ...delivery, m: { type: "request", body: ["changed", delivery.m] } }
+              ? { ...delivery, m: { ...Tag.cases.request.make({}), body: ["changed", delivery.m] } }
               : { ...delivery, to: choose(others, cell.alt) };
 
           const answer = yield* deliver(changed);
@@ -613,6 +621,7 @@ const prop = (
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
+
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 40 }),
@@ -853,7 +862,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
                   name,
                   code: { program, hash: "build-a" },
                   requester: Recipient.cases.process.make({ process: self.process }),
-                  input: { type: "land", ref: `r${world.n}` },
+                  input: { ...Tag.cases.land.make({}), ref: `r${world.n}` },
                 },
                 from({ parent: parent() }),
               ),
@@ -1001,7 +1010,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
                 command: `${self.process}/${++world.n}/0`,
                 source: { name: source, process: self.process },
                 to,
-                m: { type: "request", ref: `m${world.n}` },
+                m: { ...Tag.cases.request.make({}), ref: `m${world.n}` },
                 from: from({ by: "SHA256:program-writer", parent: parent() }),
               }),
             ),
@@ -1048,7 +1057,7 @@ const acked = (name: string) => `processes/${name}/acked`;
 const CapCell = fc.record({
   move: fc.nat(),
   pick: fc.nat(),
-  m: fc.jsonValue({ maxDepth: 1 }).map((m) => copied({ type: "letter", body: m })),
+  m: fc.jsonValue({ maxDepth: 1 }).map((m) => copied({ ...Tag.cases.letter.make({}), body: m })),
 });
 
 type CapCell = typeof CapCell extends fc.Arbitrary<infer A> ? A : never;
@@ -1292,6 +1301,7 @@ const capLaw = (
         const scoped = (cap: number, tape: Iterable<fc.AsyncCommand<object, CapWalk>>) => Effect.scoped(law(cap, tape));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each walk
         const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => runPromise(scoped(cap, tape)));
+
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 50 }),
@@ -1368,6 +1378,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
           const property = fc.asyncProperty(FamilyTape, (tape) => runPromise(Effect.scoped(law(tape))));
+
           const checks = {
             seed: SEED,
             // Every relation the law names must be mailed across: 60 walks miss some at this seed.

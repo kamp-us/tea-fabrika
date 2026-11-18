@@ -54,10 +54,10 @@ return Effect.gen(function* () {
 }).pipe(Effect.provide(m.layer));
 ```
 
-`Recorder.layer(Service, impl, { fails })` (`next/packages/vitest/src/Recorder.ts:212`) provides
+`Recorder.layer(Service, impl, { fails })` (`next/packages/vitest/src/Recorder.ts:215`) provides
 the service and records each run of its effectful members as `{ method, args }`. `impl` has the type
 Effect's `Layer.mock` takes, `Layer.PartialEffectful<S>`, and the Recorder hands it to `Layer.mock`
-(`Recorder.ts:219`), so a member the law leaves out dies with `UnimplementedError` when used, and
+(`Recorder.ts:222`), so a member the law leaves out dies with `UnimplementedError` when used, and
 is not recorded (law R10, `next/packages/vitest/src/Recorder.test.ts:276`). So `fails` may name
 only a method `impl` gives, and a member `impl` names that the service lacks does not compile (law
 R17, `next/packages/vitest/src/Recorder.types.test.ts:126`, and R18 on the call as a law writes it,
@@ -66,11 +66,11 @@ R17, `next/packages/vitest/src/Recorder.types.test.ts:126`, and R18 on the call 
 the whole `impl` would then miss what it left out.
 
 - **A call is a run.** The record is written when the Effect runs, not when the method is called
-  (`Recorder.ts:174`). An Effect built and dropped leaves no record, one retried leaves two, and one
+  (`Recorder.ts:177`). An Effect built and dropped leaves no record, one retried leaves two, and one
   that never ends is recorded at its start (law R8, `Recorder.test.ts:210`). A Stream method is
-  recorded when its stream starts (`Recorder.ts:195`).
+  recorded when its stream starts (`Recorder.ts:198`).
 - **`fails` is a record of error values,** one per method, each of that method's own error type
-  (`Recorder.Fails`, `Recorder.ts:93`). A named method is recorded, then fails with that very value,
+  (`Recorder.Fails`, `Recorder.ts:96`). A named method is recorded, then fails with that very value,
   and the implementation's Effect or Stream is not run. A method that cannot fail cannot be named
   (law R3, `next/packages/vitest/src/Recorder.types.test.ts:71`). A test layer that switched
   failures by hand takes `Recorder.Fails<S>` as its `Failing` type, as `PushesTest.ts:17` does.
@@ -84,6 +84,60 @@ the whole `impl` would then miss what it left out.
   `FileSystem.makeNoop(...)` in `Recorder.layer` (`Command.test.ts:97`), and types its list of write
   methods as `Recorder.Method<FileSystem.FileSystem>` (`Command.test.ts:66`), so a misspelled name
   does not compile.
+
+## Two cases where the law does not write `impl` itself
+
+**The real service, recorded.** When a law needs the real implementation to run and only wants to
+see its calls, the impl is the built service itself. It exists only inside an Effect, so the law
+reads it there and turns it into the Recorder's layer with `Layer.unwrap`:
+
+```ts
+// next/apps/fabrika/src/door.integration.test.ts:3083-3086, :3127 and :3129
+const clients = Layer.unwrap(
+  ClientManager.pipe(Effect.map((real) => Recorder.layer(ClientManager, real))),
+).pipe(Layer.provide(w.env));
+// ...
+expect(yield* Recorder.calls(ClientManager, "write")).toEqual([]);
+// ...
+}).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, clients)))));
+```
+
+A whole service is a `Layer.PartialEffectful` of itself, so it passes as `impl` with no wrapper,
+and every member still runs the real code: the Recorder's proxy calls the member on the real object
+(`next/packages/vitest/src/Recorder.ts:191`). `clients` comes after `w.env` in the merge, so the
+code under test gets the recorded `ClientManager`. The worse version this stops is a hand wrap,
+`{ ...real, write: (...args) => { called(); return real.write(...args); } }` with a `vi.fn`: it
+records one method, with `any` args, and a method added later is not wrapped.
+
+**Code that provides its own layers.** When the code under test builds its layers itself, such as
+an entry file that reads a layer the law sets and provides it, the law's own provide would build the
+Recorder a second time. Each build makes a new store (`Recorder.ts:221`), so the law would read an
+empty list from its own build and miss every call. The law builds the Recorder once, in a scope,
+and hands the built context to the code with `Layer.succeedContext`, then reads the calls from that
+same context with `Effect.provideContext`:
+
+```ts
+// next/apps/fabrika/src/file-services.laws.integration.test.ts:86-101, trimmed
+Effect.scoped(
+  Effect.gen(function* () {
+    const files = yield* Layer.build(
+      Recorder.layer(FileSystem.FileSystem, FileSystem.makeNoop({ makeDirectory: () => Effect.never })),
+    );
+    cli.layer = Layer.merge(Layer.succeedContext(files), Path.layer);
+    vi.resetModules();
+    yield* Effect.promise(() => import("../dev.ts"));
+    instanceFailure(yield* Effect.exit(cli.work!), "parent_gone");
+    expect(
+      yield* Recorder.calls(FileSystem.FileSystem, "makeDirectory").pipe(Effect.provideContext(files)),
+    ).toEqual([]);
+  }),
+);
+```
+
+`cli.layer` is the hoisted slot the file's `@effect/platform-node` stand-in hands to `dev.ts` as
+`NodeServices.layer` (`file-services.laws.integration.test.ts:30-46`). However many times `dev.ts`
+provides it, `Layer.succeedContext` builds nothing new, so there is one store. The scope keeps the
+built context alive until the law has read it, and closes it after.
 
 ## Where it applies
 

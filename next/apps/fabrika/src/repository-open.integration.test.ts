@@ -38,6 +38,7 @@ const inheritedPath = Effect.suspend(() =>
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
   const PATH = yield* inheritedPath;
+
   return Str.trim(
     yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
       ChildProcess.make("git", [...args], {
@@ -163,6 +164,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
           process.platform === "darwin"
             ? ["-q", "/dev/null", process.execPath, ...argv]
             : ["-q", "-e", "-c", Arr.join(Arr.map([process.execPath, ...argv], quote), " "), "/dev/null"];
+
         // Node's stdin is a socket pair. A shell pipeline gives script a real pipe on both hosts.
         // The scoped spawner owns the shell's process group, including cat, script and dev.
         const child = yield* ChildProcess.make(

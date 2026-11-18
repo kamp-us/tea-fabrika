@@ -29,6 +29,7 @@ import {
   ProcessEvent,
   processTableFor,
   Recipient,
+  Recorded,
   signalId,
   Start,
   State,
@@ -421,6 +422,7 @@ const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Ar
 
 const led = (word: string) => {
   const lead = Str.slice(0, -1)(JSON.stringify([word]));
+
   return (id: string): boolean =>
     Str.startsWith(lead)(id) || Option.exists(decodeIdParts(id), (parts) => parts[0] === word);
 };
@@ -485,7 +487,7 @@ export class ProcessTable {
     let model = base === undefined ? this.#machine.init(null, undefined)[0] : base.#model;
 
     for (const entry of entries) {
-      model = applyCell(this.#machine, model, { type: "recorded", entry })[0];
+      model = applyCell(this.#machine, model, Recorded.make({ entry }))[0];
     }
 
     this.#model = model;

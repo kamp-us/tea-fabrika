@@ -1,6 +1,7 @@
 // T878, next/, L5/L6. Shared laws take a scoped real SQL driver (0062).
 // No second trust reducer lives here: the opening machine consumes these saved events.
 import { describe, expect, it } from "@effect/vitest";
+import * as LoadSnapshot from "@kalfa/config/Snapshot";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Arr from "effect/Array";
@@ -23,11 +24,19 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { Appended, Entry as EntrySchema, type Entry, type Line } from "../ledger/Log.ts";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Sources from "../settings/Fabrika.ts";
-import * as LoadSnapshot from "../settings/Snapshot.ts";
 import type { Sql } from "../Sql.ts";
 import * as Open from "./Open.ts";
 import { Event, RepositoryTrust, TrustDecision } from "./RepositoryTrust.ts";
 import * as RepositoryTrustLedger from "./RepositoryTrustLedger.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  checked: {},
+  history: {},
+  saved: {},
+  select: {},
+});
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
@@ -182,9 +191,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       { key, person: otherPerson, events: otherIdentity, known: false },
                     ]) {
                       const session = yield* Open.session();
-                      yield* session.send({ type: "select", selection: reopened });
+                      yield* session.send({ ...Tag.cases.select.make({}), selection: reopened });
                       yield* session.send({
-                        type: "checked",
+                        ...Tag.cases.checked.make({}),
                         selection: reopened,
                         snapshot: {
                           repository: repoId,
@@ -200,7 +209,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       });
 
                       const state = yield* session.send({
-                        type: "history",
+                        ...Tag.cases.history.make({}),
                         selection: reopened,
                         events: candidate.events,
                       });
@@ -209,7 +218,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
 
                       if (state._tag === "saving") {
                         const ready = yield* session.send({
-                          type: "saved",
+                          ...Tag.cases.saved.make({}),
                           selection: reopened,
                           request: reopened,
                           receipt: first,

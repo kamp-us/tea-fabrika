@@ -1,13 +1,13 @@
 /**
  * The quota settings as a Worker reads them from a settings snapshot.
  */
+import * as Snapshot from "@kalfa/config/Snapshot";
 import * as ByteSize from "effect/ByteSize";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type { Allowance, Limits } from "../processes/Quotas.ts";
 import * as Declarations from "../settings/Declarations.ts";
-import * as Snapshot from "../settings/Snapshot.ts";
 
 type Declared = {
   readonly writes: (typeof Declarations.writes.schema)["Type"];
@@ -38,6 +38,7 @@ export const read = Effect.fn("quota_settings.read")(function* (input: unknown) 
   const saved = yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(Effect.mapError(refused));
   const checked = yield* Snapshot.read(Declarations.all, saved);
   const { writes, storage, recovery } = checked.values;
+
   return { writes, storage, recovery };
 });
 
@@ -60,5 +61,6 @@ export const limits = (declared: Declared): Limits => ({
  */
 export const instance = Effect.fn("quota_settings.instance")(function* (text: unknown) {
   const config = yield* Schema.decodeUnknownEffect(Instance)(text).pipe(Effect.mapError(refused));
+
   return limits(yield* read(config.settings));
 });

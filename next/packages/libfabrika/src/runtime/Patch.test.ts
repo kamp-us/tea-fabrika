@@ -30,6 +30,7 @@ const independentApply = (before: unknown, patches: ReadonlyArray<Patch>): unkno
     const keys = Arr.map(Str.split(Str.slice(1)(patch.path), "/"), (s) =>
       Str.replaceAll("~0", "~")(Str.replaceAll("~1", "/")(s)),
     );
+
     let object = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -242,10 +243,12 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
           // The unsafe key at a path this value holds, as the last token or with one more below it.
           const all = paths(before);
           const at = [...all[pick % all.length]!, unsafe, ...(last ? [] : ["polluted"])];
+
           const path = `/${Arr.join(
             Arr.map(at, (k) => Str.replaceAll("/", "~1")(Str.replaceAll("~", "~0")(k))),
             "/",
           )}`;
+
           const copy = structuredClone(before);
           const got = apply(before, [op === "remove" ? { op, path } : { op, path, value }]);
           expect(Result.isFailure(got), `${op} ${path}`).toBe(true);

@@ -207,6 +207,7 @@ it.effect.prop(
         // The final record names no phase and keeps the rest it is given.
         const final = yield* progress.done({ groups: [1] });
         expect(final).toEqual({ guardMs, phase: null, ...model });
+
         const written = yield* fs
           .readFileString(file)
           .pipe(
@@ -216,6 +217,7 @@ it.effect.prop(
               ),
             ),
           );
+
         expect(written).toEqual({ groups: [1], phase: null });
       }
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -236,6 +238,7 @@ it.live.skipIf(!enabled)(
       // plant for the exit half is a guard that exits 3 before ready: the check then fails with
       // `guard-exited-3` in well under the stop timeout, and this law never reaches here.
       expect(Number.isInteger(result.guardMs) && result.guardMs >= 0).toBe(true);
+
       const recorded = yield* Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem,
           path = yield* Path.Path;

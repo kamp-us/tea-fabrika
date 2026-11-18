@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t766-port-typecheck-review2",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-18T08:14:24-08:00",
+  "ended": "2026-11-18T08:22:30-08:00",
+  "parent": "2026-11-17-t766-n6-macos-vectors-tests",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "outcome": "fail",
+  "why": "Today's tooling. This was a fresh whole-diff review of the typecheck port at 593cb3bed7126b5c55c65420a625603fe1c857c7, which has the same tree as 48b9dbfb. It is sent to tests, for one fix round of tests then build, with one blocking class: the running-child guard (<lock>.child) can be written or removed by a process that does not own the label, so two live holders still happen. This is the same class as the release bug that the 2026-11-17 amendment fixed, reached through two other ways in. (a) scripts/typecheck/LocksFile.ts:191-199: Held.running writes and removes .child with no check of who owns the label. The program calls it at each command's start and end (scripts/typecheck/CommandsProcess.ts:45 and :50), so a displaced holder stamps on the next holder's guard. A scratch walk on the test file's own moves ran take 501, take 502, old writes over 501, old ends, kill 502 with its command running, then 501 starts and ends a command, then take 503. It printed 'after take 503: two live holders, 502 and 503'. N3 cannot reach this, because it calls Held.running only inside the kill move, never for a live holder. (b) scripts/typecheck/LocksFile.ts:121-127: the breaker removes the label first and .child second. A taker that links the lock between the two removes and writes its child guard loses that guard. A scratch scenario, ordered by a Deferred gate, then killed that taker's wrapper: the breaker took the lock while the taker's command 703 still ran. Both cases go green in a scratch copy of LocksFile.ts in which running first checks that the label still names this process and the breaker removes .child before the label; all seven lock-file tests then passed. Both earlier faults are fixed with a law that reaches each one: N7 goes red when the direct remove of a stale .break is put back, and the pinned displaced-holder regression goes red when release's ownership guard is dropped (N3 at its 100-case fast count stays green under that plant). The rest holds. The .oxlintrc.json merge keeps every main line and names the same port globs per block as the branch side, the zero lock's audit prints 0 lines at this head, and L2 repeats the lead-tooling list exactly. E1 and E6 hold the same or more. 0602 removes the plan's 'CI's full run on the branch' for I1 to I6 and N5; the lead's run of them in this disposable container at this head meets 0178. The head now conflicts with origin/main d480d876 (pull request 1583) in .oxlintrc.json and oxlint-plugins/anti-slop.ts.",
+  "plants": [
+    {
+      "law": "scripts/typecheck-lock.test.ts pinned displaced-holder regression",
+      "plant": "release removes .child whatever the label names (ownership guard dropped), in a scratch copy of LocksFile.ts",
+      "result": "red"
+    },
+    {
+      "law": "scripts/typecheck-lock.test.ts N3 (fast, 100 runs)",
+      "plant": "the same release plant",
+      "result": "green"
+    },
+    {
+      "law": "scripts/typecheck-lock.test.ts N7",
+      "plant": "a stale .break removed directly in place of breakStale(breaker), in a scratch copy",
+      "result": "red"
+    },
+    {
+      "law": "scripts/typecheck-lock.test.ts N2",
+      "plant": "judge drops the start-time check (running always holds), in a scratch copy of Look.ts",
+      "result": "red"
+    },
+    {
+      "law": "scripts/typecheck-lock.test.ts N3 and N4",
+      "plant": "none needed: scratch scenarios A (a displaced holder's command start and end) and B (a take between the breaker's two removes) gave two live holders on the product as it is",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "driver_caused": false,
+  "note": "Read-only apart from this row. Ran in a disposable cloud container on Node 26.13.0 with TYPESAFE_API_KEY unset, nice 19 and maxWorkers 1, one file at a time. The plants and the two scenarios ran in an untracked scratch copy (scripts/zz-review-scratch.test.ts, scripts/typecheck/zzLocksFile.ts and zzLook.ts), never in a tracked file, and were deleted; git status was clean after. The zero lock's audit() ran alone over oxlint --print-config: 0 lines. No pnpm typecheck, no real-signal test and no full suite were run. loosening.sh from the merge base gives 14 hits: the two removed expects are E1 and E6, which hold the same or more, and the rest are renamed paths or added globs. git merge-tree of 48b9dbfb with origin/main d480d876 conflicts in .oxlintrc.json and oxlint-plugins/anti-slop.ts.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "step": "review",
+  "head": "593cb3bed7126b5c55c65420a625603fe1c857c7"
+}

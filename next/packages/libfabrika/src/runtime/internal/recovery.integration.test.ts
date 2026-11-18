@@ -224,6 +224,7 @@ describe("T319, next/ dead-letter identity", () => {
 
             for (const started of w.starts) {
               const other = Option.getOrThrow(Arr.findFirst(w.starts, (s) => s.name !== started.name));
+
               const forged = {
                 ...h.input,
                 _tag: "dead" as const,

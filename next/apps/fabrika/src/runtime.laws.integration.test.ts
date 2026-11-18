@@ -47,6 +47,15 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  approve: {},
+  prepare: {},
+  throw: {},
+  inc: {},
+});
+
 class ReopenError extends Schema.TaggedError<ReopenError, { readonly brand: unique symbol }>()("ReopenError", {
   message: Schema.String,
   cause: Schema.Defect(),
@@ -252,6 +261,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
         const owned = () =>
           descriptors.get(storageKey) ??
           Option.getOrUndefined(Arr.findLast([...descriptors.values()], (d) => d.name === storageKey));
+
         return {
           configure: async (descriptor: Descriptor) => {
             if (options.callback === true) {
@@ -282,6 +292,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
       getByName: () => ({
         write: async (_chain: unknown, _part: number, rows: ReadonlyArray<{ span: SpanRow }>) => {
           recorded.push(...Arr.map(rows, (row) => row.span));
+
           return { _tag: "written" };
         },
       }),
@@ -292,7 +303,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
         getEntrypoint: () => ({
           audit: async (message: unknown) =>
             Audit.Answer.cases.ok.make({
-              value: Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(message),
+              value: Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.String }))(message),
             }),
           describe: async () =>
             Str.startsWith(`${approvalCode.hash}/`)(id)
@@ -410,8 +421,8 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
           ),
         )
       ).process,
-    send: (pid: string, type: string, letter = type) =>
-      run(p.route(client, "process.send", { pid, letter, m: { type }, sentAt: SENT, seen: 0 })),
+    send: (pid: string, type: "throw" | "inc" | "prepare" | "approve", letter: string = type) =>
+      run(p.route(client, "process.send", { pid, letter, m: Tag.cases[type].make({}), sentAt: SENT, seen: 0 })),
     revoke: async () => {
       const text = revokeText({
         id: "revoke-1",
@@ -551,6 +562,7 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
       Arr.filter(list, (p) => p.program !== "fabrika/counter"),
       (p) => ({ name: p.name, program: p.program }),
     );
+
   let refused = 0;
   expect(Arr.map(w.configured, (d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
@@ -1017,6 +1029,7 @@ describe("P12 Connection recording", () => {
       try {
         const gateway = await runtime.runPromise(ConnectionService),
           before = w.recorded.length;
+
         const actions: Record<typeof operation, () => Effect.Effect<unknown, unknown>> = {
           ring: () => gateway.ring("events", rev),
           probe: () => gateway.probe("session-test"),
@@ -1030,6 +1043,7 @@ describe("P12 Connection recording", () => {
               }),
             ),
         };
+
         await runtime.runPromise(Effect.exit(actions[operation]()));
         const rows = w.recorded.slice(before);
         expect(Arr.some(rows, (row) => row.name === `connection.${operation}`)).toBe(true);

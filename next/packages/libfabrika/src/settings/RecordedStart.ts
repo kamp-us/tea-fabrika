@@ -2,9 +2,9 @@
  * The proof that one instance start is on record. This file is the contract only. The layer that
  * records the start is `cloudflare/SettingsRecorded.ts`.
  */
+import type * as Snapshot from "@kalfa/config/Snapshot";
 import { type Config, Context } from "effect";
 import type * as Declarations from "./Declarations.ts";
-import type * as Snapshot from "./Snapshot.ts";
 import type * as Start from "./Start.ts";
 
 /**

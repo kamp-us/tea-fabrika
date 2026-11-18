@@ -122,7 +122,7 @@ const declaration = (f: Fixture) => {
 
   const machine = Machine.make({
     model,
-    msg: Schema.Struct({ type: Schema.Literal("inc") }),
+    msg: Schema.TaggedStruct("inc", {}),
     cmds: [],
     init: (kept) => [kept ?? { count: 0 }, []],
     update: { inc: (s) => [{ count: s.count + f.k }, []] },

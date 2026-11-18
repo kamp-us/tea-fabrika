@@ -347,6 +347,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             [...world.watches.entries()].filter(([, w]) => w.live),
             step.pick,
           );
+
           const ref = Arr.lastNonEmpty(Str.split(key, "|"));
           const caller = watch.to._tag === "client" ? brain() : watcher(watch.to.process);
           const answer = yield* as(caller, (p) => p.demonitor(ref, from()));

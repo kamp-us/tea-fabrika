@@ -14,11 +14,11 @@
 //   `settings/TomlParser.ts` imports the parser. oxlint's own `no-restricted-imports` says so.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
+import * as JsonSchema from "@kalfa/config/JsonSchema";
+import * as Reference from "@kalfa/config/Reference";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Setting from "@kampus/libfabrika/settings/Fabrika";
-import * as Files from "@kampus/libfabrika/settings/Files";
-import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
-import * as Reference from "@kampus/libfabrika/settings/Reference";
 import {
   Array as Arr,
   String as Str,
@@ -176,7 +176,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
 });
 
 // L9's callers: where an import sits, and whether it may take the TOML adapter or the parser.
-const ADAPTER = "next/packages/libfabrika/src/settings/TomlParser.ts";
+const ADAPTER = "kalfa/config/src/TomlParser.ts";
 
 const RULE = "eslint(no-restricted-imports)";
 
@@ -237,11 +237,14 @@ const target = fc.constantFrom("package", "relative", "relative-bare", "parser",
 /** The relative import spelling from one repo file to another, as `../../packages/x.ts`. */
 const relative = (from: string, to: string) => {
   const [a, b] = [Str.split(from, "/").slice(0, -1), Str.split(to, "/")];
+
   const n = Option.getOrElse(
     Arr.findFirstIndex(a, (s, i) => s !== b[i]),
     () => a.length,
   );
+
   const rest = Arr.join(b.slice(n), "/");
+
   return a.length === n ? `./${rest}` : `${Str.repeat(a.length - n)("../")}${rest}`;
 };
 
@@ -256,7 +259,7 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
             Arr.filter(cases, ([c, t]) => !(c.file === ADAPTER && t !== "parser" && t !== "parser-subpath")),
             ([c, t]) => {
               const spec = Match.value(t).pipe(
-                Match.when("package", () => "@kampus/libfabrika/settings/TomlParser"),
+                Match.when("package", () => "@kalfa/config/TomlParser"),
                 Match.when("relative", () => relative(c.file, ADAPTER)),
                 Match.when("relative-bare", () => Str.replace(/\.ts$/, "")(relative(c.file, ADAPTER))),
                 Match.when("parser", () => "toml-eslint-parser"),
@@ -268,6 +271,7 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
               return { file: c.file, spec, allowed };
             },
           );
+
           fc.pre(planted.length > 0);
 
           const result = await plant(

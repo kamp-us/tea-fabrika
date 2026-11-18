@@ -28,8 +28,11 @@ export const at = (name: string): string => readFileSync(join(VECTORS, name), "u
 export const text = at("text.txt");
 
 export const goodSig = at("good.sig");
+
 export const signer = Str.trim(at("signer.pub"));
+
 export const other = Str.trim(at("other.pub"));
+
 export const ecdsa = Str.trim(at("ecdsa.pub"));
 
 export const check = (armored: string, signers: ReadonlyArray<string>, body: string = text) =>
@@ -45,6 +48,7 @@ export const join8 = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
 
     return offset + p.length;
   });
+
   return out;
 };
 
@@ -233,6 +237,7 @@ const fromSigner = Effect.fnUntraced(function* (
   sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array>,
 ): Effect.fn.Return<Identity> {
   const blob = keyBlob(publicKey);
+
   const fingerprint = (bytes: Uint8Array) =>
     digest("SHA-256", bytes).pipe(Effect.map((hashed) => `SHA256:${Str.replace(/=+$/, "")(base64(hashed))}`));
 

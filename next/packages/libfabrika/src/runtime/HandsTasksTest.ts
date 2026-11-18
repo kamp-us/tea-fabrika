@@ -121,6 +121,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
 
     for (const cell of tape.cells) {
       const waiting = Arr.filter([...saved.entries()], ([, s]) => s.phase === "requested");
+
       const can: Record<Move, boolean> = {
         ask: true,
         change: life + 1 < tape.targets.length,

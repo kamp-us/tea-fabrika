@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-crypto-pattern-cites-stale-id-lines",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".patterns/effect-crypto-through-services.md",
+    "line": 52
+  },
+  "says": "The crypto pattern doc cites Id.makeGenerator at Id.ts:170-175 and Id.Generator.layer at Id.ts:226-228, but on the slice's head those lines are the end of the advance step and the Generator class header; makeGenerator and its randomBytes(10) draw are at Id.ts:177-182 and the layer at Id.ts:233-235, because the main merge 135df3c1e put Id.ts on main's one-import-per-module style and moved every line down by 7.",
+  "proof": "On fabrikalfa/mock-lib-top-s1 at bc53c8553, grep -n 'export const makeGenerator|randomBytes(10)|static readonly layer' next/packages/libfabrika/src/Id.ts prints 177, 182 and 233; the same grep on the build commit 5c6f381e7 prints 170, 175 and 226, the numbers the doc carries at lines 52 and 55.",
+  "cost": "A reader who follows the pattern doc's line links lands on the wrong code; the doc says the source wins, so it misleads until the two numbers are changed to Id.ts:177-182 and Id.ts:233-235.",
+  "head": "bc53c8553aae502f43ce666a8baad7f53fe800db",
+  "ticket": null,
+  "pr": null
+}

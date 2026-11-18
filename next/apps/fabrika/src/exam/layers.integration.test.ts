@@ -234,6 +234,7 @@ describe("the real rule file on planted trees", () => {
       expect(runTool(tree, REAL)).toMatchObject({ edges: walls, unclaimed: [], status: 1 });
 
       const store = `${LIB}/runtime/ProcessStore.ts`;
+
       const moved = Arr.map(REAL.layers, (row) =>
         row.name === "next-runtime-coordination" ? { ...row, paths: Arr.filter(row.paths, (p) => p !== store) } : row,
       );
@@ -268,6 +269,7 @@ describe("the real rule file on planted trees", () => {
           ]),
         ),
       });
+
       expect(runTool(tree, REAL).edges).toEqual(
         Arr.map(lower, (module) => `${LIB}/${module}/Up.ts -> next-door [upward]`),
       );
@@ -451,12 +453,14 @@ describe("the real rule file on planted trees", () => {
         Arr.findFirstIndex(REAL.layers, (row) => row.name === "next-node"),
         () => new Error("the real layer rules have a next-node row"),
       );
+
       const below = [
         ...REAL.layers.slice(0, 1),
         ...REAL.layers.slice(node, node + 2),
         ...REAL.layers.slice(1, node),
         ...REAL.layers.slice(node + 2),
       ];
+
       expect(Arr.map(below, (row) => row.name).slice(0, 4)).toEqual([
         "next-apps",
         "next-node",
@@ -563,6 +567,7 @@ describe("the real rule file on planted trees", () => {
     REAL.layers,
     (row) => row.layer !== undefined && Arr.every(row.paths, (p) => pipe(p, Str.startsWith(LIB))),
   );
+
   const probe = (row: Row): string => {
     const first = row.paths[0] ?? "";
 
@@ -573,6 +578,7 @@ describe("the real rule file on planted trees", () => {
     const ranks = new Map(
       Arr.flatMap(rows, (row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])),
     );
+
     return Arr.flatMap(SRC_ROWS, (from) =>
       Arr.flatMap(SRC_ROWS, (to): ReadonlyArray<Edge> => {
         const [a, b] = [ranks.get(from.name), ranks.get(to.name)];
@@ -596,6 +602,7 @@ describe("the real rule file on planted trees", () => {
                 Arr.filter((other) => other.name !== row.name),
                 Arr.map((other, n) => {
                   const spec = relative(dirname(probe(row)), probe(other));
+
                   return `import * as m${n} from "${pipe(spec, Str.startsWith(".")) ? spec : `./${spec}`}";`;
                 }),
               ),
@@ -633,6 +640,7 @@ describe("the real rule file on planted trees", () => {
       const runtime =
         Option.getOrUndefined(Arr.findFirst(REAL.layers, (row) => row.name === "next-runtime"))?.layer ??
         expect.fail("the runtime has a layer");
+
       const beside = Arr.map(REAL.layers, (row) => (row.name === "next-access" ? { ...row, layer: runtime } : row));
       const before = rowEdges(realTree, REAL);
       const after = rowEdges(realTree, { ...REAL, layers: beside });
@@ -667,6 +675,7 @@ describe("the real rule file on planted trees", () => {
       "next-client": 7, // P18: the window client, beside the door
       "next-door": 7,
       "next-runtime": 6,
+      "next-email": 6, // P36's approved plan: email sits beside the runtime, above access
       "next-access": 5,
       "next-tezgah": 5, // Desk S2a: above `processes/`, whose `ProcessName` it takes, and below the client
       "next-processes": 4,
@@ -681,6 +690,7 @@ describe("the real rule file on planted trees", () => {
       "next-repositories": 2,
       "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
       "next-telemetry": 1,
+      "kalfa-config": 1, // kalfa-config-PLAN.md:318: it imports next-vitest (0), and next-settings (2) imports it
       "next-shared": 0,
       "next-vitest": 0, // 0538: the test primitives, a package of their own below everything else of ours
     });
@@ -717,6 +727,7 @@ describe("the real rule file on planted trees", () => {
     };
 
     const now = layersByName(REAL.layers);
+
     const changed = Arr.flatMap(Rec.toEntries(main), ([a, before]) =>
       Arr.flatMap(Rec.toEntries(main), ([b, other]) => {
         const [after, then] = [now.get(a), now.get(b)];
@@ -742,6 +753,7 @@ describe("the real rule file on planted trees", () => {
       REAL.layers,
       (row) => row.imports === undefined && Arr.some(row.paths, (p) => pipe(p, Str.startsWith("next/"))),
     );
+
     expect(
       Arr.filter(open, (row) => Arr.some(row.paths, (p) => pipe(p, Str.startsWith("next/packages/libfabrika")))),
     ).toEqual([]);

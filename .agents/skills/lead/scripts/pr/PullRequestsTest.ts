@@ -1,15 +1,7 @@
 import { Array as Arr, Effect, Layer, Option, Schema } from "effect";
 // PullRequestsTest.layer: the PullRequests service in memory, on one list of pull requests that its
 // writes change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
-import {
-  type Detail,
-  type MergeQueue,
-  type Patch,
-  type PullRequest,
-  PullRequests,
-  PullRequestsError,
-  type Stack,
-} from "./PullRequests.ts";
+import { type Detail, type Patch, type PullRequest, PullRequests, PullRequestsError } from "./PullRequests.ts";
 
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
@@ -19,7 +11,6 @@ export const Call = Schema.TaggedUnion({
   enqueue: { number: Schema.Finite, oid: Schema.String },
   arm: { number: Schema.Finite, oid: Schema.String },
   admin: { number: Schema.Finite, oid: Schema.String },
-  stack: { top: Schema.Finite, heads: Schema.Array(Schema.Struct({ number: Schema.Finite, oid: Schema.String })) },
 });
 
 export type Call = typeof Call.Type;
@@ -27,20 +18,7 @@ export type Call = typeof Call.Type;
 /** The calls that fail with a reason, by name. */
 export type Failing = Partial<
   Record<
-    | "openOn"
-    | "all"
-    | "draft"
-    | "edit"
-    | "ready"
-    | "view"
-    | "enqueue"
-    | "files"
-    | "patches"
-    | "arm"
-    | "admin"
-    | "stack"
-    | "mergeQueue"
-    | "mergeStack",
+    "openOn" | "all" | "draft" | "edit" | "ready" | "view" | "enqueue" | "files" | "patches" | "arm" | "admin",
     string
   >
 >;
@@ -57,10 +35,6 @@ export type World = {
   readonly files: Map<number, ReadonlyArray<string>>;
   /** The diff hunks of each file a pull request changes, by number: none when absent. */
   readonly patches: Map<number, ReadonlyArray<Patch>>;
-  /** The repo's open native stacks. */
-  readonly stacks: Array<Stack>;
-  /** The merge queue on each branch, by branch: none when absent. */
-  readonly queues: Map<string, MergeQueue>;
 };
 
 /** A fresh world over these pull requests; the layer reads and changes it in place. */
@@ -70,8 +44,6 @@ export const world = (prs: ReadonlyArray<PullRequest> = []): World => ({
   more: new Map(),
   files: new Map(),
   patches: new Map(),
-  stacks: [],
-  queues: new Map(),
 });
 
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests> => {
@@ -138,12 +110,6 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
       admin: (number, oid) =>
         Effect.map(fails("admin"), () => {
           w.calls.push(Call.cases.admin.make({ number, oid }));
-        }),
-      stack: (number) => Effect.map(fails("stack"), () => Arr.findFirst(w.stacks, (s) => Arr.contains(s.prs, number))),
-      mergeQueue: (branch) => Effect.map(fails("mergeQueue"), () => Option.fromUndefinedOr(w.queues.get(branch))),
-      mergeStack: (top, heads) =>
-        Effect.map(fails("mergeStack"), () => {
-          w.calls.push(Call.cases.stack.make({ top, heads: [...heads] }));
         }),
     }),
   );

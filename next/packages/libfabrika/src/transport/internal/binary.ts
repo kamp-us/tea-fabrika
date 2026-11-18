@@ -1,4 +1,5 @@
 import * as Arr from "effect/Array";
+import * as WebCrypto from "effect/crypto/WebCrypto";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Option from "effect/Option";
@@ -20,6 +21,7 @@ export const join = (...parts: ReadonlyArray<Uint8Array>): Bytes => {
 
     return at + part.length;
   });
+
   return out;
 };
 
@@ -73,6 +75,7 @@ export const holds = (ok: boolean): Option.Option<true> => (ok ? Option.some(tru
 export const armor = (blob: Uint8Array): string => {
   const body = Base64.encode(blob);
   const rows = Array.from({ length: Math.ceil(body.length / 70) }, (_, i) => Str.slice(i * 70, (i + 1) * 70)(body));
+
   return `-----BEGIN SSH SIGNATURE-----\n${Arr.join(rows, "\n")}\n-----END SSH SIGNATURE-----\n`;
 };
 
@@ -99,7 +102,7 @@ export const subtle = Effect.fn("transport.crypto")(function* <M extends CryptoM
   method: M,
   ...args: CryptoArgs[M]
 ): Effect.fn.Return<CryptoResult[M], WebCryptoError> {
-  const api: CryptoApi = crypto.subtle;
+  const api: CryptoApi = (yield* WebCrypto.WebCrypto).subtle;
   const fail = (cause: unknown) => WebCryptoError.make({ cause });
 
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise

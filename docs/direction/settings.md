@@ -14,6 +14,8 @@ value is one, declared once with its schema and default. Tier 1's P38 (tracker t
 the first of it in `next/`. The decision record is
 [0086](../../.decisions/0086-settings-are-declared-once.md).
 
+The engine lives in `@kalfa/config` under `kalfa/config/`, named by the app that uses it.
+
 Built from [experiment 251](../../experiments/251-settings.md), which read how about twenty makers and
 tools let people set a choice, checked `next/`'s local instance against them, and ran one editor
 probe. The reading is not a measurement. A tag such as [c5] points at that experiment's links.

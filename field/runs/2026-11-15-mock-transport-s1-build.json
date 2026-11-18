@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-transport-s1-build",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-15T23:38:36-08:00",
+  "ended": "2026-11-16T00:22:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step for slice 1 of the transport mock sweep (docs/plan/quests/mock-transport-PLAN.md at 14e9b3134, next/ only), after a merge of origin/main into the branch. New next/packages/libfabrika/src/transport/Routes.ts holds the Routes service and RouteError, the contract only. answerFrame(text, attached) in next/packages/libfabrika/src/transport/Answer.ts asks for Routes and passes the online identity or null; the Frame and Incoming tuple types, isOnline and the unused admit argument are gone, and its doc says so. The WebCrypto edge in next/packages/libfabrika/src/transport/internal/binary.ts reads Effect's WebCrypto reference, which defaults to globalThis.crypto, so no caller changes. .glossary/TERMS.md gains a Routes row in Clients. Answer.test.ts (18) and ErrorCause.test.ts (3) are green, and every other transport law file, the two transport integration files included, is green run one at a time.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: p23: ok has one matching reply (A1)",
+      "plant": "pass null as the identity on an online connection",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: p23: failure sends nothing and permits a real retry (A2)",
+      "plant": "remember a failed frame's text and answer its retry with a cached ok reply, skipping the second route call",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: p23: no reply for junk, response or notification (A3)",
+      "plant": "make the request id optional, so a notification is routed",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: d2: for any unauthenticated state, method and id, only a waiting gateway.knock is routed (A4)",
+      "plant": "pass the waiting client's key as an identity to the knock route",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: p82: additive request fields leave the reply id and checked writer alone (A5)",
+      "plant": "pass the request's params as the route's identity",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: A6 type: answerFrame's environment is exactly Routes, so it cannot reach admission",
+      "plant": "answerFrame also yields the ClientKey service; tsc --noEmit on next/packages/libfabrika fails at Answer.test.ts line 337",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/ErrorCause.test.ts: C5",
+      "plant": "const fail = () => new WebCryptoError({ cause: undefined }) in internal/binary.ts",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/ErrorCause.test.ts: C6 scenario",
+      "plant": "read globalThis.crypto.subtle in internal/binary.ts again",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 44,
+  "note": "Each plant was one change on the real build, one run of its law file, then a restore by copy, checked with cmp. A2's plant also reds the parked-wait law, and C5's and C6's plants each red both C5 and C6. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144, all 18 parts passed, none killed), the list ratchet and one pnpm typecheck exit 0; loosening.sh on the build's own commit has 0 hits, and its 6 hits from the tests head are in .github/ci files that the merge of origin/main brought. vitest --changed origin/main at 3 workers ran 86 files: 85 passed, and next/apps/fabrika/src/start-child.laws.integration.test.ts L11 timed out at 60 s under that load; the same file run alone passed 23 of 23, so it is reported as a flaky_test finding. No law here sends a signal or calls launchctl, and none is host-only.",
+  "step": "build"
+}

@@ -523,7 +523,7 @@ const Head = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
 const automaticFixture = { jobs: shaped("changed"), log: "" };
 
-describe("automatic ready CI as the current-head resource proof", () => {
+describe("automatic ready CI, with its related tooling legs, as the current-head proof", () => {
   // Plant owed on CI: omit the automatic lookup; older changed/red history would refuse again.
   it.effect.prop(
     "property: complete ready CI, including an explicitly empty related set, supersedes older scheduled history and arms the exact head",

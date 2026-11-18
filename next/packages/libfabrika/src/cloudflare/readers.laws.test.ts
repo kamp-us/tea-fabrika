@@ -130,15 +130,18 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
 
             let consumers = 0;
             let settingsCalls = 0;
+
             const w = yield* Effect.acquireRelease(
               Effect.sync(() =>
                 world(async (wire) => {
                   settingsCalls++;
+
                   return StartsTest.reply(wire);
                 }),
               ),
               (value) => Effect.sync(() => value.db.close()),
             );
+
             const bad =
               origin === undefined
                 ? StartsTest.corrupt(deployment, Math.floor(choice / moves.length))
@@ -166,12 +169,14 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 ...w.ctx.storage,
                 get: (...args: unknown[]) => {
                   consumers++;
+
                   return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
                 },
                 sql: {
                   ...sql,
                   exec: (...args: unknown[]) => {
                     consumers++;
+
                     return Reflect.apply(sql.exec, sql, args);
                   },
                   get databaseSize() {
@@ -180,6 +185,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 },
               },
             };
+
             // The world's Project stub counts each `settingsStart` and answers the start it is given.
             const env = { ...w.env, INSTANCE: Formatter.formatJson(bad) };
 
@@ -452,10 +458,12 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
     fc.asyncProperty(malformed(Schema.Struct({ rev: Schema.Int })), async (raw) => {
       const w = world(),
         attempts: Array<Exit.Exit<unknown, unknown>> = [];
+
       // The real waits, watched: each run is recorded, and its exit is kept to read its error.
       const waits = Layer.unwrap(
         Effect.gen(function* () {
           const real = yield* GatewayWaits;
+
           return Recorder.layer(GatewayWaits, {
             wait: (...args) =>
               real.wait(...args).pipe(
@@ -468,6 +476,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
           });
         }),
       ).pipe(Layer.provide(GatewayWaits.layer));
+
       const runtime = SettingsRuntime.runtime(
         gatewayLayer(w.ctx, w.env).pipe(
           Layer.provideMerge(waits),

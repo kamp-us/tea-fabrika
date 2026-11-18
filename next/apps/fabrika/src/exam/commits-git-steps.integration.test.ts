@@ -314,6 +314,7 @@ describe("person commits between step links (p86b)", () => {
           tree,
         ),
       );
+
     const { squash, rows } = squashed(r, [{ note: middle, commit: person }]);
     const row = rows[0]!.attested[0]!;
 
@@ -359,16 +360,20 @@ describe("person commits between step links (p86b)", () => {
         const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
         r.write("next/packages/x/src/a.ts", "a\n");
         const person = r.gitSigned();
+
         const payload = pipe(
           r.git("cat-file", "commit", person),
           Str.replace(/^gpgsig .*(?:\n .*)*\n/m, ""),
           Str.replace("\n\n", "\nxgpgsig forged\n\n"),
         );
+
         const sig = sh(r.dir, "ssh-keygen", ["-Y", "sign", "-n", "git", "-f", join(KEYS, "person")], payload);
+
         const raw = pipe(
           payload,
           Str.replace("\n\n", `\ngpgsig ${pipe(sig, Str.trimEnd, Str.replaceAll("\n", "\n "))}\n\n`),
         );
+
         const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
         expect(verifyCommit(r, c)).toBe(0);
         const { squash, rows } = squashed(r, [{ note: { ...personLink(r, c), sig: "forged\n" }, commit: c }]);

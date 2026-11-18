@@ -31,6 +31,7 @@ import type { PlatformError } from "effect";
 import { ChildProcess } from "effect/process";
 
 const ZEROS = pipe("0", Str.repeat(40));
+
 const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
 const LintRows = Schema.fromJsonString(
@@ -199,6 +200,7 @@ const annotation = (answer: Answer, sha: string) => {
     answer.reason === "not_a_list"
       ? `${answer.file} does not read as a list at HEAD.`
       : `${answer.rows.length} row(s) added against ${sha}. A list only shrinks (0524): fix the code, or, where the code is right and the rule does not fit, mark that one line with a disable comment and its reason.`;
+
   return [`::error file=${answer.file}::${escape(Arr.join([head, ...answer.rows], "\n"))}`];
 };
 
@@ -238,6 +240,7 @@ const main = Effect.gen(function* () {
     Str.split(yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"])), "\0"),
     (part) => part !== "",
   );
+
   const renames = new Map<string, string>();
 
   for (let i = 0; i + 2 < moved.length; i += 3) {

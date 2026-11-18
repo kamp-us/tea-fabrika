@@ -11,6 +11,9 @@
 # In a pnpm patch under patches/, the removed, context and added lines inside its hunks skip only the
 # style shapes.
 # A line is read the way git writes it: up to the newline, and nothing else ends one.
+# In a shallow clone a range may list a commit at the shallow boundary, which git shows as a root
+# holding everything: the check deepens the fetch (50, 200, then 1000 commits) until the range lists
+# none, and refuses with exit 2 when it still does.
 set -eu
 # Only deliberate diagnostics use fd 3. Shell and tool failures may contain private paths.
 exec 3>&2 2>/dev/null
@@ -207,11 +210,73 @@ def commit_hits(commit, parents):
         hits = [hit for hit in hits if hit[1:] in places]
     return [(number, kind) for number, _, kind in hits], respaced
 
+def asks(*args):
+    return subprocess.run(['git', *args], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                          env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+
+def is_shallow():
+    return asks('rev-parse', '--is-shallow-repository').stdout.strip() == 'true'
+
+# The two ends of a revision such as base..head or base...head, an empty end meaning HEAD.
+def ends_of(arg):
+    for dots in ('...', '..'):
+        if dots in arg and not arg.startswith('-'):
+            base, head = arg.split(dots, 1)
+            return base or 'HEAD', head or 'HEAD'
+    return None
+
+# Fetches `more` commits of history past the shallow boundary. A base that lives on a remote is also
+# fetched by its own branch: a plain fetch deepens only the branches the clone follows, and which
+# other shallow tips it reaches depends on the git version, so the base is never left to chance.
+def deepen(more, bases):
+    asks('fetch', f'--deepen={more}')
+    for base in bases:
+        name = asks('rev-parse', '--symbolic-full-name', base).stdout.strip().removeprefix('refs/remotes/')
+        for remote in asks('remote').stdout.split():
+            if name.startswith(remote + '/'):
+                branch = name[len(remote) + 1:]
+                asks('fetch', f'--deepen={more}', remote, f'+refs/heads/{branch}:refs/remotes/{name}')
+
+# The commits in .git/shallow are grafted roots: git shows them with no parents, though they are old.
+def boundary():
+    if not is_shallow():
+        return set()
+    return set(Path(asks('rev-parse', '--git-path', 'shallow').stdout.strip()).read_text().split())
+
+def listed(revs):
+    return [line.split() for line in asks('rev-list', '--parents', *revs, '--').stdout.split('\n') if line]
+
+# A shallow clone cuts the history of the base as well as the branch: git then lists commits as the
+# branch's own that the base already holds, ending in a grafted commit or in a root with no parents.
+# Deepen while the range lists either, until the clone is whole, and refuse when the steps run out.
+# Stopping at the first merge base is not enough: a branch that merged main in has older parents of
+# its own.
+def reach_bases(revs):
+    bases = [base for base, _ in filter(None, map(ends_of, revs))]
+    steps = iter((50, 200, 1000))
+    def unsure():
+        grafted = boundary()
+        return is_shallow() and any(commit[0] in grafted or len(commit) == 1 for commit in listed(revs))
+    while unsure():
+        more = next(steps, None)
+        if more is None:
+            refuse('a commit at this shallow clone\'s boundary is still in the range after deepening; fetch more history')
+        deepen(more, bases)
+
 bad = 0
 respaced = 0
 if sys.argv[2] == 'commits':
+    if is_shallow():
+        reach_bases(sys.argv[3:])
+    # The commits in .git/shallow are grafted roots: git shows them with no parents, though they are
+    # old, so they are never read as new.
+    grafted = boundary()
     # Oldest first, each with its parents. No path limits, so the parents are the real ones.
     commits = [line.split() for line in git('rev-list', '--reverse', '--parents', *sys.argv[3:], '--').split('\n') if line]
+    # A boundary commit still in the list was not reached past by a range: reading it would scan old
+    # history as new, and skipping it could miss the branch's own text, so refuse.
+    if any(commit[0] in grafted for commit in commits):
+        refuse('a commit at this shallow clone\'s boundary is in the range; give a base..head range or fetch more history')
     for commit, *parents in commits:
         hits, old = commit_hits(commit, parents)
         respaced += old

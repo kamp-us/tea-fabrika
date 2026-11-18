@@ -10,7 +10,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Config, ConfigProvider, Console, Effect, Layer, Option } from "effect";
 import * as BoxGitProcess from "./box/BoxGitProcess.ts";
 import * as Remove from "./box/Remove.ts";
-import * as RunsProcess from "./box/RunsProcess.ts";
+import * as RunsFs from "./box/RunsFs.ts";
 
 /** One variable of this process's environment, read through Config; unset is `undefined`. */
 const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
@@ -31,12 +31,11 @@ const rm = Effect.fn("box.rm")(function* (name: string, places: { readonly boxes
   yield* setExit(Remove.exitCode(removal.verdict));
 });
 
-/** What `rm` calls: git from MAIN and the script that keeps a box's runs, on Node. */
+/** What `rm` calls: git from MAIN and the move that keeps a box's runs, on Node. */
 const services = (main: string) =>
-  Layer.mergeAll(
-    BoxGitProcess.layer(main, process.env),
-    RunsProcess.layer(`${import.meta.dirname}/keepruns.sh`, process.env),
-  ).pipe(Layer.provideMerge(NodeServices.layer));
+  Layer.mergeAll(BoxGitProcess.layer(main, process.env), RunsFs.layer(main)).pipe(
+    Layer.provideMerge(NodeServices.layer),
+  );
 
 // A box name is read as the exact argument, never through a flag parser: a name such as "", "-h"
 // or "--x" must reach the name check, which answers it with exit 2.

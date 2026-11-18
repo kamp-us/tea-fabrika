@@ -45,6 +45,15 @@ import {
 } from "./p14.test-support.ts";
 import { stored } from "./stored.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  check: {},
+  uncheck: {},
+  add: {},
+  remove: {},
+});
+
 const SEED = 119120;
 
 /** The registered name of the process the window's one tile shows: its streams are read by it. */
@@ -211,6 +220,7 @@ const loseFirstAnswers = (pid: string) => {
 const checklistPid = (r: Effect.Success<ReturnType<typeof reader>>) =>
   Effect.gen(function* () {
     const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
+
     const pids = Arr.flatMap(yield* r.read(`processes/${NAME}`), (e) => {
       const started = Schema.decodeUnknownOption(Started)(e);
 
@@ -275,14 +285,14 @@ const useChecklist = (
 
       if (pick === 0) {
         const name = pool[p.name % pool.length]!;
-        msg = { type: "add", name };
+        msg = { ...Tag.cases.add.make({}), name };
         yield* Effect.promise(() => t.field.fill(name));
         yield* Effect.promise(() => t.field.press("Enter"));
       } else if (pick === 1) {
-        msg = { type: row!.checked ? "uncheck" : "check", name: row!.name };
+        msg = { ...(row!.checked ? Tag.cases.uncheck : Tag.cases.check).make({}), name: row!.name };
         yield* Effect.promise(() => t.box(row!.name).click());
       } else {
-        msg = { type: "remove", name: row!.name };
+        msg = { ...Tag.cases.remove.make({}), name: row!.name };
         yield* Effect.promise(() => t.remove(row!.name).click());
       }
 
@@ -297,7 +307,7 @@ const useChecklist = (
       yield* settle(
         Effect.all([t.shown, t.refusal], { concurrency: 1 }),
         ([r, said]) => JSON.stringify(r) === JSON.stringify(want) && said === words[at],
-        `tab ${at} after ${msg.type}`,
+        `tab ${at} after ${msg._tag}`,
       );
       yield* observe;
       yield* afterPress(msg, at);
@@ -448,7 +458,23 @@ describe("L15: use in two tabs (W2)", () => {
               yield* online(h, tabs[0]!.page);
               yield* Effect.forEach(
                 tabs,
-                (t) => Effect.promise(() => tile(t.page, REGION).field.waitFor({ timeout: 30_000 })),
+                // A red here says which tab waited and what it showed, so a tab stuck on its code
+                // (a grant that never woke it) reads differently from a field that never drew.
+                (t, index) =>
+                  Effect.promise(() => tile(t.page, REGION).field.waitFor({ timeout: 30_000 })).pipe(
+                    Effect.catchDefect((defect) =>
+                      Effect.tryPromise({ try: () => t.page.locator("body").innerText(), catch: String }).pipe(
+                        Effect.orElseSucceed(() => "(its text could not be read)"),
+                        Effect.flatMap((shown) =>
+                          Effect.die(
+                            new Error(`tab ${index} never showed the checklist field; its page shows: ${shown}`, {
+                              cause: defect,
+                            }),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 { concurrency: 1 },
               );
               const settled = Arr.map(tabs, () => 0);
@@ -506,7 +532,7 @@ describe("L15: use in two tabs (W2)", () => {
               for (const entry of Arr.filter(inbox, (entry) => !letters.has(entry.id))) {
                 expect(entry._tag, "inbox entries are mailbox sends").toBe("send");
                 const { m } = Schema.decodeUnknownSync(Schema.Struct({ m: checklist.msg }))(entry.body);
-                expect(m.type, "every remaining inbox entry is a runner timer").toBe("timer");
+                expect(m._tag, "every remaining inbox entry is a runner timer").toBe("timer");
                 expect(entry.id, "the runner timer has its own revision-scoped id").toMatch(/\/due\/\d+\/\d+$/);
               }
             }),
@@ -592,7 +618,8 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   } else {
                     yield* settle(
                       tile(t.page, REGION).refusal,
-                      (words) => words === checklistWindow.refused!({ type: "add", name: `itm_${item}` }, "taken"),
+                      (words) =>
+                        words === checklistWindow.refused!({ ...Tag.cases.add.make({}), name: `itm_${item}` }, "taken"),
                       "the duplicate sentinel is refused",
                     );
                   }
@@ -626,6 +653,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 ).toBeGreaterThan(0);
                 const credentials = [`tok_${token}`, `sec_${secret}`, h.credential, stranger.credential];
                 const granted = Arr.flatMap([...h.grants, ...stranger.grants], (g) => g.signatures);
+
                 const signatures = [
                   ...Arr.flatMap(granted, (signature) => [
                     signature,
@@ -651,6 +679,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   "the signed removal stays in its history",
                 ).toBe(true);
                 const accessBodies = new Map<string, string>();
+
                 const records = Arr.map(access, (entry): readonly [string, string] => {
                   if (entry._tag !== "granted" && entry._tag !== "revoked") {
                     return ["access record", JSON.stringify(entry)];
@@ -672,10 +701,12 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
 
                   return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
                 });
+
                 const proofs = [
                   ...Arr.flatMap([...h.grants, ...stranger.grants], (g) => g.signatures),
                   revoked.armored,
                 ];
+
                 // The tabs' last look comes while the instance still runs. The scan reads the home once
                 // more while it runs, then stops it and reads a home nothing writes to any more.
                 const last = [...(yield* look(t.page, t.seen)), ...(yield* look(second.page, second.seen))];
@@ -711,6 +742,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                     [output, percentDecoded(text)],
                   ],
                 );
+
                 const credentialOutputs = [
                   ...checkedOutputs,
                   ...Arr.flatMap(disk.raw, ([output, text]): ReadonlyArray<readonly [string, string]> => [

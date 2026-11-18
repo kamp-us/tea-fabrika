@@ -323,7 +323,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
         { concurrency: 1 },
       ),
     ),
-    land: (ref: string) => deliver(Mail.Land.make({ type: "land", ref, change: 1, head, reply: "queue" })),
+    land: (ref: string) => deliver(Mail.Land.make({ ref, change: 1, head, reply: "queue" })),
   };
 });
 

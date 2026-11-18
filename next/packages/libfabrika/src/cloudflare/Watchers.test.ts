@@ -28,14 +28,17 @@ const Step = Arbitrary.all({
 const Walk = Arbitrary.array(Step, { minLength: 6, maxLength: 30 });
 
 const patch = { type: "patch", base: 4, rev: 5, patch: [] } as const;
+
 /** The same update as the Project is handed it: with the pid of the process it came from. */
 const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
 const published = { ...patch, pid: PID };
 
 /** The route port `Publish.make` reads: one Connection object's name per client. */
 const routed = (routes: ReadonlyMap<string, string>): Sql => ({
   exec: (_query, client) => {
     const connection = routes.get(String(client));
+
     return connection === undefined ? [] : [{ connection }];
   },
   transaction: (f) => f(),
@@ -99,9 +102,11 @@ describe("watcher delivery evidence, next/", () => {
             }
 
             expect(Cause.hasFails(exit.cause)).toBe(true);
+
             const error = yield* Schema.decodeUnknownEffect(Schema.toType(WatcherManagerError))(
               Cause.squash(exit.cause),
             );
+
             expect(error._tag).toBe("WatcherManagerError");
             expect(error.reason.cause).toBeDefined();
 
@@ -157,11 +162,13 @@ describe("watcher delivery evidence, next/", () => {
       Effect.gen(function* () {
         const routes = new Map<string, string>();
         const delivered: Array<{ connection: string; client: string; news: News }> = [];
+
         const told = Publish.make(routed(routes), (connection: string, client: string, news: News) =>
           Effect.sync(() => {
             delivered.push({ connection, client, news });
           }),
         );
+
         const updates = [whole, patch];
         const all = [close, granted, ...updates.map((update) => News.cases.view.make({ update }))];
 

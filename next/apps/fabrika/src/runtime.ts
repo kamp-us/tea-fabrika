@@ -78,8 +78,8 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
                 raw: [],
                 personOnly: [],
                 name: (m) =>
-                  Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "type") && Predicate.isString(m.type)
-                    ? m.type
+                  Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "_tag") && Predicate.isString(m._tag)
+                    ? m._tag
                     : undefined,
               },
               events: { personOnly: [] },

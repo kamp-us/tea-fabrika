@@ -39,6 +39,7 @@ export type Written = typeof Written.Type;
  * @category schemas
  */
 export const Sent = Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) });
+
 type Sent = typeof Sent.Type;
 
 /** One page of a part's spans, oldest first; `after` is where the next page starts. */
@@ -64,6 +65,7 @@ type Lookup = typeof Lookup.Type;
  * @category schemas
  */
 export const Deletion = Schema.Struct({ by: Schema.String, at: Schema.Int, reason: Schema.String });
+
 type Deletion = typeof Deletion.Type;
 
 /** How many spans one page holds. */
@@ -114,6 +116,7 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
       store.atomic(() => {
         const held = store.holds(Arr.map(rows, (row) => row.span.spanId));
         const seen = new Set(held);
+
         const left = Arr.filter(rows, (row) => {
           if (seen.has(row.span.spanId)) {
             return false;
@@ -132,6 +135,7 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
           Arr.map(rows, (row) => row.span.spanId),
           (id) => held.has(id),
         );
+
         const rolled = Option.getOrElse(store.rolled(), () => {
           const bytes = store.size();
 

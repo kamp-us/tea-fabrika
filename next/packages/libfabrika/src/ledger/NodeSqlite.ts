@@ -62,6 +62,7 @@ export const nodeSql = (db: DatabaseSync): Sql => {
       const done = Result.try(() => {
         const answer = step();
         db.exec("COMMIT");
+
         return answer;
       });
 

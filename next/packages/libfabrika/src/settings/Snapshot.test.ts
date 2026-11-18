@@ -8,6 +8,10 @@
 //   from different sources have one hash. It may need `Digest` from `effect/crypto`.
 // - `Snapshot.Snapshot` is its Schema: what a process start saves, and what a replay reads back.
 import { describe, expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import { Toml } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import * as ByteSize from "effect/ByteSize";
 import * as Cause from "effect/Cause";
 import * as Digest from "effect/crypto/Digest";
@@ -29,11 +33,7 @@ import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Fabrika.ts";
 import * as Sources from "./Fabrika.ts";
-import * as Files from "./Files.ts";
-import * as Snapshot from "./Snapshot.ts";
 import * as StartsTest from "./StartsTest.ts";
-import { Toml } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 

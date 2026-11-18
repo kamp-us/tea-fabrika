@@ -38,6 +38,12 @@ import type { RepliesError } from "./Replies.ts";
 import { capture, nat, nth, parsed, sentinel, text, unleaked } from "./RepliesTest.ts";
 import { ProgramRunner, Sent } from "./Runner.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const SEED = 119120;
 
 const RUNS = runsFor({ fast: 10, full: 100 });
@@ -106,12 +112,7 @@ const Model = Schema.Struct({ notes: Schema.Record(Schema.String, Schema.Int) })
 
 type Model = typeof Model.Type;
 
-const Save = Schema.Struct({
-  type: Schema.Literal("save"),
-  note: Schema.String,
-  base: Schema.Int,
-  body: Schema.String,
-});
+const Save = Schema.TaggedStruct("save", { note: Schema.String, base: Schema.Int, body: Schema.String });
 
 /** One version per note. A save on any other base is refused with the current version. */
 const program = {
@@ -368,6 +369,7 @@ const walk = (
     });
 
     const patches = () => Arr.filter(published, (u) => u.type === "patch").length;
+
     const inboxCount = Effect.suspend(() =>
       mailbox === undefined ? Effect.die("no connection") : Stream.runCount(mailbox.read(NAME, 0)).pipe(Effect.orDie),
     );
@@ -395,6 +397,7 @@ const walk = (
     const sorted = (view: unknown) => {
       // SAFETY: the view compared here is this program's own model, which holds `notes`.
       const notes = (view as Model).notes;
+
       return { notes: Rec.fromEntries(Rec.toEntries(notes).sort(([a], [b]) => Str.localeCompare(b)(a))) };
     };
 
@@ -405,7 +408,7 @@ const walk = (
           id: inputId(),
           by: Writer.cases.person.make(by),
           arrivedAt: 0,
-          input: { type: "save", note, base, body },
+          input: { ...Tag.cases.save.make({}), note, base, body },
         },
         sentAt: "2026-11-11T00:00:00Z",
         seen: 0,
@@ -472,6 +475,7 @@ const walk = (
       const intact = Arr.filter(answered, (a) => !damaged.has(a.letter.id));
       const stored = Arr.filter(intact, (a) => a.first._tag === "refused");
       const futures = Arr.filter(answered, (a) => a.first._tag === "refused" && a.base > current(a.note));
+
       const moves = Arr.filter(enabled, (move) =>
         move === "older"
           ? Arr.some(NOTES, (note) => current(note) > 0)
@@ -591,9 +595,11 @@ const walk = (
         expect(located, "one stored JSON value holds the refusal").toHaveLength(1);
         // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
+
         const json = yield* Schema.decodeUnknownEffect(
           Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
         )(value);
+
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
 

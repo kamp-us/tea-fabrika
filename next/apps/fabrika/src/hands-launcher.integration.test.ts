@@ -106,6 +106,7 @@ const keyFingerprint = Effect.fnUntraced(
 const method = (project: DevProject, name: Exclude<keyof LauncherProject, keyof DevProject>) => {
   // @ts-expect-error these are the fixture's own calls, which only its Control takes (hands-launcher.test-support.ts:136); DevProject names the real door's calls, and the dev client sends any name to the wire
   const picked: (...args: ReadonlyArray<unknown>) => Promise<unknown> = project[name];
+
   return picked;
 };
 
@@ -138,6 +139,7 @@ const launcher = Effect.fnUntraced(function* (
   errors: Seen["stderr"],
 ) {
   const lines = yield* Queue.unbounded<Line>();
+
   // This process's PATH through Config, read when the child starts; an empty one stays empty.
   const path = yield* Config.String("PATH")
     .pipe(Config.withDefault(""))
@@ -270,9 +272,11 @@ const flow = Effect.fnUntraced(
         const one = yield* launcher(script, app, hands, lines, stderr);
         const waiting = yield* one.next("waiting");
         expect(waiting._tag).toBe("waiting");
+
         const stored = yield* Schema.decodeEffect(Stored)(
           yield* fs.readFileString(path.join(hands, "hands", "key.json")),
         );
+
         expect(yield* keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
           waiting.fingerprint,
         );
@@ -302,6 +306,7 @@ const flow = Effect.fnUntraced(
         const online = yield* one.next("online");
         expect(online.fingerprint, "E2: online is the same key").toBe(waiting.fingerprint);
         yield* call("task request failed", () => method(project, "requestHandsTask")(waiting.fingerprint));
+
         let task = yield* Schema.decodeUnknownEffect(Task)(
           yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
@@ -328,6 +333,7 @@ const flow = Effect.fnUntraced(
         const online = yield* two.next("online");
         // Time for a client that would take or run the task again to do so.
         yield* Effect.sleep("5 seconds");
+
         const task = yield* Schema.decodeUnknownEffect(Task)(
           yield* call("task read failed", () => method(project, "readHandsTask")()),
         );
@@ -346,14 +352,17 @@ const flow = Effect.fnUntraced(
         const db = yield* TestDatabase.open(path.join(hands, "hands", "journal.sqlite"), { readOnly: true }).pipe(
           Effect.orDie,
         );
+
         const tables = Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) =>
           String(row["name"]),
         );
+
         return Rec.fromEntries(
           Arr.map(tables, (t) => [t, db.prepare(`SELECT * FROM "${Str.replace(/"/g, '""')(t)}"`).all()]),
         );
       }),
     );
+
     const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
 
     return {

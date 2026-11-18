@@ -31,6 +31,7 @@ const SEED = 119120;
 /** A real WAL database, as the brain's span queue keeps one. The queue is the product's file, so
  *  `TestDatabase.open` sets nothing in it, and each law sets the queue's own pragmas itself. */
 const spanQueue = (file: string) => TestDatabase.open(file).pipe(Effect.orDie);
+
 const NAMES = ["brain.last.json", "brain.pending.jsonl", "records/brain.json"] as const;
 
 /** Some of the brain's files, and which of them a write renames into place under each listing. */
@@ -147,6 +148,7 @@ describe("stored", () => {
               }
 
               const disk = yield* stored({ dir, stop: Effect.sync(() => db.close()) }, new Map(), []);
+
               const holders = Arr.map(
                 Arr.filter(disk.raw, ([, text]) => pipe(text, Str.includes(sentinel))),
                 ([label]) => label,
@@ -276,10 +278,12 @@ describe("stored", () => {
                   Effect.provideService(FileSystem.FileSystem, fs),
                   Effect.exit,
                 );
+
                 const all = Arr.sort(
                   Arr.map(files, (name) => `/${name}`),
                   Order.String,
                 );
+
                 // What the scan did: the files each pass read, or the error it failed with.
                 const seen = Exit.match(exit, {
                   onSuccess: (disk) => ({

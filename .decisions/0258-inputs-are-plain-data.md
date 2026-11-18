@@ -1,7 +1,7 @@
 ---
 id: 0258
 title: In next/, a program's inputs are plain data its Msg is built from, "input" means a write, and personOnly true is the one way to say person-only, branded FromPerson for tsc
-status: accepted
+status: amended-in-part by [0601](0601-program-make-with-optional-pipes.md)
 date: 2026-11-08
 tags: [programs, program-shape, inputs, person-only, brand, tsc, next]
 ---

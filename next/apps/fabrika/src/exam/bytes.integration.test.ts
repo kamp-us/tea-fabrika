@@ -89,6 +89,7 @@ vi.mock("rolldown", async (original) => {
         name: "p8-passive-observer",
         generateBundle(_options, output) {
           const ids = new Set(this.getModuleIds());
+
           const modules = Arr.map([...ids], (id) => {
             const info = this.getModuleInfo(id);
 
@@ -104,6 +105,7 @@ vi.mock("rolldown", async (original) => {
               code: info.code ?? "",
             };
           });
+
           const chunks = Arr.flatMap(Rec.values(output), (o) =>
             o.type === "chunk"
               ? [
@@ -136,7 +138,9 @@ vi.mock("rolldown", async (original) => {
           observations.builds.push({ input: options.input, modules, chunks, assets });
         },
       };
+
       const plugins: Array<RolldownPluginOption> = Arr.isArray(options.plugins) ? options.plugins : [options.plugins];
+
       return real.rolldown({ ...options, plugins: [...plugins, observer] });
     },
   };
@@ -199,6 +203,7 @@ const carried = (brain: Observed) =>
 
 // What one call emitted: a program's whole bundle, each window chunk and each window asset.
 const emitted = (graph: Observed) => [joined(graph), ...Arr.map(graph.chunks, (c) => c.code), ...graph.assets];
+
 const isProgram = (graph: Observed) => graph.input === "fabrika:program";
 
 // P14 slice 1: a tab's own call, the one whose input is exactly the tab entry the build was given.
@@ -226,6 +231,7 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built, tab?: string) =>
 
   const texts = carried(brain),
     others = Arr.filter(all, (g) => g !== brain);
+
   expect(texts).toHaveLength(Rec.keys(built.programs).length + Rec.keys(built.assets).length);
 
   for (const text of texts) {
@@ -272,6 +278,7 @@ it.effect(
       // carries the page and the tab's script, each from the tab's own observed call.
       const observed = observations.builds.slice(start),
         brain = checkBuild(observed, built, APP_TAB);
+
       expect(Rec.keys(built.assets)).toContain("/index.html");
       expect(Rec.keys(built.assets)).toContain("/window.js");
       process.stdout.write(
@@ -309,6 +316,7 @@ it.effect(
           },
         ],
       };
+
       expect(() => checkBuild([...Arr.filter(observed, (g) => g !== brain), planted], built)).toThrow();
       expect(() => realBrain(Arr.filter(observed, (g) => g !== brain))).toThrow("no actual P12 brain");
       // A carried program whose own call went unobserved fails: its graph was never checked.
@@ -469,6 +477,7 @@ const graphShape = (g: BundleGraph) => {
       Match.when(1, () => depth + 1),
       Match.orElse(() => 2 ** (depth + 1) - 1),
     );
+
   let least = 0;
 
   while (capacity(least, 2) < g.modules) {
@@ -476,10 +485,12 @@ const graphShape = (g: BundleGraph) => {
   }
 
   const depth = Math.max(least, Math.min(g.depth, g.modules - 1));
+
   const fan = Option.getOrElse(
     Arr.findFirst([g.imports, 1, 2], (f) => capacity(depth, f) >= g.modules),
     () => 2,
   );
+
   const level = [0],
     children: Array<Array<number>> = [[]];
 
@@ -543,6 +554,7 @@ it.effect.prop(
             ),
             Arr.join("\n"),
           );
+
           yield* fs.writeFileString(
             path.join(folder, `m${i}.ts`),
             `export const text = ${Formatter.formatJson(g.text)}; ${next}`,

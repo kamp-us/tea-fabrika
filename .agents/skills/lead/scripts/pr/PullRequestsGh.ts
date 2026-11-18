@@ -1,21 +1,10 @@
 // PullRequestsGh.layer: the PullRequests service on `gh`, the one way the lead tooling reaches
 // GitHub. `gh pr edit` fails here with a classic Projects error (AGENTS.md), so an edit goes
 // through `gh api -X PATCH`. Every call names the repo, so the checkout it runs in does not pick it.
-
-import { Array as Arr, String as Str, pipe, Effect, Layer, Option, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { type Given, lastLine, run } from "./command.ts";
-import {
-  type Detail,
-  MergeQueue,
-  Patch,
-  type Pin,
-  type PullRequest,
-  PullRequests,
-  PullRequestsError,
-  type Stack,
-  type Text,
-} from "./PullRequests.ts";
+import { type Detail, Patch, type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
 
 /** The most pull requests one `all` read takes; a repo with this many fails it, never cuts it. */
 export const LIMIT = 5000;
@@ -53,47 +42,6 @@ const VIEW_FIELDS = `${FIELDS},baseRefName,title,body,mergeCommit`;
 /** One line of the files list as `patches` asks jq to print it. */
 const PatchRow = Schema.fromJsonString(Patch);
 
-/** One open stack as `stackRows` asks jq to print it: its layers bottom first, each with its head. */
-const StackRow = Schema.fromJsonString(
-  Schema.Struct({
-    number: Schema.Finite,
-    base: Schema.String,
-    prs: Schema.Array(Schema.Struct({ number: Schema.Finite, oid: Schema.String })),
-  }),
-);
-
-/** The jq that prints each open stack of `GET repos/{repo}/stacks` on a line of its own. */
-const STACKS_JQ = ".[] | select(.open) | {number, base: .base.ref, prs: [.pull_requests[] | {number, oid: .head.sha}]}";
-
-/** The merge queue rule's two sizes, read by `mergeQueue` from the rules on a branch. */
-const QueueRow = Schema.fromJsonString(MergeQueue);
-
-/** The jq that prints the `merge_queue` rule on a branch, if any, as a `MergeQueue`. */
-const QUEUE_JQ =
-  '.[] | select(.type == "merge_queue") | .parameters | {build: .max_entries_to_build, merge: .max_entries_to_merge}';
-
-/**
- * The stack merge (gh-stack's `gh stack merge`): everything from the stack's bottom up to `top`, as
- * squashes, with no prompt. A stack number shares the pull requests' number sequence, so `top` is
- * never read as a stack number.
- */
-const stackMergeArgs = (top: number): ReadonlyArray<string> => ["stack", "merge", String(top), "--squash", "--yes"];
-
-/** Why a stack's layers are not at the heads that were checked, or `null` when every one is. */
-export const moved = (layers: ReadonlyArray<Pin>, pinned: ReadonlyArray<Pin>): string | null => {
-  const off = Arr.filter(
-    pinned,
-    (pin) => Option.getOrUndefined(Arr.findFirst(layers, (layer) => layer.number === pin.number))?.oid !== pin.oid,
-  );
-
-  return off.length === 0
-    ? null
-    : `layers not at the head their gates read, so nothing was merged: ${Arr.join(
-        Arr.map(off, (pin) => `pr ${pin.number}`),
-        ", ",
-      )}`;
-};
-
 /**
  * The merge call that adds a pull request to the queue: a squash, pinned to the head that was
  * checked. It carries no `--admin`, no `--auto` and no other merge method (0162).
@@ -128,7 +76,7 @@ export const ARM = `mutation($id: ID!, $oid: GitObjectID!) {
 /** `owner/name` from an origin URL GitHub serves, https or ssh; `null` for any other. */
 export const repoFromUrl = (url: string): string | null =>
   /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/.exec(
-    Str.trim(url),
+    url.trim(),
   )?.[1] ?? null;
 
 /** `repo` is `owner/name`; `cwd` is any folder gh may start in. */
@@ -146,7 +94,7 @@ export const make = (
 
         if (ran.code !== 0) {
           return yield* PullRequestsError.make({
-            reason: `gh ${Arr.join(args.slice(0, 2), " ")} exited ${ran.code}: ${lastLine(ran)}`,
+            reason: `gh ${args.slice(0, 2).join(" ")} exited ${ran.code}: ${lastLine(ran)}`,
           });
         }
 
@@ -161,11 +109,11 @@ export const make = (
     const list = Effect.fn("PullRequestsGh.list")(function* (args: ReadonlyArray<string>) {
       const out = yield* gh(["pr", "list", "-R", repo, "--json", FIELDS, ...args]);
 
-      const rows = yield* Schema.decodeEffect(Listed)(Str.trim(out) || "[]").pipe(
+      const rows = yield* Schema.decodeEffect(Listed)(out.trim() || "[]").pipe(
         Effect.mapError(() => PullRequestsError.make({ reason: "gh pr list answered a shape we do not read" })),
       );
 
-      return Arr.map(rows, (r): PullRequest => ({
+      return rows.map((r): PullRequest => ({
         number: r.number,
         head: r.headRefName,
         oid: r.headRefOid,
@@ -175,7 +123,9 @@ export const make = (
     });
 
     const openOn = (branch: string) =>
-      Effect.map(list(["--head", branch, "--state", "open"]), (prs) => Arr.findFirst(prs, (pr) => pr.head === branch));
+      Effect.map(list(["--head", branch, "--state", "open"]), (prs) =>
+        Option.fromNullishOr(prs.find((pr) => pr.head === branch)),
+      );
 
     const all = Effect.flatMap(list(["--state", "all", "--limit", String(LIMIT)]), (prs) =>
       prs.length >= LIMIT
@@ -187,7 +137,7 @@ export const make = (
       function* (branch: string, text: Text, head: string) {
         let out;
 
-        if (pipe(branch, Str.startsWith("fabrikalfa/"))) {
+        if (branch.startsWith("fabrikalfa/")) {
           const ran = yield* run(
             "node",
             [`${import.meta.dirname}/../botpush.mjs`, "--draft", repo, branch, head],
@@ -276,7 +226,7 @@ export const make = (
     const files = Effect.fn("PullRequestsGh.files")(function* (number: number) {
       const out = yield* gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", ".[].filename"]);
 
-      return Arr.filter(pipe(out, Str.split("\n")), (path) => path !== "");
+      return out.split("\n").filter((path) => path !== "");
     });
 
     // The same paged list, one JSON line per file. GitHub leaves `patch` out for a file it will not show.
@@ -290,7 +240,7 @@ export const make = (
       ]);
 
       return yield* Effect.forEach(
-        Arr.filter(pipe(out, Str.split("\n")), (row) => row !== ""),
+        out.split("\n").filter((row) => row !== ""),
         (row) =>
           Schema.decodeEffect(PatchRow)(row).pipe(
             Effect.mapError(() =>
@@ -302,7 +252,7 @@ export const make = (
     });
 
     const arm = Effect.fn("PullRequestsGh.arm")(function* (number: number, oid: string) {
-      const id = Str.trim(yield* gh(["pr", "view", String(number), "-R", repo, "--json", "id", "--jq", ".id"]));
+      const id = (yield* gh(["pr", "view", String(number), "-R", repo, "--json", "id", "--jq", ".id"])).trim();
 
       if (id === "") {
         return yield* PullRequestsError.make({ reason: `gh pr view named no node id for pull request ${number}` });
@@ -312,61 +262,6 @@ export const make = (
     });
 
     const admin = (number: number, oid: string) => Effect.asVoid(gh(adminArgs(repo, number, oid)));
-
-    /** Each open stack of the repo, its layers bottom first, each with the head GitHub holds. */
-    const stacks = Effect.fn("PullRequestsGh.stacks")(function* () {
-      const out = yield* gh(["api", "--paginate", `repos/${repo}/stacks`, "--jq", STACKS_JQ]);
-
-      return yield* Effect.forEach(
-        Arr.filter(Str.split(out, "\n"), (row) => row !== ""),
-        (row) =>
-          Schema.decodeEffect(StackRow)(row).pipe(
-            Effect.mapError(() => PullRequestsError.make({ reason: "gh api stacks answered a shape we do not read" })),
-          ),
-        { concurrency: "unbounded" },
-      );
-    });
-
-    const holding = (number: number) =>
-      Effect.map(stacks(), (all) => Arr.findFirst(all, (stack) => Arr.some(stack.prs, (pr) => pr.number === number)));
-
-    const stack = (number: number) =>
-      Effect.map(
-        holding(number),
-        Option.map((stack): Stack => ({ ...stack, prs: Arr.map(stack.prs, (pr) => pr.number) })),
-      );
-
-    const mergeQueue = Effect.fn("PullRequestsGh.mergeQueue")(function* (branch: string) {
-      const out = yield* gh(["api", "--paginate", `repos/${repo}/rules/branches/${branch}`, "--jq", QUEUE_JQ]);
-      const row = Option.getOrUndefined(Arr.findFirst(Str.split(out, "\n"), (line) => line !== ""));
-
-      return row === undefined
-        ? Option.none()
-        : Option.some(
-            yield* Schema.decodeEffect(QueueRow)(row).pipe(
-              Effect.mapError(() =>
-                PullRequestsError.make({ reason: `the merge_queue rule on ${branch} has a shape we do not read` }),
-              ),
-            ),
-          );
-    });
-
-    // gh stack merge pins no head, so the layers' heads are read again right before it runs.
-    const mergeStack = Effect.fn("PullRequestsGh.mergeStack")(function* (top: number, heads: ReadonlyArray<Pin>) {
-      const held = yield* holding(top);
-
-      if (Option.isNone(held)) {
-        return yield* PullRequestsError.make({ reason: `pr ${top} is in no open stack now; nothing was merged` });
-      }
-
-      const off = moved(held.value.prs, heads);
-
-      if (off !== null) {
-        return yield* PullRequestsError.make({ reason: off });
-      }
-
-      yield* gh(stackMergeArgs(top), { env: { GH_REPO: repo } });
-    });
 
     return PullRequests.of({
       openOn,
@@ -380,9 +275,6 @@ export const make = (
       patches,
       arm,
       admin,
-      stack,
-      mergeQueue,
-      mergeStack,
     });
   });
 

@@ -190,6 +190,7 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
   return yield* Option.match(
     Option.gen(function* () {
       const sig = yield* read(a.armored);
+
       const signer = yield* Arr.findFirst(a.signers, (line) =>
         Option.exists(
           Option.orElse(keyBlob(line), () => passkeyBlob(line)),

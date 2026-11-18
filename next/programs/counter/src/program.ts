@@ -7,15 +7,12 @@ import { Schema } from "effect";
 /** The counter's model, which is also its view: the window checks what it shows against it. */
 export const counterModel = Schema.Struct({ count: Schema.Int });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("inc") }),
-  Schema.Struct({ type: Schema.Literal("dec") }),
-  Schema.Struct({ type: Schema.Literal("reset") }),
-]);
+/** The counter's inputs; its window makes each with `CounterMsg.cases.<name>.make`. */
+export const CounterMsg = Schema.TaggedUnion({ inc: {}, dec: {}, reset: {} });
 
 export const counterMachine = Machine.make({
   model: counterModel,
-  msg: Msg,
+  msg: CounterMsg,
   cmds: [],
   init: (loaded) => [loaded ?? { count: 0 }, []],
   update: {

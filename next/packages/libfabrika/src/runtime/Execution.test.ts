@@ -9,6 +9,13 @@ import { executionFailure, nodeExecution, workerExecution } from "./Execution.ts
 import { stepper, Step, type Admission, type Prepared, type ProgramDown } from "./Program.ts";
 import { Saved } from "./State.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  missing: {},
+});
+
 const SEED = 119120;
 
 const noSavedModel: [number, null] = [0, null];
@@ -35,7 +42,7 @@ const rejectedRpc = async (): Promise<never> => {
 
 const Model = Schema.Struct({ count: Schema.Int });
 
-const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+const Msg = Schema.TaggedStruct("inc", {});
 
 const work = Cmd.make("work", {
   input: Schema.Struct({ n: Schema.Int }),
@@ -110,7 +117,7 @@ describe("P13 split execution", () => {
                 },
                 fresh: async (s: unknown, m: unknown) => invoke(() => pure.fresh(s, m)),
                 update: async (s: unknown, m: unknown) => invoke(() => pure.update(s, m)),
-                audit: async () => ({ _tag: "ok", value: { type: "inc" } }),
+                audit: async () => ({ _tag: "ok", value: Tag.cases.inc.make({}) }),
                 fold: async (s: unknown, m: unknown) => pure.fold(s, m),
                 upgrade: async (saved: unknown) => ({ saved, ran: [] }),
                 reply: async () => null,
@@ -122,7 +129,11 @@ describe("P13 split execution", () => {
 
               const remote = workerExecution(calls);
               const selected = mode === "retry" ? history[n % history.length]! : model;
-              const call: Effect.Effect<Admission | Prepared, ProgramDown> = remote[phase](selected, { type: "inc" });
+
+              const call: Effect.Effect<Admission | Prepared, ProgramDown> = remote[phase](selected, {
+                ...Tag.cases.inc.make({}),
+              });
+
               const result = yield* Effect.result(call);
               expect(composed, "new calls cannot fall back to composed step").toBe(0);
 
@@ -164,7 +175,7 @@ describe("P13 split execution", () => {
             for (const n of tape) {
               const mode = ["rpc", "decode", "checked", "ok"][n % 4]!;
               const node = nodeExecution(declared);
-              const failure = yield* Effect.flip(node.step({ count: "invalid" }, { type: "inc" }));
+              const failure = yield* Effect.flip(node.step({ count: "invalid" }, Tag.cases.inc.make({})));
               const rpc = async () => (mode === "checked" ? executionFailure(failure) : null);
 
               const remote = workerExecution({
@@ -180,7 +191,7 @@ describe("P13 split execution", () => {
                     return rejectedRpc();
                   }
 
-                  return mode === "ok" ? { _tag: "ok", value: { type: "inc" } } : { _tag: "unrecognized" };
+                  return mode === "ok" ? { _tag: "ok", value: Tag.cases.inc.make({}) } : { _tag: "unrecognized" };
                 },
               });
 
@@ -189,11 +200,11 @@ describe("P13 split execution", () => {
                 expect((yield* Effect.flip(remote.update({}, {}))).source).toBeUndefined();
               }
 
-              const audit = yield* Effect.exit(remote.audit({ type: "inc" }));
+              const audit = yield* Effect.exit(remote.audit(Tag.cases.inc.make({})));
               expect(audit._tag).toBe(mode === "ok" ? "Success" : "Failure");
 
               if (mode === "ok") {
-                expect(audit).toMatchObject({ _tag: "Success", value: { type: "inc" } });
+                expect(audit).toMatchObject({ _tag: "Success", value: Tag.cases.inc.make({}) });
               } else {
                 expect(Exit.isFailure(audit)).toBe(true);
 
@@ -254,7 +265,7 @@ describe("P12 Effect execution adapter", () => {
               expect(yield* node.init(saved)).toEqual(pure.init(saved));
               expect(yield* remote.init(saved)).toEqual(pure.init(saved));
 
-              for (const msg of [{ type: "inc" }, { type: "missing" }]) {
+              for (const msg of [Tag.cases.inc.make({}), Tag.cases.missing.make({})]) {
                 expect(yield* node.step({ count: n }, msg)).toEqual(pure.step({ count: n }, msg));
                 expect(yield* remote.step({ count: n }, msg)).toEqual(pure.step({ count: n }, msg));
                 expect(yield* remote.fold({ count: n }, msg)).toEqual(pure.fold({ count: n }, msg));
@@ -296,11 +307,13 @@ describe("P12 Effect execution adapter", () => {
               ] as const) {
                 const result = yield* Effect.flip(action);
                 expect(result).toMatchObject({ _tag: "ProgramDown", reason });
+
                 // The JSON the error writes as it is: Formatter.formatJson would also write the nested
                 // Error's message, which plain JSON leaves out.
                 const written = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result).pipe(
                   Effect.orDie,
                 );
+
                 expect(written).not.toContain("private RPC body");
               }
             }),

@@ -371,6 +371,7 @@ describe("chain after the merge (p86 and p89)", () => {
     r.git("add", "-A");
     r.git("commit", "-q", "--amend", "-m", "squash");
     const squash = r.head();
+
     const moved = Arr.map(rows, (row) => ({
       ...row,
       attested: Arr.map(row.attested, (l) => ({ ...l, squash })),
@@ -430,6 +431,7 @@ describe("chain after the merge (p86 and p89)", () => {
     r.write("f.txt", "vuln\n");
     const squash = r.commit("squash that reverts the fix");
     const forged = Str.trim(r.git("commit-tree", tree, "-p", fix, "-m", "forged"));
+
     const rows = Arr.map(steps, ({ note, commit }, i) => ({
       date: "2026-11-11",
       run: `r${i}`,
@@ -535,6 +537,7 @@ describe("chain after the merge (p86 and p89)", () => {
     const { rows } = squashed(r, steps);
     const main = r.head();
     r.git("checkout", "-q", "-b", "log", main);
+
     const moved = Arr.map(rows, (row) => ({
       ...row,
       attested: Arr.map(row.attested, (l) => ({ ...l, squash: fake })),
@@ -550,6 +553,7 @@ describe("chain after the merge (p86 and p89)", () => {
     const steps = twoSteps(r);
     const { squash, rows } = squashed(r, steps);
     const twin = Str.trim(r.git("commit-tree", "-p", r.base, "-m", "twin", r.head(`${r.base}^{tree}`)));
+
     const moved = Arr.map(rows, (row) => ({
       ...row,
       attested: Arr.map(row.attested, (l) => ({ ...l, base: twin })),

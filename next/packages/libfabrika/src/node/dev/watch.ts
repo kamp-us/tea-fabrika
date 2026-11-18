@@ -23,7 +23,7 @@ import { CodeEvent, Installed, type Install } from "../../runtime/Code.ts";
 import { buildPrograms, type Selection } from "../build/build.ts";
 import { compile } from "../build/compiler.ts";
 import { ControlError } from "./dev.ts";
-import { watcher } from "./internal/watcher.ts";
+import { Msg as WatcherMsg, watcher } from "./internal/watcher.ts";
 
 type Failed = (typeof CodeEvent.cases)["code.failed"]["Type"];
 
@@ -242,7 +242,7 @@ export const watchPrograms = (options: {
             }
 
             yield* phase
-              .dispatch({ type: "rebuilt", failedInputs: built._tag === "Failure" ? digest : null })
+              .dispatch(WatcherMsg.cases.rebuilt.make({ failedInputs: built._tag === "Failure" ? digest : null }))
               .pipe(Effect.orDie);
 
             if (built._tag === "Failure") {
@@ -268,7 +268,7 @@ export const watchPrograms = (options: {
               })
               .pipe(Effect.orElseSucceed(() => Installed.cases.failed.make({ reason: "load" })));
 
-            yield* phase.dispatch({ type: "attempted" }).pipe(Effect.orDie);
+            yield* phase.dispatch(WatcherMsg.cases.attempted.make({})).pipe(Effect.orDie);
 
             return yield* finish(
               Option.some({ ...answer, program: selected.name, hash: code.hash }),

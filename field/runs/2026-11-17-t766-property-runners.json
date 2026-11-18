@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t766-property-runners",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": "kamp-us/tea-fabrika#1506",
+  "head": "cd9f0c6a3c53f27b6d5fa19dd67e1b654a9de7b2",
+  "started": "2026-11-16T23:57:07-08:00",
+  "ended": "2026-11-17T00:10:08-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's tooling, ticket 766. N1 and N3 now use it.effect.prop, N2 uses it.prop, all with Schema inputs and unchanged assertions, coverage and fast/full counts. The shared setup sets seed 119120 once for fast-check and native Effect Arbitrary check/sample defaults. The 80-move descriptor array retains all actions, holder IDs, preconditions and the original walk. Its full 300-case run found an existing release bug: after an old script displaces 501 and ends, 502 takes the lock and 503 waits; 502 dies with child 602 running; 501 releases and unconditionally deletes 502's child guard, so 503 starts beside 602. The constant seven-move regression was written first and failed on the original product. The lead-authorized fix checks label ownership before removing either file. Displaced owners remove neither file; ordinary release and idempotence keep the same behavior.",
+  "plants": [
+    {
+      "law": "N1",
+      "plant": "Wait on a process whose args contain --lsp. The native property failed after 50 cases and shrank four times.",
+      "result": "red"
+    },
+    {
+      "law": "N2",
+      "plant": "Ignore the recorded start-time comparison. The native property failed after 18 cases and shrank four times.",
+      "result": "red"
+    },
+    {
+      "law": "N3",
+      "plant": "Remove a label owned by another pid. The native property failed after 24 cases and shrank five times.",
+      "result": "red"
+    },
+    {
+      "law": "pinned: T766 a displaced holder leaves the next holder's running-child guard intact",
+      "plant": "Original release on the exact seven-move counterexample: two live holders, 502 and 503.",
+      "result": "red"
+    },
+    {
+      "law": "pinned: T766 a displaced holder leaves the next holder's running-child guard intact",
+      "plant": "Remove the new release ownership condition from the fixed source: two live holders, 502 and 503. Restored byte for byte.",
+      "result": "red"
+    }
+  ],
+  "note": "Started is the first timestamped verification run; reading and initial edits began earlier without an exact recorded start. Pinned Node 26.13.0 and native pnpm 12.16.1; paid key unset. Own offline frozen install with scripts disabled reused all packages. Every temporary product break was restored byte for byte. N1 full 300 passed, with the four process-vector tests intentionally unrun locally. The in-memory lock file passed all five tests at full depth, including N2 1000, N3 300, the new seven-move regression, N4 and N7. Original full-depth N3 failure at case 262 and exact replay are retained as evidence; input bounds and assertions were not narrowed. Equal outcome weights first missed N1's existing success coverage; restoring the original 3:1:1 success/nonzero/signal weighting passed it. Targeted oxlint and oxfmt passed on the four changed TypeScript files. Draft plancheck passed with approval blank. No compiler, full lint, full API, real signal/process integration, CI, commit or push ran in this repair. Root owns plan approval, review, compiler and resulting-head remote proof.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "driver_caused": false,
+  "billed": null
+}

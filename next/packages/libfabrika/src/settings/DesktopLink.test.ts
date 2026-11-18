@@ -1,9 +1,9 @@
 // next/, ticket 887, P21 L10. The declaration, Config, files and generated editors agree.
 import { expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
 import { ConfigProvider, Effect, Result, Schema, Match } from "effect";
 import * as Declarations from "./Declarations.ts";
 import * as Sources from "./Fabrika.ts";
-import * as Files from "./Files.ts";
 
 const seed = 119120;
 

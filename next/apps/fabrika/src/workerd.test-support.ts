@@ -100,6 +100,7 @@ const objectRows = (db: Effect.Success<ReturnType<typeof instanceDatabase>>, nam
   // workerd's own key-value table (`_cf_KV`, key TEXT, value BLOB), read for its one `activity` row.
   const kv =
     table("_cf_KV") !== undefined ? db.prepare("SELECT value FROM _cf_KV WHERE key='activity'").get() : undefined;
+
   return {
     journal: Schema.decodeUnknownSync(Saved)(saved.value).journal,
     // SAFETY: _cf_KV's value column is a BLOB, which node:sqlite reads as a Uint8Array.

@@ -5,10 +5,11 @@
  *
  * The module is the engine's `Setting.ts` and `Sources.ts` with `make`, `group` and `env` bound to fabrika, so code that declares or reads fabrika's settings imports it under either name, as `import * as Setting from "./Fabrika.ts"`, and keeps writing `Setting.make(path, options)` and `Sources.env(record)`.
  */
-import * as App from "./App.ts";
+import * as App from "@kalfa/config/App";
 
-export * from "./Setting.ts";
-export * from "./Sources.ts";
+export * from "@kalfa/config/Setting";
+
+export * from "@kalfa/config/Sources";
 
 /**
  * Fabrika's app: prefix `FABRIKA`, home variable `FABRIKA_HOME`, files `.fabrika/fabrika.toml` and `~/.fabrika/fabrika.toml`, and version setting `fabrika-version`.
