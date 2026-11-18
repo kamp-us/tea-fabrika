@@ -1,7 +1,7 @@
 ---
 id: 0041
 title: In next/, a Durable Object class is written with Alchemy's Effect Durable Object model in its modular form, never as a plain cloudflare:workers class
-status: amended-in-part by [0050](0050-a-ledger-step-is-a-plain-function.md), [0054](0054-read-upstream-before-patching-it.md)
+status: accepted
 date: 2026-11-09
 tags: [durable-objects, alchemy, effect, object-class, brain, rpc, next]
 ---
@@ -146,7 +146,6 @@ caller's stub answers with an Effect, and Alchemy's bridge is the one place a Pr
   same day. It is never a reason to go back to a plain class. A patch comes only after reading
   Alchemy's docs and source for its own answer
   ([0054](0054-read-upstream-before-patching-it.md)).
-
 - **The port ends with no plain platform class in the brain, and with Alchemy bundling it.** The
   owner decided this on 2026-11-10. Tracker ticket 533. Tickets 526 and 527 are folded into the
   port (tracker ticket 502) as its last two pull requests, PR 7 and PR 8.
@@ -173,8 +172,9 @@ caller's stub answers with an Effect, and Alchemy's bridge is the one place a Pr
     Effect Worker reads those with `yield* ctx.props` on `Cloudflare.WorkerExecutionContext`. So
     it becomes a branch of the one Effect `fetch`, or a small Effect Worker of its own. The plan
     picks, after a spike of both in local workerd.
-  - **Then the stack drops `bundle: false`** (the `bundle` key in `next/apps/fabrika/alchemy.run.ts`).
-    Once no plain class is left, Alchemy bundles the brain. `brain.ts`'s `cloudflare:workers` import and the hand-written bridge lines go. The
+  - **Then the stack drops `bundle: false`** (the `bundle` key in
+    `next/apps/fabrika/alchemy.run.ts`). Once no plain class is left, Alchemy bundles the brain.
+    `brain.ts`'s `cloudflare:workers` import and the hand-written bridge lines go. The
     `bundle: false` build with a hand-exported bridge class is a staging step of the port, not
     where it ends.
   - **PR 8: the object services read storage through Alchemy's `state.storage`,** with its Effect
@@ -186,8 +186,8 @@ caller's stub answers with an Effect, and Alchemy's bridge is the one place a Pr
   - **What was read, in beta.84's source.** `Workers/Worker.ts`: "Effect Workers" and "Worker
     Layer" show `fetch` as an Effect returned from the implementation, and "Self Entrypoints &
     ctx.props" shows `yield* ctx.props`. `Workers/WorkerEntrypoint.ts`: a binding with no
-    entrypoint name targets the default export and can carry `props`. `Workers/DurableObjectStorage.ts`:
-    `transaction` takes an Effect, and a typed failure, a defect or an interruption rolls it back.
+    entrypoint name targets the default export and can carry `props`.
+    `Workers/DurableObjectStorage.ts`: `transaction` takes an Effect, and a typed failure, a defect or an interruption rolls it back.
     It runs the platform's `transaction`, not `transactionSync`.
   - **Not run, so not known.** Nobody here has run an Effect `fetch` or `ctx.props` this way.
     Alchemy's source says `props` on a service binding are delivered locally and dropped on a real
@@ -232,16 +232,15 @@ source shows a name exists. It does not show that it works for our objects.
   `workers/platform.ts` shrink or go is the plan's to answer.
 - **The host Worker changes too.** `.make()` registers the class through the host Worker's
   `export`, and Alchemy's source says a Worker with `bundle: false` does not get those exports.
-  Our stack sets `bundle: false` today and bundles the brain itself, with the React Compiler
-  plugin and the program table. So the port touches `alchemy.run.ts` and `build.ts`.
+  The stack's `bundle` key (`next/apps/fabrika/alchemy.run.ts`) is `false`, and the stack bundles
+  the brain itself, with the React Compiler plugin and the program table. So the port touches
+  `alchemy.run.ts` and `build.ts`.
 - **Cost:** the object classes join Alchemy's resource graph, a beta's breaking change can reach
   the brain's core, and one more library sits between a platform event and our service.
 
 **Unknown, settled by ticket 502's spike on beta.84:**
 
 - Whether Alchemy's own bundling can carry our compiler plugin and program table.
-- How a per-call sibling lookup types and resolves in beta.84. *Answered: it does not resolve,
-  see [Amendments](#amendments).*
 - Whether our alarm use holds: the bridge runs its own alarm callbacks before the `alarm` slot.
 - Whether the Gateway's hibernation laws hold: each event gets a new wrapper around the raw socket.
 - Whether a failed call between objects shows in the stub's error type. At run time it is an
@@ -249,14 +248,8 @@ source shows a name exists. It does not show that it works for our objects.
 - Whether the local stage and the exam twin (`exam/twin.ts`, which reads the stack's Alchemy
   imports) work unchanged.
 
-**Not decided here:** `Control`, the `WorkerEntrypoint` class, and the Worker's default `fetch`;
-whether calls between objects use the plain typed stub or `Cloudflare.RpcDurableObject` with a
-schema; and merging objects into one, as phoenix later did. No table under
-`docs/direction/follows/` covers this, so none changes.
-
-*Pointer, 2026-11-09:* [0042](0042-platform-pieces-go-through-alchemy.md) extends this file to
-every platform piece, `Control`, the `WorkerEntrypoint` class and the Worker's default `fetch`
-included. Every rule above still holds.
-
-*Pointer, 2026-11-10:* `Control` and the default `fetch` are now decided for the brain, and so is
-the stack's `bundle: false`: see the second line under [Amendments](#amendments).
+**Not decided here:** whether calls between objects use the plain typed stub or
+`Cloudflare.RpcDurableObject` with a schema; and merging objects into one, as phoenix later did. No
+table under `docs/direction/follows/` covers this, so none changes.
+[0042](0042-platform-pieces-go-through-alchemy.md) takes this rule to every platform piece, the
+`WorkerEntrypoint` class and the Worker's default `fetch` included.
