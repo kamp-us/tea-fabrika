@@ -3,11 +3,11 @@
  *
  * **Details**
  *
- * The repo's `fabrika-version` is read first. Each file's schema is derived from the declarations whose scope includes that file. A failure is explained at its key, with the line the Toml service gave.
+ * The repo's `<app>-version`, as `fabrika-version`, is read first, and every message names the group's own app. Each file's schema is derived from the declarations whose scope includes that file. A failure is explained at its key, with the line the Toml service gave.
  */
 import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
+import type { App } from "./App.ts";
 import * as Codec from "./Codec.ts";
-import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";
 import type { TomlDocument } from "./Toml.ts";
 
@@ -16,7 +16,7 @@ import type { TomlDocument } from "./Toml.ts";
  *
  * **Details**
  *
- * `reason` says which problem. This folder builds `version` (the repo needs a newer fabrika), `unknown` (no such setting, with a near-miss guess when one key is close), `scope` (the setting exists but not in this file), `invalid` (a value or table the schema refuses), and `read` (a source could not be read, or its value could not be traced to a declaration). `syntax` is built by the loader in `node/settings/Load.ts`, which turns a TOML error into it; that loader also builds `read` for a file it cannot read and `invalid` for a saved snapshot it cannot check. `cause` holds the underlying failure when there is one.
+ * `reason` says which problem. This folder builds `version` (the repo needs a newer release of the app), `unknown` (no such setting, with a near-miss guess when one key is close), `scope` (the setting exists but not in this file), `invalid` (a value or table the schema refuses), and `read` (a source could not be read, or its value could not be traced to a declaration). `syntax` is built by the loaders in `Load.ts` and `node/settings/Load.ts`, which turn a TOML error into it; they also build `read` for a file it cannot read and `invalid` for a saved snapshot it cannot check. `cause` holds the underlying failure when there is one.
  *
  * @category errors
  */
@@ -90,13 +90,13 @@ const located = (place: Place, path: Path) => {
  *
  * **Details**
  *
- * The message names the location, the key, the value as shown, the schema's title as what was expected, and its description as the rule. Without a title or description it falls back to "a valid value" and "fabrika settings lists every setting." The caller passes `shown`, the text printed for the value.
+ * The message names the location, the key, the value as shown, the schema's title as what was expected, and its description as the rule. Without a title or description it falls back to "a valid value" and the declaring app's list command, as "fabrika settings lists every setting." The caller passes `shown`, the text printed for the value.
  *
  * @category errors
  */
 export const refused = (location: string, d: Declaration, shown: string) => {
   const expected = SchemaAST.resolveTitle(d.schema.ast) ?? "a valid value";
-  const rule = SchemaAST.resolveDescription(d.schema.ast) ?? "fabrika settings lists every setting.";
+  const rule = SchemaAST.resolveDescription(d.schema.ast) ?? `${d.app.list} lists every setting.`;
 
   return new SettingsError({
     reason: "invalid",
@@ -154,6 +154,7 @@ export const schema = <A>(group: Setting.Group<A>, file: Setting.File): Schema.C
 
 /** The one message for the first issue in `file`. Unknown keys are named; their values never are. */
 const explain = (
+  app: App,
   declarations: ReadonlyArray<Declaration>,
   files: Files,
   file: Setting.File,
@@ -170,7 +171,7 @@ const explain = (
       ? refused(located(place, path), d, shape(at(place.document.value, path)))
       : new SettingsError({
           reason: "invalid",
-          message: `${located(place, path)}: ${path.join(".")} is a table of settings.\n  fabrika settings lists every setting. ${STOP}`,
+          message: `${located(place, path)}: ${path.join(".")} is a table of settings.\n  ${app.list} lists every setting. ${STOP}`,
         });
   }
 
@@ -194,7 +195,7 @@ const explain = (
     reason: "unknown",
     message:
       `${location}: there is no setting ${key.join(".")}.${near === undefined ? "" : ` Did you mean ${near}?`}\n` +
-      `  fabrika settings lists every setting. ${STOP}`,
+      `  ${app.list} lists every setting. ${STOP}`,
   });
 };
 
@@ -220,16 +221,16 @@ const greater = Order.isGreaterThan(Order.Tuple([Order.Number, Order.Number, Ord
 export const newer = (a: string, b: string) => greater(triple(a), triple(b));
 
 /**
- * Fails when the repo's file states a minimum fabrika version that is newer than the running one.
+ * Fails when the repo's file states a minimum version of the app that is newer than the running one.
  *
  * **Details**
  *
- * Succeeds with nothing when the repo's file does not set `fabrika-version`. A value that the version schema refuses fails as `invalid`, and a newer one fails as `version`. Both messages carry the file and line.
+ * Reads the app's own version key, as `fabrika-version`, and succeeds with nothing when the repo's file does not set it. Another app's version key is not read here. A value that the version schema refuses fails as `invalid`, and a newer one fails as `version`. Both messages carry the file and line.
  *
  * @category combinators
  */
-export const supported = Effect.fnUntraced(function* (repo: Place, version: string) {
-  const d = Declarations.version;
+export const supported = Effect.fnUntraced(function* (app: App, repo: Place, version: string) {
+  const d = app.version;
   const wanted = repo.document.value[d.path];
 
   if (wanted === undefined) {
@@ -243,7 +244,7 @@ export const supported = Effect.fnUntraced(function* (repo: Place, version: stri
   if (newer(wanted, version)) {
     return yield* new SettingsError({
       reason: "version",
-      message: `${located(repo, d.segments)}: This repo needs fabrika ${wanted} or newer. You have ${version}.\n  ${STOP}`,
+      message: `${located(repo, d.segments)}: This repo needs ${app.name} ${wanted} or newer. You have ${version}.\n  ${STOP}`,
     });
   }
 });
@@ -253,7 +254,7 @@ export const supported = Effect.fnUntraced(function* (repo: Place, version: stri
  *
  * **Details**
  *
- * First runs `supported` on the repo's file. Then each file is decoded with excess keys refused, and the first issue becomes one `SettingsError`: `invalid`, `scope` or `unknown`. Unknown keys are named, and their values never are. It does not read any source other than the two files, so flags and environment values are not checked here.
+ * First runs `supported` on the repo's file, for the group's app. Then each file is decoded with excess keys refused, and the first issue becomes one `SettingsError`: `invalid`, `scope` or `unknown`. Unknown keys are named, and their values never are. It does not read any source other than the two files, so flags and environment values are not checked here.
  *
  * @category combinators
  */
@@ -262,11 +263,11 @@ export const validate = Effect.fnUntraced(function* <A>(
   files: Files,
   options: { readonly version: string },
 ) {
-  yield* supported(files.repo, options.version);
+  yield* supported(group.app, files.repo, options.version);
 
   for (const file of ["repo", "person"] as const) {
     yield* Schema.decodeUnknownEffect(schema(group, file))(files[file].document.value, {
       onExcessProperty: "error",
-    }).pipe(Effect.mapError((error) => explain(group.declarations, files, file, error.issue)));
+    }).pipe(Effect.mapError((error) => explain(group.app, group.declarations, files, file, error.issue)));
   }
 });

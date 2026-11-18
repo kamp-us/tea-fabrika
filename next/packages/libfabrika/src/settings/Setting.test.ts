@@ -15,7 +15,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Config, ConfigProvider, Effect, Exit, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
-import * as Setting from "./Setting.ts";
+import * as Setting from "./Fabrika.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 

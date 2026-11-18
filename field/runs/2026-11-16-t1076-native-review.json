@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1076-native-review",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": "kamp-us/tea-fabrika#1427",
+  "started": "2026-11-16T20:03:42-08:00",
+  "ended": "2026-11-16T20:10:56-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Fresh whole read-only review of next/ slice 1 at 23cc6381e0d648c1909a4de9a03b8ff8ef4d3c7c against actual merge base c8d2646d00e082d4fc1537bd5ebde4900640d40b. All three prior blockers are resolved: generic early-version load coverage, S5 scalar display versus structural/foreign non-disclosure, and the supported Schema property runner. Seven old/new mappings preserve original domains, examples, assertions and recorded counterexamples. All 19 old exam edits are import-only apart from the approved stronger app field in Files.test.ts. No product or law fix requested. One proof gate remains: the shared seed setup reaches broad selection, but exact-head CI skipped next tests. answer: send tests obtain actual green broad CI proof before landing.",
+  "note": "Started is the first captured clock after initial reads, not the actual session start; elapsed minutes are a lower bound. Usage and model metadata were not exposed, so token/tool counts and dollar cost remain unknown. Actual reviewer checks: exact Git blob and full net-diff read, two loosening ranges with every hit read, governance discovery, assertion-line comparison, git diff --check, GitHub metadata and selected proof logs. No local test or plant execution, typecheck, guarded law, signal, Electron, launchd, CI wait, subagent or source/ref/PR mutation. Fix-worker logs show 39/39 fast and full, 12 original plants red before and after with pinned companions, and 3 added plants red then restored. These are read evidence, not reviewer runs. Exact-head check run 44013752995 passed lint/typecheck but skipped next. Exact-head host run 44013752930 passed both L13 tests. Older scheduled run 43847603869 has six named integration/law files green, but is red overall and predates shared seed setup; it is not current broad proof. Private report handed to the lead; no public text posted.",
+  "minutes": 7.25,
+  "tokens": null,
+  "tools": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "K4",
+      "plant": "By reading only: remove just generic Load.load early Files.supported; the extended law expects version before any person read and instead reaches read.",
+      "result": "red"
+    },
+    {
+      "law": "K5-display",
+      "plant": "By reading only: replace the declared scalar text with a placeholder; positive source/value assertions reject it.",
+      "result": "red"
+    },
+    {
+      "law": "K1",
+      "plant": "By reading only: retain the fabrika env prefix; the pinned foreign-source input changes the own snapshot.",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "By reading only: remove the mixed-app conflict check; generated group assertions require the missing throw.",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "By reading only: print structural values; readable table/array/scalar/unknown cases search all named outputs and spellings.",
+      "result": "red"
+    }
+  ]
+}
