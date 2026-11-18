@@ -3,6 +3,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { Cmd, Tagged } from "@demlik/tea";
 import type { Machine } from "@demlik/tea/effect";
 import { beforeAll, expect, it, vi } from "@effect/vitest";
 import { Clock, Deferred, Effect, Exit, Logger, Redacted, Schema, Semaphore, Tracer } from "effect";
@@ -402,13 +403,7 @@ export type NoticeView = (fact: {
 }) => Notice;
 
 /** A tea machine made with `Machine.make`, with the schemas it was made from. */
-export type Made<S, M extends { _tag: string }, C extends { readonly _tag: string }, Ctx> = Machine<
-  S,
-  M,
-  C,
-  never,
-  Ctx
-> & {
+export type Made<S, M extends Tagged, C extends Cmd, Ctx> = Machine<S, M, C, never, Ctx> & {
   readonly model: Schema.Codec<S, unknown>;
   readonly msg: Schema.Codec<M, unknown>;
 };

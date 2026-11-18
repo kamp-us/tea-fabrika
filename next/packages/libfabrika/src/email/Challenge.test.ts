@@ -1,5 +1,5 @@
 // P36, next/: Challenge persistence is tested through the real store and service, including reopen.
-import { acceptedTypes, applyCell } from "@demlik/tea";
+import { acceptedTypes, applyCell, type Cmd, type Tagged } from "@demlik/tea";
 import { expect, it } from "@effect/vitest";
 import { Effect, Redacted, Result, Schema } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
@@ -30,7 +30,7 @@ import {
 // The brain's challenge machine. The law reads its saved states as the store wrote them, so the
 // contract leaves the Model's cases to the machine.
 const module = pureModule<{
-  readonly challenge: Made<unknown, { readonly _tag: string }, { readonly _tag: string }, object>;
+  readonly challenge: Made<unknown, Tagged, Cmd, object>;
 }>("Challenge.ts");
 
 // Plants after build: reset a saved try count; reopen used/ended as open; discard a pending add.
