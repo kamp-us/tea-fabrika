@@ -2075,3 +2075,97 @@ it("property: a green historical partial run cannot skip the new automatic proje
     options,
   );
 });
+
+// A change to .gitattributes that only edits `linguist-*` attributes changes how GitHub shows a diff
+// and no byte any job reads, so it runs only what Markdown runs. `eol`, `text`, `filter` and `diff`
+// change checked-out bytes, so any other line keeps every job on.
+const attributesDiff = (...lines: string[]) =>
+  [
+    "diff --git a/.gitattributes b/.gitattributes",
+    "--- a/.gitattributes",
+    "+++ b/.gitattributes",
+    "@@ -1 +1 @@",
+    ...lines,
+  ].join("\n");
+
+const attributesJobs = async (event: string, diff: string, paths: readonly string[] = [".gitattributes"]) => {
+  const printed = await ci.outputs({ same: false, env: envOf(event, false), run: git(paths, diff) });
+
+  return { check: printed["check"], typecheck: printed["typecheck"], next: printed["next"], build: printed["build"] };
+};
+
+// build starts only for a file of today's version, which no root attributes file is.
+const fullRun = { check: "true", typecheck: "true", next: "true", build: "false" };
+
+const quietRun = { check: "false", typecheck: "false", next: "false", build: "false" };
+
+it("scenario: a .gitattributes edit of only linguist attributes, comments or blank lines runs no heavy job", async () => {
+  for (const event of ["pull_request", "merge_group", "push"]) {
+    for (const lines of [
+      ["+field/** linguist-generated=true"],
+      ["-field/** linguist-generated=true", "+field/** linguist-generated=true linguist-vendored"],
+      ["+docs/** -linguist-detectable !linguist-language"],
+      ["+# the field rows are generated", "+"],
+      ["-# old comment", "-   "],
+    ]) {
+      expect(await attributesJobs(event, attributesDiff(...lines)), `${event} ${lines.join(" | ")}`).toEqual(quietRun);
+    }
+  }
+});
+
+it("scenario: a .gitattributes edit that touches any other attribute runs every job", async () => {
+  for (const event of ["pull_request", "merge_group", "push"]) {
+    for (const lines of [
+      ["+* text=auto eol=lf"],
+      ["-* eol=lf", "+field/** linguist-generated=true"],
+      ["+field/** linguist-generated=true", "+*.sh eol=lf"],
+      ["+field/** linguist-generated=true text"],
+      ["+*.ts diff=ts linguist-generated"],
+      ["+[attr]gen linguist-generated", "+field/** gen"],
+      ['+"my file" linguist-generated'],
+    ]) {
+      expect(await attributesJobs(event, attributesDiff(...lines)), `${event} ${lines.join(" | ")}`).toEqual(fullRun);
+    }
+  }
+});
+
+it("scenario: a linguist-only .gitattributes edit beside any other path changes nothing for that path", async () => {
+  const diff = attributesDiff("+field/** linguist-generated=true");
+
+  expect(await attributesJobs("pull_request", diff, [".gitattributes", "pnpm-lock.yaml"])).toEqual(fullRun);
+  expect(await attributesJobs("pull_request", diff, [".gitattributes", "docs/a.md"])).toEqual(quietRun);
+  // Only the root file is read as attributes; another folder's is not proven.
+  expect(await attributesJobs("pull_request", diff, ["fixtures/toy/.gitattributes"])).toMatchObject({ check: "true" });
+});
+
+it("scenario: a .gitattributes diff that cannot be read or is binary runs every job", async () => {
+  const paths = [".gitattributes"];
+  const env = envOf("pull_request", false);
+
+  const failing: Runner = (args) =>
+    args[0] === "diff" && !args.includes("--name-only") ? { status: 128, stdout: "" } : git(paths, "")(args);
+
+  expect((await ci.outputs({ same: false, env, run: failing }))["next"]).toBe("true");
+
+  const binary = attributesDiff().replace("@@ -1 +1 @@", "Binary files a/.gitattributes and b/.gitattributes differ");
+  expect(await attributesJobs("pull_request", binary)).toEqual(fullRun);
+
+  // Unreadable history runs everything, as for any path.
+  const broken: Runner = () => ({ status: 128, stdout: "" });
+  const printed = await ci.outputs({ same: false, env, run: broken });
+  expect(printed).toMatchObject({ check: "true", typecheck: "true", next: "true", build: "true" });
+  expect(ci.displayOnly("a".repeat(40), "c".repeat(40), null, broken)).toEqual([]);
+});
+
+it("property: a path list proven display-only changes only that path's own answer", () => {
+  fc.assert(
+    fc.property(fc.array(fc.oneof(safe, next, shared), { maxLength: 6 }), (others) => {
+      expect(ci.classify([...others, ".gitattributes"], "pull_request", [], [".gitattributes"])).toEqual(
+        ci.classify(others.length === 0 ? ["docs/a.md"] : others, "pull_request"),
+      );
+      // Not proven: the file is unlisted and runs everything.
+      expect(ci.classify([...others, ".gitattributes"], "pull_request")).toMatchObject(heavy);
+    }),
+    options,
+  );
+});
