@@ -1,5 +1,5 @@
 ---
-state: "decided 2026-11-08"
+state: "decided 2026-11-08; amended in part 2026-11-17 by [0601](../../.decisions/0601-a-program-is-three-functions.md): a program is init, update and select, with no tea word in its API"
 summary: "`next/`. The rule: in a program's API one word means one thing and there is one way to do each job; parts link by reference or a tsc check, never by two matching strings; an unused part is left out. Picks shape 2: inputs, events and outputs as values, the Msg built from the inputs (Elm ports). `Fact` becomes `Event`; `personOnly: true` is the one way to say person-only; an input is plain data; each event brings its own write Cmd, listed in `cmds`, and tsc lets only a person-only input's Msg into a person-only event's write (a `Schema.brand`); the copied `_ok`/`_err` answers are a tea problem for now; the event knows its stream, so a write stays `answered.write(msg, event)`. Probed in experiment 235."
 ---
 

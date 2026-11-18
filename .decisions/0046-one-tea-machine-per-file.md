@@ -1,7 +1,7 @@
 ---
 id: 0046
 title: In next/, every state machine is a tea machine and a file exports at most one, or one factory of one, with its Model, Msg and update in that file and no input or output code, never a plain union with a function or a state edited by hand from outside
-status: amended-in-part by [0567](0567-a-tagged-value-is-matched.md)
+status: amended-in-part by [0567](0567-a-tagged-value-is-matched.md), [0601](0601-a-program-is-three-functions.md)
 date: 2026-11-09
 tags: [state-machine, tea, file-layout, lint, properties, elm, next]
 ---

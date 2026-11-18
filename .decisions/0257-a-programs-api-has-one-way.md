@@ -1,7 +1,7 @@
 ---
 id: 0257
 title: In next/, a program's API has one meaning per word and one way per job, links its parts by reference or tsc, leaves out what it does not use, and is built with Program.make only
-status: accepted
+status: amended-in-part by [0601](0601-a-program-is-three-functions.md)
 date: 2026-11-08
 tags: [programs, program-shape, api, one-way, tsc, next]
 ---

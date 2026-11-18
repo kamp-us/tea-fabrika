@@ -1,5 +1,5 @@
 ---
-state: "decided 2026-11-08"
+state: "decided 2026-11-08; amended in part 2026-11-17 by [0601](../../.decisions/0601-a-program-is-three-functions.md): a core program's init answers only its state, so it has no init Cmds"
 summary: "`next/`. A program has no main; the runner owns the loop. The Cmds `init` returns run once per process start, as OTP's `init/1`: each is saved as dispatched, tied to its process id, before it runs, and its answer comes back as a letter. A wake and a hot reload run none; a restart is a new process and runs them again, under the restart brake. Today's stepper drops them."
 ---
 

@@ -1,7 +1,7 @@
 ---
 id: 0585
 title: "Our tooling is six @kalfa packages grouped by domain, config, ci, records, vitest, oxlint and a thin cli, reached through one kalfa command, never one small package per tool, its settings never take a FABRIKA_ name, and every record folder moves under one .kalfa/ folder"
-status: amended-in-part by [0600](0600-kalfa-quality-holds-test-lint-format.md)
+status: amended-in-part by [0600](0600-kalfa-quality-holds-test-lint-format.md), [0601](0601-a-program-is-three-functions.md)
 date: 2026-11-15
 tags: [kalfa, packages, tooling, ci, cli, config, settings, records, vitest, oxlint, leak-check, ship]
 ---
