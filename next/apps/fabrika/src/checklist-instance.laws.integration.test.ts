@@ -38,7 +38,7 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Deferred, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -211,18 +211,29 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
   };
 };
 
+const proof = () => ({ cases: 0, moves: 0, started: 0, completed: 0, canceled: 0, future: 0 });
+
+type Proof = ReturnType<typeof proof>;
+
+class AlarmFailure extends Schema.TaggedError<AlarmFailure>()("AlarmFailure", { cause: Schema.Defect() }) {}
+
+type AlarmWork = {
+  readonly at: number;
+  readonly done: Deferred.Deferred<void, AlarmFailure>;
+};
+
 type Entry = {
   object: ReturnType<typeof processObject>;
   readonly db: DatabaseSync;
   readonly ctx: DurableObjectState;
-  timer: ReturnType<typeof setTimeout> | undefined;
+  scheduled: { readonly timer: ReturnType<typeof setTimeout>; readonly work: AlarmWork } | undefined;
 };
 
 /** What a client was sent, and what each Process published for it, in order. */
 type Heard = { readonly client: string; readonly news: unknown };
 
 /** One brain on fresh stores: the real Project, a real Process per started name, and the loader. */
-const world = (options: { readonly lacks?: string } = {}) =>
+const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       // In place: the mocked modules hold this very object, so a new one would never reach them.
@@ -248,10 +259,44 @@ const world = (options: { readonly lacks?: string } = {}) =>
         exports: loopbacks,
       } as unknown as DurableObjectState;
 
+      const counts = options.proof ?? proof();
+      counts.cases++;
+
       const processes = new Map<string, Entry>(),
         configured: Array<Descriptor> = [],
         heard: Array<Heard> = [],
-        published: Array<Heard> = [];
+        published: Array<Heard> = [],
+        alarms = new Set<AlarmWork>(),
+        running = new Set<AlarmWork>();
+
+      const cancel = (entry: Entry) => {
+        const pending = entry.scheduled;
+
+        if (pending !== undefined) {
+          clearTimeout(pending.timer);
+          counts.canceled++;
+          Deferred.doneUnsafe(pending.work.done, Effect.void);
+          alarms.delete(pending.work);
+          entry.scheduled = undefined;
+        }
+      };
+
+      // Finished records stay until read, so a failure before settled starts cannot disappear.
+      const settled = Effect.gen(function* () {
+        while (true) {
+          const due = [...alarms].filter((work) => work.at <= Date.now() || running.has(work));
+
+          if (due.length === 0) {
+            return;
+          }
+
+          yield* Effect.forEach(due, (work) => Deferred.await(work.done), { concurrency: "unbounded" });
+
+          for (const work of due) {
+            alarms.delete(work);
+          }
+        }
+      });
 
       let closed = false;
       let project: ReturnType<typeof projectObject>;
@@ -323,15 +368,39 @@ const world = (options: { readonly lacks?: string } = {}) =>
                   return;
                 }
 
-                clearTimeout(entry.timer);
+                cancel(entry);
 
                 if (at !== null && !closed) {
-                  entry.timer = setTimeout(
+                  const current = entry;
+                  const work: AlarmWork = { at, done: Deferred.makeUnsafe<void, AlarmFailure>() };
+                  alarms.add(work);
+                  const timer = setTimeout(
                     () => {
-                      entry!.object.call("alarm", []).catch(() => {});
+                      current.scheduled = undefined;
+                      running.add(work);
+                      counts.started++;
+                      // The existing platform Promise ends after publish and notify have been awaited.
+                      void Effect.runPromise(
+                        Deferred.complete(
+                          work.done,
+                          Effect.tryPromise({
+                            try: () => current.object.call("alarm", []),
+                            catch: (cause) => new AlarmFailure({ cause }),
+                          }).pipe(
+                            Effect.asVoid,
+                            Effect.ensuring(
+                              Effect.sync(() => {
+                                running.delete(work);
+                                counts.completed++;
+                              }),
+                            ),
+                          ),
+                        ),
+                      );
                     },
                     Math.max(0, at - Date.now()),
                   );
+                  current.scheduled = { timer, work };
                 }
               });
 
@@ -342,7 +411,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
                 exports: loopbacks,
               } as unknown as DurableObjectState;
 
-              entry = { db: processDb, ctx: processCtx, timer: undefined, object: processObject(processCtx, env) };
+              entry = { db: processDb, ctx: processCtx, scheduled: undefined, object: processObject(processCtx, env) };
               processes.set(storageKey, entry);
 
               return entry;
@@ -424,6 +493,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
         startsPending: () => db.prepare("SELECT process FROM dev_descriptors WHERE pending>0").all().length,
         heard,
         published,
+        settled,
         from,
         get project() {
           return project;
@@ -436,9 +506,20 @@ const world = (options: { readonly lacks?: string } = {}) =>
         }),
         close: async () => {
           closed = true;
+          counts.future += [...alarms].filter((work) => work.at > Date.now() && !running.has(work)).length;
 
           for (const p of processes.values()) {
-            clearTimeout(p.timer);
+            cancel(p);
+          }
+
+          // Calls already started keep their own records when another alarm replaces theirs.
+          await Effect.runPromise(
+            Effect.forEach([...running], (work) => Effect.exit(Deferred.await(work.done)), {
+              concurrency: "unbounded",
+            }),
+          );
+
+          for (const p of processes.values()) {
             await p.object.runtime.dispose();
             p.db.close();
           }
@@ -499,8 +580,6 @@ const admit = (w: World) =>
 
     return client;
   });
-
-const settle = Effect.promise(() => new Promise<void>((done) => setTimeout(done, 50)));
 
 describe("L21: the boot list", () => {
   it("each entry starts once, in order; a reopen starts none again and reads each entry's first placing", async () => {
@@ -591,12 +670,14 @@ describe("L21: the boot list", () => {
 
 describe("L13: notices name their process", () => {
   it("successive sends land and a client joining after the first send opens the current checklist", async () => {
+    const counts = proof();
+    const started = performance.now();
     await fc.assert(
       fc.asyncProperty(fc.uniqueArray(fc.stringMatching(/^[a-z]{1,12}$/), { minLength: 2, maxLength: 5 }), (names) =>
         Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const w = yield* world();
+              const w = yield* world({ proof: counts });
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
 
               const [, [pid]] = Schema.decodeUnknownSync(
@@ -608,6 +689,7 @@ describe("L13: notices name their process", () => {
               let model = checklistMachine.init(null, {})[0];
 
               for (const [n] of names.entries()) {
+                counts.moves++;
                 const name = names.filter((candidate) => !model.items.some((item) => item.name === candidate))[0]!;
                 const msg = { type: "add" as const, name };
 
@@ -625,8 +707,8 @@ describe("L13: notices name their process", () => {
                   result: { _tag: "accepted" },
                 });
                 model = applyCell(checklistMachine, model, msg)[0];
-                // Let the platform's past-time alarm run between inputs, as it does in dev.ts.
-                yield* settle;
+                // Plant: finish the alarm record before a Deferred-held Process call.
+                yield* w.settled;
                 const late = yield* admit(w);
                 const opened = yield* call(w, (p) => p.route(late, "view.open", { pid }));
 
@@ -656,9 +738,13 @@ describe("L13: notices name their process", () => {
         examples: [[["milk", "bread"]]],
       },
     );
+    console.info("L13 successive sends proof", { ...counts, ms: performance.now() - started });
   });
 
+  // Plants: remove pid, alter the body, or drop notify at the real delivery adapter.
   it("each view.whole and view.patch for checklist:1 carries its pid and the update its Process published", async () => {
+    const counts = proof();
+    const started = performance.now();
     const seen = { whole: 0, patch: 0, arrays: 0, refused: 0 };
     await fc.assert(
       fc.asyncProperty(
@@ -670,7 +756,7 @@ describe("L13: notices name their process", () => {
           Effect.runPromise(
             Effect.scoped(
               Effect.gen(function* () {
-                const w = yield* world();
+                const w = yield* world({ proof: counts });
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
 
                 const [, [pid]] = Schema.decodeUnknownSync(
@@ -685,6 +771,7 @@ describe("L13: notices name their process", () => {
                 let n = 0;
 
                 for (const m of moves) {
+                  counts.moves++;
                   const names = [...items.keys()];
                   const held = names.length === 0 ? null : names[m.pick % names.length]!;
 
@@ -727,10 +814,10 @@ describe("L13: notices name their process", () => {
                     }
                   }
 
-                  yield* settle;
+                  yield* w.settled;
                 }
 
-                yield* settle;
+                yield* w.settled;
                 // Read as the Connection object reads them: a view news, and the Published it holds.
                 const views = w.heard.map((h) => h.news).filter(News.guards.view);
                 const theirs = w.published.map((h) => h.news).filter(Schema.is(Published));
@@ -750,6 +837,7 @@ describe("L13: notices name their process", () => {
       ),
       { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) },
     );
+    console.info("L13 forwarding proof", { ...counts, ms: performance.now() - started });
     expect(seen.patch).toBeGreaterThan(0);
     expect(seen.arrays, "array ops reached the client").toBeGreaterThan(0);
     expect(seen.refused, "some inputs were refused").toBeGreaterThan(0);

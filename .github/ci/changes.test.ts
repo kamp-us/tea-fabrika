@@ -1451,6 +1451,8 @@ const world = (paths: readonly string[], ran: ci.Selection, fault: Fault) => {
   const list = [
     { name: "changes", conclusion: "success" },
     fault === "red ci-required" ? { ...required, conclusion: "failure" } : required,
+    { name: "select", conclusion: "success" },
+    { name: "related (1)", conclusion: "success" },
   ];
 
   const api = {
@@ -1723,7 +1725,18 @@ const workflowPaths = fc.constantFrom(
 );
 
 const jobNames = fc.oneof(
-  fc.constantFrom("ci-required", "ci-required (draft)", "check", "changes", "next (1)", "Ci-required", "ci-required "),
+  fc.constantFrom(
+    "ci-required",
+    "ci-required (draft)",
+    "check",
+    "changes",
+    "next (1)",
+    "Ci-required",
+    "ci-required ",
+    "select",
+    "related (1)",
+    "related",
+  ),
   fc.string(),
 );
 
@@ -1755,7 +1768,11 @@ it("property: a run vouches only when it is a completed, successful pull request
           conclusion === "success" &&
           path === ".github/workflows/check.yaml" &&
           head === "same" &&
-          list.some((job) => job.name === "ci-required" && job.conclusion === "success");
+          list.some((job) => job.name === "ci-required" && job.conclusion === "success") &&
+          list.some((job) => job.name === "select" && ["success", "skipped"].includes(job.conclusion ?? "")) &&
+          list.some(
+            (job) => /^related(?: \([1-9]\))?$/.test(job.name) && ["success", "skipped"].includes(job.conclusion ?? ""),
+          );
 
         expect(ci.vouches(found, list, "check.yaml")).toBe(holds);
       },
@@ -1771,7 +1788,11 @@ it("property: a run vouches only when it is a completed, successful pull request
           "success",
           ".github/workflows/check.yaml",
           "same",
-          [{ name: "ci-required", conclusion: "success" }],
+          [
+            { name: "ci-required", conclusion: "success" },
+            { name: "select", conclusion: "success" },
+            { name: "related (1)", conclusion: "success" },
+          ],
         ],
         [
           "merge_group",
@@ -1779,7 +1800,11 @@ it("property: a run vouches only when it is a completed, successful pull request
           "success",
           ".github/workflows/check.yaml",
           "same",
-          [{ name: "ci-required", conclusion: "success" }],
+          [
+            { name: "ci-required", conclusion: "success" },
+            { name: "select", conclusion: "success" },
+            { name: "related (1)", conclusion: "success" },
+          ],
         ],
         [
           "pull_request",
@@ -1787,7 +1812,11 @@ it("property: a run vouches only when it is a completed, successful pull request
           "success",
           ".github/workflows/check.yaml",
           "same",
-          [{ name: "ci-required", conclusion: "success" }],
+          [
+            { name: "ci-required", conclusion: "success" },
+            { name: "select", conclusion: "success" },
+            { name: "related (1)", conclusion: "success" },
+          ],
         ],
         [
           "pull_request",
@@ -1795,7 +1824,11 @@ it("property: a run vouches only when it is a completed, successful pull request
           "cancelled",
           ".github/workflows/check.yaml",
           "same",
-          [{ name: "ci-required", conclusion: "success" }],
+          [
+            { name: "ci-required", conclusion: "success" },
+            { name: "select", conclusion: "success" },
+            { name: "related (1)", conclusion: "success" },
+          ],
         ],
         [
           "pull_request",
@@ -1803,7 +1836,11 @@ it("property: a run vouches only when it is a completed, successful pull request
           "success",
           ".github/workflows/host.yaml",
           "same",
-          [{ name: "ci-required", conclusion: "success" }],
+          [
+            { name: "ci-required", conclusion: "success" },
+            { name: "select", conclusion: "success" },
+            { name: "related (1)", conclusion: "success" },
+          ],
         ],
         [
           "pull_request",
@@ -1811,7 +1848,11 @@ it("property: a run vouches only when it is a completed, successful pull request
           "success",
           ".github/workflows/check.yaml",
           "none",
-          [{ name: "ci-required", conclusion: "success" }],
+          [
+            { name: "ci-required", conclusion: "success" },
+            { name: "select", conclusion: "success" },
+            { name: "related (1)", conclusion: "success" },
+          ],
         ],
         [
           "pull_request",
@@ -2006,5 +2047,31 @@ it("property: on every event, for any paths and either draft flag, no flag and n
         [null, "workflow_dispatch", false],
       ],
     },
+  );
+});
+
+// The old merge-line run had no selector or related matrix and cannot vouch for their coverage.
+it("property: a green historical partial run cannot skip the new automatic projects", () => {
+  fc.assert(
+    fc.property(fc.boolean(), (empty) => {
+      const found: ci.WorkflowRun = {
+        event: "pull_request",
+        status: "completed",
+        conclusion: "success",
+        path: ".github/workflows/check.yaml",
+        html_url: "https://github.com/owner/repo/actions/runs/11",
+        repository: { id: 1 },
+        head_repository: { id: 1 },
+      };
+
+      const required = { name: "ci-required", conclusion: "success" };
+      const selected = { name: "select", conclusion: "success" };
+      const related = { name: empty ? "related" : "related (1)", conclusion: empty ? "skipped" : "success" };
+      expect(ci.vouches(found, [required], "check.yaml")).toBe(false);
+      expect(ci.vouches(found, [required, selected], "check.yaml")).toBe(false);
+      expect(ci.vouches(found, [required, related], "check.yaml")).toBe(false);
+      expect(ci.vouches(found, [required, selected, related], "check.yaml")).toBe(true);
+    }),
+    options,
   );
 });
