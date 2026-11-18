@@ -340,7 +340,7 @@ describe("L11: boot", () => {
           const sockets = seen.opened;
           yield* waiting(page);
           yield* Effect.sleep("2 seconds");
-          // The real tab bundle uses production React. The entry location is checked in build.test.ts.
+          // The real tab bundle uses production React. The entry's one runtime is held by the lint rule fabrika/one-page-runtime.
           expect(sockets, "one runtime dials once").toHaveLength(1);
           // L16's plain child also reaches the reader's socket.
           yield* online(h, page);

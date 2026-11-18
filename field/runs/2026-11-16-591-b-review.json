@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-b-review",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T01:37:11-08:00",
+  "ended": "2026-11-16T01:55:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send tests",
+  "why": "The one review of slice B of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md), next/ and our tooling, on fabrikalfa/exam-to-lint-b at 1ae9fa9. The answer is changes: 2; findings: 3. I read B's own diff: 2621967..03a5235, the merge 625fccd (one auto-merged hunk, in oxlint-plugins/index.ts), and 625fccd..1ae9fa9. node-kinds, next-manifests, the typed command's secret-types and tsconfig-scope checks, and package-deps' break, exports and front-or-internal laws all compare at least as much as their exam files did, with two exceptions, and both send the slice back. (1) The 'reading imports' law in oxlint-plugins/package-deps.test.ts:38 no longer proves that the type import, the re-export and the bare import are read. Its three relative paths all resolve inside the planted package, so the rule fires on none of them whether or not it reads them. The old exam law in deps.integration.test.ts asserted that every one of those forms was found. In a scratch copy, I removed the ExportNamedDeclaration and ExportAllDeclaration visitors from package-deps.ts, and all 7 package-deps laws stayed green. The TSImportType and TSImportEqualsDeclaration forms that the rule's own header claims to read have no law either. The fix: each form in the planted reader text gets a spec that fires (for example an unlisted package or a path that leaves the package), and the expected list names a fire on each line, the export * line and a type import() line included. (2) The front-or-internal exports law (package-deps.test.ts:254) draws 36 generated cases at seed 119120 and 6 runs, which I counted with the same arbitrary in a scratch script. The old law ran 60 in the full run, and this folder runs only in the full run. The comment at lines 247-250 says 'the exam's 60 cases cost six oxlint runs', which is not true. The fix: draw exactly 10 per run (minLength 10) or raise numRuns until the count is at least 60, and keep the comment true. Everything else holds. The .agents/ twin keeps the 0033 mirror exact (edge-comment.test.ts passes), and package-deps judges next/ paths only, as no-stage-word already does there. plant.ts's code-file filter dropped no file that any plant test used to lint, since a non-code file would have failed the old number_of_files check. Each export (checkSecretTypes, typedProjects, nextPackages, scopeGaps, exportAt, MESSAGES, nodeKindProblems, manifestFaults) has a reader, and lint:dead passes. The typed command now opens every next/ project where the old secret-types law opened two, and it reports 0. The tests rows record each break red on the old and the new law together, the old files green, then their removal in 41c30ab, f3ca5b7, 8f1356e and 8826975. The L5 and nextSamples counts are text only, and L5 passes.",
+  "plants": [
+    {
+      "law": "M4 oxlint-plugins/package-deps.test.ts, reading imports (and all 7 package-deps laws)",
+      "plant": "run in a scratch copy: drop the ExportNamedDeclaration and ExportAllDeclaration visitors in package-deps.ts",
+      "result": "green"
+    },
+    {
+      "law": "M3 oxlint-plugins/node-kinds.test.ts, made-up names",
+      "plant": "by reading: test the raw text instead of the comment-blanked code; the 'bound in a comment' shape expects the unbound message",
+      "result": "red"
+    },
+    {
+      "law": "M2 oxlint-plugins/promise-types.test.ts, typecheck script and stray file",
+      "plant": "by reading: drop the stray branch of scopeGaps; the law expects next/<word>.ts stray on every run",
+      "result": "red"
+    },
+    {
+      "law": "M4 oxlint-plugins/package-deps.test.ts, the exam's own files outside a package",
+      "plant": "by reading: widen EXAM to all of next/apps/fabrika/; the law expects a stray fire on src/brain.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "Run here on Node 26.13.0 at 1ae9fa9, nice -n 19, --maxWorkers=1, one file at a time: B's four law files, deps.integration.test.ts, vitest.shards.test.ts, and the 37 other oxlint-plugins tests that use plant.ts or plant a manifest (advice and prefer-schema-arbitrary included). That is 43 files and 502 tests, all green. lint:node-kinds, lint:manifests and lint:promise-types each report 0 findings. pnpm lint ran by parts because other agents were running, with NODE_OPTIONS=--max-old-space-size=6144: oxlint (0 blocking), format check, lint:versions, lint:reach, lint:kind, lint:layers, lint:boundaries, lint:browser, lint:compiler, lint:twin, lint:dead, tokens --check, stylelint and skillscheck all exit 0. One pnpm typecheck passed. loosening.sh on 2621967..03a5235: each removed deps, node-kinds, secret-types and tsconfig-scope law is at its new path. Two of them compare less, as written above. The 'fewer numRuns: line 709' hit is runsFor's full count of 200, now a fixed 200 on Node's rule, so that law is not looser. loosening.sh on 625fccd..1ae9fa9: 0 hits. Not run: .github/ci/changes.test.ts, workflow-lint, field-check and shard-rows, because their paths hold a word the box's command check refuses; the fold or CI runs them.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

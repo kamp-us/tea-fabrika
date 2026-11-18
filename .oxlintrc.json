@@ -674,6 +674,8 @@
         "fabrika/one-store-hook": "error",
         "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
+        // p65: each import of a next/ file stays inside what its package lists and exports (0591).
+        "fabrika/package-deps": "error",
         "eslint/no-restricted-imports": [
           "error",
           {
@@ -708,7 +710,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1098,7 +1100,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1165,6 +1167,8 @@
         "fabrika/one-store-hook": "error",
         "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
+        // p65: each import of a next/ file stays inside what its package lists and exports (0591).
+        "fabrika/package-deps": "error",
         "eslint/no-restricted-imports": [
           "error",
           {
@@ -1199,7 +1203,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1464,6 +1468,13 @@
       }
     },
     {
+      // P12, L11 (0591): the page entry starts its one Effect program through `runMain` from
+      // `@kampus/tuval/browser`, once, at module scope, and calls no other run function.
+      // `one-page-runtime.test.ts` plants each break at this path.
+      "files": ["next/apps/fabrika/src/entry/browser.tsx"],
+      "rules": { "fabrika/one-page-runtime": "error" }
+    },
+    {
       // A3b: raw Node console output in the grant entry runs before `runMain` starts.
       "files": ["next/apps/fabrika/grant.ts"],
       "rules": { "eslint/no-console": "error" }
@@ -1655,7 +1666,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1811,7 +1822,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1895,7 +1906,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -1950,7 +1961,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -2003,7 +2014,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -2298,7 +2309,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -2463,7 +2474,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -2587,7 +2598,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -2699,7 +2710,7 @@
             ],
             "patterns": [
               {
-                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "group": ["**/oxlint-plugins/plant.ts", "**/oxlint-plugins/plant"],
                 "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
               },
               {
@@ -3128,8 +3139,7 @@
       // change them together.
       "files": [
         "next/apps/fabrika/src/exam/**",
-        "next/apps/fabrika/src/settings-generated.integration.test.ts",
-        "next/apps/fabrika/src/build.test.ts",
+        "next/apps/fabrika/src/settings-generated.test.ts",
         "next/apps/fabrika/src/build.integration.test.ts",
         "next/apps/fabrika/src/build-command.integration.test.ts",
         "next/apps/fabrika/src/instance-one-file.integration.test.ts"

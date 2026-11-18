@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-a-review",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T00:50:04-08:00",
+  "ended": "2026-11-16T01:12:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The one review of slice A of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md), next/ and our tooling, on fabrikalfa/exam-to-lint-a at 3f7dd39: merge-ready, findings 1. Read the slice's own diff (262d4dc..7abc095, the merge 2621967's resolutions, 2621967..3f7dd39). Every law of the twelve exam files is at its new path with the same planted files and the same expected lines; none compares less. Three compare more: object-imports now draws all four modules (examples plus a drawn check, where the old it.effect.prop at 4 runs did not force them), the typed promise-types laws run 12 or 20 runs on every run where the old ones ran 3 on a pull request, and L9 runs 100 runs with a check that each start file is drawn taking the adapter. The tests2 row has the four results for all twelve lint rows, each break red in the old and the moved file together. Departures judged: edge-comment's five config laws staying in next/apps/fabrika/src/exam/edge-config.test.ts holds (PR 1420 put them there after the plan was written, plain, so they run on every pull request; moving them would undo that); the three nearest-real breaks hold; runsFor replaced by the full-depth count holds; the local Row type holds; slice A's settings-imports.test.ts is the one the fold should keep (it imports ./plant.ts, which only exists after slice A, and adds the start-file coverage check; slice F's copy imports the old exam path); the settings-generated rename back to plain holds (lint:kind green); cache: false in F2 and L18 hides no fault (CI restores only the tsc cache, and L19 still holds failed-first); the dropped edge comment in plant.ts was forced by oxlint's unused-comment report, since oxlint-plugins/ is not under next/'s edge rules; the shard renames are consistent. changes.test.ts was not run; by reading, its readers law passes with the renamed path, and the fold's CI covers it. One finding row: two stale pointers to where edge-comment's laws live.",
+  "plants": [
+    {
+      "law": "M1 oxlint-plugins/plants.test.ts, object contracts load only Alchemy",
+      "plant": "by reading: allow a value import of node:fs in the cloudflare/objects.ts block; the old exam file at seed 119120 and 4 runs need not draw node:fs, the moved law draws every module through examples and checks it",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/plants.test.ts, built in, on in next/'s .tsx files: react(purity)",
+      "plant": "by reading: drop the next/ test override, so react/purity fires in view.test.tsx; the moved law checks every planted file against want[file] ?? [], as the old one checked the test copy",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/settings-imports.test.ts (M8)",
+      "plant": "by reading: drop next/apps/fabrika/cli.ts from the adapter's allowed files; if the seed never drew cli.ts taking the adapter, the coverage check expect([...started]) fails first",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 22,
+  "note": "Run here on Node 26.13.0 at 3f7dd39, nice -n 19, --maxWorkers=1: the 13 moved oxlint-plugins laws and compiler.test.ts (14 files, 86 green); plants.test.ts, exam/edges.integration.test.ts, exam/edge-config.test.ts, settings-generated.test.ts and vitest.shards.test.ts (5 files, 294 green). pnpm lint in full with NODE_OPTIONS=--max-old-space-size=6144: four parts died with EPIPE or status null at once (oxlint, lint:kind, lint:dead, lint:promise-types); each run again alone passed (oxlint 0 blocking, lint:kind green, lint:dead no new finding, lint:promise-types 0 findings). One pnpm typecheck: green. loosening.sh on 262d4dc..7abc095 and 2621967..3f7dd39: every removed law is a move, each found at its new path. A merge of origin/main conflicts in oxlint-plugins/modules.test.ts, no-node-imports.test.ts, one-id-module.test.ts (deleted on main) and plants.test.ts; a merge into fabrikalfa/exam-to-lint conflicts in settings-generated.test.ts, settings-imports.test.ts and vitest.shards.test.ts. 0573's oxlint-plugins/effect-checks-held.test.ts reached main after this slice took main, so the plan's fold of the effect-checks pin into it is the fold's to do. Not run: .github/ci/changes.test.ts (the brief kept it to CI).",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

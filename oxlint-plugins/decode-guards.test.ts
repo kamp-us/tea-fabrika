@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { Array as Arr, pipe, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "eslint(no-restricted-properties)";
 
@@ -103,11 +103,21 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
   });
 });
 
-/** Runs `pnpm lint`'s oxlint step on planted files inside next/, as the repo runs it. */
+/**
+ * Runs `pnpm lint`'s oxlint step on planted files inside next/, as the repo runs it. The library's
+ * manifest is planted beside them, so `fabrika/package-deps` (p65) finds each file in its package and
+ * the count is the planted faults' own.
+ */
 const lint = (files: Readonly<Record<string, string>>, args: ReadonlyArray<string>) => {
   const dir = realpathSync(mkdtempSync(join(root, "next", ".decode-lint-")));
 
   try {
+    mkdirSync(join(dir, "next/packages/libfabrika"), { recursive: true });
+    writeFileSync(
+      join(dir, "next/packages/libfabrika/package.json"),
+      JSON.stringify({ name: "@kampus/libfabrika", dependencies: { effect: "catalog:" } }),
+    );
+
     for (const [path, text] of Rec.toEntries(files)) {
       mkdirSync(dirname(join(dir, path)), { recursive: true });
       writeFileSync(join(dir, path), text);

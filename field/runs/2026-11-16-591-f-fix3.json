@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-f-fix3",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T00:14:21-08:00",
+  "ended": "2026-11-16T00:23:00-08:00",
+  "parent": "2026-11-16-591-f-review3",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Third and last fix round for slice F of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md, law M7), allowed by the owner after the review's third send-back (field/runs/2026-11-16-591-f-review3.json), on fabrikalfa/exam-to-lint-f from 4269851. The review found that fabrika/one-page-runtime (oxlint-plugins/one-page-runtime.ts) matched a string only when its whole value was a run name (OTHER_RUN, line 21) and skipped every template with an expression, so `const x = \"\"; Effect[`runPromise${x}`](page);` and `Effect[\"Effect.runPromise\".split(\".\")[1]](page);` passed, while the deleted next/apps/fabrika/src/build.test.ts law, which searched the whole text with `\\brun(?!Main\\b)[A-Z]\\w*` and counted `\\brunMain\\b`, refused both. The fix, as the owner ruled: the Literal visitor searches every string literal's value, and the TemplateLiteral visitor searches the text of every template piece (joined by a space where each expression stood, so no word spans an expression), templates with expressions included, with those two word patterns. A run-pattern match is reported as a run the page does not own; a runMain-pattern match is a read of runMain, so a second page runtime. The one exception is a \"runMain\" string that names an import specifier, still counted as an import at Program:exit. Identifiers are read as before. The rule's top comment and oxlint-plugins/README.md say so. M7's law (oxlint-plugins/one-page-runtime.test.ts) gains two generated planted entries: a run named in a template with an expression (the name after, before or between `${tail}` pieces) and a run named inside a longer string (`\"Effect.<name>\".split(\".\")[1]` or `\"<name> now\".split(\" \")[0]`, in double quotes, single quotes or a template). Both draw the name from runPromise, runFork, runSync and runMain (runMain must report a second runtime, the others a foreign run), and the property's coverage check requires each name, piece, wording and quote to be drawn. The scenario plants both too. Every earlier case stays.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: refuses each planted entry with its own reports and passes the entry in every start spelling",
+      "plant": "the rule as it stood at 4269851 (reads a string only as its whole value, skips templates with expressions)",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: scenario: the repo's config turns the rule on for the page entry and for no other file",
+      "plant": "the rule as it stood at 4269851",
+      "result": "red"
+    },
+    {
+      "law": "case 1, a run named in a template with an expression: const x = \"\"; Effect[`runPromise${x}`](page);",
+      "plant": "the rule as it stood at 4269851, in a scratch RuleTester file expecting one report",
+      "result": "red"
+    },
+    {
+      "law": "case 2, a run named inside a longer string: Effect[\"Effect.runPromise\".split(\".\")[1]](page);",
+      "plant": "the rule as it stood at 4269851, in a scratch RuleTester file expecting one report",
+      "result": "red"
+    },
+    {
+      "law": "cases 1 and 2, each alone, on the fixed rule",
+      "plant": "none: the fixed rule, in the same scratch RuleTester file, each case expecting exactly one report",
+      "result": "green"
+    },
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: both laws, on the fixed rule (M7's planned break)",
+      "plant": "count a runMain inside a function as the module's start (the first runMain read anywhere taken as the start, in place of program.body's start statements)",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8.7,
+  "note": "The new law was run at 2026-11-16T00:15:53 with the test change and the rule still as at 4269851: the property failed 'Should have 1 error but had 0' on 'a run named in a template with an expression' (counterexample: runPromise in the after piece), and the scenario 'a run named in a template with an expression: expected [] to have a length of 1 but got +0'. Since both laws stop at their first failing case, a scratch file oxlint-plugins/zz-cases.test.ts ran each of the review's two cases alone at 00:16:11: the 4269851 rule gave each 0 reports; at 00:16:54 the fixed rule gave each 1. The scratch file was deleted and never committed. M7's planned break was run at 00:17:16 with the Edit tool and restored with it: 'inside a component' fails with 'Should have 2 errors but had 0', the scenario with 'expected [] to have a length of 2 but got +0'. False alarms: oxlint with .oxlintrc.json on the real entry next/apps/fabrika/src/entry/browser.tsx gives 0 diagnostics (361 rules, 1 file), and the entry is unchanged. Tests ran under nice -n 19 with --maxWorkers=1 on narrow paths only, at 00:17:40 on the fixed rule: oxlint-plugins/one-page-runtime.test.ts and oxlint-plugins/plants.test.ts, 238 passed. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144, started when pgrep -x tsgo found none) exits 0, 17 parts passed. The list ratchet exits 0. One pnpm typecheck, once pgrep -x tsgo found none: exit 0. No .integration. or .visual. law was reached, so none met the 0178 guard. No product file changed. What this cannot tell us: text the old law read and the rule still does not is comments, regex literals and JSX text, which run nothing; a name built by joining pieces (\"run\" + \"Promise\") escaped the old law too.",
+  "step": "tests"
+}
