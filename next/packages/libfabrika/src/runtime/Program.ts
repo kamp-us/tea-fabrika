@@ -150,7 +150,7 @@ Object.defineProperty(readCase, "make", { value: readPort });
 Object.defineProperty(writeCase, "make", { value: writePort });
 
 /**
- * Schema for one input port of a program, kept in `inputs` under its Msg `type`.
+ * Schema for one input port of a program, kept in `inputs` under its Msg `_tag`.
  *
  * **Details**
  *
@@ -469,7 +469,7 @@ const makeEffect = Effect.fn("program.make")(function* <
  */
 export const Program = { schema: Declaration, make, makeEffect };
 
-type PortFields<M, K extends string> = M extends Typed ? (K extends M["type"] ? Omit<M, "type"> : never) : never;
+type PortFields<M, K extends string> = M extends Typed ? (K extends M["_tag"] ? Omit<M, "_tag"> : never) : never;
 
 type PortSchema<P extends typeof Declaration.Type, K extends string> = string extends K
   ? Declared
@@ -484,7 +484,7 @@ type PortSchema<P extends typeof Declaration.Type, K extends string> = string ex
     : Declared;
 
 const Payload = Schema.Record(Schema.String, Schema.Json).check(
-  Schema.makeFilter((value) => !Object.hasOwn(value, "type")),
+  Schema.makeFilter((value) => !Object.hasOwn(value, "_tag")),
 );
 
 const Fields = Schema.Record(Schema.String, Schema.Unknown);
@@ -493,39 +493,42 @@ const Fields = Schema.Record(Schema.String, Schema.Unknown);
 const isJsonObject = (u: Schema.Json): u is Schema.JsonObject => Predicate.isObject(u);
 
 // Keep the Msg's codecs and checks intact. Only add and remove the port's discriminator.
-const writePortCodec = (msg: Declared, key: string) =>
-  Payload.pipe(
+const writePortCodec = (msg: Declared, key: string) => {
+  const tagged = Schema.TaggedStruct(key, {}).make({});
+
+  return Payload.pipe(
     Schema.decodeTo(
       Schema.toCodecJson(msg),
       SchemaTransformation.transform<Schema.Json, Readonly<Record<string, Schema.Json>>>({
-        decode: (value) => ({ ...value, type: key }),
+        decode: (value) => ({ ...value, ...tagged }),
         encode: (wire) => {
           if (!isJsonObject(wire)) {
             return {};
           }
 
-          const { type: _, ...value } = wire;
+          const { _tag: _, ...value } = wire;
           return value;
         },
       }),
     ),
-    Schema.decodeTo(Fields.check(Schema.makeFilter((m) => m.type === key))),
+    Schema.decodeTo(Fields.check(Schema.makeFilter((m) => m._tag === key))),
     Schema.decodeTo(
       Fields,
       SchemaTransformation.transform({
         decode: (m) => {
-          const { type: _, ...fields } = Predicate.isObject(m) ? m : {};
+          const { _tag: _, ...fields } = Predicate.isObject(m) ? m : {};
           return fields;
         },
-        encode: (fields) => ({ ...fields, type: key }),
+        encode: (fields) => ({ ...fields, ...tagged }),
       }),
     ),
   );
+};
 
 /**
  * Returns the schema of one of a program's ports, or none when the program declares no port by
  * that name. A read port gives its own schema. A write port gives a codec for its Msg's fields
- * without `type`, which decodes and checks them with the Msg's own JSON codec.
+ * without `_tag`, which decodes and checks them with the Msg's own JSON codec.
  *
  * @category getters
  */
