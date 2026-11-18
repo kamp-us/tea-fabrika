@@ -1,13 +1,11 @@
 // Today's lead tooling. The laws of `land.ts stack` (ticket 1115) on the test layers: nothing here
-// asks GitHub. A stack lands whole through the merge queue only if its open layers fit what the
-// queue builds at once; on 2026-11-16 a 4-layer stack entered a queue that builds 2 and lost its
-// upper layers. And since merge when ready is not offered for a stacked pull request
+// asks GitHub. The selected prefix is pinned while GitHub handles the native stack merge. And since
+// merge when ready is not offered for a stacked pull request
 // (github/gh-stack#591), each layer passes `arm`'s gates here or the stack is not merged at all.
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
 import { Effect, Layer, Option } from "effect";
 import { Checks, type Job } from "../ci/Checks.ts";
-import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
 import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as Stack from "./Stack.ts";
@@ -22,6 +20,8 @@ type World = {
   readonly build?: number;
   /** The layer whose net change the leak grep refuses. */
   readonly leaky?: number;
+  /** The layer left as a draft. */
+  readonly draft?: number;
   /** The layer that exports a new name with no `## New names` section. */
   readonly unnamed?: number;
   /** How `ci-required` stands at a layer's head, by layer: a finished success when absent. */
@@ -30,7 +30,7 @@ type World = {
 
 const GREEN: Job = { id: 1, status: "completed", conclusion: "success" };
 
-/** Stack 1522's shape: layers 11, 12 and 13, bottom first, each open, ready and named. */
+/** A three-layer stack: layers 11, 12 and 13, bottom first, each open, ready and named. */
 const memory = (w: World = {}) => {
   const github = PullRequestsTest.world(
     [11, 12, 13].map((number) => ({
@@ -38,14 +38,18 @@ const memory = (w: World = {}) => {
       head: `fabrikalfa/layer-${number}`,
       oid: head(number),
       state: "OPEN",
-      draft: false,
+      draft: number === w.draft,
     })),
   );
 
-  github.stacks.push({ number: 1522, base: "main", prs: [11, 12, 13] });
+  github.stacks.push({
+    number: 1522,
+    base: "main",
+    prs: [11, 12, 13].map((number) => ({ number, oid: head(number) })),
+  });
 
   if (w.build !== undefined) {
-    github.queues.set("main", { build: w.build, merge: 3 });
+    github.queues.set("main", { build: w.build, merge: 3, method: "SQUASH" });
   }
 
   for (const number of [11, 12, 13]) {
@@ -92,48 +96,54 @@ const land = (m: ReturnType<typeof memory>, top: number) =>
 
 const stackCalls = (m: ReturnType<typeof memory>) => m.github.calls.filter((call) => call._tag === "stack");
 
-describe("Stack.land: a stack lands only if it fits one merge group (ticket 1115)", () => {
-  // Plant: drop the size check, and the stack of 3 is asked for and this law goes red.
-  it.effect(
-    "scenario: a stack of 3 open layers on a queue that builds 2 is refused, naming 3 and 2, and nothing is merged",
-    () =>
-      Effect.gen(function* () {
-        const m = memory({ build: 2 });
-        const answer = yield* land(m, 13);
-        expect(answer._tag).toBe("Failure");
-        const reason = answer._tag === "Failure" ? answer.failure.reason : "";
-        expect(reason).toContain("3 open pull requests (11, 12, 13)");
-        expect(reason).toContain("more than the 2 the main merge queue builds at once");
-        expect(reason).toContain("Split the stack, or land it layer by layer");
-        expect(stackCalls(m)).toEqual([]);
-      }),
+describe("Stack.land: gates and pins the selected native stack prefix (ticket 1115)", () => {
+  it.effect("scenario: three open layers reach the adapter when the queue builds two", () =>
+    Effect.gen(function* () {
+      const m = memory({ build: 2 });
+      const answer = yield* land(m, 13);
+      expect(answer).toEqual(
+        expect.objectContaining({
+          _tag: "Success",
+          success: Stack.Landed.cases.pending.make({
+            top: 13,
+            base: "main",
+            prs: [11, 12, 13],
+            uuid: "fixture-merge-request",
+          }),
+        }),
+      );
+      expect(stackCalls(m).map((call) => call.heads.map((pin) => pin.number))).toEqual([[11, 12, 13]]);
+    }),
   );
 
-  it.effect(
-    "scenario: a stack of 2 open layers on a queue that builds 2 is asked for, pinned to each layer's head",
-    () =>
-      Effect.gen(function* () {
-        const m = memory({ build: 2 });
-        const answer = yield* land(m, 12);
-        expect(answer).toEqual(
-          expect.objectContaining({
-            _tag: "Success",
-            success: Stack.Landed.cases.asked.make({ top: 12, base: "main", prs: [11, 12] }),
-          }),
-        );
-        expect(stackCalls(m)).toEqual([
-          PullRequestsTest.Call.cases.stack.make({
+  it.effect("scenario: a ready prefix through the middle layer excludes an upper draft", () =>
+    Effect.gen(function* () {
+      const m = memory({ build: 2, draft: 13 });
+      const answer = yield* land(m, 12);
+      expect(answer).toEqual(
+        expect.objectContaining({
+          _tag: "Success",
+          success: Stack.Landed.cases.pending.make({
             top: 12,
-            heads: [
-              { number: 11, oid: head(11) },
-              { number: 12, oid: head(12) },
-            ],
+            base: "main",
+            prs: [11, 12],
+            uuid: "fixture-merge-request",
           }),
-        ]);
-      }),
+        }),
+      );
+      expect(stackCalls(m)).toEqual([
+        PullRequestsTest.Call.cases.stack.make({
+          top: 12,
+          heads: [
+            { number: 11, oid: head(11) },
+            { number: 12, oid: head(12) },
+          ],
+        }),
+      ]);
+    }),
   );
 
-  it.effect("scenario: a merged bottom layer does not count: 2 open layers of 3 fit a queue that builds 2", () =>
+  it.effect("scenario: a merged bottom layer skips gates while the two open layers stay selected", () =>
     Effect.gen(function* () {
       const m = memory({ build: 2 });
       m.github.prs.splice(0, 1, {
@@ -146,6 +156,52 @@ describe("Stack.land: a stack lands only if it fits one merge group (ticket 1115
       const answer = yield* land(m, 13);
       expect(answer._tag).toBe("Success");
       expect(stackCalls(m).map((call) => call.heads.map((pin) => pin.number))).toEqual([[12, 13]]);
+    }),
+  );
+
+  it.effect("scenario: a merged top without a merge commit is not reported as landed", () =>
+    Effect.gen(function* () {
+      const m = memory();
+      m.github.prs.splice(
+        0,
+        3,
+        ...[11, 12, 13].map((number) => ({
+          number,
+          head: `fabrikalfa/layer-${number}`,
+          oid: head(number),
+          state: "MERGED" as const,
+          draft: false,
+        })),
+      );
+      const answer = yield* land(m, 13);
+
+      expect(answer._tag).toBe("Failure");
+      expect(answer._tag === "Failure" ? answer.failure.reason : "").toContain("returned no merge commit");
+      expect(stackCalls(m)).toEqual([]);
+    }),
+  );
+
+  it.effect("scenario: a merged top with open lower layers is not reported as a complete stack", () =>
+    Effect.gen(function* () {
+      const m = memory();
+      m.github.prs.splice(2, 1, {
+        number: 13,
+        head: "fabrikalfa/layer-13",
+        oid: head(13),
+        state: "MERGED",
+        draft: false,
+      });
+      m.github.more.set(13, {
+        base: "fabrikalfa/layer-12",
+        title: "Layer 13",
+        body: NAMED,
+        mergeCommit: "f".repeat(40),
+      });
+      const answer = yield* land(m, 13);
+
+      expect(answer._tag).toBe("Failure");
+      expect(answer._tag === "Failure" ? answer.failure.reason : "").toContain("selected lower layers 11, 12 are not");
+      expect(stackCalls(m)).toEqual([]);
     }),
   );
 
@@ -173,7 +229,7 @@ describe("Stack.land: a stack lands only if it fits one merge group (ticket 1115
     }),
   );
 
-  it.effect("scenario: with no merge queue on the base, the stack merges directly, whatever its size", () =>
+  it.effect("scenario: with no merge queue, a large stack still reaches the direct merge adapter", () =>
     Effect.gen(function* () {
       const m = memory();
       const answer = yield* land(m, 13);
@@ -181,25 +237,6 @@ describe("Stack.land: a stack lands only if it fits one merge group (ticket 1115
       expect(stackCalls(m)).toHaveLength(1);
     }),
   );
-
-  // Plant: let moved() answer null, and a layer pushed after its gates ran is merged unread.
-  it("scenario: the stack merge refuses a layer that is not at the head its gates read", () => {
-    const pinned = [
-      { number: 11, oid: head(11) },
-      { number: 12, oid: head(12) },
-    ];
-
-    expect(PullRequestsGh.moved(pinned, pinned)).toBeNull();
-    expect(
-      PullRequestsGh.moved(
-        [
-          { number: 11, oid: head(11) },
-          { number: 12, oid: head(9) },
-        ],
-        pinned,
-      ),
-    ).toContain("pr 12");
-  });
 
   // Plant: drop the ci-required read, and the middle layer's stack is asked for and this law goes red.
   it.effect(
@@ -238,7 +275,7 @@ describe("Stack.land: a stack lands only if it fits one merge group (ticket 1115
     }),
   );
 
-  it.effect("scenario: a stack with ci-required a success at every layer's head merges", () =>
+  it.effect("scenario: a stack with ci-required success at every layer's head reaches the adapter", () =>
     Effect.gen(function* () {
       const m = memory({ build: 3 });
       const answer = yield* land(m, 13);

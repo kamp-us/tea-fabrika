@@ -8,7 +8,9 @@ import {
   type PullRequest,
   PullRequests,
   PullRequestsError,
+  StackMerge,
   type Stack,
+  type StackMerge as StackMergeResult,
 } from "./PullRequests.ts";
 
 /** One write the layer took, as the caller made it. */
@@ -61,6 +63,8 @@ export type World = {
   readonly stacks: Array<Stack>;
   /** The merge queue on each branch, by branch: none when absent. */
   readonly queues: Map<string, MergeQueue>;
+  /** The async stack result this fixture stands for; pending when absent. */
+  readonly stackResult?: StackMergeResult;
 };
 
 /** A fresh world over these pull requests; the layer reads and changes it in place. */
@@ -142,11 +146,28 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
           w.calls.push(Call.cases.admin.make({ number, oid }));
         }),
       stack: (number) =>
-        Effect.map(fails("stack"), () => Option.fromUndefinedOr(w.stacks.find((s) => s.prs.includes(number)))),
+        Effect.map(fails("stack"), () =>
+          Option.fromUndefinedOr(w.stacks.find((s) => s.prs.some((pr) => pr.number === number))),
+        ),
       mergeQueue: (branch) => Effect.map(fails("mergeQueue"), () => Option.fromUndefinedOr(w.queues.get(branch))),
-      mergeStack: (top, heads) =>
-        Effect.map(fails("mergeStack"), () => {
-          w.calls.push(Call.cases.stack.make({ top, heads: [...heads] }));
+      mergeStack: (selection) =>
+        Effect.flatMap(fails("mergeStack"), () => {
+          const top = selection.layers.at(-1);
+
+          if (top === undefined) {
+            return Effect.fail(PullRequestsError.make({ reason: "fixture stack has no selected top" }));
+          }
+
+          w.calls.push(
+            Call.cases.stack.make({
+              top: top.number,
+              heads: selection.layers
+                .filter((layer) => layer.state === "OPEN")
+                .map(({ number, oid }) => ({ number, oid })),
+            }),
+          );
+
+          return Effect.succeed(w.stackResult ?? StackMerge.cases.pending.make({ uuid: "fixture-merge-request" }));
         }),
     }),
   );

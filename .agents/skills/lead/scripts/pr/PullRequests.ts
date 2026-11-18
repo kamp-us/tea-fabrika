@@ -2,7 +2,7 @@
 // (0134: a draft at a branch's first commit, marked ready when its steps passed; 0162: one pinned
 // squash that adds it to GitHub's merge queue; 0530: merge when ready, which pr/Arm.ts turns on;
 // 0183 and 0532: an admin merge, which pr/Merge.ts alone asks; ticket 1115: a native stack's
-// merge, which pr/Stack.ts alone asks, after it reads the base branch's merge queue).
+// merge, which pr/Stack.ts alone asks, after its layer gates pass).
 // This file is the
 // contract only (0095): `PullRequestsGh.layer` asks GitHub through `gh`, `PullRequestsTest.layer`
 // answers from a list in memory. Today's lead tooling, run on our own laptop; it is not product.
@@ -50,30 +50,50 @@ export const Patch = Schema.Struct({ path: Schema.String, patch: Schema.NullOr(S
 
 export type Patch = typeof Patch.Type;
 
+/** A pull request head as GitHub lists it in a native stack, in bottom-first order. */
+export const StackHead = Schema.Struct({ number: Schema.Finite, oid: Schema.String });
+
+export type StackHead = typeof StackHead.Type;
+
 /**
  * One native stack as GitHub's stacks list gives it (`GET repos/{repo}/stacks`): its number, which
- * shares the pull requests' number sequence, the branch it lands on, and its pull requests' numbers,
+ * shares the pull requests' number sequence, the branch it lands on, and each pull request's head,
  * bottom first.
  */
 export const Stack = Schema.Struct({
   number: Schema.Finite,
   base: Schema.String,
-  prs: Schema.Array(Schema.Finite),
+  prs: Schema.Array(StackHead),
 });
 
 export type Stack = typeof Stack.Type;
 
-/**
- * A branch's merge queue, as its ruleset's `merge_queue` rule sets it: `build` is
- * `max_entries_to_build`, the most entries GitHub tests at once, and `merge` is
- * `max_entries_to_merge`, the most it merges in one group.
- */
-export const MergeQueue = Schema.Struct({ build: Schema.Finite, merge: Schema.Finite });
+/** The selected stack prefix, with the exact PR facts each layer's gates read. */
+export const StackSelection = Schema.Struct({
+  number: Schema.Finite,
+  base: Schema.String,
+  layers: Schema.Array(Detail),
+});
+
+export type StackSelection = typeof StackSelection.Type;
+
+/** What GitHub says happened to an async native stack merge request. */
+export const StackMerge = Schema.TaggedUnion({
+  merged: { commit: Schema.String },
+  enqueued: {},
+  pending: { uuid: Schema.String },
+});
+
+export type StackMerge = typeof StackMerge.Type;
+
+/** A branch's merge queue, as its ruleset's `merge_queue` rule sets it. */
+export const MergeQueue = Schema.Struct({
+  build: Schema.Finite,
+  merge: Schema.Finite,
+  method: Schema.Literals(["MERGE", "SQUASH", "REBASE"]),
+});
 
 export type MergeQueue = typeof MergeQueue.Type;
-
-/** One layer of a stack merge, pinned: its number and the head its gates read. */
-export type Pin = { readonly number: number; readonly oid: string };
 
 /** What a new or edited pull request says: its title and its description. */
 export type Text = { readonly title: string; readonly body: string };
@@ -117,12 +137,10 @@ export class PullRequests extends Context.Service<
     /** The merge queue the rules on `branch` turn on; none when the branch has no queue. */
     readonly mergeQueue: (branch: string) => Effect.Effect<Option.Option<MergeQueue>, PullRequestsError>;
     /**
-     * Asks GitHub to squash-merge the stack of pull request `top`, from its bottom up to `top`, in
-     * one all-or-nothing merge (`gh stack merge`); on a branch with a merge queue it enters the
-     * queue. `heads` pins it: each open layer's number and the head that was checked, and it fails,
-     * asking nothing, when a layer is not at its pinned head. Only pr/Stack.ts asks it, after its
-     * gates passed and the stack fits one merge group.
+     * Asks GitHub to merge the exact selected native stack prefix after rereading its identity,
+     * links and heads. The result says whether GitHub merged it, queued it, or left it pending.
+     * Only pr/Stack.ts asks, after each open layer passed its gates.
      */
-    readonly mergeStack: (top: number, heads: ReadonlyArray<Pin>) => Effect.Effect<void, PullRequestsError>;
+    readonly mergeStack: (selection: StackSelection) => Effect.Effect<StackMerge, PullRequestsError>;
   }
 >()("lead/pr/PullRequests") {}

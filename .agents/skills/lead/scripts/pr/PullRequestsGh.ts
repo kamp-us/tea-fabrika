@@ -8,11 +8,13 @@ import {
   type Detail,
   MergeQueue,
   Patch,
-  type Pin,
   type PullRequest,
   PullRequests,
   PullRequestsError,
+  StackMerge,
   type Stack,
+  Stack as StackSchema,
+  type StackSelection,
   type Text,
 } from "./PullRequests.ts";
 
@@ -53,39 +55,106 @@ const VIEW_FIELDS = `${FIELDS},baseRefName,title,body,mergeCommit`;
 const PatchRow = Schema.fromJsonString(Patch);
 
 /** One open stack as `stackRows` asks jq to print it: its layers bottom first, each with its head. */
-const StackRow = Schema.fromJsonString(
-  Schema.Struct({
-    number: Schema.Finite,
-    base: Schema.String,
-    prs: Schema.Array(Schema.Struct({ number: Schema.Finite, oid: Schema.String })),
-  }),
-);
+const StackRow = Schema.fromJsonString(StackSchema);
 
 /** The jq that prints each open stack of `GET repos/{repo}/stacks` on a line of its own. */
 const STACKS_JQ = ".[] | select(.open) | {number, base: .base.ref, prs: [.pull_requests[] | {number, oid: .head.sha}]}";
 
-/** The merge queue rule's two sizes, read by `mergeQueue` from the rules on a branch. */
+/** The merge queue rule, read by `mergeQueue` from the rules on a branch. */
 const QueueRow = Schema.fromJsonString(MergeQueue);
 
-/** The jq that prints the `merge_queue` rule on a branch, if any, as a `MergeQueue`. */
+/** The jq that prints the merge queue rule, including its configured merge method. */
 const QUEUE_JQ =
-  '.[] | select(.type == "merge_queue") | .parameters | {build: .max_entries_to_build, merge: .max_entries_to_merge}';
+  '.[] | select(.type == "merge_queue") | .parameters | {build: .max_entries_to_build, merge: .max_entries_to_merge, method: .merge_method}';
 
 /**
- * The stack merge (gh-stack's `gh stack merge`): everything from the stack's bottom up to `top`, as
- * squashes, with no prompt. A stack number shares the pull requests' number sequence, so `top` is
- * never read as a stack number.
+ * The result of GitHub's async merge request. Details are optional because queued and failed replies
+ * have different fields; each status checks the fields it needs before it is trusted.
  */
-const stackMergeArgs = (top: number): ReadonlyArray<string> => ["stack", "merge", String(top), "--squash", "--yes"];
+const MergeReply = Schema.fromJsonString(
+  Schema.Struct({
+    status: Schema.Literals(["merged", "enqueued", "pending", "failed"]),
+    details: Schema.optional(
+      Schema.Struct({
+        message: Schema.optional(Schema.String),
+        sha: Schema.optional(Schema.String),
+        uuid: Schema.optional(Schema.String),
+        merge_action: Schema.optional(Schema.Literals(["default", "direct_merge", "merge_queue"])),
+        merge_method: Schema.optional(Schema.Literals(["merge", "squash", "rebase"])),
+        expected_head_sha: Schema.optional(Schema.String),
+        bypass_rules: Schema.optional(Schema.Boolean),
+      }),
+    ),
+  }),
+);
 
-/** Why a stack's layers are not at the heads that were checked, or `null` when every one is. */
-export const moved = (layers: ReadonlyArray<Pin>, pinned: ReadonlyArray<Pin>): string | null => {
-  const off = pinned.filter((pin) => layers.find((layer) => layer.number === pin.number)?.oid !== pin.oid);
+const Compared = Schema.fromJsonString(Schema.Struct({ mergeBase: Schema.NullOr(Schema.String) }));
 
-  return off.length === 0
+/** The selected open prefix must still hold the same ordered heads, stack identity and base. */
+const prefixMoved = (
+  held: Stack,
+  selection: StackSelection,
+  prefix: ReadonlyArray<Stack["prs"][number]>,
+  current: ReadonlyArray<Detail>,
+): string | null => {
+  if (held.number !== selection.number || held.base !== selection.base) {
+    return "the stack identity or base changed after its gates; nothing was merged";
+  }
+
+  const top = selection.layers.at(-1);
+  const pinsMatchViews =
+    prefix.length > 0 &&
+    prefix.length === current.length &&
+    prefix.every((pin, index) => pin.number === current[index]?.number && pin.oid === current[index]?.oid);
+  const expected = selection.layers
+    .filter((layer) => layer.state === "OPEN")
+    .map(({ number, oid }) => ({ number, oid }));
+  const actual = current.filter((layer) => layer.state === "OPEN").map(({ number, oid }) => ({ number, oid }));
+  const sameOpenPrefix =
+    expected.length > 0 &&
+    actual.length === expected.length &&
+    expected.every((pin, index) => pin.number === actual[index]?.number && pin.oid === actual[index]?.oid);
+  const endsAtSelectedTop = top !== undefined && prefix.at(-1)?.number === top.number;
+
+  return pinsMatchViews && sameOpenPrefix && endsAtSelectedTop
     ? null
-    : `layers not at the head their gates read, so nothing was merged: ${off.map((pin) => `pr ${pin.number}`).join(", ")}`;
+    : "the selected stack prefix changed after its gates; nothing was merged";
 };
+
+/** Every field the stack gates read must still describe the same selected layer. */
+const layerMoved = (held: Detail, expected: Detail): boolean =>
+  held.number !== expected.number ||
+  held.head !== expected.head ||
+  held.oid !== expected.oid ||
+  held.base !== expected.base ||
+  held.state !== expected.state ||
+  held.draft !== expected.draft ||
+  held.title !== expected.title ||
+  held.body !== expected.body ||
+  held.mergeCommit !== expected.mergeCommit;
+
+/** Open children target their parent branch; a merged parent may already be retargeted to the stack base. */
+const linkRefusal = (selection: StackSelection): string | null => {
+  const broken = selection.layers.find((layer, index) => {
+    const parent = selection.layers[index - 1];
+
+    return parent === undefined
+      ? layer.base !== selection.base
+      : layer.base !== parent.head && !(parent.state === "MERGED" && layer.base === selection.base);
+  });
+
+  return broken === undefined
+    ? null
+    : `pr ${broken.number} targets ${broken.base}, not its stack base or parent branch; nothing was merged`;
+};
+
+const mergeRequest = (repo: string, top: Detail, action: "direct_merge" | "merge_queue") => ({
+  args: ["api", "-X", "PUT", `repos/${repo}/pulls/${top.number}/merge-async`, "--input", "-"],
+  body:
+    action === "merge_queue"
+      ? { sha: top.oid, merge_action: action }
+      : { sha: top.oid, merge_action: action, merge_method: "squash" },
+});
 
 /**
  * The merge call that adds a pull request to the queue: a squash, pinned to the head that was
@@ -334,12 +403,20 @@ export const layer = (
       const stack = (number: number) =>
         Effect.map(
           holding(number),
-          Option.map((stack): Stack => ({ ...stack, prs: stack.prs.map((pr) => pr.number) })),
+          Option.map((stack): Stack => stack),
         );
 
       const mergeQueue = Effect.fn("PullRequestsGh.mergeQueue")(function* (branch: string) {
         const out = yield* gh(["api", "--paginate", `repos/${repo}/rules/branches/${branch}`, "--jq", QUEUE_JQ]);
-        const row = out.split("\n").find((line) => line !== "");
+        const rows = out.split("\n").filter((line) => line !== "");
+
+        if (rows.length > 1) {
+          return yield* PullRequestsError.make({
+            reason: `the merge_queue rules on ${branch} are ambiguous; nothing was merged`,
+          });
+        }
+
+        const row = rows[0];
 
         return row === undefined
           ? Option.none()
@@ -352,21 +429,200 @@ export const layer = (
             );
       });
 
-      // gh stack merge pins no head, so the layers' heads are read again right before it runs.
-      const mergeStack = Effect.fn("PullRequestsGh.mergeStack")(function* (top: number, heads: ReadonlyArray<Pin>) {
-        const held = yield* holding(top);
+      const compare = Effect.fn("PullRequestsGh.compare")(function* (parent: Detail, parentOid: string, child: Detail) {
+        const out = yield* gh([
+          "api",
+          `repos/${repo}/compare/${parentOid}...${child.oid}`,
+          "--jq",
+          "{mergeBase: .merge_base_commit.sha}",
+        ]);
 
-        if (Option.isNone(held)) {
-          return yield* PullRequestsError.make({ reason: `pr ${top} is in no open stack now; nothing was merged` });
+        return yield* Schema.decodeEffect(Compared)(out).pipe(
+          Effect.mapError(() =>
+            PullRequestsError.make({
+              reason: `GitHub could not confirm pr ${parent.number} is an ancestor of pr ${child.number}`,
+            }),
+          ),
+        );
+      });
+
+      const mergeStack = Effect.fn("PullRequestsGh.mergeStack")(function* (selection: StackSelection) {
+        const top = selection.layers.at(-1);
+
+        if (top === undefined || top.state !== "OPEN" || top.draft) {
+          return yield* PullRequestsError.make({
+            reason: "the selected stack top is not open and ready; nothing was merged",
+          });
         }
 
-        const off = moved(held.value.prs, heads);
+        const linkProblem = linkRefusal(selection);
+
+        if (linkProblem !== null) {
+          return yield* PullRequestsError.make({ reason: linkProblem });
+        }
+
+        const held = yield* holding(top.number);
+
+        if (Option.isNone(held)) {
+          return yield* PullRequestsError.make({
+            reason: `pr ${top.number} is in no open stack now; nothing was merged`,
+          });
+        }
+
+        const topAt = held.value.prs.findIndex((layer) => layer.number === top.number);
+
+        if (topAt === -1) {
+          return yield* PullRequestsError.make({ reason: `pr ${top.number} left its stack; nothing was merged` });
+        }
+
+        const prefix = held.value.prs.slice(0, topAt + 1);
+        const heldLayers = yield* Effect.forEach(prefix, (layer) => view(layer.number), {
+          concurrency: "unbounded",
+        });
+        const offPin = prefix.filter((pin, index) => heldLayers[index]?.oid !== pin.oid);
+
+        if (offPin.length > 0) {
+          return yield* PullRequestsError.make({
+            reason: "a selected stack head changed while GitHub's stack list was reread; nothing was merged",
+          });
+        }
+
+        const off = prefixMoved(held.value, selection, prefix, heldLayers);
 
         if (off !== null) {
           return yield* PullRequestsError.make({ reason: off });
         }
 
-        yield* gh(stackMergeArgs(top), { env: { GH_REPO: repo } });
+        const current = yield* Effect.forEach(selection.layers, (layer) => view(layer.number), {
+          concurrency: "unbounded",
+        });
+        const changed = selection.layers.filter((layer, index) => {
+          const actual = current[index];
+
+          return actual === undefined || layerMoved(actual, layer);
+        });
+
+        if (changed.length > 0) {
+          return yield* PullRequestsError.make({
+            reason: `selected pull requests changed after their gates (${changed.map((layer) => layer.number).join(", ")}); nothing was merged`,
+          });
+        }
+
+        for (const [index, child] of selection.layers.slice(1).entries()) {
+          const parent = selection.layers[index];
+
+          if (parent === undefined) {
+            return yield* PullRequestsError.make({
+              reason: "the selected stack parent is missing; nothing was merged",
+            });
+          }
+
+          const retargeted = parent.state === "MERGED" && child.base === selection.base;
+          const parentOid = retargeted ? parent.mergeCommit : parent.oid;
+
+          if ((child.base !== parent.head && !retargeted) || parentOid === null) {
+            return yield* PullRequestsError.make({
+              reason: `pr ${child.number} no longer targets a current parent or stack base; nothing was merged`,
+            });
+          }
+
+          const ancestry = yield* compare(parent, parentOid, child);
+
+          if (ancestry.mergeBase !== parentOid) {
+            return yield* PullRequestsError.make({
+              reason: `pr ${parent.number} is not the pinned ancestor of pr ${child.number}; nothing was merged`,
+            });
+          }
+        }
+
+        const queue = yield* mergeQueue(selection.base);
+        let action: "direct_merge" | "merge_queue";
+
+        if (Option.isSome(queue)) {
+          if (queue.value.method !== "SQUASH") {
+            return yield* PullRequestsError.make({
+              reason: `the ${selection.base} merge queue is configured for ${queue.value.method}, not SQUASH; nothing was merged`,
+            });
+          }
+
+          action = "merge_queue";
+        } else {
+          action = "direct_merge";
+        }
+
+        const request = mergeRequest(repo, top, action);
+        const raw = yield* gh(request.args, { stdin: JSON.stringify(request.body) });
+        const reply = yield* Schema.decodeEffect(MergeReply)(raw).pipe(
+          Effect.mapError(() =>
+            PullRequestsError.make({ reason: "GitHub answered the stack merge request in a shape we do not read" }),
+          ),
+        );
+
+        if (reply.status === "failed") {
+          return yield* PullRequestsError.make({
+            reason: `GitHub's stack merge request failed: ${reply.details?.message ?? "no reason returned"}`,
+          });
+        }
+
+        if (reply.status === "enqueued") {
+          if (action !== "merge_queue") {
+            return yield* PullRequestsError.make({
+              reason: "GitHub reported a queued stack merge for a direct request; nothing was reported as merged",
+            });
+          }
+
+          return StackMerge.cases.enqueued.make({});
+        }
+
+        if (reply.status === "pending") {
+          const details = reply.details;
+
+          if (
+            details?.uuid === undefined ||
+            details.uuid === "" ||
+            details.expected_head_sha !== top.oid ||
+            details.merge_action !== action ||
+            details.merge_method !== "squash" ||
+            details.bypass_rules !== false
+          ) {
+            return yield* PullRequestsError.make({
+              reason:
+                "GitHub's pending stack merge did not match the pinned squash request; nothing was reported as merged",
+            });
+          }
+
+          return StackMerge.cases.pending.make({ uuid: details.uuid });
+        }
+
+        const commit = reply.details?.sha;
+
+        if (commit === undefined || commit === "") {
+          return yield* PullRequestsError.make({
+            reason: "GitHub reported a merged stack without its merge commit; nothing was reported as merged",
+          });
+        }
+
+        const after = yield* Effect.forEach(selection.layers, (layer) => view(layer.number), {
+          concurrency: "unbounded",
+        });
+        const notMerged = selection.layers.filter((layer, index) => {
+          const actual = after[index];
+
+          return (
+            actual === undefined ||
+            actual.number !== layer.number ||
+            actual.oid !== layer.oid ||
+            actual.state !== "MERGED"
+          );
+        });
+
+        if (notMerged.length > 0 || after.at(-1)?.mergeCommit !== commit) {
+          return yield* PullRequestsError.make({
+            reason: "GitHub reported a merged stack but the selected layers did not all report merged at that commit",
+          });
+        }
+
+        return StackMerge.cases.merged.make({ commit });
       });
 
       return PullRequests.of({
