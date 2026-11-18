@@ -405,7 +405,7 @@ const STRIP = /^\s*- button "(open (?:[^"\\]|\\.)*)"/;
 export type FoldDrawn = Drawn & { readonly strips: ReadonlyArray<{ readonly name: string; readonly box: Box | null }> };
 
 /** Reads what the tab draws now, strips included, by role and accessible name. */
-const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
+export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
   Effect.gen(function* () {
     const d = yield* drawn(page);
     const main = page.getByRole("main").first();
