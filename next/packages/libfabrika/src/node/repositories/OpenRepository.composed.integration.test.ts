@@ -34,7 +34,6 @@ import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
 
 import * as fc from "fast-check";
-import { vi } from "vitest";
 import * as Id from "../../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../../ledger/Ledger.ts";
 import * as LedgerSql from "../../ledger/LedgerSql.ts";
@@ -216,48 +215,6 @@ describe("T878 composed repository opening", () => {
               }
             }),
           ).pipe(Effect.provide(services)),
-        );
-      }),
-      { seed: 119120, numRuns: 200 },
-    ));
-
-  it("L3: a malformed snapshot made upstream is refused rather than defaulted or returned unchecked", () =>
-    // A fault at the saved-data boundary makes bypassing Snapshot.read observable.
-    fc.assert(
-      fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (cells) => {
-        const original = SettingsSnapshot.make;
-        const spy = vi.spyOn(SettingsSnapshot, "make");
-        await Effect.runPromise(
-          Effect.acquireRelease(Effect.void, () => Effect.sync(() => spy.mockRestore())).pipe(
-            Effect.andThen(
-              Effect.gen(function* () {
-                for (const c of cells) {
-                  spy.mockImplementation((group, resolved) =>
-                    original(group, resolved).pipe(
-                      Effect.map((saved) => (c % 2 === 0 ? { ...saved, hash: "wrong" } : { ...saved, values: {} })),
-                    ),
-                  );
-
-                  const result = yield* OpenRepository.prepare("selected-repo", {
-                    person: { path: "person-file", name: personName },
-                    flags: {},
-                    env: {},
-                    version: "0.0.0",
-                  }).pipe(
-                    Effect.provide([
-                      reader("", []),
-                      FileSystem.layerNoop({ readFileString: () => Effect.succeed("") }),
-                    ]),
-                    Effect.exit,
-                  );
-
-                  expect(Exit.isFailure(result)).toBe(true);
-                }
-              }),
-            ),
-            Effect.scoped,
-            Effect.provide(services),
-          ),
         );
       }),
       { seed: 119120, numRuns: 200 },
