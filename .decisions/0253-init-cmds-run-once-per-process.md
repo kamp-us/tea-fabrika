@@ -1,7 +1,7 @@
 ---
 id: 0253
 title: In next/, a program has no main, and the Cmds its init returns run once per process start, never on a wake or a hot reload, each saved as dispatched before it runs
-status: amended-in-part by [0601](0601-a-program-is-three-functions.md)
+status: amended-in-part by [0601](0601-program-make-with-optional-pipes.md)
 date: 2026-11-08
 tags: [programs, init, cmds, runner, process, ledger, elm, otp, next]
 ---

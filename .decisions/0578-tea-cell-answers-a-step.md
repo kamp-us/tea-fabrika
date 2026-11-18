@@ -1,7 +1,7 @@
 ---
 id: 0578
 title: In next/ and our tooling, a tea cell answers a pipeable Step (Step.stay, Step.to, Step.run), never the [model, cmds] tuple, through our local tea patch, with the sweep of the return sites after it lands
-status: amended-in-part by [0601](0601-a-program-is-three-functions.md)
+status: amended-in-part by [0601](0601-program-make-with-optional-pipes.md)
 date: 2026-11-15
 tags: [tea, step, cell, update, tuple, patch, upstream, next, tooling]
 ---

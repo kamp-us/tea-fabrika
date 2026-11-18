@@ -1,7 +1,7 @@
 ---
 id: 0256
 title: In next/, a program is one typed Program.make over its own exported Machine.make value, with every type inferred from the machine and nothing written twice, never defineProgram or a plain object
-status: amended-in-part by [0601](0601-a-program-is-three-functions.md)
+status: amended-in-part by [0601](0601-program-make-with-optional-pipes.md)
 date: 2026-11-07
 tags: [programs, program-make, machine, types, tea, next]
 ---
