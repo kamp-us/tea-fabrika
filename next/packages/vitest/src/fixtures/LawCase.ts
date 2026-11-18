@@ -1,6 +1,6 @@
 // What a nested run of Law.fixture.ts registers, passed through vitest's `provide`. Its own file, so
 // the integration laws can make a case without loading the fixture's laws into their own run.
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 export const LawCase = Schema.TaggedUnion({
   /** One law per threshold, failing on a value above it, and one more that no value fails. */

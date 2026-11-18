@@ -11,7 +11,7 @@
 // recorded where it is declared, as the CI plant check keys it. The refusal of an unplanted law
 // names that same file, since that is where its plant option is written.
 import { describe, expect, it } from "@effect/vitest";
-import { Result } from "effect";
+import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import * as Plants from "./Plants.ts";
 

@@ -5,7 +5,8 @@
 // worker thread and starts no process, port or temp folder, so the file is plain (0584) and runs on
 // every pull request, as .github/ci/shard-rows.test.ts and related.test.ts do.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { RunnerTask, RunnerTestFile } from "vitest";
 import { createVitest } from "vitest/node";
 import { runsFor } from "./Depth.ts";
@@ -29,7 +30,9 @@ const verdicts = (files: ReadonlyArray<RunnerTestFile>): ReadonlyMap<string, Ver
 
 /** Runs the fixture's laws for one case in a vitest of its own, and answers each law's verdict by title. */
 /** A nested run that could not start or finish: the run itself broke, not a law in it. */
-class NestedRun extends Schema.TaggedError<NestedRun>()("NestedRun", { cause: Schema.Defect() }) {}
+class NestedRun extends Schema.TaggedError<NestedRun, { readonly brand: unique symbol }>()("NestedRun", {
+  cause: Schema.Defect(),
+}) {}
 
 const nested = (lawCase: LawCase) =>
   Effect.acquireUseRelease(
@@ -45,14 +48,14 @@ const nested = (lawCase: LawCase) =>
           reporters: [],
           provide: { lawCase },
         }),
-      catch: (cause) => new NestedRun({ cause }),
+      catch: (cause) => NestedRun.make({ cause }),
     }),
     (vitest) =>
-      Effect.tryPromise({ try: () => vitest.start(), catch: (cause) => new NestedRun({ cause }) }).pipe(
+      Effect.tryPromise({ try: () => vitest.start(), catch: (cause) => NestedRun.make({ cause }) }).pipe(
         Effect.map(() => verdicts(vitest.state.getFiles())),
       ),
     (vitest) =>
-      Effect.tryPromise({ try: () => vitest.close(), catch: (cause) => new NestedRun({ cause }) }).pipe(Effect.orDie),
+      Effect.tryPromise({ try: () => vitest.close(), catch: (cause) => NestedRun.make({ cause }) }).pipe(Effect.orDie),
   );
 
 const Small = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 }));

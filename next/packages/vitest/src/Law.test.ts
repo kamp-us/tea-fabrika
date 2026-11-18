@@ -8,7 +8,8 @@
 // The laws that must see a law fail, time out or run twice run it in a vitest of their own:
 // Law.runner.test.ts.
 import { describe, expect } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import type { TestContext } from "vitest";
 import { it, Label, type LawOptions, toTestOptions } from "./Law.ts";
