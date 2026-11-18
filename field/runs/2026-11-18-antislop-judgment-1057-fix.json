@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-antislop-judgment-1057-fix",
+  "ticket": "1057",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1593",
+  "branch": "fabrikalfa/antislop-judgment-1057",
+  "started": "2026-11-18T01:43:30+00:00",
+  "ended": "2026-11-18T01:56:00+00:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "step": "build",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "outcome": "done",
+  "why": "Fix round after the judgment fold merged main: four folder/rule pairs had new hits from main's newer code, plus one type error the merge made. (1) anti-slop/require-safety-comment-for-type-assertion in next/apps/fabrika: 4 casts `Object.keys(paths) as ReadonlyArray<Law>` in next/apps/fabrika/src/exam/agents.test.ts became Effect's `Struct.keys(paths)`, which types the keys itself, so no cast and no SAFETY comment is left. (2) anti-slop-effect/prefer-effect-match in next/apps/fabrika: the nested ternary picking `methods` by `law` in the same file became `Match.value(law)` with cases for tools and malformed and `Match.orElse` for the law's own name. (3) anti-slop-effect/prefer-effect-match in .github/ci: 10 ternary chains became `Match.value(...).pipe(Match.when(...))`, closed with `Match.exhaustive` where the type lists every case (l11-cases.ts fault fields; the span field in l11-exercise.test.ts) and `Match.orElse` with the old last branch elsewhere (workflow-lint/l11.test.ts job `if`; l11-exercise.ts span field and compare variant; l11-exercise.test.ts mode, identity job and stand-in git output; plant.test.ts position and sibling cases); `as const` keeps literal result types where the old ternary had them. (4) anti-slop/no-runtime-typeof in .agents: the two typeof checks on one line of .agents/skills/lead/scripts/botpush.mjs stay as written, under one line `// oxlint-disable-next-line anti-slop/no-runtime-typeof -- the stdin JSON's one shape check, by hand: this script imports no effect, since an effect import makes its seven try blocks fabrika/no-raw-try-catch errors`. A Schema decode was written and worked, but its effect import made pnpm format's lint report 7 blocking fabrika/no-raw-try-catch hits on the script, so it was reverted; Predicate.isString needs the same import. Until .agents/** joins that rule's block in .oxlintrc.json, lint reports this ignore as an unused directive (1 blocking). (5) next/apps/fabrika/src/door-spans.test.ts:299 decodes with `Schema.decodeSync(Input)` in place of `decodeUnknownSync`, as effect(preferTypedSchemaDecoder) asks; the decode and its throw are unchanged. No law, assertion or rule was weakened, and .oxlintrc.json and both ledger files were not changed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": "Commits: 09d1a6e9a8731e8bca71ca2f86716a0ca3225ccb (casts), ceffb9d682c9b0155875487dafe33d246c4fc25f (door-spans decoder), 5be1903b323dd45a326525738cb2f4d34fc9648b (Match in next/apps/fabrika), e44f37d6ad0e117d9ce4758b0407d670d9e39496 (Match in .github/ci), f1eaec7dd6fc1bd362a8251300cda2cef6decea5 (botpush ignore). The scratch hit counter printed nothing for require-safety in next/apps/fabrika, prefer-effect-match in .github/ci and next/apps/fabrika, and no-runtime-typeof in .agents. pnpm format: exit 1 on 56 `.oxlintrc.json: ... add the folder to its block (0563)` lines, five of them these pairs, plus the 1 unused-directive line above; no ledger file changed. Tests, on Node 26.13.0 (the pinned version, fetched from nodejs.org with its checksum checked, since the machine had only Node 22 and the test config refuses it), --maxWorkers=3: next/apps/fabrika/src/exam/agents.test.ts and door-spans.test.ts, 13 passed and 4 skipped, the same counts as before the change; .github/ci/workflow-lint/l11.test.ts, l11-exercise.test.ts, plant.test.ts, l11-machine.test.ts and .agents/skills/lead/scripts/botdraft.test.ts, 51 passed. Typecheck: next/apps/fabrika `pnpm typecheck` passes (it failed on door-spans.test.ts:299 before), `tsc --noEmit -p .github/ci` and `-p .agents` pass. Not run: the full suite, the full pnpm typecheck, and the plant integration tests."
+}
