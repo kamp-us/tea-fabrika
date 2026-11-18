@@ -17,7 +17,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
@@ -155,12 +154,14 @@ const stored = (page: Page) =>
           out.push({ kind: `key:${v.type}`, extractable: v.extractable, exported });
         } else if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
           out.push({ kind: "bytes", hex: hex(v) });
-        } else if (Predicate.isString(v)) {
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- runs in the page through page.evaluate, where Effect is not loaded
+        } else if (typeof v === "string") {
           out.push({
             kind: "string",
             hex: [...new TextEncoder().encode(v)].map((x) => x.toString(16).padStart(2, "0")).join(""),
           });
-        } else if (Predicate.isObjectOrArray(v)) {
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- runs in the page through page.evaluate, where Effect is not loaded
+        } else if (typeof v === "object" && v !== null) {
           for (const one of Object.values(v)) {
             await walk(one);
           }
