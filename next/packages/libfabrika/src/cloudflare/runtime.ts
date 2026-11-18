@@ -504,7 +504,7 @@ const projectStorage = Effect.fnUntraced(function* <A, E, R>(
   return yield* work.pipe(
     Effect.withTracer(safe),
     Effect.mapError((error) => (Schema.is(LedgerError)(error) ? new LedgerError({ reason: error.reason }) : error)),
-    Effect.catchDefect(() => Effect.fail(new LedgerError({ reason: "storage" }))),
+    Effect.catchDefect((defect) => Effect.fail(new LedgerError({ reason: "storage", message: String(defect) }))),
   );
 });
 
