@@ -606,8 +606,9 @@ visible, and never weaken the rules to hide this message.
 
 ## How a change lands
 
-- **Every pull request, `next/` or today's, goes through the pipeline's steps:** plan, test writer,
-  build, one review, each by its own agent, with laws. No builder starts before an approved plan and
+- **Product work, `next/` or today's, goes through the pipeline's steps:** plan, test writer,
+  build, one review, each by its own agent, with laws. A ticket with a fix command takes
+  [the mechanical branch](#the-mechanical-branch) instead. No builder starts before an approved plan and
   tests that exist ([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)), and `next/` does
   not wait on the pipeline. Today's pipeline programs are paused, so the lead session's agents run
   the steps by hand, each logged in `field/`, and the lead reads every diff, CI and the leak grep
@@ -643,6 +644,24 @@ visible, and never weaken the rules to hide this message.
   missing parts: quick means each part is small, never absent. A rule that code checks leaves the
   prose, a rule that code could check becomes a check, and only judgment stays in prose
   ([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
+
+### The mechanical branch
+
+A ticket for which a fix command exists (a lint rule with an autofix, a format change, a rename, a
+codemod) skips the plan and the test writer ([0615](../../../.decisions/0615-mechanical-tickets-take-a-fix-command-branch.md)). By hand, the lead runs
+the branch's four primitives:
+
+1. **Judge:** is there a command? A rule with no fixer first gets its fixer written into the rule
+   (`context.report({ fix })`, [rule authors' page](../../../oxlint-plugins/README.md#a-rule-ships-with-its-fixer)), as one small pull request through the main steps.
+2. **Act:** run the ticket's declared command over the whole repo, in one branch. One pull request per
+   rule or rename, never sliced by folder.
+3. **Check:** rerun the same command on the pull request's base and get the same diff. Then lint at
+   zero, typecheck, tests green and `loosening.sh` clean, and read the diff by rule: the command, a sample.
+4. **Land** as any pull request does.
+
+If the command leaves hits it cannot fix, or the diff does not reproduce, the ticket leaves the branch
+for builder, then one review. A judgment sweep (the mock sweep, async to `Effect.gen`) has no
+command: builder, then one review, no plan per slice.
 
 ## Tickets and tracker posts
 

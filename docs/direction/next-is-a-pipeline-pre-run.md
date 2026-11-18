@@ -58,6 +58,24 @@ review.*
   [stage agents](./agents-run-on-codex.md). A step done by hand says in its report what
   ran it.
 
+## The mechanical branch
+
+**Added 2026-11-18 ([0615](../../.decisions/0615-mechanical-tickets-take-a-fix-command-branch.md)).** demlik runs old fabrika, and this pipeline is
+built on its ideas. One branch was missing, for tickets a command can finish. In `next/` it is a
+pipeline branch built from the six primitives (0421), with no plan and no test writer:
+
+```text
+ticket -> Judge: a fix command exists?       no / "I don't know" -> plan, tests, build, review
+       -> Act: run it over the whole repo        (`oxlint --fix --rule X`, a codemod)
+       -> Check: rerun on the base, same diff; lint zero, typecheck, tests, loosening.sh clean
+       -> Land: one pull request per rule or rename
+Check fails (hits left, or no same diff) -> builder, then one review
+```
+
+Today's version has no machine for it: the lead runs it by hand
+([the lead skill](../../.agents/skills/lead/SKILL.md#the-mechanical-branch)). Reasons and sources are
+in the decision.
+
 ## How a change lands
 
 - **A live run on a target repository:** only through the ship stage.

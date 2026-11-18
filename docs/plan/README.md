@@ -629,7 +629,8 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 - **An exam change that is all proper property tests** (owner, 2026-11-08) merges without the owner's read. Proper means every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason; nothing loosens. Zero hits from `loosening.sh` show that; the PR writes its removed/replacement mapping table and that output. Mutation is no step of a pull request: the hourly run against main files a narrowed law as a ticket marked loosening ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)). *It said: mutation shows no law got narrower, with the mutation arm-a vs arm-b narrowing list as a second output.* The lead agent checks that and says so in the pull request. Measure the new check's false alarms on the last 20 merged `next/` PRs before it blocks. A change that loosens or removes a law still waits on the owner. The leak check fails closed: any hit goes to the lead agent's hand check.
 - **No number caps a pull request's size** (owner, 2026-11-11). Bigger work is a stack of
   slices the plan cuts by what lands whole, each its own pull request through every step, with its
-  tests. Size picks who looks, never whether it lands
+  tests. Work a fix command makes whole is no stack: it takes
+  [the mechanical branch](../direction/next-is-a-pipeline-pre-run.md#the-mechanical-branch), one pull request per rule ([0615](../../.decisions/0615-mechanical-tickets-take-a-fix-command-branch.md)). Size picks who looks, never whether it lands
   ([0099](../../.decisions/0099-no-number-caps-a-pull-request.md), which drops
   [0087](../../.decisions/0087-a-pull-request-caps-product-lines.md)'s 600-line cap). *It said: at
   most 600 lines of product code, a trial that only advises (owner, 2026-11-10).*

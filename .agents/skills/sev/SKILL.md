@@ -146,7 +146,8 @@ tool's sessions. What kept the work moving on 2026-11-17, and what slowed it:
 - **Proof comes from the automatic changed and related CI.** A hand-started proof run that the
   automatic CI already covers takes shared slots from every other pull request.
 - **The code-quality sweeps count as sev work:** lint rules, Effect checks, mock and exam sweeps. Bad
-  code on main poisons every later agent's context.
+  code on main poisons every later agent's context. A sweep with a fix command is one pull request per
+  rule on [the mechanical branch](../lead/SKILL.md#the-mechanical-branch), not one per folder.
 - **A leak grep checks only a branch's own commits.** Only `base..head` and `--not --remotes=origin`
   read just those; `base...head` also reads main's new commits. In a shallow clone the check
   deepens until the range is whole or refuses; it never scans main's old history.
