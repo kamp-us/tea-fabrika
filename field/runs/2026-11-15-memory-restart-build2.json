@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-memory-restart-build2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316",
+  "started": "2026-11-15T07:24:00-08:00",
+  "ended": "2026-11-15T07:31:00-08:00",
+  "parent": "2026-11-15-memory-restart-build1",
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "build round 2 for the memory restart in next/: desktop.brain-memory is declared with format: \"text\", as mail.chunk is on fabrikalfa/pipe-plumbing, so the regenerated person.json gives it a plain string with the default \"500000000 bytes\" in place of the digit pattern ^-?\\d+$ and the default \"500000000\". \"500 MB\", \"1 GiB\" and \"500000000 bytes\" load through the declaration, and a bare \"500000000\" is refused. Every listed settings file is green but one: JsonSchema.test.ts line 355, the shipped-declarations vector, pins every editor default to the JSON spelling and now fails on \"500000000 bytes\". pipe-plumbing's copy of that line reads a text setting's default in its text spelling; this branch's test needs the same change from the tests step.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "The finding 2026-11-15-brain-memory-schema-refuses-unit is marked fixed in this pull request.",
+  "step": "build",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}

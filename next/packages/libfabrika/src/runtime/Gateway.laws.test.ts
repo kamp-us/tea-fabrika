@@ -3,6 +3,10 @@ import { DatabaseSync } from "node:sqlite";
 // The connection must save attachments and release its turn before calling the Project.
 import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer } from "effect";
+import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -14,6 +18,12 @@ import type { connection } from "../transport/Connection.ts";
 import { Answer, Attached, type RateCountFailure } from "../transport/Wire.ts";
 
 const SEED = 119120;
+
+const AttachedJson = Schema.fromJsonString(Attached);
+
+/** A saved attachment as a reconstructed connection reads it back: written as JSON, then decoded. */
+const reread = (saved: typeof Attached.Type) =>
+  Schema.encodeEffect(AttachedJson)(saved).pipe(Effect.flatMap(Schema.decodeEffect(AttachedJson)));
 
 const generated = fc.record({
   id: fc.oneof(fc.string(), fc.integer()),
@@ -33,7 +43,7 @@ const chosen = {
   rev: 4,
   session: "session-1",
   ping: 42,
-  ids: Array.from({ length: 12 }, (_, n) => `${n}${"x".repeat(2000)}`),
+  ids: Array.from({ length: 12 }, (_, n) => `${n}${Str.repeat(2000)("x")}`),
 };
 
 const law = (
@@ -85,6 +95,7 @@ const setup = Effect.fnUntraced(function* (
   let saved: typeof Attached.Type = online();
   const frames: Array<Record<string, unknown>> = [];
   const closes: Array<number> = [];
+
   const c: Connection = connection({
     reader: "gateway/session-1",
     session,
@@ -102,6 +113,7 @@ const setup = Effect.fnUntraced(function* (
     wait,
     call,
   });
+
   return {
     c,
     frames,
@@ -141,13 +153,16 @@ describe("P12 Connection attachment laws", () => {
       try {
         const sql = nodeSql(db);
         let ring: Connection["ring"] = () => Effect.void;
+
         const bell = Layer.succeed(Doorbell, {
           ring: (_reader, stream, rev) =>
             ring(stream, rev).pipe(Effect.mapError((cause) => new LedgerError({ reason: "storage", cause }))),
         });
+
         const layer = Layer.mergeAll(RefereeSql.layer(sql), LedgerSql.layer(sql, { reader: "writer" })).pipe(
           Layer.provide(bell),
         );
+
         yield* Effect.gen(function* () {
           const referee = yield* Referee;
           const ledger = yield* Ledger;
@@ -199,14 +214,17 @@ describe("P12 Connection attachment laws", () => {
     Effect.gen(function* () {
       const entered = yield* Deferred.make<void>();
       const reply = yield* Deferred.make<{ readonly _tag: "ready"; readonly rev: number }>();
+
       const f = yield* setup((stream) =>
         stream === "old"
           ? Effect.gen(function* () {
               yield* Deferred.succeed(entered, undefined);
+
               return yield* Deferred.await(reply);
             })
           : Effect.succeed({ _tag: "parked" } as const),
       );
+
       const first = yield* Effect.forkChild(f.c.frame(request(id, "old")));
       yield* Deferred.await(entered);
       yield* f.c.ring("old", 1);
@@ -226,12 +244,15 @@ describe("P12 Connection attachment laws", () => {
     Effect.gen(function* () {
       const entered = yield* Deferred.make<void>();
       const reply = yield* Deferred.make<{ readonly _tag: "ready"; readonly rev: number }>();
+
       const f = yield* setup(() =>
         Effect.gen(function* () {
           yield* Deferred.succeed(entered, undefined);
+
           return yield* Deferred.await(reply);
         }),
       );
+
       const pending = yield* Effect.forkChild(f.c.frame(request(id)));
       yield* Deferred.await(entered);
       const fresh = Attached.cases.new.make({ client: "gateway/session-1", nonce: "fresh" });
@@ -246,6 +267,7 @@ describe("P12 Connection attachment laws", () => {
     Effect.gen(function* () {
       let ring: Connection["ring"] = () => Effect.void;
       let read: () => typeof Attached.Type = () => online();
+
       const f = yield* setup((stream, after, reader) =>
         Effect.gen(function* () {
           expect(reader).toBe("gateway/session-1");
@@ -254,9 +276,11 @@ describe("P12 Connection attachment laws", () => {
           yield* ring(stream, after + 1).pipe(
             Effect.mapError((cause) => new LedgerError({ reason: "storage", cause })),
           );
+
           return { _tag: "parked" } as const;
         }),
       );
+
       ring = f.c.ring;
       read = f.saved;
       yield* f.c.frame(request(id, "counter:1/inbox", after));
@@ -270,12 +294,15 @@ describe("P12 Connection attachment laws", () => {
     Effect.gen(function* () {
       const registered = yield* Deferred.make<void>();
       const reply = yield* Deferred.make<{ readonly _tag: "ready"; readonly rev: number }>();
+
       const f = yield* setup(() =>
         Effect.gen(function* () {
           yield* Deferred.succeed(registered, undefined);
+
           return yield* Deferred.await(reply);
         }),
       );
+
       const pending = yield* Effect.forkChild(f.c.frame(request("r")));
       yield* Deferred.await(registered);
       yield* f.c.ring("other", 99);
@@ -296,7 +323,7 @@ describe("P12 Connection attachment laws", () => {
       const parked = yield* setup(() => Effect.succeed({ _tag: "parked" } as const));
       yield* parked.c.frame(request(2));
       const fresh = yield* setup(() => Effect.succeed({ _tag: "parked" } as const));
-      fresh.save(JSON.parse(JSON.stringify(parked.saved())));
+      fresh.save(yield* reread(parked.saved()));
       yield* fresh.c.wake();
       yield* fresh.c.ring("counter:1/inbox", rev + 1);
       expect(fresh.frames).toEqual([{ jsonrpc: "2.0", id: 2, result: { rev: rev + 1 } }]);
@@ -310,10 +337,10 @@ describe("P12 Connection attachment laws", () => {
 
         for (const id of ids) {
           yield* f.c.frame(request(id));
-          expect(new TextEncoder().encode(JSON.stringify(f.saved())).length).toBeLessThanOrEqual(16384);
+          expect(new TextEncoder().encode(Formatter.formatJson(f.saved())).length).toBeLessThanOrEqual(16384);
         }
 
-        expect(f.frames.some((frame) => JSON.stringify(frame).includes("too_many_waits"))).toBe(true);
+        expect(Arr.some(f.frames, (frame) => Str.includes("too_many_waits")(JSON.stringify(frame)))).toBe(true);
 
         if (ids.length === 65) {
           expect(f.frames).toHaveLength(1);
@@ -329,6 +356,7 @@ describe("P12 Connection attachment laws", () => {
       const entered = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       let busyRead: () => typeof Attached.Type = () => online();
+
       const f = yield* setup(
         () => Effect.succeed({ _tag: "parked" } as const),
         () =>
@@ -336,13 +364,16 @@ describe("P12 Connection attachment laws", () => {
             expect(busyRead()).toMatchObject({ busy: true });
             yield* Deferred.succeed(entered, undefined);
             yield* Deferred.await(release);
+
             return Answer.cases.ok.make({ result: { _tag: "accepted", rev: 1, pos: 1 } });
           }),
       );
+
       busyRead = f.saved;
+
       const pending = yield* Effect.forkChild(
         f.c.frame(
-          JSON.stringify({
+          Formatter.formatJson({
             jsonrpc: "2.0",
             id,
             method: "process.send",
@@ -350,9 +381,10 @@ describe("P12 Connection attachment laws", () => {
           }),
         ),
       );
+
       yield* Deferred.await(entered);
       const wake = yield* setup(() => Effect.succeed({ _tag: "parked" } as const));
-      wake.save(JSON.parse(JSON.stringify(f.saved())));
+      wake.save(yield* reread(f.saved()));
       yield* wake.c.wake();
       expect(wake.closes).toEqual([1012]);
       yield* Deferred.succeed(release, undefined);

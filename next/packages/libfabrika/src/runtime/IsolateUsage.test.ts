@@ -1,12 +1,33 @@
 // next/, U2 and U10. U4/U5's unknown platform words are exercised at the tail entrypoint.
 import { expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as IsolateUsage from "./IsolateUsage.ts";
 
 const PROCESS = "process_0000000000e008000000000001";
-const methods = ["describe", "init", "step", "fold", "upgrade", "reply", "admit", "check", "other"] as const;
+
+const methods = [
+  "describe",
+  "init",
+  "step",
+  "fresh",
+  "update",
+  "audit",
+  "fold",
+  "upgrade",
+  "reply",
+  "admit",
+  "check",
+  "other",
+] as const;
+
 const outcomes = ["ok", "exception", "exceededCpu", "exceededMemory", "canceled", "other"] as const;
 
 // Deliberately different and independently drawn: copying either clock into the other must fail.
@@ -32,20 +53,24 @@ it("U2 a usage span lasts its CPU time and keeps wall time separately, including
           Effect.scoped(
             Effect.gen(function* () {
               const spans: Array<Tracer.NativeSpan> = [];
+
               const tracer = Tracer.make({
                 span: (options) => {
                   const span = new Tracer.NativeSpan(options);
                   spans.push(span);
+
                   return span;
                 },
               });
-              const usage = Schema.decodeUnknownSync(IsolateUsage.Usage)({
+
+              const usage = yield* Schema.decodeUnknownEffect(IsolateUsage.Usage)({
                 process: PROCESS,
                 method,
                 cpuMs,
                 wallMs,
                 outcome,
               });
+
               yield* IsolateUsage.record([usage]).pipe(Effect.withTracer(tracer));
               expect(spans).toHaveLength(1);
               const span = spans[0];
@@ -58,7 +83,7 @@ it("U2 a usage span lasts its CPU time and keeps wall time separately, including
 
               expect(Number(span.status.endTime - span.status.startTime) / 1_000_000).toBeCloseTo(cpuMs, 5);
               expect(Exit.isSuccess(span.status.exit)).toBe(true);
-              expect(Object.fromEntries(span.attributes)).toEqual({
+              expect(Rec.fromEntries(span.attributes)).toEqual({
                 "fab.process": PROCESS,
                 "fab.isolate.method": method,
                 "fab.isolate.wall_ms": wallMs,
@@ -77,7 +102,9 @@ it("U10 schemas reject unknown words, negative and nonfinite times", () =>
       fc.record({
         word: fc
           .string()
-          .filter((word) => !methods.some((known) => known === word) && !outcomes.some((known) => known === word)),
+          .filter(
+            (word) => !Arr.some(methods, (known) => known === word) && !Arr.some(outcomes, (known) => known === word),
+          ),
         invalid: fc.oneof(
           fc.double({ max: -Number.MIN_VALUE, noNaN: true }),
           fc.constantFrom(Number.NaN, Infinity, -Infinity),
@@ -97,8 +124,8 @@ it("U10 schemas reject unknown words, negative and nonfinite times", () =>
     { seed: 119120 },
   ));
 
-// format: these exact closed wire types are checked by CI, even if no test executes.
-it("format: U10 Method, Outcome and Usage keep their closed wire types", () => {
+// type: these exact closed wire types are checked by CI's typecheck, even if no test executes.
+it("U10 type: Method, Outcome and Usage keep their closed wire types", () => {
   expectTypeOf<typeof IsolateUsage.Method.Type>().toEqualTypeOf<(typeof methods)[number]>();
   expectTypeOf<typeof IsolateUsage.Outcome.Type>().toEqualTypeOf<(typeof outcomes)[number]>();
   expectTypeOf<typeof IsolateUsage.Usage.Type>().toEqualTypeOf<{

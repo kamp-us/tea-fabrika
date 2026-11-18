@@ -6,18 +6,24 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { Array as Arr, String as Str, ConfigProvider, Effect, Match, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
 import * as Settings from "./Settings.ts";
 
 type Program = ReturnType<typeof queue>;
+
 type Model = Program["machine"]["model"]["Type"];
+
 type Msg = Program["msg"]["Type"];
+
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
+
 type Start = Extract<Command, { type: "start_child" }>;
+
 type Entry = { change: number; head: string; reply: { to: string; ref: string } | null };
+
 type Active = Entry & { name: string; ref: string };
 
 type Oracle = {
@@ -31,9 +37,13 @@ type Oracle = {
 };
 
 const ctx = stubCtxThrowingProxy<never>();
-const head = Schema.decodeUnknownSync(Commit)("a".repeat(40));
-const tree = Schema.decodeUnknownSync(Tree)("b".repeat(40));
-const other = Schema.decodeUnknownSync(Tree)("c".repeat(40));
+
+const head = Schema.decodeSync(Commit)(Str.repeat(40)("a"));
+
+const tree = Schema.decodeSync(Tree)(Str.repeat(40)("b"));
+
+const other = Schema.decodeSync(Tree)(Str.repeat(40)("c"));
+
 const pid = "process_0000000000e008000000000001";
 
 const draw = fc.record({
@@ -46,7 +56,9 @@ const draw = fc.record({
 });
 
 type Cell = typeof draw extends fc.Arbitrary<infer A> ? A : never;
+
 const world = fc.record({ most: fc.integer({ min: 1, max: 6 }), enabled: fc.boolean() });
+
 type World = typeof world extends fc.Arbitrary<infer A> ? A : never;
 
 const program = (w: World) =>
@@ -76,7 +88,7 @@ const enqueue = (cell: Cell, change: number) =>
     type: "enqueue",
     change,
     head,
-    ...(cell.reply ? { reply: { to: `lane:${change}`, ref: `own:${cell.pick}` } } : {}),
+    ...(cell.reply ? { reply: { to: `quest:${change}`, ref: `own:${cell.pick}` } } : {}),
   });
 
 const reply = (cell: Cell, active: Pick<Active, "ref" | "change">): typeof Mail.Reply.Type => {
@@ -126,7 +138,8 @@ const reasons = [...StartRefusal.literals, "bad_cmd"] as const;
 
 const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
   const reason = reasons[cell.pick % reasons.length]!;
-  return Schema.decodeUnknownSync(p.msg)({
+
+  return Schema.decodeSync(p.msg)({
     type: "start_child_err",
     cmd: { type: "start_child" },
     reason,
@@ -137,18 +150,18 @@ const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
 
 const startAnswer = (p: Program, cmd: Start, cell: Cell, allowRefusal = true): Msg => {
   const which = cell.pick % (allowRefusal ? reasons.length + 3 : 3);
-  return Schema.decodeUnknownSync(p.msg)(
+
+  return Schema.decodeSync(p.msg)(
     which < 3
       ? {
           type: "start_child_ok",
           cmd,
           at: cell.at,
-          value:
-            which === 0
-              ? Started.cases.started.make({ process: pid, name: cmd.name, rev: 1 })
-              : which === 1
-                ? Started.cases.already_started.make({ process: pid, name: cmd.name })
-                : Started.cases.already_present.make({ process: pid, name: cmd.name }),
+          value: Match.value(which).pipe(
+            Match.when(0, () => Started.cases.started.make({ process: pid, name: cmd.name, rev: 1 })),
+            Match.when(1, () => Started.cases.already_started.make({ process: pid, name: cmd.name })),
+            Match.orElse(() => Started.cases.already_present.make({ process: pid, name: cmd.name })),
+          ),
         }
       : startRefusalAnswer(p, { ...cell, pick: which - 3 }),
   );
@@ -160,7 +173,7 @@ const refusal = (m: Oracle, w: World, msg: Msg) => {
       return { reason: "unset" };
     }
 
-    if (m.current?.change === msg.change || m.line.some((e) => e.change === msg.change)) {
+    if (m.current?.change === msg.change || Arr.some(m.line, (e) => e.change === msg.change)) {
       return { reason: "queued" };
     }
 
@@ -170,7 +183,7 @@ const refusal = (m: Oracle, w: World, msg: Msg) => {
   }
 
   if (msg.type === "drop") {
-    if (m.current?.change !== msg.change && !m.line.some((e) => e.change === msg.change)) {
+    if (m.current?.change !== msg.change && !Arr.some(m.line, (e) => e.change === msg.change)) {
       return { reason: "missing" };
     }
 
@@ -208,15 +221,18 @@ const step = (walk: Walk, input: Msg) => {
   if (refused !== null) {
     walk.seen.add(refused.reason);
     expect(p.view.select(walk.model)).toEqual(originalView);
+
     return;
   }
 
   const expected: Array<unknown> = [];
+
   const forward = (entry: Entry, answer: typeof Mail.Reply.Type) => {
     if (entry.reply !== null) {
       expected.push({ type: "send", to: entry.reply.to, m: { ...answer, ref: entry.reply.ref } });
     }
   };
+
   const next = () => {
     const entry = m.line.shift();
     m.reason = null;
@@ -256,10 +272,12 @@ const step = (walk: Walk, input: Msg) => {
       m.since = input.at;
     } else {
       const current = m.current!;
+
       const tag =
         input.type === "start_child_ok" ? input.value._tag : "reason" in input ? input.reason : input.error._tag;
+
       m.reason = Schema.TaggedStruct("start_refused", {
-        change: Schema.Number,
+        change: Schema.Finite,
         name: Schema.String,
         refusal: Schema.String,
       }).make({ change: current.change, name: current.name, refusal: tag });
@@ -286,7 +304,7 @@ const step = (walk: Walk, input: Msg) => {
       if (input._tag === "merged" && input.tree !== input.checked) {
         m.state = "stopped";
         m.reason = Schema.TaggedStruct("tree_drift", {
-          change: Schema.Number,
+          change: Schema.Finite,
           commit: Commit,
           tree: Tree,
           checked: Tree,
@@ -307,11 +325,11 @@ const step = (walk: Walk, input: Msg) => {
       });
       walk.seen.add("abandon_current");
     } else {
-      for (const entry of m.line.filter((e) => e.change === input.change)) {
+      for (const entry of Arr.filter(m.line, (e) => e.change === input.change)) {
         forward(entry, Mail.Reply.cases.abandoned.make({ type: "reply", ref: "dropped", change: entry.change }));
       }
 
-      m.line = m.line.filter((e) => e.change !== input.change);
+      m.line = Arr.filter(m.line, (e) => e.change !== input.change);
       walk.seen.add("drop_waiting");
     }
   } else if (input.type === "resume") {
@@ -328,7 +346,7 @@ const step = (walk: Walk, input: Msg) => {
     state: m.state,
     current: m.current === null ? null : { change: m.current.change, head: m.current.head, name: m.current.name },
     since: m.since,
-    line: m.line.map(({ change, head }) => ({ change, head })),
+    line: Arr.map(m.line, ({ change, head }) => ({ change, head })),
     attempt: m.attempt,
     late: m.late,
     reason: m.reason,
@@ -361,15 +379,17 @@ const open = (w: World, seen: Set<string>): Walk => {
   const [model, commands] = p.machine.init(null, ctx);
   expect(commands).toEqual([]);
   expect(p.inputs.resume).toMatchObject({ personOnly: true });
+
   return { p, w, model, oracle: initial(), history: [], unanswered: null, seen };
 };
 
 const choose = (walk: Walk, cell: Cell): Msg => {
   const { p, oracle: m } = walk;
-  const starts = walk.history.filter((c) => c.type === "start_child");
-  const sends = walk.history.filter((c) => c.type === "send");
+  const starts = Arr.filter(walk.history, (c) => c.type === "start_child");
+  const sends = Arr.filter(walk.history, (c) => c.type === "send");
   const queued = [...(m.current === null ? [] : [m.current]), ...m.line];
-  const moves: Array<() => unknown> = [
+
+  const moves: Array<() => object> = [
     () => enqueue(cell, (cell.pick % 10) + 1),
     () =>
       Mail.Drop.make({
@@ -406,7 +426,7 @@ const choose = (walk: Walk, cell: Cell): Msg => {
     );
   }
 
-  return Schema.decodeUnknownSync(p.msg)(moves[cell.move % moves.length]!());
+  return Schema.decodeSync(p.msg)(moves[cell.move % moves.length]!());
 };
 
 for (const law of [
@@ -437,13 +457,13 @@ for (const law of [
       { seed: 119120, numRuns: 200 },
     );
 
-    if (law.startsWith("Q3")) {
+    if (Str.startsWith("Q3")(law)) {
       for (const tag of ["merged", "red", "conflict", "moved", "closed", "unset", "abandoned", "behind"]) {
         expect(seen.has(`reply:${tag}`), tag).toBe(true);
       }
     }
 
-    if (law.startsWith("Q6")) {
+    if (Str.startsWith("Q6")(law)) {
       for (const state of ["idle", "landing", "stopped"]) {
         expect(seen.has(`late:start_child_err:${state}`), state).toBe(true);
       }
@@ -480,6 +500,7 @@ for (const [law, reached] of [
           const w = { ...drawn, enabled: true };
           const p = program(w);
           const first = draw.map((cell) => enqueue(cell, (cell.pick % 10) + 1));
+
           const guided = arbGuidedSequence(
             p.machine,
             ctx,
@@ -493,6 +514,7 @@ for (const [law, reached] of [
             },
             { maxLength: 100, size: "max" },
           );
+
           return fc
             .tuple(guided, fc.array(draw, { minLength: 80, maxLength: 100 }))
             .map(([msgs, cells]) => ({ w, msgs, cells }));
@@ -502,7 +524,7 @@ for (const [law, reached] of [
 
           // Keep the guided fold intact: interleaving another walk would orphan its answers.
           for (const msg of msgs) {
-            step(walk, Schema.decodeUnknownSync(walk.p.msg)(msg));
+            step(walk, Schema.decodeSync(walk.p.msg)(msg));
           }
 
           for (const cell of cells) {
@@ -518,11 +540,11 @@ for (const [law, reached] of [
     );
     expect(seen.has(reached), reached).toBe(true);
 
-    if (law.startsWith("Q4")) {
+    if (Str.startsWith("Q4")(law)) {
       expect(seen.has("enqueue_stopped")).toBe(true);
     }
 
-    if (law.startsWith("Q5")) {
+    if (Str.startsWith("Q5")(law)) {
       for (const tag of [...reasons, "already_started", "already_present"]) {
         expect(seen.has(tag), tag).toBe(true);
       }
@@ -537,7 +559,8 @@ const invalidModels = (idle: Extract<Model, { _tag: "idle" }>, entry: Entry) => 
   // @ts-expect-error idle cannot hold a current landing
   const current: Extract<Model, { _tag: "idle" }> = { ...idle, current: entry };
   // @ts-expect-error a reply address requires its ref
-  const partial: typeof Mail.Enqueue.Type = { type: "enqueue", change: 1, head, reply: { to: "lane" } };
+  const partial: typeof Mail.Enqueue.Type = { type: "enqueue", change: 1, head, reply: { to: "quest" } };
+
   return [line, current, partial];
 };
 

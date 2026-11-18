@@ -3,8 +3,8 @@
 //
 //   a box is kept while   a process has its cwd there, or its git index, HEAD log or folder changed
 //                         in the last 2 h (lastTouched; gc's own reads write none of them),
-//                         or drive kept it stuck less than 24 h ago and its lane has not landed,
-//                         or it holds uncommitted or untracked files and its lane has not landed
+//                         or drive kept it stuck less than 24 h ago and its quest has not landed,
+//                         or it holds uncommitted or untracked files and its quest has not landed
 //                         (a backup saves only HEAD, so they would be lost); once it landed, the
 //                         files go first into the main checkout as a stash (keepFiles), and a box
 //                         whose git data is not its own `<box>-gitdata` keeps them
@@ -13,15 +13,15 @@
 //                         first (fabrikalfa/<box>-wip when that is refused), and kept if both fail
 //   then                  every state/<box>.box whose box folder is gone is removed too, and every
 //                         linked worktree of the main checkout outside the boxes folder whose
-//                         lane landed (decideWorktree): its branch stays in the main checkout
-//   and                   boxfiles.ts sweeps what a landed lane's gone boxes left beside the boxes:
+//                         quest landed (decideWorktree): its branch stays in the main checkout
+//   and                   boxfiles.ts sweeps what a landed quest's gone boxes left beside the boxes:
 //                         their files and mutation folders move to the main checkout's runs/, their
 //                         views and Codex homes go (boxfiles.ts says when)
 //
-// A box's tree is in BOXES/box (lane.ts boxTree); one made before that layout is still in BOXES.
+// A box's tree is in BOXES/box (quest.ts boxTree); one made before that layout is still in BOXES.
 //
-// A lane's pinned scripts (BOXES/pins/<lane>.<pid>, lane.ts pinFolder) are removed by the lane's own
-// scope; a pin a killed lane left goes once no running process names it and it is older than IDLE
+// A quest's pinned scripts (BOXES/pins/<quest>.<pid>, quest.ts pinFolder) are removed by the quest's own
+// scope; a pin a killed quest left goes once no running process names it and it is older than IDLE
 // (decidePin).
 //
 // Before any folder goes, keepruns.sh moves its runs/ (raw samples, never in git) into the main
@@ -38,12 +38,13 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { Schema } from "effect";
-import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./lane.ts";
+import { Array as Arr, pipe, String as Str, DateTime, Option, Result, Schema } from "effect";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
+import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipBranch } from "./quest.ts";
 
 const HOUR = 3_600_000;
+
 export const STUCK = 24 * HOUR;
 
 /** What gc saw of one box. All of it is read before anything is decided. */
@@ -68,36 +69,41 @@ export const Verdict = Schema.TaggedUnion({
   remove: { reason: Schema.Literals(["merged", "closed", "on_remote"]) },
   backup: { to: Schema.Array(Schema.String) },
 });
+
 export type Verdict = typeof Verdict.Type;
+
 const keep = (reason: string) => Verdict.cases.keep.make({ reason });
+
 const remove = (reason: "merged" | "closed" | "on_remote") => Verdict.cases.remove.make({ reason });
 
-/** What gc does with one lane's pinned scripts. */
+/** What gc does with one quest's pinned scripts. */
 export const PinVerdict = Schema.TaggedUnion({
   keep: { reason: Schema.String },
   remove: { reason: Schema.String },
 });
+
 export type PinVerdict = typeof PinVerdict.Type;
 
 /** The branch a box's commits are backed up to, best first. */
 export const backupsOf = (name: string, branch: string | null): string[] => {
   const own = `fabrikalfa/${name}-wip`;
-  const wip = branch === null ? null : wipOf(branch);
-  return wip?.startsWith("fabrikalfa/") && wip !== own ? [wip, own] : [own];
+  const wip = branch === null ? null : wipBranch(branch);
+
+  return wip !== null && pipe(wip, Str.startsWith("fabrikalfa/")) === true && wip !== own ? [wip, own] : [own];
 };
 
 /** The `state/*.box` files whose box folder is gone: facts of a dead box, which stepcommit would
  * otherwise still read. A box saves its facts only after its folder exists, so none is half made. */
 export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>): string[] =>
-  files.filter((f) => f.endsWith(".box") && !boxes.has(f.slice(0, -".box".length)));
+  Arr.filter(files, (f) => pipe(f, Str.endsWith(".box")) && !boxes.has(pipe(f, Str.slice(0, -".box".length))));
 
 /**
- * The Check for one lane's pinned scripts, pure. A pin goes only when no process names it and it is
+ * The Check for one quest's pinned scripts, pure. A pin goes only when no process names it and it is
  * IDLE old; a process list pgrep cannot read keeps it, never reads as none running.
  */
 export const decidePin = (holders: PgrepAnswer, idle: number): PinVerdict =>
   holders._tag === "refused"
-    ? PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a lane may still run from it" })
+    ? PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a quest may still run from it" })
     : holders.count > 0
       ? PinVerdict.cases.keep.make({ reason: `${holders.count} running processes name it` })
       : idle < IDLE
@@ -111,14 +117,14 @@ export const decide = (s: Seen): Verdict => {
   }
 
   if (s.busy.length > 0) {
-    return keep(`a process is working in it (pid ${s.busy.join(", ")})`);
+    return keep(`a process is working in it (pid ${Arr.join(Arr.map(s.busy, String), ", ")})`);
   }
 
   if (s.idle < IDLE) {
     return keep(`touched ${Math.round(s.idle / 60_000)} min ago`);
   }
 
-  // A stuck box is kept for the lead to read, until its lane lands (0019).
+  // A stuck box is kept for the lead to read, until its quest lands (0019).
   if (s.stuck !== null && s.stuck < STUCK && !s.merged) {
     return keep(`stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago`);
   }
@@ -129,7 +135,7 @@ export const decide = (s: Seen): Verdict => {
 
   // A backup pushes HEAD only, so files never committed would go with the folder (field note
   // 2026-11-09-42: a box removed with 10 uncommitted product files). The lead saves or drops them,
-  // until the lane lands: then gc keeps them in the main checkout first (`refs/keep/box/<box>-files`,
+  // until the quest lands: then gc keeps them in the main checkout first (`refs/keep/box/<box>-files`,
   // a stash), since a drive box never commits and so always holds its step's files uncommitted.
   if (s.dirty === null) {
     return keep("its files could not be read");
@@ -165,8 +171,8 @@ export type PrState = "OPEN" | "MERGED" | "CLOSED";
 
 /** The pull requests holding a worktree's work: those of its own branch (minus -wip), of every
  * remote branch whose tip is its HEAD, and every one whose head commit is its HEAD. A lead's
- * worktree is often pushed under another name (botpush to fabrikalfa/<lane>), so its own branch
- * name alone missed a merged lane and gc kept it for good (2026-11-09: PR 623's worktree). */
+ * worktree is often pushed under another name (botpush to fabrikalfa/<quest>), so its own branch
+ * name alone missed a merged quest and gc kept it for good (2026-11-09: PR 623's worktree). */
 export const worktreePrs = (
   w: {
     readonly branch: string | null;
@@ -176,20 +182,20 @@ export const worktreePrs = (
   byRef: ReadonlyMap<string, readonly PrState[]>,
   byHead: ReadonlyMap<string, readonly PrState[]>,
 ): PrState[] => [
-  ...(w.branch === null ? [] : (byRef.get(w.branch.replace(/(-wip)+$/, "")) ?? [])),
-  ...w.tips.flatMap((t) => byRef.get(t.replace(/(-wip)+$/, "")) ?? []),
+  ...(w.branch === null ? [] : (byRef.get(pipe(w.branch, Str.replace(/(-wip)+$/, ""))) ?? [])),
+  ...Arr.flatMap(w.tips, (t) => byRef.get(pipe(t, Str.replace(/(-wip)+$/, ""))) ?? []),
   ...(w.head === null ? [] : (byHead.get(w.head) ?? [])),
 ];
 
-/** A worktree goes once its lane landed, clean and idle. Its branch stays in the main checkout, so
- * only the folder goes; a worktree with no lane branch is someone's own and stays. */
+/** A worktree goes once its quest landed, clean and idle. Its branch stays in the main checkout, so
+ * only the folder goes; a worktree with no quest branch is someone's own and stays. */
 export const decideWorktree = (w: SeenWorktree): Verdict => {
   if (w.locked) {
     return keep("locked");
   }
 
   if (w.busy.length > 0) {
-    return keep(`a process is working in it (pid ${w.busy.join(", ")})`);
+    return keep(`a process is working in it (pid ${Arr.join(Arr.map(w.busy, String), ", ")})`);
   }
 
   if (w.idle < IDLE) {
@@ -234,6 +240,7 @@ const sh = (cmd: string, args: readonly string[], cwd?: string) => {
     maxBuffer: 64 * 1024 * 1024,
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
   });
+
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 };
 
@@ -247,9 +254,10 @@ const loadEnv = (): Env => {
     '. "$0" && printf "%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO"',
     join(import.meta.dirname, "env.sh"),
   ]);
-  const [MAIN = "", BOXES = "", GH_REPO = ""] = r.out.split("\n");
 
-  if (r.code !== 0 || !MAIN || !BOXES) {
+  const [MAIN = "", BOXES = "", GH_REPO = ""] = Str.split(r.out, "\n");
+
+  if (r.code !== 0 || MAIN === "" || BOXES === "") {
     throw new Error(`env.sh failed: ${r.err}`);
   }
 
@@ -270,8 +278,9 @@ export const dirtyIn = (gitDir: string, box: string): number | null => {
     "-z",
     "--untracked-files=all",
   ]);
+
   // No rename pairs, so each NUL-ended entry is one file.
-  return r.code === 0 ? r.out.split("\0").filter(Boolean).length : null;
+  return r.code === 0 ? Arr.filter(Str.split(r.out, "\0"), Boolean).length : null;
 };
 
 /** Keep a box's uncommitted and untracked files in `main` at `ref`, as one stash commit (`git stash
@@ -309,11 +318,11 @@ const gitDirOf = (box: string): string | null => {
 
   const m = /^gitdir:\s*(.+)$/m.exec(readFileSync(dot, "utf8"));
 
-  if (!m?.[1]) {
+  if (m?.[1] === undefined || m[1] === "") {
     return null;
   }
 
-  return isAbsolute(m[1].trim()) ? m[1].trim() : resolve(box, m[1].trim());
+  return isAbsolute(Str.trim(m[1])) ? Str.trim(m[1]) : resolve(box, Str.trim(m[1]));
 };
 
 const mtime = (path: string) => (existsSync(path) ? statSync(path).mtimeMs : 0);
@@ -325,9 +334,10 @@ export const lastLogged = (log: string): number => {
     return 0;
   }
 
-  const last = readFileSync(log, "utf8").trimEnd().split("\n").at(-1) ?? "";
+  const last = pipe(readFileSync(log, "utf8"), Str.trimEnd, Str.split("\n")).at(-1) ?? "";
   const m = / (\d+) [+-]\d{4}\t/.exec(last);
-  return m?.[1] ? Number(m[1]) * 1000 : 0;
+
+  return m?.[1] !== undefined && m[1] !== "" ? Number(m[1]) * 1000 : 0;
 };
 
 /** When work last happened in a box: the newest of its folder (a box being made), its index (an
@@ -344,11 +354,11 @@ const cwds = (): { readonly pid: number; readonly path: string }[] => {
   const out: { pid: number; path: string }[] = [];
   let pid = 0;
 
-  for (const l of sh("lsof", ["-a", "-d", "cwd", "-Fpn"]).out.split("\n")) {
-    if (l.startsWith("p")) {
-      pid = Number(l.slice(1));
-    } else if (l.startsWith("n/")) {
-      out.push({ pid, path: l.slice(1) });
+  for (const l of Str.split(sh("lsof", ["-a", "-d", "cwd", "-Fpn"]).out, "\n")) {
+    if (pipe(l, Str.startsWith("p"))) {
+      pid = Number(pipe(l, Str.slice(1)));
+    } else if (pipe(l, Str.startsWith("n/"))) {
+      out.push({ pid, path: pipe(l, Str.slice(1)) });
     }
   }
 
@@ -356,10 +366,16 @@ const cwds = (): { readonly pid: number; readonly path: string }[] => {
 };
 
 const pidsIn = (busyIn: readonly { pid: number; path: string }[], dir: string) => [
-  ...new Set(busyIn.filter((c) => c.path === dir || c.path.startsWith(`${dir}/`)).map((c) => c.pid)),
+  ...new Set(
+    pipe(
+      busyIn,
+      Arr.filter((c) => c.path === dir || pipe(c.path, Str.startsWith(`${dir}/`))),
+      Arr.map((c) => c.pid),
+    ),
+  ),
 ];
 
-/** Box name to when drive kept it stuck, from `state/<lane>.json`. */
+/** Box name to when drive kept it stuck, from `state/<quest>.json`. */
 const keptByDrive = (boxes: string): Map<string, number> => {
   const kept = new Map<string, number>();
   const dir = join(boxes, "state");
@@ -368,36 +384,41 @@ const keptByDrive = (boxes: string): Map<string, number> => {
     return kept;
   }
 
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".json"))) {
-    try {
-      const lane = JSON.parse(readFileSync(join(dir, file), "utf8")) as {
+  for (const file of Arr.filter(readdirSync(dir), (f) => pipe(f, Str.endsWith(".json")))) {
+    // A state file that does not read is skipped, from the step where it stopped reading.
+    Result.try(() => {
+      // SAFETY: drive's record Cmd writes this file as its Quest, whose steps carry `box`, `kept` and
+      // `ended`; each is optional here, and a file whose shape throws below is skipped.
+      const quest = JSON.parse(readFileSync(join(dir, file), "utf8")) as {
         steps?: { box?: string; kept?: boolean; ended?: string }[];
       };
 
-      for (const step of lane.steps ?? []) {
-        if (step.kept && step.box) {
-          kept.set(step.box, Date.parse(step.ended ?? "") || Date.now());
+      for (const step of quest.steps ?? []) {
+        if (step.kept === true && step.box !== undefined && step.box !== "") {
+          kept.set(step.box, Date.parse(step.ended ?? "") || DateTime.toEpochMillis(DateTime.nowUnsafe()));
         }
       }
-    } catch {}
+    });
   }
 
   return kept;
 };
 
 const sizeMb = (paths: readonly string[]) => {
-  const there = paths.filter(existsSync);
+  const there = Arr.filter(paths, existsSync);
 
   if (there.length === 0) {
     return 0;
   }
 
   const r = sh("du", ["-sk", ...there]);
+
   return Math.round(
-    r.out
-      .split("\n")
-      .filter(Boolean)
-      .reduce((n, l) => n + Number(l.split("\t")[0] ?? 0), 0) / 1024,
+    pipe(
+      Str.split(r.out, "\n"),
+      Arr.filter(Boolean),
+      Arr.reduce(0, (n, l) => n + Number(Str.split(l, "\t")[0] ?? 0)),
+    ) / 1024,
   );
 };
 
@@ -405,8 +426,8 @@ const sizeMb = (paths: readonly string[]) => {
 const keepRuns = (dir: string): boolean => {
   const r = sh("sh", [join(import.meta.dirname, "keepruns.sh"), dir]);
 
-  if (r.out.trim()) {
-    console.log(r.out.trim());
+  if (Str.trim(r.out) !== "") {
+    console.log(Str.trim(r.out));
   }
 
   return r.code === 0;
@@ -416,7 +437,7 @@ const main = () => {
   const args = process.argv.slice(2);
   const dry = args.includes("--dry-run");
 
-  if (args.some((a) => a !== "--dry-run")) {
+  if (Arr.some(args, (a) => a !== "--dry-run")) {
     console.error("usage: box.sh gc [--dry-run]");
     process.exit(2);
   }
@@ -425,14 +446,16 @@ const main = () => {
 
   if (!existsSync(env.BOXES)) {
     console.log("gc: no boxes folder");
+
     return;
   }
 
   const repo = (...a: string[]) => sh("git", ["-C", env.MAIN, ...SAFE, ...a]);
-  const common = resolve(env.MAIN, repo("rev-parse", "--git-common-dir").out.trim());
+  const common = resolve(env.MAIN, Str.trim(repo("rev-parse", "--git-common-dir").out));
   repo("fetch", "-q", "origin");
   const prsOf = new Map<string, PrState[]>();
   const prsAt = new Map<string, PrState[]>();
+
   const listed = sh("gh", [
     "pr",
     "list",
@@ -449,70 +472,92 @@ const main = () => {
   ]);
 
   if (listed.code !== 0) {
-    console.error(`gc: gh could not list pull requests: ${listed.err.trim()}`);
+    console.error(`gc: gh could not list pull requests: ${Str.trim(listed.err)}`);
     process.exit(1);
   }
 
-  for (const line of listed.out.split("\n")) {
-    const [state, ref, oid] = line.split(" ");
+  for (const line of Str.split(listed.out, "\n")) {
+    const [state, ref, oid] = Str.split(line, " ");
 
     if (state !== "OPEN" && state !== "MERGED" && state !== "CLOSED") {
       continue;
     }
 
-    if (ref) {
+    if (ref !== undefined && ref !== "") {
       prsOf.set(ref, [...(prsOf.get(ref) ?? []), state]);
     }
 
-    if (oid) {
+    if (oid !== undefined && oid !== "") {
       prsAt.set(oid, [...(prsAt.get(oid) ?? []), state]);
     }
   }
 
-  const merged = new Set([...prsOf].filter(([, s]) => s.includes("MERGED")).map(([r]) => r));
+  const merged = new Set(
+    pipe(
+      [...prsOf],
+      Arr.filter(([, s]) => s.includes("MERGED")),
+      Arr.map(([r]) => r),
+    ),
+  );
+
   const busyIn = cwds();
   const kept = keptByDrive(env.BOXES);
-  const now = Date.now();
+  const now = DateTime.toEpochMillis(DateTime.nowUnsafe());
   let removed = 0;
   let freed = 0;
   let keptCount = 0;
+
   const foldersIn = (dir: string, skip: (name: string) => boolean) =>
     existsSync(dir)
-      ? readdirSync(dir, { withFileTypes: true })
-          .filter((d) => d.isDirectory() && !skip(d.name))
-          .map((d) => d.name)
+      ? pipe(
+          readdirSync(dir, { withFileTypes: true }),
+          Arr.filter((d) => d.isDirectory() && !skip(d.name)),
+          Arr.map((d) => d.name),
+        )
       : [];
+
   const boxes = [
-    ...foldersIn(boxTrees(env.BOXES), (n) => n.endsWith("-view")).map((name) => ({
-      name,
-      box: boxTree(env.BOXES, name),
-    })),
-    ...foldersIn(env.BOXES, (n) => n === "state" || n === "box" || n === "pins" || n.endsWith("-gitdata")).map(
+    ...Arr.map(
+      foldersIn(boxTrees(env.BOXES), (n) => pipe(n, Str.endsWith("-view"))),
+      (name) => ({
+        name,
+        box: boxTree(env.BOXES, name),
+      }),
+    ),
+    ...Arr.map(
+      foldersIn(env.BOXES, (n) => n === "state" || n === "box" || n === "pins" || pipe(n, Str.endsWith("-gitdata"))),
       (name) => ({
         name,
         box: oldBoxTree(env.BOXES, name),
       }),
     ),
-  ].sort((a, b) => a.name.localeCompare(b.name));
+  ].sort((a, b) => pipe(a.name, Str.localeCompare(b.name)));
+
   // The boxes this run removed, or would remove: boxfiles.ts sweeps only a box whose tree is gone.
   const gone: string[] = [];
 
   for (const { name, box } of boxes) {
     const gitDir = gitDirOf(box);
+
     const git =
       gitDir === null
         ? null
         : (() => {
             const g = (...a: string[]) => sh("git", [...SAFE, `--git-dir=${gitDir}`, ...a]);
-            const head = g("rev-parse", "--verify", "-q", "HEAD^{commit}").out.trim() || null;
-            const branch = g("symbolic-ref", "-q", "--short", "HEAD").out.trim() || null;
+            const head = Str.trim(g("rev-parse", "--verify", "-q", "HEAD^{commit}").out) || null;
+            const branch = Str.trim(g("symbolic-ref", "-q", "--short", "HEAD").out) || null;
+
             return { head, branch };
           })();
+
     const head = git?.head ?? null;
     const inMain = head !== null && repo("cat-file", "-e", `${head}^{commit}`).code === 0;
+
     const onRemote =
-      inMain && repo("for-each-ref", "--count=1", "--contains", head, "refs/remotes/origin").out.trim() !== "";
-    const branch = git?.branch?.replace(/(-wip)+$/, "") ?? null;
+      inMain && Str.trim(repo("for-each-ref", "--count=1", "--contains", head, "refs/remotes/origin").out) !== "";
+
+    const branch = git?.branch == null ? null : pipe(git.branch, Str.replace(/(-wip)+$/, ""));
+
     const seen: Seen = {
       name,
       git,
@@ -523,6 +568,7 @@ const main = () => {
       onRemote,
       dirty: gitDir === null ? null : dirtyIn(gitDir, box),
     };
+
     const verdict = decide(seen);
 
     if (verdict._tag === "keep") {
@@ -533,7 +579,7 @@ const main = () => {
 
     let reason: string = verdict._tag === "remove" ? verdict.reason : "";
 
-    // A merged lane's box may hold commits no remote has: keep its HEAD in the main checkout.
+    // A merged quest's box may hold commits no remote has: keep its HEAD in the main checkout.
     if (verdict._tag === "remove" && !onRemote && !dry) {
       if (repo("fetch", "-q", "-f", box, `HEAD:refs/keep/box/${name}`).code !== 0) {
         console.log(`keep ${name}: could not save its HEAD`);
@@ -544,7 +590,7 @@ const main = () => {
       reason += `, HEAD kept at refs/keep/box/${name}`;
     }
 
-    // A landed lane's box with files never committed: they go into the main checkout as a stash, the
+    // A landed quest's box with files never committed: they go into the main checkout as a stash, the
     // untracked ones too (git ignores node_modules), before the folder goes.
     if (verdict._tag === "remove" && (seen.dirty ?? 0) > 0) {
       const kept = `refs/keep/box/${name}-files`;
@@ -584,18 +630,20 @@ const main = () => {
           repo("notes", "--ref=fabrika", "merge", "-q", "-s", "cat_sort_uniq", `box-${name}`);
         }
 
-        const pushed = verdict.to.find(
+        const pushed = Arr.findFirst(
+          verdict.to,
           (to) => sh("node", [join(import.meta.dirname, "botpush.mjs"), env.MAIN, to, ref]).code === 0,
         );
+
         repo("update-ref", "-d", ref);
 
-        if (pushed === undefined) {
-          console.log(`keep ${name}: backup push refused (${verdict.to.join(", ")})`);
+        if (Option.isNone(pushed)) {
+          console.log(`keep ${name}: backup push refused (${Arr.join(verdict.to, ", ")})`);
           keptCount += 1;
           continue;
         }
 
-        reason = `backed up to ${pushed}`;
+        reason = `backed up to ${pushed.value}`;
       }
     }
 
@@ -609,7 +657,7 @@ const main = () => {
     }
 
     if (!dry) {
-      if (gitDir?.startsWith(`${join(common, "worktrees")}/`)) {
+      if (gitDir !== null && pipe(gitDir, Str.startsWith(`${join(common, "worktrees")}/`)) === true) {
         repo("worktree", "remove", "--force", "--force", box);
       }
 
@@ -638,7 +686,7 @@ const main = () => {
     console.log(`${dry ? "would remove" : "removed"} state/${f}: its box is gone`);
   }
 
-  // A lane's pinned scripts: its own scope removes them, so one left here is a lane that was
+  // A quest's pinned scripts: its own scope removes them, so one left here is a quest that was
   // killed. It goes once no running process names it and it is older than IDLE.
   const pins = pinsFolder(env.BOXES);
 
@@ -658,8 +706,8 @@ const main = () => {
     );
   }
 
-  // What a landed lane's gone boxes left beside the boxes. Landed is the lane's own branch with a
-  // merged pull request and no open one, from the listing above: boxfiles.ts judges it per lane.
+  // What a landed quest's gone boxes left beside the boxes. Landed is the quest's own branch with a
+  // merged pull request and no open one, from the listing above: boxfiles.ts judges it per quest.
   const swept = spawnSync(
     process.execPath,
     [
@@ -669,14 +717,15 @@ const main = () => {
       "--main",
       env.MAIN,
       ...(dry ? ["--dry-run"] : []),
-      ...gone.flatMap((name) => ["--gone", name]),
-      ...[...prsOf].flatMap(([ref, states]) => [
+      ...Arr.flatMap(gone, (name) => ["--gone", name]),
+      ...Arr.flatMap([...prsOf], ([ref, states]) => [
         ...(states.includes("MERGED") ? ["--merged", ref] : []),
         ...(states.includes("OPEN") ? ["--open", ref] : []),
       ]),
     ],
     { encoding: "utf8" },
   );
+
   process.stdout.write(swept.stdout ?? "");
   process.stderr.write(swept.stderr ?? "");
 
@@ -684,31 +733,52 @@ const main = () => {
     repo("worktree", "prune");
   }
 
-  // Linked worktrees outside the boxes folder: a lead's or an agent's own checkout of a lane.
+  // Linked worktrees outside the boxes folder: a lead's or an agent's own checkout of a quest.
   let trees = 0;
-  const blocks = repo("worktree", "list", "--porcelain").out.split("\n\n").filter(Boolean);
+  const blocks = Arr.filter(Str.split(repo("worktree", "list", "--porcelain").out, "\n\n"), Boolean);
 
   for (const block of blocks.slice(1)) {
-    const lines = block.split("\n");
-    const path = lines.find((l) => l.startsWith("worktree "))?.slice(9) ?? "";
+    const lines = Str.split(block, "\n");
+    const field = (start: string) => Arr.findFirst(lines, (l) => pipe(l, Str.startsWith(start)));
 
-    if (!path || path === env.MAIN || path.startsWith(`${env.BOXES}/`) || !existsSync(path)) {
+    const path = pipe(
+      field("worktree "),
+      Option.map((l) => pipe(l, Str.slice(9))),
+      Option.getOrElse(() => ""),
+    );
+
+    if (path === "" || path === env.MAIN || pipe(path, Str.startsWith(`${env.BOXES}/`)) || !existsSync(path)) {
       continue;
     }
 
-    const ref = lines.find((l) => l.startsWith("branch "))?.slice("branch refs/heads/".length);
+    const ref = pipe(
+      field("branch "),
+      Option.map((l) => pipe(l, Str.slice("branch refs/heads/".length))),
+    );
+
     const gitDir = gitDirOf(path);
-    const branch = ref ?? null;
-    const head = lines.find((l) => l.startsWith("HEAD "))?.slice(5) ?? null;
+    const branch = Option.getOrNull(ref);
+
+    const head = pipe(
+      field("HEAD "),
+      Option.map((l) => pipe(l, Str.slice(5))),
+      Option.getOrNull,
+    );
+
     const tips =
       head === null
         ? []
-        : repo("for-each-ref", "--points-at", head, "--format=%(refname:lstrip=3)", "refs/remotes/origin")
-            .out.split("\n")
-            .filter(Boolean);
+        : Arr.filter(
+            Str.split(
+              repo("for-each-ref", "--points-at", head, "--format=%(refname:lstrip=3)", "refs/remotes/origin").out,
+              "\n",
+            ),
+            Boolean,
+          );
+
     const verdict = decideWorktree({
       branch,
-      locked: lines.some((l) => l === "locked" || l.startsWith("locked ")),
+      locked: Arr.some(lines, (l) => l === "locked" || pipe(l, Str.startsWith("locked "))),
       busy: pidsIn(busyIn, path),
       idle: now - lastTouched(path, gitDir),
       dirty: gitDir === null ? null : dirtyIn(gitDir, path),
@@ -744,13 +814,14 @@ const main = () => {
   // The mutation container's leftovers (0045): a container a dead run left, and images over a
   // week old. mutbox.ts knows which are safe to remove, and keeps a live run's. Each of its Docker
   // calls has its own bound; GC_SECONDS is a second guard, so a hung Docker never holds the chain
-  // (2026-11-10: a `docker ps` here never returned, and two lanes sat 1 h 50 min).
+  // (2026-11-10: a `docker ps` here never returned, and two quests sat 1 h 50 min).
   if (!dry) {
     const swept = spawnSync(
       process.execPath,
       [join(import.meta.dirname, "mutbox.ts"), "gc", "--lock", join(env.BOXES, "state", "docker.lock")],
       { encoding: "utf8", timeout: GC_SECONDS * 1000 },
     );
+
     process.stdout.write(swept.stdout ?? "");
 
     if (swept.error !== undefined) {

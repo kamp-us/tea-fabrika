@@ -28,8 +28,8 @@ Five parts, from the bottom up:
   through the Agent SDK, or any harness (a tool that runs an agent, like Claude Code) that speaks
   the Agent Client Protocol.
 - **The work pipeline.** Programs for each step of the work, where a **stage** is one step:
-  plan, build, review and ship. A **lane** is one plan's whole path, from ticket to merged pull
-  request. It is an app built on the tools above, in its own package, `@kampus/pipeline`. That
+  plan, build, review and ship. A **quest** is one plan's whole path, from ticket to merged pull
+  request; today's code calls it a `lane`. It is an app built on the tools above, in its own package, `@kampus/pipeline`. That
   name is a placeholder: the pipeline's own name is still open.
 
 ## Why it is built this way
@@ -121,12 +121,12 @@ and its local ledger in `~/.tsh` (set `TSH_HOME` to move it).
 [Run a ticket through the pipeline](./docs/how-to/run-a-pipeline-ticket.md). This section stays until
 `deliver` is deleted.
 
-**It is wired, but it has not yet taken a real ticket to a merged pull request.** Experiment 105 ran the same lane against a fake GitHub. Read
+**It is wired, but it has not yet taken a real ticket to a merged pull request.** Experiment 105 ran the same quest against a fake GitHub. Read
 [experiment 105](./experiments/105-the-plan-lane-dry-run.md) before you try it.
 
 - **It writes to the repository you name.** It pushes a branch and commits, and opens one pull
   request per plan.
-- **It spends money.** By default each agent run may cost up to $2, and one step of the lane,
+- **It spends money.** By default each agent run may cost up to $2, and one step of the quest,
   with its retries, up to $20.
 
 Steps:
@@ -188,7 +188,7 @@ Steps:
    - `deliver` plans the ticket, then waits for you to approve the plan on the desk.
    - Once approved, it builds each task on one branch, reviews it, opens one pull request and
      ships it under the repository's own merge rules.
-   - Killed or crashed, run the same line again. It goes on from where the lane stood.
+   - Killed or crashed, run the same line again. It goes on from where the quest stood.
    - Only one tsh may use a home at a time, so run `desk` and `answer` in the same tsh.
 
 ### Older paths, kept for now
@@ -228,9 +228,6 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
 - [`packages/pipeline`](./packages/pipeline/README.md), `@kampus/pipeline` (a placeholder name):
   the work pipeline, an app on fabrika's public names. The stages, the services they use, the
   programs it lists in tsh, and the `tsh` that lists them.
-- [`packages/promises`](./packages/promises/README.md), `@kampus/promises`: each formal check
-  as a record in `promises/`, tied to the code it covers, and the CI gate that fails when that
-  code changes and the record does not (experiment 117).
 - [`packages/ledger-server`](./packages/ledger-server/README.md), `@kampus/ledger-server`: one
   shared ledger on Cloudflare for a team, declared with Alchemy, and its twin on the laptop from
   the same Worker.
@@ -277,6 +274,3 @@ Other commands:
 | tsh, the same as `bin/tsh` but without its check for missing packages | `pnpm tsh` |
 | tsh with only its small programs (fabrika installs no command) | `packages/fabrika/bin/tsh-small` |
 | Open the fabrika app: tsh in a window, with the small programs, `counter` and `tracker` | `pnpm fabrika` |
-| Start or stop a local Jaeger, to see tsh's traces (`TSH_TRACE=1`) | `pnpm trace:up`, `pnpm trace:down` |
-| List the promises the formal checks keep, each run with its planted break | `pnpm promises` |
-| Confirm one promise again after the code it covers changed | `pnpm promises confirm <id>` |

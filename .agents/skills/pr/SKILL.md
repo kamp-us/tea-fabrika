@@ -1,6 +1,6 @@
 ---
 name: pr
-description: Write or rewrite one tea-fabrika pull request's title and description, in the fixed order every pull request here uses, starting with what the change does. Use whenever a step or the lead writes a PR body file, a lane brief's `## pr` section or the words of an open pull request, and on "write the PR description", "fix this PR's title" or "this PR does not say what it does".
+description: Write or rewrite one pull request's title and description, what the change does first. Use whenever a PR body file, a quest brief's `## pr` section or the words of an open pull request are written, and on "write the PR description" or "fix this PR's title".
 ---
 
 # pr
@@ -20,7 +20,7 @@ flowchart TD
   does --> rest["the other parts, in their fixed order"]
   rest --> leak["leakgrep.sh --text on the body file"]
   leak --> open{"is the pull request open?"}
-  open -- "no, a lane is ending" --> ready["land.ts ready --body"]
+  open -- "no, a quest is ending" --> ready["land.ts ready --body"]
   open -- yes --> patch["gh api -X PATCH repos/kamp-us/tea-fabrika/pulls/N"]
 ```
 
@@ -78,6 +78,7 @@ Three of its six bullets, two of its seven lines of shape and two of its six fil
 | `## Why this change` | The ticket, the plan row, and the decision or note it builds. One or two lines |
 | `## How it works` | The shape in code, for a reader about to open the diff |
 | `## What a reader should know` | What other code or stored data will feel |
+| `## New names` | One line per new name: what the industry calls it, with the source |
 | `## Laws and checks` | The laws by name, what ran, and the loosening check |
 | `## Not in this pull request` | What waits for a later slice, and what was found and left |
 | `## How it looks` | Only for a change to a program's window: the shots |
@@ -91,7 +92,7 @@ one line of checks.
 ## What each part needs
 
 - **Title.** Say what is true after the merge: `a process keeps its watchers across its object's
-  sleep`. Never the step's name, never the draft's `the lane's steps are running`, never a note on
+  sleep`. Never the step's name, never the draft's `the quest's steps are running`, never a note on
   what to write. At the squash it becomes main's commit subject, where nobody sees the body.
 - **What this does.** The answer first. Each bullet is something a person, a program or an agent can
   now do, or a fault that is gone. A list of files is not an answer. When nothing can be reached yet
@@ -106,6 +107,13 @@ one line of checks.
 - **What a reader should know.** New or removed public exports, settings, a stored shape (a fact
   recorded from now on, and whether older rows still read), and anything that makes other code
   change. When there is none, say "Nothing." in one line.
+- **New names.** Each name the diff adds, a type, a service, a function, a file, a setting or a
+  record field, gets one line: the name, what the industry calls it, and a link to a source that
+  says so, such as a maker's docs or `.glossary/TERMS.md`. A name we coined says what it was
+  searched against and why no industry word fits
+  ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md)).
+  `land.ts queue` and `land.ts arm` refuse a pull request whose diff exports a name this part does
+  not name (`.agents/skills/lead/scripts/pr/Names.ts`).
 - **Laws and checks.** Each law by its exact test title, with what it protects in a few words. Then
   what ran, at which head, and what ran it. Say what could not run and why, and what is not known
   yet: a check nobody ran is said as plainly as a green one. Then `loosening.sh`'s output and, when
@@ -125,9 +133,9 @@ one line of checks.
   ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). A slice that leaves its
   ticket open leaves the phrase out and says so under Why this change.
 
-## A lane's description is written twice
+## A quest's description is written twice
 
-A lane brief needs its `## pr` section before any code exists, and `chain.ts` posts it word for
+A quest brief needs its `## pr` section before any code exists, and `chain.ts` posts it word for
 word: the first line as the title, the rest as the description, then its own `## Steps`
 (`.agents/skills/lead/scripts/chain.ts:1444`). So:
 
@@ -136,7 +144,7 @@ word: the first line as the title, the rest as the description, then its own `##
   say later. Pull request 1074 opened with such a note as its title and nothing above its steps.
 - **When the review says merge-ready,** read the diff and rewrite the whole description with this
   skill. Keep the tooling's Steps part as it is.
-- **Every heading has two words or more,** on purpose. In a lane brief a one-word `## ` heading
+- **Every heading has two words or more,** on purpose. In a quest brief a one-word `## ` heading
   starts a new brief section (`chain.ts:384`), so a `## Why` would cut the description short there.
 
 ## Words
@@ -148,8 +156,8 @@ repo is public". The ones a description breaks most:
 - A pull request or an issue is a full URL. A decision or a note is a full URL too: a relative link
   does not resolve in a description.
 - No personal names, no account names, no machine paths, and nothing a person typed in a chat.
-- No credit line, no "generated with" footer and no session link. The agent never names itself
-  ([0401](../../../.decisions/0401-agents-commit-as-the-fabrikalfa-bot.md)).
+- No session link. A credit line for the agent is fine
+  ([0187](../../../.decisions/0187-a-commit-may-credit-its-agent.md)).
 
 ## Send it
 
@@ -159,9 +167,9 @@ gh api -X PATCH repos/kamp-us/tea-fabrika/pulls/<n> -f title='<title>' -F body=@
 ```
 
 Check the body file before it is sent, every time. `gh pr edit` fails in this repo, so an open pull
-request is changed with the second line. A lane agent does not send: its body file's first line is
+request is changed with the second line. A quest agent does not send: its body file's first line is
 the title, and it ends with `land.ts ready --body <file>`
-([the lead skill](../lead/SKILL.md#lane-brief-template)). `land.ts run` then adds `loosening.sh`'s
+([the lead skill](../lead/SKILL.md#quest-brief-template)). `land.ts run` then adds `loosening.sh`'s
 output as its own last section, so do not paste it twice.
 
 ## The known way
@@ -172,12 +180,14 @@ output as its own last section, so do not paste it twice.
   merge. We keep all four. Google writes the first line as an order. Here it is a statement, as
   main's titles already are.
 - Effect: [its template](https://github.com/Effect-TS/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md)
-  asks for a type, a description and related issues, and its own merged pull requests open with
-  summary bullets and end with the commands that were run
-  ([one of them](https://github.com/Effect-TS/effect-smol/pull/2613)). A change to runtime behavior
-  or an exported type also gets a changeset, a short note for people who use the package
-  ([its AGENTS.md](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md#changesets)). Our
-  What this does, Laws and checks and What a reader should know are those three.
+  asks for a type, a description and related issues. Its
+  [pull request skill](https://github.com/Effect-TS/effect/blob/main/.agents/skills/pull-requests/SKILL.md)
+  asks for the problem addressed, the notable decisions and the issue it closes, and says not to
+  narrate the diff. Some of its merged pull requests also open with summary bullets and end with the
+  commands that were run ([one of them](https://github.com/Effect-TS/effect/pull/10627)). A change
+  to runtime behavior or an exported type also gets a changeset, a short note for people who use the
+  package ([its changesets skill](https://github.com/Effect-TS/effect/blob/main/.agents/skills/changesets/SKILL.md#requirement)).
+  Our What this does, Laws and checks and What a reader should know are those three.
 
 ## Could become a check
 
@@ -185,10 +195,10 @@ Each of these is a rule code could hold. It stays here until its check lands
 ([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
 
 - The title is one clause: not empty, not the draft's placeholder, no second sentence.
-- `## What this does` is there, with 3 to 6 bullets, before a lane's pull request is marked ready or
+- `## What this does` is there, with 3 to 6 bullets, before a quest's pull request is marked ready or
   `land.ts ready` takes a body file.
 - No heading has nothing under it, and the headings keep this order.
-- No relative link, no bare `#<n>`, no credit footer and no session link.
+- No relative link, no bare `#<n>` and no session link.
 - `leakgrep.sh --text` on the title and the description wherever a tool sends them. `land.ts run`
   does it today.
 - Every file path named in the description is in the diff, and every law title is in one of its

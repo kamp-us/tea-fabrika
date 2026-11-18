@@ -1,15 +1,28 @@
 // P11, next/. Program is a declaration schema; stepper exposes init/step/fold from the plan.
-// Imports are inside each law so an absent planned module reports every law, not zero tests.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Predicate, Result, Schema, SchemaIssue } from "effect";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as SchemaIssue from "effect/SchemaIssue";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
-import { Declaration } from "./Execution.ts";
-import { Input, Program, Refusal, stepper } from "./Program.ts";
+import { Declaration, nodeExecution } from "./Execution.ts";
+import { Input, Program, ProgramDown, Refusal, Step, Write, stepper } from "./Program.ts";
+import * as Wire from "./WireTest.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
+
 type Model = typeof Model.Type;
 
 const Msg = Schema.Union([
@@ -52,8 +65,125 @@ const authoring = () => ({
 });
 
 const spec = () => Program.make(authoring());
+
 const SEED = 119120;
+
 const parameters = { seed: SEED, numRuns: 100 };
+
+describe("P13 A7 split checking and update", () => {
+  it("A7: fresh checks once, update never checks, composed step updates once, and fold ignores a changed refusal", () => {
+    const coverage = new Set<string>();
+    fc.assert(
+      fc.property(fc.array(fc.noBias(fc.nat()), { minLength: 8, maxLength: 40 }), (tape) => {
+        let checks = 0;
+        let updates = 0;
+        let views = 0;
+        let wakes = 0;
+        let refuseAll = false;
+
+        const p = Program.make({
+          ...authoring(),
+          machine: Machine.make({
+            ...machine,
+            cmds: [save],
+            update: {
+              ...machine.update,
+              add: (s, m) => {
+                updates++;
+
+                return [{ ...s, count: s.count + m.n }, [save({ n: m.n })]];
+              },
+            },
+          }),
+          refuse: (s, m) => {
+            checks++;
+
+            return refuseAll || (m.type === "add" && s.count + m.n > 10)
+              ? { reason: "limit", now: s.count, most: 10 }
+              : null;
+          },
+          view: (s) => {
+            views++;
+
+            return { count: s.count };
+          },
+          wake: () => {
+            wakes++;
+
+            return null;
+          },
+        });
+
+        const pure = Result.getOrThrow(stepper(p));
+        let current: Model = { count: 0, replies: 0 };
+        const accepted: Array<typeof Msg.Type> = [];
+
+        for (const entropy of tape) {
+          const moves = accepted.length === 0 ? ["admit", "refuse", "invalid"] : ["admit", "refuse", "invalid", "fold"];
+          const move = moves[entropy % moves.length]!;
+          const before = { checks, updates, views, wakes };
+          coverage.add(move);
+
+          if (move === "fold") {
+            refuseAll = true;
+            const msg = accepted[Math.floor(entropy / moves.length) % accepted.length]!;
+            const folded = pure.fold(current, msg);
+            expect(checks).toBe(before.checks);
+            expect(updates).toBe(before.updates + 1);
+            expect(folded).toMatchObject({
+              _tag: "stepped",
+              model: { count: current.count + (msg.type === "add" ? msg.n : 0) },
+            });
+            refuseAll = false;
+            continue;
+          }
+
+          const addition = { type: "add", n: move === "refuse" ? 11 - current.count : -1 - (entropy % 5) } as const;
+          const msg = move === "invalid" ? { type: "save_ok", value: 1 } : addition;
+          const checked = pure.fresh(current, msg);
+          expect(Result.isSuccess(checked)).toBe(true);
+          expect({ updates, views, wakes }).toEqual({
+            updates: before.updates,
+            views: before.views,
+            wakes: before.wakes,
+          });
+          const admission = Result.getOrThrow(checked);
+          expect(admission).toEqual(
+            Match.value(move).pipe(
+              Match.when("invalid", () => ({ _tag: "invalid" })),
+              Match.when("refuse", () => ({ _tag: "refused", reason: "limit", now: current.count, most: 10 })),
+              Match.orElse(() => ({ _tag: "admitted" })),
+            ),
+          );
+          expect(checks).toBe(before.checks + (move === "invalid" ? 0 : 1));
+          const composed = pure.step(current, msg);
+
+          if (move !== "admit") {
+            expect(composed).toEqual(move === "invalid" ? { _tag: "refused", reason: "bad_msg" } : admission);
+            expect(updates).toBe(before.updates);
+
+            if (move === "invalid") {
+              expect(Result.isFailure(pure.update(current, msg))).toBe(true);
+            }
+
+            continue;
+          }
+
+          expect(updates).toBe(before.updates + 1);
+          const updated = Result.getOrThrow(pure.update(current, msg));
+          expect(updated).toEqual(composed);
+          expect(checks).toBe(before.checks + 2);
+          expect(updates).toBe(before.updates + 2);
+          expect(updated.model).toEqual({ ...current, count: current.count + addition.n });
+          current = Schema.decodeUnknownSync(Model)(updated.model);
+          accepted.push(Schema.decodeUnknownSync(Msg)(msg));
+        }
+      }),
+      parameters,
+    );
+    expect([...coverage]).toEqual(expect.arrayContaining(["admit", "refuse", "invalid", "fold"]));
+  });
+});
 
 type Policy = typeof import("./Runner.ts").Supervision.Type.policy;
 // Bounded waits keep valid samples inside their period; corrupt commands push each numeric edge.
@@ -73,6 +203,7 @@ const policies = fc
   }));
 
 type PolicyModel = { valid: boolean; checked: boolean; policy: Policy | undefined };
+
 type PolicyReal = { raw: Record<string, unknown>; checked: unknown; described: unknown | null; calls: string[] };
 
 const policyCheck = (value: unknown, policy: Policy | undefined) => {
@@ -80,10 +211,16 @@ const policyCheck = (value: unknown, policy: Policy | undefined) => {
   expect(fields).toEqual(policy === undefined ? {} : { policy });
 };
 
-const corruptPolicy = (policy: Policy, field: number, n: number): unknown => {
+const corruptPolicy = (policy: Policy, field: number, n: number): object => {
   if (field < 18) {
     const key = ["maxDeliveries", "intensity", "periodMs", "minMs", "maxMs", "resetAfterMs"][Math.floor(field / 3)]!;
-    const value = field % 3 === 0 ? 0 : field % 3 === 1 ? -n - 1 : n + 0.5;
+
+    const value = Match.value(field % 3).pipe(
+      Match.when(0, () => 0),
+      Match.when(1, () => -n - 1),
+      Match.orElse(() => n + 0.5),
+    );
+
     return field < 9 ? { ...policy, [key]: value } : { ...policy, backoff: { ...policy.backoff, [key]: value } };
   }
 
@@ -160,8 +297,9 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
               const raw = {
                 ...spec(),
                 machine: r.raw.machine,
-                ...(Object.hasOwn(r.raw, "policy") ? { policy: r.raw.policy } : {}),
+                ...(Rec.has(r.raw, "policy") ? { policy: r.raw.policy } : {}),
               };
+
               const decoded = Schema.decodeUnknownResult(Program.schema)(m.checked ? r.checked : raw);
               expect(Result.isSuccess(decoded)).toBe(m.valid);
 
@@ -180,6 +318,7 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
                   Effect.provide(ProgramLoader.layer({ test: r.checked }, {})),
                 ),
               ).declaration;
+
               policyCheck(described, m.policy);
               policyCheck(Schema.decodeUnknownSync(Declaration)(described), m.policy);
               r.described = described;
@@ -192,10 +331,12 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
     ],
     { maxCommands: 80, size: "max" },
   );
+
   fc.assert(
     fc.property(commands, (moves) => {
       const calls: string[] = [];
       const fields = authoring();
+
       const raw = {
         ...fields,
         machine: Machine.make({
@@ -203,10 +344,12 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
           cmds: [save],
           init: () => {
             calls.push("init");
+
             return [{ count: 0, replies: 0 }, []];
           },
         }),
       };
+
       fc.modelRun(
         () => ({
           model: { valid: true, checked: false, policy: undefined },
@@ -233,6 +376,7 @@ const declarations = fc
   .map(({ name, v, initial, ...data }) => {
     const modelSchema = Schema.Struct(Model.fields);
     const msgSchema = Schema.Union(Msg.members);
+
     return {
       ...data,
       initial,
@@ -269,6 +413,7 @@ describe("Program.make authoring laws, next/", () => {
           ...fields,
           inputs: { add: description, throw: { description: personDescription, personOnly: true } },
         });
+
         expect(p.machine).toBe(fields.machine);
         expect(fields.machine.model).toBe(modelSchema);
         expect(fields.machine.msg).toBe(msgSchema);
@@ -293,10 +438,12 @@ describe("Program.make authoring laws, next/", () => {
     fc.assert(
       fc.property(declarations, ({ fields, description, query }) => {
         const calls: string[] = [];
+
         const never = (name: string): never => {
           calls.push(name);
           throw new Error(name);
         };
+
         const untouched = Machine.make({
           model: fields.machine.model,
           msg: fields.machine.msg,
@@ -309,6 +456,7 @@ describe("Program.make authoring laws, next/", () => {
             save_err: () => never("update"),
           },
         });
+
         const p = Program.make({
           ...fields,
           machine: untouched,
@@ -323,6 +471,7 @@ describe("Program.make authoring laws, next/", () => {
             }),
           },
         });
+
         expect(p.machine).toBe(untouched);
         expect(calls).toEqual([]);
         expect(p.inputs.read._tag).toBe("read");
@@ -348,12 +497,12 @@ describe("Program.make authoring laws, next/", () => {
         fc.property(declarations, broken, ({ fields }, change) => {
           // Deliberately untrusted JavaScript reaches the same constructors without a cast.
           const raw: unknown = { ...fields, ...change };
-          const make = Reflect.get(Program, "make");
-          const makeEffect = Reflect.get(Program, "makeEffect");
-          expect(() => Reflect.apply(make, Program, [raw])).toThrow();
+          // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+          expect(() => Program.make(raw)).toThrow();
           let checked: Effect.Effect<unknown, unknown> = Effect.void;
           expect(() => {
-            checked = Reflect.apply(makeEffect, Program, [raw]);
+            // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+            checked = Program.makeEffect(raw);
           }).not.toThrow();
           const exit = Effect.runSyncExit(Effect.result(checked));
           expect(Exit.isSuccess(exit)).toBe(true);
@@ -407,6 +556,7 @@ describe("Program.make authoring laws, next/", () => {
     fc.assert(
       fc.property(declarations, fc.integer(), ({ fields, initial }, n) => {
         const NonJson = Schema.Struct({ count: Schema.Int, body: Schema.Unknown });
+
         const nonJson = Machine.make({
           model: NonJson,
           msg: Msg,
@@ -414,12 +564,14 @@ describe("Program.make authoring laws, next/", () => {
           init: () => [{ count: initial.count, body: () => n }, []],
           update: { add: (s) => [s, []], throw: (s) => [s, []] },
         });
+
         const p = Program.make({
           ...fields,
           machine: nonJson,
           view: (s) => ({ count: s.count }),
           refuse: () => null,
         });
+
         expect(() => load(p).init(null)).toThrowError(expect.objectContaining({ reason: "load" }));
       }),
       parameters,
@@ -438,46 +590,50 @@ describe("Program.make authoring laws, next/", () => {
       "writes",
       "wake",
     );
+
     const malformed = fc
       .option(
         fc.oneof(
           fc.tuple(declarations, missing).map(([{ fields }, field]) => {
             const raw: Record<string, unknown> = { ...Program.make(fields) };
             delete raw[field];
+
             return raw;
           }),
           fc
             .tuple(declarations, fc.jsonValue(), fc.constantFrom("msg", "state", "view", "outputs"))
             .map(([{ fields }, bad, field]) => {
               const p = Program.make(fields);
+
               return {
                 ...p,
-                ...(field === "state"
-                  ? { state: { ...p.state, schema: bad } }
-                  : field === "view"
-                    ? { view: { ...p.view, data: bad } }
-                    : field === "outputs"
-                      ? { outputs: { rows: bad } }
-                      : { msg: bad }),
+                ...Match.value(field).pipe(
+                  Match.when("state", () => ({ state: { ...p.state, schema: bad } })),
+                  Match.when("view", () => ({ view: { ...p.view, data: bad } })),
+                  Match.when("outputs", () => ({ outputs: { rows: bad } })),
+                  Match.orElse(() => ({ msg: bad })),
+                ),
               };
             }),
           fc
             .tuple(declarations, fc.jsonValue(), fc.constantFrom("refuse", "wake", "view", "init"))
             .map(([{ fields }, bad, field]) => {
               const p = Program.make(fields);
+
               return {
                 ...p,
-                ...(field === "init"
-                  ? { machine: { ...p.machine, init: bad } }
-                  : field === "view"
-                    ? { view: { ...p.view, select: bad } }
-                    : { [field]: bad }),
+                ...Match.value(field).pipe(
+                  Match.when("init", () => ({ machine: { ...p.machine, init: bad } })),
+                  Match.when("view", () => ({ view: { ...p.view, select: bad } })),
+                  Match.orElse(() => ({ [field]: bad })),
+                ),
               };
             }),
         ),
         { nil: null },
       )
       .map((raw) => ({ bug: "generated broken declaration", raw }));
+
     fc.assert(
       fc.property(malformed, ({ raw }) => {
         // Expect Result<Stepper, SchemaError> or Effect<Stepper, SchemaIssue.Issue>.
@@ -524,17 +680,14 @@ describe("Program.make authoring laws, next/", () => {
 
 describe("P11 program contract and p22 refusal", () => {
   for (const field of ["state", "msg", "view", "refuse", "inputs", "outputs", "writes", "wake"]) {
-    it(`plant, omit ${field}: incomplete declarations are refused`, async () => {
-      const { Program } = await import("./Program.ts");
+    it(`plant, omit ${field}: incomplete declarations are refused`, () => {
       const raw: Record<string, unknown> = { ...spec() };
       delete raw[field];
       expect(() => Schema.decodeUnknownSync(Program.schema)(raw)).toThrow();
     });
   }
 
-  it("plant, skip declaration checks: schemas and functions are checked, not mere presence", async () => {
-    const { Program } = await import("./Program.ts");
-
+  it("plant, skip declaration checks: schemas and functions are checked, not mere presence", () => {
     for (const broken of [
       { machine: { ...machine, update: 3 } },
       { state: { v: 0, schema: Model, upgrades: [] } },
@@ -556,7 +709,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [3, generated],
         (value) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             const p = load(spec());
             const before = { count: 2, replies: 0 };
             const ok = { type: "save_ok", cmd: save({ n: value }), value, at: 42 };
@@ -593,7 +746,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [1, generated],
         (value) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             const asyncSave = {
               ...save,
               schema: {
@@ -601,6 +754,7 @@ describe("P11 program contract and p22 refusal", () => {
                 ok: { "~standard": { validate: (value: unknown) => Promise.resolve({ value }) } },
               },
             };
+
             const broken: unknown = { ...spec(), machine: { ...machine, cmds: [asyncSave] } };
             const p = load(broken);
             expect(
@@ -618,8 +772,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         ["bad", generated],
         (value) =>
-          Effect.promise(async () => {
-            const { ProgramDown } = await import("./Program.ts");
+          Effect.sync(() => {
             let error: unknown;
 
             try {
@@ -635,8 +788,7 @@ describe("P11 program contract and p22 refusal", () => {
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
   );
-  it("plant, reject every declaration: a complete pure tea program loads and steps", async () => {
-    const { Program } = await import("./Program.ts");
+  it("plant, reject every declaration: a complete pure tea program loads and steps", () => {
     const p = load(Schema.decodeUnknownSync(Program.schema)(spec()));
     expect(p.init(null)).toMatchObject({
       _tag: "stepped",
@@ -659,7 +811,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [{ reason: "" }, { reason: "limit", now: 7, most: 10 }, generated],
         (refusal) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             const p = load(spec());
             const before = { count: 7, replies: 0 };
             expect(p.step(before, { type: "add", n: "3" })).toEqual({
@@ -686,7 +838,7 @@ describe("P11 program contract and p22 refusal", () => {
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
   );
-  it("plant, run refusal during replay: fold applies a once-accepted letter despite today's limit", async () => {
+  it("plant, run refusal during replay: fold applies a once-accepted letter despite today's limit", () => {
     const p = load(spec());
     expect(p.fold({ count: 9, replies: 0 }, { type: "add", n: 4 })).toMatchObject({
       _tag: "stepped",
@@ -701,7 +853,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [{ count: 0, replies: 0 }, generated],
         (value) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             expect(() => load(spec()).step(value, { type: "throw" })).toThrowError(
               expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
             );
@@ -719,7 +871,7 @@ describe("P11 program contract and p22 refusal", () => {
         Effect.forEach(
           [{ count: 0, replies: 0 }, generated],
           (value) =>
-            Effect.promise(async () => {
+            Effect.sync(() => {
               const broken: unknown = {
                 ...spec(),
                 machine: {
@@ -734,6 +886,7 @@ describe("P11 program contract and p22 refusal", () => {
                 },
                 view: part === "view" ? { data: Model, select: () => ({ count: "bad" }) } : spec().view,
               };
+
               expect(() => load(broken).step(value, { type: "add", n: 1 })).toThrowError(
                 expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
               );
@@ -751,7 +904,7 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         [null, generated],
         (value) =>
-          Effect.promise(async () => {
+          Effect.sync(() => {
             expect(() => load(spec()).fold({ count: 0, replies: 0 }, { type: "add", n: value })).toThrowError(
               expect.objectContaining({ _tag: "ProgramDown", reason: "saved_letter" }),
             );
@@ -760,8 +913,7 @@ describe("P11 program contract and p22 refusal", () => {
       ),
     { arbitrary: { seed: 119120, runs: 12 } },
   );
-  it("plant, give read ports write fields: read and write declarations are exclusive", async () => {
-    const { Input } = await import("./Program.ts");
+  it("plant, give read ports write fields: read and write declarations are exclusive", () => {
     const decode = Schema.decodeUnknownSync(Input);
     expect(
       decode({
@@ -793,14 +945,14 @@ describe("P11 program contract and p22 refusal", () => {
       Effect.forEach(
         ["forged", generated],
         (value) =>
-          Effect.promise(async () => {
-            const { Write } = await import("./Program.ts");
-            const decode = Schema.decodeUnknownSync(Write);
+          Effect.sync(() => {
+            const decode = Schema.decodeUnknownResult(Write);
             expect(decode({ _tag: "own", event: { _tag: "polled", changed: false } })).toMatchObject({
-              _tag: "own",
+              _tag: "Success",
+              success: { _tag: "own" },
             });
-            expect(() => decode({ _tag: "caused", event: { _tag: "saved" } })).toThrow();
-            expect(() => decode({ _tag: "caused", parent: value, event: { _tag: "saved" } })).toThrow();
+            expect(Result.isFailure(decode({ _tag: "caused", event: { _tag: "saved" } }))).toBe(true);
+            expect(Result.isFailure(decode({ _tag: "caused", parent: value, event: { _tag: "saved" } }))).toBe(true);
           }),
         { concurrency: 1, discard: true },
       ),
@@ -810,15 +962,16 @@ describe("P11 program contract and p22 refusal", () => {
 
 describe("P34 a program sets its own maxDeliveries, next/", () => {
   // The declaration takes an optional limit, an integer 1 to 32. The default (3) is the wiring's.
-  const withLimit = (fields: object, maxDeliveries: unknown): unknown => ({
+  const withLimit = (fields: object, maxDeliveries: unknown): object => ({
     ...fields,
     maxDeliveries,
   });
+
   const refused = (raw: unknown) => {
-    const make = Reflect.get(Program, "make");
-    const makeEffect = Reflect.get(Program, "makeEffect");
-    expect(() => Reflect.apply(make, Program, [raw])).toThrow();
-    const exit = Effect.runSyncExit(Effect.result(Reflect.apply(makeEffect, Program, [raw])));
+    // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+    expect(() => Program.make(raw)).toThrow();
+    // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+    const exit = Effect.runSyncExit(Effect.result(Program.makeEffect(raw)));
     expect(Exit.isSuccess(exit) && Result.isFailure(exit.value)).toBe(true);
   };
 
@@ -826,11 +979,12 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
     fc.assert(
       fc.property(declarations, fc.option(fc.integer({ min: 1, max: 32 }), { nil: undefined }), ({ fields }, limit) => {
         const raw = limit === undefined ? fields : withLimit(fields, limit);
+
         const own = (u: unknown) =>
-          typeof u === "object" && u !== null && Object.hasOwn(u, "maxDeliveries")
-            ? Reflect.get(u, "maxDeliveries")
-            : undefined;
-        const p: unknown = Reflect.apply(Reflect.get(Program, "make"), Program, [raw]);
+          Predicate.hasProperty(u, "maxDeliveries") && Rec.has(u, "maxDeliveries") ? u.maxDeliveries : undefined;
+
+        // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+        const p: unknown = Program.make(raw);
         expect(own(p)).toBe(limit);
         const decoded = Schema.decodeUnknownResult(Program.schema)(p);
         expect(Result.isSuccess(decoded)).toBe(true);
@@ -840,7 +994,8 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
         }
 
         expect(own(load(p).program)).toBe(limit);
-        const effect: unknown = Effect.runSync(Reflect.apply(Reflect.get(Program, "makeEffect"), Program, [raw]));
+        // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
+        const effect: unknown = Effect.runSync(Program.makeEffect(raw));
         expect(own(effect)).toBe(limit);
       }),
       { ...parameters, examples: [[fc.sample(declarations, { seed: SEED, numRuns: 1 })[0]!, 7]] },
@@ -894,10 +1049,10 @@ const oldTyped = (u: unknown): u is { readonly type: string } =>
 
 const oldCode = (u: unknown) => typeof u === "function";
 
-/** A made program's `machine`. A value Reflect.get cannot read fails the law, as its throw did. */
-const madeMachine = (made: unknown): unknown => {
+/** A made program keeps `machine`. A value that is not an object fails the law, as reading it would. */
+const expectMachine = (made: unknown, machine: unknown): void => {
   expect(Predicate.isObjectKeyword(made)).toBe(true);
-  return Predicate.isObjectKeyword(made) ? Reflect.get(made, "machine") : undefined;
+  expect(Predicate.hasProperty(made, "machine") ? made.machine : undefined).toBe(machine);
 };
 
 class Shaped {
@@ -928,7 +1083,8 @@ const callables = {
   array: () => [() => 0],
 } as const;
 
-const Callable = fc.constantFrom(...(Object.keys(callables) as Array<keyof typeof callables>));
+// SAFETY: callables is a const object literal, so its own keys are exactly its declared keys.
+const Callable = fc.constantFrom(...(Rec.keys(callables) as Array<keyof typeof callables>));
 
 /** Where a machine's fields live and what they hold. */
 const MachineRecipe = fc.record({
@@ -941,9 +1097,10 @@ const MachineRecipe = fc.record({
     nil: undefined,
   }),
 });
+
 type MachineRecipe = typeof MachineRecipe extends fc.Arbitrary<infer A> ? A : never;
 
-const built = (r: MachineRecipe, base: typeof machine): unknown => {
+const built = (r: MachineRecipe, base: typeof machine): object | null | string => {
   const own: Record<string, unknown> = { ...r.extra };
   const inherited: Record<string, unknown> = {};
   const table = { ...base.update };
@@ -951,22 +1108,23 @@ const built = (r: MachineRecipe, base: typeof machine): unknown => {
   if (r.update === "inherited") {
     inherited.update = table;
   } else if (r.update !== "missing") {
-    own.update =
-      r.update === "table"
-        ? table
-        : r.update === "array"
-          ? Object.assign([], table)
-          : r.update === "null"
-            ? null
-            : r.update === "function"
-              ? Object.assign(() => 0, table)
-              : "update";
+    own.update = Match.value(r.update).pipe(
+      Match.when("table", () => table),
+      Match.when("array", () => Object.assign([], table)),
+      Match.when("null", () => null),
+      Match.when("function", () => Object.assign(() => 0, table)),
+      Match.orElse(() => "update"),
+    );
   }
 
   own.init = callables[r.init]();
 
   if (r.cmds !== "missing") {
-    own.cmds = r.cmds === "given" ? [save] : r.cmds === "garbage" ? "cmds" : 3;
+    own.cmds = Match.value(r.cmds).pipe(
+      Match.when("given", () => [save]),
+      Match.when("garbage", () => "cmds"),
+      Match.orElse(() => 3),
+    );
   }
 
   if (r.schemas !== "missing") {
@@ -1011,6 +1169,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         const m = built(recipe, fields.machine);
         const p = Program.make(fields);
         const upgrades = fns.run === undefined ? [] : [{ name: "up", from: 1, run: callables[fns.run]() }];
+
         const raw: unknown = {
           ...p,
           machine: m,
@@ -1019,11 +1178,13 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           refuse: callables[fns.refuse](),
           wake: callables[fns.wake](),
         };
+
         const codeOk =
           oldCode(callables[fns.select]()) &&
           oldCode(callables[fns.refuse]()) &&
           oldCode(callables[fns.wake]()) &&
-          upgrades.every((u) => oldCode(u.run));
+          Arr.every(upgrades, (u) => oldCode(u.run));
+
         const ok = oldIsSteps(m) && codeOk;
         const decoded = Schema.decodeUnknownResult(Program.schema)(raw);
         expect(Result.isSuccess(decoded)).toBe(ok);
@@ -1054,18 +1215,19 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           refuse: callables[fns.refuse](),
           wake: callables[fns.wake](),
         };
+
         const schemasOk =
-          typeof m === "object" &&
-          m !== null &&
+          Predicate.isObjectOrArray(m) &&
           "model" in m &&
           Schema.isSchema(m.model) &&
           "msg" in m &&
           Schema.isSchema(m.msg);
+
         const made = Effect.runSyncExit(Reflect.apply(Program.makeEffect, Program, [authored]));
         expect(Exit.isSuccess(made)).toBe(ok && schemasOk);
 
         if (Exit.isSuccess(made)) {
-          expect(madeMachine(made.value)).toBe(m);
+          expectMachine(made.value, m);
         }
 
         seen.add(`${ok}:${recipe.container}:${recipe.update}`);
@@ -1098,6 +1260,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
   it("D4: a getter- or proxy-backed machine sees the same reads, in order, and the same answer as the old guard", () => {
     const Read = fc.constantFrom("table", "table", "array", "null", "function", "string", "throw");
     const Field = fc.record({ present: fc.boolean(), reads: fc.array(Read, { minLength: 1, maxLength: 3 }) });
+
     const Backed = fc.record({
       kind: fc.constantFrom("proxy", "proxy", "getters"),
       target: fc.constantFrom("object", "object", "array", "function"),
@@ -1105,10 +1268,12 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
       init: Field,
       throwOnHas: fc.option(fc.constantFrom("update", "init"), { nil: undefined }),
     });
+
     type Backed = typeof Backed extends fc.Arbitrary<infer A> ? A : never;
+
     type Field = Backed["update"];
 
-    const value = (read: string): unknown => {
+    const value = (read: string): object | null | string => {
       switch (read) {
         case "table":
           return {};
@@ -1126,24 +1291,32 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     };
 
     /** A machine whose field reads are logged, and whose nth read of a field gives that field's nth value. */
-    const backed = (b: Backed, trace: Array<string>): unknown => {
+    const backed = (b: Backed, trace: Array<string>): object => {
       const count = new Map<string, number>();
       const fields: Record<string, Field> = { update: b.update, init: b.init };
+
       const next = (key: string) => {
         const field = fields[key]!;
         const n = count.get(key) ?? 0;
         count.set(key, n + 1);
         const read = field.reads[Math.min(n, field.reads.length - 1)]!;
+
         // An init that reads as a table or array is given a callable instead, so init varies too.
         return key === "init" && read === "table" ? () => 0 : value(read);
       };
-      const target: object = b.target === "array" ? [] : b.target === "function" ? () => 0 : {};
+
+      const target: object = Match.value(b.target).pipe(
+        Match.when("array", () => []),
+        Match.when("function", () => () => 0),
+        Match.orElse(() => ({})),
+      );
 
       if (b.kind === "getters") {
-        for (const key of Object.keys(fields).filter((k) => fields[k]!.present)) {
+        for (const key of Arr.filter(Rec.keys(fields), (k) => fields[k]!.present)) {
           Object.defineProperty(target, key, {
             get: () => {
               trace.push(`get:${key}`);
+
               return next(key);
             },
           });
@@ -1160,17 +1333,21 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
             throw new Error("has");
           }
 
-          return typeof key === "string" && key in fields ? fields[key]!.present : Reflect.has(t, key);
+          // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
+          return Predicate.isString(key) && key in fields ? fields[key]!.present : Reflect.has(t, key);
         },
         get: (t, key, receiver) => {
           trace.push(`get:${String(key)}`);
-          return typeof key === "string" && key in fields ? next(key) : Reflect.get(t, key, receiver);
+
+          // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
+          return Predicate.isString(key) && key in fields ? next(key) : Reflect.get(t, key, receiver);
         },
       });
     };
 
     const outcome = (run: () => Result.Result<unknown, unknown>) => {
       const ran = Result.try({ try: run, catch: () => "thrown" as const });
+
       return Result.isFailure(ran) ? "thrown" : Result.isSuccess(ran.success) ? "accepted" : "refused";
     };
 
@@ -1218,9 +1395,14 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         let reads = 0;
         const spec: Record<string, unknown> = { ...fields };
         Object.defineProperty(spec, "machine", { enumerable: true, get: () => copies[reads++ % cycle] });
+
         const made = effect
           ? Effect.runSyncExit(Reflect.apply(Program.makeEffect, Program, [spec]))
-          : Result.try({ try: (): unknown => Reflect.apply(Program.make, Program, [spec]), catch: () => null });
+          : Result.try({
+              try: (): ReturnType<typeof Program.make> => Reflect.apply(Program.make, Program, [spec]),
+              catch: () => null,
+            });
+
         const value = Exit.isExit(made)
           ? Exit.isSuccess(made)
             ? made.value
@@ -1228,10 +1410,11 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           : Result.isSuccess(made)
             ? made.success
             : undefined;
+
         expect(value !== undefined).toBe(cycle === 1);
 
         if (value !== undefined) {
-          expect(madeMachine(value)).toBe(fields.machine);
+          expectMachine(value, fields.machine);
         }
 
         seen.add(`${cycle}:${effect}`);
@@ -1257,6 +1440,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     }
 
     const error = "error" in msg ? msg.error : undefined;
+
     return typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string";
   };
 
@@ -1280,10 +1464,11 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     extra: fc.option(fc.string({ maxLength: 3 }), { nil: undefined }),
     saved: fc.boolean(),
   });
+
   type Answer = typeof Answer extends fc.Arbitrary<infer A> ? A : never;
 
   /** One generated answer to a Cmd the walk saw the machine return. */
-  const answer = (a: Answer, pending: unknown): unknown => {
+  const answer = (a: Answer, pending: unknown): object => {
     const own: Record<string, unknown> = a.extra === undefined ? {} : { extra: a.extra };
     const inherited: Record<string, unknown> = {};
 
@@ -1292,14 +1477,12 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     }
 
     if (a.cmd !== "missing") {
-      own.cmd =
-        a.cmd === "pending"
-          ? pending
-          : a.cmd === "other"
-            ? { type: "other", n: 1 }
-            : a.cmd === "untyped"
-              ? { type: 7 }
-              : Object.assign([], pending);
+      own.cmd = Match.value(a.cmd).pipe(
+        Match.when("pending", () => pending),
+        Match.when("other", () => ({ type: "other", n: 1 })),
+        Match.when("untyped", () => ({ type: 7 })),
+        Match.orElse(() => Object.assign([], pending)),
+      );
     }
 
     if (a.at !== "missing") {
@@ -1311,20 +1494,15 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     }
 
     if (a.error !== "missing") {
-      own.error =
-        a.error === "tag"
-          ? { _tag: "disk" }
-          : a.error === "empty"
-            ? { _tag: "" }
-            : a.error === "number"
-              ? { _tag: 3 }
-              : a.error === "array"
-                ? Object.assign([], { _tag: "disk" })
-                : a.error === "function"
-                  ? Object.assign(() => 0, { _tag: "disk" })
-                  : a.error === "null"
-                    ? null
-                    : Object.create({ _tag: "disk" });
+      own.error = Match.value(a.error).pipe(
+        Match.when("tag", () => ({ _tag: "disk" })),
+        Match.when("empty", () => ({ _tag: "" })),
+        Match.when("number", () => ({ _tag: 3 })),
+        Match.when("array", () => Object.assign([], { _tag: "disk" })),
+        Match.when("function", () => Object.assign(() => 0, { _tag: "disk" })),
+        Match.when("null", () => null),
+        Match.orElse(() => Object.create({ _tag: "disk" })),
+      );
     }
 
     switch (a.container) {
@@ -1356,6 +1534,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     fc.assert(
       fc.property(fc.array(Move, { minLength: 1, maxLength: 30, size: "max" }), (moves) => {
         const received: Array<unknown> = [];
+
         const recorded = Machine.make({
           model: Model,
           msg: Msg,
@@ -1364,19 +1543,23 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           update: {
             add: (s, m) => {
               received.push(m);
+
               return [{ ...s, count: s.count + m.n }, [save({ n: m.n })]];
             },
             throw: (s) => [s, []],
             save_ok: (s, m) => {
               received.push(m);
+
               return [{ ...s, replies: s.replies + 1 }, []];
             },
             save_err: (s, m) => {
               received.push(m);
+
               return [{ ...s, replies: s.replies + 1 }, []];
             },
           },
         });
+
         const loaded = stepper(Program.make({ ...authoring(), machine: recorded, refuse: () => null }));
         expect(Result.isSuccess(loaded)).toBe(true);
 
@@ -1417,12 +1600,14 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
 
           const typed = oldTyped(msg);
           const settled = oldSettled(msg);
+
           const expected =
             typed && !["add", "throw", "save_ok", "save_err"].includes(msg.type)
               ? "skipped"
               : settled === true
                 ? "applied"
                 : "down";
+
           const folded = Result.try({ try: () => p.fold(model, msg), catch: (e) => e });
 
           if (expected === "down") {
@@ -1449,7 +1634,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           }
 
           seen.add(`${expected}:${a.container}`);
-          seen.add(`${expected}:at:${typeof a.at === "number" && !Number.isFinite(a.at) ? "nonfinite" : String(a.at)}`);
+          seen.add(`${expected}:at:${Predicate.isNumber(a.at) && !Number.isFinite(a.at) ? "nonfinite" : String(a.at)}`);
           seen.add(`${expected}:error:${a.type === "save_err" ? a.error : "-"}`);
         }
       }),
@@ -1474,6 +1659,192 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
       "down:error:function",
       "down:error:number",
     ]) {
+      expect(seen, side).toContain(side);
+    }
+  });
+});
+
+// Ticket 888, Amendment A-Wire, next/: one JSON codec at every boundary. These two are the runner's
+// half, the path a person's window takes: the letter is the Msg's JSON form, and the only decode is
+// the runner's.
+describe("A-Wire: the runner reads a letter with the Msg's JSON codec, next/", () => {
+  const wire = { arbitrary: { seed: SEED, runs: 300, size: 4096 } };
+
+  it.effect.prop(
+    "W1: any Msg sent as its JSON form is admitted, and step and fold hand update an equal Msg",
+    { sample: Wire.Sent },
+    ({ sample }) =>
+      Effect.gen(function* () {
+        const same = Schema.toEquivalence(Wire.Msg);
+
+        for (const x of [sample.drawn, sample.edge]) {
+          const { program, taken } = Wire.make();
+          const execution = nodeExecution(program);
+          const letter = Wire.letter(x);
+          expect(yield* execution.admit(letter), "admit").toBe(true);
+          const start = yield* execution.init(null);
+          expect(start._tag).toBe("stepped");
+
+          if (!Step.isAnyOf(["stepped"])(start)) {
+            continue;
+          }
+
+          expect((yield* execution.step(start.model, letter))._tag, "step").toBe("stepped");
+          expect(taken, "step hands update one Msg").toHaveLength(1);
+          expect((yield* execution.fold(start.model, letter))._tag, "fold").toBe("stepped");
+          expect(taken, "fold hands update one Msg").toHaveLength(2);
+
+          for (const got of taken) {
+            expect(same(got, x), "update takes a Msg equal to the one sent").toBe(true);
+          }
+        }
+      }),
+    wire,
+  );
+
+  it.effect.prop(
+    "W3: a letter main wrote for a Msg whose two sides are equal still steps and folds to an equal Msg",
+    { x: Wire.Plain },
+    ({ x }) =>
+      Effect.gen(function* () {
+        const same = Schema.toEquivalence(Wire.PlainMsg);
+        const { program, taken } = Wire.plain();
+        const execution = nodeExecution(program);
+        const letter = Wire.old(x);
+        const raw = Schema.decodeUnknownResult(Wire.PlainMsg)(letter);
+        expect(Result.isSuccess(raw) && same(raw.success, x), "the raw Msg decodes its own old letter").toBe(true);
+        expect(yield* execution.admit(letter), "admit").toBe(true);
+        const start = yield* execution.init(null);
+        expect(start._tag).toBe("stepped");
+
+        if (!Step.isAnyOf(["stepped"])(start)) {
+          return;
+        }
+
+        expect((yield* execution.step(start.model, letter))._tag, "step").toBe("stepped");
+        expect((yield* execution.fold(start.model, letter))._tag, "fold").toBe("stepped");
+        expect(taken).toHaveLength(2);
+
+        for (const got of taken) {
+          expect(same(got, x), "update takes a Msg equal to the old letter's").toBe(true);
+        }
+      }),
+    wire,
+  );
+});
+
+// Program watch (docs/plan/quests/watch-PLAN.md), next/: law M11. A program that may `monitor` gets a
+// `DOWN` message when a watched process ends, so it must declare the port that message arrives on.
+// The loader checks it: a program whose `cmds` hold `monitor` and whose inputs have no `DOWN` port does
+// not load, `ProgramDown` with `load` and a cause that names the port. The Cmds are this file's own,
+// matched by name as the runner matches them, so the law reads no module the build has not written.
+// The program without the port is the made program with its `DOWN` input taken out, so the check is the
+// loader's, whatever `Program.make` does. Plant: load it anyway.
+describe("Program watch: a program that monitors declares DOWN, next/", () => {
+  const Watched = Schema.Struct({ type: Schema.Literal("watch"), name: Schema.String });
+  const DownMsg = Schema.Struct({ type: Schema.Literal("DOWN"), ref: Schema.String, process: Schema.String });
+  const watchMsg = Schema.Union([Watched, DownMsg]);
+  const watchModel = Schema.Struct({ downs: Schema.Int });
+
+  /** Cmds a program may declare beside the watch: `monitor` and `demonitor` by their built-in names. */
+  const named = (name: string) =>
+    Cmd.make(name, { input: Schema.Struct({ name: Schema.String }), ok: Schema.Json, err: ["refused"] });
+
+  const CMDS = ["monitor", "demonitor", "send", "save"] as const;
+
+  const watcher = (cmds: ReadonlyArray<string>, port: "DOWN" | "other" | "both") => {
+    const defs = Arr.map(cmds, named);
+
+    const answers = Rec.fromEntries(
+      Arr.flatMap(defs, (d) => [
+        [d.okType, (s: typeof watchModel.Type) => [s, []]],
+        [d.errType, (s: typeof watchModel.Type) => [s, []]],
+      ]),
+    );
+
+    const made = Program.make({
+      name: "watcher",
+      machine: Machine.make({
+        model: watchModel,
+        msg: watchMsg,
+        cmds: defs,
+        init: (loaded) => [loaded ?? { downs: 0 }, []],
+        // SAFETY: each key is a case of the Msg schema or the `_ok` or `_err` answer of a declared Cmd, the messages tea dispatches; the handlers are typed by hand, in shapes tea's update type does not take.
+        update: {
+          ...answers,
+          watch: (s: typeof watchModel.Type) => [s, []],
+          DOWN: (s: typeof watchModel.Type) => [{ downs: s.downs + 1 }, []],
+        } as never,
+      }),
+      state: { v: 1, upgrades: [] },
+      view: (s) => s,
+      refuse: () => null,
+      inputs: { watch: "Watch a name", DOWN: "A process this program monitors has ended" },
+      outputs: {},
+      writes: {},
+      wake: () => null,
+    });
+
+    const { DOWN, ...rest } = made.inputs;
+
+    const inputs = Match.value(port).pipe(
+      Match.when("both", () => made.inputs),
+      Match.when("DOWN", () => ({ DOWN })),
+      Match.orElse(() => rest),
+    );
+
+    return { ...made, inputs };
+  };
+
+  const loaded = (raw: unknown) =>
+    Effect.runSync(
+      ProgramLoader.use((loader) => loader.load("watcher")).pipe(
+        Effect.provide(ProgramLoader.layer({ watcher: raw }, {})),
+        Effect.exit,
+      ),
+    );
+
+  it("M11: a program whose cmds hold monitor loads exactly when its inputs have a DOWN port, and the refusal names the port", () => {
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(
+        fc.subarray([...CMDS]),
+        fc.constantFrom<"DOWN" | "other" | "both">("DOWN", "other", "both"),
+        (cmds, port) => {
+          const exit = loaded(watcher(cmds, port));
+          const monitors = cmds.includes("monitor");
+          const declared = port !== "other";
+          const label = `cmds ${JSON.stringify(cmds)}, ports ${port}`;
+          seen.add(`${monitors}:${declared}`);
+
+          // The refusal a load gives, or none when it loads: ProgramDown `load`, with a cause naming the port.
+          const down = Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined;
+
+          const refusal = Exit.isSuccess(exit)
+            ? "loads"
+            : {
+                error: Predicate.hasProperty(down, "_tag") ? down._tag : "none",
+                reason: Predicate.hasProperty(down, "reason") ? down.reason : "none",
+                names: Str.includes("DOWN")(String(Predicate.hasProperty(down, "cause") ? down.cause : down)),
+              };
+
+          expect(refusal, `M11: ${label}`).toEqual(
+            monitors && !declared ? { error: "ProgramDown", reason: "load", names: true } : "loads",
+          );
+        },
+      ),
+      {
+        seed: SEED,
+        numRuns: 100,
+        examples: [
+          [["monitor"], "other"],
+          [["monitor"], "both"],
+          [["demonitor"], "other"],
+        ],
+      },
+    );
+
+    for (const side of ["true:true", "true:false", "false:true", "false:false"]) {
       expect(seen, side).toContain(side);
     }
   });

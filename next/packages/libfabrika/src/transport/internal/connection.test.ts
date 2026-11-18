@@ -5,19 +5,27 @@
 // the machine must now hold.
 import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Attached, Wait } from "../Wire.ts";
 import { connection } from "./connection.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 const MAX_WAITS = 64;
+
 const MAX_BYTES = 16_384;
 
 type Model = ReturnType<typeof connection.init>[0];
+
 type Saved = typeof Attached.Type;
+
 type W = typeof Wait.Type;
 
 type Msg =
@@ -27,11 +35,12 @@ type Msg =
   | { readonly type: "waited"; readonly wait: W }
   | { readonly type: "answered"; readonly wait: W };
 
-const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const bytes = (value: Saved) => new TextEncoder().encode(JSON.stringify(value)).length;
+
 const same = (a: W, b: W) => a.id === b.id && a.stream === b.stream && a.after === b.after;
 
 /** The named state an attachment stands for: busy lives only in the tag. */
-const expected = (saved: Saved | null): unknown => {
+const expected = (saved: Saved | null): object => {
   if (saved === null) {
     return { _tag: "unloaded" };
   }
@@ -40,8 +49,9 @@ const expected = (saved: Saved | null): unknown => {
     return { _tag: saved._tag, attached: saved };
   }
 
-  const { client, identity, version, watching, waits, busy } = saved;
-  return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits };
+  const { client, identity, version, watching, waits, busy, has, build } = saved;
+
+  return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits, has, build };
 };
 
 /** The attachment a loaded state saves, read from the Model alone. */
@@ -54,6 +64,8 @@ const projected = (model: Exclude<Model, { readonly _tag: "unloaded" }>): Saved 
     client: model.client,
     identity: model.identity,
     version: model.version,
+    ...(model.has === undefined ? {} : { has: model.has }),
+    ...(model.build === undefined ? {} : { build: model.build }),
     waits: model.waits,
     watching: model.watching,
     busy: model._tag === "busy",
@@ -66,8 +78,9 @@ const metadata = (model: Model) => {
     return model._tag === "unloaded" ? null : model.attached;
   }
 
-  const { client, identity, version, watching } = model;
-  return { client, identity, version, watching };
+  const { client, identity, version, watching, has, build } = model;
+
+  return { client, identity, version, watching, has, build };
 };
 
 const held = (model: Model): ReadonlyArray<W> => (model._tag === "idle" || model._tag === "busy" ? model.waits : []);
@@ -94,13 +107,14 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
 
   if (msg.type === "waited") {
     const next = { ...saved, waits: [...saved.waits, wait] };
-    return saved.waits.some((w) => w.id === wait.id) || next.waits.length > MAX_WAITS || bytes(next) > MAX_BYTES
+
+    return Arr.some(saved.waits, (w) => w.id === wait.id) || next.waits.length > MAX_WAITS || bytes(next) > MAX_BYTES
       ? saved
       : next;
   }
 
-  return saved.waits.some((w) => same(w, wait))
-    ? { ...saved, waits: saved.waits.filter((w) => w.id !== wait.id) }
+  return Arr.some(saved.waits, (w) => same(w, wait))
+    ? { ...saved, waits: Arr.filter(saved.waits, (w) => w.id !== wait.id) }
     : saved;
 };
 
@@ -108,12 +122,23 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
 // fast-check, not a Schema arbitrary: the walk aims text at the encoded limit and draws ids from
 // the folded state, which Wait's and Attached's own arbitraries cannot do.
 const units = ["a", "Z", "7", "é", "ß", "€", "流", "😀", "𝄞"];
-const text = fc.array(fc.constantFrom(...units), { maxLength: 6 }).map((s) => s.join(""));
+
+const text = fc.array(fc.constantFrom(...units), { maxLength: 6 }).map((s) => Arr.join(s, ""));
+
 const id = fc.oneof(text, fc.integer({ min: -3, max: 80 }));
+
 const streams = ["events", "counter:1/inbox", "ünï/流", "😀"];
+
 const stream = fc.constantFrom(...streams);
+
 const after = fc.nat({ max: 12 });
-const identity = fc.record({ key: text, person: text, as: fc.constantFrom("window" as const, "agent" as const) });
+
+const identity = fc.record({
+  key: text,
+  person: text,
+  as: fc.constantFrom("window" as const, "agent" as const, "hands" as const),
+});
+
 const wait = fc.record({ id, stream, after }).map((w) => Wait.make(w));
 
 const hello = fc.record({
@@ -136,6 +161,8 @@ const observation = fc.oneof(
     .record({
       client: text,
       identity,
+      has: fc.array(text, { maxLength: 3 }),
+      build: text.map((value) => value || "build"),
       version: fc.integer({ min: 0, max: 9 }),
       waits: fc.uniqueArray(wait, { maxLength: 6, selector: (w) => w.id }),
       watching: fc.boolean(),
@@ -153,26 +180,30 @@ const Choice = fc.record({
   shift: fc.integer({ min: -2, max: 2 }),
   unit: fc.constantFrom(...units),
 });
+
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
 
 /** Walk state: the reference attachment and every wait that was once saved. */
 type Fold = { readonly saved: Saved | null; readonly completed: ReadonlyArray<W> };
 
 const online = (fold: Fold) => (fold.saved?._tag === "online" ? fold.saved : null);
+
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
 
 /** A stream of exactly `size` UTF-8 bytes, built from `unit` and ASCII padding. */
 const sized = (size: number, unit: string) => {
   const width = new TextEncoder().encode(unit).length;
   const count = Math.max(0, Math.floor(size / width) - 1);
-  const head = unit.repeat(count);
-  return head + "x".repeat(Math.max(0, size - count * width));
+  const head = Str.repeat(count)(unit);
+
+  return head + Str.repeat(Math.max(0, size - count * width))("x");
 };
 
 /** A wait whose candidate attachment lands `shift` bytes off the encoded limit. */
 const boundary = (saved: Saved & { readonly _tag: "online" }, choice: Choice): W => {
   const probe = Wait.make({ id: choice.wait.id, stream: "", after: choice.wait.after });
   const space = MAX_BYTES - bytes({ ...saved, waits: [...saved.waits, probe] });
+
   return Wait.make({ ...probe, stream: sized(Math.max(0, space + choice.shift), choice.unit) });
 };
 
@@ -222,6 +253,7 @@ const next = (fold: Fold, choice: Choice): Msg => {
     // A reused id on another stream or revision.
     const old = at(saved.waits, pick);
     const other = choice.wait.stream === old.stream && choice.wait.after === old.after;
+
     return {
       type: move % 2 === 0 ? "answered" : "waited",
       wait: { ...choice.wait, id: old.id, after: other ? old.after + 1 : choice.wait.after },
@@ -274,7 +306,7 @@ const walk = (
 
     each({ before: model, after, msg, from: fold.saved, to, fold });
     const kept = to?._tag === "online" ? to.waits : [];
-    const gone = fold.saved?._tag === "online" ? fold.saved.waits.filter((w) => !kept.includes(w)) : [];
+    const gone = fold.saved?._tag === "online" ? Arr.filter(fold.saved.waits, (w) => !kept.includes(w)) : [];
     fold = { saved: to, completed: [...fold.completed, ...gone, ...(msg.type === "waited" ? [msg.wait] : [])] };
     model = after;
   }
@@ -283,28 +315,26 @@ const walk = (
 };
 
 const Walk = fc.array(Choice, { minLength: 1, maxLength: 160, size: "max" });
+
 const options = { seed: SEED, numRuns: RUNS };
 
 describe("T703 connection machine laws", () => {
   it("type: busy comes only from the state tag, and unauthenticated states hold no waits", () => {
-    fc.assert(
-      fc.property(fc.constant(null), () => {
-        expectTypeOf<Model["_tag"]>().toEqualTypeOf<"unloaded" | "new" | "waiting" | "idle" | "busy">();
-        expectTypeOf<Extract<Model, { readonly busy: unknown }>>().toBeNever();
-        type Unauthenticated = Extract<Model, { readonly _tag: "unloaded" | "new" | "waiting" }>;
-        expectTypeOf<Extract<Unauthenticated, { readonly waits: unknown }>>().toBeNever();
-        expectTypeOf<Extract<Model, { readonly _tag: "new" }>["attached"]>().toEqualTypeOf<
-          typeof Attached.cases.new.Type
-        >();
-        expectTypeOf<Extract<Model, { readonly _tag: "waiting" }>["attached"]>().toEqualTypeOf<
-          typeof Attached.cases.waiting.Type
-        >();
-        expectTypeOf<Extract<Model, { readonly _tag: "idle" }>>().not.toHaveProperty("attached");
-        expectTypeOf<Extract<Model, { readonly _tag: "busy" }>>().not.toHaveProperty("attached");
-        expectTypeOf<Extract<Model, { readonly _tag: "idle" }>["waits"]>().toEqualTypeOf<ReadonlyArray<W>>();
-      }),
-      { seed: SEED, numRuns: 1 },
-    );
+    expectTypeOf<Model["_tag"]>().toEqualTypeOf<"unloaded" | "new" | "waiting" | "idle" | "busy">();
+    expectTypeOf<Extract<Model, { readonly busy: unknown }>>().toBeNever();
+
+    type Unauthenticated = Extract<Model, { readonly _tag: "unloaded" | "new" | "waiting" }>;
+
+    expectTypeOf<Extract<Unauthenticated, { readonly waits: unknown }>>().toBeNever();
+    expectTypeOf<Extract<Model, { readonly _tag: "new" }>["attached"]>().toEqualTypeOf<
+      typeof Attached.cases.new.Type
+    >();
+    expectTypeOf<Extract<Model, { readonly _tag: "waiting" }>["attached"]>().toEqualTypeOf<
+      typeof Attached.cases.waiting.Type
+    >();
+    expectTypeOf<Extract<Model, { readonly _tag: "idle" }>>().not.toHaveProperty("attached");
+    expectTypeOf<Extract<Model, { readonly _tag: "busy" }>>().not.toHaveProperty("attached");
+    expectTypeOf<Extract<Model, { readonly _tag: "idle" }>["waits"]>().toEqualTypeOf<ReadonlyArray<W>>();
   });
 
   it("every Msg keeps the transition table, the metadata and the unrelated waits", () => {
@@ -318,7 +348,7 @@ describe("T703 connection machine laws", () => {
           expect(metadata(moved)).toEqual(metadata(before));
           const wait = "wait" in msg ? msg.wait : undefined;
           const unrelated = (w: W) => wait === undefined || w.id !== wait.id;
-          expect(held(moved).filter(unrelated)).toEqual(held(before).filter(unrelated));
+          expect(Arr.filter(held(moved), unrelated)).toEqual(Arr.filter(held(before), unrelated));
         });
       }),
       options,
@@ -360,7 +390,7 @@ describe("T703 connection machine laws", () => {
           const candidate = { ...from, waits: [...from.waits, msg.wait] };
           const accepted = after !== before;
           const size = bytes(candidate);
-          const duplicate = from.waits.some((w) => w.id === msg.wait.id);
+          const duplicate = Arr.some(from.waits, (w) => w.id === msg.wait.id);
           expect(accepted).toBe(!duplicate && candidate.waits.length <= MAX_WAITS && size <= MAX_BYTES);
 
           if (!duplicate && candidate.waits.length <= MAX_WAITS) {
@@ -380,7 +410,7 @@ describe("T703 connection machine laws", () => {
           }
 
           if (duplicate) {
-            sides.add(`duplicate:${typeof msg.wait.id}`);
+            sides.add(`duplicate:${Predicate.isString(msg.wait.id) ? "string" : "number"}`);
           }
         });
       }),
@@ -413,12 +443,12 @@ describe("T703 connection machine laws", () => {
             return;
           }
 
-          const matching = from.waits.some((w) => same(w, msg.wait));
+          const matching = Arr.some(from.waits, (w) => same(w, msg.wait));
           const answered = after !== before;
           expect(answered).toBe(matching);
           const left = held(after);
-          expect(left.some((w) => w.id === msg.wait.id)).toBe(
-            !matching && from.waits.some((w) => w.id === msg.wait.id),
+          expect(Arr.some(left, (w) => w.id === msg.wait.id)).toBe(
+            !matching && Arr.some(from.waits, (w) => w.id === msg.wait.id),
           );
 
           if (answered) {
@@ -427,10 +457,10 @@ describe("T703 connection machine laws", () => {
             expect(again).toBe(after);
           }
 
-          const reused = from.waits.some((w) => w.id === msg.wait.id) && !matching;
-          const late = fold.completed.some((w) => same(w, msg.wait)) && !matching;
+          const reused = Arr.some(from.waits, (w) => w.id === msg.wait.id) && !matching;
+          const late = Arr.some(fold.completed, (w) => same(w, msg.wait)) && !matching;
           seen.add(matching ? "matching" : reused ? "reused" : late ? "late" : "absent");
-          seen.add(`id:${typeof msg.wait.id}:${answered}`);
+          seen.add(`id:${Predicate.isString(msg.wait.id) ? "string" : "number"}:${answered}`);
         });
       }),
       options,

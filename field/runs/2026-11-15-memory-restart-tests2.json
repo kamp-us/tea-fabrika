@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-memory-restart-tests2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316",
+  "started": "2026-11-15T07:19:13-08:00",
+  "ended": "2026-11-15T07:27:11-08:00",
+  "parent": "2026-11-15-memory-restart-tests1",
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "tests step, second round for the memory restart in next/, after the build. The type errors in two test files are fixed without a cast or a product export. Both files reach the control plugin through one helper, listenOn: Context.get gives Alchemy's union of a plain plugin config or an Effect that builds one, the helper narrows with Effect.isEffect and a check that start is there, and it dies otherwise, since the driver always gives a plain config with a start. The replace helper's exit is typed as the runtime's own exit event, with a SIGTERM or SIGKILL argument, and the layer wrapper takes the work's real requirement type. The L17/L18 watch law's own hole is fixed: its input is a record with the move drawn from fit, syntax and compiler, and one save of each move runs as an example before the random runs. Two finding rows saved. L10 and L11 were not run: they signal a real process, so under 0178 they run in CI's full run or after the owner's yes. Every other law file in the change ran alone and passed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "note": "desktop.brain-memory should be declared as mail.chunk is on fabrikalfa/pipe-plumbing, with format: \"text\", so person.json spells it as a string with its unit; that is product code, for the builder. The watch law was red at the default depth before the fix (seen in round 1 on main's product files and by the build at 49b01c72f), and green after it at the default and full depths.",
+  "step": "tests",
+  "plants": [
+    { "law": "L17/L18 (node/dev/watch.laws.integration.test.ts)", "plant": "the law's old generator, three seeded runs with no compiler move, at the default depth", "result": "red" }
+  ]
+}

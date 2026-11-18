@@ -731,12 +731,12 @@ createOperator(slots);                        // the ship stage is the shipper s
 createOperator(slots, { ship: "machine" });   // the ship stage is the ship machine, run as a child
 //   in src/operate.ts:  SHIP=agent (the default)  |  SHIP=machine
 
-// At `ship`, where the shipper shell would start: start the child on the lane's pull request.
+// At `ship`, where the shipper shell would start: start the child on the quest's pull request.
 // Its limits are the run's own: how long checks may take, how long the queue may hold it.
 const machine = createShip({ waits: { checksMs: p.knobs.ciWaitMs, queueMs: p.knobs.queueStallMs } });
 const [ship, cmds] = applyCell(machine, { phase: "idle" }, { type: "start", pr: t.pr });
 
-// When the child is over, its outcome is written as ONE line on the lane, in the words a
+// When the child is over, its outcome is written as ONE line on the quest, in the words a
 // shipper shell reports today. Fabrika folds it as it folds a shipper's.
 //   done                        LANDED, or ALREADY-MERGED when it was found merged
 //   send:builder:conflicts      BASE-CONFLICTED, a lap that costs no repair round
@@ -755,8 +755,8 @@ What to know:
   declares none of the child's Cmds or Listens, and every test the operator
   had passes untouched.
 - **No "queued" line is written.** A shipper shell ends its run when the pull
-  request enters the merge queue, so it writes `QUEUED` and the lane waits in
-  another state. The child waits on the queue itself, so the lane stays at
+  request enters the merge queue, so it writes `QUEUED` and the quest waits in
+  another state. The child waits on the queue itself, so the quest stays at
   `ship` until the one line at the end. Whether fabrika takes a `QUEUED`
   written by the driver is therefore not asked, and still not known.
 - **The working copy stays the operator's.** It made it, and it removes it on
@@ -788,7 +788,7 @@ What to know:
 Checked twice, on one line. In
 [experiment 56](../experiments/56-first-live-run-of-the-ship-machine.md)
 fabrika's `lane report` took `LANDED` from the driver when no shipper shell
-was started, on both runs: exit 0, the lane folded to complete, the record
+was started, on both runs: exit 0, the quest folded to complete, the record
 posted. Fabrika checked the word against GitHub before it wrote it, as its
 source says it does. The other nine lines in the block above have never been
 written for real, and `QUEUED` is never written in this mode.

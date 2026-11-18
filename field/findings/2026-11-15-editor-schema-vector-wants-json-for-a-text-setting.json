@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-editor-schema-vector-wants-json-for-a-text-setting",
+  "date": "2026-11-15",
+  "by": "build",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/settings/JsonSchema.test.ts",
+    "line": 355
+  },
+  "says": "In next/, the editor schema vector law expected every shipped setting's default in its JSON spelling, and mail.chunk is the first text setting, whose file spells it as text. The product was right: Codec.file says the editor shows the file's own default, and the law above it pins that a text byte size's editor default is its text, never its digits. Fixed in the same pull request: the vector expects the file's spelling, JSON for a json setting and text for a text one, written from the declaration's format and not from Codec.file. A plant that made Codec.file's default the JSON spelling turned it red.",
+  "proof": "vitest on JsonSchema.test.ts at this head: `expected '65536 bytes' to deeply equal '65536'` at JsonSchema.test.ts:355. Not in CI's red leg, since that leg stopped the others; found by running the settings tests one at a time.",
+  "cost": "The vector would stay red on every full run, and the easy wrong fix is to make the editor offer a default in a spelling the file does not use.",
+  "head": "9671fbdf2fb6487d983e89b580b02f77becbc726",
+  "ticket": "kamp-us/tea-fabrika#1041",
+  "pr": "kamp-us/tea-fabrika#1310"
+}

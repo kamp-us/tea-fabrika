@@ -1,7 +1,7 @@
-// Beat.ts: a lane's heartbeat (ticket 685). Today's lead tooling (0064), read through its module:
+// Beat.ts: a quest's heartbeat (ticket 685). Today's lead tooling (0064), read through its module:
 // `Beat.enter(...)`, `Beat.says(...)`.
 //
-// While a lane runs, the chain keeps one beat in the lane's chain record: what the chain is doing
+// While a quest runs, the chain keeps one beat in the quest's chain record: what the chain is doing
 // now, since when, when the step's agent last wrote to its event log, and when the chain last wrote
 // the beat. The chain writes it on every phase change and every `EVERY` while it runs. A call that
 // blocks the chain's one thread (a hung cleanup) stops the beat, so a reader sees how long since
@@ -13,7 +13,7 @@
 //   Beat.says(beat, new Date("2026-11-10T21:00:00Z"))
 //   // { stuck: true, text: "cleanup for 1h50m, no beat for 1h50m: stuck" }
 
-import { Schema } from "effect";
+import { Schema, String as Str, pipe } from "effect";
 
 /**
  * What the chain is doing now. A step's own parts come from its drive machine: `cleanup` (the
@@ -48,13 +48,14 @@ export const Beat = Schema.Struct({
   /** When the step's agent last wrote to its event log; `null` before it wrote anything. */
   agentAt: Schema.NullOr(Schema.String),
 });
+
 export type Beat = typeof Beat.Type;
 
 /** How often the chain writes the beat while nothing changes. */
 export const EVERY = 30_000;
 
 /**
- * How long a beat, or an agent in its turn, may stay quiet before `says` calls the lane stuck.
+ * How long a beat, or an agent in its turn, may stay quiet before `says` calls the quest stuck.
  * A guess, to tune from the beats themselves: the longest quiet part of a start we measured was
  * 100 to 180 s before the agent acted (ticket 673), and one box sweep took about 22 s (2026-11-11),
  * before the sweep left the start (0101).
@@ -83,14 +84,14 @@ export const spoken = (ms: number): string => {
   const m = Math.floor((s % 3600) / 60);
 
   if (h > 0) {
-    return `${h}h${String(m).padStart(2, "0")}m`;
+    return `${h}h${pipe(String(m), Str.padStart(2, "0"))}m`;
   }
 
   return m > 0 ? `${m}m` : `${s}s`;
 };
 
 /**
- * The line a status page shows for a running lane, and whether it counts as stuck: the beat went
+ * The line a status page shows for a running quest, and whether it counts as stuck: the beat went
  * quiet (the chain is blocked or gone), or the agent wrote nothing for `quiet` in its turn.
  */
 export const says = (beat: Beat, now: Date, quiet = QUIET): { stuck: boolean; text: string } => {
@@ -110,5 +111,6 @@ export const says = (beat: Beat, now: Date, quiet = QUIET): { stuck: boolean; te
 
   const last = beat.agentAt === null ? null : spoken(ago(beat.agentAt));
   const agent = last === null ? "no agent output yet" : `last agent output ${last} ago`;
+
   return { stuck: false, text: `${head}, ${agent}` };
 };

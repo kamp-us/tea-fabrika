@@ -1,7 +1,5 @@
 /**
  * Worker Loader tail delivery. Only call metadata crosses into the Process object.
- *
- * @stability unstable
  */
 import {
   getLoopbackEntrypoint,
@@ -11,14 +9,13 @@ import {
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { errorClass } from "../telemetry/Trace.ts";
+import { causeClass } from "../telemetry/Trace.ts";
 import { isolateUsage, ProcessClient, rejected } from "./platform.ts";
 import { processStub, type Env } from "./runtime.ts";
 
 /**
  * Schema for attribution fixed when a program isolate is loaded.
  *
- * @stability stable
  * @category schemas
  */
 export const Props = Schema.Struct({ project: Schema.String, name: Schema.String, process: Schema.String });
@@ -26,7 +23,6 @@ export const Props = Schema.Struct({ project: Schema.String, name: Schema.String
 /**
  * Binds the tail to the name and process being loaded, including a successor.
  *
- * @stability unstable
  * @category constructors
  */
 export const bind = Effect.fnUntraced(function* (
@@ -34,6 +30,7 @@ export const bind = Effect.fnUntraced(function* (
   props: typeof Props.Type,
 ) {
   const tail = yield* getLoopbackEntrypoint(ctx.exports, "IsolateTail", { props });
+
   // The existing loader still takes native code options until its Alchemy port.
   return tail.raw;
 });
@@ -41,7 +38,6 @@ export const bind = Effect.fnUntraced(function* (
 /**
  * Sends one batch to its name's object. A failed delivery logs only the error class and is dropped.
  *
- * @stability unstable
  * @category combinators
  */
 export const tail = Effect.fnUntraced(function* (
@@ -54,13 +50,13 @@ export const tail = Effect.fnUntraced(function* (
     const stub = processStub(env, props.project, props.name);
     yield* ProcessClient.make(stub).usage(rows);
   });
-  yield* work.pipe(Effect.catchCause((cause) => Effect.logError(errorClass(rejected(Cause.squash(cause))))));
+
+  yield* work.pipe(Effect.catchCause((cause) => Effect.logError(causeClass(Cause.map(cause, rejected)))));
 });
 
 /**
  * Runs the platform tail callback using its load-bound props.
  *
- * @stability unstable
  * @category combinators
  */
 export const receive = (env: Pick<Env, "PROCESS">, props: unknown, items: Parameters<typeof tail>[2]) =>
@@ -69,7 +65,6 @@ export const receive = (env: Pick<Env, "PROCESS">, props: unknown, items: Parame
 /**
  * Reads each tail invocation's props and bindings from Alchemy's live services.
  *
- * @stability unstable
  * @category combinators
  */
 export const callback = Effect.fnUntraced(
@@ -79,5 +74,5 @@ export const callback = Effect.fnUntraced(
     const ctx = yield* WorkerExecutionContext;
     yield* receive({ PROCESS: env.PROCESS }, yield* ctx.props, items);
   },
-  Effect.catchCause((cause) => Effect.logError(errorClass(rejected(Cause.squash(cause))))),
+  Effect.catchCause((cause) => Effect.logError(causeClass(Cause.map(cause, rejected)))),
 );

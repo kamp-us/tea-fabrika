@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-as-no-runtime-typeof-2-review2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:05:34-08:00",
+  "ended": "2026-11-16T00:18:00-08:00",
+  "parent": "2026-11-15-as-no-runtime-typeof-2-build2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of anti-slop judgment slice AS-no-runtime-typeof-2 at 9c8260543, next/ and our tooling, decision 0563 and its amendment, after the merge of origin/main with pull request 1366 (ef8f220d4), a second tests step (c85e1cf98) and a second build step (9c8260543): merge-ready, no blocking fault, no finding row. The merge's four conflicted files differ from main's b510ed2e8 only by typeof to Predicate swaps; QuotaRunnerTest.ts is main's file unchanged and holds no hit. Each new edit answers what the old check did: isObjectOrArray is typeof object and not null, isObject adds not an array, hasProperty in Runner.integration.test.ts reads saved JSON Cmds, which are never a function. Gateway.ts's stamp keeps its null exclusion, since message !== null is checked in the same condition. Runner.ts's Err reply now reads m through Schema.decodeUnknownOption(Schema.JsonObject) before it adds reason. Both Execution builds hand the runner a reply already decoded as Schema.Json (Execution.ts reply decodes with Schema.Json; the worker build decodes its Reply schema), so for every object that is not an array the decode succeeds, as the old check did, and the onNone branch only returns m for arrays and leaves. Its cost is a second walk over the reply, only on an Err with a tag. The unchecked alternatives are a cast, which needs its own reason comment (0561), or a Predicate guard, which TypeScript refuses to spread (TS2698). runner-reply.laws.test.ts holds the reason. Recount with the rule forced on: 73 at ef8f220d4, 16 at 9c8260543 (13 exam, 3 product), matching tests2 (19 fixed, 13 left) and build2 (38 fixed, 3 left).",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/cloudflare/runner-reply.laws.test.ts: an Err reply carries its error's tag as reason (line 351)",
+      "plant": "by reading: Runner.ts onSome returns o without reason, or decodeJsonObject always none, so the work_err letter lacks reason and the expected body differs",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/ledger/LedgerSpans.integration.test.ts: a storage failure tags each call's span with fab.ledger.reason, fab.ledger.code and error.type",
+      "plant": "by reading: ledgerStore.ts errorCode keeps only Predicate.isString codes; the law throws an errcode of 13 and a generated Int and expects it as fab.ledger.code, so the tag goes missing",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/ledger/LedgerSpans.integration.test.ts: the same law, at errorCode's object guard",
+      "plant": "by reading: ledgerStore.ts errorCode's guard negated (an object returns none), so the thrown Error with errcode gives no code and the expected tags differ",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 13,
+  "note": "Read-only apart from this row. Node 26.13.0. loosening.sh ef8f220d4..9c8260543: 5 'removed expect' and 8 'unrecognized change' hits. Each is an import line, a typeof to Predicate swap inside the same expression, or expect(typeof x).toBe(t) to expect(x).toBeTypeOf(t), so no law is loosened. pnpm typecheck: exit 0. Tests one file at a time at 9c8260543, all green, .integration. laws included now that the branch holds PR 1508: runner-reply.laws 7, Sink.integration 41, JsonSchema 6, LedgerSpans.integration 16, QuotaSettings 3, Handshake.laws 2, TomlEdit 18, pipeline Settings 2, node QuotaRunner 7, RecoveryStore.integration 8, Program 44, Gateway.types 2, GatewayRevocation.integration 16, TaskAccess 2, Log.integration 41, AccessSpans.integration 14, Records.integration 22, ProcessStreams.integration 13, build-one-file.integration 12, RecoveryGaps.integration 12 (1 skipped), cloudflare supervision.laws.integration 6. Not run: Runner.integration.test.ts (117 tests, which the two later steps ran green) and the signal and launchctl laws named in build2. git merge-tree with origin/main b490a3203 (PR 1462, the E0 to E3 sweep): 34 files conflict, among them build.ts, bundle.ts, compiler.ts, ScheduledJob.ts, binary.ts, tuval key.ts and main.tsx and many test files, all touched by this slice and that sweep. The integrator must resolve them, or the slice must merge main again.",
+  "step": "review"
+}

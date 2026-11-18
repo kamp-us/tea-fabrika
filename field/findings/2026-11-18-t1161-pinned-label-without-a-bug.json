@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-t1161-pinned-label-without-a-bug",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "opus",
+  "rule": "rule_break",
+  "location": {
+    "path": ".github/ci/proof.test.ts",
+    "line": 573
+  },
+  "says": "In today's CI tooling, the fix round splits P9's check that a plain law reaches isLaw into its own test labeled pinned:, but it pins no past bug: it is a hand-picked example of a general rule, which the labels rule calls a defect.",
+  "proof": "proof.test.ts:573 `it(\"pinned: a plain law path does reach isLaw, once, so the refusal above is the pre-check and not a dead isLaw\", ...)` names no ticket or bug. docs/direction/five-steps-for-every-check.md keeps pinned: for a test that pins a named past bug.",
+  "cost": "A misread label. The check belongs in P8's property, for example by counting isLaw calls for the valid full pairs.",
+  "head": "c83fe39bc955f719297843d0cf36f643235f4065",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623"
+}

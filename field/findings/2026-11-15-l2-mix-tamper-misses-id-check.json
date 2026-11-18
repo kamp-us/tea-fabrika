@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-l2-mix-tamper-misses-id-check",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Chunk.test.ts",
+    "line": 182
+  },
+  "says": "L2's mix tamper always inserts a stranger chunk, so the seq check alone catches it, and join's send id check is never tested. Fixed in the same pull request by the fix round of 2026-11-15: the mix tamper replaces chunk k with the chunk k of a second send of the same items under another id of the same length, so seq, last and items match and only the id differs.",
+  "proof": "A plant that drops `chunk.part.id === id &&` from join (Chunk.ts:147) left Chunk.test.ts green.",
+  "cost": "A join that mixes two sends' chunks with the same seq and last would pass every law.",
+  "head": "e813174db04c8c71cbf859a6950eb6f613bcd42e",
+  "ticket": "kamp-us/tea-fabrika#1041",
+  "pr": "kamp-us/tea-fabrika#1310"
+}

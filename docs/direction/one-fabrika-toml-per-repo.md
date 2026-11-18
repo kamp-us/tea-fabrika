@@ -1,3 +1,8 @@
+---
+state: "decided; built with agents, build, review, checks, ship and ledger tables (experiment 107); 2026-10-30: the `.fabrika/` folder and `~/.fabrika` home decided; 2026-11-01: the repo's file built, review rules are `[review]`, the home not built; nested folders for monorepos (nearest wins, inherit only by `extends`) and repo programs proposed; 2026-10-31: where packs come from decided (lock, cache, no catalog word), how their code runs open; walked at Tier 5"
+summary: "Knobs are numbers, names or picks between tested paths, in TOML; the step order stays in code. Empty file changes nothing, unknown key fails, a run copies its settings when filed. Packs are listed here, one `[pack.<name>]` with `from` and `ref`, pinned in `.fabrika/fabrika.lock`; `~/.fabrika/packs` only caches code, as Cargo and Go do; any repo can offer packs in `.fabrika/packs/`. Each key left out gets a named default, printed at start. The repo's file lives at `.fabrika/fabrika.toml`; a person's own settings at `~/.fabrika/fabrika.toml`, which replaces `ledger.json` and `tsh.toml`."
+---
+
 # One fabrika.toml per repo
 
 Decided 2026-10-05. Packs added 2026-10-18. Walked when Tier 5 starts (owner, 2026-11-08): repo programs and their settings. The full story is
@@ -97,7 +102,7 @@ cache of pack code is `~/.fabrika/cache/packs/`, not `packs/`.
   - Open: whether `extends` takes only `"//"`, or a path to any other file as
     Ruff and tsconfig allow.
   - Repo programs are read from the default branch only, like the settings,
-    so a lane cannot change the code that judges it.
+    so a quest cannot change the code that judges it.
   - Opening a repo whose programs you have not run before asks you to trust
     it first, like `mise trust` or VS Code's workspace trust. A program runs
     in workerd and can only ask for Cmds, so it never touches the computer
@@ -118,7 +123,7 @@ cache of pack code is `~/.fabrika/cache/packs/`, not `packs/`.
   - A read that broke is not "no file". Not there and git failing are told
     apart with `git ls-tree` first: an empty list is not there, a non-zero exit
     is a failure. A side of a change that could not be read leaves the review's
-    kinds unknown, and the lane's read of its settings fails with the reason.
+    kinds unknown, and the quest's read of its settings fails with the reason.
 - **Not built yet.** `~/.fabrika` as the home, `ledger.json` and `tsh.toml`
   folding in, `fabrika.lock`, nested files, repo programs.
 - **Doubt:** a hidden folder is harder to find than a file at the root, which
@@ -244,13 +249,13 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
     the file as committed on that repository's default branch, read in its
     clone (`git cat-file blob <commit>:.fabrika/fabrika.toml`). tsh fetches first, and
     makes the clone with `--no-checkout` when it is not there, as build does.
-    A lane's own branch, or a file left in the clone's folder, is never read,
-    so a lane cannot change the settings it runs under.
+    A quest's own branch, or a file left in the clone's folder, is never read,
+    so a quest cannot change the settings it runs under.
   - **No target**: the root of the folder tsh starts in, the nearest folder up
     that holds `.git` (`repoOf`). Outside any repository, that folder itself.
   - A missing file is every default, in both cases. A `fabrika.toml` still at
     the root, or a `.fabrika.jsonc` with no new file, in that same place, is
-    refused, so it never reads as a missing file. The lane's own read at main's
+    refused, so it never reads as a missing file. The quest's own read at main's
     tip (`stages/pipeline/work.ts`) does the same. All three go by one pure
     check, `settingsRefusal` in `settings.ts`.
   - Not through the typed `CodeHost` service: it has no read of a file at a
@@ -294,7 +299,7 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
 
 - **No knob from the first file came over.** Every one of them belongs to a
   step `wip` does not have yet: the Jev readers (`[jev]`, `[review]`,
-  `[comments]`, `[failure]`), triage (`[triage]`) and the old lane (`[lane]`).
+  `[comments]`, `[failure]`), triage (`[triage]`) and the old quest (`[lane]`).
   A knob comes back with the step that decides with it, and is copied into
   the run when it is filed. Until then there is no restart test, because no
   `wip` machine decides with a value from this file.

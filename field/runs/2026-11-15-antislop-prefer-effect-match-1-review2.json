@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-prefer-effect-match-1-review2",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-15T23:28:11-08:00",
+  "ended": "2026-11-15T23:58:30-08:00",
+  "parent": "2026-11-15-antislop-prefer-effect-match-1-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice AS-prefer-effect-match-1 at f0ee7d00d, after the merge of origin/main b510ed2e8 (PR 1366 and PR 1508 in) and the second tests step: merge-ready, one finding row left. The merge 20984dcad changes only the effect import line in its four conflicted files (TomlEdit.test.ts, counter runner.laws.integration.test.ts, pipeline QueueRunnerTest.ts and Settings.test.ts), keeping main's runsFor or Predicate and the slice's Match, read with git show --remerge-diff; the three files main renamed to .integration. carry the slice's edits unchanged (19, 18 and 13 changed lines, as before). f0ee7d00d rewrites 18 chains in 11 test files: every pattern is a literal, every arm keeps its order, the else arm is Match.orElse, and the hand edits (programMail.test.ts orElse takes the narrowed reason, as const on Runner.integration.test.ts's four answers, test-kind.test.ts's real import) keep the old values. Rule forced to error in the scratch config: 13 hits left, the same 13 stopped as before (oxlint-plugins/effect-jsdocs.ts:801, .agents/skills/lead/scripts/chain.ts:728, and 11 in box.test.ts, redact.test.ts, stepcommit.test.ts and program-package-layout.test.ts), so 31 met at the merged tree and 18 fixed match the tests2 row. Review1's first finding is fixed: the file-head comment is back above the imports in oxlint-plugins/jsdocs.ts and oxlint-plugins/advice.test.ts. loosening.sh b510ed2e8 to f0ee7d00d: 121 hits, every one 'unrecognized change' at a rewritten line or the Match import, with no removed law, removed expect, muted test, fewer numRuns or tighter bound; none loosens a law. The hits over dfd6bb1e2 to f0ee7d00d that name removed laws are main's own changes, which the merge brought in.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Ran at f0ee7d00d, one file at a time: 92 test files green, 65 of them .integration., which the 0178 guard allowed in this box now that PR 1508 is in, and refused none. Not run, by reading only, since each sends a real signal to a child: next/apps/fabrika/src/hands-launcher.integration.test.ts and next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.laws.integration.test.ts. pnpm typecheck green. pnpm lint fails only on the zero lock asking to add the folders now at zero to the rule's block, which this slice may not do. Still open from review1: field/runs/2026-11-15-antislop-prefer-effect-match-1-build1.json says ended 22:44:00, later than its own commit 2fc1ade61 at 22:42:15 Pacific; the row is unchanged.",
+  "step": "review"
+}

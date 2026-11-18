@@ -3,12 +3,15 @@
 // and verify share) and `Webauthn.ts:176` (client data that does not decode). Each run makes its
 // own passkey and signs with it, so only the client data is damaged.
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { subtle } from "./internal/binary.ts";
 import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
@@ -42,7 +45,7 @@ const call = (method: Method, bytes: Uint8Array<ArrayBuffer>) => {
 };
 
 /** A spy on one WebCrypto method that rejects with `failure`, restored when the Effect ends. */
-const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A, E>) =>
+const rejecting = <A, E>(method: Method, failure: object, work: Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => vi.spyOn(crypto.subtle, method).mockRejectedValue(failure)),
     () => work,
@@ -50,7 +53,7 @@ const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A
   );
 
 describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
-  // C5, internal/binary.ts:81. Plant: `const fail = () => new WebCryptoError({})`.
+  // C5, internal/binary.ts:81. Plant: `const fail = () => WebCryptoError.make({})`.
   law(
     "C5: a generated rejection on any WebCrypto call is WebCryptoError with that very value as its cause",
     fc.record({
@@ -69,6 +72,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
           const error = yield* Effect.flip(
             rejecting<unknown, Effect.Error<ReturnType<typeof call>>>(method, failure, call(method, bytes)),
           );
+
           expect(error._tag).toBe("WebCryptoError");
           expect((error as { readonly cause?: unknown }).cause).toBe(failure);
         }
@@ -77,9 +81,10 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
 });
 
 const field = (value: string | Uint8Array) => {
-  const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const bytes = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(bytes.length);
+
   return Buffer.concat([size, bytes]);
 };
 
@@ -92,11 +97,17 @@ const integer = (raw: Uint8Array) => {
   }
 
   const bytes = Buffer.from(raw.slice(at));
+
   return (bytes[0] ?? 0) >= 128 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes;
 };
 
-const web = <A>(work: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: work, catch: (cause) => new Error("test WebCrypto failed", { cause }) });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+const web = <A>(work: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
+  Effect.tryPromise({ try: work, catch: (cause) => WebCryptoError.make({ message: "test WebCrypto failed", cause }) });
 
 /**
  * scenario: a passkey made when the law runs (WebCrypto, P-256) signs authenticator data and the
@@ -107,6 +118,7 @@ const signed = Effect.fnUntraced(function* (client: Uint8Array) {
   const pair = yield* web(() =>
     crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]),
   );
+
   const point = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const rp = "fabrika.test";
   const KEY = "sk-ecdsa-sha2-nistp256@openssh.com";
@@ -114,6 +126,7 @@ const signed = Effect.fnUntraced(function* (client: Uint8Array) {
   const rpHash = Buffer.from(yield* web(() => crypto.subtle.digest("SHA-256", Buffer.from(rp))));
   const authenticatorData = Buffer.concat([rpHash, Buffer.from([5]), Buffer.from([0, 0, 0, 1])]);
   const clientHash = Buffer.from(yield* web(() => crypto.subtle.digest("SHA-256", new Uint8Array(client))));
+
   const raw = new Uint8Array(
     yield* web(() =>
       crypto.subtle.sign(
@@ -123,9 +136,11 @@ const signed = Effect.fnUntraced(function* (client: Uint8Array) {
       ),
     ),
   );
+
   const r = integer(raw.slice(0, 32));
   const s = integer(raw.slice(32));
   const ints = Buffer.concat([Buffer.from([2, r.length]), r, Buffer.from([2, s.length]), s]);
+
   return {
     line: `${KEY} ${blob.toString("base64")}`,
     assertion: {
@@ -157,9 +172,11 @@ describe("T695, the passkey writer keeps why client data was refused", () => {
     ({ client, text }) =>
       Effect.gen(function* () {
         const { line, assertion } = yield* signed(client.data);
+
         const error = yield* Effect.flip(
-          writeWebauthnSshsig({ text, line: Schema.decodeUnknownSync(PasskeyLine)(line), assertion }),
+          writeWebauthnSshsig({ text, line: Schema.decodeSync(PasskeyLine)(line), assertion }),
         );
+
         expect(error._tag).toBe("BadAssertion");
         const cause = (error as { readonly cause?: unknown }).cause;
 

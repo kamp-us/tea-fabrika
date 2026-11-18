@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1133-full-lint",
+  "ticket": "kamp-us/tea-fabrika#1133",
+  "pr": null,
+  "started": "2026-11-17T00:11:59.964319-08:00",
+  "ended": "2026-11-17T00:13:05.820372-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling, checked source 1a15f0904ee9f6a5400a53b1429be3e86e17420e. The separately reserved full pnpm lint exited 0; all 18 parts passed, including the full typed-API checks. Parallel duration was 36.4 seconds and command duration 36.986 seconds. Row timing includes preflight through the completed release check. Native pnpm 12.16.1 and direct, pnpm-nested and Python-nested Node 26.13.0 were verified; HOME was preserved and the paid key unset. No formatting, tests, compiler, protected fixture, CI or push ran alongside this worker's check. After actual child exit, no API process remained and the API slot was released. Source, branch ref, tree, index tree and byte hash, clean status, source diff hash, all 11 selected file hashes and all three ledger hashes were unchanged. Agents, next and unreachable ledgers were not pruned or extended. Two preserved historical host rows warned about missing driver_caused metadata; field validation passed. Checked tree was 5a2f4921b5cac81ffa51314b52b07d7a74322717; index hash was 3b3e662c2659383046322dddb01c278c05702052e34253a43ba32ffb01443849. Raw output SHA256 was 9f6333b84140316f4a6ecd5d759cbde0952ffc9ef8cb4057b77411005f4b706d. This row is a later records-only addition; no lint rerun or protected adapter proof is claimed at its commit.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 1.097601,
+  "note": null,
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-28"
+summary: "No tabs. A container runs horizontal or vertical, and nested containers alternate, as in AeroSpace. Any tile folds into a thin strip that keeps its place (Ctrl-B f, or a click on its title bar); a container whose tiles are all folded draws as one strip. The last open tile cannot fold."
+---
+
 # Fold, not tabs
 
 **Decided 2026-10-28.** The desk has no tabs. A container in the layout tree
@@ -256,7 +261,7 @@ inputs:  {id: input(TraceId, "A job's trace id ..."), ticket: input(TicketNumber
 
 Each still runs alone: `ticket --ticket 7` and `trace --ticket 7` take the
 ticket as a flag, and with no flag they wait for one on their input. So
-`tracker | ticket | trace` shows the picked ticket's lanes, and a step there
+`tracker | ticket | trace` shows the picked ticket's quests, and a step there
 opens to its job's spans. A ticket's writes name their
 ticket (`{kind: "comment", ticket: 7, body}`), so a comment typed on #7 never
 lands on #3 picked after it.

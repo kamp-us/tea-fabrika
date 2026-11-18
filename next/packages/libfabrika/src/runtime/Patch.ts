@@ -1,38 +1,76 @@
 /**
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
- *
- * @stability unstable
  */
+import * as Arr from "effect/Array";
 
-/** One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs. */
-export type Patch =
-  | { readonly op: "add"; readonly path: string; readonly value: unknown }
-  | { readonly op: "remove"; readonly path: string }
-  | { readonly op: "replace"; readonly path: string; readonly value: unknown };
+import * as Function from "effect/Function";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
+/**
+ * Schema for one RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs, and
+ * a value is JSON.
+ *
+ * @category schemas
+ */
+export const Patch = Schema.Union([
+  Schema.Struct({ op: Schema.Literal("add"), path: Schema.String, value: Schema.Json }),
+  Schema.Struct({ op: Schema.Literal("replace"), path: Schema.String, value: Schema.Json }),
+  Schema.Struct({ op: Schema.Literal("remove"), path: Schema.String }),
+]);
+
+/**
+ * One RFC 6902 operation, as `Patch` decodes it.
+ *
+ * @category models
+ */
+export type Patch = typeof Patch.Type;
 
 /** A JSON Pointer token: `~` as `~0`, `/` as `~1` (RFC 6901). */
-const token = (key: string | number): string => String(key).replaceAll("~", "~0").replaceAll("/", "~1");
+const token = (key: string | number): string =>
+  Function.pipe(String(key), Str.replaceAll("~", "~0"), Str.replaceAll("/", "~1"));
 
-type Plain = { readonly [key: string]: unknown };
+/**
+ * Narrows a JSON value to its object case: an object, not an array or a leaf. `Predicate.isObject`
+ * alone narrows to a plain record, which no rest pattern over `Schema.JsonObject` takes.
+ *
+ * @category guards
+ */
+export const isJsonObject = (json: Schema.Json): json is Schema.JsonObject => Predicate.isObject(json);
 
-const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Array.isArray(u);
+/** The value an object holds under `key` as its own, never one from its prototype. */
+const own = (object: Schema.JsonObject, key: string): Schema.Json | undefined =>
+  Object.hasOwn(object, key) ? object[key] : undefined;
 
 /** Same JSON value: `Object.is` for leaves, so `0` and `-0` differ as they do to a watcher. */
-const same = (a: unknown, b: unknown): boolean => {
+const same = (a: Schema.Json, b: Schema.Json): boolean => {
+  // `Array.isArray` keeps a `Json` array's element type, where `Arr.isArray` narrows to `unknown`.
   if (Array.isArray(a) && Array.isArray(b)) {
-    return a.length === b.length && a.every((one, i) => same(one, b[i]));
+    return a.length === b.length && Arr.every(a, (one, i) => same(one, b[i]));
   }
 
-  if (isPlain(a) && isPlain(b)) {
-    const keys = Object.keys(a);
-    return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]));
+  if (isJsonObject(a) && isJsonObject(b)) {
+    // `Schema.JsonObject` has no symbol index, which the `Rec` operations ask of their record.
+    const entries = Object.entries(a);
+
+    return (
+      entries.length === Object.keys(b).length &&
+      Arr.every(entries, ([key, one]) => {
+        const other = own(b, key);
+
+        return other !== undefined && same(one, other);
+      })
+    );
   }
 
   return Object.is(a, b);
 };
 
-const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>): void => {
+const walk = (path: string, before: Schema.Json, after: Schema.Json, out: Array<Patch>): void => {
   if (same(before, after)) {
     return;
   }
@@ -55,7 +93,7 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
     return;
   }
 
-  if (isPlain(before) && isPlain(after)) {
+  if (isJsonObject(before) && isJsonObject(after)) {
     for (const key of Object.keys(before)) {
       if (!Object.hasOwn(after, key)) {
         out.push({ op: "remove", path: `${path}/${token(key)}` });
@@ -64,11 +102,12 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
 
     for (const [key, value] of Object.entries(after)) {
       const at = `${path}/${token(key)}`;
+      const held = own(before, key);
 
-      if (Object.hasOwn(before, key)) {
-        walk(at, before[key], value, out);
-      } else {
+      if (held === undefined) {
         out.push({ op: "add", path: at, value: structuredClone(value) });
+      } else {
+        walk(at, held, value, out);
       }
     }
 
@@ -78,9 +117,115 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
   out.push({ op: "replace", path, value: structuredClone(after) });
 };
 
-/** The patches that turn `before` into `after`, in the order to apply them. None when equal. */
-export const diff = (before: unknown, after: unknown): ReadonlyArray<Patch> => {
+/**
+ * Returns the patches that turn `before` into `after`, in the order to apply them. None when equal.
+ *
+ * @category combinators
+ */
+export const diff = (before: Schema.Json, after: Schema.Json): ReadonlyArray<Patch> => {
   const out: Array<Patch> = [];
   walk("", before, after, out);
+
   return out;
+};
+
+const decodeOps = Schema.decodeUnknownResult(Schema.Array(Patch));
+
+const decodeJson = Schema.decodeUnknownResult(Schema.Json);
+
+const unsafe = new Set(["__proto__", "constructor", "prototype"]);
+
+const invalid = () => Result.fail("bad_patch" as const);
+
+/**
+ * Applies the view protocol's RFC 6902 subset to a copy. A rejected patch changes nothing.
+ *
+ * **Details**
+ *
+ * It fails with `bad_patch` when `before` is not JSON, an operation is not one of `add`, `replace`
+ * and `remove`, a path is malformed or names a missing place, or a path holds `__proto__`,
+ * `constructor` or `prototype`.
+ *
+ * @category combinators
+ */
+export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json, "bad_patch"> => {
+  const decoded = decodeOps(ops);
+  const json = decodeJson(before);
+
+  if (Result.isFailure(decoded) || Result.isFailure(json)) {
+    return invalid();
+  }
+
+  let root = structuredClone(json.success);
+
+  for (const op of decoded.success) {
+    if (op.path !== "" && !Str.startsWith("/")(op.path)) {
+      return invalid();
+    }
+
+    const encoded: ReadonlyArray<string> = op.path === "" ? [] : Str.split(Str.slice(1)(op.path), "/");
+
+    if (Arr.some(encoded, (p) => /~(?![01])/.test(p))) {
+      return invalid();
+    }
+
+    const path = Arr.map(encoded, (p) => Function.pipe(p, Str.replaceAll("~1", "/"), Str.replaceAll("~0", "~")));
+
+    if (Arr.some(path, (p) => unsafe.has(p))) {
+      return invalid();
+    }
+
+    if (path.length === 0) {
+      root = op.op === "remove" ? null : structuredClone(op.value);
+      continue;
+    }
+
+    let parent: unknown = root;
+
+    for (const part of path.slice(0, -1)) {
+      if (Arr.isArray(parent)) {
+        if (!/^(0|[1-9][0-9]*)$/.test(part) || Number(part) >= parent.length) {
+          return invalid();
+        }
+
+        parent = parent[Number(part)] ?? null;
+      } else if (Predicate.isObject(parent) && Rec.has(parent, part)) {
+        parent = parent[part];
+      } else {
+        return invalid();
+      }
+    }
+
+    const key = path.at(-1) ?? "";
+
+    if (Arr.isArray(parent)) {
+      const index = key === "-" && op.op === "add" ? parent.length : /^(0|[1-9][0-9]*)$/.test(key) ? Number(key) : -1;
+
+      if (index < 0 || index >= parent.length + (op.op === "add" ? 1 : 0)) {
+        return invalid();
+      }
+
+      if (op.op === "remove") {
+        parent.splice(index, 1);
+      } else if (op.op === "add") {
+        parent.splice(index, 0, structuredClone(op.value));
+      } else {
+        parent[index] = structuredClone(op.value);
+      }
+    } else if (Predicate.isObject(parent)) {
+      if (op.op !== "add" && !Rec.has(parent, key)) {
+        return invalid();
+      }
+
+      if (op.op === "remove") {
+        delete parent[key];
+      } else {
+        parent[key] = structuredClone(op.value);
+      }
+    } else {
+      return invalid();
+    }
+  }
+
+  return Result.succeed(root);
 };

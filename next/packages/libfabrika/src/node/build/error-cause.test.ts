@@ -5,13 +5,21 @@
 // `css.ts:24`, `:28`, `:32` and `:35`, the four branches of the stylesheet refusal, through both of
 // its callers; `bundle.ts:47`, a Rolldown build that rejects.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { BuildError, build } from "./build.ts";
 import { bundle } from "./bundle.ts";
 import { inlineStylesheet } from "./css.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
@@ -58,7 +66,8 @@ const steps = fc.constantFrom<Step>(
 );
 
 /** The build options and disk that make `step` fail with `failure` (a damaged file for a decode). */
-const world = (step: Step, failure: unknown, bad: string) => {
+const world = (step: Step, failure: object, bad: string) => {
+  // SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it, and the Effect only fails, so its success type is free.
   const fails = <A>() => Effect.fail(failure as never) as Effect.Effect<A, never>;
   const damaged = Effect.succeed(bad);
 
@@ -68,6 +77,7 @@ const world = (step: Step, failure: unknown, bad: string) => {
 
   if (step === "ledger_read" || step === "ledger_decode") {
     const { ledger: _, ...rest } = options();
+
     return {
       options: rest,
       disk: disk({ readFileString: () => (step === "ledger_read" ? fails() : damaged) }),
@@ -76,6 +86,7 @@ const world = (step: Step, failure: unknown, bad: string) => {
 
   // A program's name is `pack/program` (P40), else the build refuses it before any disk step.
   const program = [{ name: "demo/counter", package: "counter-pkg", export: "program" }];
+
   return {
     options: options({ programs: program }),
     disk: disk({
@@ -85,7 +96,7 @@ const world = (step: Step, failure: unknown, bad: string) => {
   };
 };
 
-const stepReason = (step: Step) => (step.startsWith("manifest") ? "table" : "read");
+const stepReason = (step: Step) => (Function.pipe(step, Str.startsWith("manifest")) ? "table" : "read");
 
 describe("T695, the build's shared callback keeps what failed", () => {
   // C5, build.ts:51 through :66, :71, :273 and :283. Plant: `const fail = (reason) => () => ...`.
@@ -108,7 +119,7 @@ describe("T695, the build's shared callback keeps what failed", () => {
         expect(error).toBeInstanceOf(BuildError);
         expect(error.reason).toBe(stepReason(step));
 
-        if (step.endsWith("_decode")) {
+        if (Function.pipe(step, Str.endsWith("_decode"))) {
           expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
         } else {
           expect(error.cause).toBe(failure);
@@ -133,9 +144,12 @@ describe("T695, a stylesheet refusal keeps what lightningcss or the disk said", 
     ({ message, file }) =>
       Effect.gen(function* () {
         const failure = new Error(message);
+
         const error = yield* Effect.flip(
+          // SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it.
           Effect.provide(inlineStylesheet(`${ROOT}/${file}`), disk({ realPath: () => Effect.fail(failure as never) })),
         );
+
         expect(error.reason).toBe("bundle");
         expect(error.cause).toBe(failure);
       }),
@@ -156,6 +170,7 @@ describe("T695, a stylesheet refusal keeps what lightningcss or the disk said", 
             disk({ realPath: (p) => Effect.succeed(p), readFileString: () => Effect.succeed(`${open}${tail}\n`) }),
           ),
         );
+
         expect(error.reason).toBe("bundle");
         expect(error.cause, "the cause is what the bundler rejected with").toBeInstanceOf(Error);
       }),
@@ -163,7 +178,7 @@ describe("T695, a stylesheet refusal keeps what lightningcss or the disk said", 
 });
 
 /** A Rolldown plugin whose `hook` throws `failure`, as a broken plugin does. */
-const throwingPlugin = (hook: "buildStart" | "resolveId", failure: unknown) => ({
+const throwingPlugin = (hook: "buildStart" | "resolveId", failure: object) => ({
   name: "cause-probe",
   [hook]: () => {
     throw failure;

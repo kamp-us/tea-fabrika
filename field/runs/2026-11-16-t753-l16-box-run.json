@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t753-l16-box-run",
+  "ticket": "753",
+  "pr": "kamp-us/tea-fabrika#1519",
+  "started": "2026-11-16T00:21:28-08:00",
+  "ended": "2026-11-16T00:25:21-08:00",
+  "parent": "2026-11-16-t753-l16-timeout-fix",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/, test code only. Box run of T753 L16 in next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts at head 297895bf9b781b238271094181992209f86bc1f4, which the laptop could not run (0178). The depth is read in next/packages/vitest/src/Depth.ts from FABRIKA_TEST_DEPTH: unset is fast, full is full, so runsFor({ fast: 10, full: 100 }) gives 10 or 100 cases. Each run was nice -n 15 pnpm exec vitest run --maxWorkers=3 next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts -t \"T753 L16\" --reporter=verbose. Fast (FABRIKA_TEST_DEPTH unset): 1 passed, 12 skipped, L16 5156 ms, vitest Duration 6.74 s (a first run without the verbose reporter: Duration 7.66 s, same counts). Full (FABRIKA_TEST_DEPTH=full): 1 passed, 12 skipped, L16 42716 ms, Duration 44.08 s. The verbose line names L16 with a check mark, so L16 itself ran and the 12 skipped are the file's other tests. Plant 1, at full depth because the poll's cost is paid once per case: the asked(3) wait put back to the old vi.waitFor 50 ms poll with its 5 s timeout. It stayed green and in its 5 s bound: L16 46559 ms, Duration 48.04 s, 3.8 s slower than without the plant. Plant 2, at fast depth because that is where the depth change matters: the count put back to a fixed 100 in place of runsFor. It stayed green: L16 43874 ms, Duration 45.55 s, against 5.2 s at fast depth. So in this box the depth change is what takes the pull-request run from about 44 s to about 5 s, and removing the poll saves about 8% at full depth. Neither plant makes the law red: this fix changes the law's time, not what it asserts, so no plant can turn it red, and the plants measure time instead.",
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts: T753 L16 real first/later process steps, recovery and successors keep the shared instance gate",
+      "plant": "the asked(3) wait put back to vi.waitFor(() => expect(w.attempts.length).toBeGreaterThanOrEqual(3), { timeout: 5_000 }), run at FABRIKA_TEST_DEPTH=full: 46559 ms against 42716 ms unplanted",
+      "result": "green"
+    },
+    {
+      "law": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts: T753 L16 real first/later process steps, recovery and successors keep the shared instance gate",
+      "plant": "the case count put back to a fixed { runs: 100 } in place of runsFor({ fast: 10, full: 100 }), run at fast depth: 43874 ms against 5156 ms unplanted",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Cloud box, Linux, Node v26.13.0, pnpm install --frozen-lockfile. The 0178 guard did not refuse the file; FABRIKA_HOST_RUN_OWNER_APPROVED was never set. Each plant was a scratch Edit, run once and restored by Edit; git status --short and git diff --stat showed no change after. Box times are one sample each and another read-only agent shared the box; the CI legs the parent row cites ran about 0.6 s per case, near this box's 0.43 s. At full depth the law still takes about 43 s here against the 60 s testTimeout in vitest.config.ts, so the scheduled run keeps less headroom than the pull-request run. No pnpm typecheck in this step.",
+  "step": "tests",
+  "driver_caused": false
+}

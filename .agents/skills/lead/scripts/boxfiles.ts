@@ -1,4 +1,4 @@
-// boxfiles.ts: what a landed lane's boxes left beside the boxes, swept. gc runs it last; today's
+// boxfiles.ts: what a landed quest's boxes left beside the boxes, swept. gc runs it last; today's
 // lead tooling, run on our own laptop, not product.
 //
 //   node boxfiles.ts --boxes <BOXES> --main <MAIN> [--dry-run] [--gone <box>]... [--merged <branch>]... [--open <branch>]...
@@ -8,28 +8,28 @@
 // harness keeps a Codex home per tree. Nothing removed them: 5,900 names and 9.5 GB of Codex homes
 // by 2026-11-11 (ticket 601). A box's files go once all of these hold:
 //
-//   its lane landed     every lane whose state file (`state/<lane>.json`) names the box has a
+//   its quest landed     every quest whose state file (`state/<quest>.json`) names the box has a
 //                       branch with a merged pull request and no open one (`--merged`, `--open`:
-//                       gc's own listing). A chain's judgment box `<lane>-judge<n>` is its lane's.
+//                       gc's own listing). A chain's judgment box `<quest>-judge<n>` is its quest's.
 //   its tree is gone    neither `BOXES/box/<box>` nor an older `BOXES/<box>`, unless gc removes it
 //                       this run (`--gone`): a tree gc keeps, it keeps for a reason it printed
 //   nothing is fresh    no file of the box changed in the last 2 h (gc's IDLE). Age only keeps.
 //
-// Then content moves into MAIN's `runs/boxes/<lane>/` (ignored by git, the owner's private archive,
+// Then content moves into MAIN's `runs/boxes/<quest>/` (ignored by git, the owner's private archive,
 // 0027), never deleted: a report or an event stream is the run's own record. A git view (a
 // hard-linked mirror of MAIN's git data) is removed, and so is the box's Codex home, after its
 // `sessions/` moves too.
 //
 // Edge cases, each with a test in boxfiles.test.ts:
-//   1. landed is a merged PR on the lane's branch (less -wip) and no open one; an open one (the
+//   1. landed is a merged PR on the quest's branch (less -wip) and no open one; an open one (the
 //      branch used again), only a closed one, none, or a state with no branch: not landed
-//   2. a box two lanes name goes only when both landed
+//   2. a box two quests name goes only when both landed
 //   3. a box whose tree is there, in either layout, stays unless gc removes it this run
 //   4. a box with a file changed in the last 2 h stays
-//   5. a file belongs to the longest box or lane name it starts with, then `.` or `-`: box
-//      `t5-tests1` does not take `t5-tests10.md`, and box `a-tests1` does not take lane
+//   5. a file belongs to the longest box or quest name it starts with, then `.` or `-`: box
+//      `t5-tests1` does not take `t5-tests10.md`, and box `a-tests1` does not take quest
 //      `a-tests1`'s `a-tests1-rows.jsonl`
-//   6. a lane's own files (its rows, plan, chain briefs) are never touched: rows may not be in
+//   6. a quest's own files (its rows, plan, chain briefs) are never touched: rows may not be in
 //      field/ yet
 //   7. a box's git data (`-gitdata`) and sign worktree (`-sign`) are never touched: git data may
 //      hold commits only the box's rm command proves safe, and git owns a worktree
@@ -41,24 +41,30 @@
 //
 // Looked at first (0040): `tmpreaper`/`tmpwatch` and `find -mtime -delete` remove by age alone,
 // which this must not; `logrotate` rotates files a program keeps writing, not files of a finished
-// job; `git clean` sees only a checkout. None knows when a lane landed, which is the rule here.
+// job; `git clean` sees only a checkout. None knows when a quest landed, which is the rule here.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { codexHomeOf } from "@kampus/fabrika-old/agents/acp";
 import { Clock, Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
-import { boxTree, boxView, IDLE, oldBoxTree } from "./lane.ts";
+import { boxTree, boxView, IDLE, oldBoxTree } from "./quest.ts";
 
-/** What boxfiles reads of a lane's state file (drive writes it). */
-export const LaneState = Schema.Struct({
-  lane: Schema.String,
+const QuestFields = Schema.Struct({
+  quest: Schema.String,
   branch: Schema.optional(Schema.String),
   steps: Schema.optional(Schema.Array(Schema.Struct({ box: Schema.optional(Schema.String) }))),
 });
-export type LaneState = typeof LaneState.Type;
 
-/** Whether a lane landed: its branch, less -wip, has a merged pull request and no open one. */
+/**
+ * What boxfiles reads of a quest's state file (drive writes it). One written before decision 0546
+ * names the quest `lane`, and reads the same.
+ */
+export const QuestState = Schema.Union([QuestFields, QuestFields.pipe(Schema.encodeKeys({ quest: "lane" }))]);
+
+export type QuestState = typeof QuestState.Type;
+
+/** Whether a quest landed: its branch, less -wip, has a merged pull request and no open one. */
 export const hasLanded = (
   branch: string | undefined,
   merged: ReadonlySet<string>,
@@ -69,6 +75,7 @@ export const hasLanded = (
   }
 
   const own = branch.replace(/(-wip)+$/, "");
+
   return merged.has(own) && !open.has(own) && !open.has(`${own}-wip`);
 };
 
@@ -91,30 +98,30 @@ export const ownerName = (file: string, names: Iterable<string>): string | null 
 export const fateFor = (rest: string): "move" | "remove" | "leave" =>
   rest === "-gitdata" || rest === "-sign" ? "leave" : rest === "-view" ? "remove" : "move";
 
-/** A chain's judgment box, by its file name: `<lane>-judge<n>` and a suffix. */
+/** A chain's judgment box, by its file name: `<quest>-judge<n>` and a suffix. */
 const JUDGE = /^(.+-judge\d+)[.-]/;
 
-/** Each box, with the lanes that name it, from the lanes' state files and the names beside the boxes. */
-export const boxLanes = (lanes: readonly LaneState[], names: readonly string[]): Map<string, string[]> => {
+/** Each box, with the quests that name it, from the quests' state files and the names beside the boxes. */
+export const boxQuests = (quests: readonly QuestState[], names: readonly string[]): Map<string, string[]> => {
   const out = new Map<string, string[]>();
-  const add = (box: string, lane: string) => out.set(box, [...new Set([...(out.get(box) ?? []), lane])]);
+  const add = (box: string, quest: string) => out.set(box, [...new Set([...(out.get(box) ?? []), quest])]);
 
-  for (const l of lanes) {
+  for (const l of quests) {
     for (const step of l.steps ?? []) {
       if (step.box) {
-        add(step.box, l.lane);
+        add(step.box, l.quest);
       }
     }
   }
 
-  const laneNames = new Set(lanes.map((l) => l.lane));
+  const questNames = new Set(quests.map((l) => l.quest));
 
   for (const name of names) {
     const judge = JUDGE.exec(name)?.[1];
-    const lane = judge?.replace(/-judge\d+$/, "");
+    const quest = judge?.replace(/-judge\d+$/, "");
 
-    if (judge !== undefined && lane !== undefined && laneNames.has(lane)) {
-      add(judge, lane);
+    if (judge !== undefined && quest !== undefined && questNames.has(quest)) {
+      add(judge, quest);
     }
   }
 
@@ -125,6 +132,7 @@ export const Verdict = Schema.TaggedUnion({
   keep: { reason: Schema.String },
   sweep: {},
 });
+
 export type Verdict = typeof Verdict.Type;
 
 /** The Check, pure: whether a box's files go now. */
@@ -136,7 +144,7 @@ export const judgeBox = (b: {
   readonly idle: number;
 }): Verdict => {
   if (b.landed.length === 0 || b.landed.includes(false)) {
-    return Verdict.cases.keep.make({ reason: "its lane has not landed" });
+    return Verdict.cases.keep.make({ reason: "its quest has not landed" });
   }
 
   if (b.tree && !b.gone) {
@@ -163,6 +171,7 @@ const sizeKb = Effect.fnUntraced(
 
     const ran = yield* ChildProcess.make("du", ["-sk", ...paths]);
     const out = yield* text(ran.stdout);
+
     return out
       .split("\n")
       .filter(Boolean)
@@ -188,8 +197,11 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const would = o.dry ? "would " : "";
+  // SAFETY: an empty array holds no name, so it is a string[]; it stands in for a folder that does
+  // not read.
   const list = (dir: string) => fs.readDirectory(dir).pipe(Effect.catch(() => Effect.succeed([] as string[])));
   const there = (p: string) => fs.exists(p).pipe(Effect.catch(() => Effect.succeed(false)));
+
   /** Move `from` to `to`, or to the first of `to-1`, `to-2`, ... that is free: nothing is overwritten. */
   const moveTo = Effect.fnUntraced(function* (from: string, to: string) {
     yield* fs.makeDirectory(path.dirname(to), { recursive: true });
@@ -201,8 +213,9 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
 
     yield* fs.rename(from, free);
   });
+
   const state = path.join(o.boxes, "state");
-  const lanes: LaneState[] = [];
+  const quests: QuestState[] = [];
 
   for (const file of yield* list(state)) {
     if (!file.endsWith(".json") || file.endsWith("-chain.json")) {
@@ -210,20 +223,21 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
     }
 
     const read = yield* fs.readFileString(path.join(state, file)).pipe(Effect.option);
-    const lane = Option.flatMap(read, Schema.decodeUnknownOption(Schema.fromJsonString(LaneState)));
+    const quest = Option.flatMap(read, Schema.decodeUnknownOption(Schema.fromJsonString(QuestState)));
 
-    if (Option.isSome(lane)) {
-      lanes.push(lane.value);
+    if (Option.isSome(quest)) {
+      quests.push(quest.value);
     }
   }
 
   const beside = yield* list(o.boxes);
   const inState = yield* list(state);
-  const owners = boxLanes(lanes, beside);
-  const landed = new Map(lanes.map((l) => [l.lane, hasLanded(l.branch, o.merged, o.open)]));
-  // Lane names count for ownership, so a lane's own files are never a box's (edge 5, 6).
+  const owners = boxQuests(quests, beside);
+  const landed = new Map(quests.map((l) => [l.quest, hasLanded(l.branch, o.merged, o.open)]));
+  // Quest names count for ownership, so a quest's own files are never a box's (edge 5, 6).
   const names = [...owners.keys(), ...landed.keys()];
   const byBox = new Map<string, Entry[]>();
+
   const add = (dir: string, under: string) => (name: string) => {
     const owner = ownerName(name, names);
 
@@ -232,21 +246,22 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
     }
 
     const fate = fateFor(name.slice(owner.length));
-    const lane = owners.get(owner)?.[0] ?? "";
+    const quest = owners.get(owner)?.[0] ?? "";
 
     if (fate !== "leave") {
-      const to = path.join(o.main, "runs", "boxes", lane, under, name);
+      const to = path.join(o.main, "runs", "boxes", quest, under, name);
       byBox.set(owner, [...(byBox.get(owner) ?? []), { path: path.join(dir, name), name, fate, to }]);
     }
   };
+
   beside.forEach(add(o.boxes, ""));
   inState.forEach(add(state, "state"));
-  // Names no lane's state file accounts for: an older box's, a lane's own, or the lead's by hand.
+  // Names no quest's state file accounts for: an older box's, a quest's own, or the lead's by hand.
   const unclaimed = beside.filter((name) => !owners.has(ownerName(name, names) ?? "")).length;
   const now = yield* Clock.currentTimeMillis;
   const mainHome = codexHomeOf(o.main, o.home);
   const totals = { boxes: 0, moved: 0, movedKb: 0, removedKb: 0, waiting: 0, held: 0 };
-  const lanesSwept = new Set<string>();
+  const questsSwept = new Set<string>();
 
   for (const [box, named] of [...owners].sort(([a], [b]) => a.localeCompare(b))) {
     const trees = [boxTree(o.boxes, box), oldBoxTree(o.boxes, box)];
@@ -261,10 +276,10 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
     for (const home of homes) {
       if (yield* there(home)) {
         const sessions = path.join(home, "sessions");
-        const lane = named[0] ?? "";
+        const quest = named[0] ?? "";
 
         if (yield* there(sessions)) {
-          const to = path.join(o.main, "runs", "boxes", lane, `${box}-codex-sessions`);
+          const to = path.join(o.main, "runs", "boxes", quest, `${box}-codex-sessions`);
           entries.push({ path: sessions, name: `${box} Codex sessions`, fate: "move", to });
         }
 
@@ -297,7 +312,7 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
     });
 
     if (verdict._tag === "keep") {
-      if (verdict.reason === "its lane has not landed") {
+      if (verdict.reason === "its quest has not landed") {
         totals.waiting += 1;
       } else {
         totals.held += 1;
@@ -340,7 +355,7 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
     totals.removedKb += removedKb;
 
     for (const l of named) {
-      lanesSwept.add(l);
+      questsSwept.add(l);
     }
 
     yield* Console.log(
@@ -349,7 +364,7 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
   }
 
   yield* Console.log(
-    `boxfiles: ${would}sweep ${totals.boxes} boxes of ${lanesSwept.size} landed lanes: ${would}move ${totals.moved} files and folders (${mb(totals.movedKb)} MB), ${would}remove ${mb(totals.removedKb)} MB; kept ${totals.held} for a reason above and ${totals.waiting} whose lane has not landed; ${unclaimed} names beside the boxes belong to no lane's box and stay`,
+    `boxfiles: ${would}sweep ${totals.boxes} boxes of ${questsSwept.size} landed quests: ${would}move ${totals.moved} files and folders (${mb(totals.movedKb)} MB), ${would}remove ${mb(totals.removedKb)} MB; kept ${totals.held} for a reason above and ${totals.waiting} whose quest has not landed; ${unclaimed} names beside the boxes belong to no quest's box and stay`,
   );
 });
 

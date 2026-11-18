@@ -11,7 +11,13 @@ import { TestClock } from "effect/testing";
 import { Add, MemberEvent, Signed } from "../access/Access.ts";
 import { Written } from "../access/ClientManager.ts";
 
+/** A rejected promise in a test helper or law, kept in the error channel with its cause. */
+export class PromiseFailed extends Schema.TaggedErrorClass<PromiseFailed>()("PromiseFailed", {
+  cause: Schema.Defect,
+}) {}
+
 export const EPOCH = 1_800_000_000_000;
+
 export const TEN_MINUTES = 600_000;
 
 export const PURE = {
@@ -19,7 +25,9 @@ export const PURE = {
 };
 
 export const EFFECT = { arbitrary: { ...PURE.arbitrary, runs: 30 } };
+
 export const INTEGRATION = { arbitrary: { ...PURE.arbitrary, runs: 10 } };
+
 export const integer = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 
 export const text = (minimum: number, maximum: number) =>
@@ -29,10 +37,15 @@ const list = <S extends Schema.Top>(item: S, minimum: number, maximum: number) =
   Schema.Array(item).check(Schema.isMinLength(minimum), Schema.isMaxLength(maximum));
 
 export const Seed = list(integer(0, 255), 32, 32);
+
 export const Boundary = Schema.Literals([-1, 0, 1]);
+
 export const Role = Schema.Literals(["person", "window", "agent", "recovery", "email"]);
+
 export const Edge = Schema.Literals(["store.read", "store.write", "store.commit", "send", "hash", "sign", "append"]);
+
 export type Edge = typeof Edge.Type;
+
 export const Operation = Schema.Literals(["issue", "wrong", "right", "replace", "reopen", "malformed", "refuse"]);
 
 // Depth is constructed, not filtered. Every array/object has 0..8 items; text is 0..512.
@@ -98,27 +111,47 @@ export const Flow = Schema.Struct({
   }),
   failureText: text(0, 160),
 });
+
 export type Flow = typeof Flow.Type;
+
 export const flows = Arbitrary.schema(Flow);
+
 export const CodeFlow = flows;
+
 export const AttemptFlow = flows;
+
 export const BindingFlow = flows;
+
 export const SetupFlow = flows;
+
 export const VerificationFlow = flows;
+
 export const SignatureFlow = flows;
+
 export const RecoveryFlow = flows;
+
 export const RetryFlow = flows;
+
 export const AuthorityFlow = flows;
+
 export const MembershipFlow = flows;
+
 export const NoticeFlow = flows;
+
 export const SecretFlow = flows;
+
 export const FailureFlow = flows;
 
 export const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 export const LEDGER = "ledger_01m6v5270hf3c8x2q7w9z4k5mn";
+
 export const input = (n: number) => `in-process_01m6v5270hf3c8x2q7w9z4k5mn-${n}`;
+
 export const address = (flow: Flow) => `${flow.local}@example.test`;
+
 export const code = (flow: Flow) => flow.code.toString().padStart(6, "0");
+
 export const wrong = (value: string) => `${value[0] === "9" ? "8" : "9"}${value.slice(1)}`;
 
 export const signed = (signer: string): typeof Signed.Type => ({
@@ -214,7 +247,9 @@ export class Fault extends Schema.TaggedError<Fault>()("EmailTestFault", {
 }) {}
 
 export type IO<A> = Effect.Effect<A, Fault | { readonly reason: string }>;
+
 export const Challenge = Schema.Struct({ id: Schema.String, until: Schema.Number });
+
 export type Challenge = typeof Challenge.Type;
 
 export type Binding = {
@@ -329,7 +364,10 @@ export const started = (ctx: Skips): void => {
  */
 export const product = <A>(source: Source): Effect.Effect<A, unknown> =>
   // oxlint-disable-next-line fabrika/no-promises -- edge: Vitest loads the product module by path at the test boundary, so every law registers before the build
-  Effect.tryPromise(() => vi.importActual<A>(pathToFileURL(sourceFile(source)).href));
+  Effect.tryPromise({
+    try: () => vi.importActual<A>(pathToFileURL(sourceFile(source)).href),
+    catch: (cause) => new PromiseFailed({ cause }),
+  });
 
 // These names are the tests' P36 contract. The laws read the real modules through them. When P36's
 // tests step meets real sources, it names each module in a plain import, so these are checked
@@ -373,21 +411,26 @@ export type Made<S, M extends { type: string }, C extends { readonly type: strin
 };
 
 export const loadDomain = product<Domain>("Email.ts");
+
 export const loadStore = product<StoreModule>("EmailSecrets.ts");
+
 export const loadService = product<ServiceModule>("EmailRecovery.ts");
 
 export const parentAnswers = (flow: Flow) => {
   const calls: string[] = [];
+
   return {
     calls,
     services: {
       device: Effect.succeed(binding()),
       oldDevice: Effect.sync(() => {
         calls.push("old");
+
         return flow.old;
       }),
       personCheck: Effect.sync(() => {
         calls.push("check");
+
         return "touch" as const;
       }),
     },
@@ -438,6 +481,7 @@ export function pureModule<A>(source: Source): () => A {
       ),
     );
   });
+
   return () => {
     if (loaded === undefined) {
       throw failure ?? new Error("missing P36 export");
@@ -491,7 +535,9 @@ export const OUTPUTS = [
 ] as const;
 
 export type Output = (typeof OUTPUTS)[number];
+
 export type Captures = Record<Output, unknown[]>;
+
 type Observations = { readonly [K in Output]: ReadonlyArray<unknown> };
 
 export const captures = (): Captures => ({
@@ -527,6 +573,7 @@ export function assertSecret(out: Observations, secret: string, outputs: Readonl
     for (const form of encodings(secret)) {
       // A numeric timestamp/count equal to a code is public. A string containing it is not.
       const strings: string[] = [];
+
       const visit = (value: unknown): void => {
         if (typeof value === "string") {
           strings.push(value);
@@ -540,6 +587,7 @@ export function assertSecret(out: Observations, secret: string, outputs: Readonl
           }
         }
       };
+
       visit(out[name]);
       expect(
         strings.some((value) => value.includes(form)),
@@ -575,6 +623,7 @@ export function assertPrivate(out: Observations, bytes: ReadonlyArray<number> | 
         }
       }
     };
+
     visit(out[output]);
   }
 }
@@ -582,12 +631,15 @@ export function assertPrivate(out: Observations, bytes: ReadonlyArray<number> | 
 export const privateFixture = () => {
   const data = new Map<string, unknown>();
   const failures = new Map<Edge, string>();
+
   const hit = (edge: Edge) =>
     Effect.suspend(() => {
       const message = failures.get(edge);
       failures.delete(edge);
+
       return message === undefined ? Effect.void : Effect.fail(new Fault({ reason: edge, message }));
     });
+
   const storage: PrivateStorage = {
     read: (id) => hit("store.read").pipe(Effect.map(() => structuredClone(data.get(id)))),
     write: (id, value) =>
@@ -601,6 +653,7 @@ export const privateFixture = () => {
     transaction: (body) =>
       Effect.gen(function* () {
         const before = new Map(data);
+
         return yield* body.pipe(
           Effect.tap(() => hit("store.commit")),
           Effect.tapError(() =>
@@ -615,6 +668,7 @@ export const privateFixture = () => {
         );
       }),
   };
+
   return {
     data,
     storage,
@@ -643,21 +697,40 @@ export const testKey = (seed: ReadonlyArray<number>) =>
       const body = typeof data === "string" ? new TextEncoder().encode(data) : data;
       const size = new Uint8Array(4);
       new DataView(size.buffer).setUint32(0, body.length);
+
       return new Uint8Array([...size, ...body]);
     };
+
     const join = (...parts: Uint8Array[]) => new Uint8Array(parts.flatMap((part) => [...part]));
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: Node module loading or WebCrypto returns a Promise at this test boundary
-    const { KeyLine, writeSshsig } = yield* Effect.tryPromise(() => import("../transport/Sshsig.ts"));
+    const { KeyLine, writeSshsig } = yield* Effect.tryPromise({
+      // oxlint-disable-next-line fabrika/no-promises -- edge: Node module loading returns a Promise at this test boundary
+      try: () => import("../transport/Sshsig.ts"),
+      catch: (cause) => new PromiseFailed({ cause }),
+    });
+
     const raw = Uint8Array.from(seed);
     const pkcs8 = join(Uint8Array.from([48, 46, 2, 1, 0, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32]), raw);
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: Node module loading or WebCrypto returns a Promise at this test boundary
-    const key = yield* Effect.tryPromise(() => crypto.subtle.importKey("pkcs8", pkcs8, "Ed25519", true, ["sign"]));
+    const key = yield* Effect.tryPromise({
+      try: () => crypto.subtle.importKey("pkcs8", pkcs8, "Ed25519", true, ["sign"]),
+      catch: (cause) => new PromiseFailed({ cause }),
+    });
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: Node module loading or WebCrypto returns a Promise at this test boundary
-    const jwk = yield* Effect.tryPromise(() => crypto.subtle.exportKey("jwk", key));
+    const jwk = yield* Effect.tryPromise({
+      try: () => crypto.subtle.exportKey("jwk", key),
+      catch: (cause) => new PromiseFailed({ cause }),
+    });
+
     const publicBytes = Buffer.from(Schema.decodeUnknownSync(Schema.String)(jwk.x), "base64url");
+
     const line = Schema.decodeUnknownSync(KeyLine)(
       `ssh-ed25519 ${Buffer.from(join(field("ssh-ed25519"), field(publicBytes))).toString("base64")}`,
     );
+
     return {
       line,
       raw,
@@ -668,9 +741,10 @@ export const testKey = (seed: ReadonlyArray<number>) =>
           line,
           sign: (bytes) =>
             // oxlint-disable-next-line fabrika/no-promises -- edge: Node module loading or WebCrypto returns a Promise at this test boundary
-            Effect.tryPromise(() => crypto.subtle.sign("Ed25519", key, new Uint8Array(bytes))).pipe(
-              Effect.map((bytes) => new Uint8Array(bytes)),
-            ),
+            Effect.tryPromise({
+              try: () => crypto.subtle.sign("Ed25519", key, new Uint8Array(bytes)),
+              catch: (cause) => new PromiseFailed({ cause }),
+            }).pipe(Effect.map((bytes) => new Uint8Array(bytes))),
         }).pipe(Effect.orDie),
     };
   }).pipe(Effect.orDie);
@@ -683,10 +757,12 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterA
     yield* TestClock.setTime(EPOCH);
     const fixture = privateFixture();
     const lock = yield* Semaphore.make(1);
+
     const storage: PrivateStorage = {
       ...fixture.storage,
       transaction: (body) => lock.withPermits(1)(fixture.storage.transaction(body)),
     };
+
     const mails: Mail[] = [];
     const out = captures();
     const rows: Row[] = initial(flow).map((fact) => ({ fact, arrivedAt: EPOCH - 1, parent: null }));
@@ -697,25 +773,34 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterA
     const signRelease = yield* Deferred.make<void>();
     let pauseSign = false;
     const spans: Tracer.NativeSpan[] = [];
+
     const tracer = Tracer.make({
       span: (options) => {
         const span = new Tracer.NativeSpan(options);
         spans.push(span);
+
         return span;
       },
     });
+
     const logger = Logger.make((options) => {
       out.logs.push(Logger.formatJson.log(options));
     });
+
     let store = storeModule.makeEmailStore(storage);
+
     const dependencies: Dependencies = {
       hash: (value) =>
         fixture.hit("hash").pipe(
           Effect.flatMap(() => {
             // oxlint-disable-next-line fabrika/no-redacted-value -- edge: hash only a generated test secret
             const bytes = new TextEncoder().encode(Redacted.value(value));
+
             // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto returns a Promise for its digest
-            return Effect.tryPromise(() => crypto.subtle.digest("SHA-256", bytes));
+            return Effect.tryPromise({
+              try: () => crypto.subtle.digest("SHA-256", bytes),
+              catch: (cause) => new PromiseFailed({ cause }),
+            });
           }),
           Effect.map((bytes) => Buffer.from(bytes).toString("hex")),
           Effect.mapError(() => ({ reason: "crypto" })),
@@ -731,6 +816,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterA
             expect(length, "P36 code entropy is one uint32 per draw").toBe(4);
             const bytes = new Uint8Array(4);
             new DataView(bytes.buffer).setUint32(0, draw++ === 0 ? 0xffffffff : flow.code);
+
             return bytes;
           }),
       },
@@ -763,6 +849,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterA
             rows.push({ ...row, arrivedAt: at });
             out.ledger.push(rows.at(-1));
             yield* afterAppend;
+
             return Written.cases.applied.make({
               rev: Schema.decodeUnknownSync(Written.cases.applied.fields.rev)(rows.length),
             });
@@ -771,24 +858,34 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterA
       // P28 stand-in: no old-device policy, key creation or recovery decisions here.
       personCheck: Effect.sync(() => {
         checks++;
+
         return "touch" as const;
       }),
     };
+
     const make = () => serviceModule.makeEmailRecovery(dependencies);
     let recovery: Recovery = yield* make();
+
     const reopen = Effect.gen(function* () {
       store = storeModule.makeEmailStore(storage);
       recovery = yield* make();
       out.reopened.push(yield* dependencies.store.snapshot);
+
       return recovery;
     });
+
     const observe = Effect.gen(function* () {
       const { noticeView } = yield* product<{ readonly noticeView: NoticeView }>("RecoveryEmail.ts");
 
       for (const row of rows) {
         if (typeof row.fact === "object" && row.fact !== null && "_tag" in row.fact && row.fact._tag === "added") {
           // oxlint-disable-next-line fabrika/no-promises -- edge: Node module loading or WebCrypto returns a Promise at this test boundary
-          const { MemberEvent } = yield* Effect.tryPromise(() => import("../access/Access.ts"));
+          const { MemberEvent } = yield* Effect.tryPromise({
+            // oxlint-disable-next-line fabrika/no-promises -- edge: Node module loading returns a Promise at this test boundary
+            try: () => import("../access/Access.ts"),
+            catch: (cause) => new PromiseFailed({ cause }),
+          });
+
           const event = Schema.decodeUnknownSync(MemberEvent.cases.added)(row.fact);
           out.notices.push(
             noticeView({
@@ -810,6 +907,7 @@ export const harness = (flow: Flow, beforeAppend: IO<void> = Effect.void, afterA
         })),
       );
     });
+
     return {
       flow,
       fixture,
@@ -882,13 +980,16 @@ export const setup = (h: Harness) =>
   Effect.gen(function* () {
     const challenge = yield* h.recovery.issueSetup(binding(), Redacted.make(address(h.flow)));
     const fact = verified(h);
+
     const answer = yield* h.recovery.verifySetup(
       challenge.id,
       // oxlint-disable-next-line fabrika/no-redacted-value -- edge: read only a generated test secret to exercise the real hash or recovery input
       Redacted.make(Redacted.value(lastMail(h).code)),
       fact,
     );
+
     expect(answer._tag).toBe("applied");
+
     return fact;
   });
 
@@ -897,13 +998,16 @@ export const recover = (h: Harness, n = 0) =>
     const challenge = yield* h.recovery.issueRecovery(binding(n % h.flow.devices));
     // oxlint-disable-next-line fabrika/no-redacted-value -- edge: read only a generated test secret to exercise the real hash or recovery input
     const value = Redacted.value(lastMail(h).code);
+
     const receipt = yield* h.recovery.redeem(
       challenge.id,
       Redacted.make(value),
       added(h.flow, n),
       signed(binding(n % h.flow.devices).person),
     );
+
     h.out.replies.push(challenge, receipt);
+
     return { challenge, value, receipt };
   });
 
@@ -941,6 +1045,7 @@ export const fullFlow = (h: Harness) =>
                   added(h.flow),
                   signed("unknown"),
                 );
+
         const result = yield* Effect.exit(action);
         h.out.replies.push(Exit.isSuccess(result) ? result.value : "refused");
 

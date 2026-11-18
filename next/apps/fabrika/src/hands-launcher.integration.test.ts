@@ -1,0 +1,465 @@
+// P39 slice 4b, next/: the real hands launcher end to end, E2 and S2. Host-only under 0045 and 0536:
+// a real local instance on workerd, a real hands process, a real git and a real SIGTERM. It runs only
+// in CI's full run, in its container, never on a laptop.
+//
+// What these laws hold `next/apps/fabrika/hands.ts` to, from the approved plan
+// (docs/plan/quests/p39-s5-PLAN.md, "The launcher" and "One value traced through"):
+// - `node hands.ts` takes its home from `FABRIKA_HOME`, keeps its key in `hands/key.json` and its
+//   journal in `hands/journal.sqlite`, reads `instance.port` as `dev.ts` does, and prints one JSON
+//   line per change a parent needs: `waiting { fingerprint, code, until }` while its key is not
+//   granted, `online { fingerprint }`, `offline { fingerprint }`.
+// - Once a person key grants it as `hands`, a `git_version` task asked of its key ends `finished`
+//   with `exited` code 0. After a SIGTERM and a new start, the fingerprint is the same and the task
+//   is not run again.
+// - S2: the key's private half (`jwk.d`) appears in no stdout or stderr line, no journal row, and
+//   no row the brain stored (its `job:` and `target:` rows, and what it kept of each hello and
+//   knock the client wrote). The hands have no span sink at the brain yet (the plan's Records), so
+//   no span reaches a place this law can read. This is the end-to-end supplement: the property over
+//   generated flows, which scans every frame as sent, every span, log line and error, is
+//   `next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts`.
+//
+// The key's public half is read from the key file the launcher made, to grant it, as the person's
+// approve screen will read it from the knock. The brain is `hands-launcher.test-support.ts`.
+//
+// Plants, each run once and undone (recorded in the tests step's field row): E2, open a fresh key
+// file on every start. S2, print the stored JWK in the `online` line.
+import { NodeServices } from "@effect/platform-node";
+import { describe, expect, it } from "@effect/vitest";
+import { grantText } from "@kampus/libfabrika/access/Text";
+import { build } from "@kampus/libfabrika/build";
+import type { DevProject } from "@kampus/libfabrika/node/dev";
+import { Task } from "@kampus/libfabrika/tasks/Task";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import {
+  Effect,
+  FileSystem,
+  Option,
+  Path,
+  Predicate,
+  Queue,
+  Schema,
+  Stream,
+  Array as Arr,
+  String as Str,
+  Config,
+  ConfigProvider,
+  Formatter,
+  Record as Rec,
+} from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
+import { Base64, Base64Url } from "effect/encoding";
+import { ChildProcess } from "effect/process";
+
+import { FetchHttpClient, HttpBody, HttpClient } from "effect/http";
+
+import * as fc from "fast-check";
+import { keptEnv } from "./env.test-support.ts";
+import type { Project as LauncherProject } from "./hands-launcher.test-support.ts";
+import { localInstance } from "./local-instance.ts";
+import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
+import { programs } from "./table.ts";
+
+// The brain fixture loads only in workerd, so this file imports its type alone, as
+// `tasks-wire.integration.test.ts` does, and names the task the fixture asks here.
+const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
+const TASK = "hands-task";
+
+const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
+const SENT = "2026-11-15T10:00:00.000Z";
+
+const NAME = "hands-launcher";
+
+/** The launcher's stdout protocol, as the plan writes it. */
+const Line = Schema.TaggedUnion({
+  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Finite },
+  online: { fingerprint: Schema.String },
+  offline: { fingerprint: Schema.String },
+});
+
+type Line = typeof Line.Type;
+
+const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(Line));
+
+/** The key file the plan stores: WebCrypto's JWK, its private half `d` and its public half `x`. */
+const Stored = Schema.fromJsonString(
+  Schema.Struct({ jwk: Schema.Struct({ kty: Schema.String, crv: Schema.String, d: Schema.String, x: Schema.String }) }),
+);
+
+/** `SHA256:` and the unpadded base64 SHA-256 of a JWK's `x`, worked out here, not by the launcher. */
+const keyFingerprint = Effect.fnUntraced(
+  function* (x: string) {
+    const bytes = yield* Effect.fromResult(Base64Url.decode(x));
+    const hashed = yield* Digest.Digest.use((digest) => digest.digest(Digest.sha256, bytes));
+
+    return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(hashed))}`;
+  },
+  Effect.provide(Digest.layerWebCrypto),
+  Effect.orDie,
+);
+
+/** A call on the brain's own local handle, by its method name on the fixture's Project. */
+const method = (project: DevProject, name: Exclude<keyof LauncherProject, keyof DevProject>) => {
+  // @ts-expect-error these are the fixture's own calls, which only its Control takes (hands-launcher.test-support.ts:136); DevProject names the real door's calls, and the dev client sends any name to the wire
+  const picked: (...args: ReadonlyArray<unknown>) => Promise<unknown> = project[name];
+
+  return picked;
+};
+
+class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+const call = <A>(label: string, invoke: () => Promise<A>) =>
+  Effect.tryPromise({ try: invoke, catch: (cause: unknown) => CallError.make({ message: label, cause }) });
+
+/** What one launch of the flow saw: every line, the key's two halves, the task, and every stored row. */
+type Seen = {
+  readonly lines: Array<string>;
+  readonly stderr: Array<string>;
+  readonly d: string;
+  readonly fingerprints: ReadonlyArray<string>;
+  readonly task: Task;
+  readonly taskAfterRestart: Task;
+  readonly journal: Record<string, unknown>;
+  readonly brain: unknown;
+};
+
+/** One hands process: its parsed lines, in order, and its raw stdout and stderr text. */
+const launcher = Effect.fnUntraced(function* (
+  script: string,
+  cwd: string,
+  home: string,
+  all: Seen["lines"],
+  errors: Seen["stderr"],
+) {
+  const lines = yield* Queue.unbounded<Line>();
+
+  // This process's PATH through Config, read when the child starts; an empty one stays empty.
+  const path = yield* Config.String("PATH")
+    .pipe(Config.withDefault(""))
+    .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+
+  const handle = yield* ChildProcess.make(process.execPath, [script], {
+    cwd,
+    extendEnv: false,
+    env: { FABRIKA_HOME: home, HOME: home, PATH: path },
+  });
+
+  yield* handle.stdout.pipe(
+    Stream.decodeText(),
+    Stream.splitLines,
+    Stream.runForEach((text) =>
+      Effect.gen(function* () {
+        all.push(text);
+        const line = decodeLine(text);
+
+        if (Option.isSome(line)) {
+          yield* Queue.offer(lines, line.value);
+        }
+      }),
+    ),
+    Effect.forkScoped,
+  );
+  yield* handle.stderr.pipe(
+    Stream.decodeText(),
+    Stream.runForEach((text) => Effect.sync(() => errors.push(text))),
+    Effect.forkScoped,
+  );
+
+  const next = <T extends Line["_tag"]>(tag: T) =>
+    Effect.gen(function* () {
+      const tagged = (line: Line): line is Extract<Line, { readonly _tag: T }> => line._tag === tag;
+
+      while (true) {
+        const line = yield* Queue.take(lines);
+
+        if (tagged(line)) {
+          return line;
+        }
+      }
+    }).pipe(Effect.timeout("60 seconds"));
+
+  return { handle, next };
+});
+
+const flow = Effect.fnUntraced(
+  function* () {
+    const fs = yield* FileSystem.FileSystem,
+      path = yield* Path.Path;
+
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "hands-launcher-" });
+    const hands = path.join(home, "hands-home");
+    yield* fs.makeDirectory(hands);
+    const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+    const root = yield* SshsigTest.identity;
+    const app = path.resolve(import.meta.dirname, "..");
+    const entry = path.join(home, "hands-entry.ts");
+    yield* fs.symlink(path.join(app, "node_modules"), path.join(home, "node_modules"));
+    yield* fs.writeFileString(
+      entry,
+      Arr.join(
+        [
+          `export { default, Connection, Process, RecordPart, IsolateTail } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
+          // The fixture's Control lets the three test calls past the control door's closed list.
+          `export { Project, Control } from ${Formatter.formatJson(path.join(app, "src/hands-launcher.test-support.ts"))};`,
+        ],
+        "\n",
+      ),
+    );
+
+    const built = yield* build({
+      out: path.join(home, "dist"),
+      root: path.resolve(app, "../../.."),
+      entry,
+      programs,
+      chaos: false,
+      files: [],
+    });
+
+    // localInstance sets ALCHEMY_HOME; it goes back as it was when the scope closes.
+    yield* keptEnv(["ALCHEMY_HOME"]);
+
+    const running = yield* localInstance(
+      built,
+      yield* RecordWireTest.startupFixture({
+        home,
+        name: NAME,
+        person: PERSON,
+        founder: root.line,
+        window: root.raw,
+        port: port.port,
+      }),
+    );
+
+    const url = `http://127.0.0.1:${port.port}`;
+    const project = running.project(NAME);
+    // The task's requester is a started name: a finish wakes it (P39 slice 3).
+    yield* call("requester start failed", () =>
+      project.start(
+        {
+          _tag: "first",
+          id: "start-wire",
+          name: "wire:1",
+          code: { program: "fabrika/counter", hash: built.programs["fabrika/counter"]?.hash ?? "missing" },
+        },
+        {
+          by: root.fingerprint,
+          for: PERSON,
+          sentAt: SENT,
+          seen: 0,
+          parent: null,
+          traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+          build: built.build,
+        },
+      ),
+    );
+    // The launcher's home: a fresh FABRIKA_HOME whose person file names the instance's port.
+    yield* fs.writeFileString(path.join(hands, "fabrika.toml"), `[instance]\nport = ${port.port}\n`);
+    const script = path.join(app, "hands.ts");
+
+    const lines: Seen["lines"] = [],
+      stderr: Seen["stderr"] = [];
+
+    // First start: the key is made, the knock waits for a person.
+    const first = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const one = yield* launcher(script, app, hands, lines, stderr);
+        const waiting = yield* one.next("waiting");
+        expect(waiting._tag).toBe("waiting");
+
+        const stored = yield* Schema.decodeEffect(Stored)(
+          yield* fs.readFileString(path.join(hands, "hands", "key.json")),
+        );
+
+        expect(yield* keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
+          waiting.fingerprint,
+        );
+
+        const value = grantText({
+          id: "grant-hands",
+          key: stored.jwk.x,
+          for: PERSON,
+          to: NAME,
+          as: "hands",
+          sentAt: SENT,
+          saw: {
+            label: "hands",
+            location: "test",
+            code: waiting.code,
+            method: "command",
+            check: "touch",
+            has: ["git"],
+          },
+        });
+
+        const armored = yield* root.proof(value);
+
+        const reply = yield* HttpClient.post(`${url}/grant`, { body: HttpBody.jsonUnsafe({ text: value, armored }) });
+
+        expect(reply.status >= 200 && reply.status < 300, "E2: the person key's grant is accepted").toBe(true);
+        const online = yield* one.next("online");
+        expect(online.fingerprint, "E2: online is the same key").toBe(waiting.fingerprint);
+        yield* call("task request failed", () => method(project, "requestHandsTask")(waiting.fingerprint));
+
+        let task = yield* Schema.decodeUnknownEffect(Task)(
+          yield* call("task read failed", () => method(project, "readHandsTask")()),
+        );
+
+        for (let i = 0; i < 120 && task.state._tag !== "finished"; i++) {
+          yield* Effect.sleep("500 millis");
+          task = yield* Schema.decodeUnknownEffect(Task)(
+            yield* call("task read failed", () => method(project, "readHandsTask")()),
+          );
+        }
+
+        // A SIGTERM, as launchd stops a job; the scope's close then reaps it.
+        yield* one.handle.kill({ killSignal: "SIGTERM" });
+        yield* one.handle.exitCode.pipe(Effect.ignore);
+
+        return { fingerprint: waiting.fingerprint, d: stored.jwk.d, task };
+      }),
+    );
+
+    // Second start, over the same home: the same key, already granted, and nothing run again.
+    const second = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const two = yield* launcher(script, app, hands, lines, stderr);
+        const online = yield* two.next("online");
+        // Time for a client that would take or run the task again to do so.
+        yield* Effect.sleep("5 seconds");
+
+        const task = yield* Schema.decodeUnknownEffect(Task)(
+          yield* call("task read failed", () => method(project, "readHandsTask")()),
+        );
+
+        yield* two.handle.kill({ killSignal: "SIGTERM" });
+        yield* two.handle.exitCode.pipe(Effect.ignore);
+
+        return { fingerprint: online.fingerprint, task };
+      }),
+    );
+
+    // S2 reads the journal file's rows as stored, below any layer of ours. The hands own it, so it
+    // opens read-only, with nothing set.
+    const journal = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* TestDatabase.open(path.join(hands, "hands", "journal.sqlite"), { readOnly: true }).pipe(
+          Effect.orDie,
+        );
+
+        const tables = Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) =>
+          String(row["name"]),
+        );
+
+        return Rec.fromEntries(
+          Arr.map(tables, (t) => [t, db.prepare(`SELECT * FROM "${Str.replace(/"/g, '""')(t)}"`).all()]),
+        );
+      }),
+    );
+
+    const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
+
+    return {
+      lines,
+      stderr,
+      d: first.d,
+      fingerprints: [first.fingerprint, second.fingerprint],
+      task: first.task,
+      taskAfterRestart: second.task,
+      journal,
+      brain,
+    } satisfies Seen;
+  },
+  Effect.scoped,
+  Effect.provide([SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
+  Effect.provide(NodeServices.layer),
+);
+
+describe("P39 slice 4b: the hands launcher end to end", () => {
+  it.live(
+    "E2 scenario: the real launcher, as its own process with a fresh FABRIKA_HOME, against a real local instance, prints waiting, then online once a person key grants it as hands; a git_version task ends finished with exited code 0; after a SIGTERM and a new start the fingerprint is the same and the task is not run again",
+    () =>
+      Effect.gen(function* () {
+        const seen = yield* flow();
+        expect(seen.task.state._tag, `E2: the task ends finished: ${Formatter.format(seen.task.state)}`).toBe(
+          "finished",
+        );
+        const result = seen.task.state._tag === "finished" ? seen.task.state.result : null;
+        expect(result?._tag, "E2: real git exits").toBe("exited");
+        expect(result?._tag === "exited" ? result.code : null, "E2: with code 0").toBe(0);
+        expect(
+          result?._tag === "exited" && Str.startsWith("git version ")(result.version),
+          "E2: its version line",
+        ).toBe(true);
+        const [first, second] = seen.fingerprints;
+        expect(second, "E2: a new start keeps the same key").toBe(first);
+        expect(seen.taskAfterRestart, "E2: the restart runs nothing again").toEqual(seen.task);
+        expect(
+          Arr.map(seen.task.events, (e) => e.event),
+          "E2: the task was taken, started and finished once",
+        ).toEqual(["requested", "taken", "started", "finished"]);
+        expect(seen.task.state._tag === "finished" && seen.task.state.request.id).toBe(TASK);
+        expect(seen.task.state._tag === "finished" && seen.task.state.request.process).toBe(PROCESS);
+      }),
+    600_000,
+  );
+
+  it.live(
+    "S2: [secrets] the key's private half appears in no stdout line, no journal row, and no row the brain stored, across generated launches",
+    () =>
+      Effect.tryPromise({
+        try: () =>
+          fc.assert(
+            fc.asyncProperty(fc.constantFrom("first", "second", "third"), (launch) =>
+              Effect.runPromise(
+                Effect.gen(function* () {
+                  const seen = yield* flow();
+                  const secret = Buffer.from(seen.d, "base64url");
+
+                  // Every form the private half could be written in.
+                  const forms = [
+                    seen.d,
+                    secret.toString("base64"),
+                    secret.toString("base64").replace(/=+$/, ""),
+                    secret.toString("base64url"),
+                    secret.toString("hex"),
+                    encodeURIComponent(seen.d),
+                  ];
+
+                  const outputs: Record<string, unknown> = {
+                    stdout: seen.lines,
+                    stderr: seen.stderr,
+                    journal: seen.journal,
+                    brain: seen.brain,
+                    task: seen.task,
+                  };
+
+                  expect(seen.lines.length, `S2 (${launch}): the scan read real lines`).toBeGreaterThan(0);
+
+                  for (const [name, value] of Rec.toEntries(outputs)) {
+                    const text = yield* Schema.encodeEffect(
+                      Schema.fromJsonString(Schema.Unknown, {
+                        replacer: (_k, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
+                      }),
+                    )(value);
+
+                    for (const form of forms) {
+                      expect(Str.includes(form)(text), `S2: [secrets] the private half is not in ${name}`).toBe(false);
+                    }
+                  }
+                }),
+              ),
+            ),
+            { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), includeErrorInReport: true },
+          ),
+        catch: (cause) => CallError.make({ message: "S2 failed", cause }),
+      }),
+    1_800_000,
+  );
+});

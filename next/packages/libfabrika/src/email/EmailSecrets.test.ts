@@ -45,6 +45,7 @@ for (const [name, outputs] of [
         expect.hasAssertions();
         yield* fullFlow(h).pipe(Effect.withTracer(h.tracer), Effect.withLogger(h.logger));
         expect(h.out.notices.length).toBeGreaterThan(0);
+
         const secrets =
           name === "code"
             ? h.mails.map((mail) => Redacted.value(mail.code))

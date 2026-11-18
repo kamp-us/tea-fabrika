@@ -19,6 +19,7 @@ import {
   type Binding,
   type Recovery,
   type IO,
+  PromiseFailed,
 } from "../email/Email.test-support.ts";
 
 export interface Door {
@@ -41,6 +42,7 @@ effectLaw("not built: P36 / P36.04 another device, purpose or ledger cannot rede
     yield* setup(h);
     const challenge = yield* h.recovery.issueRecovery(binding());
     const value = Redacted.value(h.mails.at(-1)!.code);
+
     const changes = [
       { purpose: "setup" as const, binding: binding() },
       { purpose: "recovery" as const, binding: { ...binding(), person: "other-person-key" } },
@@ -77,8 +79,17 @@ effectLaw("not built: P36 / P36.04 another device, purpose or ledger cannot rede
 effectLaw("not built: P36 / P36.07 changed signed fields and wrong-ledger text are refused", (h) =>
   Effect.gen(function* () {
     const door = yield* loadDoor;
-    const { MemberEvent } = yield* Effect.promise(() => import("../access/Access.ts"));
-    const { verifySshsig } = yield* Effect.promise(() => import("../transport/Sshsig.ts"));
+
+    const { MemberEvent } = yield* Effect.tryPromise({
+      try: () => import("../access/Access.ts"),
+      catch: (cause) => new PromiseFailed({ cause }),
+    });
+
+    const { verifySshsig } = yield* Effect.tryPromise({
+      try: () => import("../transport/Sshsig.ts"),
+      catch: (cause) => new PromiseFailed({ cause }),
+    });
+
     const key = yield* testKey(h.flow.seed);
     h.rows[0] = {
       ...h.rows[0]!,
@@ -99,6 +110,7 @@ effectLaw("not built: P36 / P36.07 changed signed fields and wrong-ledger text a
       _tag: "key",
       signer: key.line,
     });
+
     const variations = [
       { ...unsigned, verified: { ...unsigned.verified, id: `${unsigned.verified.id}-changed` } },
       { ...unsigned, verified: { ...unsigned.verified, for: "other-person" } },
@@ -182,14 +194,19 @@ it.effect.prop(
   { flow: SignatureFlow, section: Schema.Literals(["begin", "body", "end"]) },
   ({ flow, section }) =>
     Effect.gen(function* () {
-      const { verifySshsig } = yield* Effect.promise(() => import("../transport/Sshsig.ts"));
+      const { verifySshsig } = yield* Effect.tryPromise({
+        try: () => import("../transport/Sshsig.ts"),
+        catch: (cause) => new PromiseFailed({ cause }),
+      });
+
       const key = yield* testKey(flow.seed);
       const text = JSON.stringify(added(flow));
       const armored = yield* key.sign(text);
       const lines = armored.split("\n");
+
       // Exactly one changed section: a body byte, BEGIN marker or END marker.
-      const at =
-        section === "begin" ? 0 : section === "body" ? 1 : lines.findIndex((line) => line.startsWith("-----END"));
+      const at = { begin: 0, body: 1, end: lines.findIndex((line) => line.startsWith("-----END")) }[section];
+
       const line = lines[at]!;
       lines[at] = `${line[0] === "A" ? "B" : "A"}${line.slice(1)}`;
       const changed = lines.join("\n").slice(0, 2048);

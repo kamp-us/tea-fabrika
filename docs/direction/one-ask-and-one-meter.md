@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "Five places ask a person and seven count money today. One ask: the tracker's `asked` and `answered` facts, grown, with one hash (SHA-256 of canonical JSON) of what the person saw; the first answer wins and a late one is refused. One meter: the ledger's `hold` and `charge`, which Jev and the agents count into; a dollar limit is set only with the row of a person's yes to a spend estimate. Agents run on flat subscriptions, so their list-price dollars are for comparison only; each run records how it was paid, which key variables were set (never blocked) and how full its quota is."
+---
+
 # One way to ask a person, and one meter for money
 
 **Decided, in pieces:**
@@ -59,7 +64,7 @@ ledger.charge(fence, "case-1", {usd: 0.07}) // what the case really cost; it rep
 | # | Where | How it asks, and what the yes covers | Who uses it |
 |---|---|---|---|
 | 1 | `packages/pipeline/src/combos.ts` `createAsk`, `Thread`, `hashOf`, `covers` | Posts on a `Thread` (issue comments), reads a `/choice` by code or the words by a Judge. Hash: `node:crypto` over the `about` text. | Only `legacy/src/turn.ts` `parkAsk` (used by `legacy/src/operator.ts` and `operator-host.ts`), and its tests |
-| 2 | `packages/pipeline/src/tickets/ticket.ts` facts `asked`, `answered`; `tickets/approval.ts` `hashOf`, `covers`, `changesRequested` | `asked {ask, what, picks}`, `answered {ask, pick, note, text}`. Hash: Web Crypto over the JSON pair `[title, body]`. The fold refuses an answer with no ask, a second answer, and a pick not offered. | `programs/tracker` (the ask box), `programs/ticket`, the lane plan in [a ticket runs from the app](./a-ticket-runs-from-the-app.md) |
+| 2 | `packages/pipeline/src/tickets/ticket.ts` facts `asked`, `answered`; `tickets/approval.ts` `hashOf`, `covers`, `changesRequested` | `asked {ask, what, picks}`, `answered {ask, pick, note, text}`. Hash: Web Crypto over the JSON pair `[title, body]`. The fold refuses an answer with no ask, a second answer, and a pick not offered. | `programs/tracker` (the ask box), `programs/ticket`, the quest plan in [a ticket runs from the app](./a-ticket-runs-from-the-app.md) |
 | 3 | `packages/pipeline/src/asks/` (`ask.ts`, `program.ts`, `rules.ts`, `ledger.ts`) | Asks are folded from other facts (`planned`, `ruling_needed`, `check_raised`). Four kinds: plan, stuck, ruling, check. An answer is `answered {id, answer}`. No hash: a plan's yes covers its version number (`plan:o/r#7@2`). | `packs/owner-desk`, `packs/ui-verification`, `packs/ask-log`, `programs/map`, `hosted/lane-ends.ts`, `laws/lane.ts` |
 | 4 | `packages/fabrika/src/agents/acp/program.ts` | A harness permission request is shown on `ask`. `--permissions refuse` (the default) refuses at once; `--permissions ask` waits for the `allow` or `refuse` input. It picks `allow_once`, never an always-allow. Kept in the program's own state, not on the ledger. No hash. | The `acp` program, from tsh |
 | 5 | `packages/fabrika/src/agents/agent/turn.ts` event `asked {id, title}`; PR 192's `claude` and `codex` programs | The `Agents` service streams `asked`. PR 192 wires `allow` and `refuse`, but no adapter sends `asked`, so they are dead. | Nobody yet |
@@ -234,7 +239,7 @@ const plan = Ask.define("plan", {
 - To be plain about it: the session still reads the person's words into a
   pick. It does not stop a hijacked session from faking a yes. What it gives
   is a visible mark that can be checked later against the session's own log.
-- In `next/`, a person's line in a lane's room is one more place to answer, with `via` naming the
+- In `next/`, a person's line in a quest's room is one more place to answer, with `via` naming the
   room and the line ([0073](../../.decisions/0073-a-lane-has-a-room.md)).
 
 ### The one hash
@@ -628,7 +633,7 @@ no person      -> no ask is written; the box's rules refuse the tool, reject_onc
   would show if it stays small.
 - **70% on `no_limit` before any spend.** The doubt: friction for a $0.01 Jev
   hint. A standing project limit should make it rare. Counting the asks in a
-  week of experiment 170 and one lane would settle it.
+  week of experiment 170 and one quest would settle it.
 - **70% on Jev holding in blocks.** The doubt: how many ledger writes a 2,000
   call run makes, and the block size. A memory-ledger run with a scripted Jev,
   no money spent, would measure it.

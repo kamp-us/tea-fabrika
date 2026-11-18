@@ -3,23 +3,25 @@
 //
 //   publish   leak grep on origin/main..head, fail closed -> push, never forced -> the branch's open
 //             pull request, or a new draft when it has none
-//   ready     publish, then the pull request's title and description from the lane brief, then
-//             marked ready: a lane's steps have passed
+//   ready     publish, then the pull request's title and description from the quest brief, then
+//             marked ready: a quest's steps have passed
 //
-// The commit step runs `publish` after each signed commit; a lane's host part runs it after each
-// step's commit comes out of the box, and `ready` where the lane used to open its pull request.
+// The commit step runs `publish` after each signed commit; a quest's host part runs it after each
+// step's commit comes out of the box, and `ready` where the quest used to open its pull request.
 // Read through its module: `Publish.publish(...)`.
 import { Effect, Schema } from "effect";
 import { PullRequests, type Text } from "./PullRequests.ts";
 import { Pushes } from "./Pushes.ts";
 
-/** What a draft says when a commit opens it; the lane's ready step gives it the brief's words. */
+/** What a draft says when a commit opens it; the quest's ready step gives it the brief's words. */
 export const DRAFT_BODY =
   "Opened as a draft at this branch's first commit, so no code stays only on a branch (decision " +
   "0134). It is marked ready when its steps have passed.";
 
 /** A branch no commit step pushes to: main, or none (a detached head). */
-export class NoBranch extends Schema.TaggedError<NoBranch>()("NoBranch", { reason: Schema.String }) {}
+export class NoBranch extends Schema.TaggedError<NoBranch, { readonly brand: unique symbol }>()("NoBranch", {
+  reason: Schema.String,
+}) {}
 
 /** What one publish did: the branch's pull request, whether this publish opened it, and if a draft. */
 export type Published = { readonly pr: number; readonly opened: boolean; readonly draft: boolean };
@@ -28,7 +30,7 @@ export type Ask = {
   /** The checkout the commit is in. */
   readonly dir: string;
   readonly branch: string;
-  /** The commit to push, a sha or a ref the checkout reads. */
+  /** The exact commit SHA to push and use when opening a draft. */
   readonly head: string;
   /** What a new draft says. A pull request already open keeps its own words. */
   readonly text: Text;
@@ -36,9 +38,9 @@ export type Ask = {
 
 const checked = (branch: string) =>
   branch === "" || branch === "HEAD"
-    ? Effect.fail(new NoBranch({ reason: "HEAD is detached, so there is no branch to push" }))
+    ? Effect.fail(NoBranch.make({ reason: "HEAD is detached, so there is no branch to push" }))
     : branch === "main" || branch === "refs/heads/main"
-      ? Effect.fail(new NoBranch({ reason: "a commit step never pushes to main" }))
+      ? Effect.fail(NoBranch.make({ reason: "a commit step never pushes to main" }))
       : Effect.succeed(branch);
 
 export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
@@ -53,11 +55,12 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
     return { pr: open.value.number, opened: false, draft: open.value.draft } satisfies Published;
   }
 
-  const pr = yield* prs.draft(branch, a.text);
+  const pr = yield* prs.draft(branch, a.text, a.head);
+
   return { pr, opened: true, draft: true } satisfies Published;
 });
 
-/** The lane's steps passed: push its head, give its pull request the brief's words, mark it ready. */
+/** The quest's steps passed: push its head, give its pull request the brief's words, mark it ready. */
 export const ready = Effect.fn("Publish.ready")(function* (a: Ask) {
   const published = yield* publish(a);
   const prs = yield* PullRequests;

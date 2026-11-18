@@ -1,29 +1,34 @@
-# The ticket is the lane's one view
+---
+state: "decided 2026-10-24; machine state as facts proposed; what the view shows decided 2026-10-25; walked at Tier 6"
+summary: "A ticket ties every fact of a quest together; its state is their fold. Its timeline is the app's most important window and the agents' main context: people and agents read the same rows. Triage reads it whole."
+---
+
+# The ticket is the quest's one view
 
 Decided 2026-10-24. One part is still proposed, and it is marked. Walked when Tier 6 starts (owner, 2026-11-08): pipeline timelines and each step's brief.
 
 Its decided rules are in: [0347](../../.decisions/0347-a-ticket-ties-its-lane-together.md).
 
 ```ts
-// A sketch. A ticket is the key that ties one lane's facts together.
+// A sketch. A ticket is the key that ties one quest's facts together.
 // Its state is the fold of those facts. A person and an agent get two views of the same fold.
 const facts = ledger.entries({ticket: "demlik-1"}); // oldest first
-const state = facts.reduce(step, empty); // where the lane is now
+const state = facts.reduce(step, empty); // where the quest is now
 const forPerson = view(state, facts); // the window: rows, then a box for each open ask
 const forAgent = brief(state, facts); // the same rows as text, typed facts as short lines
 ```
 
 ## What was decided
 
-- **The ticket ties the lane together.** Every piece of a lane's work is a
+- **The ticket ties the quest together.** Every piece of a quest's work is a
   fact on its ticket: filed, edited, comments, triage's answer, the plan, each
   build commit, each review, the pull request's status, each ask and its
   answer. The ticket's state is the fold of those facts.
 - **Its view is the most important window in the app.** A person sees where
-  the lane is, and what waits on them, from this one view. An open ask shows
+  the quest is, and what waits on them, from this one view. An open ask shows
   as a box after the last entry, and the owner answers there
   ([tickets start in our tracker](./tickets-start-in-our-tracker.md)).
-- **It is also the agents' main context.** An agent working the lane reads the
+- **It is also the agents' main context.** An agent working the quest reads the
   same timeline a person reads, as text.
   - Triage reads it whole, comments included (decided 2026-10-24).
   - [Experiment 138](../../experiments/138-tracker-on-demlik.md) ran 20 demlik
@@ -31,10 +36,10 @@ const forAgent = brief(state, facts); // the same rows as text, typed facts as s
     triage's answer, each time toward what really happened.
 - **Proposed: machine state is a fact, never a comment.**
   - In 138, half of demlik's 1,463 comments (732) were machine markers:
-    claims, lane state, JSON.
+    claims, quest state, JSON.
   - Here those are typed facts. A person sees each as a short row, and an
     agent reads it as data.
-  - Nothing reads a comment to learn where a lane is
+  - Nothing reads a comment to learn where a quest is
     ([data first](./data-first-markdown-is-a-view.md)).
 - **Each fact says who or what wrote it** (decided 2026-10-24). The ledger is
   private, and each writer on it is a user or an agent. An agent session can
@@ -64,13 +69,13 @@ const forAgent = brief(state, facts); // the same rows as text, typed facts as s
 
 - Two views, the window and the agent's brief, to keep in step with every new
   kind of fact.
-- A long lane makes a long timeline. An agent's brief may need to cut old
+- A long quest makes a long timeline. An agent's brief may need to cut old
   rows. Not designed.
 - The more an agent reads, the more text could steer it. Only ledger members
   write, and each fact says who wrote it.
 
-**How sure: 80%.** The doubt: how long a lane's timeline gets, and whether one
-brief fits every stage or each stage needs its own cut. The first lanes on the
+**How sure: 80%.** The doubt: how long a quest's timeline gets, and whether one
+brief fits every stage or each stage needs its own cut. The first quests on the
 tracker would settle it.
 
 ## Proposed 2026-10-25: what the view shows
@@ -81,11 +86,11 @@ In short:
 - **The top line** is a fold with seven branches: done, closed by you, waits
   on you, running, stuck, idle, next. An open ask wins over all but done and
   closed.
-- **A lane writes nine fact kinds:** `started`, `ended`, `planned`, `pushed`,
+- **A quest writes nine fact kinds:** `started`, `ended`, `planned`, `pushed`,
   `reviewed`, `pr`, `asked`, `answered`, `rated`. Each is one short row.
 - **A running agent is one live row,** never its tool calls. "open log" opens
   its whole log in a tile.
-- **Until the pipeline runs lanes,** Claude Code hooks write each run's start
+- **Until the pipeline runs quests,** Claude Code hooks write each run's start
   and end, and the main session writes each stage's answer, as `agent:`
   writers. The bridge never takes an answer.
 - **Done is a merged pull request,** read from GitHub, or a user's close on a
@@ -97,7 +102,7 @@ In short:
   or not: some agent sessions run on the same machine outside any box.
 - What each stage's brief keeps: the whole timeline, or a cut per stage.
 - How a long timeline is cut for an agent.
-- How the window groups rows, by stage or by task, once a lane has many.
+- How the window groups rows, by stage or by task, once a quest has many.
 
 ## What it cannot tell us
 

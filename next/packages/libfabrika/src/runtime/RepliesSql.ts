@@ -1,11 +1,11 @@
 /**
  * The `Replies` layer over the runtime's own recovery SQL. One SQL transaction reads the row, sends
  * the reply machine its Msg and inserts what it remembers, within the runtime's storage capacity.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import { Effect, Layer, Result, Schema, SchemaIssue } from "effect";
+import * as Arr from "effect/Array";
+import type { Accounting } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
 import { Model, Reply, reply as machine } from "./internal/reply.ts";
 import { Replies, RepliesError } from "./Replies.ts";
@@ -14,7 +14,9 @@ const TABLE =
   "CREATE TABLE IF NOT EXISTS process_replies (name TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (name, id))";
 
 const decode = Schema.decodeUnknownResult(Schema.fromJsonString(Reply));
+
 const encode = Schema.encodeSync(Schema.fromJsonString(Reply));
+
 const issues = SchemaIssue.makeFormatterStandardSchemaV1();
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
@@ -33,8 +35,12 @@ const load = (sql: Sql, name: string, id: string): typeof Model.Type => {
   const saved = decode(row.value);
 
   if (Result.isFailure(saved)) {
-    const paths = issues(saved.failure.issue).issues.map((i) => (i.path ?? []).map(String).join(".") || "row");
-    throw badRow(`a stored reply does not decode at ${paths.join(", ")}`);
+    const paths = Arr.map(
+      issues(saved.failure.issue).issues,
+      (i) => Arr.join(Arr.map(i.path ?? [], String), ".") || "row",
+    );
+
+    throw badRow(`a stored reply does not decode at ${Arr.join(paths, ", ")}`);
   }
 
   if (saved.success.name !== name || saved.success.id !== id) {
@@ -46,7 +52,17 @@ const load = (sql: Sql, name: string, id: string): typeof Model.Type => {
 
 /** Sends the stored Model its `remember` Msg and inserts what it newly remembers. Run inside one
  *  transaction, so a failed or full write keeps nothing. */
-const remember = (sql: Sql, capacity: number, reply: typeof Reply.Type): typeof Reply.Type => {
+const remember = (
+  sql: Sql,
+  capacity: number,
+  reply: typeof Reply.Type,
+  accounting?: Accounting,
+  at = 0,
+): typeof Reply.Type => {
+  if (reply.answer.reason === "quota") {
+    return reply;
+  }
+
   const model = load(sql, reply.name, reply.id);
   const [next] = applyCell(machine, model, { type: "remember", reply });
 
@@ -62,6 +78,7 @@ const remember = (sql: Sql, capacity: number, reply: typeof Reply.Type): typeof 
       throw new RepliesError({ reason: "storage" });
     }
 
+    accounting?.change("reply", 1, bytes(reply.name) + bytes(reply.id) + bytes(value), at, true);
     sql.exec("INSERT INTO process_replies (name,id,value) VALUES (?,?,?)", reply.name, reply.id, value);
   }
 
@@ -74,14 +91,38 @@ const stored = <A>(f: () => A) =>
     catch: (error) => (error instanceof RepliesError ? error : new RepliesError({ reason: "storage", cause: error })),
   });
 
-/** Replies in the runtime's own recovery SQL, within its storage capacity. */
-export const layer = (sql: Sql, limits: { readonly capacity: number }): Layer.Layer<Replies> =>
+/**
+ * Layer that provides `Replies` over the runtime's own recovery SQL, within `capacity` bytes.
+ *
+ * **Details**
+ *
+ * `reply` reads one row. `rememberReply` runs in one transaction, so a failed or full write keeps
+ * nothing; it fails with `storage` when the new row would pass `capacity`, and with `bad_row` when a
+ * stored row does not decode or disagrees with its key. With `accounting`, each saved reply is
+ * charged to the process's recovery room. A quota refusal is never saved as a reply.
+ *
+ * @category layers
+ */
+export const layer = (
+  sql: Sql,
+  limits: { readonly capacity: number; readonly accounting?: Accounting },
+): Layer.Layer<Replies> =>
   Layer.succeed(Replies, {
     reply: Effect.fn("replies.reply")(function* (name: string, id: string) {
       const model = yield* stored(() => load(sql, name, id));
+
       return model._tag === "remembered" ? model.reply : null;
     }),
     rememberReply: Effect.fn("replies.remember")(function* (reply: typeof Reply.Type) {
-      return yield* stored(() => sql.transaction(() => remember(sql, limits.capacity, reply)));
+      return yield* Effect.clockWith((clock) =>
+        stored(() => {
+          const save = () =>
+            sql.transaction(() =>
+              remember(sql, limits.capacity, reply, limits.accounting, clock.currentTimeMillisUnsafe()),
+            );
+
+          return limits.accounting === undefined ? save() : limits.accounting.protect(save);
+        }),
+      );
     }),
   });

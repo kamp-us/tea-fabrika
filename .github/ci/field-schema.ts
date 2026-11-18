@@ -1,16 +1,18 @@
+import { DateTime, Option, Predicate, Record as Rec, Schema } from "effect";
 // Today's field records. Cores measured against 437 notes and the last 500 runs
 // by the approved T342 plan. README drift advises; unknown facts stay unknown.
 // A finding row's core is decision 0035's own: its keys, the closed `rule` list and its proof.
 // Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
 // are history. Both hold the same rows, so one schema reads both.
-import { Schema } from "effect";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
+
 export type Log = typeof Log.Type;
 
 /** The log a path holds rows of: its old `.jsonl` file, or anything in its folder. */
 export const logOf = (file: string): Log | null => {
   const log = /^field\/([^/]+)(?:\.jsonl$|\/)/.exec(file)?.[1];
+
   return Schema.is(Log)(log) ? log : null;
 };
 
@@ -23,8 +25,16 @@ export const inFolder = (file: string) => /^field\/(?:notes|runs|findings)\//.te
 const dated = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const Day = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/));
+
 const Text = Schema.NullOr(Schema.String);
+
 const Count = Schema.NullOr(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
+
+// A note lists its quests (0546). A row written before the rename lists them as `lanes`, and a row
+// is never edited, so a note holds exactly one of the two keys, checked in `checkRow`.
+const Quests = Schema.Array(Schema.Unknown);
+
+const questKeys = ["quests", "lanes"] as const;
 
 const Note = Schema.Struct({
   id: Schema.String,
@@ -32,7 +42,6 @@ const Note = Schema.Struct({
   stage: Schema.String,
   kind: Schema.String,
   what: Schema.String,
-  lanes: Schema.Array(Schema.Unknown),
   fix: Text,
   cause: Schema.optionalKey(Text),
   person: Schema.optionalKey(Schema.Boolean),
@@ -73,8 +82,7 @@ const Run = Schema.Struct({
 // A finding and its rating (decision 0035). The fields table is field/README.md, "A finding".
 const Words = Schema.String.check(Schema.isPattern(/\S/));
 
-const Found = Schema.Struct({
-  _tag: Schema.Literal("finding"),
+const Found = Schema.TaggedStruct("finding", {
   id: Schema.String,
   date: Day,
   by: Words,
@@ -92,8 +100,7 @@ const Found = Schema.Struct({
   pr: Text,
 });
 
-const Rated = Schema.Struct({
-  _tag: Schema.Literal("rated"),
+const Rated = Schema.TaggedStruct("rated", {
   finding: Schema.String,
   says: Schema.Literals(["fix", "noise"]),
   by: Words,
@@ -103,12 +110,13 @@ const Rated = Schema.Struct({
 
 const fields = {
   file: Schema.String,
-  line: Schema.Number,
+  line: Schema.Finite,
   field: Schema.String,
   reason: Schema.String,
 };
 
 export const Finding = Schema.TaggedUnion({ error: fields, warning: fields });
+
 export type Finding = typeof Finding.Type;
 
 const words: Record<string, readonly string[]> = {
@@ -132,8 +140,7 @@ const words: Record<string, readonly string[]> = {
   outcome: ["merged", "pass", "fail", "triaged", "parked", "skip", "stopped"],
 };
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isObject = (value: unknown): value is Record<string, unknown> => Predicate.isObject(value);
 
 /** Never put a value or a decoder's input-bearing error into a finding. */
 export const checkRow = (file: string, line: number, value: unknown): Finding[] => {
@@ -160,9 +167,23 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     return [warning("row", "no detailed schema for this file")];
   }
 
-  const failures = Object.entries(schema.fields).flatMap(([field, rule]) =>
+  // One field map for whichever schema the folder names, so each core field is checked alone.
+  const fields: Schema.Struct.Fields = schema.fields;
+
+  const failures = Rec.toEntries(fields).flatMap(([field, rule]) =>
     Schema.is(Schema.Struct({ [field]: rule }))(value) ? [] : [error(field, "invalid or missing core field")],
   );
+
+  if (schema === Note) {
+    const keys = questKeys.filter((key) => key in value);
+    const key = keys.length > 1 ? "quests" : (keys[0] ?? "quests");
+
+    if (keys.length > 1) {
+      failures.push(error(key, "a note lists its quests under `quests` or `lanes`, never both"));
+    } else if (!Schema.is(Quests)(value[key])) {
+      failures.push(error(key, "invalid or missing core field"));
+    }
+  }
 
   // The proposed shape said `at`. AGENTS.md keeps `at` for a time, so the place is `location`.
   if (schema === Found && "at" in value) {
@@ -196,6 +217,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   }
 
   const note = log === "notes";
+
   const metadata = note
     ? ["cause", "person", "primitive", "test", "links"]
     : ["run", "ticket", "pr", "started", "ended", "parent", "active", "driver_caused", "costUsd", "billed"];
@@ -212,8 +234,12 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     }
   }
 
-  if (Array.isArray(value["lanes"]) && value["lanes"].some((lane) => typeof lane !== "string")) {
-    findings.push(warning("lanes", "lane member is not text"));
+  for (const key of questKeys) {
+    const quests = value[key];
+
+    if (Array.isArray(quests) && quests.some((quest) => !Predicate.isString(quest))) {
+      findings.push(warning(key, "quest member is not text"));
+    }
   }
 
   const id = note ? "id" : "run";
@@ -221,7 +247,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   if (
     !found &&
     !folder &&
-    typeof value[id] === "string" &&
+    Predicate.isString(value[id]) &&
     !/^\d{4}-\d{2}-\d{2}-(?:r)?\d+(?:-c\d+)?$/.test(value[id])
   ) {
     findings.push(warning(id, "unusual record id"));
@@ -230,8 +256,8 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   const day = value["date"];
 
   if (
-    typeof day === "string" &&
-    (!Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0, 10) !== day)
+    Predicate.isString(day) &&
+    !Option.exists(DateTime.make(day), (at) => DateTime.formatIso(at).slice(0, 10) === day)
   ) {
     findings.push(warning("date", "unusual calendar date"));
   }
@@ -240,7 +266,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     const time = value[field];
 
     if (
-      typeof time === "string" &&
+      Predicate.isString(time) &&
       (!/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(time) || !Number.isFinite(Date.parse(time)))
     ) {
       findings.push(warning(field, "unusual timestamp"));
@@ -250,13 +276,13 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   for (const field of ["ticket", "pr"]) {
     const ref = value[field];
 
-    if (ref != null && (typeof ref !== "string" || !/^[^/\s]+\/[^#\s]+#\d+$/.test(ref))) {
+    if (ref != null && (!Predicate.isString(ref) || !/^[^/\s]+\/[^#\s]+#\d+$/.test(ref))) {
       findings.push(warning(field, "unusual reference"));
     }
   }
 
   if (
-    typeof value["parent"] === "string" &&
+    Predicate.isString(value["parent"]) &&
     !/^\d{4}-\d\d-\d\d-r\d+(?:-c\d+)?$/.test(value["parent"]) &&
     !dated.test(value["parent"])
   ) {
@@ -264,33 +290,33 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   }
 
   if (
-    typeof value["started"] === "string" &&
-    typeof value["ended"] === "string" &&
+    Predicate.isString(value["started"]) &&
+    Predicate.isString(value["ended"]) &&
     Date.parse(value["ended"]) < Date.parse(value["started"])
   ) {
     findings.push(warning("ended", "end precedes start"));
   }
 
   if (
-    typeof value["active"] === "number" &&
-    typeof value["minutes"] === "number" &&
+    Predicate.isNumber(value["active"]) &&
+    Predicate.isNumber(value["minutes"]) &&
     value["active"] > value["minutes"]
   ) {
     findings.push(warning("active", "active time exceeds wall time"));
   }
 
   if (
-    typeof value["cachedTokens"] === "number" &&
-    typeof value["inputTokens"] === "number" &&
+    Predicate.isNumber(value["cachedTokens"]) &&
+    Predicate.isNumber(value["inputTokens"]) &&
     value["cachedTokens"] > value["inputTokens"]
   ) {
     findings.push(warning("cachedTokens", "cached count exceeds input count"));
   }
 
   if (
-    typeof value["billed"] === "number" &&
-    typeof value["inputTokens"] === "number" &&
-    typeof value["outputTokens"] === "number" &&
+    Predicate.isNumber(value["billed"]) &&
+    Predicate.isNumber(value["inputTokens"]) &&
+    Predicate.isNumber(value["outputTokens"]) &&
     value["billed"] !== value["inputTokens"] + value["outputTokens"]
   ) {
     findings.push(warning("billed", "billed count differs from input plus output"));
@@ -298,7 +324,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
 
   if (
     Array.isArray(value["links"]) &&
-    value["links"].some((link) => typeof link === "string" && !/^https?:\/\/\S+$/.test(link))
+    value["links"].some((link) => Predicate.isString(link) && !/^https?:\/\/\S+$/.test(link))
   ) {
     findings.push(warning("links", "unusual public URL"));
   }

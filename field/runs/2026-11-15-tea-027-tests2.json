@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-tea-027-tests2",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1391",
+  "started": "2026-11-15T17:35:00-08:00",
+  "ended": "2026-11-15T17:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Second tests round for slice 1 of docs/plan/quests/tea-msg-tag-PLAN.md (body 9741cd80ec65), after the build found law E2 red: the .agents project failed with 89 TS377051 duplicatePackage warnings, tea 0.25.0 and 0.27.0 in one program. Law E3 is written in oxlint-plugins/duplicate-packages.test.ts as a format law over tsconfig.base.json, read the way namespace-imports.test.ts reads it. It was red before the override for the right reason: no checker override held allowedDuplicatedPackages. The step then wrote the override the plan gives it, an exam path: one entry at the end of the checker's overrides, include .agents/**/*.ts, allowedDuplicatedPackages @demlik/tea, with its comment naming ticket 1065. The override form silences the check, so the plan's fallback is not needed: tsc on .agents alone exits 0 with no TS377051, and with the override removed it exits 126 with the same 89 warnings. One pnpm typecheck ran: it failed first in today's packages/pipeline, and a second run of every project with --no-bail found that to be the only failure. That failure is a gap in the plan: packages/pipeline/src/machine-make.test.ts lines 60-66 assert that Machine.make returns the model and msg schemas, which only the deleted 0.25.0 patch (demlik 897) added, so on unpatched 0.25.0 line 69 fails with TS2344. The plan says only next/'s Program.make reads them. That law is not the tests step's to narrow, so slice 1 goes back to plan.",
+  "plants": [
+    {
+      "law": "E3 oxlint-plugins/duplicate-packages.test.ts: format: E3, `@demlik/tea` may appear twice only in one checker override scoped to `.agents/**`, and nowhere else",
+      "plant": "(a) allowedDuplicatedPackages set in the checker's top-level options",
+      "result": "red"
+    },
+    {
+      "law": "E3 oxlint-plugins/duplicate-packages.test.ts",
+      "plant": "(b) next/**/*.ts added to the override's include",
+      "result": "red"
+    },
+    {
+      "law": "E3 oxlint-plugins/duplicate-packages.test.ts",
+      "plant": "(c) a second package name, effect, in the override",
+      "result": "red"
+    },
+    {
+      "law": "E3 oxlint-plugins/duplicate-packages.test.ts",
+      "plant": "the same allowance in .agents/tsconfig.json's own checker entry",
+      "result": "red"
+    },
+    {
+      "law": "E2 pnpm typecheck, the .agents project",
+      "plant": "the new override removed from tsconfig.base.json",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Every plant edited a saved copy's file and was restored by copy, checked with cmp. Before the typecheck, pnpm install --frozen-lockfile brought node_modules in line with the branch's lockfile, with no lockfile change. Two full type-check runs and two of .agents alone, each started only when pgrep -x tsgo found none. E2's own plant from the plan (one next/ package pointed at catalog:old) was not run, since E2 is still red in packages/pipeline.",
+  "step": "tests"
+}

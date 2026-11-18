@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s12-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T20:27:07-08:00",
+  "ended": "2026-11-15T20:37:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 12 of the Reflect ban (0554, ticket 1056) in next/, libfabrika's client folder. The rule met 50 fires in 3 files: 33 in WindowMachine.laws.test.ts, 9 in WindowStart.laws.test.ts and 8 in Tezgah.laws.test.ts, which the plan gives to this slice though the brief named only the first two; the folder cannot join the ban with Tezgah's fires left. All 50 were hand edits: loose ledger entries, letters, sub deps and frame params are decoded once with a Schema.Struct of optional Unknown fields (kind 1), one field in a check is read after Predicate.hasProperty or a _tag narrow (kind 2), a failure row's error is read after its _tag (kind 3), and the Model's handshake and inbox are read plainly (kind 4). A probe in the scratchpad showed the loose decode answers as Reflect.get did for null, a number, a string, an array, an own key, a getter, an inherited key and a nested value. A new block in .oxlintrc.json puts the four Reflect entries on next/packages/libfabrika/src/client/** with the JSON.parse and two P18 retry entries it had. No disable line was added. The three files pass vitest (72 tests), libfabrika's tsc passes, and pnpm lint passes. No file of pull request 1366 was touched, and none of its files is in the client folder.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Pull requests 1312 and 1232 also edit WindowMachine.laws.test.ts, so whichever lands second rebases.",
+  "plants": [
+    {
+      "law": "L5",
+      "plant": "Reflect.get(Object(page.at(-1)), \"rev\") put back in readsOn in WindowMachine.laws.test.ts: oxlint-plugins/lint.ts exits 1 with eslint(no-restricted-properties) 'Reflect.get' is restricted from being used (0554) at line 2659, and pnpm lint exits 1; undone",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

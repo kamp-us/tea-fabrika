@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-later-mail-overtakes-an-owed-plain-send",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 245
+  },
+  "says": "A later letter to the same name can overtake an earlier plain send still owed after a storage failure: an owed plain send is retried by the alarm, while a fresh Cmd runs at once, and `behind` holds a Cmd back only behind an owed send_chunks. It predates this branch. The plan's line 190 and the OTP follows row read as order per sender and receiver pair. Not fixed here: widening the wait to plain sends turns the existing M2 alarm law red, so it needs its own design call.",
+  "proof": "Runner.ts `behind` matches only `cmdType(cmd) === SEND_CHUNKS` among the owed Cmds; the review's plant that waited behind any owed send turned M2 red.",
+  "cost": "After a storage failure, a reader can see one writer's letters out of the order the writer sent them.",
+  "head": "e813174db04c8c71cbf859a6950eb6f613bcd42e",
+  "ticket": "kamp-us/tea-fabrika#1041",
+  "pr": "kamp-us/tea-fabrika#1310"
+}

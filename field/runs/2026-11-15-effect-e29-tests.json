@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e29-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:32:12-08:00",
+  "ended": "2026-11-15T20:56:20-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E29 of the Effect-checker sweep (preferEffectArray) in next/: folders lib:node, app:e2e, prog:chaos and app:top. Counted on main at 37db01a with only this check at error through --lspconfig: 804 hits (lib:node 458, app:e2e 281, prog:chaos 58, app:top 7), 705 in exam paths, 99 in product files, none in a file of pull request 1366. Fixed 677 exam-path hits in 62 files; left 28 that run inside a Playwright page callback (evaluate, evaluateAll, waitForFunction), where effect is not loaded. Their right form is the checker's own next-line comment, which reports 'has no effect' and fails the typecheck while the check is off, so it lands with the judgment lock pull request. The 99 product hits are left for the build step. No lock line was written (the judgment slice rule), so there is no new law and no plant.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "report": "preferEffectArray: 804 hits met. Quick fix: 0 (the checker offers none for this check). A scratch codemod on oxc-parser, never committed, rewrote 654 calls to data-first Arr.* (find to Option.getOrUndefined(Arr.findFirst(...)), and to Option.getOrThrow where the code had a non-null assertion). Hand edits: 23 hits (findIndex, findLastIndex and toSorted to Option and Order forms, three optional-chained maps), plus follow-up edits where Arr.join needs strings, an optional receiver needed '?? []', or a nested generic call lost its inference. Left: 28 page-context hits in app:e2e (instance, p14, reload, tezgah test support and first-window) and 99 product hits in 15 files. Waiting on 1366: 0.",
+  "note": "Ran at the pushed head: tsc --noEmit for libfabrika, the app and chaos (all 0); pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (passed); the list ratchet (exit 0); nice -n 15 vitest --maxWorkers=3 on the 36 changed non-visual test files (35 passed, 1 skipped) and on 16 tests that read the changed support files (155 passed, 1 failed: instance-wire.integration.test.ts spawns ssh-keygen, which this box lacks, ENOENT). Not run: the .visual. tests (never in this box) and the full suite. Per decision 0589's amendment a slice opens no pull request; this branch is for the coordinator's fold.",
+  "step": "tests"
+}

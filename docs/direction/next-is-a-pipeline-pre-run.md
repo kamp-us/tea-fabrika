@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-31; order set 2026-11-01; order changed 2026-11-05 by the owner: `next/` first, pipeline paused; merge rule amended 2026-11-09 by [0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)"
+summary: "Every pull request, in either version, goes through today's pipeline programs. A step that cannot run yet goes by hand for that pull request, logged in `field/`. Since 2026-11-05 the pipeline programs are paused and `next/` does not wait on them: Tier 1 is built by the lead session's agents, the steps by hand, the lead agent reading every diff before a merge. The lead merges any pull request once every step passed and nothing really loosens; only real loosening or a new design call waits on the owner."
+---
+
 # Every pull request goes through the pipeline's steps
 
 **Decided 2026-10-31, and widened the same day. Order set 2026-11-01.** This is about
@@ -58,12 +63,13 @@ review.*
 - **A live run on a target repository:** only through the ship stage.
 - **A pull request that went by hand:** it follows [autonomy is measured trust](./autonomy-is-measured-trust.md):
   a merge does not wait on the owner. One review by a separate agent says merge-ready, CI is green,
-  and the lead agent reads the diff and runs a leak grep, then merges. `catchup.sh` comments on
+  and the lead agent reads the diff and runs a leak grep, then adds it to GitHub's merge queue
+  (0162). After the merge, `land.ts merged` comments on
   each ticket it closes with the pull request and its merge commit
-  (`.agents/skills/lead/scripts/catchup.sh:86`); the row per merge that note proposes (M1) is
+  (`.agents/skills/lead/scripts/pr/Queue.ts`); the row per merge that note proposes (M1) is
   not written yet.
-  This holds for product code, exam pull requests and exam paths too: the lead merges with
-  `catchup.sh` once every step passed and `loosening.sh` shows no real loosening after the lead's
+  This holds for product code, exam pull requests and exam paths too: the lead lands it through
+  the queue once every step passed and `loosening.sh` shows no real loosening after the lead's
   hand check. The lead reads each new edge comment. Still the owner's: real loosening or removal
   of a law, and any new design call
   ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). *Changed 2026-11-09
@@ -83,7 +89,7 @@ review.*
 - *Changed 2026-11-01:* ticket 115 is no longer the first full try. Its plan was replaced by
   [Tier 1](../plan/tier-1.md), which waits for the pipeline.
 - *Changed 2026-11-05 (owner):* Tier 1 no longer waits for the pipeline. Ticket 117 ran
-  eight lanes in five days ($35.37) and stopped at the test writer twice; four steps after it
+  eight quests in five days ($35.37) and stopped at the test writer twice; four steps after it
   have never met real code. The pipeline does not follow the program guidelines the rest of
   the app now does, and it is hard to watch even with tracing. Its pieces were built one at a
   time, each with that day's context. So it pauses, and the steps go by hand for `next/`.
@@ -102,7 +108,7 @@ review.*
 ## What it costs
 
 - Time: a small change takes several agents.
-- **A step done by hand has no lane machine holding the order.** Only the session's own
+- **A step done by hand has no quest machine holding the order.** Only the session's own
   discipline does, and that has already failed once. This is the weak spot.
 - **Some changes do not fit yet.** A docs change cannot go through the pipeline today, so it
   goes by hand.

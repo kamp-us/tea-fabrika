@@ -1,6 +1,7 @@
 // P11 adds history without changing P9 Letter. One reader must keep entry timing and build.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -46,10 +47,10 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
     const context = yield* Effect.context<R>();
     yield* Effect.promise(() =>
       fc.assert(
-        fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
+        fc.asyncProperty(arb, (a) => Effect.runPromiseWith(context)(law(a))),
         {
           seed: 119120,
-          numRuns: 40,
+          numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
           examples: examples.map((a): [A] => [a]),
         },
@@ -63,13 +64,16 @@ describe("P11 richer mailbox history", () => {
   it.effect("each history read ends one mailbox.read span", () =>
     check(fc.array(fc.jsonValue(), { maxLength: 10 }), [], (messages) => {
       const spans: Tracer.NativeSpan[] = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
 

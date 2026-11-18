@@ -4,6 +4,10 @@ import type { Page } from "playwright";
 import { launch as launchWindow, type TestWindow } from "../test-window.ts";
 import { startWorker, type EmailFixture } from "./email-worker.test-support.ts";
 
+class PromiseFailed extends Schema.TaggedErrorClass<PromiseFailed>()("PromiseFailed", {
+  cause: Schema.Defect,
+}) {}
+
 export const EPOCH = 1_800_000_000_000;
 
 export const IntegrationFlow = Schema.Struct({
@@ -20,9 +24,10 @@ export const INTEGRATION = {
 };
 
 export type IntegrationFlow = typeof IntegrationFlow.Type;
-export type Mail = { readonly to: string; readonly raw: string };
 
-export type Snapshot = {
+type Mail = { readonly to: string; readonly raw: string };
+
+type Snapshot = {
   readonly founding: unknown;
   readonly person: string;
   readonly name: string;
@@ -38,9 +43,9 @@ export type Snapshot = {
   readonly outputs: Record<string, ReadonlyArray<unknown>>;
 };
 
-export type Session = { readonly id: string; readonly key: string; readonly token: string };
+type Session = { readonly id: string; readonly key: string; readonly token: string };
 
-export interface Instance {
+interface Instance {
   readonly home: string;
   readonly url: string;
   readonly call: <A>(path: string, body?: unknown) => Effect.Effect<A, unknown>;
@@ -63,21 +68,24 @@ const request = Effect.fn("emailExam.request")(function* <A>(
   }
 
   // oxlint-disable-next-line fabrika/no-promises -- edge: the HTTP fetch boundary returns a Promise
-  const response = yield* Effect.tryPromise(() =>
-    fetch(
-      target,
-      body === undefined
-        ? undefined
-        : {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          },
-    ),
-  );
+  const response = yield* Effect.tryPromise({
+    try: () =>
+      fetch(
+        target,
+        body === undefined
+          ? undefined
+          : {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            },
+      ),
+    catch: (cause) => new PromiseFailed({ cause }),
+  });
+
   // Inspect bytes before decoding or refusing, so a raw error body cannot escape the law.
   // oxlint-disable-next-line fabrika/no-promises -- edge: a web Response reads text through a Promise
-  const raw = yield* Effect.tryPromise(() => response.text());
+  const raw = yield* Effect.tryPromise({ try: () => response.text(), catch: (cause) => new PromiseFailed({ cause }) });
 
   if (publicReply) {
     outputs.replies.push(raw);
@@ -92,6 +100,8 @@ const request = Effect.fn("emailExam.request")(function* <A>(
   }
 
   const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(raw);
+
+  // SAFETY: the P36 test instance answers each `/__test/*` path with the shape its caller names in `A`.
   return value as A;
 });
 
@@ -100,6 +110,7 @@ export const openInstance = Effect.fn("emailExam.openInstance")(function* (fixtu
   const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh." });
   const url = yield* startWorker(home, fixture);
   const outputs: Instance["outputs"] = { urls: [], replies: [], errors: [] };
+
   return {
     home,
     url,
@@ -126,7 +137,9 @@ export const mailCode = Effect.fn("emailExam.mailCode")(function* (instance: Ins
 });
 
 export const device = (instance: Instance, label: string) => instance.call<Session>("/__test/device", { label });
+
 export const snapshot = (instance: Instance) => instance.call<Snapshot>("/__test/snapshot");
+
 export const clock = (instance: Instance, at: number) => instance.call("/__test/clock", { at });
 
 export const checkedAddress = Effect.fn("emailExam.checkedAddress")(function* (
@@ -138,6 +151,7 @@ export const checkedAddress = Effect.fn("emailExam.checkedAddress")(function* (
     device: session,
     address,
   });
+
   return yield* instance.call("/email/verify", {
     device: session,
     challenge: challenge.id,
@@ -151,6 +165,7 @@ export const redeem = Effect.fn("emailExam.redeem")(function* (
   old: "lost" | "kept",
 ) {
   const challenge = yield* instance.call<{ id: string }>("/email/recovery", { device: session });
+
   return yield* instance.call<{ id: string; added: string }>("/email/redeem", {
     device: session,
     challenge: challenge.id,
@@ -161,10 +176,12 @@ export const redeem = Effect.fn("emailExam.redeem")(function* (
 });
 
 export const launch = (instance: Instance, label: string) => launchWindow({ instance: instance.url, label });
-export type Window = TestWindow;
 
-// oxlint-disable-next-line fabrika/no-promises -- edge: Playwright exposes renderer operations through Promise APIs
-export const play = <A>(action: () => PromiseLike<A>) => Effect.tryPromise(() => action());
+type Window = TestWindow;
+
+export const play = <A>(action: () => PromiseLike<A>) =>
+  // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright exposes renderer operations through Promise APIs
+  Effect.tryPromise({ try: () => action(), catch: (cause) => new PromiseFailed({ cause }) });
 
 export const visible = (page: Page, text: string) =>
   play(() => page.getByText(text, { exact: false }).waitFor({ state: "visible" }));

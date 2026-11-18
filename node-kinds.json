@@ -2,7 +2,23 @@
   "entryExportConventions": {
     "alchemy-durable-object-export": {
       "files": "src/brain.ts",
-      "exports": ["RecordPart", "IsolateTail"]
+      "exports": ["RecordPart", "Connection", "Process", "IsolateTail"]
+    },
+    "alchemy-durable-object-test-entry": {
+      "files": "e2e/chaos-revoke.worker.test-support.ts",
+      "exports": ["Project"]
     }
+  },
+  "testSupportFilePatterns": {
+    "test-directory": ["(^|/)tests?/", "(^|/)__tests__/", "(^|/)e2e[^/]*/"],
+    "test-helper-module": [
+      "(^|/)test-helpers?/",
+      "(^|/)test-utils?/",
+      "(^|/)fixtures?/",
+      "(^|/)test-helper\\.tsx?$",
+      "(^|/)test-db\\.tsx?$",
+      "\\.fixture\\.tsx?$"
+    ],
+    "test-support-module": ["\\.test-support\\.tsx?$"]
   }
 }

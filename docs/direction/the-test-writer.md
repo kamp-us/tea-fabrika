@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24, the `noise` answer too (experiment 124's ratings); 2026-10-25: no TLA+ for code that exists (experiment 139); how it writes a spec for a design with no code is open"
+summary: "Its own agent, not the builder. After the owner's approval it writes a test per Property and runs it on the plan's base: new fails, existing passes. A surprise is a box with three choices. Boxed; adds only new files `includes` names in `fabrika.toml`; a local commit, its hash and one `checked` fact per Property on the ledger. Was the verify writer. Each mutant that lives gets `test`, `cannot`, or `noise`; a `noise` is a finding the owner rates."
+---
+
 # The test writer
 
 Decided 2026-10-24. It was called the verify writer in
@@ -33,7 +38,7 @@ const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
     test fails before the fix exists.
 - **Its answers.** Most runs end `done`. A surprise becomes a box on the
   ticket's timeline with three choices, and the owner picks
-  ([the ticket is the lane's one view](./the-ticket-is-the-lane-view.md)):
+  ([the ticket is the quest's one view](./the-ticket-is-the-lane-view.md)):
 
   ```ts
   done                    // every test fails or passes as the plan says; build starts
@@ -136,7 +141,7 @@ us.
   planner picks the tool; no TLA+ for code that exists; a Property about
   machines working together is a property test on the running host, as in
   experiment 116.
-- **Where red and green live:** in the criteria book, or only in the lane.
+- **Where red and green live:** in the criteria book, or only in the quest.
   The mutation step's walk reads them and settles it.
 - **A fixture outside `includes`.** Whether some tests need one the default
   does not cover.

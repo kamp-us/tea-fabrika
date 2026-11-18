@@ -36,7 +36,9 @@ each job over ([0217](./.decisions/0217-next-grows-beside-today.md),
 - **In `next/`:** read [`next/AGENTS.md`](./next/AGENTS.md) before you touch a file there.
 - **In today's version:** fixes that daily use or CI needs, the UX work the owner picks, and ideas
   the owner wants to try out there first. What a tryout teaches goes into `next/` as a lesson,
-  rethought and not copied. Nothing else is added (0217). Today's library is `@kampus/fabrika-old`
+  rethought and not copied, except an approved guideline, whose rules `next/` follows as written
+  ([0543](./.decisions/0543-next-follows-approved-guidelines-as-written.md)). Nothing else is added
+  (0217). Today's library is `@kampus/fabrika-old`
   and today's app is `@kampus/fabrika-app-old`; both are deleted when `next/` takes over.
 - **A product foundation decided in a walk starts on today's app at once,** no exception: tokens,
   focus, lint rules for the design, accessibility checks. Its build plan is written the same day
@@ -51,18 +53,19 @@ each job over ([0217](./.decisions/0217-next-grows-beside-today.md),
 |---|---|---|
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) | The plan docs, in the same pull request as the work ([0013](./.decisions/0013-plan-docs-change-with-the-work.md)) |
 | Know what the owner decided | [`.decisions/`](./.decisions/); see [Decision discovery](#decision-discovery) | `.decisions/NNNN-slug.md`, the turn the owner decides, in its own docs pull request, with [`/adr`](./.agents/skills/adr/SKILL.md) ([0001](./.decisions/0001-decisions-live-in-the-repo.md)) |
-| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes | A note there when a decision needs the long reasoning, plus its row in that folder's README. Mark it **proposed** until it is settled. Its decision file links it |
+| Know where this is going and why | [`docs/direction/`](./docs/direction/README.md), the long design notes; [`records.ts`](./.agents/skills/lead/scripts/records.ts) `list docs/direction` prints one line per note | A note there when a decision needs the long reasoning, with its own frontmatter (`state`, `summary`); no folder keeps an index table ([0522](./.decisions/0522-no-folder-keeps-an-index-table.md)). Mark it **proposed** until it is settled. Its decision file links it |
 | Know where `next/` follows a model (OTP, Elm, Kubernetes) and where it leaves it | [`docs/direction/follows/`](./docs/direction/follows/README.md) | The row, in the pull request that changes that behavior ([0017](./.decisions/0017-each-model-we-follow-has-one-table.md)) |
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md): `next/`'s words by bounded context; its last section translates today's code's words | A row there, in the pull request that coins or renames a word |
-| Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md), then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` plus its index row, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md) ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)) |
+| Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md) and [`records.ts`](./.agents/skills/lead/scripts/records.ts) `list .patterns`, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md` with its own frontmatter (`where`, `when`), with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md) ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)) |
 | Know a design area's guidelines | `docs/guidelines/<area>.md`, read whole | An edit to the page, in a pull request the owner says yes to ([0136](./.decisions/0136-guidelines-live-in-their-own-pages.md)) |
 | Write guidelines for one design area | [the guidelines skill](./.claude/skills/guidelines/SKILL.md) | What that skill lists, in its shape |
-| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md), then the write-up | `experiments/NN-short-title.md` with the next free number, plus its index row. Raw results go to the private archive, never into git; a script stays on its own branch, named in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)). A write-up nothing cites leaves once its lesson is in `.decisions/`, `.patterns/` or `docs/direction/` |
+| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md) and [`records.ts`](./.agents/skills/lead/scripts/records.ts) `list experiments`, then the write-up | `experiments/NN-short-title.md` with the number `records.ts next experiments` gives, and its own frontmatter (`date`, `scripts`, `summary`). Raw results go to the private archive, never into git; a script stays on its own branch, named in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)). A write-up nothing cites leaves once its lesson is in `.decisions/`, `.patterns/` or `docs/direction/` |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes/` and `field/runs/` | One file per agent run and one per thing that broke, cost too much, needed a person or worked well, the same day ([0090](./.decisions/0090-each-field-row-is-a-file.md)) |
 | Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding) | One row file in `field/findings/`, with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)) |
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, add the note under `docs/direction/` too |
 | Build the new version | [`next/AGENTS.md`](./next/AGENTS.md), then `docs/direction/` | Code in `next/`, with its test beside it as `name.test.ts` |
 | Change the machines (today's version) | `packages/fabrika`, `packages/pipeline`, `programs/*`, with the top-level [`README.md`](./README.md#what-is-in-this-repository) as the map and each part's own README | Code in the part's folder, with its test beside it as `name.test.ts`. New pipeline work goes in `packages/pipeline/src/`; a tool any factory could use goes in `packages/fabrika`. Outside a package, import it by its name, never by a path; inside one, by relative path. Toy projects used by tests live in `fixtures/` |
+| Do an operation by hand: a sev, a wipe of the dev and test homes | [`.runbooks/`](./.runbooks/), the one file for that operation | One file there, the first time the operation is done for real, linking the decision it follows ([0571](./.decisions/0571-runbooks-live-in-top-level-runbooks.md)) |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial | A folder there with a `package.json` whose `typecheck` covers the files. Run every step on a fresh clone before it lands |
 | Run a real ticket through the pipeline | [the how-to](./docs/how-to/run-a-pipeline-ticket.md) and [its rules](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | The run's rows in `field/`, the same day |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed |
@@ -78,9 +81,12 @@ the wrong place: write it here.
 
 ## Decision discovery
 
-List `.decisions/`: filenames identify records, and each record's frontmatter gives its `id`,
+List `.decisions/` (or run `records.ts list .decisions`, which reads `origin/main`,
+[0522](./.decisions/0522-no-folder-keeps-an-index-table.md)): filenames identify records, and each record's frontmatter gives its `id`,
 `title` and `status`. Read applicable records when changing the choice they govern or resolving
 conflicting guidance. Record new decisions with `/adr` ([skill](./.agents/skills/adr/SKILL.md)).
+`records.ts resolve <id>...` says whether a decision you cite is in force, and names the live one a
+superseded decision lands on.
 
 There is no committed decision index and no startup hook. Filenames plus frontmatter are the
 discovery contract ([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md), after
@@ -89,7 +95,9 @@ Repo tooling adds no Claude Code hooks, SessionStart or any other: a tool runs w
 
 **Check what is settled first.** Before any question to the owner, design question, recommendation
 or plan, search `.decisions/`, `.glossary/`, `docs/direction/`, `experiments/` and the plan for the
-topic. That holds for a question an agent's plan raises and for a pull request you walk: compare its
+topic. Start with `node .agents/skills/lead/scripts/records.ts find "<words>"`, which ranks those
+records (and `.patterns/`, `.runbooks/`) on `origin/main` by the rare words they share with yours,
+then `rg` for what its shortlist cannot see: the plan, long note bodies, and other wordings. That holds for a question an agent's plan raises and for a pull request you walk: compare its
 shape with the note it says it builds, and name any place it walks a decision back. A claim about
 how a piece runs comes from reading that piece's note now, never from a summary. A settled note is
 evidence, not a tiebreaker: nothing from before experiment 107 (the first run on a repo other than
@@ -133,19 +141,21 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
   the steps by hand, each logged in `field/`, and the lead reads every diff, CI and the leak grep
   before a merge. [The lead skill](./.agents/skills/lead/SKILL.md) says how, and
   [the plan](./docs/plan/README.md#how-a-change-lands) says how a change lands.
-  Every new or changed law is a property, or an example labeled vector, format, pinned or scenario
-  with its reason. Zero hits from loosening.sh mean no owner read is needed. The lead records its
-  output in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real
-  loosening waits on the owner.
+  [The tests skill](./.agents/skills/tests/SKILL.md#new-and-changed-laws) says what a new or changed
+  law must be, and [the lead skill's "Land it" step](./.agents/skills/lead/SKILL.md#steps) what a
+  loosening.sh hit on one means.
 - **The decisions that shape the steps,** each read when you are at that point: mutation runs hourly
   on main, never as a step ([0066](./.decisions/0066-mutation-runs-on-a-schedule.md)); one fresh
-  agent per step, which reads the lane's state file, does its one step and writes it back, driven by
-  flows and `chain.ts`, never a lane agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md),
-  [the lead skill](./.agents/skills/lead/SKILL.md#run-a-whole-lane-with-chaints)); a fix round is one agent, and the same
+  agent per step, which reads the quest's state file, does its one step and writes it back, driven by
+  flows and `chain.ts`, never a quest agent ([0064](./.decisions/0064-the-lead-drives-with-flows.md),
+  [the lead skill](./.agents/skills/lead/SKILL.md#run-a-whole-quest-with-chaints)); a fix round is one agent, and the same
   reviewer rechecks ([0177](./.decisions/0177-fix-round-is-one-agent.md)); a law that needs the real
-  machine runs before the first review, and on the owner's Mac only after the lead's read and the
-  owner's yes ([0178](./.decisions/0178-host-only-laws-run-first.md)); a lane stops at its second
-  sent-back review ([0176](./.decisions/0176-second-send-back-stops-lane.md)); no number caps a pull
+  machine runs before the first review ([0178](./.decisions/0178-host-only-laws-run-first.md)), with
+  launchd, real Electron and process-signal laws off the owner's laptop on eligible disposable CI
+  ([0594](./.decisions/0594-safe-checks-direct-mac-ci.md)); a quest stops at its second
+  sent-back review ([0176](./.decisions/0176-second-send-back-stops-lane.md)), unless its faults are
+  named, located and inside the plan, when the lead decides one more fix round itself
+  ([0564](./.decisions/0564-lead-decides-further-fix-rounds.md)); no number caps a pull
   request's size ([0099](./.decisions/0099-no-number-caps-a-pull-request.md)); the lead merges once
   every step passed, and only real loosening of a law or a new design call waits on the owner
   ([0014](./.decisions/0014-the-lead-merges-when-every-step-passed.md)); owed work needs no owner
@@ -197,7 +207,9 @@ is linked; the others have no other home yet.
   means ask why before you call it a false alarm. Before you write Effect code, read
   `node_modules/effect/AGENTS.md` in full: it ships inside the installed package, so it always
   matches the lockfile. Where it and a decision here differ, the decision wins
-  ([0023](./.decisions/0023-next-follows-effects-code-style.md) lists the differences).
+  ([0023](./.decisions/0023-next-follows-effects-code-style.md) lists the differences). Read a
+  package's source in the repo its installed `package.json` names in `repository`: for Effect that is
+  `Effect-TS/effect`, never `effect-smol`, where v4 was only built as a beta.
 - **Judge a design by its properties, never its size.** Never pick between designs by how many lines
   or agent hours each takes. Judge by what is lost, what holds, how it reads and how it fails. Size
   a design once it is picked.
@@ -276,12 +288,12 @@ Typecheck, lint and test must all pass before a change is offered. None needs a 
 not wait on a local `pnpm typecheck`: CI runs it, and a pull request merges only when it is green
 ([0133](./.decisions/0133-no-push-waits-on-a-local-typecheck.md)). Run the narrowest check that
 still covers the change, as
-[Effect's own repo](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md) asks of its
+[Effect's own repo](https://github.com/Effect-TS/effect/blob/main/.agents/AGENTS.md) asks of its
 agents. This table adds no rule, and `pnpm format` comes first in every row.
 
 | What changed | What to run here |
 |---|---|
-| Only Markdown that no program or skill reads, or field rows | `pnpm lint`. CI skips the heavy jobs, and its `field` job checks the added rows |
+| Only Markdown that no program or skill reads, or field rows | `pnpm lint`, which checks the added rows too. CI skips the heavy jobs; a pull request of only plan files and rows starts no CI run (changes.mjs's `ignored`) |
 | Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
 | A skill script, or Markdown that a program or skill reads | as code, below |
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
@@ -298,14 +310,15 @@ agents. This table adds no rule, and `pnpm format` comes first in every row.
   [0006](./.decisions/0006-no-unused-exports.md)). Check each finding
   by hand. If it is right, delete the code or drop its `export`. If it is wrong, stop and tell the
   owner: that is a code-graph bug to file. `unreachable-ledger.json` only shrinks, the run prunes
-  it, and CI fails until that is committed. Adding an entry is the owner's call, in a change of its
-  own ([nobody writes their own exam](./docs/direction/nobody-writes-their-own-exam.md)).
+  it, and CI fails until that is committed. No entry is added: its last ones are fixed, then the
+  file is deleted ([0524](./.decisions/0524-no-list-lets-broken-code-pass.md)).
 - **A check on the shape of code is a lint rule, never a test:** oxlint's own rule where one exists
   (`no-restricted-imports`), else ours in `oxlint-plugins/`. A plan asks "lint, type or test?" of
   every law.
 - **A check that can block needs its false alarms measured first:** about 0% to block, up to 10% to
   only advise (Google, CACM 2018). Every number in a rule needs a source or our own data. A tool's
-  default is not a source.
+  default is not a source. [0523](./.decisions/0523-advice-rules-block-where-clean.md) sets the
+  five old advice rules aside from this: they block in every folder at zero.
 - **A flaky test is fixed the day it is seen**
   ([0036](./.decisions/0036-a-flaky-test-is-fixed.md)).
 - **Money.** A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything else with
@@ -331,11 +344,15 @@ these caps. Each one came from a laptop that became unusable.
   needs what CI lacks (Electron shots, a stage with workerd) still runs here.
 - **With two or more code agents running:** `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at
   the very end. `tsgo` takes about 8 cores, so small jobs add up.
-- **At most 12 code agents, one `pnpm typecheck` at a time across all of them, one Electron test app
-  and one Docker box** ([0012](./.decisions/0012-twelve-agents-at-once.md)). Wait while
+- **Count actual productive workers** under
+  [0597](./.decisions/0597-eight-workers-before-twelve.md), which holds the staffing targets,
+  fresh verification and immediate replacement rules. Keep one file owner, fresh steps,
+  independent review and required proof.
+- **Shared resources stay capped:** one `pnpm typecheck` at a time, one Electron test app and one
+  Docker box ([0012](./.decisions/0012-twelve-agents-at-once.md)). Wait while
   `pgrep -x tsgo` finds one (`pgrep -f tsgo` also matches the waiting shell, so that loop never
   ends); in a step's box, skip the wait, since `pnpm typecheck` takes its own lock. Two type checks
-  at once, not the agent count, is what froze the laptop. If it feels slow, drop back to 8 agents.
+  at once froze the laptop before; reduce demand if it feels slow.
 - Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
   version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u` in a
   subshell first.
@@ -348,16 +365,24 @@ these caps. Each one came from a laptop that became unusable.
   keeps it out of the person's way: its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`,
   never `focus()` or `show()`. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
-- A step that needs ports, sockets or its own processes runs in a container, never behind a hole in
-  the laptop sandbox ([0045](./.decisions/0045-test-steps-run-in-containers.md)).
+- Ordinary safe checks run directly in parallel, under the caps above. For launchd, real Electron
+  or real process signals, use eligible disposable CI off the owner's laptop. Read
+  [0594](./.decisions/0594-safe-checks-direct-mac-ci.md) for the split and what remains of
+  [0045](./.decisions/0045-test-steps-run-in-containers.md). Read the selected tests and cleanup
+  before a direct run: a plain filename is not clearance. When `--changed` reaches these laws,
+  run explicit verified-safe paths locally and obtain their remote proof separately.
 
 ### Tool facts that cost us time
 
 - `gh pr edit` fails here with a classic Projects error. Use `gh api -X PATCH`.
 - In `claude -p`, `--allowedTools` only pre-approves. `--tools` is what limits an agent; without it
   the agent keeps a shell and can read what you meant to hide, git history included.
-- `rg <subfolder>` skips tracked files when a root `.gitignore` re-includes them with `!path`.
-  `rg .` is fine.
+- A plain `rg` (or `rg .`) from the repo root searches our dot folders, `.decisions/` and
+  `.agents/` included, because the root `.ignore` lists them; a new dot folder needs its line
+  there. It still skips `node_modules`, `dist` and `runs`. `.claude/skills/` holds links into
+  `.agents/skills/`, which rg does not follow, so each skill is searched once.
+- `rg field` skips `field/runs/`, which the root `.gitignore` re-includes with `!/field/runs/`
+  (ripgrep 13). Plain `rg`, `rg .` and `rg field/runs` find those files.
 
 ## This repo is public
 
@@ -389,7 +414,6 @@ Write-ups are read by busy people, some of them not native English speakers.
 
 ## Changing files
 
-- Change code with an editor-style edit, not with a find-and-replace script run over the tree.
 - Move files with `git mv`, so history follows.
 - Stage your own paths by name. Another session may have work in the same checkout.
 - Push every commit when you make it, and give its branch a draft pull request at the first commit

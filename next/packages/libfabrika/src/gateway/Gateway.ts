@@ -1,16 +1,41 @@
+/**
+ * The gateway: the door a client connects to. It proves who a client is, admits it, and routes the
+ * calls it sends to the project.
+ */
 import { applyCell } from "@demlik/tea";
-import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import {
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+  Tracer,
+} from "effect";
+import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Formatter from "effect/Formatter";
 import { RateLimiter } from "effect/persistence/RateLimiter";
-import { admitted, MemberEvent, Saw } from "../access/Access.ts";
+import * as Rec from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as Str from "effect/String";
+import { type Access, admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
-import { ClientManager } from "../access/ClientManager.ts";
+import { ClientManager, type Written } from "../access/ClientManager.ts";
 import type * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import {
   type Envelope,
   NotGranted,
+  type Session,
   SessionManager,
+  type SessionManagerError,
   SigningRefused,
   SignRequest,
   Writer,
@@ -22,28 +47,43 @@ import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
 import { type From } from "../processes/Mailbox.ts";
-import { type ProcessError, brainOnly } from "../processes/Process.ts";
+import { type ProcessError, brainOnly, Recipient } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
+import { type QuotasError } from "../processes/Quotas.ts";
 import { ProcessId } from "../ProcessId.ts";
+import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
+import { MailWakeups } from "../runtime/MailWakeups.ts";
+import { News } from "../runtime/News.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
+import { type RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, Sent } from "../runtime/Runner.ts";
 import { type WatchersError } from "../runtime/Watchers.ts";
+import { Tasks } from "../tasks/Tasks.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SinkError, SpanSink } from "../telemetry/Sink.ts";
 import { Chain, REFUSED } from "../telemetry/Trace.ts";
-import { checkHello } from "../transport/Hello.ts";
+import { type CheckedHello, checkHello, type WebCryptoError } from "../transport/Hello.ts";
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
 import { Admission, Answer, Attached, Hello, RateCountFailure, RateRefusal } from "../transport/Wire.ts";
+import { GatewayError, Storage } from "./GatewayError.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
 import { Policy as RatePolicy } from "./RateLimit.ts";
+import * as TaskRoutes from "./Tasks.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
+
+/**
+ * The id of one connection to the gateway, a non-empty string the gateway makes when the connection
+ * opens. It names a connection, not a client key.
+ *
+ * @category models
+ */
 export type ConnectionId = typeof ConnectionId.Type;
 
 const quiet = Tracer.make({ span: (options) => new Tracer.NativeSpan(options) });
@@ -52,25 +92,21 @@ const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E,
   return yield* effect.pipe(Effect.withTracer(quiet));
 });
 
-const json = Schema.decodeUnknownResult(Schema.Json);
-
-const rawObject = (a: unknown): Record<string, unknown> | null =>
-  typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
-
-const reserved = (a: unknown) => {
-  const value = rawObject(a);
-  return value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key));
-};
+/** Whether an object carries a field that only the door stamps. Callers narrow with `Predicate.isReadonlyObject`. */
+const reserved = (value: Readonly<Record<string, unknown>>) =>
+  ["id", "by", "for", "arrivedAt"].some((key) => Rec.has(value, key));
 
 const no = (reason: string) => Answer.cases.refused.make({ reason });
 
 const refuse = Effect.fn("gateway.route")(function* (reason: "reserved") {
   yield* Effect.annotateCurrentSpan(REFUSED, reason);
+
   return no(reason);
 });
 
 const refuseRate = Effect.fn("gateway.route")(function* (retryAfter: number) {
   yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
+
   return RateRefusal.make({ reason: "rate_limited", retryAfter });
 });
 
@@ -107,9 +143,18 @@ const Binding = Schema.Struct({
   span: Link,
   sentAt: Schema.String,
   state: EnvelopeState,
-});
+}).check(
+  Schema.makeFilter((binding) =>
+    !Schema.is(InputId)(binding.id) || (binding.door !== undefined && binding.n !== undefined)
+      ? true
+      : "a current input binding keeps its door and sequence",
+  ),
+);
+
 type Binding = typeof Binding.Type;
+
 const encodeBinding = Schema.encodeSync(Schema.fromJsonString(Binding));
+
 const decodeBinding = Schema.decodeUnknownResult(Schema.fromJsonString(Binding));
 
 // Saved pre-P17 inputs keep their original shape when checking a retry.
@@ -159,11 +204,13 @@ const WatchReply = Schema.TaggedUnion({
 });
 
 type WaitingModel = typeof Waiting.machine.model.Type;
+
 type WaitingMsg = typeof Waiting.machine.msg.Type;
 
 // The waiting value as `gateway_state` holds it: flat rows and settings, decoded by the machine's
 // own codec.
 const SavedWaiting = Schema.toEncoded(Waiting.Stored);
+
 const stepWaiting = (s: WaitingModel, msg: WaitingMsg) => applyCell(Waiting.machine, s, msg)[0];
 
 const Enrollment = Schema.Struct({
@@ -175,6 +222,7 @@ const Enrollment = Schema.Struct({
 });
 
 const Enrolled = Schema.Struct({ binding: Enrollment, nonce: Schema.String, used: Schema.Boolean });
+
 const Receipt = Schema.Struct({ text: Schema.String, armored: Schema.String, reply: GrantReply });
 
 const ChangePending = Schema.Struct({
@@ -213,12 +261,27 @@ const Read = Schema.Struct({
   after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
+/** `process.monitor`'s params: exactly these two keys. The recipient is never one of them. */
+const Monitor = Schema.Struct({ ref: Schema.String, pid: ProcessId });
+
+const decodeMonitor = Schema.decodeUnknownResult(Monitor, { onExcessProperty: "error" });
+
+/** Who a window's watches deliver to: its hello's tab and its socket's session, saved at its hello. */
+const ClientRecipient = Recipient.cases.client;
+
+/**
+ * What the door trusts about a connection, from the object that holds its socket, never from the
+ * client: the url, the tab and the key's fingerprint, and the socket's session when there is one.
+ */
+type Trusted = { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string };
+
 const SpanRead = Schema.Struct({
   chain: Chain,
   after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
 const SpanContent = Schema.Struct({ chain: Chain, spanId: Schema.String });
+
 const DeleteContent = Schema.Struct({ ...SpanContent.fields, reason: Schema.String });
 
 const methods: ReadonlySet<string> = new Set([
@@ -226,6 +289,7 @@ const methods: ReadonlySet<string> = new Set([
   "view.open",
   "ledger.read",
   "ledger.wait",
+  "process.monitor",
   "spans.read",
   "spans.content",
   "spans.deleteContent",
@@ -254,8 +318,28 @@ type Options<A, RNext, RDeliver, RNotify> = {
   ) => Effect.Effect<{ readonly inputs: ReadonlyArray<string>; readonly events: ReadonlyArray<string> }, LedgerError>;
   readonly isLive?: (process: string) => Effect.Effect<boolean, LedgerError>;
   readonly open?: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError, RDeliver>;
+  /**
+   * Watches `pid` under the caller's `ref` for `to`, the recipient the door built from the checked
+   * connection. The door never builds `to` from params.
+   */
+  readonly monitor?: (
+    ref: string,
+    pid: string,
+    to: typeof ClientRecipient.Type,
+    from: From,
+  ) => Effect.Effect<void, ProcessError | LedgerError, RDeliver>;
   readonly wait?: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
   readonly nextProcess: () => Effect.Effect<string, never, RNext>;
+  /**
+   * Whether the program behind `process` has room for this input's message and its step, placed
+   * after the `before` entries the door writes first. The door asks before it saves anything of
+   * the input, and `false` answers `quota` (0147). Left out, every input has room.
+   */
+  readonly admit?: (
+    process: string,
+    incoming: Incoming,
+    before: number,
+  ) => Effect.Effect<boolean, LedgerError, RDeliver>;
   readonly deliver: (
     process: string,
     envelope: Envelope<A>,
@@ -264,6 +348,9 @@ type Options<A, RNext, RDeliver, RNotify> = {
   ) => Effect.Effect<
     Sent | void,
     | LedgerError
+    | SessionManagerError
+    | RecoveryStoreError
+    | GatewayError
     | SinkError
     | SigningRefused
     | NotGranted
@@ -271,15 +358,16 @@ type Options<A, RNext, RDeliver, RNotify> = {
     | RunnerError
     | ProcessError
     | RepliesError
+    | QuotasError
     | WatchersError,
     RDeliver
   >;
-  readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError, RNotify>;
+  readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError, RNotify>;
+  readonly audit?: (process: string, message: A) => Effect.Effect<Schema.Json, Audit.AuditError, RDeliver>;
   readonly inputs: {
     readonly schema: Schema.Codec<A, unknown>;
     readonly personOnly: ReadonlyArray<string>;
     readonly raw: ReadonlyArray<string>;
-    readonly log: Schema.Encoder<unknown>;
     readonly name?: (input: A) => string | undefined;
   };
   readonly events: { readonly personOnly: ReadonlyArray<string> };
@@ -289,22 +377,30 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const [initialWaiting] = Waiting.machine.init(null, options.waiting);
   const context = yield* Effect.context<RNext | RDeliver | RNotify>();
   const ledger = yield* Ledger;
+  const tasks = yield* Tasks;
+  const wakeups = yield* MailWakeups;
   const transaction = yield* LedgerTransaction;
   const ids = yield* Id.Generator;
+
   const appendChecked = Effect.fnUntraced(function* (key: string, write: Parameters<typeof appendAdmitted>[1]) {
     return yield* appendAdmitted(key, write).pipe(Effect.provideService(LedgerTransaction, transaction));
   });
+
   const clients = yield* ClientManager;
   const sink = yield* SpanSink;
   const limiter = yield* RateLimiter;
+
   const ratePolicy = yield* Schema.decodeUnknownEffect(RatePolicy)(options.rateLimit).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
+
   const records = yield* RecordManager;
   const archive = yield* Archive;
   const processes = yield* Effect.serviceOption(ProcessManager);
+
   const store = gatewayStore(options.sql),
     sql = options.sql;
+
   const nonces = yield* silent(gatewayNonce(store, options.waiting.ttl, options.spentCap));
   // Only calls currently checking a proof live here. No challenge is retained.
   const checking = new Map<ConnectionId, Set<{ current: boolean }>>();
@@ -312,11 +408,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const write = options.write ?? turn.withPermit;
   const flush = sink.flush.pipe(Effect.provideService(RecordManager, records), Effect.provideService(Archive, archive));
   const clock = Effect.clockWith((c) => c.currentTimeMillis);
-  const notify = Effect.fn("gateway.notify")(function* (client: string, news: unknown) {
+
+  const notify = Effect.fn("gateway.notify")(function* (client: string, news: News) {
     const result = yield* Effect.exit(options.notify(client, news).pipe(Effect.provideContext(context)));
     yield* Effect.annotateCurrentSpan("fab.gateway.notified", Exit.isSuccess(result));
   });
+
   const memberRows = Stream.runCollect(ledger.read("gateway/access", 0));
+
   const readMembers = Effect.fnUntraced(function* () {
     const rows = yield* memberRows;
 
@@ -335,17 +434,20 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       ),
     );
   });
+
   const membership = Effect.fnUntraced(function* (raw: string, checkedKey?: string) {
     const members = yield* clients.members;
     const identity = admitted(members, raw);
 
-    if ("reason" in identity) {
+    if ("reason" in identity || identity.as === "hands") {
       return yield* new NotGranted({});
     }
 
     const key = checkedKey ?? (yield* fingerprint(raw, false));
+
     return Writer.cases[identity.as === "agent" ? "agent" : "person"].make({ key, for: identity.person });
   });
+
   const sessions = yield* Effect.service(SessionManager).pipe(
     Effect.provide(
       SessionManager.layer(sql, membership, {
@@ -354,12 +456,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       }),
     ),
   );
+
   const sessionsFor = Effect.fnUntraced(function* (process: string) {
     if (options.policy === undefined) {
       return sessions;
     }
 
     const policy = yield* options.policy(process);
+
     return yield* SessionManager.pipe(
       Effect.provide(
         SessionManager.layer(sql, membership, {
@@ -369,6 +473,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       ),
     );
   });
+
+  // A connection's checked state: its attachment, its key and its watches' recipient.
+  const forget = (client: string) => {
+    sql.exec(
+      "DELETE FROM gateway_state WHERE name IN (?,?,?)",
+      `client/${client}`,
+      `key/${client}`,
+      `recipient/${client}`,
+    );
+  };
+
   const prunePending = (at: number) => {
     const expired = sql.exec(
       "SELECT client FROM gateway_pending WHERE until<=? OR client IN (SELECT client FROM gateway_pending ORDER BY rowid DESC LIMIT -1 OFFSET ?)",
@@ -378,19 +493,22 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     for (const row of expired) {
       const client = String(row.client);
-      sql.exec("DELETE FROM gateway_state WHERE name=?", `client/${client}`);
-      sql.exec("DELETE FROM gateway_state WHERE name=?", `key/${client}`);
+      forget(client);
       sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     }
   };
+
   const attachment = Effect.fnUntraced(function* (client: ConnectionId) {
     const at = yield* clock;
+
     return yield* store.atomic(() => {
       prunePending(at);
+
       return store.get(`client/${client}`, Attached);
     });
   });
-  const online = Effect.fnUntraced(function* (client: ConnectionId) {
+
+  const authenticated = Effect.fnUntraced(function* (client: ConnectionId) {
     const attached = yield* attachment(client);
 
     if (attached?._tag !== "online") {
@@ -403,13 +521,26 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return yield* new NotGranted({});
     }
 
+    const identity = admitted(yield* clients.members, raw);
+
+    if ("reason" in identity) {
+      return yield* new NotGranted({});
+    }
+
     // initialize saved this fingerprint only after checking the signed hello against the raw key.
-    const by = yield* membership(raw, attached.identity.key);
-    return { attached, raw, by };
+    return { attached: { ...attached, identity: { ...identity, key: attached.identity.key } }, raw };
   });
+
+  const online = Effect.fnUntraced(function* (client: ConnectionId) {
+    const checked = yield* authenticated(client);
+
+    return { ...checked, by: yield* membership(checked.raw, checked.attached.identity.key) };
+  });
+
   const connect = Effect.fnUntraced(function* () {
     return yield* Effect.sync(() => ConnectionId.make(random()));
   });
+
   const challenge = Effect.fnUntraced(function* (client: ConnectionId) {
     for (const attempt of checking.get(client) ?? []) {
       attempt.current = false;
@@ -417,15 +548,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     yield* store.atomic(() => {
       // A reconnect retires this checked connection, never another client's proof.
-      sql.exec("DELETE FROM gateway_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+      forget(client);
       sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     });
+
     return yield* silent(nonces.issue(client));
   });
+
   const initialize = Effect.fnUntraced(function* (
     client: ConnectionId,
-    input: unknown,
-    trusted: { readonly url: string; readonly tab: string; readonly name: string },
+    input: Schema.Json | undefined,
+    trusted: Trusted,
   ) {
     if (trusted.url !== options.url) {
       return no("bad_nonce");
@@ -438,16 +571,19 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const hello = decoded.success;
+
     return yield* Effect.acquireUseRelease(
       Effect.sync(() => {
         const attempt = { current: true };
         const calls = checking.get(client) ?? new Set();
         calls.add(attempt);
         checking.set(client, calls);
+
         return attempt;
       }),
       Effect.fnUntraced(function* (attempt: { current: boolean }) {
         const until = yield* silent(nonces.check(client, hello.nonce));
+
         return until === null ? no("bad_nonce") : yield* initializeChecked(client, hello, trusted, until, attempt);
       }),
       (attempt) =>
@@ -461,24 +597,29 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         }),
     );
   });
+
   const initializeChecked = Effect.fnUntraced(function* (
     client: ConnectionId,
     hello: typeof Hello.Type,
-    trusted: { readonly url: string; readonly tab: string; readonly name: string },
+    trusted: Trusted,
     until: number,
     attempt: { current: boolean },
   ) {
     let claimed = false;
+
     const result = yield* silent(
       checkHello({
         hello,
-        ...trusted,
+        url: trusted.url,
+        tab: trusted.tab,
+        name: trusted.name,
         nonce: hello.nonce,
         versions: options.versions,
         ping: options.ping,
         consume: () => attempt.current && claimed,
         admit: Effect.fnUntraced(function* () {
           const at = yield* clock;
+
           const spent = yield* store.atomic(() => {
             const current = store.get(`client/${client}`, Attached);
 
@@ -508,6 +649,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
           const members = existing ?? (yield* clients.members);
           const identity = admitted(members, raw);
+
           return "reason" in identity
             ? Admission.cases.refused.make({ reason: "not_granted" })
             : Admission.cases.admitted.make({ identity: { ...identity, key: trusted.name } });
@@ -559,13 +701,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         parent: null,
         build: options.build,
       });
+
       const event = HelloEvent.make({
         ...result.hello,
         url: trusted.url,
         version: result.version,
         location: options.location,
         build: options.build,
+        ...(result.hello.build === undefined ? {} : { clientBuild: result.hello.build }),
       });
+
       const placed = yield* appendChecked(result.hello.key, {
         stream: "gateway/hellos",
         id: `hello-${random()}`,
@@ -579,6 +724,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       yield* store.atomic(() => {
         sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
         store.set(`key/${client}`, Schema.String, result.hello.key);
+
+        // A door with no socket has no session, so its watches have no recipient: `no_session`.
+        const recipient =
+          trusted.session === undefined
+            ? Option.none()
+            : ClientRecipient.makeOption({ client: trusted.tab, session: trusted.session });
+
+        if (Option.isSome(recipient)) {
+          store.set(`recipient/${client}`, ClientRecipient, recipient.value);
+        }
+
         store.set(
           `client/${client}`,
           Attached,
@@ -589,17 +745,23 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             waits: [],
             watching: false,
             busy: false,
+            has: result.hello.has,
+            ...(result.hello.build === undefined ? {} : { build: result.hello.build }),
           }),
         );
       });
     });
+
     yield* recordHello();
     yield* flush;
+
     return result;
   });
+
   const saveWaiting = (s: WaitingModel) => {
     store.set("waiting", SavedWaiting, Schema.encodeSync(Waiting.Stored)(s));
   };
+
   const waiting = (at: number) => {
     const saved = store.get("waiting", SavedWaiting);
     const loaded = saved === null ? null : Schema.decodeUnknownResult(Waiting.Stored)(saved);
@@ -609,11 +771,34 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const [state] = Waiting.machine.init(loaded?.success ?? initialWaiting, options.waiting);
+
     return stepWaiting(state, { type: "expire", at });
   };
+
+  // Takes the waiting rows whose keys the members admit, and wakes those rows' clients. The grant
+  // path calls it after a grant applies, and a knock calls it after it writes its row, so a knock
+  // that lands after a grant's drain is still woken. Only the caller whose atomic step removed a row
+  // notifies that row's clients, so a race between the two wakes each client once.
+  const release = Effect.fnUntraced(function* (members: Access, at: number) {
+    const taken = yield* store.atomic(() => {
+      const live = waiting(at);
+      const accepted = live.rows.filter((r) => !("reason" in admitted(members, r.key)));
+      saveWaiting(stepWaiting(live, { type: "accepted", keys: accepted.map((r) => r.key) }));
+
+      return accepted;
+    });
+
+    for (const row of taken) {
+      for (const client of row.clients) {
+        const nonce = yield* challenge(ConnectionId.make(client));
+        yield* notify(client, News.cases.granted.make({ nonce }));
+      }
+    }
+  });
+
   const knock = Effect.fnUntraced(function* (
     client: ConnectionId,
-    params: { readonly label: string; readonly pass?: string | null },
+    params: { readonly label: string; readonly pass?: string | null; readonly as?: "window" | "agent" | "hands" },
   ) {
     const attached = yield* attachment(client);
 
@@ -622,6 +807,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const at = yield* clock;
+
     const state = yield* store.atomic(() => {
       const next = stepWaiting(waiting(at), {
         type: "knock",
@@ -630,20 +816,33 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         label: params.label,
         location: options.location,
         has: attached.hello.has,
-        as: "window",
-        code: String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0)
-          .slice(-6)
-          .padStart(6, "0"),
+        as: params.as ?? "window",
+        code: Str.padStart(6, "0")(Str.slice(-6)(String(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0))),
         pass: params.pass ?? null,
         at,
       });
+
       saveWaiting(next);
+
       return next;
     });
+
     // The positive cap keeps the row this knock just wrote.
     const row = Option.getOrThrow(Option.fromUndefinedOr(state.rows.find((r) => r.key === attached.key)));
+
+    // Register first, then check: a grant that drained before this row existed is seen here.
+    // An empty project has no members and nobody to admit, and reading it here must not found one.
+    const members = yield* silent(readMembers()).pipe(
+      Effect.mapError((cause) => new GatewayError({ reason: new Storage({ cause }) })),
+    );
+
+    if (members !== null) {
+      yield* release(members, at);
+    }
+
     return ok({ code: row.code, until: row.until });
   });
+
   const watch = Effect.fnUntraced(function* (client: ConnectionId) {
     const checked = yield* silent(Effect.result(online(client)));
 
@@ -656,6 +855,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const at = yield* clock;
+
     const state = yield* store.atomic(() => {
       store.set(
         `client/${client}`,
@@ -664,10 +864,13 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       );
       const live = waiting(at);
       saveWaiting(live);
+
       return live;
     });
+
     return WatchReply.cases.watching.make({ rows: Waiting.rows(state) });
   });
+
   const disconnect = Effect.fnUntraced(function* (client: ConnectionId) {
     for (const attempt of checking.get(client) ?? []) {
       attempt.current = false;
@@ -681,15 +884,18 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         saveWaiting(stepWaiting(waiting(at), { type: "leave", key: attached.key, client }));
       }
 
-      sql.exec("DELETE FROM gateway_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+      forget(client);
       sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     });
   });
+
   const enrollment = Effect.fnUntraced(function* (binding: typeof Enrollment.Type) {
     const nonce = random();
     yield* store.atomic(() => store.set(`enrollment/${binding.id}`, Enrolled, { binding, nonce, used: false }));
+
     return nonce;
   });
+
   const fromInput = (binding: Binding): From => ({
     by: binding.by.key,
     for: binding.by.for,
@@ -699,11 +905,14 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     traceId: binding.span.traceId,
     build: options.build,
   });
+
   let start: string | null = null;
   let count = 0;
+
   const allocateStart = Effect.fnUntraced(function* () {
     while (start === null) {
       const candidate = yield* options.nextProcess().pipe(Effect.provideContext(context));
+
       const fresh = yield* store.atomic(() => {
         if (!Schema.is(ProcessId)(candidate)) {
           return false;
@@ -714,6 +923,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         }
 
         sql.exec("INSERT INTO gateway_starts (id) VALUES (?)", candidate);
+
         return true;
       });
 
@@ -724,8 +934,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     return start;
   });
+
   const saveBinding = (b: Binding) =>
     sql.exec("UPDATE gateway_bindings SET value=? WHERE id=?", encodeBinding(b), b.id);
+
   const savedBinding = Effect.fnUntraced(function* (id: string) {
     return yield* store.atomic(() => {
       const [row] = sql.exec("SELECT value FROM gateway_bindings WHERE id=?", id);
@@ -743,6 +955,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return decoded.success;
     });
   });
+
   const grant = Effect.fnUntraced(function* (input: unknown) {
     const decoded = Schema.decodeUnknownResult(Schema.Struct({ text: Schema.String, armored: Schema.String }))(input);
 
@@ -758,6 +971,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const c = change.success;
+
     const value = Change.match(c, {
       granted: ({ grant }) => grant,
       revoked: ({ revoke }) => revoke,
@@ -778,11 +992,13 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           window: options.founder.window,
         }),
       ]);
+
     const signers = [...members.keys.keys()].filter((key) => Schema.is(KeyLine)(key) || Schema.is(PasskeyLine)(key));
     let verified: typeof Checked.Type | null = null;
 
     for (const signer of signers) {
       const rp = passkeyRp(signer);
+
       const checked = yield* silent(
         verifySshsig({
           text,
@@ -836,8 +1052,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           issued === null ||
           issued.used ||
           pass.nonce !== issued.nonce ||
-          JSON.stringify(issued.binding) !==
-            JSON.stringify(
+          Formatter.formatJson(issued.binding) !==
+            Formatter.formatJson(
               Enrollment.make({
                 id: c.add.id,
                 to: c.add.to,
@@ -905,11 +1121,13 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             }
           : {}),
       };
+
       const event = Change.match(c, {
         granted: ({ grant }) => MemberEvent.cases.granted.make({ grant, signed }),
         revoked: ({ revoke }) => MemberEvent.cases.revoked.make({ revoke, signed }),
         added: ({ add }) => MemberEvent.cases.added.make({ add, signed }),
       });
+
       const currentFrom = yield* fromHere({
         by: signerFingerprint,
         for: value.for,
@@ -917,6 +1135,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         parent: null,
         build: options.build,
       });
+
       const pending = yield* store.atomic(() => {
         const prior = store.get(`changePending/${value.id}`, ChangePending);
 
@@ -926,6 +1145,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
         const next = { text, armored, from: currentFrom };
         store.set(`changePending/${value.id}`, ChangePending, next);
+
         return next;
       });
 
@@ -950,28 +1170,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           }
         }
       });
+
       return reply;
     }, write);
+
     return yield* applyGrant().pipe(
       Effect.flatMap((reply) =>
         Effect.gen(function* () {
           if (reply._tag === "applied") {
             const latest = yield* clients.members;
             const at = yield* clock;
-            const pending = yield* store.atomic(() => {
-              const live = waiting(at);
-              const accepted = live.rows.filter((r) => !("reason" in admitted(latest, r.key)));
-              const keys = accepted.map((r) => r.key);
-              saveWaiting(stepWaiting(live, { type: "accepted", keys }));
-              return accepted;
-            });
-
-            for (const row of pending) {
-              for (const client of row.clients) {
-                const nonce = yield* challenge(ConnectionId.make(client));
-                yield* notify(client, { method: "client.granted", params: { nonce } });
-              }
-            }
+            yield* release(latest, at);
 
             const connections = yield* store.atomic(() =>
               sql.exec("SELECT name FROM gateway_state WHERE name LIKE 'key/%'"),
@@ -979,21 +1188,24 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
             for (const connection of connections) {
               const name = String(connection.name),
-                client = name.slice(4);
+                client = Str.slice(4)(name);
+
               const key = yield* store.atomic(() => store.get(name, Schema.String));
 
               if (key !== null && "reason" in admitted(latest, key)) {
-                yield* notify(client, { close: 4003 });
+                yield* notify(client, News.cases.close.make({ code: 4003 }));
               }
             }
           }
 
           yield* flush;
+
           return reply;
         }),
       ),
     );
   });
+
   const denyFrom = Effect.fn("gateway.deny")(function* (by: Writer) {
     return yield* fromHere({
       by: by.key,
@@ -1003,7 +1215,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       build: options.build,
     });
   });
-  const deny = Effect.fnUntraced(function* (client: ConnectionId, input: unknown) {
+
+  const deny = Effect.fnUntraced(function* (client: ConnectionId, input: Schema.Json | undefined) {
     const checked = yield* silent(Effect.result(online(client)));
 
     if (Result.isFailure(checked)) {
@@ -1016,33 +1229,98 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     const params = Schema.decodeUnknownResult(Schema.Struct({ key: Schema.String, saw: Saw }))(input);
 
-    if (Result.isFailure(params) || reserved(input)) {
+    if (Result.isFailure(params) || (Predicate.isReadonlyObject(input) && reserved(input))) {
       return GrantReply.cases.refused.make({ reason: "bad_input" });
     }
 
     const { key, saw } = params.success;
     const from = yield* denyFrom(checked.success.by);
+
     return yield* clients
       .write(MemberEvent.cases.denied.make({ id: random(), key, saw, by: from.by }), from)
       .pipe(write);
   });
+
+  /** One wait past `after` on `stream`, as `ledger.wait` and `tasks.wait` both park it: ready at once,
+   *  or parked until an append past it rings `reader`. */
+  const parkOn = Effect.fnUntraced(function* (stream: string, after: number, reader: string) {
+    const waited =
+      options.wait === undefined
+        ? yield* ledger.wait(stream, after)
+        : yield* options.wait(stream, after, reader).pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} }))),
+            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+          );
+
+    return waited._tag === "parked" ? Answer.cases.parked.make({ stream, after }) : ok({ rev: waited.rev });
+  });
+
+  /**
+   * Whether the target's program has room for one send, asked as its message would land, with
+   * nothing saved or recorded. A send this cannot read has room: the door's own checks answer it.
+   */
+  const roomFor = Effect.fnUntraced(function* (
+    admit: NonNullable<typeof options.admit>,
+    raw: string,
+    key: string,
+    params: Schema.Json | undefined,
+  ) {
+    const request = Schema.decodeUnknownResult(Send)(params);
+
+    const message = Result.isSuccess(request)
+      ? Schema.decodeUnknownResult(options.inputs.schema)(request.success.m)
+      : Result.fail(null);
+
+    if (Result.isFailure(request) || Result.isFailure(message)) {
+      return true;
+    }
+
+    const sent = request.success;
+
+    const trial = Effect.gen(function* () {
+      const by = yield* membership(raw, key);
+      const id = yield* ids.next(InputId);
+      const span = yield* Effect.currentSpan;
+
+      // The door's record of the input on `gateway/inputs` is its one entry before the message.
+      return yield* admit(
+        sent.pid,
+        {
+          id: sent.letter,
+          envelope: { id, by, arrivedAt: yield* clock, input: message.success },
+          sentAt: sent.sentAt,
+          seen: sent.seen,
+          span: { traceId: span.traceId, spanId: span.spanId },
+        },
+        1,
+      );
+    }).pipe(
+      Effect.withSpan("gateway.quota"),
+      // A storage failure fails the call; a writer who is not granted is answered by the door below.
+      Effect.catch((error) => (error instanceof LedgerError ? Effect.fail(error) : Effect.succeed(true))),
+    );
+
+    return yield* silent(trial).pipe(Effect.provideContext(context));
+  });
+
   const route = Effect.fnUntraced(function* (
     client: ConnectionId,
     method: string,
-    params: unknown,
+    params: Schema.Json | undefined,
     reader = String(client),
   ) {
-    const checked = yield* silent(Effect.result(online(client)));
+    const checked = yield* silent(Effect.result(authenticated(client)));
 
     if (Result.isFailure(checked)) {
       return no("not_granted");
     }
 
-    const { by, raw } = checked.success;
+    const { attached, raw } = checked.success;
 
+    // One budget per authenticated key, hands included, before a window or agent becomes a Writer.
     const budget = yield* Effect.result(
       limiter.consume({
-        key: by.key,
+        key: attached.identity.key,
         ...ratePolicy,
         algorithm: "fixed-window",
         onExceeded: "fail",
@@ -1066,16 +1344,81 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             }),
         ),
       );
+
       return answer;
     }
 
-    if (reserved(params) || (method === "process.send" && reserved(rawObject(params)?.m))) {
+    if (
+      Predicate.isReadonlyObject(params) &&
+      (reserved(params) || (method === "process.send" && Predicate.isReadonlyObject(params.m) && reserved(params.m)))
+    ) {
       return yield* refuse("reserved");
     }
+
+    // A hands key's wait for new work parks outside the write turn, as `ledger.wait` does, on the
+    // caller's own `target:` stream: the referee rings it when a request for that key lands.
+    if (method === "tasks.wait") {
+      const asked = TaskRoutes.waitOn(attached, params);
+
+      return Result.isFailure(asked)
+        ? no(asked.failure)
+        : yield* parkOn(asked.success.stream, asked.success.after, reader);
+    }
+
+    if (Str.startsWith("tasks.")(method)) {
+      // One span for the whole tasks call: the write turn, the finish's record and the wake, so the
+      // wake joins the trace the finish saved. `flush` runs after it, so the span is written too.
+      const routeTasks = Effect.fn("gateway.route")(
+        function* () {
+          const { answer, wake } = yield* Effect.gen(function* () {
+            const fresh = yield* silent(Effect.result(authenticated(client)));
+
+            if (Result.isFailure(fresh)) {
+              return { answer: no("not_granted"), wake: null };
+            }
+
+            return yield* TaskRoutes.route(tasks, fresh.success.attached, method, params);
+          }).pipe(write);
+
+          // A taken finish answers only once its requester is scheduled, outside the write turn. A
+          // wake that failed answers `unavailable`: the result is saved, and the same finish sent
+          // again repeats and wakes again, as MailDelivery's `queued` comes only after both.
+          const woke = wake === null ? Result.succeed(undefined) : yield* Effect.result(wakeups.wake(wake));
+
+          return Result.isSuccess(woke) ? answer : no("unavailable");
+        },
+        Effect.tap((answer) => Effect.annotateCurrentSpan("fab.gateway.outcome", answer._tag)),
+      );
+
+      const routed = yield* Effect.exit(routeTasks());
+      yield* flush;
+
+      return yield* Exit.isSuccess(routed) ? Effect.succeed(routed.value) : Effect.failCause(routed.cause);
+    }
+
+    if (attached.identity.as === "hands") {
+      return no("not_allowed");
+    }
+
+    // The program's room is asked before anything of the input is saved or recorded, so a refusal
+    // leaves no record, binding, step or span behind (0147, 0153); the caller counts it (0143).
+    if (
+      method === "process.send" &&
+      options.admit !== undefined &&
+      !(yield* roomFor(options.admit, raw, attached.identity.key, params))
+    ) {
+      return no("quota");
+    }
+
+    const by = yield* membership(raw, attached.identity.key);
 
     let refusal: string | null = methods.has(method) ? null : "unknown_method";
 
     if ((method === "ledger.read" || method === "ledger.wait") && !Schema.is(Read)(params)) {
+      refusal ??= "bad_input";
+    }
+
+    if (method === "process.monitor" && Result.isFailure(decodeMonitor(params))) {
       refusal ??= "bad_input";
     }
 
@@ -1092,12 +1435,18 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const request = method === "process.send" ? Schema.decodeUnknownResult(Send)(params) : null;
+
     const decoded =
       request !== null && Result.isSuccess(request)
         ? Schema.decodeUnknownResult(options.inputs.schema)(request.success.m)
         : null;
+
     const message = decoded !== null && Result.isSuccess(decoded) ? decoded.success : null;
-    const name = message === null ? undefined : (options.inputs.name?.(message) ?? rawObject(message)?._tag);
+
+    const name =
+      message === null
+        ? undefined
+        : (options.inputs.name?.(message) ?? (Predicate.isReadonlyObject(message) ? message._tag : undefined));
 
     if (
       method === "process.send" &&
@@ -1105,12 +1454,13 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         Result.isFailure(request) ||
         decoded === null ||
         Result.isFailure(decoded) ||
-        typeof name !== "string")
+        !Predicate.isString(name))
     ) {
       refusal ??= "bad_input";
     }
 
     const target = request !== null && Result.isSuccess(request) ? request.success.pid : "gateway";
+
     const policy =
       target !== "gateway" && options.policy !== undefined
         ? yield* options.policy(target)
@@ -1118,6 +1468,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     if (request !== null && Result.isSuccess(request) && request.success.traceId !== undefined && by._tag === "agent") {
       const traceId = request.success.traceId;
+
       const delivered = yield* store.atomic(
         () =>
           sql.exec(
@@ -1132,18 +1483,23 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       }
     }
 
-    const digest = yield* hash(JSON.stringify(params));
-    const bodyHash = yield* hash(JSON.stringify(message));
+    const digest = yield* hash(Formatter.formatJson(params));
+    const bodyHash = yield* hash(Formatter.formatJson(message));
     const process = yield* allocateStart();
+
     const inputId = yield* ids
       .next(InputId)
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "storage", cause })));
+
     const at = yield* clock;
+
     const letter =
       refusal === null && request !== null && Result.isSuccess(request) ? `${target}/${request.success.letter}` : null;
+
     const recordInput = Effect.fn("gateway.input")(function* () {
       const span = yield* Effect.currentSpan;
       const destination = letter !== null && Option.isSome(processes) ? yield* processes.value.resolve(target) : null;
+
       // The letter's inbox row, if an earlier delivery landed it: its placing is the letter's answer.
       const held =
         destination === null || request === null || Result.isFailure(request)
@@ -1151,6 +1507,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           : (yield* Stream.runCollect(ledger.read(`${destination.name}/inbox`, 0))).find(
               (entry) => entry.id === request.success.letter,
             );
+
       const allocation = yield* store.atomic(() => {
         const [prior] = letter === null ? [] : sql.exec("SELECT value FROM gateway_bindings WHERE letter=?", letter);
         let processId = destination?.state._tag === "live" ? destination.state.process : target;
@@ -1192,6 +1549,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         }
 
         count++;
+
         const binding: Binding = {
           id: inputId,
           door: process,
@@ -1203,12 +1561,15 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           client: raw,
           by,
           process: processId,
-          name: typeof name === "string" ? name : method,
-          personOnly: typeof name === "string" && policy.inputs.includes(name),
+          name: Predicate.isString(name) ? name : method,
+          personOnly: Predicate.isString(name) && policy.inputs.includes(name),
           digest,
           arrivedAt: at,
           span: { traceId: span.traceId, spanId: span.spanId },
-          sentAt: request !== null && Result.isSuccess(request) ? request.success.sentAt : new Date(at).toISOString(),
+          sentAt:
+            request !== null && Result.isSuccess(request)
+              ? request.success.sentAt
+              : DateTime.formatIso(DateTime.makeUnsafe(at)),
           state: EnvelopeState.cases.allocated.make({}),
         };
 
@@ -1234,18 +1595,70 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return null;
       }
 
+      // Once its input row exists, a binding keeps that metadata across selector changes.
+      // A binding this call allocated carries a new ID, so no row can hold it and nothing is read.
+      const priorRecord =
+        binding.id === inputId
+          ? Option.none()
+          : yield* Stream.runHead(
+              ledger.read("gateway/inputs", 0).pipe(Stream.filter((entry) => entry.id === binding.id)),
+            );
+
+      if (Option.isSome(priorRecord)) {
+        yield* Schema.decodeUnknownEffect(Schema.is(InputId)(binding.id) ? InputEvent : LegacyInputEvent)(
+          valueFor(priorRecord.value),
+        ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+      }
+
+      const recorded = Option.isSome(priorRecord);
+
+      if (!recorded && binding.state._tag !== "allocated") {
+        return yield* new LedgerError({ reason: "bad_row" });
+      }
+
+      if (recorded) {
+        const kept =
+          binding.state._tag === "allocated" ? { ...binding, state: EnvelopeState.cases.recorded.make({}) } : binding;
+
+        if (letter !== null && kept !== binding) {
+          yield* store.atomic(() => saveBinding(kept));
+        }
+
+        return { binding: kept, held };
+      }
+
       let safe: typeof Schema.Json.Type | undefined;
 
-      if (refusal === null && message !== null && typeof name === "string" && !options.inputs.raw.includes(name)) {
-        const encoded = Schema.encodeUnknownResult(options.inputs.log)(message);
+      if (refusal === null && message !== null && Predicate.isString(name) && !options.inputs.raw.includes(name)) {
+        const audit = options.audit;
+        // Audit decodes the same trusted parent that the runner stamps before checking the message.
+        const stamped = Predicate.isObjectOrArray(message) ? { ...message, parent: binding.id } : message;
 
-        if (Result.isSuccess(encoded)) {
-          const value = json(encoded.success);
+        const selected =
+          audit === undefined
+            ? Effect.succeed<Schema.Json>({ type: name })
+            : Effect.suspend(() => audit(binding.process, stamped)).pipe(
+                Effect.provideContext(context),
+                Effect.catchCause((cause) => {
+                  const error = Cause.findError(cause);
 
-          if (Result.isSuccess(value)) {
-            safe = value.success;
-          }
-        }
+                  return Effect.fail(
+                    Result.isSuccess(error) && Schema.is(Audit.AuditError)(error.success)
+                      ? error.success
+                      : new Audit.AuditError({ reason: new Audit.Selection({ cause: Redacted.make(cause) }) }),
+                  );
+                }),
+              );
+
+        safe = yield* selected.pipe(
+          Effect.flatMap((value) =>
+            Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+              Effect.mapError(
+                (cause) => new Audit.AuditError({ reason: new Audit.Output({ cause: Redacted.make(cause) }) }),
+              ),
+            ),
+          ),
+        );
       }
 
       const fields = {
@@ -1256,6 +1669,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         traceId: binding.span.traceId,
         spanId: binding.span.spanId,
       };
+
       const event =
         refusal === null
           ? LegacyInputEvent.cases.received.make({
@@ -1263,6 +1677,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
               ...(safe === undefined ? {} : { input: safe }),
             })
           : LegacyInputEvent.cases.refused.make({ ...fields, reason: refusal });
+
       const recordedEvent = Schema.is(InputId)(binding.id)
         ? yield* Schema.decodeUnknownEffect(InputEvent)({
             ...event,
@@ -1270,6 +1685,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             n: binding.n,
           }).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })))
         : event;
+
       const placed = yield* appendChecked(binding.client, {
         stream: "gateway/inputs",
         id: binding.id,
@@ -1292,6 +1708,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
       return { binding, held };
     });
+
     const input = yield* recordInput();
     yield* flush;
 
@@ -1311,15 +1728,19 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
         if (method === "gateway.watch") {
           const answer = yield* watch(client);
+
           return answer._tag === "refused" ? no(answer.reason) : ok({ rows: answer.rows });
         }
 
         if (method === "gateway.deny") {
           const answer = yield* deny(client, params);
+
           return answer._tag === "refused" ? no(answer.reason) : ok(answer);
         }
 
         if (method === "process.send" && message !== null && request !== null && Result.isSuccess(request)) {
+          yield* membership(binding.client);
+
           if (binding.state._tag === "settled") {
             return deliveryAnswer(binding.state.result);
           }
@@ -1331,17 +1752,21 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             yield* store.atomic(() =>
               saveBinding({ ...binding, state: EnvelopeState.cases.settled.make({ result: answer }) }),
             );
+
             return deliveryAnswer(answer);
           }
 
           const sessions = yield* sessionsFor(binding.process);
           yield* sessions.record({ ...binding, traceId: binding.span.traceId });
           yield* sessions.delivered(binding.id, binding.process);
+
           const delivered: Binding = {
             ...binding,
             state: EnvelopeState.cases.delivered.make({}),
           };
+
           yield* store.atomic(() => saveBinding(delivered));
+
           const result = yield* Effect.exit(
             options
               .deliver(
@@ -1375,6 +1800,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
           if (Exit.isFailure(result)) {
             yield* store.atomic(() => saveBinding({ ...binding, state: EnvelopeState.cases.retryable.make({}) }));
+
             return yield* Effect.failCause(result.cause);
           }
 
@@ -1382,6 +1808,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           yield* store.atomic(() =>
             saveBinding({ ...binding, state: EnvelopeState.cases.settled.make({ result: answer }) }),
           );
+
           return deliveryAnswer(answer);
         }
 
@@ -1393,6 +1820,29 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           }
 
           return ok(yield* options.open(opened.success.pid, String(client)).pipe(Effect.provideContext(context)));
+        }
+
+        if (method === "process.monitor" && options.monitor !== undefined) {
+          const asked = decodeMonitor(params);
+
+          if (Result.isFailure(asked)) {
+            return no("bad_input");
+          }
+
+          const to = yield* store.atomic(() => store.get(`recipient/${client}`, ClientRecipient));
+
+          if (to === null) {
+            return no("no_session");
+          }
+
+          // The call's own `from`, as a letter's: the window's key, which the brain keeps as `asked`.
+          const from = { ...fromInput(binding), parent: binding.id };
+
+          return yield* options.monitor(asked.success.ref, asked.success.pid, to, from).pipe(
+            Effect.provideContext(context),
+            Effect.as(ok(null)),
+            Effect.catchTag("ProcessError", (error) => Effect.succeed(no(error.reason))),
+          );
         }
 
         if (method === "ledger.read" || method === "ledger.wait") {
@@ -1408,16 +1858,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             });
           }
 
-          const waited =
-            options.wait === undefined
-              ? yield* ledger.wait(p.success.stream, p.success.after)
-              : yield* options.wait(p.success.stream, p.success.after, reader).pipe(
-                  Effect.flatMap(
-                    Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} })),
-                  ),
-                  Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-                );
-          return waited._tag === "parked" ? Answer.cases.parked.make(p.success) : ok({ rev: waited.rev });
+          return yield* parkOn(p.success.stream, p.success.after, reader);
         }
 
         if (method === "spans.read") {
@@ -1430,6 +1871,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           const spans = yield* Stream.runCollect(
             records.read(p.success.chain).pipe(Stream.drop(p.success.after), Stream.take(PAGE)),
           );
+
           return ok({ spans, next: p.success.after + spans.length });
         }
 
@@ -1441,6 +1883,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           }
 
           const content = yield* records.content(p.success.chain, p.success.spanId);
+
           return ok(Option.getOrNull(content));
         }
 
@@ -1459,6 +1902,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             by: by.key,
             reason: p.success.reason,
           });
+
           return ok(null);
         }
 
@@ -1466,15 +1910,19 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       },
       Effect.tap((answer) => Effect.annotateCurrentSpan("fab.gateway.outcome", answer._tag)),
     );
+
     const routed = yield* Effect.exit(routeInput());
     yield* flush;
+
     return yield* Exit.isSuccess(routed) ? Effect.succeed(routed.value) : Effect.failCause(routed.cause);
   });
+
   /** The runner may save only the exact input whose checked binding the door delivered. */
   const accept = Effect.fn("gateway.accept")(function* (input: Incoming) {
     const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
+
     const parent = Schema.decodeUnknownResult(InputId)(incoming.envelope.id);
 
     if (Result.isFailure(parent)) {
@@ -1495,7 +1943,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       binding.seen !== incoming.seen ||
       binding.span.traceId !== incoming.span.traceId ||
       binding.span.spanId !== incoming.span.spanId ||
-      reserved(incoming.envelope.input)
+      (Predicate.isReadonlyObject(incoming.envelope.input) && reserved(incoming.envelope.input))
     ) {
       return yield* new NotGranted({});
     }
@@ -1507,7 +1955,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return yield* new LedgerError({ reason: "bad_row" });
     }
 
-    if (binding.hash !== (yield* hash(JSON.stringify(message)))) {
+    if (binding.hash !== (yield* hash(Formatter.formatJson(message)))) {
       return yield* new NotGranted({});
     }
 
@@ -1529,6 +1977,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const m = yield* Schema.decodeUnknownEffect(Schema.Json)(message).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
+
     return yield* appendChecked(binding.client, {
       stream,
       id: incoming.id,
@@ -1542,6 +1991,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       ),
     });
   });
+
   const append = Effect.fn("gateway.append")(function* (a: {
     readonly id: string;
     readonly parent: string;
@@ -1563,12 +2013,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
 
-      const event = rawObject(a.event);
+      const event = Predicate.isReadonlyObject(a.event) ? a.event : null;
 
       if (
         event === null ||
         event._tag !== a.kind ||
-        a.stream.startsWith("gateway/") ||
+        Str.startsWith("gateway/")(a.stream) ||
         brainOnly({ stream: a.stream, id: a.id, tag: a.kind })
       ) {
         return yield* new SigningRefused({ reason: "not_delivered" });
@@ -1577,14 +2027,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       const schema = Schema.StructWithRest(Schema.TaggedStruct(a.kind, {}), [
         Schema.Record(Schema.String, Schema.Json),
       ]);
+
       const decoded = Schema.decodeUnknownResult(schema)(event);
 
       if (Result.isFailure(decoded)) {
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
 
-      const digest = yield* hash(JSON.stringify(decoded.success));
+      const digest = yield* hash(Formatter.formatJson(decoded.success));
       const at = yield* clock;
+
       const meta = yield* store.atomic(() => {
         const prior = store.get(`append/${a.id}`, AppendMeta);
 
@@ -1592,8 +2044,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           return prior.digest === digest && prior.stream === a.stream ? prior : null;
         }
 
-        const next = { sentAt: new Date(at).toISOString(), digest, stream: a.stream };
+        const next = { sentAt: DateTime.formatIso(DateTime.makeUnsafe(at)), digest, stream: a.stream };
         store.set(`append/${a.id}`, AppendMeta, next);
+
         return next;
       });
 
@@ -1619,6 +2072,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       });
     }).pipe(write);
   });
+
   return {
     target: Effect.fn("gateway.target")(function* (name: string, code: string) {
       const at = yield* clock;
@@ -1660,6 +2114,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         .signer(parent, process, kind)
         .pipe(Effect.provideService(SignRequest, { id }));
     }),
+    // Who sent an input is the same for every policy: no event kind is asked, so none is loaded.
+    sender: Effect.fn("gateway.sender")(function* (process: string, parent: string) {
+      return yield* sessions.sender(parent, process);
+    }),
     retire: sessions.end,
     checkDelivery: Effect.fn("gateway.checkDelivery")(function* (process: string, input: Incoming) {
       const binding = yield* savedBinding(input.envelope.id);
@@ -1672,15 +2130,15 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
       if (
         !["delivered", "retryable", "settled"].includes(binding.state._tag) ||
-        JSON.stringify(by) !== JSON.stringify(binding.by) ||
-        JSON.stringify(by) !== JSON.stringify(input.envelope.by) ||
+        Formatter.formatJson(by) !== Formatter.formatJson(binding.by) ||
+        Formatter.formatJson(by) !== Formatter.formatJson(input.envelope.by) ||
         binding.arrivedAt !== input.envelope.arrivedAt ||
         binding.sentAt !== input.sentAt ||
         (binding.seen ?? 0) !== input.seen ||
         binding.span.traceId !== input.span.traceId ||
         binding.span.spanId !== input.span.spanId ||
         binding.hash === undefined ||
-        binding.hash !== (yield* hash(JSON.stringify(input.envelope.input)))
+        binding.hash !== (yield* hash(Formatter.formatJson(input.envelope.input)))
       ) {
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
@@ -1690,9 +2148,129 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   };
 });
 
-export class Gateway extends Context.Service<Gateway, Effect.Success<ReturnType<typeof make>>>()(
-  "@kampus/libfabrika/gateway/Gateway",
-) {
+/** What the ledger's `append` answers, read from its service: gateway/ imports no more of ledger/ (0043, rule 11). */
+type Appended = Ledger["Service"]["append"] extends (...args: Array<never>) => Effect.Effect<infer A, unknown>
+  ? A
+  : never;
+
+/**
+ * Service that admits clients and routes their calls. `Gateway.layer(options)` builds it from the
+ * project's Sql, its ledger and access services, a rate-limit budget and the callbacks that deliver
+ * an input to a process.
+ *
+ * **Details**
+ *
+ * A client connects, answers a signed challenge and is admitted, or knocks and waits for a person
+ * to grant it. `route` checks that the client is still admitted, spends the sender's rate-limit
+ * budget and then handles one named call. A call that sends an input to a process is saved as a
+ * binding. `accept` appends a delivered input to the process inbox only when it matches that
+ * binding, else it refuses with `NotGranted`. It fails with a `bad_row` ledger error when the input
+ * does not decode. `checkDelivery` refuses with `not_delivered` when an input does not match its
+ * saved binding. `sign`, `signer` and `append` serve a process answering an input it was delivered.
+ * They refuse with `SigningRefused`: `not_delivered` when the process is not live or no delivery is
+ * saved, and `spent`, `ended`, `person_only` or `signal` in the other cases. `sender` answers who
+ * sent an input delivered to a process, refused as `sign` is, and writes nothing: the brain asks it
+ * before a start (0170).
+ *
+ * @category services
+ */
+export class Gateway extends Context.Service<
+  Gateway,
+  {
+    /** The waiting row with this code whose key has this fingerprint, or null. */
+    readonly target: (
+      name: string,
+      code: string,
+    ) => Effect.Effect<
+      { key: string; for: string; to: string; code: string; label: string } | null,
+      GatewayError | LedgerError | NotGranted
+    >;
+    readonly connect: () => Effect.Effect<ConnectionId>;
+    readonly challenge: (client: ConnectionId) => Effect.Effect<string, GatewayError>;
+    /** Answers the checked hello, or the door's own refusal before the hello is checked. */
+    readonly initialize: (
+      client: ConnectionId,
+      input: Schema.Json | undefined,
+      trusted: Trusted,
+    ) => Effect.Effect<
+      typeof Answer.cases.refused.Type | typeof CheckedHello.Type,
+      GatewayError | LedgerError | NotGranted | SinkError | Cause.NoSuchElementError | WebCryptoError
+    >;
+    readonly knock: (
+      client: ConnectionId,
+      params: { readonly label: string; readonly pass?: string | null },
+    ) => Effect.Effect<typeof Answer.cases.ok.Type | typeof Answer.cases.refused.Type, GatewayError>;
+    readonly watch: (client: ConnectionId) => Effect.Effect<typeof WatchReply.Type, GatewayError>;
+    readonly disconnect: (client: ConnectionId) => Effect.Effect<void, GatewayError>;
+    /** Saves a passkey enrollment and answers its nonce. */
+    readonly enrollment: (binding: typeof Enrollment.Type) => Effect.Effect<string, GatewayError>;
+    readonly grant: (
+      input: unknown,
+    ) => Effect.Effect<
+      typeof GrantReply.Type,
+      GatewayError | LedgerError | NotGranted | SinkError | Cause.NoSuchElementError
+    >;
+    readonly deny: (
+      client: ConnectionId,
+      input: Schema.Json | undefined,
+    ) => Effect.Effect<typeof GrantReply.cases.refused.Type | Written, LedgerError | Cause.NoSuchElementError>;
+    readonly route: (
+      client: ConnectionId,
+      method: string,
+      params: Schema.Json | undefined,
+      reader?: string,
+    ) => Effect.Effect<
+      typeof Answer.Type,
+      | GatewayError
+      | LedgerError
+      | SessionManagerError
+      | RecoveryStoreError
+      | SinkError
+      | SigningRefused
+      | NotGranted
+      | ProgramDown
+      | RunnerError
+      | ProcessError
+      | RepliesError
+      | QuotasError
+      | WatchersError
+      | Audit.AuditError
+      | Cause.NoSuchElementError
+    >;
+    readonly signer: (
+      parent: string,
+      process: string,
+      kind: string,
+    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError | SessionManagerError, SignRequest>;
+    readonly sign: (
+      process: string,
+      id: string,
+      parent: string,
+      kind: string,
+    ) => Effect.Effect<Session, SigningRefused | NotGranted | LedgerError | SessionManagerError>;
+    /** Who sent `parent`, an input delivered to `process`, as `sign` would sign it, writing nothing. */
+    readonly sender: (
+      process: string,
+      parent: string,
+    ) => Effect.Effect<Writer, SigningRefused | NotGranted | SessionManagerError>;
+    readonly retire: (process: string) => Effect.Effect<void, SessionManagerError>;
+    readonly checkDelivery: (
+      process: string,
+      input: Incoming,
+    ) => Effect.Effect<void, GatewayError | LedgerError | SigningRefused | NotGranted>;
+    readonly append: (a: {
+      readonly id: string;
+      readonly parent: string;
+      readonly process: string;
+      readonly kind: string;
+      readonly stream: string;
+      readonly event: unknown;
+    }) => Effect.Effect<Appended, GatewayError | LedgerError | SessionManagerError | SigningRefused | NotGranted>;
+    readonly accept: (
+      input: Incoming,
+    ) => Effect.Effect<Appended, GatewayError | LedgerError | NotGranted | ProcessError>;
+  }
+>()("@kampus/libfabrika/gateway/Gateway") {
   static readonly layer = <A, RNext, RDeliver, RNotify>(options: Options<A, RNext, RDeliver, RNotify>) =>
     Layer.effect(Gateway, make(options));
 }
@@ -1704,12 +2282,13 @@ const HelloEvent = Schema.TaggedStruct("initialized", {
   version: Schema.Int,
   location: Schema.String,
   build: Schema.String,
+  clientBuild: Schema.optionalKey(Schema.NonEmptyString),
 });
 
 const random = () => Base64Url.encode(crypto.getRandomValues(new Uint8Array(24)));
 
 const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
-  const bytes = line ? Base64.decode(value.split(/\s+/)[1] ?? "") : Base64Url.decode(value);
+  const bytes = line ? Base64.decode(Str.split(value, /\s+/)[1] ?? "") : Base64Url.decode(value);
 
   if (Result.isFailure(bytes)) {
     return yield* new NotGranted({});
@@ -1720,7 +2299,8 @@ const fingerprint = Effect.fnUntraced(function* (value: string, line: boolean) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", body), catch: fail });
   const digest = yield* work;
-  return `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`;
+
+  return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(digest)))}`;
 });
 
 const hash = Effect.fnUntraced(function* (text: string) {
@@ -1729,5 +2309,6 @@ const hash = Effect.fnUntraced(function* (text: string) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes only through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const digest = yield* work;
+
   return Base64Url.encode(new Uint8Array(digest));
 });

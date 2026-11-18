@@ -50,14 +50,12 @@
   { "glob": ".oxfmtrc.json", "why": "the format settings" },
   { "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
   { "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
+  { "glob": "vendor/**", "why": "the lint rules we take as they ship, at their pinned commit (0563)" },
   { "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
+  { "glob": "vitest.e2e.config.ts", "why": "which end-to-end tests run, and their time limit" },
   {
     "glob": ".agents/skills/*/scripts/*.test.ts",
     "why": "the step scripts' laws and planted breaks"
-  },
-  {
-    "glob": ".agents/skills/lead/scripts/catchup.test-support.ts",
-    "why": "the stubbed tools and Git fixture catchup.sh's laws share"
   },
   {
     "glob": ".agents/skills/lead/scripts/skillscheck.sh",
@@ -77,6 +75,9 @@
     "why": "the owner's ledger of functions left out of the React Compiler"
   },
   { "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
+  { "glob": "next-ledger.json", "why": "next/'s list of old lint breaks, which only shrinks (0524)" },
+  { "glob": "agents-ledger.json", "why": "lead tooling's list of old lint breaks, which only shrinks (0524)" },
+  { "glob": "node-kinds.json", "why": "names code-graph treats as used; each must be bound by that name (0524)" },
   { "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
   { "glob": "pnpm-lock.yaml", "why": "the exact dependencies the tests and checks run" },
   { "glob": "tsconfig.base.json", "why": "the type checker's strictness" },

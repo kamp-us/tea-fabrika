@@ -1,6 +1,16 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
+import { apply, diff } from "./Patch.ts";
+
+/** A value the walk built, checked as the JSON the diff takes: the check hands back the same value. */
+const json = Schema.decodeUnknownSync(Schema.Json);
 
 type Patch = {
   readonly op: "add" | "remove" | "replace";
@@ -8,7 +18,7 @@ type Patch = {
   readonly value?: unknown;
 };
 
-const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
+const independentApply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
   let root = structuredClone(before);
 
   for (const patch of patches) {
@@ -17,19 +27,19 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
       continue;
     }
 
-    const keys = patch.path
-      .slice(1)
-      .split("/")
-      .map((s) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const keys = Arr.map(Str.split(Str.slice(1)(patch.path), "/"), (s) =>
+      Str.replaceAll("~0", "~")(Str.replaceAll("~1", "/")(s)),
+    );
+
     let object = root;
 
     for (const key of keys.slice(0, -1)) {
-      object = Reflect.get(Object(object), key);
+      object = Predicate.hasProperty(object, key) ? object[key] : undefined;
     }
 
     const last = keys.at(-1)!;
 
-    if (Array.isArray(object)) {
+    if (Arr.isArray(object)) {
       const at = last === "-" ? object.length : Number(last);
 
       if (patch.op === "remove") {
@@ -41,8 +51,8 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
       }
     } else if (patch.op === "remove") {
       Reflect.deleteProperty(Object(object), last);
-    } else {
-      Reflect.set(Object(object), last, structuredClone(patch.value));
+    } else if (Predicate.isObjectKeyword(object)) {
+      Object.assign(object, { [last]: structuredClone(patch.value) });
     }
   }
 
@@ -59,31 +69,315 @@ describe("p22 whole view plus patches", () => {
     ["primitive root", 2, "three"],
     ["removed keys", { a: 1, b: { c: 2 } }, { b: { d: 3 } }],
   ] as const) {
-    it(`plant, patch the wrong path or order: ${label}`, async () => {
-      const { diff } = await import("./Patch.ts");
+    it(`plant, patch the wrong path or order: ${label}`, () => {
       const copy = structuredClone(before);
-      expect(apply(before, diff(before, after))).toEqual(after);
+      expect(independentApply(before, diff(before, after))).toEqual(after);
       expect(before).toEqual(copy);
     });
   }
 
-  it("plant, compare only objects: every JSON pair and a chain of watcher bases reconstructs", async () => {
-    const { diff } = await import("./Patch.ts");
+  it("plant, compare only objects: every JSON pair and a chain of watcher bases reconstructs", () => {
     fc.assert(
       fc.property(fc.array(fc.jsonValue(), { minLength: 2, maxLength: 12 }), (views) => {
         let watcher: unknown = structuredClone(views[0]);
 
         for (const next of views.slice(1)) {
-          watcher = apply(watcher, diff(watcher, next));
+          watcher = independentApply(watcher, diff(json(watcher), json(next)));
           expect(watcher).toEqual(next);
         }
       }),
       { seed: 119120, numRuns: 100 },
     );
   });
-  it("plant, emit needless work: an unchanged view has no patch", async () => {
-    const { diff } = await import("./Patch.ts");
+  it("plant, emit needless work: an unchanged view has no patch", () => {
     const value = { rows: [{ id: 1, title: "a/b~" }], count: 3 };
     expect(diff(value, structuredClone(value))).toEqual([]);
+  });
+});
+
+// P14 slice 2, next/ (ticket 828): laws L6 and L7 of the approved plan, written before `apply`. The shape
+// they hold `Patch.ts` to: `apply(before, ops)` takes a view and the operations as they arrived
+// (unknown) and answers `Result.succeed(after)`, or `Result.fail(PatchError)` when any part is
+// malformed, a pointer is not RFC 6901, a key is `__proto__`, `constructor` or `prototype`, or a target
+// is not there. It never changes `before` or `ops`.
+
+type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
+
+/** The paths `value` holds now, as pointer tokens, the root included. */
+const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyArray<string>> => {
+  const out: Array<ReadonlyArray<string>> = [at];
+
+  if (Arr.isArray(value)) {
+    for (const [i, one] of value.entries()) {
+      out.push(...paths(one, [...at, String(i)]));
+    }
+  } else if (Predicate.isObject(value)) {
+    for (const [key, one] of Rec.toEntries(value)) {
+      out.push(...paths(one, [...at, key]));
+    }
+  }
+
+  return out;
+};
+
+const read = (value: unknown, at: ReadonlyArray<string>): unknown =>
+  Arr.reduce<string, unknown>(at, value, (v, key) => (Predicate.hasProperty(v, key) ? v[key] : undefined));
+
+/** `value` with `f` done to the container at `at`, copied on the way down. */
+const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => unknown): unknown => {
+  const [key, ...rest] = at;
+
+  if (key === undefined) {
+    return f(value);
+  }
+
+  if (Arr.isArray(value)) {
+    const copy = [...value];
+    copy[Number(key)] = change(copy[Number(key)], rest, f);
+
+    return copy;
+  }
+
+  // SAFETY: change walks only paths that `paths` listed, which step only into arrays and non-null objects, and the array case returned above.
+  return {
+    ...(value as Record<string, unknown>),
+    [key]: change(Predicate.hasProperty(value, key) ? value[key] : undefined, rest, f),
+  };
+};
+
+/** One generated edit: which path the value holds now, and what to do there. */
+const editChoice = fc.record({
+  pick: fc.nat(),
+  kind: fc.nat(),
+  key: fc.string({ maxLength: 4 }),
+  value: fc.jsonValue({ maxDepth: 2 }),
+});
+
+type EditChoice = typeof editChoice extends fc.Arbitrary<infer E> ? E : never;
+
+/** `before` changed by edits chosen from the paths it holds at each step: replace a value, drop a key or
+ *  an item, or add one. */
+const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
+  Arr.reduce(edits, structuredClone(before), (value, e) => {
+    const all = paths(value);
+    const at = all[e.pick % all.length]!;
+    const here = read(value, at);
+
+    if (e.kind % 3 === 0 || at.length === 0) {
+      return change(value, at, () => e.value);
+    }
+
+    const parent = at.slice(0, -1);
+    const last = at.at(-1)!;
+
+    if (e.kind % 3 === 1) {
+      return change(value, parent, (p) =>
+        Arr.isArray(p)
+          ? Arr.filter(p, (_, i) => String(i) !== last)
+          : Rec.fromEntries(Arr.filter(Rec.toEntries(Object(p)), ([k]) => k !== last)),
+      );
+    }
+
+    return Predicate.isObjectOrArray(here)
+      ? change(value, at, (p) => (Arr.isArray(p) ? [...p, e.value] : { ...Object(p), [e.key]: e.value }))
+      : change(value, at, () => e.value);
+  });
+
+const UNSAFE = ["__proto__", "constructor", "prototype"] as const;
+
+describe("L6: apply undoes diff and never changes its inputs", () => {
+  it("applying diff(before, after) to before gives after, for after derived from before by generated edits", () => {
+    fc.assert(
+      fc.property(fc.jsonValue(), fc.array(editChoice, { maxLength: 8 }), (before, edits) => {
+        const after = edited(before, edits);
+        // A view key that names a prototype is refused by the next law, so these pairs hold none.
+        fc.pre(
+          !Arr.some([...paths(before), ...paths(after)], (p) =>
+            // SAFETY: the wider element type only lets `includes` take any key; the list is read, never written.
+            Arr.some(p, (k) => (UNSAFE as ReadonlyArray<string>).includes(k)),
+          ),
+        );
+        const ops = diff(json(before), json(after));
+        const beforeCopy = structuredClone(before);
+        const opsCopy = structuredClone(ops);
+        const got = apply(before, ops);
+        expect(Result.isSuccess(got)).toBe(true);
+        expect(Result.getOrThrow(got)).toEqual(after);
+        expect(before, "apply changed its view").toEqual(beforeCopy);
+        expect(ops, "apply changed its ops").toEqual(opsCopy);
+      }),
+      { seed: 119120, numRuns: 500 },
+    );
+  });
+
+  it("an array index past its end is refused without changing the view or operations", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.jsonValue(), { maxLength: 20 }),
+        fc.integer({ min: 1, max: 100 }),
+        fc.constantFrom("add", "replace", "remove"),
+        fc.jsonValue(),
+        (items, gap, op, value) => {
+          const before = { items };
+          const path = `/items/${items.length + gap}`;
+          const ops = [op === "remove" ? { op, path } : { op, path, value }];
+          const copy = structuredClone({ before, ops });
+          expect(Result.isFailure(apply(before, ops))).toBe(true);
+          expect({ before, ops }).toEqual(copy);
+        },
+      ),
+      { seed: 119120, numRuns: 500 },
+    );
+  });
+
+  it("a path through __proto__, constructor or prototype is refused, at any depth, and nothing is polluted", () => {
+    fc.assert(
+      fc.property(
+        fc.jsonValue(),
+        fc.nat(),
+        fc.constantFrom(...UNSAFE),
+        fc.constantFrom("add", "replace", "remove"),
+        fc.jsonValue({ maxDepth: 1 }),
+        fc.boolean(),
+        (before, pick, unsafe, op, value, last) => {
+          // The unsafe key at a path this value holds, as the last token or with one more below it.
+          const all = paths(before);
+          const at = [...all[pick % all.length]!, unsafe, ...(last ? [] : ["polluted"])];
+
+          const path = `/${Arr.join(
+            Arr.map(at, (k) => Str.replaceAll("/", "~1")(Str.replaceAll("~", "~0")(k))),
+            "/",
+          )}`;
+
+          const copy = structuredClone(before);
+          const got = apply(before, [op === "remove" ? { op, path } : { op, path, value }]);
+          expect(Result.isFailure(got), `${op} ${path}`).toBe(true);
+          expect(before).toEqual(copy);
+          expect(Object.hasOwn(Object.prototype, "polluted"), "Object.prototype was written").toBe(false);
+        },
+      ),
+      { seed: 119120, numRuns: 500 },
+    );
+  });
+});
+
+/** RFC 6901 section 5's document. */
+const RFC6901 = {
+  foo: ["bar", "baz"],
+  "": 0,
+  "a/b": 1,
+  "c%d": 2,
+  "e^f": 3,
+  "g|h": 4,
+  "i\\j": 5,
+  'k"l': 6,
+  " ": 7,
+  "m~n": 8,
+};
+
+describe("L7: pointers and operations as the RFCs give them", () => {
+  it("vector: RFC 6901 section 5, each pointer names the value the RFC says, read through a replace", () => {
+    const vectors: ReadonlyArray<readonly [string, ReadonlyArray<string | number>]> = [
+      ["/foo", ["foo"]],
+      ["/foo/0", ["foo", 0]],
+      ["/", [""]],
+      ["/a~1b", ["a/b"]],
+      ["/c%d", ["c%d"]],
+      ["/e^f", ["e^f"]],
+      ["/g|h", ["g|h"]],
+      ["/i\\j", ["i\\j"]],
+      ['/k"l', ['k"l']],
+      ["/ ", [" "]],
+      ["/m~0n", ["m~n"]],
+    ];
+
+    for (const [pointer, keys] of vectors) {
+      const got = apply(RFC6901, [{ op: "replace", path: pointer, value: "X" }]);
+      expect(Result.isSuccess(got), pointer).toBe(true);
+      expect(read(Result.getOrThrow(got), Arr.map(keys, String)), pointer).toBe("X");
+    }
+
+    expect(Result.getOrThrow(apply(RFC6901, [{ op: "replace", path: "", value: "X" }]))).toBe("X");
+    // `~01` is the key `~1`: decoding `~0` first would turn it into `/`.
+    expect(Result.getOrThrow(apply({ "~1": 0, "/": 0 }, [{ op: "replace", path: "/~01", value: 1 }]))).toEqual({
+      "~1": 1,
+      "/": 0,
+    });
+    expect(
+      Result.isFailure(apply(RFC6901, [{ op: "replace", path: "foo", value: 1 }])),
+      "a pointer starts with /",
+    ).toBe(true);
+    expect(Result.isFailure(apply(RFC6901, [{ op: "replace", path: "/m~2n", value: 1 }])), "~ is ~0 or ~1 only").toBe(
+      true,
+    );
+  });
+
+  it("vector: RFC 6902 appendix A, the add, remove and replace examples and their errors", () => {
+    const ok: ReadonlyArray<readonly [string, Json, ReadonlyArray<unknown>, Json]> = [
+      [
+        "A.1 adding an object member",
+        { foo: "bar" },
+        [{ op: "add", path: "/baz", value: "qux" }],
+        { baz: "qux", foo: "bar" },
+      ],
+      [
+        "A.2 adding an array element",
+        { foo: ["bar", "baz"] },
+        [{ op: "add", path: "/foo/1", value: "qux" }],
+        { foo: ["bar", "qux", "baz"] },
+      ],
+      ["A.3 removing an object member", { baz: "qux", foo: "bar" }, [{ op: "remove", path: "/baz" }], { foo: "bar" }],
+      [
+        "A.4 removing an array element",
+        { foo: ["bar", "qux", "baz"] },
+        [{ op: "remove", path: "/foo/1" }],
+        { foo: ["bar", "baz"] },
+      ],
+      [
+        "A.5 replacing a value",
+        { baz: "qux", foo: "bar" },
+        [{ op: "replace", path: "/baz", value: "boo" }],
+        { baz: "boo", foo: "bar" },
+      ],
+      [
+        "A.10 adding a nested member object",
+        { foo: "bar" },
+        [{ op: "add", path: "/child", value: { grandchild: {} } }],
+        { foo: "bar", child: { grandchild: {} } },
+      ],
+      [
+        "A.11 ignoring unrecognized elements",
+        { foo: "bar" },
+        [{ op: "add", path: "/baz", value: "qux", xyz: 123 }],
+        { foo: "bar", baz: "qux" },
+      ],
+      [
+        "A.16 adding an array value",
+        { foo: ["bar"] },
+        [{ op: "add", path: "/foo/-", value: ["abc", "def"] }],
+        { foo: ["bar", ["abc", "def"]] },
+      ],
+    ];
+
+    for (const [label, before, ops, after] of ok) {
+      const got = apply(before, ops);
+      expect(Result.isSuccess(got), label).toBe(true);
+      expect(Result.getOrThrow(got), label).toEqual(after);
+    }
+
+    // A.12: adding to a nonexistent target is an error, and so is any operation the client does not take.
+    expect(Result.isFailure(apply({ foo: "bar" }, [{ op: "add", path: "/baz/bat", value: "qux" }])), "A.12").toBe(true);
+    expect(
+      Result.isFailure(apply({ foo: "bar" }, [{ op: "move", from: "/foo", path: "/bar" }])),
+      "move is not taken",
+    ).toBe(true);
+    expect(Result.isFailure(apply({ foo: "bar" }, [{ op: "remove", path: "/nothere" }])), "remove needs a target").toBe(
+      true,
+    );
+    expect(
+      Result.isFailure(apply({ foo: [1] }, [{ op: "replace", path: "/foo/01", value: 2 }])),
+      "an index has no leading zero",
+    ).toBe(true);
+    expect(Result.isFailure(apply({ foo: "bar" }, { op: "add" })), "ops are a list").toBe(true);
   });
 });

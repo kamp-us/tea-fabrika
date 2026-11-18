@@ -1,0 +1,82 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-taccumulating-spread-tests1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1371",
+  "started": "2026-11-15T15:57:00-08:00",
+  "ended": "2026-11-15T16:13:07-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step, restarted after a usage limit, for decision 0559 in next/ and our tooling: oxc/no-accumulating-spread on as an error by one override, first in .oxlintrc.json overrides, for next/, .agents/, oxlint-plugins/ and .github/ci/. The earlier run left the Merger, TomlEdit and Built rewrites, the plant and the L2 rows; each matched the plan and was kept. This run wrote the override, the seven reload.laws rewrites with policyFixture, the processTable walk rewrite with reached(), and the oxlint-plugins/README.md paragraph. Hits by the rule alone, oxlint 1.90.0: 11 before (Merger.laws 1, TomlEdit 1, Built 1, reload.laws 7, processTable.laws 1), 0 after, 0 in scope on the tree, 5 left in today's app by 0559. Laws: L1 (the plant in builtin-plants.ts) and L2 (seven by-path rows in plants.test.ts) are red with no override and green now; L3 is pnpm lint, passing, and no oxlint-disable names the rule; L4a to L4e are the existing laws in the five files, green at seed 119120 with the same test counts as before (12, 17, 3, 6, 11). One plant stayed green: L4a as the plan wrote it (the tail loop pushes to a fresh list), because out.findLast then answers an older command of the same attempt and the walk goes on; the same break in both loops turns 6 of 12 laws red. That is one missing_test finding, given to the lead.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Hits 6 and 7 hash lists, seed 119120, every install of one full run of each law, logged by a temporary line in install() that was removed before the commit. Hit 6 (L9/L12, first starts choose the current selection): 336 installs, 69 distinct hashes, before and after logs byte-identical (id and digest per line, log sha256 prefix 863b12b866226a2f). Hit 7 (L9/L12, a swapped fact publishes the running build): 344 installs, 57 distinct hashes, before and after logs byte-identical (log sha256 prefix 0b01bac6d46647d7). Distinct hashes, first 12 hex, hit 6: 02c78a245866 04172d641132 052aa28078e3 0d48af9c5801 12fb6aba93d0 19d954b81eba 1dc81c2b1d5a 1e8cc7497663 252c45e1cd2b 2631bf6af1d6 29074f629fc0 2aa4db871866 2e004b7f4d1f 355602242323 3595e452292d 364a058e549d 37137e54ec8e 3802561f27c2 38529d30b95d 3ca525c4a18e 3fa173523161 403f5d9dd4ad 4ac178335a62 4b207601c333 4d980e9e7d8e 4dbe362e59e7 4dc0f575b4b5 52b641adfd06 55fb44974b38 5bee6a22072c 63c85a553fef 646ece8c1de4 6894306ef077 6eac2aa2881e 71ae8828bb3d 727f75c6cfad 76476163145e 7650d4848ba2 7c482a24cb59 7fa6f61fa8ec 800d2c90f23d 833ca95572a5 84b9f9bfb7d0 8d6cd9dc5e78 8d90cb694674 a4bbc92d7ebd a6843bf05cbb b2584e2a107c b4874ded50ee bf9da4ea47d9 c30a09fe92a1 c375da046393 c6dcbf98aac3 c875b1177e08 ce61e183c0d2 d00dc513804b d68b1afa80dd d73826dbf141 da22759106ac deccdb99566a e09087e3af2f e5927080723d e76b5472ca38 e91448cd0fc0 f472c859ad60 f9c6bbc26985 fdad53236c32 fe06fe782fe0 ffa19796db49. Hit 7: 02c78a245866 04172d641132 0d48af9c5801 12fb6aba93d0 19d954b81eba 1e8cc7497663 252c45e1cd2b 2631bf6af1d6 29074f629fc0 2aa4db871866 2e004b7f4d1f 3595e452292d 37137e54ec8e 38529d30b95d 3ca525c4a18e 3fa173523161 403f5d9dd4ad 4ac178335a62 4b207601c333 4d980e9e7d8e 4dbe362e59e7 4dc0f575b4b5 52b641adfd06 5bee6a22072c 646ece8c1de4 6894306ef077 71ae8828bb3d 727f75c6cfad 76476163145e 7650d4848ba2 800d2c90f23d 833ca95572a5 84b9f9bfb7d0 8d6cd9dc5e78 8d90cb694674 a4bbc92d7ebd a6843bf05cbb b2584e2a107c b4874ded50ee bf9da4ea47d9 c30a09fe92a1 c375da046393 c54694a22047 c6dcbf98aac3 c875b1177e08 ce61e183c0d2 d00dc513804b d68b1afa80dd da22759106ac deccdb99566a e09087e3af2f e5927080723d e76b5472ca38 fdad53236c32 fe06fe782fe0 fec14a3c91c0 ffa19796db49.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "the new override deleted from .oxlintrc.json: the plant entry fails (built in, on with 0 hits: oxc(no-accumulating-spread)), and the four in-scope L2 rows too",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "the rule moved from the override to the root rules: the packages/, programs/ and apps/ rows fire",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": ".github/ci/** dropped from the override's files: the .github/ci/ row does not fire",
+      "result": "red"
+    },
+    {
+      "law": "L3",
+      "plant": "Merger.laws.test.ts back to let out and out = [...out, ...commands] in the first loop: oxlint exits 1 naming Merger.laws.test.ts:201",
+      "result": "red"
+    },
+    {
+      "law": "L4a",
+      "plant": "the tail loop pushes to a fresh list ([...out].push) in place of out, as the plan wrote it",
+      "result": "green"
+    },
+    {
+      "law": "L4a",
+      "plant": "both loops push to a fresh list: L1, L3, L4, L8, L10 and L13 fail",
+      "result": "red"
+    },
+    {
+      "law": "L4b",
+      "plant": "markers.push(before, after) in place of unshift then push: falsified after 1 run, # before-0 out of order",
+      "result": "red"
+    },
+    {
+      "law": "L4c",
+      "plant": "programs[key.split(\"/\")[1]!] in place of programs[key]: decodeBuilt fails on the even step",
+      "result": "red"
+    },
+    {
+      "law": "L4d",
+      "plant": "current = put(current, name, process) dropped: 5 of 6 fold laws red, the machine's current differs from the step's after",
+      "result": "red"
+    },
+    {
+      "law": "L4e",
+      "plant": "hit 4's second k += dropped: expected same to be loaded",
+      "result": "red"
+    },
+    {
+      "law": "L4e",
+      "plant": "hit 9's k += dropped: expected same to be loaded",
+      "result": "red"
+    },
+    {
+      "law": "L4e",
+      "plant": "hit 10's k += dropped: expected same to be loaded",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

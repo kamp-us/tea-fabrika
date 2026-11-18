@@ -43,8 +43,10 @@ it.effect.prop(
       const h = yield* harness(flow);
       const machine = module().challenge;
       const reached: Array<typeof machine.model.Type> = [];
+
       const capture = Effect.gen(function* () {
         const states: Array<typeof machine.model.Type> = [];
+
         const visit = (value: unknown): void => {
           const decoded = Schema.decodeUnknownResult(machine.model)(value);
 
@@ -56,10 +58,12 @@ it.effect.prop(
             Object.values(value).forEach(visit);
           }
         };
+
         visit(yield* h.dependencies.store.snapshot);
         expect(states.length, "the real store exposes its saved Challenge rows").toBeGreaterThan(0);
         reached.push(...states);
       });
+
       yield* setup(h);
       yield* capture;
 
@@ -127,6 +131,7 @@ it.effect.prop(
           }),
         { seed: 119120 },
       );
+
       expect(Arbitrary.formatCheckFailure(result)).toBeUndefined();
     }),
   EFFECT,
@@ -234,11 +239,14 @@ effectLaw("not built: P36 / P36.13 lost replies and reopen produce one final add
   Effect.gen(function* () {
     yield* setup(h);
     const { challenge, value, receipt } = yield* recover(h);
+
     // Lose the first reply and retry the same redemption after reopening the private store.
     const second = yield* Effect.exit(
       h.recovery.redeem(challenge.id, Redacted.make(value), added(h.flow), signed(binding().person)),
     );
+
     yield* h.reopen;
+
     const retried = yield* Effect.exit(
       h.recovery.redeem(challenge.id, Redacted.make(value), added(h.flow), signed(binding().person)),
     );

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e96-review",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T01:31:58-08:00",
+  "parent": "2026-11-16-effect-e96-tests",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of judgment slice E96 (globalFetchInEffect, globalFetch, app:src) in next/, at head 6ca149fa14287f6e34c9e553a87aef6e08481bb3, against the stack base eeb8ecdbb: merge-ready, no blocker, no finding row. Every line of the diff was read: seven integration test files under next/apps/fabrika/src and the tests step's run row. Each global fetch became Effect's HttpClient over FetchHttpClient.layer, the fix the check's message names. Every law keeps its assertions: each Response.ok check became the same 200 to 299 status range, header reads moved to the client's lowercase header record, the four brain-life 'nothing listens' checks still expect a rejection (a non-2xx answer resolves both before and after, so a live listener still fails them), the POST to /elsewhere keeps the text/plain;charset=UTF-8 type fetch gave a string body, JSON bodies keep application/json through HttpBody.jsonUnsafe, and the instance-one-file probe check tightened from ok to exactly 200, which the probe server answers (Node's default status). In local-instance the stand-in is both the client's Fetch and the stubbed global, so 'fetched was not called' still sees a request on either path; the kill spy keeps its own release. The new request helpers open their own scope and release the body, as decision 0061 asks. Planted by reading in four laws: a live listener in brain-life, an ignored origin header in instance-wire's 403, a request in the quota law of local-instance, and a non-2xx reply in sibling.laws each turn the law red. No ignore line, no disable line, no lock line was added. The one hit left, next/apps/fabrika/e2e/instance.visual.test.ts:104, is in app:e2e, which the plan gives to slice E57.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from this row. loosening.sh eeb8ecdbb HEAD: 7 unrecognized import lines and 10 removed-expect hits, each a rewritten expect that asserts the same thing or tighter; no law loosened. Recount with only the two checks at error through --lspconfig on next/apps/fabrika/tsconfig.json: globalFetch 1 (e2e/instance.visual.test.ts:104), globalFetchInEffect 0; app:src is at zero. Tests run at 6ca149fa1, one file at a time with --maxWorkers=1, TYPESAFE_API_KEY unset, no 0178 refusal: local-instance 3, tasks-wire 1, sibling.laws 1, hands-launcher 2, instance-one-file 7, instance-wire 15, brain-life 5, all passed. Leak checks: the repo is not shallow; leakgrep --text on the added lines of origin/main...HEAD clean; leakgrep --commits eeb8ecdbb..HEAD clean (2 commits). Not run: pnpm typecheck (the tests step ran it for next/apps/fabrika on this code) and pnpm lint. For the later unstableApiUsage lock of app:src: HttpBody is new here and effect/http/HttpBody is not yet in tsconfig.base.json's allowedUnstableApis list.",
+  "step": "review"
+}

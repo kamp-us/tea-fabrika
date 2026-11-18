@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-sql-w3-misses-a-stuck-last-watch",
+  "date": "2026-11-14",
+  "by": "slow-tests",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/WatchersTest.ts",
+    "line": 131
+  },
+  "says": "In next/, the SQLite law W3 does not go red when the watchers machine's `end` keeps the last remaining client. Its drain ends every held client as gone, then checks only that a rebuilt layer sends no frame and that the saved rows stay under 2048 bytes. A client that should be gone sends no frame anyway, and one stuck row is small, so both checks pass. The pure law W3 in runtime/internal/watchers.test.ts does catch this plant, so the machine itself is covered; what the SQLite law does not show is that the saved row is empty after the drain.",
+  "proof": "Plant in next/packages/libfabrika/src/runtime/internal/watchers.ts, inside `end`, before `const [first, ...rest] = clients;`: `if (clients.length === 0) { return [model, []]; }`. Then `vitest run next/packages/libfabrika/src/node/Watchers.test.ts -t W3` on Node 26.13.0: green (1 passed) on main's WatchersTest.ts at 59c063bce in 319 s, and green on this branch's in 173 s. It is a simpler form of one of the four plants PR 1107 ran on the pure W3, where that one was red. Restored after each run.",
+  "cost": "A change that leaves one ended watch saved in SQL would pass the SQLite law. The pure law still catches it today, but only while WatchersSql keeps calling the same machine.",
+  "head": "59c063bce1bb2bbd04117cf5547e5668dd7df61f",
+  "ticket": "kamp-us/tea-fabrika#982",
+  "pr": null
+}

@@ -1,3 +1,8 @@
+---
+state: "proposed; parts decided; a program's view changed 2026-10-22; one mailbox per run 2026-10-30; today's version; walked if a tryout is picked"
+summary: "tea holds machines; a program is what you start: a name, a description, typed flags, inputs and outputs, and `main`, an Effect that runs machines and asks for services through Effect's context. It uses machines and is not one. Flags are argv, inputs are stdin (told at any time, never waiting, closed by the starter alone; since 2026-10-30 every input shares the run's one mailbox, which `main` serves one handler per input in the order told; it holds the program's `capacity` unread, 1000 unless declared, and a `tell` past it fails `MailboxFull`; a control input like Ctrl-C is forked beside the order, on its own bound), outputs are events: heard once, kept nowhere; whatever a late viewer needs is a machine's state. `start` takes the listeners and answers a run handle; `pipe` is `from | to`; no raw `dispatch`. A host lists, starts, feeds, listens and provides. The first shape, a machine with inputs and outputs, was dropped."
+---
+
 # tea-program: programs between tea and a host
 
 **Proposed** 2026-10-15, changed 2026-10-16, 2026-10-17 (five times), 2026-10-19 and 2026-10-30. Not settled. Today's version; walked if a tryout is picked (owner, 2026-11-08).
@@ -290,7 +295,7 @@ Three layers, each with one job.
   asker's own saved state, the asker says `forget {id}`, and the answerer says
   `forgot {id}` when the drop is kept. Ship is the first: `ask {id, pr}`,
   `answer {id, pr, outcome, name}`, `forget {id}`, `forgot {id}`. `operate`
-  waits for `forgot` before it writes the answer on the lane, so a lane that
+  waits for `forgot` before it writes the answer on the quest, so a quest that
   has ended has left nothing in ship's storage. It stays plain inputs and
   outputs for now, the way request ids work over a socket. Count each program
   that needs the pattern; when there are enough, it gets a helper with good
@@ -474,7 +479,7 @@ defaults.
   write in half (the record as the run opens, as an ask is indexed, as an
   answer is forgotten, and the state as the pull request enters the queue).
   18 of 18 kept cells ended right, each pull request queued once, and nothing
-  left in storage once the lane was done.
+  left in storage once the quest was done.
 - Fencing has no process id because a folder can move between machines and a
   process id can be reused; an open count and a random name are in the folder
   itself.

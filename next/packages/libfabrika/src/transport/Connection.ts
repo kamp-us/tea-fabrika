@@ -1,16 +1,29 @@
+/**
+ * The per-connection driver for one gateway socket: it reads and saves the connection's attached
+ * state around each JSON-RPC frame, tracks parked waits and answers them when a stream advances.
+ */
 import { applyCell } from "@demlik/tea";
-import { Cause, Effect, Exit, Predicate, Result, Schema, Semaphore } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import { REFUSED } from "../SpanTag.ts";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, RateCountFailure, RateRefusal, Wait } from "./Wire.ts";
-const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Number }, parked: {} });
+
+const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Finite }, parked: {} });
+
 const Retry = Schema.Struct({ reason: RateRefusal.fields.reason, retryAfter: RateRefusal.fields.retryAfter });
 
 const Request = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   method: Schema.String,
-  params: Schema.Unknown,
+  params: Schema.Json,
 });
 
 const decodeRequest = Schema.decodeUnknownResult(Schema.fromJsonString(Request));
@@ -29,18 +42,60 @@ type Options<E, ReadError> = {
   readonly send: (text: string) => void;
   readonly close: (code: number) => void;
   readonly wait: (stream: string, after: number, reader: string) => Effect.Effect<typeof Waited.Type, E>;
-  readonly call: (method: string, params: unknown) => Effect.Effect<typeof Answer.Type, E>;
+  readonly call: (method: string, params: Schema.Json) => Effect.Effect<typeof Answer.Type, E>;
 };
 
+/**
+ * Creates the handlers for one connection. The caller supplies the I/O in `options` and gets back
+ * four effects: `frame`, `ring`, `wake` and `probe`.
+ *
+ * **Details**
+ *
+ * The saved attachment is the only state. Every handler starts from `options.read()`, which may
+ * return the value or an effect that does, and writes changes back with `options.save`. Nothing is
+ * cached between calls. `options.call` answers an ordinary request, `options.wait` registers a
+ * wait on a stream, `options.send` writes a text frame, `options.close` closes the socket, and
+ * `options.ping` gives the ping interval, or `null`.
+ *
+ * - `frame(text)` takes one text frame. Text that is not a JSON-RPC 2.0 request is dropped without
+ *   a reply. A `ledger.wait` request is saved as a wait and registered, and stays parked unless
+ *   `options.wait` answers it at once. It needs an online connection and `stream` and
+ *   `after` params, and it is refused with `no_hello`, `bad_input` or `too_many_waits` when it
+ *   does not fit. Waits are limited by a repeated id, by 64 waits and by 16,384 bytes of saved
+ *   attachment. Every other request runs one at a time, marks the connection busy while
+ *   `options.call` runs, sends the answer, and marks it idle again even if the call failed. A call
+ *   answered `parked`, such as a hands key's `tasks.wait`, is saved as a wait on the stream the
+ *   answer names and registered again through `options.wait`, exactly as a `ledger.wait` is. A
+ *   connection that is not online may only call `initialize` or `gateway.knock`; the rest get
+ *   `no_hello`.
+ * - `ring(stream, rev, onRefused)` answers every wait on `stream` whose position is below `rev`
+ *   with the new `rev`. It then registers the earliest remaining wait on that stream again, and
+ *   repeats until one stays parked. `onRefused` hears a `reserved` or `rate_limited` reason.
+ * - `wake()` closes the socket with code 1012 when the connection is busy, and does nothing
+ *   otherwise.
+ * - `probe(session)` returns the ping interval when `session` is this connection's session and the
+ *   connection is online, and `null` otherwise.
+ *
+ * **Gotchas**
+ *
+ * A failed `options.call` is sent no reply and its failure is returned to the caller of `frame`
+ * after the busy marker is cleared. A failed wait registration whose error is a `RateCountFailure`
+ * drops the wait and also fails the caller.
+ *
+ * @category constructors
+ */
 export const connection = <E, ReadError = never>(options: Options<E, ReadError>) => {
   const turn = Semaphore.makeUnsafe(1);
   const [unloaded] = State.connection.init(null, {});
   const step = (model: State.Model, msg: State.Msg) => applyCell(State.connection, model, msg)[0];
+
   // The saved attachment is the Model: each read starts from it, never from a cached copy.
   const read = Effect.suspend(() => {
     const state = options.read();
+
     return Effect.isEffect(state) ? state : Effect.succeed(state);
   }).pipe(Effect.map((attached) => step(unloaded, { type: "observed", attached })));
+
   const save = (model: State.Model) => {
     const attached = State.attachment(model);
 
@@ -48,6 +103,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       options.save(attached);
     }
   };
+
   const respond = (id: string | number, answer: typeof Answer.Type) => {
     if (answer._tag === "parked") {
       return;
@@ -72,6 +128,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       ),
     );
   };
+
   const forget = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
     const now = yield* read;
     const next = step(now, { type: "answered", wait });
@@ -81,13 +138,16 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     }
 
     save(next);
+
     return true;
   });
+
   const remove = Effect.fnUntraced(function* (wait: typeof Wait.Type, answer: typeof Answer.Type) {
     if (yield* forget(wait)) {
       respond(wait.id, answer);
     }
   });
+
   const register = Effect.fnUntraced(function* (
     wait: typeof Wait.Type,
     onRefused: (reason: string) => Effect.Effect<void> = () => Effect.void,
@@ -101,6 +161,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
         yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
         yield* onRefused("rate_limited");
         yield* forget(wait);
+
         return yield* Effect.fail(error);
       }
 
@@ -120,25 +181,41 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
         if (Result.isSuccess(rate)) {
           const reply = RateRefusal.make(rate.success);
           yield* remove(wait, reply);
+
           return reply;
         }
       }
 
       const reply = Answer.cases.refused.make({ reason });
       yield* remove(wait, reply);
+
       return reply;
     } else if (answer.success._tag === "ready") {
       const reply = Answer.cases.ok.make({ result: { rev: answer.success.rev } });
       yield* remove(wait, reply);
+
       return reply;
     }
 
     return Answer.cases.parked.make({ stream: wait.stream, after: wait.after });
   });
-  const parked = Effect.fnUntraced(function* (id: string | number, params: unknown) {
-    const now = yield* read;
 
-    if (!State.online(now)) {
+  /** Keeps one wait and registers it. It is saved first, so a ring during registration finds it. */
+  const hold = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
+    const now = yield* read;
+    const next = step(now, { type: "waited", wait });
+
+    if (next === now) {
+      return respond(wait.id, Answer.cases.refused.make({ reason: "too_many_waits" }));
+    }
+
+    save(next);
+
+    return yield* register(wait);
+  });
+
+  const parked = Effect.fnUntraced(function* (id: string | number, params: Schema.Json) {
+    if (!State.online(yield* read)) {
       return respond(id, Answer.cases.refused.make({ reason: "no_hello" }));
     }
 
@@ -148,17 +225,18 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       return respond(id, Answer.cases.refused.make({ reason: "bad_input" }));
     }
 
-    const wait = Wait.make({ id, ...decoded.success });
-    const next = step(now, { type: "waited", wait });
-
-    if (next === now) {
-      return respond(id, Answer.cases.refused.make({ reason: "too_many_waits" }));
-    }
-
-    // Saved before registration, outside the turn, so a ring during registration finds it.
-    save(next);
-    return yield* register(wait);
+    // Outside the turn, so a ring during registration finds it.
+    return yield* hold(Wait.make({ id, ...decoded.success }));
   });
+
+  /** One call's answer on the socket. A call the door parked on a stream it names, such as a hands
+   *  key's `tasks.wait`, is kept and registered again as a parked `ledger.wait` is, so a ring that
+   *  came while the call was out still finds it. */
+  const reply = (id: string | number, answer: typeof Answer.Type) =>
+    answer._tag === "parked"
+      ? hold(Wait.make({ id, stream: answer.stream, after: answer.after }))
+      : Effect.sync(() => respond(id, answer));
+
   const ordinary = Effect.fnUntraced(function* (request: typeof Request.Type) {
     const now = yield* read;
 
@@ -172,20 +250,19 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       save(busy);
     }
 
-    const exit = yield* Effect.exit(options.call(request.method, request.params));
+    const exit = yield* Effect.exit(
+      options.call(request.method, request.params).pipe(
+        Effect.tap((answer) =>
+          answer._tag === "refused" && ["reserved", "rate_limited", "quota"].includes(answer.reason)
+            ? Effect.annotateCurrentSpan(REFUSED, answer.reason)
+            : Effect.void,
+        ),
+        Effect.tap((answer) => reply(request.id, answer)),
+      ),
+    );
 
-    if (Exit.isFailure(exit)) {
-      if (Schema.is(RateCountFailure)(Cause.squash(exit.cause))) {
-        yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
-      }
-    } else {
-      const answer = exit.value;
-
-      if (answer._tag === "refused" && ["reserved", "rate_limited"].includes(answer.reason)) {
-        yield* Effect.annotateCurrentSpan(REFUSED, answer.reason);
-      }
-
-      respond(request.id, answer);
+    if (Option.exists(Exit.findErrorOption(exit), Schema.is(RateCountFailure))) {
+      yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
     }
 
     // The call or reply may replace the attachment. A failed call must clear busy too.
@@ -197,6 +274,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
     return yield* exit;
   });
+
   return {
     frame: Effect.fn("connection.frame")(function* (text: string) {
       const decoded = decodeRequest(text);
@@ -235,12 +313,12 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
           return;
         }
 
-        const next = latest.waits
-          .filter((wait) => wait.stream === stream)
-          .reduce<typeof Wait.Type | undefined>(
-            (first, wait) => (first === undefined || wait.after < first.after ? wait : first),
-            undefined,
-          );
+        const next = Arr.reduce(
+          Arr.filter(latest.waits, (wait) => wait.stream === stream),
+          undefined,
+          (first: typeof Wait.Type | undefined, wait) =>
+            first === undefined || wait.after < first.after ? wait : first,
+        );
 
         if (next === undefined || (yield* register(next, onRefused))._tag === "parked") {
           return;

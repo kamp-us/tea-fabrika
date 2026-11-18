@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1133-source-fix",
+  "ticket": "1133",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T21:50:36-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Today's lead tooling fixes the source review's two reporting faults. Generated inputs use the installed Vitest matcher and its stack-or-message JSON form, including object summaries that hide received values. Those values stay unknown; only a fixed test file's numeric assertion location is retained. The real attempt boundary now writes validated request, caller, clock and runner facts before setup, keeps closed failure reasons and retains known outcomes after a transient result-write failure. Eight interpreter laws and the guided machine law passed with in-memory I/O. Two deliberate breaks failed assertions and were restored. Scoped format and lint passed. Full lint and the compiler remain owed while another compiler check holds the shared resource. No real adapter, protected law, dispatch or CI wait ran. Session usage and list-price cost remain unavailable.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billing": null,
+  "plants": [
+    {
+      "law": "watcher observations decode installed matcher stacks and keep ambiguous outcomes incomplete",
+      "plant": "require formatted minus/plus diff lines absent from JSON failureMessages",
+      "result": "red"
+    },
+    {
+      "law": "validated attempt facts survive every early setup failure without copying private errors",
+      "plant": "discard validated attempt facts and replace every setup failure with a generic reason",
+      "result": "red"
+    }
+  ]
+}

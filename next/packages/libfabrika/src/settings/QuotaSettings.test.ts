@@ -1,0 +1,232 @@
+// P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
+import { describe, expect, it } from "@effect/vitest";
+import * as ByteSize from "effect/ByteSize";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
+import * as Declarations from "./Declarations.ts";
+import * as Setting from "./Fabrika.ts";
+import * as Sources from "./Fabrika.ts";
+import * as Snapshot from "./Snapshot.ts";
+import { Toml } from "./Toml.ts";
+import * as TomlParser from "./TomlParser.ts";
+
+const declaration = (path: string) => {
+  const found = Declarations.all.declarations.filter((d) => d.path === path);
+  expect(found, `${path} must be declared once`).toHaveLength(1);
+
+  return Option.getOrThrow(Option.fromUndefinedOr(found[0]));
+};
+
+const group = () =>
+  Setting.group({
+    writes: declaration("limits.writes"),
+    storage: declaration("limits.storage"),
+    recovery: declaration("limits.recovery"),
+  });
+
+const numeric = (value: unknown): unknown => {
+  if (ByteSize.isByteSize(value)) {
+    return ByteSize.toNumberUnsafe(value);
+  }
+
+  if (Predicate.isObjectKeyword(value)) {
+    return Rec.fromEntries(Rec.toEntries(value).map(([key, v]) => [key, numeric(v)]));
+  }
+
+  return value;
+};
+
+const measured = {
+  project: { writes: 160, bytes: 74_080, message: { writes: 10, bytes: 5_469 } },
+  process: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
+};
+
+const empty = { value: {}, spans: [] };
+
+const resolve = Effect.fnUntraced(function* (text: string) {
+  const parsed = yield* Toml.use((toml) => toml.parse(text));
+
+  return yield* Sources.resolve(group(), {
+    flags: Sources.flags({}),
+    env: Sources.env({}),
+    repo: Sources.file("repo.toml", empty),
+    person: Sources.file("person.toml", parsed),
+  });
+});
+
+const layers = <A, E, R>(work: Effect.Effect<A, E, R | Toml | Digest.Digest>) =>
+  work.pipe(Effect.provide(TomlParser.layer), Effect.provide(Digest.layerWebCrypto));
+
+// fast-check supplies edge-biased tapes; each move changes the currently selected source value.
+const Natural = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 }));
+
+const Tape = Schema.Array(Schema.Struct({ pick: Natural, value: Natural, remove: Schema.Boolean })).check(
+  Schema.isMinLength(3),
+  Schema.isMaxLength(15),
+);
+
+describe("P34c Q11 settings", () => {
+  it.effect("vector: Q11 defaults equal A-Numbers; measurements are fixed independent inputs", () =>
+    layers(
+      Effect.gen(function* () {
+        const g = group();
+        expect(numeric(g.settings.writes.default)).toBe(Math.ceil(10 * 2 * 688));
+        expect(numeric(g.settings.storage.default)).toBe(1_000_000_000);
+
+        const calculated = {
+          process: {
+            writes: Math.ceil(10 * Math.max(29, 25 + 3)),
+            bytes: Math.ceil(10 * Math.max(20_741, 5_259 + 6_167 + 8_444)),
+            message: { writes: Math.ceil(10 * 5), bytes: Math.ceil(10 * 1_879) },
+          },
+          project: {
+            writes: Math.ceil(10 * Math.max(16, 5 + 5 + 6)),
+            bytes: Math.ceil(10 * Math.max(7_408, 2_216 + 2_216 + 2_966)),
+            message: { writes: Math.ceil(10 * 1), bytes: Math.ceil(10 * 546.83) },
+          },
+        };
+
+        expect(calculated).toEqual(measured);
+        expect(numeric(g.settings.recovery.default)).toEqual(measured);
+
+        for (const d of g.declarations) {
+          expect(d.scope).toEqual(["person"]);
+          expect(d.reload).toBe("restart");
+        }
+
+        const resolved = yield* resolve("");
+        const saved = yield* Snapshot.make(g, resolved);
+        expect(numeric((yield* Snapshot.read(g, saved)).values)).toEqual({
+          writes: 13_760,
+          storage: 1_000_000_000,
+          recovery: measured,
+        });
+      }),
+    ),
+  );
+
+  it.effect.prop(
+    "Q11 source changes survive TOML and strict snapshot round trips",
+    { tape: Tape },
+    ({ tape }) =>
+      layers(
+        Effect.gen(function* () {
+          const defaults = new Map<string, number>([
+            ["writes", 13_760],
+            ["storage", 1_000_000_000],
+            ...Rec.toEntries(measured).flatMap(([location, value]) => [
+              [`recovery.${location}.writes`, value.writes] as const,
+              [`recovery.${location}.bytes`, value.bytes] as const,
+              [`recovery.${location}.message.writes`, value.message.writes] as const,
+              [`recovery.${location}.message.bytes`, value.message.bytes] as const,
+            ]),
+          ]);
+
+          const selected = new Map(defaults);
+
+          for (const cell of tape) {
+            const paths = [...selected.keys()];
+            const key = paths[cell.pick % paths.length]!;
+
+            const cap = Match.value(key).pipe(
+              Match.when("writes", () => 13_760),
+              Match.when("storage", () => 1_000_000_000),
+              Match.orElse(() => 1_000_000),
+            );
+
+            selected.set(key, cell.remove ? defaults.get(key)! : 1 + (cell.value % cap));
+            const tables = new Map<string, string[]>();
+
+            for (const [key, value] of selected) {
+              const segments = Str.split(key, ".");
+              const field = segments.pop()!;
+              const table = ["limits", ...segments].join(".");
+              const rows = tables.get(table) ?? [];
+              rows.push(`${field} = ${field === "bytes" || field === "storage" ? `"${value} B"` : value}`);
+              tables.set(table, rows);
+            }
+
+            const text = [...tables].map(([table, rows]) => `[${table}]\n${rows.join("\n")}`).join("\n");
+            const resolved = yield* resolve(text);
+            const g = group();
+            const saved = yield* Snapshot.make(g, resolved);
+            const transport = Schema.decodeSync(Schema.fromJsonString(Snapshot.Snapshot))(Formatter.formatJson(saved));
+            const restored = yield* Snapshot.read(g, transport);
+            expect(numeric(restored.values)).toEqual({
+              writes: selected.get("writes"),
+              storage: selected.get("storage"),
+              recovery: Rec.fromEntries(
+                ["project", "process"].map((location) => [
+                  location,
+                  {
+                    writes: selected.get(`recovery.${location}.writes`),
+                    bytes: selected.get(`recovery.${location}.bytes`),
+                    message: {
+                      writes: selected.get(`recovery.${location}.message.writes`),
+                      bytes: selected.get(`recovery.${location}.message.bytes`),
+                    },
+                  },
+                ]),
+              ),
+            });
+            expect(restored.snapshot).toEqual(saved);
+            const bad = { ...transport, values: { ...transport.values } };
+            delete bad.values["limits.writes"];
+            expect(yield* Effect.result(Snapshot.read(g, bad))).toMatchObject({ _tag: "Failure" });
+            expect(yield* Effect.result(Snapshot.read(g, { ...transport, hash: "changed" }))).toMatchObject({
+              _tag: "Failure",
+            });
+          }
+        }),
+      ),
+    { arbitrary: { seed: 119120, runs: 100 } },
+  );
+
+  it.effect.prop(
+    "Q11 invalid quota settings fail instead of disabling or raising a wall",
+    {
+      tape: Tape,
+    },
+    ({ tape }) =>
+      layers(
+        Effect.gen(function* () {
+          const valid = new Map<string, string>([
+            ["writes", "1"],
+            ["storage", '"1 B"'],
+          ]);
+
+          for (const cell of tape) {
+            const key = [...valid.keys()][cell.pick % valid.size]!;
+            const bad = cell.value % 2 === 0 ? "0" : key === "writes" ? "13761" : '"1000000001 B"';
+            const text = `[limits]\n${[...valid].map(([k, v]) => `${k} = ${k === key ? bad : v}`).join("\n")}\n`;
+            expect(yield* Effect.result(resolve(text))).toMatchObject({ _tag: "Failure" });
+          }
+
+          const recovery = declaration("limits.recovery");
+          const encoded = Schema.encodeUnknownSync(recovery.schema)(recovery.default);
+          expect(encoded).toBeTypeOf("object");
+
+          // Mutate a schema-valid recovery value, rather than inventing another error schema.
+          for (const location of ["project", "process"]) {
+            for (const field of ["writes", "bytes"]) {
+              const bad = structuredClone(encoded) as Record<string, Record<string, any>>;
+              bad[location]![field] = field === "bytes" ? "0 B" : 0;
+              expect(Schema.decodeUnknownResult(recovery.schema)(bad)._tag).toBe("Failure");
+              const message = structuredClone(encoded) as Record<string, Record<string, any>>;
+              message[location]!.message[field] = field === "bytes" ? "0 B" : 0;
+              expect(Schema.decodeUnknownResult(recovery.schema)(message)._tag).toBe("Failure");
+            }
+          }
+        }),
+      ),
+    { arbitrary: { seed: 119120, runs: 100 } },
+  );
+});

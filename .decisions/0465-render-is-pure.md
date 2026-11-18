@@ -1,7 +1,7 @@
 ---
 id: 0465
 title: Render is pure, so a view never reads the clock, never touches a ref's current and never changes what it was given
-status: accepted
+status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
 date: 2026-11-03
 tags: [react, compiler, render, purity, next]
 ---
@@ -39,3 +39,7 @@ C1 to C3.
 ## Consequences
 
 - `react/refs`, `react/immutability` and `react/purity` hold it ([0464](0464-every-compiler-finding-fails-the-build.md)).
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/no-clock-in-view`, the rule named here, with the Effect checker's date, random and UUID checks, in the pull request that turns them on at zero hits.

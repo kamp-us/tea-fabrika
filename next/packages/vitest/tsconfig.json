@@ -1,0 +1,31 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A library imports each Effect module by its path, `import * as Effect from "effect/Effect"` (0577).
+        "namespaceImportPackages": ["effect"],
+        "diagnosticSeverity": { "preferNamespaceImport": "error" },
+        // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+        // The globs read from this folder. One entry per set of folders; its comment names its checks.
+        "overrides": [
+          // Whole package: schemaNumber (E4), unnecessaryArrowBlock (E8), runOfExitToRunExit (E25),
+          // schemaClassMissingBrand (its one hit here, outside E6's row, fixed in the recount).
+          {
+            "include": ["**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaNumber": "error",
+                "schemaClassMissingBrand": "error",
+                "unnecessaryArrowBlock": "error",
+                "runOfExitToRunExit": "error"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "include": ["src"]
+}

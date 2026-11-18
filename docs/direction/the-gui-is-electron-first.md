@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24; first build `apps/fabrika`; 2026-10-25: a terminal running tsh with a line editor; decided the same day: the window is tiled like tmux and Tuval, every new tile runs tsh, and a program with a GUI runs in its tile; later the same day: Tuval and tmux are the default, the host runs apart from the app as tmux's server does, and macOS's own window rules hold; later still: the app is the only desk for now, the host keeps only its socket file, and a browser desk waits for a device with no app (experiment 150)"
+summary: "The fabrika app is Electron from the start: its main process runs the host and every program, one sandboxed window draws the panes, and one MessagePort carries the typed messages between them. No local port, so no secret. One copy at a time. It opens on tsh; a program with a GUI takes over the window. Its window code is built into the app for now."
+---
+
 # The GUI is an Electron app first
 
 Decided 2026-10-24. Replaces The GUI is a local web page first
@@ -547,7 +552,7 @@ Where they clash, the owner picks.
 
 - **Both were used for years.** Reading what Tuval and tmux did is cheaper
   than designing it again, and their keys are muscle memory.
-- **A lane runs for hours.** Closing a window should not end it.
+- **A quest runs for hours.** Closing a window should not end it.
 - **One store, one way to save.** A crash cannot leave the layout and the
   jobs disagreeing, so nothing needs cleaning up after one.
 
@@ -560,7 +565,7 @@ Where they clash, the owner picks.
 - **How sure: 80%.** The doubt: an agent halfway through a call when the host
   stops needs its own way back. Coming back running would send the call
   again: a second paid model call, or a second comment on a real ticket. It is
-  decided before the lane that builds the restore, not found on a real
+  decided before the quest that builds the restore, not found on a real
   ticket. The shape to start from is already in kept programs
   (`packages/fabrika/src/program/kept.test.ts`): the program gets `resume` and
   its own `update` says what each half-done step does, with a write carrying
@@ -581,7 +586,7 @@ Where they clash, the owner picks.
 The host now runs apart, and the app attaches to it. The answer first: quit
 the app with `counter` up in a tile, start it again, and the same desk comes
 back with `counter` still at 1. Nothing restarted. The ledger state and
-coming back after a host stop are the next lane.
+coming back after a host stop are the next quest.
 
 ```text
 <home>/host/sock    the link: a Unix socket, 0600, in a 0700 folder; NDJSON, one message a line

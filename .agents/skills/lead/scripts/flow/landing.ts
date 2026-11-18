@@ -10,12 +10,22 @@
 //   bot-push    act     botpush.mjs: the branch and the step notes, as the bot
 //   open-pr     act     gh: finds the branch's open pull request, or opens one
 //   ci          listen  gh pr checks --watch: waits for CI; red is stuck
-//   catchup     act     catchup.sh: merges main in, signs it as the lead, waits and squashes (a `lead` step)
+//   queue       act     pr/Queue.ts: the leak checks, ci-required green, then one pinned squash that adds
+//                       the pull request to GitHub's merge queue; it ends queued, not merged (a `lead` step)
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
-import { Effect, Path, Schema, Stream } from "effect";
-import { ChildProcess, type ChildProcessSpawner } from "effect/process";
+import { Array as Arr, String as Str, pipe, Effect, Match, Path, Schema, Stream } from "effect";
+import { ChildProcess } from "effect/process";
+import type { ChildProcessSpawner } from "effect/process";
+
+import { Checks } from "../ci/Checks.ts";
+import * as ChecksGh from "../ci/ChecksGh.ts";
+import { PullRequests } from "../pr/PullRequests.ts";
+import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
+import { LeakGrepRefused, Pushes } from "../pr/Pushes.ts";
+import * as PushesProcess from "../pr/PushesProcess.ts";
+import * as Queue from "../pr/Queue.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
 import type { Step } from "./Step.ts";
@@ -24,28 +34,32 @@ import type { Step } from "./Step.ts";
 export type Ran = { readonly code: number; readonly output: string };
 
 /** The last lines of a command's output, for a reason. */
-export const tail = (output: string, n = 5): string => output.trimEnd().split("\n").slice(-n).join(" | ");
+export const tail = (output: string, n = 5): string =>
+  Arr.join(pipe(output, Str.trimEnd, Str.split("\n")).slice(-n), " | ");
 
 const run = Effect.fn("landing.run")(
   function* (dir: string, command: string, args: ReadonlyArray<string>) {
     const handle = yield* ChildProcess.make(command, args, { cwd: dir });
+
     const [output, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.all)), handle.exitCode], {
       concurrency: 2,
     });
+
     return { code: Number(code), output } satisfies Ran;
   },
   Effect.scoped,
   (effect, dir, command) =>
-    Effect.mapError(effect, () => new StepFailed({ reason: `${command} could not start in ${dir}` })),
+    Effect.mapError(effect, () => StepFailed.make({ reason: `${command} could not start in ${dir}` })),
 );
 
 /** A step's args, read by the runner's own schema. */
 const readArgs = <A>(schema: Schema.Codec<A>, step: Step) =>
   Schema.decodeUnknownEffect(schema)(step.args).pipe(
-    Effect.mapError((e) => new StepFailed({ reason: `${step.name}'s args do not parse: ${e.message}` })),
+    Effect.mapError((e) => StepFailed.make({ reason: `${step.name}'s args do not parse: ${e.message}` })),
   );
 
 const Dir = Schema.Struct({ dir: Schema.String });
+
 const Branch = Schema.Struct({ dir: Schema.String, branch: Schema.String.check(Schema.isStartingWith("fabrikalfa/")) });
 
 const Commit = Schema.Struct({
@@ -61,8 +75,6 @@ const Pr = Schema.Struct({
   title: Schema.String,
   body: Schema.String,
 });
-
-const Land = Schema.Struct({ dir: Schema.String, branch: Branch.fields.branch, ticket: Schema.String });
 
 // ---------------------------------------------------------------- what each exit code means
 
@@ -80,29 +92,37 @@ export const governanceOutcome = (ran: Ran): Outcome.Outcome =>
 
 /** stepcommit.sh: 5 is a ticket the lead must pick again (an open PR holds it, or PRs cannot be read). */
 export const commitOutcome = (ran: Ran): Outcome.Outcome =>
-  ran.code === 0
-    ? Outcome.done(`committed and signed: ${tail(ran.output, 1)}`)
-    : ran.code === 5
-      ? Outcome.ask(`stepcommit.sh refused the lead link: ${tail(ran.output)}`)
-      : Outcome.stuck(`stepcommit.sh exited ${ran.code}: ${tail(ran.output)}`);
+  Match.value(ran.code).pipe(
+    Match.when(0, () => Outcome.done(`committed and signed: ${tail(ran.output, 1)}`)),
+    Match.when(5, () => Outcome.ask(`stepcommit.sh refused the lead link: ${tail(ran.output)}`)),
+    Match.orElse(() => Outcome.stuck(`stepcommit.sh exited ${ran.code}: ${tail(ran.output)}`)),
+  );
 
 /** leakgrep.sh fails closed: 1 is a hit for the lead's hand check, anything else but 0 is stuck. */
 export const leakOutcome = (ran: Ran): Outcome.Outcome =>
-  ran.code === 0
-    ? Outcome.done("the leak grep is clean on each commit not on origin")
-    : ran.code === 1
-      ? Outcome.ask(`the leak grep has a hit for the lead's hand check: ${tail(ran.output)}`)
-      : Outcome.stuck(`leakgrep.sh could not check (exit ${ran.code}): ${tail(ran.output)}`);
+  Match.value(ran.code).pipe(
+    Match.when(0, () => Outcome.done("the leak grep is clean on each commit not on origin")),
+    Match.when(1, () => Outcome.ask(`the leak grep has a hit for the lead's hand check: ${tail(ran.output)}`)),
+    Match.orElse(() => Outcome.stuck(`leakgrep.sh could not check (exit ${ran.code}): ${tail(ran.output)}`)),
+  );
+
+/** A refused add: a leak hit asks for the lead's hand check, as leak-grep does; anything else is stuck. */
+export const queueRefused = (e: { readonly reason: string }): Outcome.Outcome =>
+  Schema.is(LeakGrepRefused)(e)
+    ? Outcome.ask(`the leak grep refused before the queue: ${e.reason}`)
+    : Outcome.stuck(`not added to the merge queue: ${e.reason}`);
 
 /** The pull request number in `gh pr list --json number -q .[0].number`'s answer, or `null`. */
 export const listedPr = (ran: Ran): number | null => {
-  const n = Number(ran.output.trim());
+  const n = Number(Str.trim(ran.output));
+
   return ran.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
 };
 
 /** The pull request number in `gh pr create`'s answer, or `null`. */
 export const createdPr = (ran: Ran): number | null => {
   const n = Number(/\/pull\/(\d+)/.exec(ran.output)?.[1]);
+
   return ran.code === 0 && Number.isInteger(n) ? n : null;
 };
 
@@ -116,7 +136,7 @@ const openPr = Effect.fn("landing.openPr")(function* (dir: string, branch: strin
   const pr = listedPr(yield* listPr(dir, branch));
 
   if (pr === null) {
-    return yield* new StepFailed({ reason: `${branch} has no open pull request` });
+    return yield* StepFailed.make({ reason: `${branch} has no open pull request` });
   }
 
   return pr;
@@ -125,6 +145,7 @@ const openPr = Effect.fn("landing.openPr")(function* (dir: string, branch: strin
 /** A script by its path from the lead scripts' folder, the one above this. */
 const script = Effect.fn("landing.script")(function* (...parts: ReadonlyArray<string>) {
   const path = yield* Path.Path;
+
   return path.join(import.meta.dirname, "..", ...parts);
 });
 
@@ -134,30 +155,36 @@ type Spawns = ChildProcessSpawner.ChildProcessSpawner | Path.Path;
 export const runners: Readonly<Record<string, Runner<Spawns>>> = {
   format: Effect.fn("landing.format")(function* (step) {
     const { dir } = yield* readArgs(Dir, step);
+
     return Outcome.answer(passOrStuck("pnpm format", yield* run(dir, "nice", ["-n", "15", "pnpm", "format"])));
   }),
   lint: Effect.fn("landing.lint")(function* (step) {
     const { dir } = yield* readArgs(Dir, step);
+
     return Outcome.answer(passOrStuck("pnpm lint", yield* run(dir, "nice", ["-n", "15", "pnpm", "lint"])));
   }),
   governance: Effect.fn("landing.governance")(function* (step) {
     const { dir } = yield* readArgs(Dir, step);
+
     return Outcome.answer(governanceOutcome(yield* run(dir, "sh", [yield* script("governance.sh")])));
   }),
   "lead-commit": Effect.fn("landing.leadCommit")(function* (step) {
     const { dir, ticket, subject, paths } = yield* readArgs(Commit, step);
     const stepcommit = yield* script("..", "..", "step-commit", "scripts", "stepcommit.sh");
+
     return Outcome.answer(commitOutcome(yield* run(dir, "sh", [stepcommit, "lead", ticket, subject, ...paths])));
   }),
   "leak-grep": Effect.fn("landing.leakGrep")(function* (step) {
     const { dir } = yield* readArgs(Dir, step);
     const leakgrep = yield* script("leakgrep.sh");
+
     return Outcome.answer(
       leakOutcome(yield* run(dir, "sh", [leakgrep, "--commits", "HEAD", "--not", "--remotes=origin"])),
     );
   }),
   "bot-push": Effect.fn("landing.botPush")(function* (step) {
     const { dir, branch } = yield* readArgs(Branch, step);
+
     return Outcome.answer(
       passOrStuck("botpush.mjs", yield* run(dir, "node", [yield* script("botpush.mjs"), dir, branch])),
     );
@@ -172,6 +199,7 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
 
     const made = yield* run(dir, "gh", ["pr", "create", "--head", branch, "--title", title, "--body", body]);
     const pr = createdPr(made);
+
     return Outcome.answer(
       pr === null ? Outcome.stuck(`gh pr create failed: ${tail(made.output)}`) : Outcome.done(`opened PR ${pr}`),
     );
@@ -180,13 +208,29 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
     const { dir, branch } = yield* readArgs(Branch, step);
     const pr = yield* openPr(dir, branch);
     const checks = yield* run(dir, "gh", ["pr", "checks", String(pr), "--watch", "--interval", "30"]);
+
     return Outcome.answer(passOrStuck(`CI on PR ${pr}`, checks));
   }),
-  catchup: Effect.fn("landing.catchup")(function* (step) {
-    const { dir, branch, ticket } = yield* readArgs(Land, step);
+  queue: Effect.fn("landing.queue")(function* (step) {
+    const { dir, branch } = yield* readArgs(Branch, step);
     const pr = yield* openPr(dir, branch);
+    const repo = PullRequestsGh.repoFromUrl((yield* run(dir, "git", ["remote", "get-url", "origin"])).output);
+
+    if (repo === null) {
+      return yield* StepFailed.make({ reason: `${dir}'s origin is not a GitHub repo` });
+    }
+
+    const scripts = yield* script();
+
+    // The `ci` step before this one waited for the checks, so the required one is read once here.
+    // Each service is built for this one call, so ChecksGh's ETag cache lives only as long as it.
     return Outcome.answer(
-      passOrStuck(`catchup.sh ${pr}`, yield* run(dir, "sh", [yield* script("catchup.sh"), String(pr), ticket])),
+      yield* Queue.add({ dir, pr }).pipe(
+        Effect.provideServiceEffect(PullRequests, PullRequestsGh.make(repo, dir)),
+        Effect.provideServiceEffect(Pushes, PushesProcess.make(scripts)),
+        Effect.provideServiceEffect(Checks, ChecksGh.make(repo)),
+        Effect.match({ onFailure: queueRefused, onSuccess: (added) => Outcome.done(Queue.line(added)) }),
+      ),
     );
   }),
 };

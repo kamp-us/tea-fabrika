@@ -1,5 +1,20 @@
-import { Cause, Effect, Exit, Path } from "effect";
+/**
+ * One Rolldown bundle as an Effect, and the program bundles built on it.
+ */
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
+import * as Match from "effect/Match";
+import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
+
 import effectPackage from "effect/package.json" with { type: "json" };
+
 import {
   rolldown,
   VERSION,
@@ -13,9 +28,28 @@ import {
 import { BuildError, hash } from "../../runtime/Built.ts";
 import type { ProgramSource } from "../../runtime/Execution.ts";
 
-export { BuildError, hash } from "../../runtime/Built.ts";
+export {
+  /**
+   * Error for a build that stopped, re-exported from the runtime's build tables.
+   *
+   * @category errors
+   */
+  BuildError,
+  /**
+   * Computes the SHA-256 of a text's UTF-8 bytes as lowercase hex, re-exported from the runtime's
+   * build tables.
+   *
+   * @category combinators
+   */
+  hash,
+} from "../../runtime/Built.ts";
 
-/** Which bundle of a build this is. Recorded on its span, with no path or content. */
+/**
+ * Which bundle of a build this is. It is recorded on the bundle's span, with no path or content,
+ * and it decides which imports the bundle leaves external.
+ *
+ * @category models
+ */
 export type Phase = "program" | "window" | "tab" | "brain";
 
 type Options = {
@@ -32,50 +66,96 @@ const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 /** The bytes a bundle emitted, chunks and assets alike. */
 const emitted = (output: RolldownOutput) =>
-  output.output.reduce(
+  Arr.reduce(
+    output.output,
+    0,
     (total, item) =>
       total +
       (item.type === "chunk"
         ? bytes(item.code)
-        : typeof item.source === "string"
+        : Predicate.isString(item.source)
           ? bytes(item.source)
           : item.source.byteLength),
-    0,
   );
 
+/**
+ * Runs one Rolldown bundle and answers its output: ES modules for the browser platform, generated
+ * in memory and never written to disk.
+ *
+ * **Details**
+ *
+ * `options.phase` decides which imports stay external: `cloudflare:workers` by default, that and
+ * every `node:` module for a brain, and none for a tab. The span records the phase, the Rolldown
+ * and Effect versions that ran, and how many files and bytes came out. A failure is a `BuildError`
+ * with `reason: "bundle"`.
+ *
+ * @category constructors
+ */
 export const bundle = Effect.fn("build.bundle")(function* (
   input: InputOption,
   plugins: Array<Plugin>,
   options: Options = {},
 ) {
+  const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
+  // The services Rolldown's synchronous onLog callback runs on.
+  const context = yield* Effect.context<never>();
+  const root = options.cwd ?? path.resolve();
+
+  const relative = (file: string) => {
+    const url = URL.parse(file);
+    let local = file;
+
+    if (url?.protocol === "file:") {
+      // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown's onLog callback is synchronous
+      local = Effect.runSyncWith(context)(path.fromFileUrl(url).pipe(Effect.orElseSucceed(() => url.pathname)));
+    }
+
+    return path.isAbsolute(local) ? path.relative(root, local) : local;
+  };
+
   // The installed tools' own versions, so a build report says what really ran.
   yield* Effect.annotateCurrentSpan({
     phase: options.phase ?? "bundle",
     "rolldown.version": VERSION,
     "effect.version": effectPackage.version,
   });
-  const fail = (error: unknown) => new BuildError({ reason: "bundle", message: String(error), cause: error });
+  const fail = (cause: unknown) => BuildError.make({ reason: "bundle", message: String(cause), cause });
+
   const config = {
     input,
     plugins,
     // Rolldown notes each "use client" it drops; a bundle here has no server half.
     onLog: (level: LogLevel, log: RolldownLog, handler: LogOrStringHandler) => {
       if (log.code !== "MODULE_LEVEL_DIRECTIVE") {
-        handler(level, log);
+        let message = log.message;
+
+        // Rolldown has already embedded file names in the message before calling onLog.
+        for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
+          if (file !== undefined) {
+            message = Function.pipe(message, Str.replaceAll(file, relative(file)));
+          }
+        }
+
+        handler(level, {
+          ...log,
+          message,
+          ...(log.loc?.file === undefined ? {} : { loc: { ...log.loc, file: relative(log.loc.file) } }),
+        });
       }
     },
     platform: "browser" as const,
     // A tab names no platform module, so nothing is external there: its build refuses one.
-    external:
-      options.phase === "brain"
-        ? ["cloudflare:workers", /^node:/]
-        : options.phase === "tab"
-          ? []
-          : ["cloudflare:workers"],
+    external: Match.value(options.phase).pipe(
+      Match.when("brain", () => ["cloudflare:workers", /^node:/]),
+      Match.when("tab", () => []),
+      Match.orElse(() => ["cloudflare:workers"]),
+    ),
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.define === undefined ? {} : { transform: { define: { ...options.define } } }),
   };
+
   const output = { format: "esm" as const, codeSplitting: options.split === true, minify: options.minify === true };
+
   const generate = Effect.acquireUseRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's build API returns a Promise
     Effect.tryPromise({ try: () => rolldown(config), catch: fail }),
@@ -84,6 +164,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown closes through a Promise
     (b) => Effect.promise(() => b.close()),
   );
+
   return yield* generate.pipe(
     Effect.onExit((exit) =>
       Effect.annotateCurrentSpan(
@@ -102,7 +183,13 @@ export const bundle = Effect.fn("build.bundle")(function* (
   );
 });
 
-/** Each program's sealed Worker Loader module: its declaration wrapped in libfabrika's box. */
+/**
+ * Bundles each selected program as one sealed Worker Loader module: its declaration wrapped in
+ * libfabrika's program box. It answers, by program name, each module's source with the SHA-256 of
+ * that source.
+ *
+ * @category constructors
+ */
 export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (options: {
   /** The folder the generated entry sits in, so package names resolve from there. */
   readonly root: string;
@@ -114,8 +201,9 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
   const generated = path.join(options.root, "program.generated.ts");
   const programs: Record<string, ProgramSource> = {};
 
-  for (const [name, entry] of Object.entries(options.programs)) {
-    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
+  for (const [name, entry] of Rec.toEntries(options.programs)) {
+    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${Formatter.formatJson(entry.module)}; export default programBox(program, ${Formatter.formatJson(name)});`;
+
     const output = yield* bundle(
       "fabrika:program",
       [
@@ -136,10 +224,15 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
       ],
       { phase: "program", ...(options.cwd === undefined ? {} : { cwd: options.cwd }) },
     );
-    const source = output.output
-      .filter((o) => o.type === "chunk")
-      .map((o) => o.code)
-      .join("\n");
+
+    const source = Arr.join(
+      Arr.map(
+        Arr.filter(output.output, (o) => o.type === "chunk"),
+        (o) => o.code,
+      ),
+      "\n",
+    );
+
     programs[name] = { hash: yield* hash(source), source };
   }
 

@@ -2,15 +2,17 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "@effect/vitest";
-import { Schema } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Schema from "effect/Schema";
 import { admitted } from "./Access.ts";
 import type { Access, Add, Signed, MemberEvent } from "./Access.ts";
 import * as AccessFold from "./AccessFold.ts";
 import * as Text from "./Text.ts";
 
 const EPOCH = 1_800_000_000_000;
+
 const PURE = { arbitrary: { seed: 119120, runs: 100, size: 40, maxDiscards: 500, maxShrinks: 200, concurrency: 1 } };
+
 const integer = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 
 const Flow = Schema.Struct({
@@ -24,14 +26,21 @@ const Flow = Schema.Struct({
   ),
   old: Schema.Literals(["lost", "kept"]),
 });
+
 type Flow = typeof Flow.Type;
+
 const VerificationFlow = Arbitrary.schema(Flow);
+
 const MembershipFlow = VerificationFlow;
+
 const AuthorityFlow = VerificationFlow;
+
 type Row = { readonly fact: unknown; readonly arrivedAt: number | null; readonly parent: string | null };
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const LEDGER = "ledger_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const input = (n: number) => `in-process_01m6v5270hf3c8x2q7w9z4k5mn-${n}`;
 
 const signed = (signer: string): typeof Signed.Type => ({
@@ -120,8 +129,8 @@ const FILES = [
 
 const built = (): boolean =>
   FILES.some((file) => existsSync(join(import.meta.dirname, file))) ||
-  Reflect.has(AccessFold, "foldAccessEntries") ||
-  Reflect.has(Text, "verifiedText");
+  Object.hasOwn(AccessFold, "foldAccessEntries") ||
+  Object.hasOwn(Text, "verifiedText");
 
 /** First line of every law here: skip while P36 is not built, run on the real module after. */
 const started = (ctx: { readonly skip: (note?: string) => never }): void => {
@@ -134,12 +143,15 @@ const started = (ctx: { readonly skip: (note?: string) => never }): void => {
 // missing one fails the law that calls it.
 const access = () => ({ admitted });
 
+// A name P36 has not built yet reads as undefined: the law that calls it fails there.
+const exported = <A>(module: object, name: string): A => Object.getOwnPropertyDescriptor(module, name)?.value;
+
 const fold = (): { readonly foldAccessEntries: (rows: ReadonlyArray<Row>, ledger: string) => Access } => ({
-  foldAccessEntries: Reflect.get(AccessFold, "foldAccessEntries"),
+  foldAccessEntries: exported(AccessFold, "foldAccessEntries"),
 });
 
-const domain = (): { readonly verifiedText: (fact: unknown) => string } => ({
-  verifiedText: Reflect.get(Text, "verifiedText"),
+const domain = (): { readonly verifiedText: (fact: ReturnType<typeof verification>) => string } => ({
+  verifiedText: exported(Text, "verifiedText"),
 });
 
 const EMAIL = "email-key";
@@ -251,6 +263,7 @@ it.prop(
         .foldAccessEntries([...rows, addition(flow)], LEDGER)
         .keys.get("new-person-0")?.live,
     ).toBe(true);
+
     const badAdds = [
       { ...add, verified: input(999) },
       { ...add, verified: undefined },
@@ -259,6 +272,7 @@ it.prop(
       { ...add, saw: { ...add.saw, method: "device" } },
       { ...add, adds: { _tag: "recovery", key: "new-sheet", v: 1 } },
     ];
+
     const forbidden = [
       ...badAdds.map((value) => ({ _tag: "added", add: value, signed: signed(EMAIL) })),
       { ...initial(flow)[1]!, signed: signed(EMAIL) },
@@ -313,6 +327,7 @@ it.prop(
 
     for (const method of ["device", "recovery"] as const) {
       const add = { ...added(flow), verified: undefined, saw: { ...added(flow).saw, method } };
+
       const sheet: Row = {
         fact: {
           _tag: "added",
@@ -327,6 +342,7 @@ it.prop(
         arrivedAt: EPOCH - 1,
         parent: null,
       };
+
       const person = fold().foldAccessEntries(
         [
           ...rows,
@@ -343,6 +359,7 @@ it.prop(
         ],
         LEDGER,
       );
+
       expect(email.keys.get("new-person-0")).toEqual(person.keys.get("new-person-0"));
     }
 
@@ -361,9 +378,11 @@ it.prop(
     started(ctx);
     const kept = { ...flow, old: "kept" as const };
     const rows = [...history(kept), addition(kept)];
+
     const grant = initial(kept).find(
       (event): event is Extract<MemberEvent, { _tag: "granted" }> => event._tag === "granted",
     )!;
+
     rows.push({
       fact: {
         ...grant,
@@ -389,6 +408,7 @@ it.prop(
         },
         signed: signed(signer),
       };
+
       const after = fold().foldAccessEntries([...rows, { fact: revoke, arrivedAt: EPOCH + 2, parent: null }], LEDGER);
 
       for (const key of ["new-window-0", "new-agent"]) {

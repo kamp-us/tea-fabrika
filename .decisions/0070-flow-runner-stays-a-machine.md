@@ -1,7 +1,7 @@
 ---
 id: 0070
 title: For now the flow runner stays a plain tea machine on tea's Effect engine until a program can run outside fabrika's app, never a Program.make that nothing can run
-status: accepted
+status: amended-in-part by [0601](0601-program-make-with-optional-pipes.md)
 date: 2026-11-10
 tags: [lead, flow, chain, program, libfabrika, tea, tooling]
 ---

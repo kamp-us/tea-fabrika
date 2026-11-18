@@ -1,3 +1,7 @@
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 // P14 slice 1, next/ (ticket 698): the Worker serves a built tab's page at `/` (S1.3). Later slices
 // add the control and bootstrap laws here.
 //
@@ -10,56 +14,83 @@
 // S1.3 is a generated walk. Each step reads the walk's state (the table the brain carries now, the
 // tables it carried before) and builds a move that state allows: a rebuild, or a request for a route
 // the current table holds, a fresh absent route or `/`, with the current validator or a stale one.
-import { createHash } from "node:crypto";
-import { Cause, Effect, Exit } from "effect";
+
+import { Stub } from "@kampus/vitest";
+import * as Digest from "effect/crypto/Digest";
+import * as Rec from "effect/Record";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import type { BrainOptions, Env } from "./runtime.ts";
+import * as Start from "../settings/Start.ts";
+import * as StartsTest from "../settings/StartsTest.ts";
+import type { ConnectionBinding, ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
+import * as Route from "./fetch.ts";
+import type { Env } from "./runtime.ts";
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
-type Assets = Readonly<Record<string, Asset>>;
-type Fetch = (request: Request, env: Env, config: BrainOptions, assets?: Assets) => Effect.Effect<Response, unknown>;
 
-const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+type Assets = Readonly<Record<string, Asset>>;
+
+/** A text's SHA-256 in hex, through Effect's Digest on the platform's WebCrypto. */
+const sha = (text: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
+
 const HTML = "text/html; charset=utf-8";
+
 const JS = "text/javascript; charset=utf-8";
+
 const CSS = "text/css; charset=utf-8";
+
 const PAGE = "/index.html";
 
-const fetchApi = async (): Promise<Fetch> => ((await import("./fetch.ts")) as { fetch: Fetch }).fetch;
-
-const config = (port: number): BrainOptions => ({
-  name: "p14",
-  port,
-  person: "person-test",
-  founder: "public-test",
-  window: null,
-  build: "test",
-  rateLimit: { limit: 100_000, window: 60_000 },
-});
+const config = (port: number) =>
+  Effect.runPromise(
+    StartsTest.fixture({
+      name: "p14",
+      port,
+      person: "person-test",
+      founder: "public-test",
+      window: null,
+      build: "test",
+    }),
+  );
 
 /** An environment whose every stub call is written down, so the law can say none was made. */
-const world = () => {
+const world = (input: Awaited<ReturnType<typeof config>>) => {
   const calls: Array<string> = [];
-  const stub = (to: string) =>
-    new Proxy(
-      {},
-      {
-        get:
-          (_t, method) =>
-          (..._args: Array<unknown>) => {
-            calls.push(`${to}.${String(method)}`);
-            return Promise.resolve({ _tag: "ok" });
-          },
-      },
-    );
+
+  /** Any call on the stub for `to`: written down, and answered `{ _tag: "ok" }`. */
+  const recorded = (to: string) => (method: string) => async () => {
+    calls.push(`${to}.${method}`);
+
+    return { _tag: "ok" };
+  };
+
+  // SAFETY: these routes reach only these four namespaces, and each answers with a Stub of its binding that records any call.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members these routes call
   const env = {
-    PROJECT: { getByName: () => stub("project") },
-    CONNECTION: { getByName: () => stub("connection") },
-    PROCESS: { getByName: () => stub("process") },
-    RECORD: { getByName: () => stub("record") },
+    INSTANCE: JSON.stringify(input),
+    PROJECT: {
+      getByName: () =>
+        Stub.make<ProjectBinding>(recorded("project"), {
+          settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(input) }),
+        }),
+    },
+    CONNECTION: {
+      getByName: () =>
+        Stub.make<ConnectionBinding>(
+          // @ts-expect-error the canned `{ _tag: "ok" }` is no Connection call's answer; any call fails this law anyway
+          recorded("connection"),
+        ),
+    },
+    PROCESS: { getByName: () => Stub.make<ProcessBinding>(recorded("process")) },
+    RECORD: { getByName: () => Stub.make<RecordBinding>(recorded("record")) },
   } as unknown as Env;
+
   return { env, calls };
 };
 
@@ -85,23 +116,25 @@ const step = fc.record({
 });
 
 type Step = typeof step extends fc.Arbitrary<infer S> ? S : never;
+
 const METHODS = ["GET", "HEAD", "POST", "PUT", "DELETE"] as const;
 
 /** A rebuild's table, derived from the step: a page or none, the tab's script, and other files. */
-const rebuilt = (s: Step, generation: number): Assets => {
+const rebuilt = async (s: Step, generation: number): Promise<Assets> => {
   const assets: Record<string, Asset> = {};
-  const add = (route: string, type: string, body: string) => {
-    assets[route] = { hash: sha(body), type, body };
+
+  const add = async (route: string, type: string, body: string) => {
+    assets[route] = { hash: await sha(body), type, body };
   };
 
   if (s.pick % 3 !== 0) {
-    add(PAGE, HTML, `<!doctype html>${s.text}<!-- ${generation} -->`);
+    await add(PAGE, HTML, `<!doctype html>${s.text}<!-- ${generation} -->`);
   }
 
-  add("/window.js", JS, `export const g = ${generation}; ${JSON.stringify(s.text)};`);
+  await add("/window.js", JS, `export const g = ${generation}; ${JSON.stringify(s.text)};`);
 
   for (const [n, name] of s.extra.entries()) {
-    add(`/${name}-${n}.${n % 2 === 0 ? "js" : "css"}`, n % 2 === 0 ? JS : CSS, `/* ${generation} ${name} */`);
+    await add(`/${name}-${n}.${n % 2 === 0 ? "js" : "css"}`, n % 2 === 0 ? JS : CSS, `/* ${generation} ${name} */`);
   }
 
   return assets;
@@ -112,14 +145,15 @@ const REACH = ["page", "plain-root", "asset", "absent", "head", "write", "stale"
 
 describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving rules", () => {
   it("generated walks of rebuilds and requests: GET, HEAD, ETag, missing routes, root fallback and access checks", async () => {
-    const fetch = await fetchApi();
+    const fetch = Route.fetch;
     const reached = new Set<(typeof REACH)[number]>();
     await fc.assert(
       fc.asyncProperty(
         fc.integer({ min: 1024, max: 65_535 }),
         fc.array(step, { minLength: 1, maxLength: 24 }),
         async (port, steps) => {
-          const { env, calls } = world();
+          const input = await config(port);
+          const { env, calls } = world(input);
           const origin = `http://127.0.0.1:${port}`;
           // The walk's state: the table the brain carries now (none before the first build), and every
           // validator an earlier table served.
@@ -130,29 +164,39 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
           for (const s of steps) {
             // A rebuild is always possible; the first move of a walk with no table yet may also be one.
             if (s.move % 4 === 0) {
-              for (const asset of Object.values(current ?? {})) {
+              for (const asset of Rec.values(current ?? {})) {
                 stale.push(asset.hash);
               }
 
-              current = rebuilt(s, ++generation);
+              current = await rebuilt(s, ++generation);
               continue;
             }
 
-            const routes = Object.keys(current ?? {});
+            const routes = Rec.keys(current ?? {});
             const choices = ["/", ...routes, `/${s.word}-absent.js`];
             const path = choices[s.pick % choices.length]!;
             const method = METHODS[s.method % METHODS.length]!;
             const wrongHost = s.host % 5 === 0;
-            const originHeader = s.origin % 5 === 0 ? "http://evil.example" : s.origin % 5 === 1 ? origin : null;
-            const target = path === "/" ? (current !== undefined && Object.hasOwn(current, PAGE) ? PAGE : null) : path;
+
+            const originHeader = Match.value(s.origin % 5).pipe(
+              Match.when(0, () => "http://evil.example"),
+              Match.when(1, () => origin),
+              Match.orElse(() => null),
+            );
+
+            const target = path === "/" ? (current !== undefined && Rec.has(current, PAGE) ? PAGE : null) : path;
+
             const asset =
-              target !== null && current !== undefined && Object.hasOwn(current, target) ? current[target] : undefined;
+              target !== null && current !== undefined && Rec.has(current, target) ? current[target] : undefined;
+
             const validators = [
               ...(asset === undefined ? [] : [`"${asset.hash}"`]),
               ...stale.filter((h) => h !== asset?.hash).map((h) => `"${h}"`),
             ];
+
             const validator =
               validators.length > 0 && s.validator % 3 !== 0 ? validators[s.validator % validators.length]! : null;
+
             const headers: Record<string, string> = { host: wrongHost ? "evil.example" : `127.0.0.1:${port}` };
 
             if (originHeader !== null) {
@@ -172,11 +216,12 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
                     ...(method === "GET" || method === "HEAD" ? {} : { body: s.text }),
                   }),
                   env,
-                  config(port),
+                  input,
                   current,
                 ),
               ),
             );
+
             const body = await response.text();
 
             if (wrongHost) {

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 // <rev>...` names: a commit as its diff from its parent, a first commit as all it holds, a merge
 // as the lines that are new against every parent. Every history here is one git itself wrote.
 const script = process.env.TEST_LEAKGREP ?? join(import.meta.dirname, "leakgrep.sh");
+
 const options = { seed: 548, numRuns: 8 };
 
 // A made-up private word, and one made-up line of each kind the check knows.
@@ -47,14 +48,18 @@ const lab = <A>(
     const words = join(dir, "words");
     mkdirSync(repo);
     writeFileSync(words, `${word}\n`);
+
     const run = (allowed: ReadonlyArray<number>, ...args: string[]) => {
       const ran = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], {
         cwd: repo,
         encoding: "utf8",
       });
+
       expect(allowed, ran.stderr).toContain(ran.status);
+
       return ran.stdout.trim();
     };
+
     const git = (...args: string[]) => run([0], ...args);
     git("init", "-q", "-b", "work");
 
@@ -71,6 +76,7 @@ const lab = <A>(
 
         git("add", "-A");
         git("commit", "-q", "--allow-empty", "-m", "a commit");
+
         return git("rev-parse", "HEAD").slice(0, 12);
       },
       push: (branch = "main") => {
@@ -83,6 +89,7 @@ const lab = <A>(
           encoding: "utf8",
           env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
         });
+
         const hits: Record<string, number> = {};
 
         for (const line of ran.stderr.split("\n")) {
@@ -251,7 +258,7 @@ describe("T548 the leak check reads each pushed commit on its own, today's tooli
       commit({ "a.md": [`main says ${word}`] });
       push();
       commit({ "a.md": [`main says ${word}`, `pushed before ${leaks[2]}`] });
-      push("fabrikalfa/lane");
+      push("fabrikalfa/quest");
       commit({ "a.md": [`main says ${word}`, `pushed before ${leaks[2]}`, "plain"] });
       expect(read(...pushed)).toMatchObject({ total: 0, commits: 1 });
     });

@@ -1,7 +1,43 @@
-import { Effect } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
+
 import { LedgerError } from "../ledger/Ledger.ts";
+import { RecordedStart } from "../settings/RecordedStart.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
-import { projectStub, rpc, type BrainOptions, type Env } from "./runtime.ts";
+import { projectStub, recordedLayer, rpc, type BrainOptions, type Env } from "./runtime.ts";
+
+// Worker bindings are immutable for an isolate, so a recorded start is kept by its `env` object. Only a
+// finished read is kept, never one still under way: the platform gives each request to a Worker its own
+// I/O context, and cancels as hung a request that waits on work another request started.
+const isolates = new WeakMap<Env, Context.Context<RecordedStart>>();
+
+/**
+ * Returns the effect that gives the Worker's `RecordedStart` context, read on first use.
+ *
+ * **Details**
+ *
+ * One context is kept per `env` object once a read has finished, and later uses get that same
+ * context with no call. A request that arrives before any read has finished reads for itself:
+ * recording the same start again answers the first receipt, so every such read gives the same
+ * start. A failed read is not kept: the next use tries again.
+ *
+ * @category getters
+ */
+export const httpContext = (env: Env) =>
+  Effect.suspend(() => {
+    const known = isolates.get(env);
+
+    return known !== undefined
+      ? Effect.succeed(known)
+      : // `RecordedStart` is a plain value with nothing to give back, so it outlives this scope.
+        Layer.build(recordedLayer(env)).pipe(
+          Effect.scoped,
+          Effect.tap((context) => Effect.sync(() => isolates.set(env, context))),
+        );
+  });
 
 /** The tab's page in the window table, answered at `/` (P14). */
 const PAGE = "/index.html";
@@ -16,7 +52,7 @@ export const serveAsset = Effect.fn("brain.asset")(function* (
   request: Request,
   route = new URL(request.url).pathname,
 ) {
-  const asset = Object.hasOwn(assets, route) ? assets[route] : undefined;
+  const asset = Rec.has(assets, route) ? assets[route] : undefined;
   yield* Effect.annotateCurrentSpan({
     "asset.found": asset !== undefined,
     "http.method": request.method,
@@ -39,9 +75,12 @@ export const serveAsset = Effect.fn("brain.asset")(function* (
 export const fetch = Effect.fn("workers.fetch")(function* (
   request: Request,
   env: Env,
-  config: BrainOptions,
+  _config?: BrainOptions,
   assets?: Readonly<Record<string, Served>>,
 ) {
+  const start = Context.get(yield* httpContext(env), RecordedStart);
+  const config = { ...start.input, port: start.values.port };
+
   const url = new URL(request.url),
     origin = `http://127.0.0.1:${config.port}`;
 
@@ -53,7 +92,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
     return new Response("Foreign origin", { status: 403 });
   }
 
-  if (url.pathname.startsWith("/client/")) {
+  if (Str.startsWith("/client/")(url.pathname)) {
     return yield* rpc(GatewayClient.make(env.CONNECTION.getByName(url.pathname)).fetch(request));
   }
 
@@ -62,14 +101,16 @@ export const fetch = Effect.fn("workers.fetch")(function* (
   if (url.pathname === "/grant" && request.method === "POST") {
     // oxlint-disable-next-line fabrika/no-promises -- edge: Request JSON body enters Effect
     const input = yield* Effect.tryPromise({ try: () => request.json(), catch: () => null });
+
     return Response.json(yield* rpc(project.grant(input)));
   }
 
-  if (url.pathname.startsWith("/grant/client/") && request.method === "GET") {
+  if (Str.startsWith("/grant/client/")(url.pathname) && request.method === "GET") {
     const target = yield* Effect.try({
-      try: () => decodeURIComponent(url.pathname.slice("/grant/client/".length)),
+      try: () => decodeURIComponent(Str.slice("/grant/client/".length)(url.pathname)),
       catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
     });
+
     return Response.json(yield* rpc(project.target(target, url.searchParams.get("code") ?? "")));
   }
 
@@ -80,7 +121,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
       return yield* serveAsset(assets, request);
     }
 
-    if (Object.hasOwn(assets, PAGE)) {
+    if (Rec.has(assets, PAGE)) {
       return yield* serveAsset(assets, request, PAGE);
     }
   }

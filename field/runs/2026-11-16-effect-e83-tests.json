@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e83-tests",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-16T00:45:21-08:00",
+  "ended": "2026-11-16T01:17:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E83 of the Effect-check sweep (preferEffectRecord in libfabrika runtime, settings, cloudflare, processes, telemetry and gateway, and the app's top src files), in next/, on branch fabrikalfa/effect-e83 from fabrikalfa/test-sqlite-store at eeb8ecdbb, which holds PR 1366. By decision 0589's amendment (judgment slices add no lock lines; their locks land in one small pull request at the end), it opens no pull request and adds no lock line or LOCKED row: a lock entry and row were first written from the brief, then taken out on the lead's word. Recount with only preferEffectRecord at error through an --lspconfig: 355 hits in the slice's folders (the plan said 336; main moved): runtime 97, settings 103, app src 75, cloudflare 35, processes 30, telemetry 12, gateway 3. 269 in exam paths, all fixed, in 87 files; 86 in 25 product files left for the build. Each Object.keys, entries, values, fromEntries and hasOwn became Rec.keys, toEntries, values, fromEntries and has, imported as import * as Rec from \"effect/Record\" in libfabrika (0577) and as Record as Rec from the barrel in the app. Where Record's types did not fit: a typed key argument for a union of records, a partial record or a string key (Rec.keys<string, unknown>, Rec.has<string, unknown>); Predicate.isObject in place of a hand-written object test, so Rec.has and Rec.values get a record; String(key) where a sqlite column or a number was the key; two texts helpers take unknown in place of Schema.Json; one ReadonlyArray<string> annotation keeps Reflect.get loose. One hasOwn on an error class instance became Object.getOwnPropertyNames(...).not.toContain, which keeps the own-property check, hidden names included; no ignore line was added, since an @effect-diagnostics line on a check that is off fails the typecheck as having no effect.",
+  "plants": [
+    {
+      "law": "L1 by hand: preferEffectRecord at error in src/settings fails libfabrika's type check on a new hit",
+      "plant": "a temporary overrides entry for src/settings/**/*.ts at preferEffectRecord error in next/packages/libfabrika/tsconfig.json, and export const planted = Object.keys({ a: 1 }) in settings/Codec.test.ts; libfabrika's tsc --noEmit -p . named Codec.test.ts(7,31) effect(preferEffectRecord) beside the 26 settings product hits; both edits taken back",
+      "result": "red"
+    },
+    {
+      "law": "L2: a locked folder dropped from the entry turns the lock law red (before the lock was taken out)",
+      "plant": "src/runtime/**/*.ts dropped from the E83 entry in next/packages/libfabrika/tsconfig.json",
+      "result": "red"
+    },
+    {
+      "law": "L2: a locked level set to warning turns the lock law red (before the lock was taken out)",
+      "plant": "the E83 entry in next/apps/fabrika/tsconfig.json set to warning",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 32,
+  "note": "Product hits left for the build (file: lines): apps/fabrika/src/build.ts 54 55; cloudflare SettingsInput.ts 29 30, box.ts 48 49 51 52, fetch.ts 50 119, index.ts 95 100, runtime.ts 976 1027 1109 1112 1340 1732; gateway Gateway.ts 84; processes Process.ts 123, internal/processTable.ts 184, internal/programMail.ts 18; runtime Built.ts 127 132, Entry.ts 135 151 152 154 155 164, Execution.ts 50 190, Patch.ts 31 33 33 63 64 69 72 163 187, Program.ts 189 387 388 564, Runner.ts 223 224 225 297 297 319 1184 1252 1673 2931; settings Files.ts 66 126, JsonSchema.ts 35 91, Setting.ts 176, Snapshot.ts 50 53 53 108 109 140 145 157 157 161 162, TomlParser.ts 25 35 184 199 199 225, internal/edit.ts 62 76 79 80; telemetry Sink.ts 132 248 253, Trace.ts 340 341. Checks: tsc --noEmit -p . for libfabrika and the app, exit 0; pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 18 parts passed; ratchet.ts exit 0 against the merge base with origin/main. Tests under nice -n 19 with --maxWorkers=1 and the pinned Node, one file at a time: the 38 touched plain test files and the 26 plain test files that read a touched support file, 64 files, all green. Not run, since the brief keeps .integration. files to a box: the 25 touched .integration.test.ts files. Not run: pnpm typecheck, the full suite.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "tests"
+}

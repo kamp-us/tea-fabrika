@@ -1,13 +1,16 @@
 // next/, W2/W6. No driver imports: Node supplies the scoped database and lower services (0062).
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
+import * as Arr from "effect/Array";
 import { Writer } from "../access/SessionManager.ts";
 import { InputId } from "../Id.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, type Update, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input } from "./Program.ts";
 import { nth } from "./RepliesTest.ts";
@@ -16,7 +19,9 @@ import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 import { Gone, Unreachable, WatcherManagerError } from "./WatcherManager.ts";
 
 const NAME = "watch-counter:1";
+
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.Struct({ type: Schema.Literal("inc") });
 
 const program = {
@@ -44,7 +49,9 @@ const Step = Arbitrary.all({
 });
 
 const Walk = Arbitrary.array(Step, { minLength: 3, maxLength: 12 });
+
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
+
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: "person-fixture" });
 
 const meta = {
@@ -71,6 +78,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
   let pos = 0;
   let serial = 0;
   const expected = new Map<string, { pos: number; count: number }>();
+
   const connect = Effect.fnUntraced(function* () {
     const sql = yield* files("inbox").pipe(Scope.provide(scope));
     const manager = yield* files("manager").pipe(Scope.provide(scope));
@@ -89,6 +97,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
     }
 
     const live = yield* processes.status(NAME).pipe(Effect.orDie);
+
     const dependencies = Layer.mergeAll(
       ProgramLoader.layer({ [program.name]: program }, {}),
       ProcessStore.layer(sql, { process: live.state.process }),
@@ -117,35 +126,43 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
             }
 
             frames.push({ client, update });
+
             return Effect.void;
           }),
       }),
       Layer.succeed(Alarm, { set: () => Effect.void }),
       Layer.succeed(Recording, { flush: Effect.void }),
     ).pipe(Layer.provideMerge(Layer.succeedContext(coordination)));
+
     const context = yield* Layer.build(
       ProgramRunner.layer(
         { id: live.state.process, name: NAME, program: program.name, build: "test", owner },
-        { recovery: { sql, name: NAME, capacity: 1024 ** 3 } },
+        { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
       ).pipe(Layer.provide(dependencies)),
     ).pipe(Scope.provide(scope));
+
     return { runner: Context.get(context, ProgramRunner), mailbox, sql };
   });
+
   let live = yield* connect();
+
   const rebuild = Effect.fnUntraced(function* () {
     yield* Scope.close(scope, Exit.void);
     scope = yield* Effect.acquireRelease(Scope.make(), (s) => Scope.close(s, Exit.void));
     live = yield* connect();
   });
+
   const open = Effect.fnUntraced(function* (client: string) {
     routes.add(client);
     const view = yield* live.runner.open(client);
     expect(view).toMatchObject({ rev: pos, view: { count: pos } });
     expected.set(client, { pos, count: pos });
   });
+
   const send = Effect.fnUntraced(function* () {
     frames.length = 0;
     attempted.length = 0;
+
     const incoming: Incoming = {
       id: `letter-${serial++}`,
       envelope: {
@@ -158,11 +175,12 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
       seen: 0,
       span: TRACE,
     };
+
     const answer = yield* live.runner.msg(incoming);
     pos++;
     expect(answer).toEqual(Sent.cases.accepted.make({ rev: answer._tag === "accepted" ? answer.rev : -1, pos }));
-    const recipients = [...expected.keys()].filter((c) => routes.has(c) && !unknown.has(c));
-    expect(frames.map((f) => f.client).sort()).toEqual(recipients.sort());
+    const recipients = Arr.filter([...expected.keys()], (c) => routes.has(c) && !unknown.has(c));
+    expect(Arr.map(frames, (f) => f.client).sort()).toEqual(recipients.sort());
 
     for (const { client, update } of frames) {
       expect(update.type).toBe("patch");
@@ -196,9 +214,11 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
       }
     }
   });
+
   // Required prefix: two pre-sleep watchers, one route removed while all Layers are closed.
   const first = `${nth(steps, 0).client}:a`,
     departed = `${nth(steps, 0).client}:b`;
+
   yield* open(first);
   yield* open(departed);
   yield* Scope.close(scope, Exit.void);
@@ -249,12 +269,12 @@ export const suite = (harness: Harness) =>
       "W2: all Layers and SQL connections can be discarded without losing live watchers",
       [Walk],
       ([steps]) => Effect.scoped(walk(harness, steps, false)),
-      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: 50 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
     );
     it.live.prop(
       "W6: unrelated ledger writes never become patch positions",
       [Walk],
       ([steps]) => Effect.scoped(walk(harness, steps, true)),
-      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: 50 } },
+      { timeout: 50 * 10_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
     );
   });

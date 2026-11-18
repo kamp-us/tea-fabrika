@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-24 (experiments 127, 128); never a Console API key, each job on its starter's own subscription token, and that token goes in the job's box, the one rule change, since it is the way Anthropic allows (2026-10-25); a token in an account another person holds is not clearly allowed, so that acceptance is marked wrong (2026-10-25); the wall's edges open"
+summary: "The box goes around a fabrika program, not an agent harness: a `Sandbox` service with a layer per box (Docker, sandbox-runtime, none), and fabrika starts the program as a child inside it. Flags, inputs, outputs and the Cmds the app allows cross the wall; a Cmd that needs a key is passed out and done by the app. Tools are served inside the box, each call a Cmd. No real key goes in, the model login included. Code that comes out of a box runs only in a box. Same machine, one interpret entry changed."
+---
+
 # Programs run in a box
 
 Decided 2026-10-24. How some edges behave is still open (see the end).
@@ -52,7 +57,7 @@ test:
   - fabrika's own part is a runner inside the box and the host's side of the
     line format. The program's code is the same in all three.
   - Requirement (owner, 2026-11-09): the `Sandbox` service removes a job's box and its files when
-    the job's lane lands, saving its work first; no person cleans up or frees disk
+    the job's quest lands, saving its work first; no person cleans up or frees disk
     ([0019](../../.decisions/0019-nothing-stale.md)).
   - A program already has a command line's shape
     ([tea-program](./tea-program.md)): flags are argv, inputs are stdin,
@@ -252,5 +257,5 @@ The doubt is the edges nobody has run yet, listed below.
 
 - A program or harness that cannot work when only its inputs, outputs and the
   allowed Cmds cross.
-- A box start that costs too much on a real lane. 128 measured about a third of
+- A box start that costs too much on a real quest. 128 measured about a third of
   a second, about half of it Node loading `@kampus/fabrika`.

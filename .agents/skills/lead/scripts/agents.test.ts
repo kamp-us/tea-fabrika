@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { Effect, Exit } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -10,18 +11,23 @@ import { ADAPTER_SCRIPTS, adaptersReady, type Install } from "./agents.ts";
 const world = (present: ReadonlyArray<string>, writes: ReadonlyArray<string>, code: number) => {
   const root = mkdtempSync(join(tmpdir(), "adapters-"));
   const modules = join(root, "adapters", "node_modules");
+
   const put = (s: string) => {
     mkdirSync(dirname(join(modules, s)), { recursive: true });
     writeFileSync(join(modules, s), "");
   };
+
   present.forEach(put);
   const calls: string[] = [];
+
   const install: Install = (folder) =>
     Effect.sync(() => {
       calls.push(folder);
       writes.forEach(put);
+
       return { code, said: code === 0 ? "" : "ERR_PNPM_FETCH offline" };
     });
+
   return { root, modules: `${modules}/`, install, calls };
 };
 
@@ -42,7 +48,7 @@ const judged = (
         Effect.tap((exit) => Effect.sync(() => law(w, exit))),
       ),
     (w) => Effect.sync(() => rmSync(w.root, { recursive: true, force: true })),
-  ).pipe(Effect.asVoid, Effect.runPromise);
+  ).pipe(Effect.asVoid, Effect.provide(NodeServices.layer), Effect.runPromise);
 
 describe("adaptersReady (ticket 565)", () => {
   // Plants (each failed this law by hand): never install; install even when nothing is missing;

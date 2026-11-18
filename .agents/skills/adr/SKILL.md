@@ -25,47 +25,16 @@ flowchart LR
 ## 1. Find the next number
 
 ```sh
-ls .decisions | grep -E '^[0-9]{4}-' | sort | tail -1
-git fetch -q origin && gh pr list --state open --search ".decisions in:files" --json number,headRefName
+node .agents/skills/lead/scripts/records.ts next .decisions   # fetches, then reads origin/main
+gh pr list --state open --search ".decisions in:files" --json number,headRefName
 ```
 
-Take the highest number on `origin/main` or in an open PR, plus one. A number is not reserved until
+Take the larger of the command's number and the highest number in an open PR plus one. A number is not reserved until
 your PR is open, so check again just before you open it. If another PR took it first, the one opened
 first keeps it, and you renumber yours.
 
 The slug is kebab-case, at most five words. The file is `NNNN-slug.md`, with the next free
-four-digit number:
-
-```markdown
----
-id: 0002
-title: <the decision in one clause, not the topic>
-status: accepted
-date: YYYY-MM-DD
-tags: [a, few, words]
----
-
-# 0002: <the same title>
-
-**What this decides:** one plain sentence.
-
-## Context
-
-Why it came up. Link the note, ticket or pull request.
-
-## Decision
-
-**One bold sentence first.** Then the rules, as short bullets.
-
-## Consequences
-
-What changes, what it costs, what is not decided here.
-```
-
-`status` is `accepted`, `superseded` or `amended` (step 4 says how it changes). Nobody deletes a
-decision. Keep it short: the long reasoning goes in a `docs/direction/` note. A decision moved in
-from elsewhere leaves only a one-line link behind
-([0002](../../../.decisions/0002-moving-a-decision-removes-it-from-its-source.md)).
+four-digit number.
 
 ## 2. Write the decision
 
@@ -125,10 +94,12 @@ merge without a review?"), then search for each:
 
 ```sh
 sh .agents/skills/lead/scripts/governance.sh
+node .agents/skills/lead/scripts/records.ts find "<the question>"
 rg -il '<word>' .decisions docs/direction .glossary
 ```
 
-The script lists the decision files whose title, tags or slug words show up in your diff, and
+`find` ranks live records by the rare words they share with the question, as phoenix's `adr sweep`
+does. The script lists the decision files whose title, tags or slug words show up in your diff, and
 every decision file the diff edits. For now it only lists and always exits 0; it blocks later, once
 its false alarms are measured. An empty
 list is not a clearance: two decisions that disagree about what a word means may share no words.
@@ -153,10 +124,10 @@ links still work.
 
 ## 5. Cite only live decisions
 
-Before you link a decision, open it on `origin/main`:
+Before you link a decision, resolve it on `origin/main`:
 
 ```sh
-git show origin/main:.decisions/<file> | sed -n '1,8p'
+node .agents/skills/lead/scripts/records.ts resolve <id>...   # status, file, and the live one a superseded one names
 ```
 
 Cite it as a rule only when its status is `accepted` or `amended-in-part by ...`. A `superseded`
@@ -177,31 +148,8 @@ glossary row was added.
 
 ## Diagrams
 
-**Rule one: diagrams are Mermaid wherever possible.** Only when Mermaid really cannot express the
-thing may a decision use ASCII art or another form, and then it says in one line, right above the
-picture, why Mermaid could not.
-
-- The diagram shows the real mechanism, with real names: the files, functions, Msgs, states and
-  commands a reader will grep for. No decorative boxes, no "System" or "Service" placeholders.
-- Dark-mode safe: no `style`, `classDef`, `linkStyle` or `%%{init}` theme lines. GitHub picks the
-  colors for each theme.
-- About 12 nodes at most. A bigger idea gets two diagrams.
-- At most one table per section (AGENTS.md).
-
-Which diagram fits which idea. All of these render on GitHub:
-
-| The idea | Mermaid type |
-|---|---|
-| who calls whom, in time order | `sequenceDiagram` |
-| a machine's states and the Msgs that move it | `stateDiagram-v2` |
-| a route, a choice, a process with steps | `flowchart TD` or `flowchart LR` |
-| types and what holds or extends what | `classDiagram` |
-| stored records and their keys | `erDiagram` |
-| branches, merges, a stack of pull requests | `gitGraph` |
-
-Things that break on GitHub: quote a label with punctuation (`a["gh stack merge --squash"]`); write
-`<` and `>` in a label as `#lt;` and `#gt;`; keep a node id one plain word, and never `end` in
-lowercase; `%%` starts a comment.
+The Mermaid rules, which diagram fits which idea and what breaks on GitHub are in
+[the diagram reference](../write-pattern/references/diagrams.md). Read it before you draw.
 
 ### Before and after
 

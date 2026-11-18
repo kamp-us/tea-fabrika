@@ -1,6 +1,5 @@
 /**
  * Replayable fault draws. Version 1 fixes the generator and case order.
- * @stability unstable
  */
 import * as Schema from "effect/Schema";
 import { uniformInt } from "pure-rand/distribution/uniformInt";
@@ -11,7 +10,7 @@ const Word = Schema.Int.check(Schema.isBetween({ minimum: -0x80000000, maximum: 
 
 /**
  * The four saved words of xoroshiro128plus, with its case-order version.
- * @stability unstable
+ *
  * @category schemas
  */
 export const Schedule = Schema.Struct({ version: Schema.Literal(1), words: Schema.Tuple([Word, Word, Word, Word]) });
@@ -19,8 +18,8 @@ export const Schedule = Schema.Struct({ version: Schema.Literal(1), words: Schem
 const words = Schema.decodeUnknownSync(Schedule.fields.words);
 
 /**
- * Start a schedule without drawing or allocating faults.
- * @stability unstable
+ * Starts a schedule without drawing or allocating faults.
+ *
  * @category constructors
  */
 export const seed = (value: number): typeof Schedule.Type => ({
@@ -56,12 +55,13 @@ const select = (choice: number, start: typeof Chaos.Start.Type): Chaos.Fault => 
 };
 
 /**
- * Draw exactly one fault and return the state for the following draw.
- * @stability unstable
+ * Draws exactly one fault and returns the state for the following draw.
+ *
  * @category scheduling
  */
 export const draw = (schedule: typeof Schedule.Type, start: typeof Chaos.Start.Type) => {
   const random = xoroshiro128plusFromState(schedule.words);
   const choice = uniformInt(random, 0, 9);
+
   return { fault: select(choice, start), schedule: Schedule.make({ version: 1, words: words(random.getState()) }) };
 };

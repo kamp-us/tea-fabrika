@@ -1,0 +1,114 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-p25s1-tests5",
+  "ticket": "888",
+  "pr": null,
+  "started": "2026-11-12T16:21:33-08:00",
+  "ended": "2026-11-12T16:36:37-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "next/, P25 slice 1. drive.ts tests in box p25s1-tests5 at 78c7fc64: done. In next/, amended laws are ready for build: 9 expected product failures and 11 passes; format, lint, exam and layer checks passed on Node 26.13.0 without nice after its refusal. CI checks T4's types; the suspended-encoding and oneOf plants remain for review after build, and only the allowed Tools.test.ts path changed. Dollars are gpt-6.1-sol's standard list price (fieldrow.py's table); the plan bills no call.",
+  "tokens": null,
+  "tools": 60,
+  "minutes": 15.1,
+  "note": null,
+  "costUsd": null,
+  "listUsd": 1.2826,
+  "billed": 7233640,
+  "inputTokens": 7204400,
+  "cachedTokens": 7062400,
+  "outputTokens": 29240,
+  "step": "tests",
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "T1/T2",
+      "plant": "mcp/Tools.ts:72: expose person-only inputs",
+      "result": "red"
+    },
+    {
+      "law": "T1",
+      "plant": "mcp/Tools.ts:134: mark writes read-only",
+      "result": "red"
+    },
+    {
+      "law": "T1/P5",
+      "plant": "mcp/Tools.ts:110: list the whole Msg schema",
+      "result": "red"
+    },
+    {
+      "law": "T2",
+      "plant": "mcp/Tools.ts:159: decode outside arguments with an unguarded throwing decoder",
+      "result": "red"
+    },
+    {
+      "law": "T3",
+      "plant": "mcp/Tools.ts:74: truncate tool names",
+      "result": "red"
+    },
+    {
+      "law": "T3",
+      "plant": "mcp/Tools.ts:106: silently keep the first colliding tool",
+      "result": "red"
+    },
+    {
+      "law": "T3",
+      "plant": "mcp/Tools.ts:112: silently skip a missing Msg member",
+      "result": "red"
+    },
+    {
+      "law": "P1, Tools.test.ts:611",
+      "plant": "mcp/Tools.ts:96: return ps alone and drop visible ports",
+      "result": "red"
+    },
+    {
+      "law": "P2, Tools.test.ts:648",
+      "plant": "mcp/Tools.ts:192: send timer as the write's type",
+      "result": "red"
+    },
+    {
+      "law": "P3, Tools.test.ts:695",
+      "plant": "mcp/Tools.ts:159: accept every argument as a write",
+      "result": "red"
+    },
+    {
+      "law": "P4, Tools.test.ts:717",
+      "plant": "mcp/Tools.ts:127: list an unconstrained value schema",
+      "result": "red"
+    },
+    {
+      "law": "P5, Tools.test.ts:748",
+      "plant": "mcp/Tools.ts:127: attach another member's internal_timer field",
+      "result": "red"
+    },
+    {
+      "law": "P5, Tools.test.ts:748",
+      "plant": "mcp/Tools.ts:127: attach an unreachable Unused definition",
+      "result": "red"
+    },
+    {
+      "law": "V1, Tools.test.ts:802",
+      "plant": "mcp/Tools.ts:192: drop the defaulted port's supplied note",
+      "result": "red"
+    },
+    {
+      "law": "V1, Tools.test.ts:860",
+      "plant": "runtime/Program.ts:378: refuse suspended schemas",
+      "result": "red"
+    },
+    {
+      "law": "T5",
+      "plant": "mcp/Tools.ts:1: import gateway/Gateway.ts; layer check rejected it",
+      "result": "red"
+    },
+    {
+      "law": "T5",
+      "plant": "mcp/Tools.ts:1: import node:fs; lint rejected it",
+      "result": "red"
+    }
+  ]
+}

@@ -64,6 +64,26 @@ export const shellEnv = (parent: Env = process.env) => ({
   ...kept(PUSH, parent),
 });
 
+/** Whether this process runs on Electron's binary, as Node or as the app: read once, at the edge. */
+const onElectron = (): boolean => process.versions.electron !== undefined;
+
+/**
+ * What a Node helper started on this process's own binary needs to run as Node. Electron's binary
+ * boots its whole app, with a Dock icon on a Mac, unless this is set and not empty
+ * (electron_main_mac.cc at v45.2.1, lines 37 to 40). On plain Node it is nothing. It is never read
+ * from the parent's environment: a helper started from Electron's main process would find none
+ * there and still need it.
+ */
+export const runAsNode = (electron: boolean = onElectron()) =>
+  electron ? ({ ELECTRON_RUN_AS_NODE: "1" } as const) : ({} as const);
+
+/**
+ * The same switch, cleared, for the commands an agent runs: they never inherit it, as VS Code
+ * strips `ELECTRON_*` from a terminal's environment. Electron reads an empty value as unset.
+ */
+export const notAsNode = (electron: boolean = onElectron()) =>
+  electron ? ({ ELECTRON_RUN_AS_NODE: "" } as const) : ({} as const);
+
 /** Where `gh` finds its login: the keychain (under `USER`), a moved settings folder, or a token. */
 const HOST = ["USER", "GH_CONFIG_DIR", "GH_TOKEN", "GITHUB_TOKEN"];
 

@@ -1,7 +1,7 @@
 ---
 id: 0062
 title: Test files keep to the floors too, and a lower room tests against a real database through a suite that a higher room runs
-status: amended-in-part by [0091](0091-modules-and-layers.md)
+status: amended-in-part by [0091](0091-modules-and-layers.md), [0536](0536-real-resource-tests-run-only-on-the-schedule.md)
 date: 2026-11-10
 tags: [tests, floors, rooms, layers, suites, sqlite, node, cloudflare, libfabrika, next]
 ---

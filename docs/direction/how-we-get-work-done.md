@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-11"
+summary: "Step 1 to 3 of decision 0059's order, before `next/`'s pipeline is designed, redone on the teams where agents do most of the work (0059's ticket 645 amendment); today's version is the evidence. The loop in plain words (decide, shape, do, check, ship, learn), then in fabrika's words, then seven principles: a person's attention is the scarce budget (F1); a ticket with intent, run to one pull request with proof (F2); check in layers and place people by risk (F3); every miss becomes a check the same day, and stale rules leave (F4); the repo is the memory and the top file a map (F5); one writer per change (F6); code holds the edges, the agent the path inside a step (F7). The first draft's W1 to W6 are mapped onto them. Ticket 574 traced through it. From experiment 250."
+---
+
 # How we get work done
 
 **Decided 2026-11-11.** Redone on the teams where agents do most of the work, as 0059's amendment
@@ -39,7 +44,7 @@ cost     $19.47 at list price, 70 agent minutes; $8.81 went to rounds that stall
 ## Which version
 
 - **Today's version:** all the evidence. Ticket 574, the lead's tooling (`drive.ts`, `chain.ts`,
-  `catchup.sh`) and today's paused lane (`packages/pipeline`).
+  `land.ts`) and today's paused quest (`packages/pipeline`).
 - **`next/`:** what the principles are for. Its pipeline is designed on them, last, as 0059 says.
   None of the loop is built in `next/` yet.
 
@@ -104,11 +109,11 @@ is **event** in `next/` (renamed 2026-11-08); today's code says fact.
 
 | Part | Today | `next/`, by settled notes |
 |---|---|---|
-| Decide | the owner orders tiers in `docs/plan/`; the lead picks lanes and files tickets with `tracker_file`; `triage` is in `STEPS` but paused | `ticket`, `tracker`, `triage`, `area`, `label`; no priority; a label never routes |
+| Decide | the owner orders tiers in `docs/plan/`; the lead picks quests and files tickets with `tracker_file`; `triage` is in `STEPS` but paused | `ticket`, `tracker`, `triage`, `area`, `label`; no priority; a label never routes |
 | Shape | a plan file approved on its line 1, by the lead when it builds a decided note | a `plan` with criteria and properties, approved by version and hash |
 | Do | `test_writer` and `build`, run by `drive.ts`, chained by `chain.ts` (a tea machine) | steps are tea machines that answer in five verbs; an `attested` link per commit, checked by `next/`'s exam |
 | Check | `mutation`, `review`, CI, `leakgrep.sh`, `loosening.sh`, the lead's hand check | `mutation`, `review`, the `exam`; a person only for a `judgment` |
-| Ship | `catchup.sh` under the lead (0014) | `ship`, the one merge authority |
+| Ship | `land.ts queue` under the lead, into GitHub's merge queue (0014, 0162) | `ship`, the one merge authority |
 | Learn | `field/` rows and notes, findings a person rates, `.decisions/` | a `finding` row until Tier 6; `asked` and `answered` events, with `needed` |
 
 The full table, with a source for each name, is in experiment 250, part 8.
@@ -263,7 +268,7 @@ The full table, with a source for each name, is in experiment 250, part 8.
 - **Linear as the builder:** No Linear answer: one session per agent is all the study read; it
   says nothing on two agents writing one change.
 - **Elm or OTP:** one process owns its state, and others only send it messages. No shared writes.
-- **What holds it:** law in part. One lane per ticket, steps in a row, chained by `chain.ts`
+- **What holds it:** law in part. One quest per ticket, steps in a row, chained by `chain.ts`
   (today's lead tooling). The test writer and the builder are two writers in turn on one branch.
 - **Doubt:** two writers in turn (tests, then build) is a form the sources do not discuss. Settled
   by comparing send-backs between them in `field/`.
@@ -291,12 +296,12 @@ The full table, with a source for each name, is in experiment 250, part 8.
   command whose result comes back as a Msg.
 - **What holds it:** law. Every state machine in `next/` is explicit and a tea machine
   ([0037](../../.decisions/0037-implicit-state-machines-made-explicit.md),
-  [0046](../../.decisions/0046-one-tea-machine-per-file.md)); the lane's moves are code in
+  [0046](../../.decisions/0046-one-tea-machine-per-file.md)); the quest's moves are code in
   `chain.ts` (today's version).
 - **Doubt:** OpenAI's lesson is secondary, and our own data is two days. Settled by running the
   same tickets through today's fixed steps and through one goal-plus-checks agent.
 - **Cost:** none to keep; an experiment to test.
-- **Ticket 574:** half. The chain ran the lane with no agent holding it. But at one edge,
+- **Ticket 574:** half. The chain ran the quest with no agent holding it. But at one edge,
   collecting a stuck commit moved the branch, and the lead fixed it by hand.
 - **Since the walk:** [0064](../../.decisions/0064-the-lead-drives-with-flows.md): the lead drives
   work as a flow, a list of typed steps one program runs, and no agent holds a loop.
@@ -314,9 +319,9 @@ the work did. Here, 16 of 31 stuck test-writer runs were `fetch_failed`.
 
 **Since the walk:** [0076](../../.decisions/0076-a-lane-stops-at-its-budget.md): every stuck step
 says its fault, `tool` or `work`; a tool fault files a finding and drains one tool budget shared by
-all lanes, and does not count against the lane.
+all quests, and does not count against the quest.
 [Experiment 254](../../experiments/254-how-a-lane-should-stop.md) sorted about 35 of 41 stuck steps
-on the five longest lanes as tool faults.
+on the five longest quests as tool faults.
 
 ## What became of the first six
 
@@ -344,7 +349,7 @@ where each goes.
 
 ## Where this differs from settled notes
 
-- [Pipeline guidelines](./pipeline-guidelines.md) says whoever designs `next/`'s lane "starts from
+- [Pipeline guidelines](./pipeline-guidelines.md) says whoever designs `next/`'s quest "starts from
   this note". 0059 already moved that note to input. Nothing here walks back its twelve principles;
   the "Also" adds "whose defect" on top of its P3.
 - [Pipeline strategies](./pipeline-strategies.md) is proposed and asks "can a later change undo the

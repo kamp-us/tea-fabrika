@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-hands-holding-stops-all-new-work",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/client/HandsMachine.ts",
+    "line": 349
+  },
+  "says": "In next/, once the brain refused one finish for good, the hands client stayed in holding and listed, took and ran nothing more until its socket dropped, so one refused job stopped every other job for that key. Fixed in the same pull request: the refusal is saved as a held journal entry with the brain's reason, the client goes back to listing, and a held job is never sent or taken again (H3 now needs a take on the same link after a hold).",
+  "proof": "At c2ce4f498, HandsMachine.ts:349 moved reporting to holding on any refusal but unavailable, and no update case left holding but a link change (moved, :380). The H3 walk reset its held set on every close, the only way out.",
+  "cost": "A key whose one job was refused conflict or not_allowed ran no other job until a network drop; on a steady link, that is forever.",
+  "head": "c2ce4f498d29785d4b81c7fc5ec44a6b0451a567",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315"
+}

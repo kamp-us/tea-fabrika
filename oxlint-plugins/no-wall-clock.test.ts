@@ -1,3 +1,4 @@
+import { Array as Arr, Record as Rec } from "effect";
 // `fabrika/no-wall-clock` through the repo's real config: next/'s product code reads the time through
 // Effect's `Clock` or `DateTime`, never the platform's clock. Each planted file sits at a generated
 // path, so the config's globs are under test with the rule.
@@ -6,11 +7,12 @@ import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const CODE = "fabrika(no-wall-clock)";
+
 const runs = { seed: 119120, numRuns: 12 };
 
 const name = fc
   .array(fc.constantFrom("a", "Z", "_", "0", "é"), { minLength: 1, maxLength: 8 })
-  .map((letters) => `file${letters.join("")}`);
+  .map((letters) => `file${Arr.join(letters, "")}`);
 
 const host = fc.constantFrom("", "window.", "globalThis.");
 
@@ -28,16 +30,17 @@ const kept = (at: string) => [
   "type J = Date;",
 ];
 
-it("refuses each clock read in next/ product code, and passes what reads no clock", async () => {
-  await fc.assert(
+it("refuses each clock read in next/ product code, and passes what reads no clock", () =>
+  fc.assert(
     fc.asyncProperty(name, host, fc.constantFrom("at", "1_000", "span.start"), async (file, on, at) => {
       const paths = [
         `next/packages/libfabrika/src/runtime/${file}.ts`,
         `next/apps/fabrika/${file}.ts`,
         `next/programs/counter/src/${file}.ts`,
       ];
+
       const result = await plant(
-        Object.fromEntries(paths.map((path) => [path, [...reads(on), ...kept(at)].join("\n")])),
+        Rec.fromEntries(Arr.map(paths, (path) => [path, Arr.join([...reads(on), ...kept(at)], "\n")])),
       );
 
       for (const path of paths) {
@@ -45,11 +48,10 @@ it("refuses each clock read in next/ product code, and passes what reads no cloc
       }
     }),
     runs,
-  );
-});
+  ));
 
-it("leaves tests, test helpers, .tsx views and today's paths to their own rules", async () => {
-  await fc.assert(
+it("leaves tests, test helpers, .tsx views and today's paths to their own rules", () =>
+  fc.assert(
     fc.asyncProperty(name, host, async (file, on) => {
       const paths = [
         `next/packages/libfabrika/src/runtime/${file}.test.ts`,
@@ -59,7 +61,8 @@ it("leaves tests, test helpers, .tsx views and today's paths to their own rules"
         `packages/fabrika/src/${file}.ts`,
         `.agents/skills/x/scripts/${file}.ts`,
       ];
-      const result = await plant(Object.fromEntries(paths.map((path) => [path, reads(on).join("\n")])));
+
+      const result = await plant(Rec.fromEntries(Arr.map(paths, (path) => [path, Arr.join(reads(on), "\n")])));
 
       for (const path of paths) {
         expect([path, result(CODE, path)]).toEqual([path, []]);
@@ -69,5 +72,4 @@ it("leaves tests, test helpers, .tsx views and today's paths to their own rules"
       expect(result("fabrika(no-clock-in-view)", paths[3] ?? "")).toEqual([1, 2, 3]);
     }),
     runs,
-  );
-});
+  ));

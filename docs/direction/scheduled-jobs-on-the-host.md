@@ -1,3 +1,8 @@
+---
+state: "decided in pieces, see the note"
+summary: "A scheduled job is a program that listens to the clock, on a Durable Object alarm (Cron Triggers do not fire in local dev). It reads and judges, and files a ticket as an agent; it never changes code. Its false alarms are counted before it files anything. Candidates: PR watcher, TLA+ drift, docs drift, mutation sweep, stale quests."
+---
+
 # Scheduled jobs run on the host's alarms
 
 **Decided, in pieces:**
@@ -52,8 +57,8 @@ const tlaDrift = scheduled("tla_drift", {every: days(1)}, function* () {
     whose draft said one alarm per host.
 - **A job never changes code. It files a ticket,** written by an agent
   writer, so the timeline shows who filed it
-  ([the ticket is the lane's one view](./the-ticket-is-the-lane-view.md)).
-  Everything after that goes through the lane, the owner's approval of the plan
+  ([the ticket is the quest's one view](./the-ticket-is-the-lane-view.md)).
+  Everything after that goes through the quest, the owner's approval of the plan
   included. Dependabot works on a schedule too, but it opens pull requests
   ([GitHub](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-version-updates)).
   A ticket is one step more careful.
@@ -74,7 +79,7 @@ Jobs this could run, each a guess until it is tried:
 | TLA+ drift | each spec and recorded runs of its code | real runs no longer fit the spec. Decided 2026-10-25: a kept spec is checked here, advise only (experiment 139: 0 false alarms in 600 right runs) |
 | docs drift | doc lines tickets added | a line no longer holds on main (experiment 134) |
 | mutation sweep | a sample of code no ticket touched lately | a mutant survives every test |
-| stale lane | the ledger | a lane has waited on an ask too long |
+| stale quest | the ledger | a quest has waited on an ask too long |
 
 ## Why
 
@@ -100,7 +105,7 @@ Jobs this could run, each a guess until it is tried:
 **How sure: 70%.** The doubts: whether a laptop's host is up often enough for
 a daily job, and how noisy each job is. The PR watcher running for a week
 would settle the first. For TLA+ drift, experiment 139 raised no false alarm
-on 600 runs, but of stand-in children; a week on real lanes would settle it.
+on 600 runs, but of stand-in children; a week on real quests would settle it.
 
 ## Still open
 

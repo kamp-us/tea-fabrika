@@ -26,13 +26,18 @@ catalog:
   '@anthropic-ai/claude-agent-sdk': 0.3.316
   # The os sandbox (packages/fabrika/src/sandbox/os.ts), held exact: 0.0.x, as experiments 127, 128 and 137 ran it.
   '@anthropic-ai/sandbox-runtime': 0.0.81
+  # The tests' JSON Schema validator (P25 slice 1), the version the lockfile already holds through the MCP SDK.
+  ajv: 8.20.0
   '@demlik/code-graph': 0.15.0
   '@demlik/structure-sweep': 0.4.1
-  '@demlik/tea': 0.25.0
-  '@effect/opentelemetry': 4.1.2
-  '@effect/platform-node': 4.1.2
+  # next/ and the root (tooling). 0.26.0 shipped demlik#897, so no patch is needed for it.
+  '@demlik/tea': 0.27.0
+  '@effect/opentelemetry': 4.1.3
+  # Held at effect's own version: the browser runner for the page (next/apps/fabrika/src/entry/browser.tsx).
+  '@effect/platform-browser': 4.1.3
+  '@effect/platform-node': 4.1.3
   '@effect/tsgo': 0.63.0
-  '@effect/vitest': 4.1.2
+  '@effect/vitest': 4.1.3
   # MCP's official TypeScript SDK, v2's split packages: the host serves programs as tools (@kampus/fabrika-old/mcp).
   '@modelcontextprotocol/client': 2.4.0
   '@modelcontextprotocol/server': 2.4.0
@@ -59,7 +64,7 @@ catalog:
   rolldown: 1.2.13
   # P16 bundles window CSS with its imports. Reuse the version already in the lockfile.
   lightningcss: 1.33.0
-  # Held on the SDK's 2.x line: OpenTelemetry 3 needs api 1.10, and @effect/opentelemetry 4.1.2 asks for
+  # Held on the SDK's 2.x line: OpenTelemetry 3 needs api 1.10, and @effect/opentelemetry 4.1.3 asks for
   # resources below 3. On that line sdk-trace-base 2.12.0 asks for api below 1.10, so api stays 1.9.1.
   '@opentelemetry/api': 1.9.1
   '@opentelemetry/exporter-trace-otlp-http': 0.223.0
@@ -90,7 +95,7 @@ catalog:
   '@xterm/xterm': 6.0.0
   # React Flow, MIT: the map program's window (programs/map).
   '@xyflow/react': 12.12.0
-  effect: 4.1.2
+  effect: 4.1.3
   electron: 45.2.1
   esbuild: 0.28.2
   fast-check: 4.10.2
@@ -103,6 +108,9 @@ catalog:
   mdast-util-from-markdown: 2.1.0
   mdast-util-gfm: 3.1.0
   micromark-extension-gfm: 3.0.0
+  # The copy-paste detector (0040, 0587): a pull request's new clones as advice, by .github/ci/copies.ts
+  # with .jscpd.json's settings. MIT. v5 is a Rust binary in a per-platform package, no install script.
+  jscpd: 5.4.3
   miniflare: 4.20260730.0
   playwright: 1.64.1
   react: 19.3.1
@@ -116,6 +124,12 @@ catalog:
   # The YAML parser oxlint-plugins/exact-versions.ts reads this file with. vite's optional peer, so already in the lockfile.
   yaml: 2.9.1
   zod: 4.6.7
+
+catalogs:
+  # Today's version (packages/, programs/, apps/, docs/tutorials/), held at the tea it runs on, with
+  # its patch, while next/ moves to `_tag` (decision 0569). Goes when today's version goes.
+  old:
+    '@demlik/tea': 0.25.0
 
 # `pnpm add` writes the exact version, not a range (docs/direction/pin-exact-versions.md).
 savePrefix: ''
@@ -131,7 +145,9 @@ allowBuilds:
 
 # The platform layer's shared part, held at effect's own version: its newer releases ask for a newer effect.
 overrides:
-  '@effect/platform-node-shared': 4.1.2
+  '@effect/platform-node-shared': 4.1.3
+  # Alchemy asks for ^4.0.5. Held at effect's own version, as the line above is.
+  '@effect/sql-d1': 4.1.3
 
 patchedDependencies:
   # P12 observes workerd PIDs, exits, replacement delays and recovery stopping.
@@ -142,11 +158,13 @@ patchedDependencies:
   # (https://github.com/alchemy-run/alchemy/pull/3203) after 2.0.0-beta.85. Drop this at the
   # release that carries it.
   '@alchemy.run/cloudflare-runtime@2.0.0-beta.85': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.85.patch
-  # demlik#897: expose the machine's existing schemas; drop at the release that has it.
+  # demlik#897: expose the machine's existing schemas. Today's version only, on 0.25.0 (0217);
+  # 0.27.0 ships the fix. Goes when today's version goes.
   '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
   # Effect-TS/effect#10539: A Schema string's shrink candidates are built on the
-  # first shrink, not while generating (sampleFromValidatedShrink already is). Drop at the release that has it.
-  effect@4.1.2: patches/effect@4.1.2.patch
+  # first shrink, not while generating (sampleFromValidatedShrink already is). Fixed upstream after
+  # 4.1.4 (commit d021cee). Drop at the release that has it.
+  effect@4.1.3: patches/effect@4.1.3.patch
   # Manti's type files name each relative import without its `.js`, which only a bundler's
   # resolution finds; under our NodeNext none of its parts is seen. The patch adds the `.js`
   # (`./components` becomes `./components/index.js`) and changes no code. Drop it when Manti
@@ -155,8 +173,11 @@ patchedDependencies:
   # Draw on change, and a hollow cursor when a tile is unfocused (experiment 142).
   ghostty-web@0.4.0: patches/ghostty-web@0.4.0.patch
   '@manti-ui/styles@0.13.0': patches/@manti-ui__styles@0.13.0.patch
-  # demlik#905: a non-exported const beside an exported type of its name is not an unused export;
-  # drop at the release that has the fix.
+  # demlik#905: a non-exported const beside an exported type of its name is not an unused export.
+  # demlik#913 and #915: a row's `layer`, and a package import read by its subpath. demlik#947 and
+  # #948: `--layers` fails a file under a `roots` folder that no layer claims, and `testFiles` are
+  # judged upward and sideways but not by the `imports` lists. demlik#968: an export of a
+  # test-support file that nothing uses is dead, not withheld. Drop each at the release that has it.
   '@demlik/code-graph@0.15.0': patches/@demlik__code-graph@0.15.0.patch
   # Alchemy's prebuilt-bundle watcher serves again on every watch event, changed or not. macOS
   # reports a late event for a folder made just before the watch began, so a Mac replaced the
@@ -168,7 +189,11 @@ patchedDependencies:
   # https://github.com/alchemy-run/alchemy/pull/3240) after 2.0.0-beta.85. Drop this at the
   # release that carries them.
   '@alchemy.run/cloudflare@2.0.0-beta.85': patches/@alchemy.run__cloudflare@2.0.0-beta.85.patch
+  # layerTest binds the loopback address its client dials. Fixed upstream in
+  # https://github.com/Effect-TS/effect/pull/10566, closing
+  # https://github.com/Effect-TS/effect/issues/10560. Drop this at the release that carries it.
+  '@effect/platform-node@4.1.3': patches/@effect__platform-node@4.1.3.patch
 
 minimumReleaseAgeExclude:
-  - '@demlik/tea@0.24.0 || 0.25.0'
+  - '@demlik/tea@0.25.0 || 0.27.0'
   - '@demlik/code-graph@0.15.0'

@@ -1,6 +1,6 @@
 // The flow machine's laws, on its pure init and update: no runner, no file, no clock.
 import { step } from "@demlik/tea/testing";
-import { Schema } from "effect";
+import { Schema, Array as Arr, Match, Option } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as Flow from "./Flow.ts";
@@ -9,19 +9,20 @@ import * as Outcome from "./Outcome.ts";
 import * as Step from "./Step.ts";
 
 type Verb = "done" | "skip" | "ask" | "stuck";
+
 type Machine = ReturnType<typeof FlowMachine.make>;
+
 type Cmd = ReturnType<typeof FlowMachine.stepRun>;
 
 const AT = 1_000;
 
 const verbOutcome = (verb: Verb, name: string): Outcome.Outcome =>
-  verb === "done"
-    ? Outcome.done(`${name} ok`)
-    : verb === "skip"
-      ? Outcome.skip(`${name} had nothing to do`)
-      : verb === "ask"
-        ? Outcome.ask(`${name} wants the lead`)
-        : Outcome.stuck(`${name} broke`);
+  Match.value(verb).pipe(
+    Match.when("done", () => Outcome.done(`${name} ok`)),
+    Match.when("skip", () => Outcome.skip(`${name} had nothing to do`)),
+    Match.when("ask", () => Outcome.ask(`${name} wants the lead`)),
+    Match.orElse(() => Outcome.stuck(`${name} broke`)),
+  );
 
 /**
  * Drive the machine as the engine would: each Cmd's answer comes from `answer`, one tick of the
@@ -62,8 +63,9 @@ const arbFlow = (lead: fc.Arbitrary<boolean> = fc.constant(false)) =>
   fc
     .array(fc.tuple(fc.integer({ min: 0, max: KINDS.length - 1 }), lead), { minLength: 1, maxLength: 8 })
     .map((specs) => {
-      const steps = specs.map(([kind, marked], i) => (KINDS[kind] ?? Step.act)(`s${i}`, { i }, { lead: marked }));
+      const steps = Arr.map(specs, ([kind, marked], i) => (KINDS[kind] ?? Step.act)(`s${i}`, { i }, { lead: marked }));
       const [first, ...rest] = steps;
+
       return Flow.make("arb", [first ?? Step.act("s0"), ...rest]);
     });
 
@@ -81,26 +83,28 @@ const scripted = (verbs: ReadonlyArray<Verb>) => (cmd: Cmd) =>
   verbOutcome(verbs[cmd.position] ?? "done", cmd.step.name);
 
 const asLead = FlowMachine.make({ lead: true });
+
 const notLead = FlowMachine.make({ lead: false });
 
 /** The state file's trip: the Model as JSON text and back, through its schema. */
 const saved = (m: FlowMachine.Model) =>
-  Schema.decodeUnknownSync(Schema.fromJsonString(FlowMachine.Model))(
-    JSON.stringify(Schema.encodeSync(FlowMachine.Model)(m)),
-  );
+  Schema.decodeSync(Schema.fromJsonString(FlowMachine.Model))(JSON.stringify(Schema.encodeSync(FlowMachine.Model)(m)));
 
 describe("the flow machine", () => {
   it("a flow ends at its first ask or stuck, and runs no step after it", () => {
     fc.assert(
       fc.property(arbScripted, ({ flow, verbs }) => {
         const { model, ran } = drive(asLead, flow, scripted(verbs));
-        const first = verbs.findIndex((v) => v === "ask" || v === "stuck");
+        const found = Arr.findFirstIndex(verbs, (v) => v === "ask" || v === "stuck");
 
-        if (first === -1) {
+        if (Option.isNone(found)) {
           expect(model._tag).toBe("done");
-          expect(ran).toEqual(flow.steps.map((_, i) => i));
+          expect(ran).toEqual(Arr.map(flow.steps, (_, i) => i));
+
           return;
         }
+
+        const first = found.value;
 
         expect(ran).toEqual(Array.from({ length: first + 1 }, (_, i) => i));
         expect(model._tag).toBe(verbs[first] === "ask" ? "parked" : "stuck");
@@ -117,13 +121,14 @@ describe("the flow machine", () => {
         if (first.model._tag === "done") {
           // A done flow resumes to itself and runs nothing.
           expect(drive(asLead, flow, () => Outcome.done("again"), saved(first.model)).ran).toEqual([]);
+
           return;
         }
 
         const stopped = first.model._tag === "running" ? -1 : first.model.position;
         const again = drive(asLead, flow, () => Outcome.done("now it passes"), saved(first.model));
         expect(again.ran[0]).toBe(stopped);
-        expect(again.ran.every((p) => p >= stopped)).toBe(true);
+        expect(Arr.every(again.ran, (p) => p >= stopped)).toBe(true);
         expect(again.model._tag).toBe("done");
         // Every attempt of the first process is kept, as it was.
         expect(again.model.history.slice(0, first.model.history.length)).toEqual(first.model.history);
@@ -145,13 +150,16 @@ describe("the flow machine", () => {
     fc.assert(
       fc.property(arbFlow(fc.boolean()), (flow) => {
         const { model, ran } = drive(notLead, flow, () => Outcome.done("ok"));
-        const first = flow.steps.findIndex((s) => s.lead);
-        expect(ran.every((p) => flow.steps[p]?.lead === false)).toBe(true);
+        const found = Arr.findFirstIndex(flow.steps, (s) => s.lead);
+        expect(Arr.every(ran, (p) => flow.steps[p]?.lead === false)).toBe(true);
 
-        if (first === -1) {
+        if (Option.isNone(found)) {
           expect(model._tag).toBe("done");
+
           return;
         }
+
+        const first = found.value;
 
         expect(model._tag).toBe("parked");
         expect(model._tag === "parked" ? model.position : -1).toBe(first);
@@ -164,7 +172,7 @@ describe("the flow machine", () => {
     fc.assert(
       fc.property(arbScripted, ({ flow, verbs }) => {
         const { model, ran } = drive(asLead, flow, scripted(verbs));
-        expect(model.history.map((a) => a.position)).toEqual(ran);
+        expect(Arr.map(model.history, (a) => a.position)).toEqual(ran);
 
         for (const a of model.history) {
           expect(a.name).toBe(flow.steps[a.position]?.name);
@@ -178,32 +186,39 @@ describe("the flow machine", () => {
   it("scenario: a send goes to the named step, and runs a done step again on purpose", () => {
     const flow = Flow.make("send", [Step.act("build"), Step.check("review"), Step.act("land")]);
     let reviews = 0;
+
     const { model, ran } = drive(asLead, flow, (cmd) => {
       if (cmd.step.name !== "review") {
         return Outcome.done("ok");
       }
 
       reviews += 1;
+
       return reviews === 1 ? Outcome.send("build", "one fix") : Outcome.done("merge-ready");
     });
+
     expect(ran).toEqual([0, 1, 0, 1, 2]);
     expect(model._tag).toBe("done");
   });
 
   it("scenario: a send to a name the flow lacks is stuck, since a typo must not end a flow done", () => {
     const flow = Flow.make("typo", [Step.act("build"), Step.check("review")]);
+
     const { model } = drive(asLead, flow, (cmd) =>
       cmd.step.name === "review" ? Outcome.send("biuld", "fix") : Outcome.done("ok"),
     );
+
     expect(model._tag).toBe("stuck");
     expect(model._tag === "stuck" ? model.reason : "").toContain("biuld");
   });
 
   it("scenario: a send loop stops stuck at the flow's attempt cap, so no flow runs forever", () => {
     const flow = Flow.make("loop", [Step.act("a"), Step.act("b")], { attempts: 5 });
+
     const { model, ran } = drive(asLead, flow, (cmd) =>
       cmd.step.name === "b" ? Outcome.send("a", "again") : Outcome.done("ok"),
     );
+
     expect(ran).toHaveLength(5);
     expect(model._tag).toBe("stuck");
   });
@@ -224,6 +239,7 @@ describe("the flow machine", () => {
       FlowMachine.stepRun.err(cmd, { _tag: "StepFailed", reason: "no gh" }, 2_000),
       ctx,
     );
+
     expect(next).toEqual([]);
     expect(model._tag === "stuck" ? model.reason : "").toBe("push failed: no gh");
     expect(model.history[0]?.outcome?._tag).toBe("stuck");
@@ -234,12 +250,14 @@ describe("the flow machine", () => {
     const ctx = { flow, at: AT };
     const [running] = asLead.init(null, ctx);
     const late = FlowMachine.stepRun({ position: 1, step: Step.act("b") });
+
     const [model, cmds] = step(
       asLead,
       running,
       FlowMachine.stepRun.ok(late, Outcome.answer(Outcome.done("x")), 2_000),
       ctx,
     );
+
     expect(model).toEqual(running);
     expect(cmds).toEqual([]);
   });

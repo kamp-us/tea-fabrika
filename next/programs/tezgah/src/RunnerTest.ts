@@ -1,0 +1,238 @@
+// Desk S2a, next/ (the desk program fabrika/tezgah, ticket named by its title): law L8's real half,
+// a suite the part that owns a real local instance runs (0062): `RunnerTest.suite(open)`. A program
+// imports only the library's front, so the instance, its door and its process table are the app's
+// (`next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts`); this file holds the law. L8's pure
+// half, on every generated layout, is in `program.laws.test.ts`.
+//
+// What the law holds the real instance to (plan amendment, 2026-11-14): a close of a tile tezgah
+// started stops that tile's process with `shutdown` through the Worker's `stop_child`; a close of a
+// tile tezgah did not start, such as workspace 1's boot tile `checklist:1`, stops nothing; and no
+// close stops another tile's process. Each run of the walk takes a workspace of its own: the first
+// run takes workspace 1, whose first tile is the boot list's `checklist:1`, and each later run a new
+// workspace, whose first tile tezgah starts itself. Every move is picked from tezgah's view as it
+// stands: a split from a live tile, a close of a live tile.
+import { describe, expect, it } from "@effect/vitest";
+import { Array as Arr, Effect, Formatter, Option, Predicate, Schema } from "effect";
+import type { Scope } from "effect";
+import * as fc from "fast-check";
+
+const SEED = 119120;
+
+const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+
+/** How long a wait on the instance may take before the law fails with what it last saw. */
+const WAIT = 60;
+
+/** A canonical UUIDv7 TypeID for `n`, made here so the law does not lean on the generator it checks. */
+const typeId = (prefix: string, n: number): string => {
+  let uuid = (BigInt(n) << 80n) | (7n << 76n) | (2n << 62n);
+  let suffix = "";
+
+  for (let i = 0; i < 26; i++) {
+    suffix = ALPHABET[Number(uuid & 31n)] + suffix;
+    uuid >>= 5n;
+  }
+
+  return `${prefix}_${suffix}`;
+};
+
+/** What the part that owns the instance supplies, in its scope: one real local instance with one
+ *  founder, whose door letters it sends. `send` is one founder's letter to tezgah's process, and
+ *  its answer's tag; `view` is tezgah's view now, as `view.open` gives it; `process` is a name's
+ *  state: whether it is live now, and the exit reasons of its lives that exited. */
+export type Open = Effect.Effect<
+  {
+    readonly send: (m: Schema.Json) => Effect.Effect<unknown>;
+    readonly view: Effect.Effect<unknown>;
+    readonly process: (
+      name: string,
+    ) => Effect.Effect<{ readonly live: boolean; readonly exited: ReadonlyArray<unknown> }>;
+  },
+  never,
+  Scope.Scope
+>;
+
+/** A letter's answer as the door gives it: taken, or refused for a reason. */
+const Answer = Schema.TaggedUnion({
+  accepted: {},
+  refused: { reason: Schema.String },
+  error: { reason: Schema.String },
+});
+
+const answered = Schema.decodeUnknownSync(Answer);
+
+/** The keybindings note's Via, as the window sends it. */
+const Via = Schema.TaggedUnion({ key: { keys: Schema.String } });
+
+/** What the law reads of a layout: a tile's id, or a container's parts, each holding a layout. */
+type Node = string | { readonly parts: ReadonlyArray<{ readonly inner: Node }> };
+
+const Node: Schema.Codec<Node> = Schema.Union([
+  Schema.String,
+  Schema.Struct({ parts: Schema.Array(Schema.Struct({ inner: Schema.suspend((): Schema.Codec<Node> => Node) })) }),
+]);
+
+/** What the law reads of tezgah's view: each workspace's tiles in reading order, and each tile. */
+const View = Schema.Struct({
+  workspaces: Schema.Array(Schema.Struct({ n: Schema.Int, layout: Node })),
+  tiles: Schema.Array(Schema.Struct({ id: Schema.String, shows: Schema.String, child: Schema.Boolean })),
+});
+
+type View = typeof View.Type;
+
+const order = (node: Node): ReadonlyArray<string> =>
+  Predicate.isString(node) ? [node] : Arr.flatMap(node.parts, (p) => order(p.inner));
+
+const tilesOn = (v: View, n: number) =>
+  Option.match(
+    Arr.findFirst(v.workspaces, (w) => w.n === n),
+    {
+      onNone: () => [],
+      onSome: (space) => Arr.flatMap(order(space.layout), (id) => Arr.filter(v.tiles, (t) => t.id === id)),
+    },
+  );
+
+const via = Schema.encodeSync(Via)(Via.cases.key.make({ keys: "ctrl+b x" }));
+
+let minted = 0;
+
+const fresh = () => typeId("tile", 70_000 + ++minted);
+
+type Live = Effect.Success<Open>;
+
+/** Polls `look` once a second until `done`, then answers it; past WAIT it fails with what it last saw. */
+const until = <A>(label: string, look: Effect.Effect<A>, done: (a: A) => boolean) =>
+  Effect.gen(function* () {
+    let last: A | undefined;
+
+    for (let n = 0; n < WAIT; n++) {
+      last = yield* look;
+
+      if (done(last)) {
+        return last;
+      }
+
+      yield* Effect.sleep("1 second");
+    }
+
+    return yield* Effect.die(new Error(`${label}: no answer in ${WAIT} s; last saw ${Formatter.format(last)}`));
+  });
+
+const readView = (live: Live) => Effect.map(live.view, (v) => Schema.decodeUnknownSync(View)(v));
+
+/** One move of the walk on workspace `n`: a split from a live tile, or a close of one. */
+type Move = { readonly kind: "split_right" | "split_down" | "close"; readonly pick: number };
+
+/** How many closes of each kind the walks made: of a tile tezgah started, and of any other. */
+type Seen = { child: number; other: number };
+
+const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: Seen) {
+  const before = yield* readView(live);
+  const tiles = tilesOn(before, n);
+  const from = tiles[m.pick % tiles.length];
+
+  if (from === undefined) {
+    return;
+  }
+
+  if (m.kind !== "close") {
+    const tile = fresh();
+    const does = m.kind === "split_right" ? "tezgah.split_right" : "tezgah.split_down";
+    expect(answered(yield* live.send({ type: "did", does, from: from.id, via, tile }))._tag).toBe("accepted");
+    yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
+      Arr.some(tilesOn(v, n), (t) => t.id === tile),
+    );
+
+    return;
+  }
+
+  const was = yield* live.process(from.shows);
+  const answer = answered(yield* live.send({ type: "did", does: "tezgah.close", from: from.id, via }));
+
+  if (tiles.length === 1) {
+    expect(answer, "the last tile of a workspace never closes").toEqual(
+      Answer.cases.refused.make({ reason: "last_tile" }),
+    );
+
+    return;
+  }
+
+  expect(answer._tag).toBe("accepted");
+  yield* until(`the close of ${from.id}`, readView(live), (v) => !Arr.some(tilesOn(v, n), (t) => t.id === from.id));
+  const others = Arr.filter(before.tiles, (t) => t.id !== from.id);
+
+  seen[from.child ? "child" : "other"]++;
+
+  if (from.child) {
+    const ended = yield* until(`${from.shows} ends`, live.process(from.shows), (p) => !p.live);
+    expect(ended.exited.length, `L8: one more exit for ${from.shows}`).toBe(was.exited.length + 1);
+    expect(
+      Predicate.isTagged(ended.exited.at(-1), "shutdown"),
+      `L8: ${from.shows}, a tile tezgah started, ends with shutdown, not ${Formatter.format(ended.exited.at(-1))}`,
+    ).toBe(true);
+  } else {
+    // A stop takes its turn within a second on a quiet instance; give it three before reading.
+    yield* Effect.sleep("3 seconds");
+    const kept = yield* live.process(from.shows);
+    expect(kept.live, `L8: ${from.shows}, a tile tezgah did not start, keeps running`).toBe(true);
+    expect(kept.exited, `L8: ${from.shows} has no new exit`).toEqual(was.exited);
+  }
+
+  for (const other of others) {
+    expect((yield* live.process(other.shows)).live, `L8: closing ${from.id} leaves ${other.shows} running`).toBe(true);
+  }
+});
+
+const Moves = fc.array(
+  fc.record({ kind: fc.constantFrom<Move["kind"]>("split_right", "split_down", "close", "close"), pick: fc.nat() }),
+  { minLength: 3, maxLength: 7 },
+);
+
+/** Runs on the instance cost seconds each, so the walk takes four seeded samples of the generator, one
+ *  workspace each, in place of a shrinking property: each sample is still a generated walk. */
+const RUNS = 4;
+
+export const suite = (open: Open) =>
+  describe("Desk S2a L8 on the real instance", () => {
+    it.live(
+      "scenario: L8, four seeded walks, since a run on the real instance costs seconds: a close of a tile tezgah started stops that process; a close of any other tile stops nothing",
+      () =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const live = yield* open;
+
+            const seen: Seen = { child: 0, other: 0 };
+
+            for (const [i, moves] of fc.sample(Moves, { seed: SEED, numRuns: RUNS }).entries()) {
+              const n = i + 1;
+              expect(answered(yield* live.send({ type: "attach", workspace: n, tile: fresh() }))._tag).toBe("accepted");
+              const first = yield* until(`workspace ${n}`, readView(live), (v) => tilesOn(v, n).length === 1);
+
+              if (n === 1) {
+                expect(tilesOn(first, 1), "workspace 1's first tile is the boot list's checklist:1").toMatchObject([
+                  { shows: "checklist:1", child: false },
+                ]);
+              }
+
+              // Each walk splits once first, so a close has a tile to take; the first walk then closes
+              // the boot list's checklist:1, so a tile tezgah did not start is closed at least once.
+              yield* step(live, n, { kind: "split_right", pick: 0 }, seen);
+
+              if (n === 1) {
+                yield* step(live, n, { kind: "close", pick: 0 }, seen);
+              }
+
+              for (const m of moves) {
+                yield* step(live, n, m, seen);
+              }
+            }
+
+            expect(
+              seen.child > 0 && seen.other > 0,
+              `L8: the walks closed a tile tezgah started and one it did not ${Formatter.format(seen)}`,
+            ).toBe(true);
+          }),
+        ),
+      { timeout: 900_000 },
+    );
+  });

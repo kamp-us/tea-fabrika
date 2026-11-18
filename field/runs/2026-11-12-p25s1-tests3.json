@@ -1,0 +1,69 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-p25s1-tests3",
+  "ticket": "888",
+  "pr": null,
+  "started": "2026-11-12T15:07:37-08:00",
+  "ended": "2026-11-12T15:18:42-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "outcome": "fail",
+  "why": "next/, P25 slice 1. drive.ts tests in box p25s1-tests3 at 13f9981d: send:build:step_said. Added next/ regression properties: 8 tool laws and 1 exam law fail on open schemas, excess fields, malformed ps arguments, lost message checks and alternatives, and mismatched JSON decoding. Format and lint passed; tests ran on Node 26.13.0 without nice after its refusal; CI checks types; all plants were restored and only the two allowed test files changed. Dollars are gpt-6.1-sol's standard list price (fieldrow.py's table); the plan bills no call.",
+  "tokens": null,
+  "tools": 93,
+  "minutes": 11.1,
+  "note": null,
+  "costUsd": null,
+  "listUsd": 0.9653,
+  "billed": 5139130,
+  "inputTokens": 5120477,
+  "cachedTokens": 4980096,
+  "outputTokens": 18653,
+  "step": "tests",
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "T1",
+      "plant": "Tools.ts:70 exposed person-only inputs; starting passing law caught the extra tool.",
+      "result": "red"
+    },
+    {
+      "law": "T1",
+      "plant": "Tools.ts:120 marked writes read-only; starting passing law rejected the hint.",
+      "result": "red"
+    },
+    {
+      "law": "T1",
+      "plant": "Tools.ts:103 used the whole Msg schema; starting passing law rejected the schema.",
+      "result": "red"
+    },
+    {
+      "law": "T2",
+      "plant": "Tools.ts:148 decoded outside arguments synchronously without catching failure; starting passing law caught the thrown SchemaError.",
+      "result": "red"
+    },
+    {
+      "law": "T2",
+      "plant": "Tools.ts:70 exposed hidden inputs to calls; starting passing law rejected the refusal change.",
+      "result": "red"
+    },
+    {
+      "law": "T3",
+      "plant": "Tools.ts:72 truncated names to 51 characters; starting passing law caught the changed error.",
+      "result": "red"
+    },
+    {
+      "law": "T3",
+      "plant": "Tools.ts:99 silently kept the first colliding tool; starting passing law required whole-list failure.",
+      "result": "red"
+    },
+    {
+      "law": "T5",
+      "plant": "Tools.ts:10 imported gateway/Gateway.ts; the layer check reported an undeclared sideways import.",
+      "result": "red"
+    }
+  ]
+}

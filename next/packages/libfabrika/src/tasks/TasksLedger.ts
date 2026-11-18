@@ -1,0 +1,255 @@
+/**
+ * Tasks on the ledger (0095): each task is its own stream, named from its command id. One call is one
+ * transaction: read the stream, fold it through the task machine, step the call, and append it only
+ * when the machine accepts it. A repeat answers the first event's receipt; a refusal writes nothing.
+ */
+import { applyCell } from "@demlik/tea";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as R from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
+import * as Id from "../Id.ts";
+import type { LedgerError } from "../ledger/Ledger.ts";
+import { LedgerStreams } from "../ledger/LedgerStreams.ts";
+import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
+import { lineFor, valueFor } from "../ledger/Log.ts";
+import { ProcessId } from "../ProcessId.ts";
+import { task, Msg } from "./internal/task.ts";
+import { Collection, Event, Executor, type Task, Recorded, Request, Result } from "./Task.ts";
+import { Tasks, TasksError, targetStream } from "./Tasks.ts";
+
+/** The execution identity a take allocates, once per task. */
+const Execution = Id.make("execution");
+
+/** An accepted call as its entry keeps it: the event's case, and the facts it brought. */
+const Stored = Schema.TaggedUnion({
+  requested: { request: Request, recorded: Schema.optionalKey(Recorded) },
+  taken: { executor: Executor, execution: Schema.NonEmptyString, recorded: Schema.optionalKey(Recorded) },
+  started: { execution: Schema.NonEmptyString, recorded: Schema.optionalKey(Recorded) },
+  finished: { execution: Schema.NonEmptyString, result: Result, recorded: Schema.optionalKey(Recorded) },
+  collected: { collection: Collection, recorded: Schema.optionalKey(Recorded) },
+});
+
+type Stored = typeof Stored.Type;
+
+/** One line of a `target:` stream: the task a hands key was asked for, as a pointer. */
+const Pointer = Schema.TaggedStruct("requested", { id: Schema.NonEmptyString, process: ProcessId });
+
+const encodePointer = Schema.encodeSync(Pointer);
+
+const decodePointer = Schema.decodeUnknownSync(Pointer);
+
+const decodeStored = Schema.decodeUnknownSync(Stored);
+
+const encodeStored = Schema.encodeSync(Stored);
+
+const decodeEvent = Schema.decodeUnknownSync(Event);
+
+const decodeCall = Schema.decodeUnknownResult(Schema.Struct({ msg: Msg, recorded: Recorded }));
+
+/** A task's stream prefix. It keeps the word it was first written with, `job:`, since a saved
+ *  ledger may hold streams under it (0545). */
+const PREFIX = "job:";
+
+const stream = (id: string) => `${PREFIX}${id}`;
+
+const toMsg = (stored: Stored): Msg => {
+  if (stored._tag === "requested") {
+    return { type: "request", request: stored.request };
+  }
+
+  if (stored._tag === "taken") {
+    return { type: "take", executor: stored.executor, execution: stored.execution };
+  }
+
+  if (stored._tag === "collected") {
+    return { type: "collect", collection: stored.collection };
+  }
+
+  return stored._tag === "started"
+    ? { type: "start", execution: stored.execution }
+    : { type: "finish", execution: stored.execution, result: stored.result };
+};
+
+const toStored = (msg: Msg): Stored => {
+  if (msg.type === "request") {
+    return Stored.cases.requested.make({ request: msg.request });
+  }
+
+  if (msg.type === "take") {
+    return Stored.cases.taken.make({ executor: msg.executor, execution: msg.execution });
+  }
+
+  if (msg.type === "collect") {
+    return Stored.cases.collected.make({ collection: msg.collection });
+  }
+
+  return msg.type === "start"
+    ? Stored.cases.started.make({ execution: msg.execution })
+    : Stored.cases.finished.make({ execution: msg.execution, result: msg.result });
+};
+
+type Model = (typeof task)["model"]["Type"];
+
+const step = (model: Model, msg: Msg): Model => applyCell(task, model, msg)[0];
+
+const fold = (events: ReadonlyArray<Stored>): Model =>
+  Arr.reduce(events, task.init(null, undefined)[0], (model, event) => step(model, toMsg(event)));
+
+/** The tasks a target index names that are still open: requested, assigned or started. */
+const OPEN: ReadonlySet<Task["state"]["_tag"]> = new Set(["requested", "assigned", "started"]);
+
+/** A ledger failure as the tasks module's: a line the referee refused is the caller's input. */
+const translated = (cause: LedgerError) =>
+  TasksError.make({ reason: cause.reason === "refused" ? "bad_input" : "storage", cause });
+
+/** One task as its stream holds it, read inside a turn: its state and its events. */
+const saved = (turn: LedgerTurn, id: string): Task => {
+  const entries = Arr.map([...turn.read(stream(id), 0)], (entry) => ({ entry, stored: decodeStored(valueFor(entry)) }));
+
+  const events = Arr.map(entries, ({ entry, stored }) =>
+    decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }),
+  );
+
+  return { state: fold(Arr.map(entries, ({ stored }) => stored)).state, events };
+};
+
+/**
+ * Layer that supplies `Tasks` from the ledger. It needs `LedgerTransaction` and an `Id.Generator`.
+ *
+ * **Details**
+ *
+ * A ledger refusal of a line becomes a `bad_input` error and any other ledger failure becomes
+ * `storage`, each keeping its cause.
+ *
+ * @category layers
+ */
+export const layer = Layer.effect(
+  Tasks,
+  Effect.gen(function* () {
+    const ledger = yield* LedgerTransaction;
+    const ids = yield* Id.Generator;
+    const streams = yield* LedgerStreams;
+
+    const read = Effect.fn("tasks.read")(function* (id: string) {
+      const found = yield* ledger.transact((turn) => saved(turn, id)).pipe(Effect.mapError(translated));
+
+      if (found.state._tag === "absent") {
+        return yield* TasksError.make({ reason: "not_found" });
+      }
+
+      return found satisfies Task;
+    });
+
+    /** One call in one transaction. It answers the receipt of the call's event and the task after it. */
+    const call = Effect.fnUntraced(function* (id: string, input: Msg, said: Recorded) {
+      const decoded = decodeCall({ msg: input, recorded: said });
+
+      if (R.isFailure(decoded)) {
+        return yield* TasksError.make({ reason: "bad_input", cause: decoded.failure });
+      }
+
+      const { msg, recorded } = decoded.success;
+      const stored = toStored(msg);
+
+      const answer = yield* ledger
+        .transact((turn) => {
+          const model = step(
+            fold(Arr.map([...turn.read(stream(id), 0)], (entry) => decodeStored(valueFor(entry)))),
+            msg,
+          );
+
+          if (model.answer._tag === "refused") {
+            return R.fail(model.answer.reason);
+          }
+
+          if (model.answer._tag === "accepted") {
+            // JSON preserves the writer's UTF-16 strings, including lone surrogates that SQL text replaces.
+            // Older events have no saved record and keep reading their ledger metadata.
+            const { connection: _connection, has: _has, ...writer } = recorded;
+            turn.append(stream(id), `${id}/${stored._tag}`, lineFor(writer, encodeStored({ ...stored, recorded })));
+
+            // An accepted request is also indexed under its target, in the same turn: a repeat or a
+            // refusal never reaches here, so it writes no second line.
+            if (msg.type === "request") {
+              const pointer = encodePointer(Pointer.make({ id, process: msg.request.process }));
+              turn.append(targetStream(msg.request.target), id, lineFor(writer, pointer));
+            }
+          }
+
+          const entry = Arr.findFirst(turn.read(stream(id), 0), (e) => e._tag === stored._tag);
+
+          // An accepted or repeated call has its event in the stream; a stream without one is a broken store.
+          return Option.match(entry, {
+            onNone: () => R.fail("storage" as const),
+            onSome: (found) =>
+              R.succeed({ receipt: { rev: found.rev, arrivedAt: found.arrivedAt }, state: model.state }),
+          });
+        })
+        .pipe(Effect.mapError(translated));
+
+      if (R.isFailure(answer)) {
+        return yield* TasksError.make({ reason: answer.failure });
+      }
+
+      return answer.success;
+    });
+
+    return {
+      request: Effect.fn("tasks.request")(function* (request: Request, recorded: Recorded) {
+        return (yield* call(request.id, { type: "request", request }, recorded)).receipt;
+      }),
+      take: Effect.fn("tasks.take")(function* (id: string, executor: Executor, recorded: Recorded) {
+        const proposed = yield* ids
+          .next(Execution)
+          .pipe(Effect.mapError((cause) => TasksError.make({ reason: "storage", cause })));
+
+        const { receipt, state } = yield* call(id, { type: "take", executor, execution: proposed }, recorded);
+        // An accepted or repeated take leaves the task owned, so the saved assignment is there.
+        const execution = state._tag === "absent" || state._tag === "requested" ? proposed : state.assignment.execution;
+
+        return { ...receipt, execution };
+      }),
+      started: Effect.fn("tasks.started")(function* (id: string, execution: string, recorded: Recorded) {
+        return (yield* call(id, { type: "start", execution }, recorded)).receipt;
+      }),
+      finish: Effect.fn("tasks.finish")(function* (id: string, execution: string, result: Result, recorded: Recorded) {
+        return (yield* call(id, { type: "finish", execution, result }, recorded)).receipt;
+      }),
+      collected: Effect.fn("tasks.collected")(function* (
+        id: string,
+        collection: typeof Collection.Type,
+        recorded: Recorded,
+      ) {
+        return (yield* call(id, { type: "collect", collection }, recorded)).receipt;
+      }),
+      read,
+      forTarget: Effect.fn("tasks.forTarget")(function* (key: string) {
+        return yield* ledger
+          .transact((turn) => {
+            const index = targetStream(key);
+
+            const tasks = Arr.filter(
+              Arr.map([...turn.read(index, 0)], (entry) => saved(turn, decodePointer(valueFor(entry)).id)),
+              (found) => OPEN.has(found.state._tag),
+            );
+
+            return { tasks, rev: turn.head(index) };
+          })
+          .pipe(Effect.mapError(translated));
+      }),
+      forProcess: (process: typeof ProcessId.Type) =>
+        streams.list(PREFIX).pipe(
+          Stream.mapError((cause) => TasksError.make({ reason: "storage", cause })),
+          Stream.mapEffect((name) => read(Function.pipe(name, Str.slice(PREFIX.length)))),
+          Stream.filter((task) => task.state._tag !== "absent" && task.state.request.process === process),
+        ),
+    };
+  }),
+);

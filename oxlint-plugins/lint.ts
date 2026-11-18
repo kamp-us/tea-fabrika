@@ -1,29 +1,26 @@
 // `pnpm lint`'s first step: oxlint, with one difference. Oxlint has two levels, warn and error, and
 // this repo needs a third: printed, and never failing. So oxlint reports everything as JSON here,
-// and this prints all of it and fails on all of it but the advice rules.
+// and this prints all of it and fails on all of it but advice. Advice is a fire of the five old
+// advice rules or the docs rule that a dirty folder's warn override grades a warning (advice.ts,
+// 0523): each of the six blocks in every folder at zero.
 //
 // Why one run and not two: an `oxlint-disable` that names a rule turned off counts as unused. A
 // second run for the advice rules would turn their own disable comments into failures of the first.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { Array as Arr, pipe, Result } from "effect";
+import { advises, stale, warnLines } from "./advice.ts";
+import { audit } from "./anti-slop.ts";
 import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
 import { load, scriptReads } from "./script-reads.mjs";
 
-const ADVICE = new Set([
-  // Ticket 737: bare JSON.parse and service IDs advise until their false alarms are counted.
-  "eslint(no-restricted-properties)",
-  "fabrika(service-id)",
-  "fabrika(law-shape)",
-  "fabrika(no-effect-promise)",
-  "fabrika(no-raw-try-catch)",
-  "fabrika(prefer-schema-arbitrary)",
-]);
-
 interface Diagnostic {
   readonly code?: string;
   readonly message: string;
+  readonly severity?: string;
+  readonly help?: string;
   readonly filename?: string;
   readonly labels?: readonly { readonly span: { readonly line: number; readonly column: number } }[];
 }
@@ -32,7 +29,7 @@ const ROOT = join(import.meta.dirname, "..");
 
 // A run with no path is over the whole repo, as `pnpm lint` and `pnpm format` make it. Only it sees
 // every finding, so only it prunes a ledger, and only it runs the check below.
-const whole = process.argv.slice(2).every((arg) => arg.startsWith("-"));
+const whole = Arr.every(process.argv.slice(2), (arg) => arg.startsWith("-"));
 
 // What a lead-script test reads is derived for Vitest (script-reads.mjs). This fails on what the
 // derivation cannot see, and on a test that declares by hand what is derived. It reads the whole
@@ -54,7 +51,7 @@ if (whole) {
     );
   }
 
-  if (raw.length || unreached.length) {
+  if (raw.length > 0 || unreached.length > 0) {
     process.exit(1);
   }
 }
@@ -67,7 +64,11 @@ const hidden = checkTracked();
 
 if (!hidden.ok) {
   console.error(
-    `Git failed or a .gitignore hides tracked files from the lint and format checks: ${hidden.files.map((file: string) => JSON.stringify(file)).join(", ")}`,
+    `Git failed or a .gitignore hides tracked files from the lint and format checks: ${pipe(
+      hidden.files,
+      Arr.map((file: string) => JSON.stringify(file)),
+      Arr.join(", "),
+    )}`,
   );
   process.exit(2);
 }
@@ -75,49 +76,63 @@ if (!hidden.ok) {
 // The one config at the top of the repo, on purpose. On its own, oxlint obeys a config in any folder
 // and a `.eslintignore` where it runs, and either could take a folder out of the checks. The config's
 // own `ignorePatterns` still apply, and those are read in review.
-const ran = spawnSync(
-  join(ROOT, "node_modules", ".bin", "oxlint"),
-  [
-    `--config=${join(ROOT, ".oxlintrc.json")}`,
-    "--disable-nested-config",
-    "--no-ignore",
-    "--format=json",
-    ...process.argv.slice(2),
-  ],
-  { cwd: process.cwd(), encoding: "utf8", maxBuffer: 2 ** 30 },
-);
-
 /** What oxlint said, or `null` when it did not finish and report: that must never read as clean. */
-const read = (): readonly Diagnostic[] | null => {
-  try {
-    const report: {
-      readonly diagnostics?: readonly Diagnostic[];
-      readonly number_of_files?: number;
-    } = JSON.parse(ran.stdout);
-    return report.diagnostics !== undefined && report.number_of_files !== 0 ? report.diagnostics : null;
-  } catch {
-    return null;
+const lint = (args: readonly string[]): readonly Diagnostic[] | null => {
+  const ran = spawnSync(
+    join(ROOT, "node_modules", ".bin", "oxlint"),
+    [`--config=${join(ROOT, ".oxlintrc.json")}`, "--disable-nested-config", "--no-ignore", "--format=json", ...args],
+    { cwd: process.cwd(), encoding: "utf8", maxBuffer: 2 ** 30 },
+  );
+
+  const read = Result.getOrNull(
+    Result.try((): readonly Diagnostic[] | null => {
+      const report: {
+        readonly diagnostics?: readonly Diagnostic[];
+        readonly number_of_files?: number;
+      } = JSON.parse(ran.stdout);
+
+      return report.diagnostics !== undefined && report.number_of_files !== 0 ? report.diagnostics : null;
+    }),
+  );
+
+  if (read !== null) {
+    return read;
   }
+
+  console.error(`oxlint did not finish: status ${ran.status}\n${ran.stdout}\n${ran.stderr}`);
+
+  return null;
 };
 
-const diagnostics = read();
+// Oxlint's fix report keeps positions from before its edits. Read fresh diagnostics against the
+// rewritten files before fingerprinting lines or pruning entries. A plain lint run still runs once.
+const FIXES = new Set(["--fix", "--fix-suggestions", "--fix-dangerously"]);
+
+const args = process.argv.slice(2);
+
+const fixed = lint(args);
+
+const diagnostics =
+  fixed === null || !Arr.some(args, (arg) => FIXES.has(arg)) ? fixed : lint(Arr.filter(args, (arg) => !FIXES.has(arg)));
 
 if (diagnostics === null) {
-  console.error(`oxlint did not finish: status ${ran.status}\n${ran.stdout}\n${ran.stderr}`);
   process.exit(2);
 }
 
 const where = ({ filename, labels }: Diagnostic) => {
   const at = labels?.[0]?.span;
+
   return at === undefined ? (filename ?? "") : `${filename}:${at.line}:${at.column}`;
 };
 
 // What a folder broke the day a rule joined it, which only shrinks (ledger.ts).
-const ledgers = LEDGERS.map((ledger) => {
+const ledgers = Arr.map(LEDGERS, (ledger) => {
   const path = join(ROOT, ledger.file);
+
   const read: { readonly entries: readonly Finding[] } = existsSync(path)
     ? JSON.parse(readFileSync(path, "utf8"))
     : { entries: [] };
+
   return { ...ledger, path, entries: read.entries, refused: outside(read.entries, ledger.root) };
 });
 
@@ -138,6 +153,7 @@ const finding = (d: Diagnostic): Finding => {
   }
 
   const line = d.labels?.[0]?.span.line;
+
   return {
     file,
     rule: d.code ?? "",
@@ -145,30 +161,84 @@ const finding = (d: Diagnostic): Finding => {
   };
 };
 
-const found = diagnostics.filter((d) => !ADVICE.has(d.code ?? ""));
-const findings = found.map(finding);
+const found = Arr.filter(diagnostics, (d) => !advises(d));
+
+const findings = Arr.map(found, finding);
 
 // Each ledger settles what the one before left blocking. A file sits in at most one ledger's folder,
 // so the order changes nothing.
 let open: readonly Finding[] = findings;
 
-const settled = ledgers.map((ledger) => {
+const settled = Arr.map(ledgers, (ledger) => {
   const result = settle(ledger.entries, open, ledger.root);
   open = result.blocks;
+
   return { ...ledger, ...result };
 });
 
-const waived = new Set(settled.flatMap((ledger) => ledger.waived));
+const waived = new Set(Arr.flatMap(settled, (ledger) => ledger.waived));
 
-const blocks = found.filter((_, i) => {
+const blocks = Arr.filter(found, (_, i) => {
   const at = findings[i];
+
   return at === undefined || !waived.has(at);
 });
 
-const advises = diagnostics.filter((d) => ADVICE.has(d.code ?? ""));
+const advised = Arr.filter(diagnostics, (d) => advises(d));
 
-for (const d of [...advises, ...blocks]) {
-  console.log(`${where(d)} ${d.code ?? ""} ${d.message}`);
+// The hint oxlint keeps apart from the message, such as the JSON.parse rule's Schema hint.
+const text = (d: Diagnostic) => (d.help === undefined ? d.message : `${d.message} ${d.help}`);
+
+for (const d of advised) {
+  console.log(`${where(d)} ${d.code ?? ""} advice, this folder is not at zero yet: ${text(d)}`);
+}
+
+for (const d of blocks) {
+  console.log(`${where(d)} ${d.code ?? ""} ${text(d)}`);
+}
+
+// Only a whole run sees every fire, so only it says which warn lines have no fire left (0523). The
+// lines come from oxlint's own reading of the config, comments and overrides resolved.
+const printed = whole
+  ? spawnSync(
+      join(ROOT, "node_modules", ".bin", "oxlint"),
+      [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        maxBuffer: 2 ** 28,
+      },
+    )
+  : undefined;
+
+if (printed !== undefined && printed.status !== 0) {
+  console.error(`oxlint --print-config failed: status ${printed.status}\n${printed.stderr}`);
+  process.exit(2);
+}
+
+const stuck =
+  printed === undefined
+    ? []
+    : stale(
+        warnLines(JSON.parse(printed.stdout)),
+        Arr.map(advised, (d) => ({ ...d, filename: relative(ROOT, resolve(process.cwd(), d.filename ?? "")) })),
+      );
+
+for (const { _tag, line } of stuck) {
+  console.error(
+    _tag === "zero"
+      ? `.oxlintrc.json: ${line.rule} has no fire left in ${line.glob}: delete it from the rule's warn override, so it blocks there (0523)`
+      : `.oxlintrc.json: ${line.rule}'s warn line ${line.glob} names a file; a warn line names a folder (0523)`,
+  );
+}
+
+// The anti-slop plugin, taken as it ships (0563). Only a whole run says whether vendor/anti-slop/ is
+// still the pinned commit's code, and only it sees every folder, so only it runs the zero lock: a
+// folder with no hit of a taken rule goes on that rule's list (anti-slop.ts).
+const vendored = printed === undefined ? [] : audit(ROOT, printed.stdout);
+
+for (const line of vendored) {
+  console.error(line);
 }
 
 // Only a whole run prunes. A run on a folder or a file leaves each ledger as it is.
@@ -182,9 +252,17 @@ for (const { file, path, entries, kept } of settled) {
 }
 
 console.log(
-  `oxlint: ${blocks.length} blocking, ${advises.length} advice, ${settled
-    .map(({ file, waived }) => `${waived.length} in ${file}`)
-    .join(", ")}`,
+  `oxlint: ${blocks.length} blocking, ${advised.length} advice, ${pipe(
+    settled,
+    Arr.map(({ file, waived }) => `${waived.length} in ${file}`),
+    Arr.join(", "),
+  )}`,
 );
 
-process.exit(blocks.length === 0 && ledgers.every(({ refused }) => refused.length === 0) ? 0 : 1);
+const clean =
+  blocks.length === 0 &&
+  stuck.length === 0 &&
+  vendored.length === 0 &&
+  Arr.every(ledgers, ({ refused }) => refused.length === 0);
+
+process.exitCode = clean ? 0 : 1;

@@ -1,0 +1,1148 @@
+// P16, next/. P12's actual workerLoader, stack and localInstance contracts, not saved proof JSON.
+// The door mints each stamped input ID with main's shared Id schema; this file never makes one.
+// Builder contract: the app's `build(options)` (src/build.ts) needs FileSystem and Path and
+// returns `{build, brain, programs, assets}`; the stack runs `built.brain` with `bundle: false`.
+import assert from "node:assert/strict";
+import { NodeHttpServer, NodeServices } from "@effect/platform-node";
+import { Id } from "@kampus/libfabrika";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import { workerLoader } from "@kampus/libfabrika/workers";
+import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
+import { runsFor } from "@kampus/vitest";
+import {
+  Context,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Path,
+  Schema,
+  Scope,
+  Array as Arr,
+  String as Str,
+  Config,
+  ConfigProvider,
+  Option,
+  Formatter,
+  Predicate,
+  Record as Rec,
+} from "effect";
+
+import { Digest, SecureRandom } from "effect/crypto";
+import { HttpServer, HttpServerResponse, FetchHttpClient, HttpClient } from "effect/http";
+
+import { NetAddress } from "effect/net";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as fc from "fast-check";
+import { parseSync } from "oxc-parser";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { heldPort } from "./port.test-support.ts";
+import * as RecordWireTest from "./record-wire.test-support.ts";
+
+class CheckError extends Schema.TaggedError<CheckError, { readonly brand: unique symbol }>()("CheckError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+/** One step on the real disk, through Effect's FileSystem and Path. */
+const disk = <A, E>(use: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A, E>) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* use(yield* FileSystem.FileSystem, yield* Path.Path);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+const path = await disk((_fs, path) => Effect.succeed(path));
+
+const APP = path.resolve(import.meta.dirname, "..");
+
+const homes: string[] = [];
+
+const runs = { seed: 119120, numRuns: 3 };
+
+/** The SHA-256 of some text or bytes, in hex, as the builder writes a hash. */
+const hash = (value: string | Uint8Array) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) =>
+      digest.digestHex(Digest.sha256, Predicate.isString(value) ? new TextEncoder().encode(value) : value),
+    ).pipe(Effect.provide(Digest.layerWebCrypto)),
+  );
+
+// One GET's status through Effect's fetch client, for this file's Promise code. The request has its
+// own scope, so closing it releases the unread body.
+const status = (url: string) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+
+      return (yield* client.get(url)).status;
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+
+// The platform's loader and stub types come from the code under test, never by their ambient
+// names (0042, tests included).
+type Platform = Parameters<typeof workerLoader>[0];
+
+const home = async () => {
+  const h = await disk((fs) => fs.makeTempDirectory({ directory: "/tmp", prefix: "fh." }));
+  homes.push(h);
+  vi.stubEnv("FABRIKA_HOME", h);
+  vi.stubEnv("TYPESAFE_API_KEY", undefined);
+  vi.stubEnv("DO_NOT_TRACK", "1");
+
+  return h;
+};
+
+// Alchemy starts its children through Effect's ChildProcessSpawner and sends SIGKILL when its scope
+// closes, but the child can still hold its port. So `task` runs with a spawner that notes every
+// child it starts, and this waits for each one's real exit before the next instance reuses that
+// same port and saved state, whether `task` failed or not. No fixed sleep.
+// The fixed brain port itself is Alchemy's in-process worker proxy, not workerd. Its 30-second
+// port reservation outlived the proxy until the local patch made a closed proxy drop it.
+const afterChildrenStop = <A, E, R>(task: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const exits: Array<Effect.Effect<void>> = [];
+
+    const watched = ChildProcessSpawner.make((command) =>
+      real.spawn(command).pipe(
+        Effect.tap((child) =>
+          Effect.sync(() => {
+            exits.push(Effect.ignore(child.exitCode));
+          }),
+        ),
+      ),
+    );
+
+    return yield* task.pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, watched),
+      Effect.ensuring(Effect.suspend(() => Effect.all(exits, { concurrency: "unbounded", discard: true }))),
+    );
+  });
+
+/** A real HTTP target on an open port, which counts each request it answers, open until `scope` closes. */
+const probeServer = (scope: Scope.Scope, hit: () => void) =>
+  Effect.gen(function* () {
+    const server = Context.get(yield* Layer.build(NodeHttpServer.layerTest), HttpServer.HttpServer);
+
+    yield* server.serve(
+      Effect.sync(() => {
+        hit();
+
+        return HttpServerResponse.text("reachable");
+      }),
+    );
+
+    if (!("port" in server.address)) {
+      return yield* Effect.die("the probe server has no port");
+    }
+
+    expect(NetAddress.formatIp(server.address.address)).toBe("127.0.0.1");
+    expect(server.address.port).toBeGreaterThan(0);
+
+    return server.address.port;
+  }).pipe(Effect.provideService(Scope.Scope, scope));
+
+// Runs `use` on a brain port held for the whole call, so nobody else is given it between two instances
+// on it. The scope gives the port back only after `use`, and every instance it opened, has closed.
+const onHeldPort = <A>(use: (port: number) => Promise<A>) =>
+  Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const held = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
+
+        // A failed assertion in `use` is a defect: the run rejects with it and the test goes red.
+        return yield* Effect.promise(() => use(held.port));
+      }),
+    ),
+  );
+
+// Change the disposable completed file, then exercise that file on the real instance below.
+// Parsing finds P12's loader policy, so the plant cannot silently miss a formatting change.
+const plantPolicy = (source: string, mode: "binding" | "outbound", name: string, value: string) => {
+  const ranges: Array<{ start: number; end: number }> = [];
+
+  const visit = (node: any): void => {
+    // `not` keeps `node` a parsed node past the guard, as the old typeof check did.
+    if (Predicate.not(Predicate.isObjectOrArray)(node)) {
+      return;
+    }
+
+    if (node.type === "ObjectExpression") {
+      const prop = (key: string) => node.properties.find((p: any) => p.key?.name === key || p.key?.value === key);
+
+      if (
+        prop("mainModule")?.value?.value === "program.js" &&
+        prop("env") !== undefined &&
+        prop("globalOutbound") !== undefined
+      ) {
+        const target = mode === "binding" ? prop("env").value : prop("globalOutbound");
+        ranges.push({ start: target.start, end: target.end });
+      }
+    }
+
+    for (const child of Rec.values(node)) {
+      visit(child);
+    }
+  };
+
+  visit(parseSync("brain.mjs", source).program);
+  assert.equal(ranges.length, 1, "plant must reach exactly one real loader policy");
+  const at = ranges[0]!;
+
+  // An empty spread removes the policy without leaving a spare comma before the tail options.
+  const changed =
+    Str.slice(0, at.start)(source) +
+    (mode === "binding" ? JSON.stringify({ [name]: value }) : "...{}") +
+    Str.slice(at.end)(source);
+
+  assert.equal(parseSync("brain.mjs", changed).errors.length, 0, "plant must leave executable JavaScript");
+
+  return changed;
+};
+
+// A loaded program answers its init and step calls with P11's Step. Decode it, never read it raw.
+type Loaded = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+
+const SealedTurn = Schema.TaggedStruct("stepped", {
+  model: Schema.Struct({ keys: Schema.Array(Schema.String), outbound: Schema.String }),
+});
+
+const CounterTurn = Schema.TaggedStruct("stepped", {
+  model: Schema.Struct({ count: Schema.Finite }),
+});
+
+const ChecklistTurn = Schema.TaggedStruct("stepped", {
+  model: Schema.Struct({ items: Schema.Array(Schema.Unknown) }),
+});
+
+/** Desk S2a: tezgah's first init, before any window attaches: no workspace, no tile. */
+const TezgahTurn = Schema.TaggedStruct("stepped", {
+  model: Schema.Struct({ workspaces: Schema.Array(Schema.Unknown), tiles: Schema.Array(Schema.Unknown) }),
+});
+
+const turn = async <A>(
+  schema: Schema.Codec<A, unknown>,
+  program: Loaded,
+  method: "init" | "step",
+  args: ReadonlyArray<unknown>,
+): Promise<A> => {
+  const call = program[method];
+  assert(call, `loaded program has no ${method}`);
+
+  return Effect.runPromise(Schema.decodeUnknownEffect(schema)(await call(...args)));
+};
+
+afterEach(() => {
+  vi.doUnmock("alchemy");
+  vi.doUnmock("@alchemy.run/cloudflare");
+  vi.resetModules();
+  vi.unstubAllEnvs();
+
+  return disk((fs) =>
+    Effect.forEach(homes.splice(0), (h) => fs.remove(h, { recursive: true, force: true }), {
+      concurrency: 1,
+      discard: true,
+    }),
+  );
+});
+
+// P12's driver field names. Experiment 238's driver on branch fabrikalfa/exp241-script gives
+// lostLinkMs and writes the caps: experiment 241's guess from its sitting's four base runs.
+const Metrics = Schema.Struct({
+  acceptedSend: Schema.Finite,
+  publication: Schema.Finite,
+  restart: Schema.Finite,
+  reconnect: Schema.Finite,
+  lostLink: Schema.Finite,
+  rss: Schema.Finite,
+  startup: Schema.Finite,
+});
+
+const Sample = Schema.Struct({
+  session: Schema.String,
+  settings: Schema.String,
+  chaos: Schema.Boolean,
+  brain: Schema.String,
+  load: Schema.String,
+  missing: Schema.Record(Schema.String, Schema.String),
+  error: Schema.optionalKey(Schema.String),
+  startMs: Schema.Finite,
+  sendMs: Schema.Array(Schema.Finite),
+  publishMs: Schema.Array(Schema.Finite),
+  replaceMs: Schema.Finite,
+  reconnectMs: Schema.Finite,
+  lostLinkMs: Schema.Finite,
+  workerdRssMb: Schema.Finite,
+});
+
+const Bar = Schema.Struct({
+  driver: Schema.String,
+  capsFrom: Schema.String,
+  caps: Metrics,
+  base: Schema.Array(Sample),
+  head: Schema.Array(Sample),
+  sizes: Schema.Struct({ brain: Schema.Finite, programs: Schema.Finite, window: Schema.Finite }),
+});
+
+type Bar = typeof Bar.Type;
+
+const median = (values: readonly number[]) => {
+  assert(values.length > 0, "reading missing");
+  const sorted = [...values].sort((a, b) => a - b);
+
+  return sorted[Math.floor(sorted.length / 2)]!;
+};
+
+const readings = (s: typeof Sample.Type) => ({
+  acceptedSend: median(s.sendMs.slice(1)),
+  publication: median(s.publishMs),
+  restart: s.replaceMs,
+  reconnect: s.reconnectMs,
+  lostLink: s.lostLinkMs,
+  rss: s.workerdRssMb,
+  startup: s.startMs,
+});
+
+// Whether any selected program's package exports "./window", read from the same package.json
+// files libfabrika's build reads: node_modules/<package> from `from` upward. A path has none.
+const findManifest = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, from: string, name: string) {
+  for (let at = from; ; at = path.dirname(at)) {
+    const file = path.join(at, "node_modules", name, "package.json");
+
+    if (yield* fs.exists(file)) {
+      return file;
+    }
+
+    if (path.dirname(at) === at) {
+      return undefined;
+    }
+  }
+});
+
+const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package: string }>) =>
+  disk((fs) =>
+    Effect.gen(function* () {
+      for (const { package: name } of selected) {
+        const file =
+          Str.startsWith(".")(name) || path.isAbsolute(name) ? undefined : yield* findManifest(fs, from, name);
+
+        if (file === undefined) {
+          continue;
+        }
+
+        const exports: unknown = JSON.parse(yield* fs.readFileString(file)).exports;
+
+        if (Predicate.isObject(exports) && Rec.has(exports, "./window")) {
+          return true;
+        }
+      }
+
+      return false;
+    }),
+  );
+
+const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean) => {
+  // oxlint-disable-next-line fabrika/no-stage-word -- saved speed-bar results name experiment 238's driver exactly
+  assert.equal(bar.driver, "experiments/238-local-stage-speed-bar.ts");
+  assert.match(bar.capsFrom, /experiments?[/ ]241(?!\d)/, "capsFrom must name experiment 241");
+  assert.equal(bar.base.length, 4);
+  assert.equal(bar.head.length, 5);
+
+  for (const sample of [...bar.base, ...bar.head]) {
+    assert.equal(sample.error, undefined, "failed run");
+    assert.deepEqual(sample.missing, {}, "missing reading");
+
+    for (const key of ["session", "settings", "chaos"] as const) {
+      assert.equal(sample[key], bar.base[0]![key], "different sitting or settings");
+    }
+
+    assert(sample.load.length > 0, "load missing");
+
+    for (const value of Rec.values(readings(sample))) {
+      assert(Number.isFinite(value) && value >= 0, "invalid reading");
+    }
+  }
+
+  for (const sample of bar.head) {
+    assert.equal(sample.brain, digest, "wrong built bytes");
+  }
+
+  for (const key of ["brain", "programs"] as const) {
+    assert(Number.isFinite(bar.sizes[key]) && bar.sizes[key] > 0, `${key} bytes missing`);
+  }
+
+  assert(Number.isFinite(bar.sizes.window) && bar.sizes.window >= 0, "window bytes invalid");
+
+  if (windowed) {
+    assert(bar.sizes.window > 0, "window bytes missing for a program with a window");
+  }
+
+  // SAFETY: every bar the law passes is decoded with Bar, or a copy of one with `caps` kept, and a Struct decode keeps only the keys Metrics declares.
+  for (const key of Rec.keys(bar.caps) as Array<keyof typeof bar.caps>) {
+    assert(Number.isFinite(bar.caps[key]) && bar.caps[key] > 0, "recorded cap missing");
+
+    if (enforce) {
+      assert(median(Arr.map(bar.head, (s) => readings(s)[key])) <= bar.caps[key], `local bar regressed: ${key}`);
+    }
+  }
+};
+
+describe("P16 stack and sealed loader", () => {
+  it("p33 environment and declarations: actual stack selects completed bytes, no rebundle, byte-limited code-free env", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.integer({ min: 1600, max: 1800 }), fc.boolean(), async (length, multibyte) => {
+        const calls: Array<{ main: string; bundle: boolean; env: Record<string, unknown> }> = [];
+        vi.doMock("@alchemy.run/cloudflare", () => ({
+          providers: () => Layer.empty,
+          R2: { Bucket: () => Effect.succeed({ type: "r2" }) },
+          DurableObject: (name: string) => ({ type: "object", name }),
+          WorkerLoader: () => ({ type: "loader" }),
+          Workers: {
+            Worker: (_name: string, props: (typeof calls)[number]) => {
+              calls.push(props);
+
+              return Effect.succeed({ url: "http://test.invalid" });
+            },
+          },
+        }));
+        vi.doMock("alchemy", () => ({
+          localState: () => Layer.empty,
+          Stack: (_name: string, _options: unknown, body: Effect.Effect<unknown>) => body,
+        }));
+        vi.resetModules();
+
+        const { stack } = await import("../alchemy.run.ts"),
+          h = await home();
+
+        const built = {
+          brain: path.join(h, "brain.mjs"),
+          build: await hash("brain"),
+          programs: { counter: { hash: await hash("program-marker"), source: "program-marker" } },
+        };
+
+        let accepted = 0;
+
+        for (const name of ["local", "cloud"]) {
+          const settings = await Effect.runPromise(
+            RecordWireTest.settingsFixture({
+              name,
+              port: 18787,
+              person: "person-test",
+              founder: Str.repeat(length)(multibyte ? "雪" : "a"),
+              window: null,
+              build: built.build,
+            }),
+          );
+
+          const checked = await Effect.runPromise(readSettings({ INSTANCE: JSON.stringify(settings) }));
+          const result = await Effect.runPromise(Effect.result(stack(built, checked)));
+          const expectedBytes = Buffer.byteLength(JSON.stringify(settings));
+
+          if (expectedBytes >= 5 * 1024) {
+            expect(result._tag, "oversized serialized setting must be refused").toBe("Failure");
+            continue;
+          }
+
+          expect(result._tag).toBe("Success");
+          accepted++;
+        }
+
+        const verify = (call: (typeof calls)[number]) => {
+          expect(call.main, "the instance runs the completed file").toBe(built.brain);
+          expect(call.bundle, "no second bundle pass").toBe(false);
+
+          for (const [name, value] of Rec.toEntries(call.env)) {
+            expect(name).not.toMatch(/WINDOW_JS|PROGRAM_SOURCE/);
+            expect(JSON.stringify(value)).not.toContain("program-marker");
+
+            if (Predicate.isString(value)) {
+              expect(Buffer.byteLength(value), "setting under 5 KB encoded").toBeLessThan(5 * 1024);
+            } else {
+              expect(value).toHaveProperty("type");
+            }
+          }
+        };
+
+        for (const call of calls) {
+          verify(call);
+        }
+
+        // Plants on a real declaration: code back in env, a source entry, a rebundle, and a
+        // multibyte setting that passes a character count.
+        const real = calls[0];
+
+        if (real !== undefined) {
+          for (const plant of [
+            { ...real, env: { ...real.env, WINDOW_JS: "export const x = 1;" } },
+            { ...real, env: { ...real.env, CODE: "program-marker" } },
+            { ...real, env: { ...real.env, WIDE: Str.repeat(1800)("雪") } },
+            { ...real, main: path.join(APP, "src/brain.ts") },
+            { ...real, bundle: true },
+          ]) {
+            expect(Str.repeat(1800)("雪").length).toBeLessThan(5 * 1024);
+            expect(() => verify(plant)).toThrow();
+          }
+        }
+
+        expect(calls.length, "each accepted instance declared one Worker").toBe(accepted);
+        vi.doUnmock("alchemy");
+        vi.doUnmock("@alchemy.run/cloudflare");
+        vi.resetModules();
+      }),
+      { ...runs, numRuns: runsFor({ fast: 3, full: 6 }) },
+    );
+  });
+  it("p33 loader: actual config uses recorded bytes/hash and exact process, empty env, null outbound; unknown is typed no_program", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.string({ minLength: 1, maxLength: 50 }),
+        fc.uuid(),
+        fc.string({ minLength: 1, maxLength: 20 }),
+        async (source, process, missing) => {
+          const calls: Array<{ key: string | null; config: unknown }> = [];
+
+          const unused = () => {
+            throw Error("unused Worker Loader capability");
+          };
+
+          const rpc = {
+            describe: async () => ({ name: "fabrika/counter", v: 1, writes: {}, inputs: {}, cmds: [] }),
+            fetch: unused,
+            connect: unused,
+          };
+
+          const stub: ReturnType<Platform["get"]> = {
+            getEntrypoint: unused,
+            getDurableObjectClass: unused,
+          };
+
+          vi.spyOn(stub, "getEntrypoint").mockReturnValue(rpc);
+
+          // Record the real adapter's config; the copied-file tests below exercise workerd itself.
+          const platform: Platform = {
+            get: (key, callback) => {
+              calls.push({ key, config: callback() });
+
+              return stub;
+            },
+            load: unused,
+          };
+
+          // P40, L4: lookups use the whole qualified name. Another pack's `counter` sits beside it
+          // with other code, and the bare short name finds neither.
+          const other = `${source}-other-pack`;
+          const sourceHash = await hash(source);
+
+          const loader = workerLoader(platform, {
+            "fabrika/counter": { hash: sourceHash, source },
+            "other/counter": { hash: await hash(other), source: other },
+          });
+
+          const bare = await Effect.runPromise(Effect.result(loader.load("counter", process)));
+          expect(bare).toMatchObject({ _tag: "Failure", failure: { _tag: "ProgramDown", reason: "no_program" } });
+          const loaded = await Effect.runPromise(loader.load("fabrika/counter", process));
+          expect(loaded.hash).toBe(sourceHash);
+          expect(calls).toEqual([
+            {
+              key: `${sourceHash}/${process}`,
+              config: {
+                compatibilityDate: "2026-10-12",
+                mainModule: "program.js",
+                modules: { "program.js": source },
+                env: {},
+                globalOutbound: null,
+              },
+            },
+          ]);
+          const refused = await Effect.runPromise(Effect.result(loader.load(`missing-${missing}`, process)));
+          expect(refused).toMatchObject({
+            _tag: "Failure",
+            failure: { _tag: "ProgramDown", reason: "no_program" },
+          });
+          expect(calls).toHaveLength(1);
+          const config = calls[0]!.config;
+          const sealed = (value: typeof config) => assert.deepEqual(value, config);
+
+          for (const plant of [
+            { ...Object(config), env: { PLANTED: source } },
+            { ...Object(config), globalOutbound: undefined },
+            { ...Object(config), modules: { "program.js": "host fallback" } },
+          ]) {
+            expect(() => sealed(plant)).toThrow();
+          }
+        },
+      ),
+      { ...runs, numRuns: 12 },
+    );
+  });
+});
+
+// P12's driver protocol, exercised on copied output. No private key is read from disk.
+class Client {
+  readonly frames: any[] = [];
+  readonly ws: WebSocket;
+  readonly url: string;
+  readonly key: SshsigTest.Identity;
+  readonly tab: string;
+  serial = 0;
+
+  constructor(url: string, key: SshsigTest.Identity, tab: string) {
+    this.url = url;
+    this.key = key;
+    this.tab = tab;
+    this.ws = new WebSocket(`${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+    this.ws.addEventListener("error", () => this.frames.push({ closed: true }));
+    this.ws.addEventListener("close", () => this.frames.push({ closed: true }));
+    this.ws.addEventListener("message", ({ data }) => this.frames.push(JSON.parse(String(data))));
+  }
+
+  async next(match: (x: any) => boolean): Promise<any> {
+    for (;;) {
+      const at = Arr.findFirstIndex(this.frames, match);
+
+      if (Option.isSome(at)) {
+        return this.frames.splice(at.value, 1)[0];
+      }
+
+      if (Arr.some(this.frames, (x) => x.closed)) {
+        throw Error("wire closed");
+      }
+
+      await Effect.runPromise(Effect.sleep("10 millis"));
+    }
+  }
+
+  async call(method: string, params: Schema.Json) {
+    const id = ++this.serial;
+    this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
+    return this.next((x) => x.id === id);
+  }
+
+  async hello() {
+    const {
+      params: { nonce },
+    } = await this.next((x) => x.method === "challenge");
+
+    return this.call("initialize", {
+      versions: [1],
+      has: ["seal"],
+      ping: "30s",
+      key: this.key.raw,
+      tab: this.tab,
+      nonce,
+      platform: "headless",
+      os: "linux",
+      sentAt: "2026-11-08T04:00:00.000Z",
+      signed: await Effect.runPromise(this.key.proof(`fabrika-hello\n${this.url}\n${this.tab}\n${nonce}`)),
+    });
+  }
+}
+
+describe("P16 copied-file real instance, serial", () => {
+  it("shutdown: a stopped child closes before the next instance, including when the prior instance fails", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.boolean(), fc.integer(), async (fail, value) => {
+        // The task leaves its child running in a scope it never closes, as a SIGKILLed child can
+        // outlive the instance that started it. Only afterChildrenStop waits for its exit.
+        const left = await Effect.runPromise(Scope.make());
+        let child: ChildProcessSpawner.ChildProcessHandle | undefined;
+
+        const task = Effect.runPromise(
+          afterChildrenStop(
+            Effect.gen(function* () {
+              const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+              child = yield* spawner
+                .spawn(ChildProcess.make(process.execPath, ["-e", "setTimeout(() => {}, 500)"]))
+                .pipe(Effect.provideService(Scope.Scope, left));
+
+              if (fail) {
+                return yield* Effect.fail(new Error(`planted instance failure ${value}`));
+              }
+
+              return value;
+            }),
+          ).pipe(Effect.provide(NodeServices.layer)),
+        );
+
+        try {
+          if (fail) {
+            await expect(task).rejects.toThrow(`planted instance failure ${value}`);
+          } else {
+            expect(await task).toBe(value);
+          }
+
+          assert(child, "the task started its child");
+          expect(
+            await Effect.runPromise(child.isRunning.pipe(Effect.orDie)),
+            "next instance must wait for the real child exit",
+          ).toBe(false);
+        } finally {
+          await Effect.runPromise(Scope.close(left, Exit.void));
+        }
+      }),
+      { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
+    );
+  });
+  it("isolation plants reach the actual compiled loader policy before a real-instance run", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.integer({ min: 1, max: 9999 }), async (n) => {
+        const h = await home(),
+          { build } = await import("./build.ts");
+
+        const built = await Effect.runPromise(
+          build({ out: path.join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
+        );
+
+        const source = await disk((fs) => fs.readFileString(built.brain));
+
+        for (const mode of ["binding", "outbound"] as const) {
+          expect(plantPolicy(source, mode, `P16_${n}`, String(n))).not.toBe(source);
+        }
+      }),
+      { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
+    );
+  });
+  it("p33 real isolation: a selected program sees no planted binding and cannot reach a controlled HTTP target", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.integer({ min: 1, max: 9999 }), async (n) => {
+        const h = await home(),
+          key = await Effect.runPromise(SshsigTest.identity);
+
+        let hits = 0;
+
+        const probe = await Effect.runPromise(Scope.make());
+
+        try {
+          const port = await Effect.runPromise(
+            probeServer(probe, () => {
+              hits++;
+            }),
+          );
+
+          const target = `http://127.0.0.1:${port}/probe-${n}`;
+          expect(await status(target)).toBe(200);
+          hits = 0;
+          const file = path.join(h, "sealed.ts");
+          await disk((fs) => fs.symlink(path.join(APP, "node_modules"), path.join(h, "node_modules")));
+          await disk((fs) =>
+            fs.writeFileString(
+              file,
+              // workerd refuses I/O at module scope whatever the policy, so a top-level fetch proves nothing.
+              // The program fetches inside the init call and keeps it alive with waitUntil, as a hostile
+              // program would; only the loader's own refusal counts as denied.
+              `import {env, waitUntil} from 'cloudflare:workers'; import {Machine} from '@demlik/tea/effect'; import {Schema} from 'effect'; let outbound='pending'; const probe=()=>{try {waitUntil(fetch(${JSON.stringify(target)}).then(()=>{outbound='allowed'},(e)=>{outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}))} catch (e) {outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}}; const Model=Schema.Struct({keys:Schema.Array(Schema.String),outbound:Schema.String}); const Msg=Schema.Struct({type:Schema.Literal('read')}); const machine=Machine.make({model:Model,msg:Msg,init:()=>{probe(); return [{keys:Object.keys(env),outbound},[]]},update:{read:s=>[{...s,outbound},[]]}}); export const program={name:'sealed',machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};`,
+            ),
+          );
+
+          const { build } = await import("./build.ts"),
+            { localInstance } = await import("./local-instance.ts"),
+            { localState } = await import("alchemy/State/LocalState");
+
+          const built = await Effect.runPromise(
+            build({
+              out: path.join(h, "dist"),
+              files: [],
+              ledger: [],
+              programs: Rec.fromEntries(Array.from({ length: (n % 3) + 1 }, (_, i) => [`p33/sealed-${i}`, file])),
+            }).pipe(Effect.provide(NodeServices.layer)),
+          );
+
+          const alone = path.join(h, "alone");
+
+          const bytes = await disk((fs) =>
+            Effect.gen(function* () {
+              yield* fs.makeDirectory(alone);
+              yield* fs.copyFile(built.brain, path.join(alone, "brain.mjs"));
+              const bytes = yield* fs.readFileString(path.join(alone, "brain.mjs"));
+              yield* fs.remove(path.join(h, "dist"), { recursive: true });
+              yield* fs.remove(file);
+
+              return bytes;
+            }),
+          );
+
+          // The three modes start one instance each on one brain port, held across all three.
+          await onHeldPort(async (brainPort) => {
+            for (const mode of ["sealed", "binding", "outbound"] as const) {
+              await disk((fs) =>
+                fs.writeFileString(
+                  path.join(alone, "brain.mjs"),
+                  mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
+                ),
+              );
+              hits = 0;
+              await Effect.runPromise(
+                afterChildrenStop(
+                  Effect.scoped(
+                    Effect.gen(function* () {
+                      const instance = yield* localInstance(
+                        { ...built, brain: path.join(alone, "brain.mjs") },
+                        yield* RecordWireTest.startupFixture({
+                          home: h,
+                          name: "p16-isolation",
+                          person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+                          founder: key.line,
+                          window: key.raw,
+                          port: brainPort,
+                        }),
+                      );
+
+                      const services = yield* Effect.context<never>();
+
+                      yield* Effect.tryPromise({
+                        try: async () => {
+                          expect(Rec.keys(built.programs).length).toBeGreaterThan(0);
+
+                          for (const name of Rec.keys(built.programs)) {
+                            const program: Loaded = await instance.loader.load(name, `probe-${n}-${mode}-${name}`);
+
+                            if (name === "fabrika/counter") {
+                              const counted = await turn(CounterTurn, program, "init", [null]);
+                              expect(counted.model).toEqual({ count: 0 });
+                              continue;
+                            }
+
+                            // P14 slice 2: the table's second core program. It is no planted one, so
+                            // it loads and starts as itself, as the counter does.
+                            if (name === "fabrika/checklist") {
+                              const listed = await turn(ChecklistTurn, program, "init", [null]);
+                              expect(listed.model).toEqual({ items: [] });
+                              continue;
+                            }
+
+                            // Desk S2a: the table's third core program, tezgah. It is no planted one either.
+                            if (name === "fabrika/tezgah") {
+                              const desk = await turn(TezgahTurn, program, "init", [null]);
+                              expect(desk.model).toMatchObject({ workspaces: [], tiles: [] });
+                              continue;
+                            }
+
+                            let model = (await turn(SealedTurn, program, "init", [null])).model;
+
+                            // Read until the program's own fetch settles. The test time limit bounds the wait.
+                            while (model.outbound === "pending") {
+                              await Effect.runPromiseWith(services)(Effect.sleep("10 millis"));
+                              model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
+                            }
+
+                            const closed = (seen: typeof model) =>
+                              assert.deepEqual(seen, { keys: [], outbound: "denied" });
+
+                            if (mode === "sealed") {
+                              closed(model);
+                              expect(hits).toBe(0);
+                            } else {
+                              if (mode === "outbound") {
+                                expect(hits).toBeGreaterThan(0);
+                              }
+
+                              expect(() => closed(model)).toThrow();
+                              expect(model).toEqual(
+                                mode === "binding"
+                                  ? { keys: [`P16_${n}`], outbound: "denied" }
+                                  : { keys: [], outbound: "allowed" },
+                              );
+                            }
+                          }
+                        },
+                        catch: (error) => CheckError.make({ message: "P16 isolation check failed", cause: error }),
+                      });
+                    }),
+                  ),
+                ).pipe(
+                  Effect.provide(localState()),
+                  Effect.provide(SecureRandom.layerWebCrypto),
+                  Effect.provide(NodeServices.layer),
+                ),
+              );
+            }
+          });
+        } finally {
+          await Effect.runPromise(Scope.close(probe, Exit.void));
+        }
+      }),
+      { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
+    );
+  });
+  it("p33 complete output and T10 recovery: copied file loads programs; resend after restart retains placing, stamped ID, inbox and both views", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(fc.constantFrom("inc", "dec", "reset"), { minLength: 1, maxLength: 4 }),
+        async (messages) => {
+          const h = await home(),
+            key = await Effect.runPromise(SshsigTest.identity);
+
+          const { build } = await import("./build.ts"),
+            { localInstance } = await import("./local-instance.ts");
+
+          const built = await Effect.runPromise(
+            build({ out: path.join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
+          );
+
+          const alone = path.join(h, "alone");
+          await disk((fs) =>
+            Effect.gen(function* () {
+              yield* fs.makeDirectory(alone);
+              yield* fs.copyFile(built.brain, path.join(alone, "brain.mjs"));
+              yield* fs.remove(path.join(h, "dist"), { recursive: true });
+            }),
+          );
+
+          const options = (port: number) => ({
+            home: h,
+            name: "p16-instance",
+            person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+            founder: key.line,
+            window: key.raw,
+            port,
+          });
+
+          const copied = { ...built, brain: path.join(alone, "brain.mjs") };
+
+          let pid = "",
+            first: unknown,
+            stamped = "",
+            total = 0;
+
+          const instance = async (port: number, again: boolean) =>
+            Effect.runPromise(
+              afterChildrenStop(
+                Effect.scoped(
+                  Effect.gen(function* () {
+                    const runtime = yield* localInstance(copied, yield* RecordWireTest.startupFixture(options(port)));
+                    yield* Effect.tryPromise({
+                      try: async () => {
+                        const a = new Client(runtime.url, key, "a"),
+                          b = new Client(runtime.url, key, "b");
+
+                        try {
+                          expect((await a.hello()).error).toBeUndefined();
+                          expect((await b.hello()).error).toBeUndefined();
+
+                          const rows = (await a.call("ledger.read", { stream: "processes/counter:1", after: 0 })).result
+                            .entries;
+
+                          // P40, L4 and L7: the brain's process facts name the qualified code
+                          // under the registered name, before and after the restart.
+                          expect(rows.findLast((r: any) => r._tag === "started").body).toMatchObject({
+                            name: "counter:1",
+                            program: "fabrika/counter",
+                          });
+                          const current = rows.findLast((r: any) => r._tag === "started").body.process;
+
+                          if (again) {
+                            expect(current).toBe(pid);
+                          } else {
+                            pid = current;
+                          }
+
+                          await b.call("view.open", { pid });
+
+                          for (const [n, type] of messages.entries()) {
+                            const answer = await a.call("process.send", {
+                              pid,
+                              letter: `p16-${n}`,
+                              m: { type },
+                              sentAt: "2026-11-08T04:00:00.000Z",
+                              seen: 0,
+                            });
+
+                            expect(answer.result).toMatchObject({ _tag: "accepted" });
+
+                            if (n === 0) {
+                              if (again) {
+                                expect(answer.result).toEqual(first);
+                              } else {
+                                first = answer.result;
+                              }
+                            }
+
+                            if (!again) {
+                              total = type === "reset" ? 0 : total + (type === "inc" ? 1 : -1);
+                            }
+                          }
+
+                          const inbox = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
+                            .entries;
+
+                          const acknowledged = inbox.filter((r: any) => Str.startsWith("p16-")(String(r.id)));
+                          expect(acknowledged).toHaveLength(messages.length);
+                          expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(messages.length);
+                          const input = inbox[0].parent;
+                          // The door's minted ID passes main's shared schema; a letter ID does not.
+                          const minted = Schema.is(Id.InputId);
+                          expect(minted(input), 'stamped input uses Id.make("input")').toBe(true);
+                          expect(minted(inbox[0].id), "the letter ID stays its own").toBe(false);
+
+                          if (again) {
+                            expect(input).toBe(stamped);
+                          } else {
+                            stamped = input;
+                          }
+
+                          if (again) {
+                            const retried = await a.call("process.send", {
+                              pid,
+                              letter: "unanswered",
+                              m: { type: "inc" },
+                              sentAt: "2026-11-08T04:00:00.000Z",
+                              seen: 0,
+                            });
+
+                            expect(retried.result).toMatchObject({ _tag: "accepted" });
+
+                            const after = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
+                              .entries;
+
+                            expect(after.filter((r: any) => r.id === "unanswered")).toHaveLength(1);
+
+                            for (const c of [a, b]) {
+                              expect((await c.call("view.open", { pid })).result.view).toEqual({
+                                count: total + 1,
+                              });
+                            }
+                          } else {
+                            for (const c of [a, b]) {
+                              expect((await c.call("view.open", { pid })).result.view).toEqual({
+                                count: total,
+                              });
+                            }
+
+                            a.ws.send(
+                              Formatter.formatJson({
+                                jsonrpc: "2.0",
+                                id: 999999,
+                                method: "process.send",
+                                params: {
+                                  pid,
+                                  letter: "unanswered",
+                                  m: { type: "inc" },
+                                  sentAt: "2026-11-08T04:00:00.000Z",
+                                  seen: 0,
+                                },
+                              }),
+                            );
+                            a.ws.close();
+                          }
+
+                          // Every embedded route must answer from this one file. P14 is absent on this base.
+                          expect(await status(`${runtime.url}/p16-missing.js`)).toBe(404);
+                        } finally {
+                          a.ws.close();
+                          b.ws.close();
+                        }
+                      },
+                      catch: (error) => CheckError.make({ message: "P16 recovery check failed", cause: error }),
+                    });
+                  }),
+                ),
+              ).pipe(
+                Effect.provide((await import("alchemy/State/LocalState")).localState()),
+                Effect.provide(SecureRandom.layerWebCrypto),
+                Effect.provide(NodeServices.layer),
+              ),
+            );
+
+          // The restart comes back on the same port: held across both starts, never re-asked.
+          await onHeldPort(async (port) => {
+            await instance(port, false);
+            await instance(port, true);
+          });
+        },
+      ),
+      { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
+    );
+  });
+  // scenario: a fixed base/head benchmark, because it measures real laptop performance.
+  it("scenario: T10 timing checks experiment 241's four base and five head readings on the laptop; without a bar file it skips the cap check", async () => {
+    // The laptop's variables through Config, read when the scenario runs. An empty one stays empty,
+    // as a read of process.env gave it, so an empty P16_LOCAL_BAR still skips and an empty CI is off.
+    const env = Effect.runSync(
+      Config.all({
+        bar: Config.String("P16_LOCAL_BAR").pipe(Config.withDefault(undefined)),
+        brain: Config.String("P16_BRAIN").pipe(Config.withDefault(undefined)),
+        ci: Config.String("CI").pipe(Config.withDefault(undefined)),
+      }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
+    );
+
+    const barFile = env.bar;
+
+    if (barFile === undefined || barFile === "") {
+      console.log(
+        "T10 cap check skipped: P16_LOCAL_BAR is unset, so there is no bar file; the bar blocks on the laptop only",
+      );
+
+      return;
+    }
+
+    const bar = Schema.decodeSync(Schema.fromJsonString(Bar))(await disk((fs) => fs.readFileString(barFile)));
+    const brain = env.brain;
+    assert(brain, "final brain path missing");
+    const digest = await hash(await disk((fs) => fs.readFile(brain)));
+    const { programs } = await import("./table.ts");
+    const windowed = await exportsWindow(path.join(APP, "src"), programs);
+    localBar(bar, digest, !env.ci, windowed);
+    console.log(
+      JSON.stringify({
+        law: "T10",
+        base: Arr.map(bar.base, readings),
+        head: Arr.map(bar.head, readings),
+        sizes: bar.sizes,
+      }),
+    );
+    expect(() =>
+      localBar(
+        {
+          ...bar,
+          head: Arr.map(bar.head, (s) => ({
+            ...s,
+            sendMs: Arr.map(s.sendMs, () => bar.caps.acceptedSend + 1),
+          })),
+        },
+        digest,
+        true,
+        windowed,
+      ),
+    ).toThrow("acceptedSend");
+    expect(() =>
+      localBar(
+        { ...bar, head: Arr.map(bar.head, (s) => ({ ...s, error: "planted failure" })) },
+        digest,
+        false,
+        windowed,
+      ),
+    ).toThrow("failed run");
+    expect(() => localBar(bar, "wrong digest", false, windowed)).toThrow("wrong built bytes");
+    expect(() => localBar({ ...bar, capsFrom: "ticket-115's rule (a guess)" }, digest, false, windowed)).toThrow(
+      "experiment 241",
+    );
+
+    for (const key of ["brain", "programs"] as const) {
+      expect(() => localBar({ ...bar, sizes: { ...bar.sizes, [key]: 0 } }, digest, false, windowed)).toThrow(
+        `${key} bytes missing`,
+      );
+    }
+
+    // A program whose package.json exports "./window", read the way the build reads it.
+    const planted = await home();
+    await disk((fs) =>
+      Effect.gen(function* () {
+        yield* fs.makeDirectory(path.join(planted, "src"));
+        yield* fs.makeDirectory(path.join(planted, "node_modules/@p16/windowed"), { recursive: true });
+        yield* fs.writeFileString(
+          path.join(planted, "node_modules/@p16/windowed/package.json"),
+          JSON.stringify({ exports: { ".": "./program.ts", "./window": "./window.tsx" } }),
+        );
+      }),
+    );
+    const withWindow = [...programs, { name: "windowed", package: "@p16/windowed" }];
+    const plantedWindow = await exportsWindow(path.join(planted, "src"), withWindow);
+    expect(plantedWindow).toBe(true);
+    expect(() => localBar({ ...bar, sizes: { ...bar.sizes, window: 0 } }, digest, false, plantedWindow)).toThrow(
+      "window bytes missing",
+    );
+  });
+});

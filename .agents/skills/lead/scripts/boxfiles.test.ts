@@ -14,17 +14,19 @@ import { join } from "node:path";
 import { codexHomeOf } from "@kampus/fabrika-old/agents/acp";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
-import { boxLanes, fateFor, hasLanded, judgeBox, ownerName } from "./boxfiles.ts";
-import { boxTree, boxView, IDLE, oldBoxTree } from "./lane.ts";
+import { boxQuests, fateFor, hasLanded, judgeBox, ownerName } from "./boxfiles.ts";
+import { boxTree, boxView, IDLE, oldBoxTree } from "./quest.ts";
 
 // Today's tooling. The rules are pure; one scenario runs the script on a folder of its own.
 const options = { seed: 119120, numRuns: 300 };
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{0,6}$/);
+
 const branch = word.map((w) => `fabrikalfa/${w}`);
 
 describe("box files, today's tooling", () => {
   // Edge 1. Plants: count a closed or open PR as landed; forget the -wip backup branch.
-  it("calls a lane landed only on a merged PR of its branch, less -wip, with no open one", () => {
+  it("calls a quest landed only on a merged PR of its branch, less -wip, with no open one", () => {
     fc.assert(
       fc.property(branch, fc.boolean(), fc.uniqueArray(branch), fc.uniqueArray(branch), (b, wip, merged, open) => {
         const m = new Set(merged);
@@ -55,8 +57,8 @@ describe("box files, today's tooling", () => {
     );
   });
 
-  // vector: the two collisions the real boxes folder has (t5-tests1 beside t5-tests10, lane names).
-  it("vector: never takes another box's or a lane's file", () => {
+  // vector: the two collisions the real boxes folder has (t5-tests1 beside t5-tests10, quest names).
+  it("vector: never takes another box's or a quest's file", () => {
     expect(ownerName("t5-tests10.md", ["t5-tests1", "t5-tests10"])).toBe("t5-tests10");
     expect(ownerName("t5-tests10.md", ["t5-tests1"])).toBe(null);
     expect(ownerName("a-tests1-rows.jsonl", ["a-tests1", "a-tests1-rows"])).toBe("a-tests1-rows");
@@ -77,8 +79,8 @@ describe("box files, today's tooling", () => {
     ]);
   });
 
-  // Edges 2, 3, 4. Plants: sweep when one of two lanes landed; sweep a box gc keeps; sweep a fresh file.
-  it("sweeps only when every lane landed, the tree is gone or going, and nothing changed for 2 h", () => {
+  // Edges 2, 3, 4. Plants: sweep when one of two quests landed; sweep a box gc keeps; sweep a fresh file.
+  it("sweeps only when every quest landed, the tree is gone or going, and nothing changed for 2 h", () => {
     fc.assert(
       fc.property(
         fc.array(fc.boolean(), { maxLength: 3 }),
@@ -95,51 +97,55 @@ describe("box files, today's tooling", () => {
     );
   });
 
-  // Plants: give a judgment box to a lane with no state file; drop a step's box.
-  it("knows each step's box and each judgment box of a known lane, and no other", () => {
+  // Plants: give a judgment box to a quest with no state file; drop a step's box.
+  it("knows each step's box and each judgment box of a known quest, and no other", () => {
     fc.assert(
-      fc.property(fc.uniqueArray(word, { minLength: 1, maxLength: 4 }), fc.nat(9), word, (lanes, n, stranger) => {
-        const states = lanes.map((lane) => ({ lane, steps: [{ box: `${lane}-tests${n}` }] }));
-        const names = [...lanes.map((l) => `${l}-judge${n}.md`), `${stranger}x-judge${n}.md`];
-        const got = boxLanes(states, names);
+      fc.property(fc.uniqueArray(word, { minLength: 1, maxLength: 4 }), fc.nat(9), word, (quests, n, stranger) => {
+        const states = quests.map((quest) => ({ quest, steps: [{ box: `${quest}-tests${n}` }] }));
+        const names = [...quests.map((l) => `${l}-judge${n}.md`), `${stranger}x-judge${n}.md`];
+        const got = boxQuests(states, names);
 
-        for (const lane of lanes) {
-          expect(got.get(`${lane}-tests${n}`)).toContain(lane);
-          expect(got.get(`${lane}-judge${n}`)).toEqual([lane]);
+        for (const quest of quests) {
+          expect(got.get(`${quest}-tests${n}`)).toContain(quest);
+          expect(got.get(`${quest}-judge${n}`)).toEqual([quest]);
         }
 
-        expect(got.has(`${stranger}x-judge${n}`)).toBe(lanes.includes(`${stranger}x`));
+        expect(got.has(`${stranger}x-judge${n}`)).toBe(quests.includes(`${stranger}x`));
       }),
       options,
     );
   });
 
-  describe("scenario: one landed lane, one running, on a folder of its own", () => {
+  describe("scenario: one landed quest, one running, on a folder of its own", () => {
     const dir = mkdtempSync(join(tmpdir(), "boxfiles-"));
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
     const boxes = join(dir, "boxes");
     const main = join(dir, "main");
     const home = join(dir, "home");
     const old = (Date.now() - 3 * IDLE) / 1000;
+
     const put = (path: string, text = "x", fresh = false) => {
       mkdirSync(join(path, ".."), { recursive: true });
       writeFileSync(path, text);
       utimesSync(path, fresh ? Date.now() / 1000 : old, fresh ? Date.now() / 1000 : old);
     };
+
     const folder = (path: string, fresh = false) => {
       put(join(path, "inside"), "x", fresh);
       utimesSync(path, fresh ? Date.now() / 1000 : old, fresh ? Date.now() / 1000 : old);
     };
-    const lane = (name: string, branch: string, steps: string[]) =>
+
+    const quest = (name: string, branch: string, steps: string[], key = "quest") =>
       put(
         join(boxes, "state", `${name}.json`),
-        JSON.stringify({ lane: name, branch, steps: steps.map((box) => ({ box })) }),
+        JSON.stringify({ [key]: name, branch, steps: steps.map((box) => ({ box })) }),
       );
 
-    // Lane `done` landed: tests1's tree is gone, build1's tree is still there (gc keeps it),
-    // review1 wrote a file a minute ago. Lane `live` has an open PR.
-    lane("done", "fabrikalfa/done", ["done-tests1", "done-build1", "done-review1"]);
-    lane("live", "fabrikalfa/live", ["live-tests1"]);
+    // Quest `done` landed: tests1's tree is gone, build1's tree is still there (gc keeps it),
+    // review1 wrote a file a minute ago. Quest `live` has an open PR. `done`'s state file is one
+    // drive wrote before decision 0546, which names the quest `lane`: it is read all the same.
+    quest("done", "fabrikalfa/done", ["done-tests1", "done-build1", "done-review1"], "lane");
+    quest("live", "fabrikalfa/live", ["live-tests1"]);
 
     for (const f of [
       "done-tests1.md",
@@ -173,6 +179,7 @@ describe("box files, today's tooling", () => {
     utimesSync(codex, old, old);
     folder(codexHomeOf(main, { HOME: home }));
     folder(codexHomeOf(oldBoxTree(boxes, "done-review1"), { HOME: home }));
+
     const run = (dry: boolean) =>
       spawnSync(
         process.execPath,
@@ -187,6 +194,7 @@ describe("box files, today's tooling", () => {
         ],
         { encoding: "utf8", env: { ...process.env, HOME: home } },
       );
+
     const listing = () =>
       [boxes, main, home]
         .flatMap((d) => readdirSync(d, { recursive: true, encoding: "utf8" }).map((p) => join(d, p)))
@@ -202,9 +210,9 @@ describe("box files, today's tooling", () => {
       expect(ran.stdout).toContain("would sweep done-judge2: would move 1");
     });
 
-    // Edges 3, 4, 6, 7, 8, 9, 11. Plants: remove the lane's rows; overwrite the archived report;
+    // Edges 3, 4, 6, 7, 8, 9, 11. Plants: remove the quest's rows; overwrite the archived report;
     // follow the link; remove main's Codex home; sweep a box whose tree is there or whose file is fresh.
-    it("scenario: moves a landed lane's gone box's files, removes its view and Codex home, keeps the rest", () => {
+    it("scenario: moves a landed quest's gone box's files, removes its view and Codex home, keeps the rest", () => {
       const ran = run(false);
       expect(ran.status, ran.stderr).toBe(0);
       const archive = join(main, "runs", "boxes", "done");

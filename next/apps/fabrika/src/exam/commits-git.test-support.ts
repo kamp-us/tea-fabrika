@@ -7,14 +7,20 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { runsFor } from "@kampus/vitest";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { afterAll, expect } from "vitest";
 import { type Role, signedText } from "./commits.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
+
 const PROGRAM = join(import.meta.dirname, "commits.ts");
+
 const EXAM_LIST = readFileSync(join(ROOT, "exam-paths.json"), "utf8");
+
 const TOP = realpathSync(mkdtempSync(join(tmpdir(), "commits-")));
+
 afterAll(() => rmSync(TOP, { recursive: true, force: true }));
 
 const ENV: NodeJS.ProcessEnv = {
@@ -28,20 +34,23 @@ const ENV: NodeJS.ProcessEnv = {
 };
 
 delete ENV.GITHUB_STEP_SUMMARY;
+
 delete ENV.GITHUB_ACTIONS;
 
 const sh = (cwd: string, cmd: string, args: string[], input?: string, env = ENV) => {
   const ran = spawnSync(cmd, args, { cwd, env, input, encoding: "utf8" });
 
   if (ran.status !== 0) {
-    throw new Error(`${cmd} ${args.join(" ")}: ${ran.stderr}`);
+    throw new Error(`${cmd} ${Arr.join(args, " ")}: ${ran.stderr}`);
   }
 
   return ran.stdout;
 };
 
 const KEYS = join(TOP, "keys");
+
 mkdirSync(KEYS, { mode: 0o700 });
+
 type Who = Role | "stranger";
 
 for (const signer of ["tests", "build", "lead", "stranger", "person"]) {
@@ -51,26 +60,26 @@ for (const signer of ["tests", "build", "lead", "stranger", "person"]) {
 sh(KEYS, "ssh-keygen", ["-q", "-t", "ecdsa", "-N", "", "-C", "ecdsa", "-f", join(KEYS, "ecdsa")]);
 
 const pub = (signer: string) =>
-  readFileSync(join(KEYS, `${signer}.pub`), "utf8")
-    .split(" ")
-    .slice(0, 2)
-    .join(" ");
+  Arr.join(Str.split(readFileSync(join(KEYS, `${signer}.pub`), "utf8"), " ").slice(0, 2), " ");
 
 /** A key's fingerprint, as `ssh-keygen -l` prints it and a note's `key` holds it. */
 const fingerprint = (signer: string) =>
   // oxlint-disable-next-line typescript/no-non-null-assertion -- Moved test setup reads ssh-keygen's fixed output after checking its exit code.
-  sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${signer}.pub`)]).split(" ")[1]!;
+  Str.split(sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${signer}.pub`)]), " ")[1]!;
 
 const keyLine = (role: string, signer: string) => `${role} namespaces="fabrika-step" ${pub(signer)}`;
 
 const stepKeys = (build = "build") =>
-  `${[keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")].join("\n")}\n`;
+  `${Arr.join([keyLine("tests", "tests"), keyLine("build", build), keyLine("lead", "lead")], "\n")}\n`;
 
 const GOOD_KEYS = stepKeys();
+
 const personLine = (id: string, signer = "person") => `person:${id} namespaces="git" ${pub(signer)}`;
+
 const PERSON_KEYS = `${GOOD_KEYS}${personLine("github:42")}\n`;
 
 let count = 0;
+
 const repoCount = () => count;
 
 /** A planted repo: `main` with one commit, and the branch `pr` checked out off it. */
@@ -114,6 +123,7 @@ class Repo {
   commit(message = "c") {
     this.git("add", "-A");
     this.git("commit", "-q", "--allow-empty", "-m", message);
+
     return this.head();
   }
 
@@ -131,22 +141,25 @@ class Repo {
       "-m",
       message,
     );
+
     return this.head();
   }
 
   head(rev = "HEAD") {
-    return this.git("rev-parse", rev).trim();
+    return Str.trim(this.git("rev-parse", rev));
   }
 
   /** Commits one file under `next/`, the usual product change. */
   change(name: string) {
     this.write(`next/packages/x/src/${name}`, `${name}\n`);
+
     return this.commit(name);
   }
 
   /** Signs a link for a commit the way a step would, with any part planted another way. */
   sign(signer: Who, opts: { step?: Role; ticket?: string; version?: number; ns?: string; sha?: string } = {}) {
     const sha = opts.sha ?? this.head();
+
     const link = {
       step: opts.step ?? (signer === "stranger" ? "build" : signer),
       ticket: opts.ticket ?? "229",
@@ -154,11 +167,13 @@ class Repo {
       from: this.head(`${sha}^1^{tree}`),
       to: this.head(`${sha}^{tree}`),
     };
+
     const args = ["-Y", "sign", "-n", opts.ns ?? "fabrika-step", "-f", join(KEYS, signer)];
     const sig = sh(this.dir, "ssh-keygen", args, signedText(link));
     // oxlint-disable-next-line fabrika/no-hand-tag -- Raw signed input for the git exam, preserved from the moved tests.
     const note = { _tag: "attested", ...link, key: fingerprint(signer), sig };
     this.setNote(sha, JSON.stringify(note));
+
     return note;
   }
 
@@ -173,10 +188,16 @@ class Repo {
 
   run(args: string[], env = ENV, cwd = this.dir) {
     const ran = spawnSync("node", [PROGRAM, ...args], { cwd, env, encoding: "utf8" });
-    const answers = ran.stdout
-      .split("\n")
-      .filter((l) => l.startsWith("{"))
-      .map((l) => JSON.parse(l) as Record<string, unknown>);
+
+    const answers = pipe(
+      Str.split(ran.stdout, "\n"),
+      Arr.filter((l) => pipe(l, Str.startsWith("{"))),
+      Arr.map(
+        // SAFETY: the program prints each answer as one JSON object per line, and only lines that start with `{` are kept.
+        (l) => JSON.parse(l) as Record<string, unknown>,
+      ),
+    );
+
     return { code: ran.status, answers, out: ran.stdout, err: ran.stderr };
   }
 
@@ -187,8 +208,11 @@ class Repo {
 
 // oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
 const DONE = { _tag: "done" };
-const runs = { seed: 119120, numRuns: 5 };
+
+const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) };
+
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,20}$/);
+
 const name = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 
 const stuck = (reason: string, sha: string, more: object = {}) => ({
@@ -205,6 +229,7 @@ const ask = (...paths: string[]) => ({ _tag: "ask", to: "owner", for: "exam_read
 const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
   const allowed = join(TOP, "git-allowed-signers");
   writeFileSync(allowed, keys);
+
   return spawnSync("git", ["-c", `gpg.ssh.allowedSignersFile=${allowed}`, "verify-commit", sha], {
     cwd: r.dir,
     env: ENV,
@@ -217,19 +242,22 @@ const acceptPgp = (r: Repo) => {
   const verifier = join(TOP, "pgp-verifier");
   writeFileSync(
     verifier,
-    [
-      "#!/bin/sh",
-      "cat >/dev/null",
-      "cat <<'STATUS'",
-      "[GNUPG:] NEWSIG",
-      "[GNUPG:] GOODSIG 1111111111111111 Fixture",
-      "[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
-      "[GNUPG:] TRUST_FULLY",
-      "STATUS",
-      // Keep the logged key check from hiding a header parsing bug after the squash.
-      `echo 'fixture key ${fingerprint("person")}' >&2`,
-      "",
-    ].join("\n"),
+    Arr.join(
+      [
+        "#!/bin/sh",
+        "cat >/dev/null",
+        "cat <<'STATUS'",
+        "[GNUPG:] NEWSIG",
+        "[GNUPG:] GOODSIG 1111111111111111 Fixture",
+        "[GNUPG:] VALIDSIG 1111111111111111111111111111111111111111 2026-11-08 1794168000 0 4 0 1 10 00 1111111111111111111111111111111111111111",
+        "[GNUPG:] TRUST_FULLY",
+        "STATUS",
+        // Keep the logged key check from hiding a header parsing bug after the squash.
+        `echo 'fixture key ${fingerprint("person")}' >&2`,
+        "",
+      ],
+      "\n",
+    ),
     { mode: 0o700 },
   );
   r.git("config", "gpg.program", verifier);
@@ -238,6 +266,7 @@ const acceptPgp = (r: Repo) => {
 const personLink = (r: Repo, sha: string, signer = "person") => {
   const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(r.git("cat-file", "commit", sha));
   expect(signature).not.toBeNull();
+
   return {
     // oxlint-disable-next-line fabrika/no-hand-tag -- Raw signed input for the git exam, preserved from the moved tests.
     _tag: "attested",
@@ -248,7 +277,7 @@ const personLink = (r: Repo, sha: string, signer = "person") => {
     to: r.head(`${sha}^{tree}`),
     key: fingerprint(signer),
     // oxlint-disable-next-line typescript/no-non-null-assertion -- The moved test assertion above requires the git signature header.
-    sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
+    sig: `${pipe(signature![1]!, Str.replaceAll("\n ", "\n"))}\n`,
   };
 };
 
@@ -256,6 +285,7 @@ const verifies = (repo: Repo, note: { sig: string; step: Role }, text: string) =
   writeFileSync(join(repo.dir, ".allowed"), GOOD_KEYS);
   writeFileSync(join(repo.dir, ".sig"), note.sig);
   const args = ["-Y", "verify", "-f", ".allowed", "-I", note.step, "-n", "fabrika-step", "-s", ".sig"];
+
   return spawnSync("ssh-keygen", args, { cwd: repo.dir, input: text }).status === 0;
 };
 
@@ -269,7 +299,9 @@ const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveM
 
   r.git("merge", "--squash", "-q", "pr");
   const squash = r.commit("squash");
-  const rows = notes.map(
+
+  const rows = Arr.map(
+    notes,
     ({ note, commit }, i): { date: string; run: string; attested: Array<Record<string, unknown>> } => ({
       date: "2026-11-07",
       run: `r${i}`,
@@ -289,11 +321,20 @@ const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveM
       ],
     }),
   );
+
   return { squash, rows };
 };
 
 const log = (r: Repo, rows: object[]) => {
-  r.write("field/runs.jsonl", `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+  r.write(
+    "field/runs.jsonl",
+    `${pipe(
+      rows,
+      Arr.map((row) => JSON.stringify(row)),
+      Arr.join("\n"),
+    )}\n`,
+  );
+
   return r.commit("log");
 };
 
@@ -303,6 +344,7 @@ const twoSteps = (r: Repo) => {
   const n1 = r.sign("tests");
   const c2 = r.change("b.ts");
   const n2 = r.sign("build");
+
   return [
     { note: n1, commit: c1 },
     { note: n2, commit: c2 },

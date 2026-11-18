@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e23-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T04:00:00Z",
+  "ended": "2026-11-16T04:30:00Z",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice E23 of the Effect-check sweep (catchToIgnore), in next/. Recount on main: 4 hits in libfabrika, 2 in src/telemetry (this slice) and 2 in src/ledger (slice E71, after 1366); no hit in the other 12 tsconfigs. Locked src/telemetry/**/*.ts with an overrides entry in libfabrika's own tsconfig. The checker's quick fix fixed both telemetry hits in measurements.ts (lines 326 and 330, each 'Replace with Effect.ignore'). On line 330 the fix put Effect.ignore directly as the last argument of Effect.fn, which fails typecheck (no overload matches), so that one is a hand edit to (effect) => Effect.ignore(effect). The now-unused SinkError type import was removed. Telemetry recount is 0.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Hits: met 4 (2 in this slice), fixed by quick fix 2, hand edits 1 (follow-up to one quick fix) plus the import removal, left 0, waiting on 1366: 2 in src/ledger/internal/ledgerStore.ts:323 and :465 (E71, not in this slice). Tests: vitest ErrorCause, P12Readers.laws, Records.integration, Sink.integration under src/telemetry, 78 passed. pnpm lint: 2 of 17 parts fail on other files (JSON.parse in next/apps/fabrika exam test, lint:dead aborted SIGABRT), none in files I touched.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "a new file in src/telemetry with Effect.catch(() => Effect.void): libfabrika typecheck reports effect(catchToIgnore) TS377099; file removed",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

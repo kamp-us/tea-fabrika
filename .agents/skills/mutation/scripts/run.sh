@@ -1,6 +1,6 @@
 #!/bin/sh
 # Today's tooling. Run from the repo root with T, BUILD and RELATED set. SINCE, when set, is the
-# commit the sample's diff starts from (the lane's base); else it is BUILD's first parent.
+# commit the sample's diff starts from (the quest's base); else it is BUILD's first parent.
 # FINAL=0 reuses unchanged answers in an intermediate round. The default forces fresh answers.
 # IN_PLACE=1 mutates the checkout itself, not a sandbox copy. Only the mutation container sets it,
 # since its checkout is a throwaway copy. A sandbox links each package's node_modules back to

@@ -37,15 +37,22 @@ libfabrika
 | Rule | Check |
 |---|---|
 | Effect all the way: nothing is built on Promises | `fabrika/no-promises` |
-| Effect's platform modules, not `node:` imports | `fabrika/no-node-imports`, `fabrika/no-node-filesystem` |
+| Effect's platform modules, not `node:` imports | `fabrika/no-node-imports` |
 | An edge is one line under a marked comment with its reason | `fabrika/edge-comment` |
 | No bare `of` and no `xOf` name; `Lease.of(...)` through its module is fine | `fabrika/no-of` |
 | No hand-written `_tag`: Effect Schema writes it | `fabrika/no-hand-tag` |
+| No loop or `reduce` callback spreads its running result back into itself (0559) | `oxc/no-accumulating-spread` |
 | No question word as a name | `eslint/id-denylist`, `fabrika/no-question-word-key` |
 | One exported tea machine, or one factory, per file | `fabrika/one-machine-per-file` |
 | One store hook, tea's `useRuntime` | `fabrika/one-store-hook` |
 | A module's files, names and `internal/` | `fabrika/modules`, `eslint/no-restricted-imports` |
 | A module imports only from lower layers | `pnpm lint:layers`, from `layer-rules.json` |
+| A part imports only the parts its row lists, and every library and tuval file has a row | `pnpm lint:layers`: a row's `imports`, and `roots` |
+| A part imports only the names of our packages its table allows, and no file of the library, tests included, names another of ours | `fabrika/package-imports` |
+| A test that drives a real resource is named `*.integration.test.ts`, or `*.visual.test.ts` for a browser or Electron, so pull requests leave it to the schedule (0536) | `fabrika/integration-test-name` |
+| A test opens a SQLite file through `@kampus/vitest/TestDatabase`: `make` for a file it owns, `open` for one another party owns; only `":memory:"` keeps `new DatabaseSync` | `fabrika/test-database` |
+| No `Reflect.get`, `Reflect.set` or `Reflect.has`, and no `globalThis.Reflect`: decode with Schema, narrow with `Predicate.hasProperty`, or assign through the type ([0554](../.decisions/0554-no-reflect-get-set-has.md)). It is on for all of `next/` by the base blocks that set the rule, so a folder that is new gets it the day it appears, and no list of folders is left | `eslint/no-restricted-properties` |
+| The anti-slop plugin, vendored whole and pinned: eight of its rules, each on folder by folder where it has no hit ([0563](../.decisions/0563-anti-slop-plugin-as-it-ships.md)); see [the section in the plugins README](../oxlint-plugins/README.md#the-anti-slop-plugin-taken-as-it-ships) | `anti-slop/*`, `anti-slop-effect/*` |
 
 A Promise edge the platform demands is one line, marked
 `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, and the lead reads each one at
@@ -102,10 +109,13 @@ has nothing, marked as an edge with its reason
   ([0037](../.decisions/0037-implicit-state-machines-made-explicit.md)).
 - **Every state machine is a tea machine.** No plain union with a transition function. The machine's
   Model, Msg and update live in its file, with no input or output code, and nothing outside it edits
-  the Model by hand: it sends a Msg. A small private helper machine may share its parent's file. An
-  `update` handler picks the next state with a plain conditional on `_tag`, not `Match` or `.match`.
-  A file may export one machine factory in place of the machine, never both
+  the Model by hand: it sends a Msg. A small private helper machine may share its parent's file. A
+  file may export one machine factory in place of the machine, never both
   ([0046](../.decisions/0046-one-tea-machine-per-file.md)).
+- **A tagged value is matched, never compared by hand,** in an `update` handler too: the union's
+  own `match`, `matchOrElse` or `isAnyOf` first, then Effect's `Match` module
+  ([0567](../.decisions/0567-a-tagged-value-is-matched.md),
+  [the pattern](../.patterns/effect-tagged-value-is-matched.md)).
 
 ## Words
 

@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e56-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:47:44-08:00",
+  "ended": "2026-11-15T20:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E56 of the Effect-checker sweep, in next/: the check extendsNativeError in lib:cloudflare, app:src, lib:ledger, lib:node and lib:telemetry. Counted with only this check at error through --lspconfig over next/packages/libfabrika and next/apps/fabrika: 6 hits, the plan's 6, all in test files (exam paths), none in a product file, none in pull request 1366's 58 files. All 6 are right where they are, as decision 0565's report read, and none was changed, hidden or given an ignore line. Each is a class a law makes on purpose to stand for a plain JavaScript error thrown from outside Effect, which is the input the code under test must handle: libfabrika/src/cloudflare/platform.test.ts:15 WireFault, a platform binding that rejects with a custom Error subclass, whose class name platform.ts keeps in the LedgerError message; libfabrika/src/cloudflare/supervision.laws.integration.test.ts:34 ProgramError, a program's own throw among the generated thrown values, read by constructor.name; libfabrika/src/ledger/LedgerSpans.integration.test.ts:584 BellBroke, a doorbell that dies with a defect as a thin class that throws would; libfabrika/src/node/dev/supervision-spans.integration.test.ts:216 ProgramError, the custom case of a program's throw whose message and stack must stay private; libfabrika/src/telemetry/Sink.integration.test.ts:1169 NoteError, an error whose message must reach only content, never a tag; apps/fabrika/src/runtime.laws.integration.test.ts:985 WireFault, a project route that rejects with a custom Error subclass. A Data.TaggedError in their place would add a _tag and make them Effect errors, so these laws would stop covering the foreign, untagged throw they exist for. No law is new or changed and no lock line is added, as the owner's ruling for judgment slices says, so no plant was owed. No pull request is opened, by owner ruling.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "What a pull request body would say: extendsNativeError, 6 hits met, 0 fixed by quick fix, 0 hand edits, 6 left as right where they are (the file:line list above), 0 waiting on 1366, no product hits, so no build step. The check cannot reach zero in these folders without loosening six laws; the owner decides whether it stays off for test files or goes on with six reasoned ignore lines. Tests run: next/packages/libfabrika/src/cloudflare/platform.test.ts, 9 passed, at 37db01aa8 (origin/main), on which this row is the only change. The five .integration. files were not run, since nothing in them changed.",
+  "step": "tests"
+}

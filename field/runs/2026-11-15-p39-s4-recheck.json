@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-p39-s4-recheck",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315",
+  "started": "2026-11-15T07:58:28-08:00",
+  "ended": "2026-11-15T08:01:26-08:00",
+  "parent": "2026-11-15-p39-s4-review",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Recheck of P39 slice 4a after its fix round, at bd3d8a141, in next/: sent back to build, one class, which the review's own fix advice caused. Blocker A is fixed: both Worker paths name this object as the reader, W2 and E1 reach it, and each half planted back went red. Blocker B is fixed as asked, but now a finish refused for a passing reason is held for good: client/HandsMachine.ts's reporting branch retries only unavailable, so rate_limited (gateway/Gateway.ts refuseRate) and unreachable (cloudflare/connection.ts answers every failed call so) save a held entry, and no process ever sends that result again. Before the round a reconnect or restart sent it again. A scratch probe on the machine, removed after, showed both reasons saving held. The job stays started at the brain forever and its program waits with no error. The take side already treats both reasons as passing. t863 L1 now reads whether a wait was kept from the product's own attachment, so a driver that refuses every parked call with too_many_waits passes it (planted, L1 green, W2 red). The skip list, the held entry, startedAt and the docs rows hold.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Plants, each run once and undone with git checkout, git status clean after each: W2, no reader on the wait asked again, red; W2, no reader on the first routed call, red; Connection.ts reply refuses every parked answer with too_many_waits: t863 L1 green, W2 red; recover reads held as a result to send, H3 red; skip relists without skipping, H4 red. The scratch probe was a test file added and deleted in client/, never committed. Not run: pnpm typecheck, pnpm lint, E1, H2, H5.",
+  "driver_caused": false,
+  "step": "review",
+  "costUsd": null,
+  "billed": null
+}

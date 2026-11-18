@@ -34,6 +34,7 @@ interface Front {
 }
 
 type EmailFact = { readonly _tag: "verified" } | { readonly _tag: "added" };
+
 type NoticeMsg = never;
 
 const bind = (): Front => {
@@ -62,8 +63,11 @@ const saved = (view: Front["EmailView"]["Type"]) => {
 };
 
 void codeType;
+
 void addressType;
+
 void client;
+
 void saved;
 
 // Type laws only. CI's check job runs these; they add no runtime test.
@@ -78,6 +82,7 @@ const noNoticeAction = () => {
 };
 
 void noWaitingFact;
+
 void noNoticeAction;
 
 it.effect.prop(

@@ -1,3 +1,8 @@
+---
+state: "vision; ledger runtime decided; 2026-10-30: central first and one ephemeral lane, at-most-once (show it, never save it, never decide with it) decided; transport and data decided 2026-10-30, coordination 2026-10-31; 2026-10-31: five layers, not four, and every window dials the brain itself (T3 changed); the first pass's standard per layer replaced, marked in the note; 2026-11-07: a wait never blocks, it answers ready or parked, then a ring (from the owner's call of 2026-11-02); 2026-11-09: in libfabrika a folder is one subject and its layer is a rank in the rule file ([0043](../../.decisions/0043-rooms-on-floors.md)), named module and layer 2026-11-10 ([0091](../../.decisions/0091-modules-and-layers.md)); amended in part 2026-11-18 by [0601](../../.decisions/0601-program-make-with-optional-pipes.md): local first, each place keeps its own ledger copy, and WebRTC joins the WebSocket"
+summary: "Signed append-only logs that hosts sync, with leases for one-writer work. The ledger is the first log on it; solo is a team of one. The ledger is one Durable Object everywhere: on Cloudflare for a team, in Miniflare on a laptop (experiment 93), restarted when its memory passes a cap. First step now: every fact says who wrote it. Five layers, bottom to top: transport (one WebSocket per client, to its own gateway; JSON-RPC 2.0; a signed hello with versions; a text ping), data (the ledger: append, read, wait; poke, then pull), coordination (claims, inboxes, the process tree, following OTP), app and desktop; central first, and a browser is always a client. This note holds the lower three (T1 to T8, D1 to D6, C1 to C5)."
+---
+
 # A local-first sync engine is the base
 
 **Part decided, part a vision. Not built.**
@@ -63,7 +68,7 @@ twice. A claim needs "add this only if nothing new came in first", and gossip
 has no single place that can say who was first.
 
 - **Leases, not claims for ever.** A claim lasts some minutes and is renewed
-  while the agent works. A dead lane's claim runs out by itself; nobody has to
+  while the agent works. A dead quest's claim runs out by itself; nobody has to
   adopt it by hand, as today's fabrika needs.
 - **A referee grants leases.** Any always-on host can be it; the team picks
   which one, and another takes over when it is gone (leader election, kept
@@ -226,7 +231,7 @@ them. The desktop has a note of its own. Config for every layer is one
   presence. Its delivery is at-most-once; a ledger send is at-least-once,
   made safe by its id. The doorbell already is one (`durable-object.ts`).
   The rule: **show it, never save it, never decide with it.** A window may
-  draw who is online; no lane, claim or ledger write ever depends on a frame
+  draw who is online; no quest, claim or ledger write ever depends on a frame
   from this lane, so losing one breaks nothing. It is not local state: local
   state stays in one program on one computer, and this lane moves between
   computers. Neither goes in the ledger.

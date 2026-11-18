@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-full-shard-rows-have-no-refresh",
+  "date": "2026-11-15",
+  "by": "full-run-hung-legs",
+  "model": "claude-fable-5-2",
+  "rule": "missing_test",
+  "location": {
+    "path": ".github/ci/shard-times.ts",
+    "line": 51
+  },
+  "says": "Today's CI prints drifted shard rows only on the merge line; the schedule, the only run of integration files and of full depth, prints none, so a new heavy file with no row starts last on its leg unseen.",
+  "proof": "check.yaml line 480 runs shard-times.ts; scheduled.yaml has no such step, and watch.laws.integration.test.ts (363 to 398 s) had no row through runs 43723335863 and 43771306886, where its leg hit the limit.",
+  "cost": "The same time-out returns when the next heavy integration file lands without a row.",
+  "head": "98bcdfa226f92fb702ae4a42ea19aa1a0592ad01",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1374"
+}

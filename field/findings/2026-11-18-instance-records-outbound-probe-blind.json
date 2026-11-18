@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-instance-records-outbound-probe-blind",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/apps/fabrika/src/instance-records.integration.test.ts",
+    "line": 161
+  },
+  "says": "In next/, the instance-records probe law's sealed program tries its outbound fetch at module top level, so removing the instance's outbound isolation leaves the law green; only instance-one-file's probe detects it.",
+  "proof": "field/runs/2026-11-18-effect-e88-fix3.json records the plant 'globalOutbound: null removed' at next/packages/libfabrika/src/cloudflare/index.ts:129: instance-one-file went red 3 of 7, while instance-records stayed green; its sealed program runs `try { await fetch(...); outbound = \"allowed\"; } catch {}` at module scope, line 161.",
+  "cost": "Outbound isolation for that probe's program can regress and the records law still passes, so R5's second probe gives no proof of isolation.",
+  "head": "acdcd27caaf96901e6c5352a80450b8b16ee6702",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1562"
+}

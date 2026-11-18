@@ -3,7 +3,7 @@ import { expectTypeOf, it } from "@effect/vitest";
 import { type View } from "./Entry.ts";
 import { type Opened } from "./Runner.ts";
 
-it("type law, plant View = any: views require decoding before use", () => {
+it("type: views require decoding before use (plant: View = any)", () => {
   expectTypeOf<View>().not.toBeAny();
   expectTypeOf<Opened["view"]>().not.toBeAny();
   // @ts-expect-error plant: an erased JSON decoder result must fail the same law

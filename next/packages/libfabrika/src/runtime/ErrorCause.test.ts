@@ -9,7 +9,15 @@
 // `Program.ts:379`, a ProgramDown's class, reads as it did before the cause was kept.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -17,6 +25,7 @@ import { executionFailure, nodeExecution } from "./Execution.ts";
 import { ProgramDown, stepper } from "./Program.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
@@ -36,10 +45,12 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 
 /** A cause that is, or holds, a decoder's failure: one value, or the list a check met. */
 const holdsSchemaError = (cause: unknown): boolean =>
-  Schema.isSchemaError(cause) || (Array.isArray(cause) && cause.some(holdsSchemaError));
+  Schema.isSchemaError(cause) || (Arr.isArray(cause) && Arr.some(cause, holdsSchemaError));
 
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+
 const Refusal = { reason: "limit", now: 3, most: 3 };
 
 /** What a generated program does wrong, if anything. */
@@ -76,6 +87,7 @@ const program = (faults: Faults) => ({
     cmds: [],
     init: (loaded) => [loaded ?? { count: 0 }, []],
     update: {
+      // SAFETY: faults.model is a wrong model on purpose: the law checks that the runtime refuses it.
       inc: (s) => [(faults.model === undefined ? { count: s.count + 1 } : faults.model) as typeof s, []],
     },
   }),
@@ -83,6 +95,7 @@ const program = (faults: Faults) => ({
   msg: Msg,
   view: {
     data: Model,
+    // SAFETY: faults.view is a wrong view on purpose: the law checks that the runtime refuses it.
     select: (s: typeof Model.Type) => (faults.view === undefined ? s : faults.view) as typeof s,
   },
   refuse: () => (faults.refusal === undefined ? null : faults.refusal),
@@ -104,6 +117,7 @@ const seenProgram = (faults: Faults) => ({
     cmds: [],
     init: (loaded) => [loaded ?? { count: 0, seen: {} }, []],
     update: {
+      // SAFETY: faults.model is a wrong model on purpose: the law checks that the runtime refuses it.
       inc: (s) => [(faults.model === undefined ? { ...s, count: s.count + 1 } : faults.model) as typeof s, []],
     },
   }),
@@ -123,12 +137,13 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
       Effect.gen(function* () {
         const run = nodeExecution(program({}));
         const saved = { count: bad };
-        const work =
-          call === "init"
-            ? run.init(saved)
-            : call === "step"
-              ? run.step(saved, { type: "inc" })
-              : run.fold(saved, { type: "inc" });
+
+        const work = Match.value(call).pipe(
+          Match.when("init", () => run.init(saved)),
+          Match.when("step", () => run.step(saved, { type: "inc" })),
+          Match.orElse(() => run.fold(saved, { type: "inc" })),
+        );
+
         const error = yield* Effect.flip(work);
         expect(error).toBeInstanceOf(ProgramDown);
         expect(error.reason).toBe("saved_state");
@@ -152,6 +167,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
           ...(model === undefined ? {} : { model: { count: model } }),
           ...(view === undefined ? {} : { view: { count: view } }),
         };
+
         const error = yield* Effect.flip(nodeExecution(program(faults)).step({ count }, { type: "inc" }));
         expect(error.reason, "the reason stays the one the check returned").toBe("step");
         expect(holdsSchemaError(error.cause), "the cause holds the failed results").toBe(true);
@@ -248,6 +264,7 @@ describe("T695, a declaration that does not load keeps why", () => {
       Effect.gen(function* () {
         const expected = stepper(declared);
         expect(Result.isFailure(expected)).toBe(true);
+
         const error = yield* Effect.flip<unknown, ProgramDown, never>(
           call === "execution"
             ? nodeExecution(declared).init(null)
@@ -256,9 +273,13 @@ describe("T695, a declaration that does not load keeps why", () => {
                 ProgramLoader.layer({ broken: declared }, {}),
               ),
         );
+
         expect(error).toBeInstanceOf(ProgramDown);
+        // SAFETY: the expect above failed the law unless the error is a ProgramDown.
         expect((error as ProgramDown).reason).toBe("load");
+        // SAFETY: the expect above failed the law unless the error is a ProgramDown.
         expect(Schema.isSchemaError((error as ProgramDown).cause), "the cause is the stepper's SchemaError").toBe(true);
+        // SAFETY: the expect above failed the law unless the error is a ProgramDown.
         expect((error as ProgramDown).cause).toEqual(Result.isFailure(expected) ? expected.failure : null);
       }),
   );
@@ -299,7 +320,8 @@ const causedAt = {
 law(
   "C7: a ProgramDown from a site that now keeps its cause reports the class it reported without one",
   fc.record({
-    site: fc.constantFrom(...(Object.keys(causedAt) as Array<keyof typeof causedAt>)),
+    // SAFETY: causedAt is a const object literal, so its own keys are exactly its declared keys.
+    site: fc.constantFrom(...(Rec.keys(causedAt) as Array<keyof typeof causedAt>)),
     // Never a valid Int, number, string or name: each site fails for this value alone.
     bad: fc.oneof(fc.boolean(), failures),
   }),
@@ -323,7 +345,7 @@ law(
 // the reply's `content` as `Cause.pretty` of the cause.
 describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing text", () => {
   const words = fc.stringMatching(/^[a-z]{12}$/);
-  const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
+  const forms = (text: string) => [text, Str.slice(1, -1)(JSON.stringify(text)), encodeURIComponent(text)];
   const calls = ["init", "step", "fold", "upgrade_row", "upgrade_gives", "encode"] as const;
 
   /** The call that feeds `seen`, keyed by `key`, to the decoder at one site. */
@@ -365,10 +387,10 @@ describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing 
           const valueText = `${decor}${valueCore}${decor}`;
           const error = yield* Effect.flip<unknown, ProgramDown, never>(feed(call, { [keyText]: valueText }));
           expect(error).toBeInstanceOf(ProgramDown);
-          const reply = JSON.stringify(executionFailure(error));
+          const reply = Formatter.formatJson(executionFailure(error));
 
           for (const form of [keyCore, valueCore, ...forms(keyText), ...forms(valueText)]) {
-            expect(reply.includes(form), "the RPC reply holds a cause's input-bearing text").toBe(false);
+            expect(Str.includes(form)(reply), "the RPC reply holds a cause's input-bearing text").toBe(false);
           }
         }
       }),

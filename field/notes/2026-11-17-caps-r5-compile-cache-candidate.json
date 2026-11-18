@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-17-caps-r5-compile-cache-candidate",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1148"],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "Today's tooling has an unrun compile-cache candidate for the R5 Node-version law in scripts/caps.test.ts. No runtime result or speedup is claimed.",
+  "cause": "The law repeatedly starts fresh Node processes that load the same configuration graph. The existing whole-file resource guard keeps local execution off the laptop because other laws in that file send real signals.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Keep one temporary Node compile cache inside R5 and remove it in finally. Keep every child fresh, preserve the existing disable setting, and supply no cache when child V8 coverage is requested.",
+  "test": "Candidate unrun. Static validation is recorded in docs/plan/quests/t1148-caps-STATUS.md. Eligible Linux CI must run the whole caps file and its naturally selected tests. Historical and new runs are separate runs, so a timing difference alone will not prove the cache caused it.",
+  "links": ["https://nodejs.org/download/release/v26.13.0/docs/api/module.html#module-compile-cache"]
+}

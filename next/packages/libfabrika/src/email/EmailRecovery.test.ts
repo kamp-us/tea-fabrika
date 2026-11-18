@@ -26,6 +26,7 @@ import {
   wrong,
   type Edge,
   type Row,
+  PromiseFailed,
 } from "./Email.test-support.ts";
 
 effectLaw("not built: P36 / P36.05 setup requires a right code and live person signature", (h) =>
@@ -57,21 +58,41 @@ it.effect.prop(
       started(ctx);
       const h = yield* harness(flow);
       yield* setup(h);
-      const { Add, MemberEvent, admitted } = yield* Effect.promise(() => import("../access/Access.ts"));
-      const { addText } = yield* Effect.promise(() => import("../access/Text.ts"));
+
+      const { Add, MemberEvent, admitted } = yield* Effect.tryPromise({
+        try: () => import("../access/Access.ts"),
+        catch: (cause) => new PromiseFailed({ cause }),
+      });
+
+      const { addText } = yield* Effect.tryPromise({
+        try: () => import("../access/Text.ts"),
+        catch: (cause) => new PromiseFailed({ cause }),
+      });
+
       // P36 adds this fold to the access module: the ledger's rows, with each one's arrival.
-      const foldAccessEntries: (rows: ReadonlyArray<Row>, ledger: string) => Access = Reflect.get(
-        yield* Effect.promise(() => import("../access/AccessFold.ts")),
+      // A name P36 has not built yet reads as undefined: the law fails where it calls it.
+      const foldAccessEntries: (rows: ReadonlyArray<Row>, ledger: string) => Access = Object.getOwnPropertyDescriptor(
+        yield* Effect.tryPromise({
+          try: () => import("../access/AccessFold.ts"),
+          catch: (cause) => new PromiseFailed({ cause }),
+        }),
         "foldAccessEntries",
-      );
-      const { verifySshsig } = yield* Effect.promise(() => import("../transport/Sshsig.ts"));
+      )?.value;
+
+      const { verifySshsig } = yield* Effect.tryPromise({
+        try: () => import("../transport/Sshsig.ts"),
+        catch: (cause) => new PromiseFailed({ cause }),
+      });
+
       const person = yield* testKey(flow.seed.map((byte) => (byte + 1) % 256));
       const window = yield* testKey(flow.seed.map((byte) => (byte + 2) % 256));
       const device = { ...binding(), person: person.line, window: window.line };
+
       const add = {
         ...added(flow),
         adds: { _tag: "person" as const, key: person.line, window: window.line },
       };
+
       const text = addText(add);
       const proof = { signer: person.line, text, armored: yield* person.sign(text) };
       const challenge = yield* h.recovery.issueRecovery(device);
@@ -124,6 +145,7 @@ it.effect.prop(
       const release = yield* Deferred.make<void>();
       const finished = yield* Deferred.make<void>();
       let pause = false;
+
       const h = yield* harness(
         flow,
         Effect.gen(function* () {
@@ -133,15 +155,18 @@ it.effect.prop(
           }
         }),
       );
+
       yield* setup(h);
       const challenge = yield* h.recovery.issueRecovery(binding());
       const value = Redacted.value(h.mails.at(-1)!.code);
       pause = true;
+
       const fiber = yield* Effect.forkChild(
         h.recovery
           .redeem(challenge.id, Redacted.make(value), added(flow), signed(binding().person))
           .pipe(Effect.tap(() => Deferred.succeed(finished, undefined))),
       );
+
       yield* Deferred.await(entered);
       expect(yield* Deferred.isDone(finished)).toBe(false);
       expect(tags(h, "added")).toEqual([]);
@@ -194,6 +219,7 @@ it.effect.prop(
       // Both failure points run in every generated flow, preserving the old pre-append reach.
       for (const persisted of [false, true]) {
         let loseReply = false;
+
         const h = yield* harness(
           flow,
           Effect.void,
@@ -203,14 +229,17 @@ it.effect.prop(
             }
 
             loseReply = false;
+
             return Effect.fail({ reason: "storage" });
           }),
         );
+
         yield* setup(h);
         const challenge = yield* h.recovery.issueRecovery(binding());
         const value = Redacted.value(h.mails.at(-1)!.code);
         const add = added(flow);
         const redeem = () => h.recovery.redeem(challenge.id, Redacted.make(value), add, signed(binding().person));
+
         const refuseChanges = Effect.gen(function* () {
           const stored = yield* h.dependencies.store.snapshot;
           const rows = structuredClone(h.rows);

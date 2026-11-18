@@ -19,6 +19,7 @@ interface WorkerEmail {
 }
 
 const SOURCE = "../cloudflare/EmailSender.ts";
+
 const worker = pureModule<WorkerEmail>(SOURCE);
 
 pureLaw(
@@ -27,12 +28,14 @@ pureLaw(
   (_flow) => {
     // The synchronous constructor must not read an environment credential or send anything.
     const sent: unknown[] = [];
+
     const sender = worker().emailSender({
       send: (message: unknown) =>
         Effect.sync(() => {
           sent.push(message);
         }),
     });
+
     expect(sent).toEqual([]);
     expect(sender.send).toBeTypeOf("function");
 
@@ -48,12 +51,14 @@ it.effect.prop(
       started(ctx);
       const module = yield* product<WorkerEmail>(SOURCE);
       const sent: unknown[] = [];
+
       const sender = module.emailSender({
         send: (message: unknown) =>
           Effect.sync(() => {
             sent.push(message);
           }),
       });
+
       yield* sender.send({
         to: Redacted.make(address(flow)),
         code: Redacted.make(code(flow)),
@@ -62,9 +67,11 @@ it.effect.prop(
         at: EPOCH,
       });
       expect(sent).toHaveLength(1);
+
       const failed = module.emailSender({
         send: () => Effect.fail({ message: `${address(flow)} ${code(flow)} ${flow.failureText}` }),
       });
+
       const result = yield* Effect.exit(
         failed.send({
           to: Redacted.make(address(flow)),
@@ -74,6 +81,7 @@ it.effect.prop(
           at: EPOCH,
         }),
       );
+
       expect(result._tag).toBe("Failure");
       expect(JSON.stringify(result)).not.toContain(address(flow));
     }),

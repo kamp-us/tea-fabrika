@@ -1,3 +1,8 @@
+---
+state: "proposed, parts decided 2026-11-04, 2026-11-05, 2026-11-06 and 2026-11-07 (presence, color and the smaller calls; `summon`; in `next/`, an alias with a session, kept by the brain, with routing); walked at Tier 5"
+summary: "Today's version first. One kind of tile: a person summons any agent that speaks the agent link into their own tile (with the `summon` line, [0157](../../.decisions/0157-summon-starts-an-agent-and-at-talks-to-it.md); `@claude` as the way to summon, decided 2026-11-05, was walked back the next day), and the agent's own tile goes as a kind. Nothing shows twice on screen, and the person is never sent to another tile to act, so follow (design B) and \"Open #7 in your own tile\" are out. \"Only a person\" is checked on the input's sender. Presence, decided 2026-11-07: a 12px avatar in the title bar (an agent a rounded square with a ✦, a person a circle, shape plus name), and a presence label on the thing an agent's job writes now, which fades; no cursor, no ring. Color, decided 2026-11-07, walking back one Radix orange hue: each agent gets its own color, a stable pick from its name out of a swatch the person may change, every swatch color passing the themes' 3:1 check in both looks, no status hue or accent, stored as a swatch name, only inside the avatar and the label. The arrow pointer is dropped everywhere (decided 2026-11-05). The smaller calls, decided 2026-11-07: `@` in every text box, the palette included, with no palette row; a line from an agent nobody summoned is an inbox row, replied to inline; an `@` line runs in the background; a dropped link says \"away\", then \"gone\" after about 10 minutes; the ticket shows what an agent changed, as activity rows with `cause`. From experiment 209."
+---
+
 # Shared tiles: summon an agent into your tile, and see who is there
 
 **Proposed 2026-11-04, presence, color and the smaller calls decided 2026-11-07.** Walked when Tier 5 starts (owner, 2026-11-08): agents sharing tiles and the inbox. The owner
@@ -71,7 +76,7 @@ One sitting, traced (today's version, after the build):
    with a ✦.
 2. claude sends `pipeline --ticket 7 | ticket`. It shows whole in t1, after a "✦ claude" label.
    The owner's half-typed line stays where it was.
-3. The lane asks "approve plan v1". The ticket window shows "Your turn" and the Approve button.
+3. The quest asks "approve plan v1". The ticket window shows "Your turn" and the Approve button.
    The plan card has no "✦ claude" label: the plan step's own agent writes it, not claude.
 4. The owner presses Approve, there. The row lands by the owner (cause
    in-3f9a12c0-41). claude cannot press
@@ -304,7 +309,7 @@ agent's link in the tile, and its jobs stay in the table, told.
 - 2.3.3: the presence label's fade has a still twin under reduced motion.
 - 3.2.1 and 3.2.5: no focus move when an agent arrives.
 - Needs a real screen reader run: VoiceOver on the accessible name as claude's state changes, and
-  whether a polite message per line is too chatty during a lane.
+  whether a polite message per line is too chatty during a quest.
 
 ## Where this differs from settled notes
 

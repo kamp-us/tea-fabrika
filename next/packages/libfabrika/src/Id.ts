@@ -1,15 +1,29 @@
+import * as Arr from "effect/Array";
 // next/: TypeIDs with UUIDv7 suffixes. No platform or other libfabrika layer is needed.
-import { type Brand, Clock, Context, Effect, Layer, Order as Ordering, Result, Schema as S } from "effect";
+import type * as Brand from "effect/Brand";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Ordering from "effect/Order";
+import * as Result from "effect/Result";
+import * as S from "effect/Schema";
+import * as Str from "effect/String";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
+
 const low62 = (1n << 62n) - 1n;
+
 const maxRandom = (1n << 74n) - 1n;
+
 const maxTime = 2 ** 48 - 1;
 
 export type IdValue<P extends string> = Brand.Branded<string, P>;
+
 export type IdSchema<P extends string> = S.Codec<IdValue<P>, string>;
 
-export class IdError extends S.TaggedError<IdError>()("IdError", {
+export class IdError extends S.TaggedError<IdError, { readonly brand: unique symbol }>()("IdError", {
   reason: S.Literals(["prefix", "clock", "entropy", "exhausted"]),
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: S.optional(S.Defect()),
@@ -20,10 +34,11 @@ const prefixes = new WeakMap<S.Top, string>();
 // Fabrika requires a nonempty prefix, with interior underscores and at most 63 characters.
 const validPrefix = (prefix: string): boolean => /^[a-z](?:[a-z_]{0,61}[a-z])?$/.test(prefix);
 
-const split = (id: string): readonly [string, string] => {
-  const separator = id.lastIndexOf("_");
-  return [id.slice(0, Math.max(0, separator)), id.slice(separator + 1)];
-};
+const split = (id: string): readonly [string, string] =>
+  Option.match(Str.lastIndexOf("_")(id), {
+    onNone: (): readonly [string, string] => ["", id],
+    onSome: (separator): readonly [string, string] => [Str.slice(0, separator)(id), Str.slice(separator + 1)(id)],
+  });
 
 const valid = (id: string): boolean => {
   const [prefix, suffix] = split(id);
@@ -37,28 +52,50 @@ const valid = (id: string): boolean => {
   }
 
   // The first character has only three bits: the UUID must fit in 128 bits.
-  if (alphabet.indexOf(suffix.charAt(0)) > 7) {
+  if (
+    Option.exists(
+      Option.flatMap(Str.charAt(0)(suffix), (first) => Str.indexOf(first)(alphabet)),
+      (index) => index > 7,
+    )
+  ) {
     return false;
   }
 
-  const uuid = [...suffix].reduce((bits, char) => (bits << 5n) | BigInt(alphabet.indexOf(char)), 0n);
-  return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
+  return Option.exists(Option.all(Arr.map([...suffix], (char) => Str.indexOf(char)(alphabet))), (digits) => {
+    const uuid = Arr.reduce(digits, 0n, (bits, digit) => (bits << 5n) | BigInt(digit));
+
+    return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
+  });
 };
 
 /** Any canonical TypeID containing a UUIDv7. Validation never trims or repairs input. */
 export const Schema = S.String.check(S.makeFilter(valid, { expected: "a UUIDv7 TypeID" }));
+
 export type Schema = typeof Schema.Type;
 
-const specific = <const P extends string>(prefix: P) => {
+/**
+ * Returns the pattern of one prefix's ids: the prefix, `_`, and a suffix whose bits are a UUIDv7.
+ *
+ * @category getters
+ */
+export const pattern = (prefix: string): RegExp => {
   const a = "[0-9a-hjkmnp-tv-z]";
+
+  return new RegExp(`^${prefix}_[0-7]${a}{9}[ef]${a}{2}[89abrstv]${a}{12}$`);
+};
+
+const specific = <const P extends string>(prefix: P) => {
   const schema = Object.assign(
-    S.String.check(S.isPattern(new RegExp(`^${prefix}_[0-7]${a}{9}[ef]${a}{2}[89abrstv]${a}{12}$`))).pipe(
-      // Prefixes may come from runtime input; make and makeEffect validate them first.
+    S.String.check(S.isPattern(pattern(prefix))).pipe(
+      // SAFETY: brand's type takes only one literal key, but at run time any string is a key. Prefixes may
+      // come from runtime input; make and makeEffect validate them first.
       S.brand<P>(prefix as Parameters<typeof S.brand<P>>[0]),
     ),
     { prefix } as const,
   );
+
   prefixes.set(schema, prefix);
+
   return schema;
 };
 
@@ -67,7 +104,7 @@ type Specific<P extends string> = ReturnType<typeof specific<P>>;
 /** A schema branded for one trusted prefix. An invalid prefix throws, as Schema.make does. */
 export const make = <const P extends string>(prefix: P): Specific<P> => {
   if (!validPrefix(prefix)) {
-    throw new IdError({ reason: "prefix" });
+    throw IdError.make({ reason: "prefix" });
   }
 
   return specific(prefix);
@@ -76,7 +113,7 @@ export const make = <const P extends string>(prefix: P): Specific<P> => {
 /** The factory for a supplied prefix: invalid prefixes fail with a typed IdError. */
 export const makeEffect = Effect.fn("id.makeEffect")(function* <const P extends string>(prefix: P) {
   if (!validPrefix(prefix)) {
-    return yield* new IdError({ reason: "prefix" });
+    return yield* IdError.make({ reason: "prefix" });
   }
 
   return specific(prefix);
@@ -100,30 +137,48 @@ export const Type = S.Literals([
   "add",
   "deny",
 ]);
+
 export type Type = typeof Type.Type;
 
 export const Ledger = make("ledger");
+
 export const Person = make("person");
+
 export const Process = make("process");
+
 export const Connection = make("connection");
+
 export const Tab = make("tab");
+
 export const Mailbox = make("mailbox");
+
 export const Input = make("input");
+
 export const InputId = Input;
+
 export type InputId = typeof InputId.Type;
+
 export const Letter = make("letter");
+
 export const Cmd = make("cmd");
+
 export const Monitor = make("monitor");
+
 export const Entry = make("entry");
+
 export const Grant = make("grant");
+
 export const Revoke = make("revoke");
+
 export const Add = make("add");
+
 export const Deny = make("deny");
 
 /** Compare UUID suffixes first, with the complete prefix breaking ties. */
 export const Order = Ordering.make<Schema>((left, right) => {
   const [lp, ls] = split(left),
     [rp, rs] = split(right);
+
   return Ordering.String(ls, rs) || Ordering.String(lp, rp);
 });
 
@@ -136,7 +191,7 @@ const encode = (at: number, random: bigint): string => {
   let suffix = "";
 
   for (let i = 0; i < 26; i++) {
-    suffix = alphabet.charAt(Number(uuid & 31n)) + suffix;
+    suffix = Option.getOrElse(Str.charAt(Number(uuid & 31n))(alphabet), () => "") + suffix;
     uuid >>= 5n;
   }
 
@@ -155,10 +210,11 @@ export class Generator extends Context.Service<
     Effect.sync(() => {
       let at = -1,
         random = 0n;
+
       // Keep allocation and validation synchronous so fibers observe IDs in allocation order.
       const allocate = <P extends string>(schema: IdSchema<P>, prefix: string, now: number) => {
         if (!Number.isSafeInteger(now) || now < 0 || now > maxTime) {
-          throw new IdError({ reason: "clock" });
+          throw IdError.make({ reason: "clock" });
         }
 
         let nextAt = at,
@@ -169,7 +225,7 @@ export class Generator extends Context.Service<
           nextRandom = entropy();
         } else if (random === maxRandom) {
           if (at === maxTime) {
-            throw new IdError({ reason: "exhausted" });
+            throw IdError.make({ reason: "exhausted" });
           }
 
           nextAt++;
@@ -180,24 +236,26 @@ export class Generator extends Context.Service<
 
         at = nextAt;
         random = nextRandom;
-        return Result.getOrThrowWith(
-          S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`),
-          (cause) => new IdError({ reason: "prefix", cause }),
+
+        return Result.getOrThrowWith(S.decodeResult(schema)(`${prefix}_${encode(at, random)}`), (cause) =>
+          IdError.make({ reason: "prefix", cause }),
         );
       };
+
       return {
         next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
           const prefix = prefixes.get(schema);
 
           if (prefix === undefined) {
-            return yield* new IdError({ reason: "prefix" });
+            return yield* IdError.make({ reason: "prefix" });
           }
 
           yield* Effect.annotateCurrentSpan({ type: prefix });
           const now = yield* Clock.currentTimeMillis;
+
           return yield* Effect.try({
             try: () => allocate(schema, prefix, now),
-            catch: (error) => (error instanceof IdError ? error : new IdError({ reason: "entropy", cause: error })),
+            catch: (error) => (S.is(IdError)(error) ? error : IdError.make({ reason: "entropy", cause: error })),
           });
         }),
       };

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-10-31; CSS gets stylelint, 2026-11-07"
+summary: "These two tools lint and format the repo. Biome is gone. The custom rules are oxlint JS plugin rules that fire on the same lines. The five old advice rules block in every folder at zero, and a dirty folder's warn line keeps a rule advising there until a fill (0523). CSS and HTML linting, and some real catches of the built-in rules, are lost, each one named."
+---
+
 # Oxlint and oxfmt, and nothing else
 
 Decided 2026-10-31 by the owner. This covers the whole repo: today's version, and `next/` when it
@@ -14,7 +19,7 @@ A study of Rust CSS linters, Biome's among them, is running; if it finds one tha
 rules, that replaces stylelint. Not decided: which tests move, each an exam change for the owner.
 
 ```sh
-pnpm lint     # oxlint-plugins/lint.ts, format.ts --check, the code-graph and browser checks, then stylelint.ts on tracked CSS
+pnpm lint     # oxlint-plugins/parallel.ts runs them at once: lint.ts, format.ts --check, the code-graph and browser checks, stylelint.ts on tracked CSS
 pnpm format   # format.ts, lint.ts --fix, format.ts
 ```
 
@@ -54,11 +59,19 @@ export const noNumericDuration: CreateRule = {
   configs and outside ignore files. So `lint.ts` and `format.ts` pin the one config and turn those
   off, and `lint.ts` fails when a `.gitignore` hides a tracked file. Each case has a plant. Running
   `oxlint` or `oxfmt` by hand skips this, and only `pnpm lint` counts.
-- **A warning still fails `pnpm lint`.** Oxlint has only `warn` and `error`, and two rules only
-  advise. So `oxlint-plugins/lint.ts` runs oxlint once and decides:
+- **A warning still fails `pnpm lint`.** Oxlint has only `warn` and `error`. The five rules that
+  only advised now block in every folder at zero
+  ([0523](../../.decisions/0523-advice-rules-block-where-clean.md), building
+  [0168](../../.decisions/0168-old-lint-breaks-are-fixed.md)). A folder that still has fires keeps a
+  warn line in `.oxlintrc.json`, so the rule only advises there until a fill brings it to zero. So
+  `oxlint-plugins/lint.ts` runs oxlint once and decides:
   - it prints every fire;
-  - it fails on any fire but `no-effect-promise` and `no-raw-try-catch`;
+  - it fails on any fire but one that a warn line makes advice;
+  - it fails on a warn line whose folder reached zero, and says which line to delete;
   - it fails too if oxlint crashed, or looked at no file.
+
+  Which folders still advise, and how today's frozen version is handled, is in
+  [where a rule still advises](../../oxlint-plugins/README.md#where-a-rule-still-advises).
 
   Why one run and not two: a disable comment for a rule that is off counts as unused, and unused ones
   fail. A second run for the advice rules would fail the first on their own comments.
@@ -149,6 +162,9 @@ built-in rules did get weaker, and [What it costs](#what-it-costs) lists how.
 | `no-extraneous-class` | 1 | an ambient class; `no-static-only-class` stays on |
 | `ban-types` | 1 | `string & {}`; three narrower rules replace it |
 
+  - `no-accumulating-spread` goes on in `next/` and our tooling
+    ([0559](../../.decisions/0559-no-accumulating-spread-is-on.md), 2026-11-15), which replaces
+    this call there. The row above still holds for today's app.
   - Six of these stand for Biome rules that were on: `noRedeclare`, `noConfusingVoidType`,
     `noInvalidBuiltinInstantiation`, `noAccumulatingSpread`, `noArrayIndexKey`,
     `useSemanticElements`. Here is what now passes:

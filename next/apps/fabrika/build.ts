@@ -5,6 +5,7 @@ import { build } from "./src/build.ts";
 NodeRuntime.runMain(
   Effect.gen(function* () {
     const path = yield* Path.Path;
+
     return yield* build({ out: path.resolve(process.argv[2] ?? "dist") });
   }).pipe(
     Effect.tap((built) =>

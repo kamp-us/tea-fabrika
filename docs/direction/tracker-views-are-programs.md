@@ -1,3 +1,8 @@
+---
+state: "proposed 2026-10-28; one program per view, the `linked`, `nested` and `moved` facts, and the whose-turn line decided 2026-11-06; walked at Tier 2"
+summary: "Every tracker view is its own small tea program over the one ledger (`ticket`, `board`, `list` first), sharing only the ledger and one fold. Status is a fold; done is a merged PR or a person's close once answered, never a drag. A ticket's page leads with whose turn it is (\"Ready for your review\", \"Agent working: build, 12 min\"), then properties, sub-issues, a live agent panel, one row per fact, comments folded. \"next: triage\" only for a ticket a quest drives. Hand-run agents post `started`, `link` and `ended` through `Tickets`; a PR's checks are read from GitHub by code. New facts: `linked`, `nested`, `moved`. Replaces PRs 135 and 153."
+---
+
 # Tracker views are programs
 
 **Proposed 2026-10-28.** Walked when Tier 2 starts (owner, 2026-11-08): tracker views and ticket facts. Not settled, except two parts marked decided: section 7, and one
@@ -47,7 +52,7 @@ The answer in eight lines:
 - **A ticket's page leads with one status line** that says whose turn it is.
   Then properties, sub-issues, a live agent panel, one row per fact, and
   comments folded.
-- **"next: triage" goes.** It is wrong for every ticket no lane drives, which
+- **"next: triage" goes.** It is wrong for every ticket no quest drives, which
   today is all of them. Such a ticket says who is on it instead.
 - **Hand-run agents write facts, not prose.** `fabrika post` learns
   `started`, `link` and `ended`, written through the `Tickets` service. The PR's
@@ -86,8 +91,8 @@ lineOf(head)            // "next: triage"
   opened at 05:02. CI went green at 05:04. The agent stopped and is waiting
   for a person. Not one of these is a fact, so no view can draw it.
 - **The top line is wrong.** `headOf` says `next: triage` whenever no run has
-  ended (`programs/tracker/src/head.ts`, the last two lines). No lane drives
-  ticket 43, and nobody will triage it. The line was written for lanes the
+  ended (`programs/tracker/src/head.ts`, the last two lines). No quest drives
+  ticket 43, and nobody will triage it. The line was written for quests the
   pipeline runs, and none runs yet.
 - **Tickets 44 and 50 are the same shape:** filed, started, "PR open",
   "green" or "waiting on CI". Ticket 49 has only "started". Tickets 45 to 48
@@ -98,7 +103,7 @@ lineOf(head)            // "next: triage"
   the comment still says green.
 - **Why it happened.** [What a ticket shows](./what-a-ticket-shows.md),
   section 4, dropped the bridge for today's agents on 2026-10-25: "an agent on
-  a lane posts plain comments on its ticket". That was right for the cost of
+  a quest posts plain comments on its ticket". That was right for the cost of
   hooks. It left every ticket run by hand with no data to draw. Section 6
   below is a smaller bridge, and it is a change to that decision.
 
@@ -154,7 +159,7 @@ it. Each line below links the page it was read from.
 - **History comes from activities, not comments,** since comments can be
   edited ([agent best practices](https://linear.app/developers/agent-best-practices)).
   That is our rule already: machine state is a fact, never a comment
-  ([the ticket is the lane view](./the-ticket-is-the-lane-view.md)).
+  ([the ticket is the quest view](./the-ticket-is-the-lane-view.md)).
 - *Not read: how the session panel is laid out inside the issue. The page
   says only that "customers will begin seeing Agent Session UI in Linear".*
 
@@ -297,11 +302,11 @@ show the same line, short. Branches, the first that fits:
 | an ask is open | Needs your answer: approve plan v2 | you |
 | the last run ended `stuck` | Stuck: needs your answer (read failed) | you |
 | a run started and not ended | Agent working: build, 12 min | agent |
-| a linked PR, checks failed | CI failed on PR #156: lint | agent if a lane drives it, else you |
+| a linked PR, checks failed | CI failed on PR #156: lint | agent if a quest drives it, else you |
 | a linked PR, checks running | Waiting on CI: PR #156, 2 of 4 done | CI |
 | a linked PR, checks passed, no person's review | Ready for your review: PR #155 | you |
 | a person asked for changes since the last run | Changes asked: waiting on the agent | agent |
-| a lane drives it, the last run sent on | Next: review | agent |
+| a quest drives it, the last run sent on | Next: review | agent |
 | a started run whose process is gone | Agent stopped without ending: build, 3h ago | you |
 | nobody on it | No one on it yet | you |
 
@@ -317,7 +322,7 @@ const Glance = Schema.Union([
 	Schema.TaggedStruct("ci", {pr: Url, says: Schema.Literals(["failed", "running"]), checks: Counts}),
 	Schema.TaggedStruct("review", {pr: Url, checks: Counts}),
 	Schema.TaggedStruct("changes", {since: Schema.Finite}),
-	Schema.TaggedStruct("next", {stage: Stage}), // only when a lane drives the ticket
+	Schema.TaggedStruct("next", {stage: Stage}), // only when a quest drives the ticket
 	Schema.TaggedStruct("gone", {stage: Stage, since: Schema.Finite}),
 	Schema.TaggedStruct("nobody", {}),
 ]);
@@ -336,9 +341,9 @@ const whose = (g: Glance, driven: boolean): "you" | "agent" | "ci" | "nobody" =>
 };
 ```
 
-- **Why "next" needs a lane.** `next: triage` is right only when a lane will
+- **Why "next" needs a quest.** `next: triage` is right only when a quest will
   run triage. Code knows that: the ticket has a `started` or `ended` written
-  by the lane writer, or `lanes` holds its claim (slice 4). Without one, the
+  by the quest writer, or `quests` holds its claim (slice 4). Without one, the
   line is `nobody` or what its PR says. This fixes ticket 43 with no new fact:
   it has no ended run, so today it reads "next: triage".
 - **Why review comes from a person.** No agent approves a PR (AGENTS.md). The
@@ -360,7 +365,7 @@ One block of name and value pairs, as Linear's sidebar. Every value is a fold.
 |---|---|---|
 | State | `Column.fromTimeline` (section 8) | Todo, In progress, In review, Done, Closed |
 | Assignee | `to` on `filed`, then `assigned` (slice 4) | a person; until slice 4, the person the filer writes for |
-| Agent | the last `started` and its `ended` | its name, hand run or lane, running time, cost and turns, or "cost not reported" |
+| Agent | the last `started` and its `ended` | its name, hand run or quest, running time, cost and turns, or "cost not reported" |
 | PR | `linked`, then GitHub's state through `CodeHost` | `#155 open`, one dot per check, the review result |
 | Parent | `nested` | `#70 v1: the pipeline` |
 | Branch | `started.log` or the PR's head | `v1-slice-1` |
@@ -414,7 +419,7 @@ composer stay open, since a person wrote it to be read.
 
 ## 6. Hand-run agents write facts, not prose
 
-Until the pipeline runs lanes, agents run by hand post to tickets with
+Until the pipeline runs quests, agents run by hand post to tickets with
 `fabrika post` ([PR 139](https://github.com/usirin/tea-fabrika/pull/139),
 `apps/fabrika/src/host/post.ts`). Today it can only `comment`. It learns three
 more, each written through `Tickets.write` from slice 1, as that agent:
@@ -440,7 +445,7 @@ yield* tickets.write(43, {type: "ended", run: "h-43-1", stage: "build",
   section 3). Until slice 7 runs, nothing writes `pr`, so a merged PR shows
   "merged" in the panel but the ticket is not done until the watcher writes
   it or a person closes it. That keeps "done only from a merge read by code".
-- **`ended` from a hand run may not know its cost.** A lane's `ended` always
+- **`ended` from a hand run may not know its cost.** A quest's `ended` always
   has its numbers. A hand run often does not. The lean: `usd`, `input`,
   `output` and `turns` become `null` when not measured, and the panel says
   "cost not reported". A made-up number is worse than none:
@@ -640,7 +645,7 @@ number); a `moved` on a closed ticket; a `linked` URL twice; a `related` to
 itself or the same relation twice. The door refuses a person's kinds from an
 agent (`PERSON_KINDS`).
 
-**The column is a fold.** A person's `moved` and the lane's facts both say
+**The column is a fold.** A person's `moved` and the quest's facts both say
 where an open ticket is, and the latest wins, as Linear's GitHub link moves an
 issue when its PR moves:
 
@@ -756,7 +761,7 @@ Small first. Each step is one pull request and costs $0 in agent runs.
 
 - **Why:** it meets both studies. Nobody can write done, and a person can
   still move a card.
-- **Cost:** a lane fact can undo a person's drag: a card dragged back to Todo
+- **Cost:** a quest fact can undo a person's drag: a card dragged back to Todo
   jumps to In progress when an agent starts.
 - **How sure: 70%.** A week of the board on v1's slices would show whether the
   jump annoys.
@@ -792,7 +797,7 @@ Small first. Each step is one pull request and costs $0 in agent runs.
 - **What Linear's agent panel looks like inside an issue.** Its docs describe
   the data, not the layout. The panel here is our reading.
 - **Whether several folds stay cheap.** Step 6 measures it.
-- **Whether a drag undone by a lane fact annoys.** Only daily use tells.
+- **Whether a drag undone by a quest fact annoys.** Only daily use tells.
 - **Some numbers are borrowed:** 8 levels of nesting is GitHub's, and the
   hour for idle is still a guess (`HOUR` in `programs/tracker/src/head.ts`).
 - **What the plan stage's tasks become.** A plan's tasks are ids inside its

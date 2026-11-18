@@ -1,11 +1,29 @@
+/**
+ * The local brain driver's span recording on Node: a durable span queue in its own SQLite file.
+ */
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for P37's durable span queue
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { Archive } from "../../telemetry/Archive.ts";
 import { RecordManager } from "../../telemetry/Records.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 
-// This is P37's durable span queue, never a second ledger. Delivery makes no spans.
+/**
+ * Builds the local brain driver's recording: a `SpanSink` over a SQLite file in `home`, with a
+ * `RecordManager` and an `Archive` that reach the record parts and the bucket through `call`.
+ *
+ * **Details**
+ *
+ * The file, `brain.records.sqlite`, is a durable span queue, never a second ledger: spans wait in
+ * it until a flush delivers them, and delivery makes no spans. The database is opened in the
+ * caller's scope and closed with it. `object` names the driver in each span row's resource.
+ *
+ * @category constructors
+ */
 export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
   home: string,
   object: string,
@@ -17,17 +35,23 @@ export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
   ) => Effect.Effect<unknown, E>,
 ) {
   const fs = yield* FileSystem.FileSystem,
-    path = yield* Path.Path;
+    path = yield* Path.Path,
+    // The services the archive binding's Promise calls run on.
+    context = yield* Effect.context<never>();
+
   yield* fs.makeDirectory(home, { recursive: true });
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => {
       // FileSystem has no SQLite handle; Node owns this durable span queue's database.
       const db = new DatabaseSync(path.join(home, "brain.records.sqlite"));
       db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+
       return db;
     }),
     (db) => Effect.sync(() => db.close()),
   );
+
   return yield* Layer.build(
     Layer.mergeAll(
       SpanSink.layer(nodeSql(db), { object }),
@@ -40,10 +64,10 @@ export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
       Archive.bucket({
         put: (key, body, sha256) =>
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the archive binding requires a Promise
-          Effect.runPromise(call("bucket", "", "put", [key, [...body], sha256]).pipe(Effect.asVoid)),
+          Effect.runPromiseWith(context)(call("bucket", "", "put", [key, [...body], sha256]).pipe(Effect.asVoid)),
         head: (key) =>
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the archive binding requires a Promise
-          Effect.runPromise(archiveHead(call("bucket", "", "head", [key]))),
+          Effect.runPromiseWith(context)(archiveHead(call("bucket", "", "head", [key]))),
       }),
     ),
   );

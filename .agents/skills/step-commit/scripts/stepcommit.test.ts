@@ -9,8 +9,11 @@ import { describe, expect, it } from "vitest";
 // Today's tooling. Git and oxfmt are real. Signing is recorded by a local stub: K1's real-key
 // properties test the signatures; K4 tests which changes may reach a commit at all.
 const root = resolve(import.meta.dirname, "../../../..");
+
 const script = join(import.meta.dirname, "stepcommit.sh");
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
+
 const options = { seed: 321, numRuns: 3, endOnFailure: true };
 
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
@@ -33,10 +36,41 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 
 type Owner = "tests" | "build" | "lead" | "mutation";
 
+/** A step to commit as. A plan row's owner stays an Owner: a fix round (0177) is no row's owner. */
+type Step = Owner | "fix";
+
 /** gh's answer to stepcommit's open-PR query. */
-const open = (nodes: unknown[], totalCount = nodes.length) => ({
+const open = <A>(nodes: A[], totalCount = nodes.length) => ({
   data: { repository: { pullRequests: { totalCount, nodes } } },
 });
+
+const sha = (value: number) => value.toString(16).padStart(40, "0");
+
+type ComparePage = {
+  ahead_by: number;
+  total_commits: number;
+  base_commit: { sha: string };
+  commits: Array<{ sha: string }>;
+};
+
+const comparePages = (oids: string[], base: string): ComparePage[] =>
+  Array.from({ length: Math.ceil(oids.length / 100) }, (_, page) => ({
+    ahead_by: oids.length,
+    total_commits: oids.length,
+    base_commit: { sha: base },
+    commits: oids.slice(page * 100, (page + 1) * 100).map((oid) => ({ sha: oid })),
+  }));
+
+const truncatedPr = (branch: string, base: string, oids: string[]) =>
+  open([
+    {
+      number: 609,
+      headRefName: branch,
+      baseRefOid: base,
+      headRefOid: oids[oids.length - 1],
+      commits: { totalCount: oids.length, nodes: oids.slice(0, 100).map((oid) => ({ commit: { oid } })) },
+    },
+  ]);
 
 const put = (path: string, value: string) => {
   mkdirSync(dirname(path), { recursive: true });
@@ -80,7 +114,9 @@ class Repo {
       T321_CALLS: join(this.dir, "calls"),
       T321_OXFMT: join(root, "node_modules/.bin/oxfmt"),
       T390_PRS: join(this.dir, "prs.json"),
+      T390_COMPARE: join(this.dir, "compare.json"),
     };
+
     const stub = String.raw`
 const fs=require("node:fs"),cp=require("node:child_process");
 const args=process.argv.slice(2);
@@ -92,17 +128,34 @@ if(args[0]==="exec"&&args[1]==="oxfmt") {
 }
 console.error("fixture refuses package or network command"); process.exit(97);
 `;
+
     writeFileSync(join(bin, "pnpm"), `#!${process.execPath}\n${stub}`, { mode: 0o755 });
+
     // gh answers the open-PR query from T390_PRS, a JSON file (no file: no open PRs; "fail": exit 1).
     const gh = String.raw`
 const fs=require("node:fs");
-fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["gh",...process.argv.slice(2)])+"\n");
+const args=process.argv.slice(2);
+fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["gh",...args])+"\n");
+if(args.includes("--paginate")) {
+ const compared=fs.existsSync(process.env.T390_COMPARE)?fs.readFileSync(process.env.T390_COMPARE,"utf8"):"fail";
+ if(compared.trim()==="fail"){console.error("gh: compare unavailable");process.exit(1);}
+ process.stdout.write(compared);process.exit(0);
+}
 const f=process.env.T390_PRS;
 const prs=f&&fs.existsSync(f)?fs.readFileSync(f,"utf8"):JSON.stringify({data:{repository:{pullRequests:{totalCount:0,nodes:[]}}}});
 if(prs.trim()==="fail"){console.error("gh: offline");process.exit(1);}
-process.stdout.write(prs);
+let answer;
+try{answer=JSON.parse(prs);}catch{process.stdout.write(prs);process.exit(0);}
+if(Array.isArray(answer)) {
+ const calls=fs.readFileSync(process.env.T321_CALLS,"utf8").trim().split("\n").map(line=>JSON.parse(line));
+ const used=calls.filter(call=>call[0]==="gh"&&call[1]==="api"&&call[2]==="graphql").length;
+ answer=answer[used-1];
+}
+process.stdout.write(JSON.stringify(answer));
 `;
+
     writeFileSync(join(bin, "gh"), `#!${process.execPath}\n${gh}`, { mode: 0o755 });
+
     // The publisher (0134) records its arguments, and fails when T134_PUBLISH says "fail".
     const publish = String.raw`
 const fs=require("node:fs");
@@ -110,10 +163,14 @@ fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["publish",...process.ar
 if(process.env.T134_PUBLISH==="fail"){console.log("publish: refused: push rejected");process.exit(1);}
 console.log("publish: pushed");
 `;
+
     writeFileSync(join(bin, "publish"), `#!${process.execPath}\n${publish}`, { mode: 0o755 });
     this.env.STEPCOMMIT_PUBLISHER = join(bin, "publish");
     symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(bin, "oxfmt"));
     this.git("init", "-q", "-b", "fabrikalfa/one", `--separate-git-dir=${join(this.dir, "gitdata")}`);
+    put(join(this.dir, "gitdata/info/exclude"), "node_modules/\n");
+    mkdirSync(join(this.repo, "node_modules/.bin"), { recursive: true });
+    symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(this.repo, "node_modules/.bin/oxfmt"));
     put(join(this.repo, "exam-paths.json"), readFileSync(join(root, "exam-paths.json"), "utf8"));
     put(join(this.repo, ".oxfmtrc.json"), '{"useTabs":true,"printWidth":100}\n');
 
@@ -150,17 +207,20 @@ console.log("publish: pushed");
       encoding: "utf8",
       timeout: 10_000,
     });
+
     expect(r.error).toBeUndefined();
+
     return { code: r.status, text: r.stdout + r.stderr, stdout: r.stdout };
   }
 
   git(...args: string[]) {
     const r = this.call("/usr/bin/git", args);
     expect(r.code, r.text).toBe(0);
+
     return r.stdout;
   }
 
-  commit(step: Owner, paths: string[], only = false) {
+  commit(step: Step, paths: string[], only = false) {
     return this.call("sh", [
       script,
       ...(only ? ["--commit-only"] : []),
@@ -193,6 +253,19 @@ console.log("publish: pushed");
           .map((s) => JSON.parse(s))
           .filter((a: string[]) => a[0] === "publish")
       : [];
+  }
+
+  calls(): string[][] {
+    return existsSync(join(this.dir, "calls"))
+      ? readFileSync(join(this.dir, "calls"), "utf8")
+          .trim()
+          .split("\n")
+          .map((s) => JSON.parse(s))
+      : [];
+  }
+
+  compareCalls(): string[][] {
+    return this.calls().filter((call) => call[0] === "gh" && call.includes("--paginate"));
   }
 
   asked(): boolean {
@@ -308,44 +381,44 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
   // Plant: match owners by prefix, allowing owned.tsx via the owned.ts row; skip unknown paths.
   it("K4 commits only paths owned by this step, including normalized ./ names", () => {
     fc.assert(
-      fc.property(
-        word,
-        fc.constantFrom("tests" as Owner, "build" as Owner, "lead" as Owner),
-        fc.boolean(),
-        (name, step, dot) => {
-          each(["owned", "foreign", "prefix", "unknown"], (kind) =>
-            withRepo(
-              [
-                ["src/owned.ts", step],
-                ["src/foreign.ts", step === "tests" ? "build" : "tests"],
-              ],
-              (r) => {
-                const path =
-                  kind === "owned"
-                    ? "src/owned.ts"
-                    : kind === "foreign"
-                      ? "src/foreign.ts"
-                      : kind === "prefix"
-                        ? "src/owned.tsx"
-                        : `src/${name}-unknown.ts`;
-                r.changed(path);
-                const got = r.commit(step, [(dot ? "./" : "") + path]);
-                expect(got.code).not.toBeNull();
+      fc.property(word, fc.constantFrom<Step>("tests", "build", "lead", "fix"), fc.boolean(), (name, step, dot) => {
+        // A fix round takes tests' and build's paths: its own row is build's, its foreign one lead's.
+        const own = step === "fix" ? "build" : step;
+        const other = step === "tests" ? "build" : step === "fix" ? "lead" : "tests";
 
-                if (kind === "owned") {
-                  expect(got.code, got.text).toBe(0);
-                  expect(r.git("show", "--format=", "--name-only", "HEAD").trim()).toBe(path);
-                } else {
-                  expect(got.code, got.text).not.toBe(0);
-                  expect(got.text).toMatch(/not_owner|owner|unknown/);
-                  expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
-                  expect(r.signs()).toEqual([]);
-                }
-              },
-            ),
-          );
-        },
-      ),
+        each(["owned", "foreign", "prefix", "unknown"], (kind) =>
+          withRepo(
+            [
+              ["src/owned.ts", own],
+              ["src/foreign.ts", other],
+            ],
+            (r) => {
+              const path =
+                kind === "owned"
+                  ? "src/owned.ts"
+                  : kind === "foreign"
+                    ? "src/foreign.ts"
+                    : kind === "prefix"
+                      ? "src/owned.tsx"
+                      : `src/${name}-unknown.ts`;
+
+              r.changed(path);
+              const got = r.commit(step, [(dot ? "./" : "") + path]);
+              expect(got.code).not.toBeNull();
+
+              if (kind === "owned") {
+                expect(got.code, got.text).toBe(0);
+                expect(r.git("show", "--format=", "--name-only", "HEAD").trim()).toBe(path);
+              } else {
+                expect(got.code, got.text).not.toBe(0);
+                expect(got.text).toMatch(/not_owner|owner|unknown/);
+                expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+                expect(r.signs()).toEqual([]);
+              }
+            },
+          ),
+        );
+      }),
       options,
     );
   });
@@ -354,6 +427,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
   // (docs/shots/ also owning docs/shotsx/), or a '..' part escaping the row.
   it("K4 a row ending in / owns every file under it, and nothing beside it", () => {
     fc.assert(
+      // SAFETY: "tests", "build" and "lead" are each a member of Owner, so these only widen a literal.
       fc.property(word, fc.constantFrom("tests" as Owner, "build" as Owner, "lead" as Owner), (name, step) => {
         each(["under", "deeper", "beside", "escape"], (kind) =>
           withRepo(
@@ -370,6 +444,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
                     : kind === "beside"
                       ? `docs/shotsx/${name}.png`
                       : "docs/shots/../src/foreign.ts";
+
               r.changed(kind === "escape" ? "src/foreign.ts" : path);
               const got = r.commit(step, [path]);
               expect(got.code).not.toBeNull();
@@ -393,8 +468,12 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
   // The exam is the test writer's (nobody-writes-their-own-exam.md): a tests commit takes an exam
   // path the plan gives to no step. 2026-11-11: three tests steps lost their laws to not_owner on a
   // renamed test file, a fixture test and .oxlintrc.json the plan did not name.
+  // A fix round (0177) is tests and build in one agent: it takes a path the plan gives to either,
+  // and an exam path the plan gives to no step, signs nothing, and still stops at lead's rows.
   // Plants: allow every unlisted path; allow an exam path the plan gives to build or lead, or one
-  // under another step's / row; allow it for build, lead or mutation; check build's owner first.
+  // under another step's / row; allow it for build, lead or mutation; check build's owner first;
+  // let fix take any path; drop fix from the unlisted-exam exception; keep build's exam refusal
+  // (exit 3) for fix; sign a fix commit as build.
   it("K4 a tests commit takes an exam path the plan gives to no step, and nothing else of another's", () => {
     const exam = [
       (name: string) => `.agents/skills/${name}/scripts/${name}.test.ts`,
@@ -402,15 +481,18 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
       (name: string) => `fixtures/next/${name}.json`,
       () => ".oxlintrc.json",
     ];
+
     const plain = [(name: string) => `src/${name}-unknown.ts`, (name: string) => `next/${name}/${name}.ts`];
+
     type Row = "none" | "tests" | "build" | "lead" | "build-folder";
+
     fc.assert(
       fc.property(
         word,
         fc.boolean(),
         fc.nat(3),
         fc.constantFrom<Row>("none", "tests", "build", "lead", "build-folder"),
-        fc.constantFrom<Owner>("tests", "build", "lead", "mutation"),
+        fc.constantFrom<Step>("tests", "build", "lead", "mutation", "fix"),
         (name, isExam, pick, row, step) => {
           const path = isExam ? exam[pick % exam.length]!(name) : plain[pick % plain.length]!(name);
           const rows: Array<[string, string]> = [["src/owned.ts", "tests"]];
@@ -425,10 +507,13 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
             r.changed(path, path.endsWith(".json") ? "[]\n" : 'export const value = "changed";\n');
             const got = r.commit(step, [path]);
             const owner = row === "build-folder" && path.includes("/") ? "build" : row;
+
             const allowed =
               owner === step ||
               (step === "mutation" && owner === "tests") ||
-              (step === "tests" && owner === "none" && isExam);
+              (step === "fix" && (owner === "tests" || owner === "build")) ||
+              ((step === "tests" || step === "fix") && owner === "none" && isExam);
+
             // The build's exam refusal (exit 3) comes before any owner check.
             const code = step === "build" && isExam ? 3 : allowed ? 0 : 1;
             expect(
@@ -439,7 +524,13 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
                 signs: r.signs().length,
               },
               got.text,
-            ).toEqual({ code, head: code ? "base" : "new", notOwner: code === 1, signs: code ? 0 : 1 });
+            ).toEqual({
+              code,
+              head: code ? "base" : "new",
+              notOwner: code === 1,
+              // A fix commit signs nothing.
+              signs: code || step === "fix" ? 0 : 1,
+            });
             expect(r.git("show", "--format=", "--name-only", "HEAD").trim().split("\n").includes(path)).toBe(!code);
           });
         },
@@ -449,7 +540,8 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
       // gives to build or lead, or under build's / row, as tests (no); an unlisted plain path as tests.
       {
         ...options,
-        numRuns: 6,
+        // numRuns must cover every pinned example, or fast-check drops the ones past it (it ran 6 of 9).
+        numRuns: 20,
         examples: [
           ["one", true, 0, "none", "tests"],
           ["one", true, 3, "none", "tests"],
@@ -460,6 +552,15 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
           ["one", true, 1, "lead", "tests"],
           ["one", true, 0, "build-folder", "tests"],
           ["one", false, 0, "none", "tests"],
+          // fix: an unlisted exam path (yes), one the plan gives to tests, build or build's / row
+          // (yes), one it gives to lead (no), an unlisted plain path (no), a build-owned plain path (yes).
+          ["one", true, 0, "none", "fix"],
+          ["one", true, 1, "tests", "fix"],
+          ["one", true, 2, "build", "fix"],
+          ["one", true, 0, "build-folder", "fix"],
+          ["one", true, 1, "lead", "fix"],
+          ["one", false, 0, "none", "fix"],
+          ["one", false, 0, "build", "fix"],
         ],
       },
     );
@@ -468,14 +569,24 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
   // scenario: what the new yes must not open. A deletion is checked as any other path, so a
   // deleted unlisted exam path commits as tests and stays refused when the plan gives it to build.
   // The exam list is the box base's, so a list widened in an earlier commit or in the same one
-  // takes no product path. Plants: skip deletions; read the checkout's or HEAD's exam-paths.json.
+  // takes no product path. A fix round (0177) reads the same list the same way.
+  // Plants: skip deletions; read the checkout's or HEAD's exam-paths.json.
   it("scenario: a deleted unlisted exam path commits as tests, and a widened exam list takes nothing", () => {
     const fixture = ".agents/skills/lead/scripts/fixture.test.ts";
+
     const widened = (r: Repo) => {
       const list = JSON.parse(readFileSync(join(r.repo, "exam-paths.json"), "utf8"));
       r.changed("exam-paths.json", `${JSON.stringify([...list, { ...list[0], glob: "src/**" }])}\n`);
     };
-    each(["delete", "delete-build", "widened-before", "widened-same"] as const, (kind) =>
+
+    // A fix round also takes build's rows, so a path the plan gives to build is no refusal for it.
+    const cases = (["tests", "fix"] as const).flatMap((step) =>
+      (["delete", "delete-build", "widened-before", "widened-same"] as const)
+        .filter((kind) => !(step === "fix" && kind === "delete-build"))
+        .map((kind) => ({ step, kind })),
+    );
+
+    each(cases, ({ step, kind }) =>
       withRepo(kind === "delete-build" ? [[fixture, "build"]] : [["src/owned.ts", "tests"]], (r) => {
         let paths = [fixture];
 
@@ -485,7 +596,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
           widened(r);
 
           if (kind === "widened-before") {
-            r.git("commit", "-q", "-am", "an earlier lane commit widens the exam");
+            r.git("commit", "-q", "-am", "an earlier quest commit widens the exam");
             paths = ["src/new-unknown.ts"];
           } else {
             paths = ["exam-paths.json", "src/new-unknown.ts"];
@@ -495,7 +606,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
         }
 
         const head = r.git("rev-parse", "HEAD").trim();
-        const got = r.commit("tests", paths);
+        const got = r.commit(step, paths);
         const ok = kind === "delete";
         expect(
           {
@@ -509,7 +620,8 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
           code: ok ? 0 : 1,
           moved: ok,
           notOwner: ok ? null : kind === "delete-build" ? fixture : "src/new-unknown.ts",
-          signs: ok ? 1 : 0,
+          // Only a tests commit is signed.
+          signs: ok && step === "tests" ? 1 : 0,
         });
         expect(r.git("show", "--format=", "--name-status", "HEAD").trim() === `D\t${fixture}`).toBe(ok);
       }),
@@ -562,6 +674,31 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
     );
   });
 
+  // Plant: ask the file system whether a path is a folder, which follows a link. A skill's
+  // `.claude/skills/<name>` is a link to its folder, and git keeps a link as one file (ticket 991).
+  it("K4 commits a link to a folder as the one file git keeps, and still refuses the folder itself", () => {
+    fc.assert(
+      fc.property(fc.boolean(), (only) =>
+        withRepo(
+          [
+            [".claude/skills/one", "tests"],
+            ["src/owned.ts", "tests"],
+          ],
+          (r) => {
+            mkdirSync(join(r.repo, ".claude/skills"), { recursive: true });
+            symlinkSync("../../src", join(r.repo, ".claude/skills/one"));
+            expect(r.commit("tests", ["src"], only).code).not.toBe(0);
+            const got = r.commit("tests", [".claude/skills/one"], only);
+            expect(got.code, got.text).toBe(0);
+            expect(r.git("show", "--name-only", "--format=", "HEAD").trim()).toBe(".claude/skills/one");
+            expect(r.git("ls-tree", "HEAD", ".claude/skills/one")).toMatch(/^120000 /);
+          },
+        ),
+      ),
+      { ...options, numRuns: 2 },
+    );
+  });
+
   // Plant: check the working file instead of the staged bytes, or skip staged formatting.
   it("K4 refuses unformatted staged content and accepts formatted content", () => {
     fc.assert(
@@ -584,6 +721,63 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
         );
       }),
       options,
+    );
+  });
+
+  // scenario: package-manager startup is unavailable; the installed formatter still works.
+  it("scenario: staged formatting uses the installed formatter in a folder without a package", () => {
+    withRepo(
+      [
+        ["src/owned.ts", "tests"],
+        ["field/one.json", "tests"],
+      ],
+      (r) => {
+        writeFileSync(
+          join(r.dir, "bin/pnpm"),
+          `#!${process.execPath}\nconsole.error("fixture refuses pnpm exec startup"); process.exit(97);\n`,
+          { mode: 0o755 },
+        );
+        const unavailable = r.call("pnpm", ["exec", "oxfmt", "--version"]);
+        expect(unavailable.code, unavailable.text).toBe(97);
+
+        r.changed(".oxfmtrc.json", '{"useTabs":true,"printWidth":100,"ignorePatterns":["field/**"]}\n');
+        const source = 'export const value = () => {\n\treturn "changed";\n};\n';
+        r.changed("src/owned.ts", source);
+        r.changed("field/one.json", '{"value":1}');
+        const got = r.commit("tests", ["src/owned.ts", "field/one.json"], true);
+        expect(got.code, got.text).toBe(0);
+        expect(r.git("show", "HEAD:src/owned.ts")).toBe(source);
+        expect(r.git("show", "HEAD:field/one.json")).toBe('{"value":1}');
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([]);
+      },
+    );
+  });
+
+  // scenario: missing tools and failed starts must not be reported as bad staged formatting.
+  it("scenario: formatter startup failures commit nothing and keep diagnostics free of tool output", () => {
+    each(["missing", "not-executable", "failed"] as const, (kind) =>
+      withRepo([["src/owned.ts", "tests"]], (r) => {
+        const formatter = join(r.repo, "node_modules/.bin/oxfmt");
+        rmSync(formatter);
+
+        if (kind !== "missing") {
+          writeFileSync(formatter, "#!/bin/sh\necho private-staged-text >&2\nexit 23\n", {
+            mode: kind === "failed" ? 0o755 : 0o644,
+          });
+        }
+
+        r.changed("src/owned.ts");
+        const got = r.commit("tests", ["src/owned.ts"]);
+        expect(got.code, got.text).toBe(2);
+        expect(got.text).toContain("formatter_failed:");
+        expect(got.text).not.toContain("not_formatted:");
+        expect(got.text).not.toContain("private-staged-text");
+        expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+        expect(r.git("diff", "--cached", "--name-only")).toBe("");
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([]);
+      }),
     );
   });
 
@@ -721,27 +915,33 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
 describe("T390 a lead link never lands on another branch's open PR ticket, today's tooling", () => {
   // Plants: drop the check; compare the branch without its -wip; check --commit-only or other
   // steps; pass when gh cannot be read. PRs 609, 614, 615 and 617, 2026-11-09: field-row PRs signed
-  // lead under a lane's ticket, and the lane's own lead links read as stale_link.
+  // lead under a quest's ticket, and the quest's own lead links read as stale_link.
   it("T390 refuses a signed lead commit exactly when another branch's open PR holds the ticket", () => {
     // scenario: every head place for a signed lead commit on the PR's ticket, then one change at a
     // time (another ticket, another step, --commit-only), since sampling missed the -wip plant.
     type Case = {
       location: "other" | "same" | "own-wip" | "none";
       ticket: string;
-      step: Owner;
+      step: Step;
       only: boolean;
     };
+
+    // SAFETY: "lead" is a member of Owner, so this only widens a literal.
     const lead = { ticket: "321", step: "lead" as Owner, only: false };
+
     const cases: Case[] = [
       ...(["other", "same", "own-wip", "none"] as const).map((location) => ({ ...lead, location })),
       { ...lead, location: "other", ticket: "999" },
       { ...lead, location: "other", step: "build" },
+      { ...lead, location: "other", step: "fix" },
       { ...lead, location: "other", only: true },
     ];
+
     each(cases, ({ location, ticket, step, only }) =>
-      withRepo([["src/owned.ts", step]], (r) => {
+      // A fix round takes build's rows, and no plan row is owned by "fix".
+      withRepo([["src/owned.ts", step === "fix" ? "build" : step]], (r) => {
         const head = {
-          other: "fabrikalfa/lane",
+          other: "fabrikalfa/quest",
           same: "fabrikalfa/one",
           "own-wip": "fabrikalfa/one-wip",
         };
@@ -756,29 +956,31 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
 
         if (refused) {
           expect(got.code, got.text).toBe(5);
-          expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/lane");
+          expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/quest");
           expect(got.text).toContain("Sign under a lead ticket");
           expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
           expect(r.git("diff", "--cached", "--name-only")).toBe("");
           expect(r.signs()).toEqual([]);
         } else {
           expect(got.code, got.text).toBe(0);
-          expect(r.signs()).toHaveLength(only ? 0 : 1);
+          // A --commit-only or fix commit signs nothing.
+          expect(r.signs()).toHaveLength(only || step === "fix" ? 0 : 1);
         }
 
         expect(r.asked()).toBe(step === "lead" && !only);
+        expect(r.compareCalls()).toEqual([]);
       }),
     );
   }, 180_000);
 
-  // scenario: gh fails, more than 100 open PRs, or a PR with more than 250 commits.
+  // scenario: gh fails, more than 100 open PRs, or a truncated PR lacks frozen compare refs.
   it("T390 refuses a signed lead commit when open PRs cannot be read whole", () => {
     const commits = { totalCount: 251, nodes: [] };
     each(
       [
         "fail\n",
         JSON.stringify(open([], 101)),
-        JSON.stringify(open([{ number: 1, headRefName: "fabrikalfa/lane", commits }])),
+        JSON.stringify(open([{ number: 1, headRefName: "fabrikalfa/quest", commits }])),
       ],
       (answer) =>
         withRepo([["src/owned.ts", "lead"]], (r) => {
@@ -791,6 +993,148 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
           expect(r.signs()).toEqual([]);
         }),
     );
+  });
+
+  it("T390 scenario: a stale note on commit 408 blocks the lead sign", () => {
+    withRepo([["src/owned.ts", "lead"]], (r) => {
+      r.openPr("fabrikalfa/quest", "321");
+      const base = sha(5000);
+      const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+      put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
+      put(join(r.dir, "compare.json"), JSON.stringify(comparePages(oids, base)));
+      r.changed("src/owned.ts");
+
+      const got = r.commit("lead", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(5);
+      expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/quest");
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      expect(r.git("diff", "--cached", "--name-only")).toBe("");
+      expect(r.signs()).toEqual([]);
+      expect(r.published()).toEqual([]);
+      expect(r.compareCalls()).toHaveLength(1);
+      expect(r.compareCalls()[0]).toContain(`repos/{owner}/{repo}/compare/${base}...${r.base}?per_page=100`);
+      expect(
+        r
+          .calls()
+          .find((call) => call[0] === "gh" && call[1] === "api" && call[2] === "graphql")
+          ?.join(" "),
+      ).toContain("commits(first:100)");
+    });
+  });
+
+  it("T390 scenario: five complete compare pages allow fallback after a PR reread", () => {
+    withRepo([["src/owned.ts", "lead"]], (r) => {
+      const base = sha(5000);
+      const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+      put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
+      put(join(r.dir, "compare.json"), JSON.stringify(comparePages(oids, base)));
+      r.changed("src/owned.ts");
+
+      const got = r.commit("lead", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(0);
+      expect(r.git("rev-parse", "HEAD").trim()).not.toBe(r.base);
+      expect(r.signs()).toHaveLength(1);
+      expect(r.published()).toHaveLength(1);
+      expect(r.compareCalls()).toHaveLength(1);
+      expect(r.calls().filter((call) => call[0] === "gh" && call[1] === "api" && call[2] === "graphql")).toHaveLength(
+        2,
+      );
+    });
+  });
+
+  it("T390 scenario: an incomplete or malformed compare page blocks before staging", () => {
+    each(
+      [
+        "missing-page",
+        "wrong-count",
+        "wrong-ahead",
+        "wrong-base",
+        "duplicate",
+        "invalid-sha",
+        "wrong-tip",
+        "replaced-listed",
+      ] as const,
+      (fault) =>
+        withRepo([["src/owned.ts", "lead"]], (r) => {
+          const base = sha(5000);
+          const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+          const pages = comparePages(oids, base);
+
+          if (fault === "missing-page") {
+            pages.pop();
+          }
+
+          if (fault === "wrong-count") {
+            pages[0]!.total_commits -= 1;
+          }
+
+          if (fault === "wrong-ahead") {
+            pages[0]!.ahead_by -= 1;
+          }
+
+          if (fault === "wrong-base") {
+            pages[0]!.base_commit.sha = sha(5001);
+          }
+
+          if (fault === "duplicate") {
+            pages[1]!.commits[0]!.sha = pages[0]!.commits[0]!.sha;
+          }
+
+          if (fault === "invalid-sha") {
+            pages[0]!.commits[0]!.sha = "not-a-sha";
+          }
+
+          if (fault === "wrong-tip") {
+            const lastPage = pages[pages.length - 1]!;
+            lastPage.commits[lastPage.commits.length - 1]!.sha = sha(6000);
+          }
+
+          if (fault === "replaced-listed") {
+            pages[0]!.commits[0]!.sha = sha(10000);
+          }
+
+          put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
+          put(join(r.dir, "compare.json"), JSON.stringify(pages));
+          r.changed("src/owned.ts");
+          const got = r.commit("lead", ["src/owned.ts"]);
+
+          expect(got.code, got.text).toBe(5);
+          expect(got.text).toContain("open PRs cannot be read");
+
+          if (fault === "replaced-listed") {
+            expect(got.text).toContain("PR 609 compare omitted a listed PR commit");
+          }
+
+          expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+          expect(r.git("diff", "--cached", "--name-only")).toBe("");
+          expect(r.signs()).toEqual([]);
+          expect(r.published()).toEqual([]);
+        }),
+    );
+  });
+
+  it("T390 scenario: a changed head ref during compare blocks the lead sign", () => {
+    withRepo([["src/owned.ts", "lead"]], (r) => {
+      const base = sha(5000);
+      const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+      const initial = truncatedPr("fabrikalfa/quest", base, oids);
+      const moved = truncatedPr("fabrikalfa/quest", base, oids);
+      moved.data.repository.pullRequests.nodes[0]!.headRefOid = sha(6000);
+      put(join(r.dir, "prs.json"), JSON.stringify([initial, moved]));
+      put(join(r.dir, "compare.json"), JSON.stringify(comparePages(oids, base)));
+      r.changed("src/owned.ts");
+
+      const got = r.commit("lead", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(5);
+      expect(got.text).toContain("open PR data changed during the check");
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      expect(r.git("diff", "--cached", "--name-only")).toBe("");
+      expect(r.signs()).toEqual([]);
+      expect(r.published()).toEqual([]);
+    });
   });
 });
 
@@ -805,7 +1149,7 @@ describe("T134 a signed commit leaves the laptop the moment it is made (0134), t
         const got = r.commit("tests", ["src/owned.ts"], only);
         expect(got.code, got.text).toBe(0);
         expect(r.published()).toEqual(only ? [] : [["publish", "fabrikalfa/one"]]);
-        const calls = readFileSync(join(r.dir, "calls"), "utf8");
+        const calls = existsSync(join(r.dir, "calls")) ? readFileSync(join(r.dir, "calls"), "utf8") : "";
         expect(only || calls.indexOf('["commits"') < calls.indexOf('["publish"')).toBe(true);
       }),
     );
@@ -835,5 +1179,156 @@ describe("T134 a signed commit leaves the laptop the moment it is made (0134), t
       expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
       expect(r.signs()).toHaveLength(1);
     });
+  });
+});
+
+describe("T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed", () => {
+  const fixture = ".agents/skills/lead/scripts/fixture.test.ts";
+
+  // F1. One fix commit holds all three kinds of path a fix round may take: an exam path the plan
+  // gives to tests, a product path it gives to build, and an exam path it gives to no step.
+  // Plants: keep build's exit 3 refusal for fix; sign a fix commit as build; skip the push; drop fix
+  // from the unlisted-exam exception.
+  it("F1 scenario: one fix commit holds a tests-owned exam path, a build-owned path and an unlisted exam path, unsigned and pushed", () => {
+    withRepo(
+      [
+        [fixture, "tests"],
+        ["src/owned.ts", "build"],
+      ],
+      (r) => {
+        const unlisted = ".oxlintrc.json";
+        r.changed(fixture);
+        r.changed("src/owned.ts");
+        r.changed(unlisted, "[]\n");
+        const paths = [fixture, "src/owned.ts", unlisted];
+        const got = r.commit("fix", paths);
+
+        expect(got.code, got.text).toBe(0);
+        expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
+        expect(r.git("show", "--format=", "--name-only", "HEAD").trim().split("\n").sort()).toEqual([...paths].sort());
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([["publish", "fabrikalfa/one"]]);
+      },
+    );
+  });
+
+  // F2. A fix round stops where the plan gives a path to lead, and at a plain path it lists for
+  // nobody; nothing is committed and the index is restored, as for the other steps. Plant: let fix
+  // take any path.
+  it("F2 a fix commit refuses a path the plan gives to lead or to nobody, and commits nothing", () => {
+    fc.assert(
+      fc.property(word, (name) => {
+        const unknown = `src/${name}-unknown.ts`;
+
+        each(
+          [
+            { kind: "lead", row: ["src/foreign.ts", "lead"], path: "src/foreign.ts" },
+            { kind: "lead-exam", row: [fixture, "lead"], path: fixture },
+            { kind: "nobody", row: ["src/foreign.ts", "tests"], path: unknown },
+          ] as const,
+          ({ row, path }) =>
+            withRepo(
+              [
+                ["src/owned.ts", "build"],
+                [row[0], row[1]],
+              ],
+              (r) => {
+                r.changed("src/owned.ts");
+                r.changed(path);
+                const got = r.commit("fix", ["src/owned.ts", path]);
+
+                expect(got.code, got.text).toBe(1);
+                expect(got.text).toContain(`not_owner: ${path}`);
+                expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+                expect(r.git("diff", "--cached", "--name-only")).toBe("");
+                expect(r.signs()).toEqual([]);
+                expect(r.published()).toEqual([]);
+              },
+            ),
+        );
+      }),
+      { ...options, seed: 119120 },
+    );
+  });
+
+  // F4. Fix is the only new step. Build keeps its exit 3 on an exam path, even one the plan gives to
+  // it. The other steps' answers are pinned in the K4 laws above, which now draw fix too.
+  // Plant: drop build's exam refusal.
+  it("F4 scenario: build still refuses an exam path with exit 3", () => {
+    withRepo([[fixture, "build"]], (r) => {
+      r.changed(fixture);
+      const got = r.commit("build", [fixture]);
+
+      expect(got.code, got.text).toBe(3);
+      expect(got.text).toContain("a build may not commit exam paths");
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      expect(r.signs()).toEqual([]);
+    });
+  });
+
+  // F4. Any step name outside the five exits 2 and commits nothing. Plant: let any step name through.
+  it("F4 an unknown step exits 2 and commits nothing", () => {
+    const valid = new Set(["tests", "build", "mutation", "lead", "fix"]);
+
+    fc.assert(
+      fc.property(
+        fc.oneof(word, fc.stringMatching(/^[A-Z][a-zA-Z]{0,8}$/)).filter((step) => !valid.has(step)),
+        (step) =>
+          withRepo([["src/owned.ts", "build"]], (r) => {
+            r.changed("src/owned.ts");
+            const got = r.call("sh", [script, step, "321", "T321 fix: fixture", "src/owned.ts"]);
+
+            expect(got.code, got.text).toBe(2);
+            expect(got.text).toContain("unknown step");
+            expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+            expect(r.published()).toEqual([]);
+          }),
+      ),
+      {
+        ...options,
+        seed: 119120,
+        // numRuns covers every pinned example, or fast-check drops the ones past it.
+        numRuns: 8,
+        examples: [["fixes"], ["Fix"], ["review"], [""]],
+      },
+    );
+  });
+
+  // F5. A fix commit is pushed like a signed one, and a refused push is exit 6 with the commit made
+  // and nothing claimed as signed. --commit-only and a box's own commit push nothing. Plants: say
+  // "signed" for fix; pass when the push fails; push on --commit-only or in a box.
+  it("F5 scenario: a fix commit whose push fails exits 6 with the commit made and no claim it was signed", () => {
+    withRepo([["src/owned.ts", "build"]], (r) => {
+      r.env.T134_PUBLISH = "fail";
+      r.changed("src/owned.ts");
+      const got = r.commit("fix", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(6);
+      expect(got.text).toContain("committed, but not pushed (0134)");
+      expect(got.text).not.toContain("signed");
+      expect(got.text).toContain("publish.ts fabrikalfa/one");
+      expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
+      expect(r.signs()).toEqual([]);
+    });
+  });
+
+  it("F5 scenario: --commit-only and a box's commit make the fix commit and push nothing", () => {
+    each(["commit-only", "box"] as const, (route) =>
+      withRepo([["src/owned.ts", "build"]], (r) => {
+        r.env.T134_PUBLISH = "fail";
+
+        if (route === "box") {
+          r.env.STEPCOMMIT_BOX = "one";
+        }
+
+        r.changed("src/owned.ts");
+        const got = r.commit("fix", ["src/owned.ts"], route === "commit-only");
+
+        expect(got.code, got.text).toBe(0);
+        expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([]);
+      }),
+    );
   });
 });

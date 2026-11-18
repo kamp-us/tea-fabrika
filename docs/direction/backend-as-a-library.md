@@ -1,3 +1,8 @@
+---
+state: "decided"
+summary: "Typed services that code imports, not a command-line tool that agents call."
+---
+
 # The backend is a library
 
 Decided 2026-10-10.
@@ -51,7 +56,7 @@ skill that was never a table.
   which are today's fabrika behind the wrapper.
 - **Build the fake first** (decided 2026-10-04, the first commit). Every agent
   and outside service sits behind a small contract, and its scripted version
-  is written before the real one. A whole lane can run with no model and no
+  is written before the real one. A whole quest can run with no model and no
   network.
 
 The first draft of the services, written from run logs, was `docs/fabrika-sdk.md`; it is on the

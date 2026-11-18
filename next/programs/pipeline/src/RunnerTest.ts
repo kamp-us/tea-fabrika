@@ -1,9 +1,24 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import { runsFor } from "@kampus/vitest";
+import {
+  Array as Arr,
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Formatter,
+  Logger,
+  Match,
+  Redacted,
+  Schema,
+} from "effect";
+import type { Scope, Tracer } from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 
 type Model = ReturnType<typeof merger>["machine"]["model"]["Type"];
+
 type Saved = { readonly name: string; readonly at: number };
 
 type Fault<R> =
@@ -35,7 +50,7 @@ export type World = {
   readonly reopen: Effect.Effect<void, unknown>;
   readonly fire: Effect.Effect<void, unknown>;
   readonly green: Effect.Effect<void>;
-  readonly deliver: (input: unknown) => Effect.Effect<unknown, unknown>;
+  readonly deliver: (input: typeof Mail.Land.Type | typeof Mail.Abandon.Type) => Effect.Effect<unknown, unknown>;
   readonly land: (ref: string) => Effect.Effect<unknown, unknown>;
   readonly savedReplies: Effect.Effect<ReadonlyArray<unknown>, unknown>;
 };
@@ -49,7 +64,7 @@ export type Driver = {
 const NAME = "merger:1";
 
 const replies = Effect.fnUntraced(function* (h: World) {
-  return (yield* h.current().letters("queue")).map((letter) => Schema.decodeUnknownSync(Mail.Reply)(letter.m));
+  return Arr.map(yield* h.current().letters("queue"), (letter) => Schema.decodeUnknownSync(Mail.Reply)(letter.m));
 });
 
 const finish = Effect.fnUntraced(function* (h: World) {
@@ -80,14 +95,14 @@ const secret = Arbitrary.schema(
 ).pipe(
   Arbitrary.map(({ prefix, body, form }) => {
     const token = `${prefix}${body}`;
+
     return {
       token,
-      text:
-        form === "token"
-          ? token
-          : form === "bearer"
-            ? `Bearer ${token}`
-            : `https://invalid.test/auth?access_token=${token}`,
+      text: Match.value(form).pipe(
+        Match.when("token", () => token),
+        Match.when("bearer", () => `Bearer ${token}`),
+        Match.orElse(() => `https://invalid.test/auth?access_token=${token}`),
+      ),
     };
   }),
 );
@@ -129,7 +144,7 @@ export const suite = (driver: Driver) =>
         expect(yield* h.alarms.saved).toEqual(before);
         yield* h.green;
         yield* h.fire;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(1);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge")).toHaveLength(1);
         expect(yield* replies(h)).toHaveLength(1);
       }),
     );
@@ -147,20 +162,23 @@ export const suite = (driver: Driver) =>
         expect((yield* h.host.read(1))?.state).toBe("merged");
         expect(yield* replies(h)).toEqual([]);
         yield* h.reopen;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(1);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge")).toHaveLength(1);
         yield* h.fire;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(2);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge")).toHaveLength(2);
         expect((yield* replies(h))[0]?._tag).toBe("merged");
         expect((yield* replies(h))[0]?.ref).toBe("r3");
         expect(yield* replies(h)).toHaveLength(1);
       }),
     );
+
     type Real = { h: World; inspect: Effect.Effect<void, unknown>; token: Redacted.Redacted<string> };
+
     const Cell = Schema.Struct({
       pick: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
       reason: Schema.Literals(["unavailable", "rate_limited", "refused"]),
       move: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     });
+
     const step = Effect.fnUntraced(function* (cell: typeof Cell.Type, m: { n: number }, r: Real) {
       const state = yield* r.h.current().model;
 
@@ -185,6 +203,7 @@ export const suite = (driver: Driver) =>
           "green",
           "crash",
         ];
+
         const move = possible[cell.move % possible.length];
 
         if (move === "reopen") {
@@ -203,13 +222,11 @@ export const suite = (driver: Driver) =>
             );
           } else {
             yield* r.h.host.fail(
-              state._tag === "reading"
-                ? cell.pick % 3 === 0
-                  ? "update"
-                  : "change"
-                : state._tag === "updating"
-                  ? "update"
-                  : "merge",
+              Match.value(state).pipe(
+                Match.tag("reading", () => (cell.pick % 3 === 0 ? ("update" as const) : ("change" as const))),
+                Match.tag("updating", () => "update" as const),
+                Match.orElse(() => "merge" as const),
+              ),
               cell.pick % 2 === 0 ? { kind: "fault", reason: cell.reason } : { kind: "defect" },
             );
           }
@@ -233,15 +250,18 @@ export const suite = (driver: Driver) =>
 
       yield* r.inspect;
     });
+
     const once = Effect.fnUntraced(function* (
       value: typeof secret extends Arbitrary.Arbitrary<infer A> ? A : never,
       commands: ReadonlyArray<typeof Cell.Type>,
     ) {
       const captured = driver.capture();
       const logs: Array<string> = [];
+
       const logger = Logger.map(Logger.formatSimple, (line) => {
         logs.push(line);
       });
+
       yield* Effect.gen(function* () {
         const h = yield* driver.open(Redacted.make(value.text));
         yield* h.host.fail("update", { kind: "fault", reason: "unavailable" });
@@ -252,26 +272,28 @@ export const suite = (driver: Driver) =>
         yield* h.ci.fail("at", { kind: "defect" });
         yield* h.land("initial");
         yield* h.land("busy");
+
         const inspect = Effect.gen(function* () {
           const letters = [...(yield* h.current().letters(NAME)), ...(yield* h.current().letters("queue"))];
           const checkpoint = yield* h.current().checkpoint;
           const savedReplies = yield* h.savedReplies;
           driver.unleaked(
             [
-              JSON.stringify(letters),
-              JSON.stringify(checkpoint),
-              JSON.stringify(savedReplies),
+              Formatter.formatJson(letters),
+              Formatter.formatJson(checkpoint),
+              Formatter.formatJson(savedReplies),
               ...captured.text(),
               ...logs,
             ],
             [value.text, value.token, encodeURIComponent(value.text)],
           );
         });
+
         // Drain the scripted failures through the saved alarms before the random walk can abandon.
         yield* inspect;
         yield* finish(h);
         yield* inspect;
-        const failures = (yield* h.current().letters(NAME)).map((letter) => letter.m);
+        const failures = Arr.map(yield* h.current().letters(NAME), (letter) => letter.m);
 
         for (const reason of ["unavailable", "handler_failed"]) {
           expect(failures).toContainEqual(
@@ -286,6 +308,7 @@ export const suite = (driver: Driver) =>
         yield* inspect;
         const walking = yield* driver.open(Redacted.make(value.text));
         yield* walking.land("walking");
+
         const walk: Real = {
           h: walking,
           token: Redacted.make(value.text),
@@ -293,10 +316,10 @@ export const suite = (driver: Driver) =>
             Effect.gen(function* () {
               driver.unleaked(
                 [
-                  JSON.stringify(yield* walk.h.current().checkpoint),
-                  JSON.stringify(yield* walk.h.current().letters(NAME)),
-                  JSON.stringify(yield* walk.h.current().letters("queue")),
-                  JSON.stringify(yield* walk.h.savedReplies),
+                  Formatter.formatJson(yield* walk.h.current().checkpoint),
+                  Formatter.formatJson(yield* walk.h.current().letters(NAME)),
+                  Formatter.formatJson(yield* walk.h.current().letters("queue")),
+                  Formatter.formatJson(yield* walk.h.savedReplies),
                   ...captured.text(),
                   ...logs,
                 ],
@@ -305,6 +328,7 @@ export const suite = (driver: Driver) =>
             }),
           ),
         };
+
         const model = { n: 0 };
 
         for (const command of commands) {
@@ -322,9 +346,9 @@ export const suite = (driver: Driver) =>
           yield* finish(final);
           driver.unleaked(
             [
-              JSON.stringify(yield* final.current().checkpoint),
-              JSON.stringify(yield* final.current().letters(NAME)),
-              JSON.stringify(yield* final.current().letters("queue")),
+              Formatter.formatJson(yield* final.current().checkpoint),
+              Formatter.formatJson(yield* final.current().letters(NAME)),
+              Formatter.formatJson(yield* final.current().letters("queue")),
               ...captured.text(),
               ...logs,
             ],
@@ -333,17 +357,18 @@ export const suite = (driver: Driver) =>
         }
 
         yield* inspect;
-        const spans = captured.text().join("\n");
+        const spans = Arr.join(captured.text(), "\n");
         expect(spans).toContain("fab.change");
         expect(spans).toContain("fab.head");
         expect((yield* h.current().letters(NAME)).length).toBeGreaterThan(0);
-        expect((yield* h.savedReplies).some((reply) => reply !== null)).toBe(true);
+        expect(Arr.some(yield* h.savedReplies, (reply) => reply !== null)).toBe(true);
       }).pipe(Effect.withTracer(captured.tracer), Effect.provide(Logger.layer([logger])));
     });
+
     it.effect.prop(
       "S1: [secrets] generated service failures stay out of every durable record, span and log",
       [secret, Arbitrary.array(Arbitrary.schema(Cell), { maxLength: 24 })],
       ([value, commands]) => Effect.scoped(once(value, commands)),
-      { arbitrary: { seed: 119120, runs: 40, size: 24 } },
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 4, full: 40 }), size: 24 } },
     );
   });

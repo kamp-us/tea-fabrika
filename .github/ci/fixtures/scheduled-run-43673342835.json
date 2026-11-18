@@ -1,0 +1,733 @@
+{
+  "needs": {
+    "next": {
+      "result": "cancelled",
+      "outputs": {}
+    },
+    "tooling": {
+      "result": "cancelled",
+      "outputs": {}
+    }
+  },
+  "jobs": {
+    "jobs": [
+      {
+        "conclusion": "cancelled",
+        "name": "tooling (2)",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "tooling tests",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "time table",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "timings",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "stop the run",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "success",
+        "name": "next (3)",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "vitest",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "chromium",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "end to end",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "time table",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "timings",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "stop the run",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "success",
+        "name": "tooling (1)",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "tooling tests",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "time table",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "timings",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "stop the run",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "success",
+        "name": "next (1)",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "vitest",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "chromium",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "end to end",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "time table",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "timings",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "stop the run",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "success",
+        "name": "next (e2e-2)",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "vitest",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "chromium",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "end to end",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "time table",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "timings",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "stop the run",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "success",
+        "name": "next (e2e-1)",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "vitest",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "chromium",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "end to end",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "time table",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "timings",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "stop the run",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "cancelled",
+        "name": "next (2)",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "failure",
+            "name": "vitest",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "chromium",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "end to end",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "time table",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "timings",
+            "status": "completed"
+          },
+          {
+            "conclusion": "cancelled",
+            "name": "stop the run",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "success",
+        "name": "next (5)",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "vitest",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "chromium",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "end to end",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "time table",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "timings",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "stop the run",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": "success",
+        "name": "next (4)",
+        "status": "completed",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "vitest",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "chromium",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "end to end",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "time table",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "timings",
+            "status": "completed"
+          },
+          {
+            "conclusion": "skipped",
+            "name": "stop the run",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run ./.github/actions/pnpm",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Complete job",
+            "status": "completed"
+          }
+        ]
+      },
+      {
+        "conclusion": null,
+        "name": "report",
+        "status": "in_progress",
+        "steps": [
+          {
+            "conclusion": "success",
+            "name": "Set up job",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "Run actions/checkout@v7",
+            "status": "completed"
+          },
+          {
+            "conclusion": "success",
+            "name": "results",
+            "status": "completed"
+          },
+          {
+            "conclusion": null,
+            "name": "report",
+            "status": "in_progress"
+          }
+        ]
+      }
+    ],
+    "total_count": 10
+  },
+  "reports": [
+    {
+      "testResults": [
+        {
+          "name": "/work/repo/next/packages/libfabrika/src/node/ProgramMailReads.integration.test.ts",
+          "status": "failed",
+          "assertionResults": [
+            {
+              "fullName": "T936 slice 1: a delivery reads the same rows whatever the history L1: a new delivery returns as many rows after h earlier letters to the same target as after none",
+              "status": "failed"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

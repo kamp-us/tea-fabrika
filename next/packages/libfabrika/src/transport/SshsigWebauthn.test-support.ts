@@ -1,0 +1,12 @@
+// The recorded passkey vector that SshsigWebauthn.test.ts and SshsigWebauthn.integration.test.ts
+// share: a real Chromium 156 assertion from experiment 230, its key line and its armor.
+
+export const SPACE = "fabrika-client";
+
+export const text = "P10 passkey SSHSIG spike\n";
+
+export const line =
+  "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBGEPo5ySi5t5pOwiGQ+WSY3J3s/zKtn06TmL1fMrSNmurpZ9v7/OjqBjuUe2pidsbivMig9u4oyTDcApCEQJE1oAAAAMZmFicmlrYS50ZXN0";
+
+export const realArmor =
+  "-----BEGIN SSH SIGNATURE-----\nU1NIU0lHAAAAAQAAAIcAAAAic2stZWNkc2Etc2hhMi1uaXN0cDI1NkBvcGVuc3NoLmNvbQ\nAAAAhuaXN0cDI1NgAAAEEEYQ+jnJKLm3mk7CIZD5ZJjcnez/Mq2fTpOYvV8ytI2a6uln2/\nv86OoGO5R7amJ2xuK8yKD27ijJMNwCkIRAkTWgAAAAxmYWJyaWthLnRlc3QAAAAOZmFicm\nlrYS1jbGllbnQAAAAAAAAABnNoYTUxMgAAAYoAAAArd2ViYXV0aG4tc2stZWNkc2Etc2hh\nMi1uaXN0cDI1NkBvcGVuc3NoLmNvbQAAAEoAAAAhANVTo/thhYAu0D8LJl6iukYHc8bZX2\nu9Ja2sv9PJMY2JAAAAIQC93CWItR64zeSMh+CkAQ31AC/mHRQrOG3gIdz/ZEmcgx0AAAAA\nAAAAFGh0dHBzOi8vZmFicmlrYS50ZXN0AAAA6HsidHlwZSI6IndlYmF1dGhuLmdldCIsIm\nNoYWxsZW5nZSI6IlUxTklVMGxIQUFBQURtWmhZbkpwYTJFdFkyeHBaVzUwQUFBQUFBQUFB\nQVp6YUdFMU1USUFBQUJBTE9kSFltTjBySENnal95eTB5dkNIZTB4azVtLW5tYWlVVWNQYX\nQ5c3ZXM0ROcm1wcmdQbDRGbnZKTm05N1VDdlF4RGFIblZXNE14QlBTUGVCMU02QmciLCJv\ncmlnaW4iOiJodHRwczovL2ZhYnJpa2EudGVzdCIsImNyb3NzT3JpZ2luIjpmYWxzZX0AAA\nAA\n-----END SSH SIGNATURE-----\n";

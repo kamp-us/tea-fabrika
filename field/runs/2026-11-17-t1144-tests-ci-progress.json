@@ -1,0 +1,130 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1144-tests-ci-progress",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": null,
+  "started": "2026-11-17T03:37:28-08:00",
+  "ended": "2026-11-17T04:57:56-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling, tracker 1144, tests-owned construction under approved plan body 4ee162ed24b7. Added a metadata-only awaited Vitest callback journal, independent timing collection, strict partial-prefix reading and grouped ambiguous hooks. Wired exactly four scheduled commands and the approved changed LEG line. This records last observations and never diagnoses the historical timeout. Local construction is complete; the lead owns the compiler, full lint, disposable process-signal proof and review. No protected fixture was run here.",
+  "note": "258 safe tests passed: progress 5, time-table 8, scheduled 245. Shared seed setup inherited unchanged from main c18d5f7caf1e220d9dda0b8ac3974bc49d402f3d. Scoped formatting and lint passed; workflow-lint reported zero errors. Ten deliberate local faults failed assertions and were restored. An earlier reporter-omission fault stayed green because a test mutation left extra whitespace; that attempt is preserved and uncredited, then the corrected control failed. Independent generated checks also exposed and fixed traversal, signed32 ID and ambiguous hook FIFO bugs. No compiler, whole-repo lint, broad test run, real process signal, overhead measurement, signing, push or CI dispatch in this step. Two protected scenarios and the P8 buffering fault require disposable CI before review.",
+  "laws": [
+    {
+      "law": ".github/ci/progress.test.ts:50 P2 independent starts survive every concurrent prefix, including indistinguishable overlapping hooks",
+      "proof": "green; planned deliberate fault caught as recorded in plants"
+    },
+    {
+      "law": ".github/ci/progress.test.ts:171 P4 stale headers and damaged journals preserve only trusted observations and remain explicitly incomplete",
+      "proof": "green; planned deliberate fault caught as recorded in plants"
+    },
+    {
+      "law": ".github/ci/progress.test.ts:273 [secrets] P5 callback projection drops titles, private values and machine paths from journal, artifact and Markdown",
+      "proof": "green; planned deliberate fault caught as recorded in plants"
+    },
+    {
+      "law": ".github/ci/progress.test.ts:400 P1 and P9 each public callback awaits one append without reading or replaying the prior journal",
+      "proof": "green; planned deliberate fault caught as recorded in plants"
+    },
+    {
+      "law": ".github/ci/progress.test.ts:553 [secrets] P6 append failures never escape callbacks and later writes reveal the missed sequence",
+      "proof": "green; planned deliberate fault caught as recorded in plants"
+    },
+    {
+      "law": ".github/ci/progress-reporter.integration.test.ts:229 scenario: P8 installed callbacks survive a ready-observed SIGKILL before final JSON, while normal and timed-out verdicts stay real",
+      "proof": "not run here; disposable CI required"
+    },
+    {
+      "law": ".github/ci/time-table.test.ts:413 P3 missing or broken final results preserve independent progress and never invent file timings",
+      "proof": "green; planned deliberate fault caught as recorded in plants"
+    },
+    {
+      "law": ".github/ci/workflow-lint/scheduled.test.ts:1067 P7 every scheduled test command requires its progress reporter and existing reporters and changed leg identity",
+      "proof": "green; planned deliberate fault caught as recorded in plants"
+    }
+  ],
+  "plants": [
+    {
+      "law": "P1-buffer",
+      "plant": ".github/ci/progress-reporter.ts: buffer event records until run end",
+      "result": "red"
+    },
+    {
+      "law": "P2-last-worker",
+      "plant": ".github/ci/progress.ts: retain only the last worker activity",
+      "result": "red"
+    },
+    {
+      "law": "P3-final-gate",
+      "plant": ".github/ci/time-table.ts: require final JSON before reading progress",
+      "result": "red"
+    },
+    {
+      "law": "P4-stale",
+      "plant": ".github/ci/progress.ts: accept mismatched run identity",
+      "result": "red"
+    },
+    {
+      "law": "P5-journal",
+      "plant": ".github/ci/progress-reporter.ts: add the raw module path to event output",
+      "result": "red"
+    },
+    {
+      "law": "P5-artifact",
+      "plant": ".github/ci/time-table.ts: add the raw root to artifact output",
+      "result": "red"
+    },
+    {
+      "law": "P5-markdown",
+      "plant": ".github/ci/time-table.ts: serialize rich input in Markdown",
+      "result": "red"
+    },
+    {
+      "law": "P6-escape",
+      "plant": ".github/ci/progress-reporter.ts: remove advisory write-error handling",
+      "result": "red"
+    },
+    {
+      "law": "P7-reporter",
+      "plant": ".github/ci/workflow-lint/scheduled.ts: remove and normalize away the reporter requirement",
+      "result": "red"
+    },
+    {
+      "law": "P9-growing-write",
+      "plant": ".github/ci/progress-reporter.ts: serialize prior journal history in every new record",
+      "result": "red"
+    }
+  ],
+  "uncaughtAttempts": [
+    {
+      "law": "P7-reporter",
+      "result": "green",
+      "reason": "Initial negative input retained extra whitespace and remained rejected for a different reason; corrected once-only control failed."
+    }
+  ],
+  "sourceHashes": {
+    ".github/ci/progress.ts": "95a46207f22783e4b7db31058b976cb2e33b3f864bc33c12fae4eab6385d3e1e",
+    ".github/ci/progress-reporter.ts": "ae54f3ee16552a4d0655d12b6c2c5af5a98eeb56040fcb95d7d6881b3a57d5e8",
+    ".github/ci/progress.test.ts": "6b277464abf286d87eb0efe20839727ce7d2da542f7eae7aa673373e9b11337d",
+    ".github/ci/progress-reporter.integration.test.ts": "a730a605310ac66f0ea7ced334f1b1aa6b405a33cf921ebd43f191f5721ced9b",
+    ".github/ci/time-table.ts": "a9d674ef4bc8c3395deb0d3e14fbcdb94181f45cc733abd1e6a693ee628f8ee7",
+    ".github/ci/time-table.test.ts": "86d3d5518813915da12f232b8360b1e215acec82767ad7d2971fe99bdf81e2ed",
+    ".github/ci/workflow-lint/scheduled.ts": "fd35c4e938839a73b42a7043a0ccfb13a628e4b5c96756f8702e01dabc76fdb1",
+    ".github/ci/workflow-lint/scheduled.test.ts": "24be554d861a9f9b4013d28939c3878afa2e53b7c4326e36b40c2b6b7bb4a2f0",
+    ".github/workflows/scheduled.yaml": "3e3e4a2dd4e4271c053bdb9ef102b1830563ff08df2404339768666819e7cca2"
+  },
+  "base": "c18d5f7caf1e220d9dda0b8ac3974bc49d402f3d",
+  "tokens": null,
+  "tools": null,
+  "minutes": 80.47,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}

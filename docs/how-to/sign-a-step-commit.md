@@ -76,7 +76,7 @@ pnpm commits sign --step tests --ticket 229 --key ~/.fabrika/step-keys/tests
 
 Since [0134](../../.decisions/0134-no-code-stays-only-on-a-local-branch.md), `stepcommit.sh` pushes
 each commit it signs, with a draft pull request when the branch has none, through
-`.agents/skills/lead/scripts/publish.ts`, and a lane pushes each box's commit from the host. By
+`.agents/skills/lead/scripts/publish.ts`, and a quest pushes each box's commit from the host. By
 hand, the lead pushes, notes first, so the check finds every note:
 
 ```sh
@@ -89,7 +89,7 @@ pushed after the branch starts no new run: re-run the job.
 
 **Catch up by merging `main` in, never by rebasing.** A rebased commit's note no longer fits its
 trees and reads `unsigned_commit`. The merge is the lead's commit, so the lead session signs it,
-most often through `land.ts run` or `catchup.sh` (a lane agent stops at `land.ts ready`, ticket 652):
+most often through `land.ts run` (a quest agent stops at `land.ts ready`, ticket 652):
 
 ```sh
 git merge --no-edit origin/main
@@ -104,7 +104,7 @@ pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 | `ask exam_read` | send the owner one line with the paths; merge after the yes. A merge before the owner's read gets a field note ([tier 1](../plan/tier-1.md)) |
 | `stuck unsigned_commit` | sign the commit with your listed person key, or add a fitting note with its step's key |
 | `stuck build_touched_exam` | a builder changed the exam: the change goes back to the test writer |
-| `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the lane again on a new branch from the last head whose list reads |
+| `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the quest again on a new branch from the last head whose list reads |
 | `stuck stale_link` | a step's newest link is not the last of its links on the branch: use it, or sign again |
 | `stuck broken_chain` | after the merge only: the logged links have a gap, or do not reach the head's tree. A branch behind `main` is never `broken_chain` ([0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md) changed it) |
 

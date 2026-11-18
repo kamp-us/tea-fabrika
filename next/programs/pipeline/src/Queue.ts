@@ -1,7 +1,7 @@
 import type { Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { CodeHost, Program, Send, StartChild, Started, type Refusal } from "@kampus/libfabrika";
-import { Schema } from "effect";
+import { Array as Arr, Record as Rec, Schema } from "effect";
 import { Abandon, Drop, Enqueue, Reply, Resume } from "./Mail.ts";
 import type { Values } from "./Settings.ts";
 
@@ -21,17 +21,22 @@ const Stop = Schema.TaggedUnion({
 });
 
 const counts = { attempt: Count, late: Count };
+
 const line = { ...counts, line: Schema.Array(Entry) };
 
 const Model = Schema.TaggedUnion({
   idle: counts,
   starting: { ...line, current: Current },
-  landing: { ...line, current: Current, since: Schema.Number },
+  landing: { ...line, current: Current, since: Schema.Finite },
   stopped: { ...line, reason: Stop },
 });
+
 type Model = typeof Model.Type;
+
 type Entry = typeof Entry.Type;
+
 type Command = ReturnType<typeof StartChild.startChild | typeof Send.send>;
+
 type Cell = readonly [Model, ReadonlyArray<Command>];
 
 const answers = <const N extends string, F extends Schema.Struct.Fields, O extends Schema.Top, const T extends string>(
@@ -41,13 +46,14 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
   tags: ReadonlyArray<T>,
 ) => {
   const cmd = input.mapFields((fields) => ({ ...fields, type: Schema.Literal(name) }));
+
   return Schema.Union([
-    Schema.Struct({ type: Schema.Literal(`${name}_ok`), cmd, value: ok, at: Schema.Number }),
+    Schema.Struct({ type: Schema.Literal(`${name}_ok`), cmd, value: ok, at: Schema.Finite }),
     Schema.Struct({
       type: Schema.Literal(`${name}_err`),
       cmd,
-      error: Schema.Union(tags.map((tag) => Schema.TaggedStruct(tag, {}))),
-      at: Schema.Number,
+      error: Schema.Union(Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {}))),
+      at: Schema.Finite,
     }),
   ]);
 };
@@ -65,7 +71,7 @@ const Msg = Schema.Union([
     type: Schema.Literal("start_child_err"),
     cmd: Schema.Struct({ type: Schema.Literal("start_child") }),
     reason: Schema.Literals([...StartChild.StartRefusal.literals, "bad_cmd"]),
-    at: Schema.Number,
+    at: Schema.Finite,
   }),
   answers("send", Send.SendInput, Send.Queued, Send.send.errTags),
 ]);
@@ -77,7 +83,8 @@ const forward = (entry: Entry, reply: typeof Reply.Type): ReadonlyArray<Command>
 
 /** One queue, registered under the same name its host supplies here. */
 export const queue = ({ name, settings }: { readonly name: string; readonly settings: Values }) => {
-  const unset = Object.values(settings.checks).every((checks) => checks.length === 0);
+  const unset = Arr.every(Rec.values(settings.checks), (checks) => checks.length === 0);
+
   const next = (s: Pick<Model, "attempt" | "late">, line: ReadonlyArray<Entry>): Cell => {
     const [entry, ...rest] = line;
 
@@ -87,6 +94,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
 
     const attempt = s.attempt + 1;
     const current = { ...entry, name: `merger:${entry.change}.${attempt}` };
+
     return [
       Model.cases.starting.make({ attempt, late: s.late, current, line: rest }),
       [
@@ -98,6 +106,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       ],
     ];
   };
+
   const refuse = (s: Model, m: Message): Refusal | null => {
     const line = s._tag === "idle" ? [] : s.line;
     const current = s._tag === "starting" || s._tag === "landing" ? s.current : null;
@@ -107,7 +116,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
         return { reason: "unset" };
       }
 
-      if (current?.change === m.change || line.some((entry) => entry.change === m.change)) {
+      if (current?.change === m.change || Arr.some(line, (entry) => entry.change === m.change)) {
         return { reason: "queued" };
       }
 
@@ -117,7 +126,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
     }
 
     if (m.type === "drop") {
-      if (current?.change !== m.change && !line.some((entry) => entry.change === m.change)) {
+      if (current?.change !== m.change && !Arr.some(line, (entry) => entry.change === m.change)) {
         return { reason: "missing" };
       }
 
@@ -128,6 +137,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
 
     return m.type === "resume" && s._tag !== "stopped" ? { reason: "running" } : null;
   };
+
   const reduce = (s: Model, m: Message): Cell => {
     if (m.type === "send_ok" || m.type === "send_err") {
       return [s, []];
@@ -139,6 +149,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
 
     if (m.type === "enqueue") {
       const entry = Entry.make({ change: m.change, head: m.head, reply: m.reply ?? null });
+
       return s._tag === "idle" ? next(s, [entry]) : [{ ...s, line: [...s.line, entry] }, []];
     }
 
@@ -194,6 +205,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       }
 
       const [model, commands] = next(s, s.line);
+
       return [model, [...sent, ...commands]];
     }
 
@@ -202,14 +214,17 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
         return [s, [Send.send({ to: s.current.name, m: Abandon.make({ type: "abandon", ref: String(s.attempt) }) })]];
       }
 
-      const sent = s.line
-        .filter((entry) => entry.change === m.change)
-        .flatMap((entry) => forward(entry, Reply.cases.abandoned.make({ ref: "dropped", change: entry.change })));
-      return [{ ...s, line: s.line.filter((entry) => entry.change !== m.change) }, sent];
+      const sent = Arr.flatMap(
+        Arr.filter(s.line, (entry) => entry.change === m.change),
+        (entry: Entry) => forward(entry, Reply.cases.abandoned.make({ ref: "dropped", change: entry.change })),
+      );
+
+      return [{ ...s, line: Arr.filter(s.line, (entry) => entry.change !== m.change) }, sent];
     }
 
     return m.type === "resume" && s._tag === "stopped" ? next(s, s.line) : [s, []];
   };
+
   const machine = Machine.make({
     model: Model,
     msg: Msg,
@@ -226,6 +241,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
       send_err: reduce,
     },
   });
+
   return Program.make({
     name: "pipeline/queue",
     machine,
@@ -237,7 +253,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
           ? { change: s.current.change, head: s.current.head, name: s.current.name }
           : null,
       since: s._tag === "landing" ? s.since : null,
-      line: s._tag === "idle" ? [] : s.line.map(({ change, head }) => ({ change, head })),
+      line: s._tag === "idle" ? [] : Arr.map(s.line, ({ change, head }) => ({ change, head })),
       attempt: s.attempt,
       late: s.late,
       reason: s._tag === "stopped" ? s.reason : null,

@@ -97,6 +97,7 @@ const environment = (key: "DO_NOT_TRACK" | "ALCHEMY_HOME", value: string) =>
     Effect.sync(() => {
       const previous = process.env[key];
       process.env[key] = value;
+
       return previous;
     }),
     (previous) =>
@@ -126,6 +127,7 @@ export const startWorker = Effect.fn("emailExam.startWorker")(function* (
   const emailKey = yield* testKey(fixture.seed);
   yield* fs.writeFileString(main, wrapper(built.brain, fixture, emailKey.line));
   const founder = yield* testKey(Array.from({ length: 32 }, (_, n) => n));
+
   const settings = Settings.make({
     name: "p36-test",
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
@@ -135,6 +137,7 @@ export const startWorker = Effect.fn("emailExam.startWorker")(function* (
     build: built.build,
     rateLimit: { limit: 100_000, window: 60_000 },
   });
+
   const stack = Alchemy.Stack(
     "p36-exam",
     { providers: Cloudflare.providers(), state: Alchemy.localState() },
@@ -144,6 +147,7 @@ export const startWorker = Effect.fn("emailExam.startWorker")(function* (
         lifecycleRules: [],
         locks: [],
       });
+
       const worker = yield* Cloudflare.Workers.Worker("EmailExam", {
         name: "p36-test",
         main,
@@ -162,9 +166,11 @@ export const startWorker = Effect.fn("emailExam.startWorker")(function* (
           INSTANCE: JSON.stringify(settings),
         },
       });
+
       return { url: worker.url };
     }),
   );
+
   // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
   yield* deploy({ stack, stage: "local", dev: true, scope: yield* Effect.scope }).pipe(
     Effect.provide(localState()),
@@ -177,5 +183,6 @@ export const startWorker = Effect.fn("emailExam.startWorker")(function* (
       ),
     ),
   );
+
   return `http://127.0.0.1:${port.port}`;
 });

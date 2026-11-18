@@ -3,11 +3,16 @@
 // succeeds. Nothing here reads a clock, a store or a service (0037, 0046).
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import { ExitReason } from "../../processes/ExitReason.ts";
 import { From } from "../../processes/Mailbox.ts";
 import { canRestart, Start } from "../../processes/Process.ts";
 import { ProcessId } from "../../ProcessId.ts";
+import { Checkpoint } from "../ProcessStore.ts";
 import { AttemptFields, Count, Deliveries, Failure, Millis, Observation, Policy, Receipt, Text } from "./recovery.ts";
+import { Reply } from "./reply.ts";
 
 /** @internal */
 export { Policy };
@@ -21,7 +26,11 @@ export const defaultPolicy: Policy = {
 };
 
 const Attempt = Schema.Struct({ ...AttemptFields, phase: Schema.Literals(["fresh", "saved"]), at: Millis });
+
+const FreshAttempt = Schema.Struct({ ...Attempt.fields, phase: Schema.Literal("fresh") });
+
 const RestartRequest = Schema.Struct({ id: Text, build: Text });
+
 const DownRecord = Schema.Struct({ process: ProcessId, reason: Text, crashes: Count, until: Millis });
 
 /** Why a process is being replaced: a captured crash, or a person's restart request. */
@@ -29,13 +38,42 @@ const Origin = Schema.TaggedUnion({
   crash: { failure: Failure, reason: ExitReason },
   manual: { request: RestartRequest },
 });
+
 type Origin = typeof Origin.Type;
 
 const StartTiming = Schema.TaggedUnion({ immediate: {}, scheduled: { until: Millis } });
 
+const CodeChange = Schema.Struct({
+  process: ProcessId,
+  load: Text,
+  program: Text,
+  was: Text,
+  checkpoint: Checkpoint,
+  from: Schema.Int,
+  ran: Schema.Array(Text),
+  origin: From,
+  pos: Millis,
+  view: Schema.Json,
+  wake: Schema.NullOr(Millis),
+  maxDeliveries: Schema.NullOr(Deliveries),
+}).check(
+  Schema.makeFilter(
+    (change) =>
+      (change.was !== change.checkpoint.saved.build &&
+        change.from <= change.checkpoint.saved.v &&
+        change.checkpoint.turn === null &&
+        change.origin.build === change.checkpoint.saved.build) ||
+      "a prepared swap keeps a new checkpoint and its build's origin",
+  ),
+);
+
 const Journal = Schema.TaggedUnion({
   idle: { process: ProcessId },
+  checking: { attempt: FreshAttempt },
   stepping: { attempt: Attempt },
+  swapping: { change: CodeChange },
+  writing_reply: { attempt: FreshAttempt, reply: Reply },
+  clearing_attempt: { attempt: Attempt },
   writing_dead: { failure: Failure.cases.fresh, reason: ExitReason, from: From },
   writing_exit: { process: ProcessId, origin: Origin, from: From },
   writing_down: { recovery: DownRecord, origin: Origin, from: From },
@@ -65,11 +103,24 @@ export const Supervision = Schema.Struct({
   Schema.makeFilter((s) => {
     const j = s.journal;
 
+    if (j._tag === "swapping") {
+      return s.build === j.change.was || "an unfinished swap keeps the previous build";
+    }
+
+    if (j._tag === "stepping" && j.attempt.phase === "fresh") {
+      return (
+        Arr.some(s.receipts, (r) => r.letter === j.attempt.letter && r.input !== null) ||
+        "fresh stepping keeps its admitted input"
+      );
+    }
+
     // Dead work names its exact fresh failure, so its terminal receipt must be that letter's own.
     if (j._tag === "writing_dead") {
       return (
-        s.receipts.some((r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null) ||
-        "dead work keeps its terminal receipt"
+        Arr.some(
+          s.receipts,
+          (r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null,
+        ) || "dead work keeps its terminal receipt"
       );
     }
 
@@ -105,6 +156,7 @@ export const Supervision = Schema.Struct({
     );
   }),
 );
+
 /** @internal */
 export type Supervision = typeof Supervision.Type;
 
@@ -112,10 +164,19 @@ const msg = <T extends string, F extends Schema.Struct.Fields>(type: T, fields: 
   Schema.Struct({ type: Schema.Literal(type), ...fields });
 
 const Msg = Schema.Union([
+  msg("swapped", { process: ProcessId, build: Text }),
+  msg("swap_prepared", { change: CodeChange }),
+  msg("swap_completed", { load: Text }),
   msg("received", { receipt: Receipt }),
   msg("compacted", { letter: Text, digest: Text }),
   msg("limited", { maxDeliveries: Schema.NullOr(Deliveries) }),
   msg("begin", { process: ProcessId, letter: Text, build: Text, phase: Attempt.fields.phase, at: Millis }),
+  msg("admitted", { seq: Count, receipt: Receipt }),
+  msg("refused", { seq: Count, reply: Reply }),
+  msg("reply_written", { seq: Count }),
+  msg("abandoned", { seq: Count }),
+  msg("attempt_cleared", { seq: Count }),
+  msg("check_threw", { seq: Count, receipt: Receipt, error: Text, reason: ExitReason, from: From }),
   msg("finished", { seq: Count }),
   msg("threw", { seq: Count, error: Text, reason: ExitReason, from: From }),
   msg("interrupted", { process: ProcessId, letter: Text, build: Text, reason: ExitReason, from: From, at: Millis }),
@@ -153,7 +214,7 @@ const DEAD = Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }).
 const unchanged = (s: Supervision) => [s, []] as const;
 
 const crashReason = (failure: Failure) =>
-  failure._tag === "saved" ? "saved_letter" : failure._tag === "fresh" ? "step" : "interrupted";
+  Failure.match(failure, { saved: () => "saved_letter", fresh: () => "step", interrupted: () => "interrupted" });
 
 /** The successor's start request, after the process that ended. */
 const again = (s: Supervision, id: string, after: string, reason: string, code: { program: string; hash: string }) =>
@@ -189,11 +250,64 @@ const waitingFor = (j: Supervision["journal"]): { after: string; origin: Origin 
       ? { after: j.request.after, origin: j.origin }
       : null;
 
+/** Check and update failures share one observation and delivery charge. */
+const failed = (
+  s: Supervision,
+  attempt: typeof Attempt.Type,
+  error: string,
+  reason: ExitReason,
+  from: From,
+): ReturnType<typeof unchanged> => {
+  const { phase, at, ...fields } = attempt;
+
+  const failure = (phase === "fresh" ? Failure.cases.fresh : Failure.cases.saved).make({
+    ...fields,
+    error,
+  });
+
+  const seen = { seq: attempt.seq, process: fields.process, letter: fields.letter, phase, error, at };
+
+  if (failure._tag !== "fresh") {
+    return [observe(s, failure, seen, exiting(failure, reason, from)), []];
+  }
+
+  const old = Option.getOrUndefined(Arr.findFirst(s.receipts, (r) => r.letter === failure.letter));
+
+  if (old === undefined) {
+    return unchanged(s);
+  }
+
+  // Observation and the fresh delivery's charge change together, in one saved step.
+  const errors = [...old.errors, error];
+  const terminal = errors.length >= (s.maxDeliveries ?? s.policy.maxDeliveries);
+
+  const receipt = {
+    ...old,
+    errors,
+    tries: errors.length,
+    process: failure.process,
+    result: terminal ? DEAD : null,
+  };
+
+  const journal = terminal
+    ? Journal.cases.writing_dead.make({ failure, reason, from })
+    : exiting(failure, reason, from);
+
+  return [
+    {
+      ...observe(s, failure, seen, journal),
+      receipts: Arr.map(s.receipts, (r) => (r.letter === failure.letter ? receipt : r)),
+    },
+    [],
+  ];
+};
+
 /** @internal */
 export const supervisor = Machine.make({
   model: Supervision,
   msg: Msg,
   cmds: [],
+  // SAFETY: `types` only carries the Ctx type; tea never reads this value at run time.
   types: { ctx: {} as Ctx },
   init: (saved, ctx) => [
     saved ??
@@ -214,16 +328,40 @@ export const supervisor = Machine.make({
     [],
   ],
   update: {
+    swap_prepared: (s, m) =>
+      s.journal._tag === "idle" && s.journal.process === m.change.process && s.build === m.change.was
+        ? [{ ...s, journal: Journal.cases.swapping.make({ change: m.change }) }, []]
+        : unchanged(s),
+    swap_completed: (s, m) => {
+      if (s.journal._tag !== "swapping" || s.journal.change.load !== m.load) {
+        return unchanged(s);
+      }
+
+      const { change } = s.journal;
+      const { maxDeliveries: _limit, ...kept } = s;
+
+      return [
+        {
+          ...kept,
+          build: change.checkpoint.saved.build,
+          journal: Journal.cases.idle.make({ process: change.process }),
+          ...(change.maxDeliveries === null ? {} : { maxDeliveries: change.maxDeliveries }),
+        },
+        [],
+      ];
+    },
+    swapped: (s, m) =>
+      s.journal._tag === "idle" && s.journal.process === m.process ? [{ ...s, build: m.build }, []] : unchanged(s),
     received: (s, m) =>
-      s.receipts.some((r) => r.letter === m.receipt.letter)
+      Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
         ? unchanged(s)
         : [{ ...s, receipts: [...s.receipts, m.receipt] }, []],
     compacted: (s, m) =>
-      s.receipts.some((r) => r.letter === m.letter && r.tries === 0 && r.input !== null)
+      Arr.some(s.receipts, (r) => r.letter === m.letter && r.tries === 0 && r.input !== null)
         ? [
             {
               ...s,
-              receipts: s.receipts.map((r) =>
+              receipts: Arr.map(s.receipts, (r) =>
                 r.letter === m.letter && r.tries === 0 ? { ...r, input: null, digest: m.digest } : r,
               ),
             },
@@ -236,6 +374,7 @@ export const supervisor = Machine.make({
       }
 
       const { maxDeliveries: _old, ...rest } = s;
+
       return [m.maxDeliveries === null ? rest : { ...rest, maxDeliveries: m.maxDeliveries }, []];
     },
     begin: (s, m) => {
@@ -245,7 +384,74 @@ export const supervisor = Machine.make({
 
       const { type: _type, ...fields } = m;
       const attempt = { ...fields, seq: s.seq + 1 };
-      return [{ ...s, seq: attempt.seq, journal: Journal.cases.stepping.make({ attempt }) }, []];
+
+      const journal =
+        m.phase === "fresh"
+          ? Journal.cases.checking.make({ attempt: FreshAttempt.make({ ...attempt, phase: "fresh" }) })
+          : Journal.cases.stepping.make({ attempt });
+
+      return [{ ...s, seq: attempt.seq, journal }, []];
+    },
+    admitted: (s, m) => {
+      const j = s.journal;
+
+      if (
+        j._tag !== "checking" ||
+        j.attempt.seq !== m.seq ||
+        j.attempt.letter !== m.receipt.letter ||
+        m.receipt.input === null
+      ) {
+        return unchanged(s);
+      }
+
+      const receipts = Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
+        ? s.receipts
+        : [...s.receipts, m.receipt];
+
+      return [{ ...s, receipts, journal: Journal.cases.stepping.make({ attempt: j.attempt }) }, []];
+    },
+    refused: (s, m) => {
+      const j = s.journal;
+
+      return j._tag === "checking" &&
+        j.attempt.seq === m.seq &&
+        m.reply.id === j.attempt.letter &&
+        m.reply.name === s.name
+        ? [{ ...s, journal: Journal.cases.writing_reply.make({ attempt: j.attempt, reply: m.reply }) }, []]
+        : unchanged(s);
+    },
+    reply_written: (s, m) =>
+      s.journal._tag === "writing_reply" && s.journal.attempt.seq === m.seq
+        ? [{ ...s, journal: Journal.cases.idle.make({ process: s.journal.attempt.process }) }, []]
+        : unchanged(s),
+    abandoned: (s, m) => {
+      const j = s.journal;
+
+      return (j._tag === "checking" || j._tag === "stepping") && j.attempt.seq === m.seq
+        ? [{ ...s, journal: Journal.cases.clearing_attempt.make({ attempt: j.attempt }) }, []]
+        : unchanged(s);
+    },
+    attempt_cleared: (s, m) =>
+      s.journal._tag === "clearing_attempt" && s.journal.attempt.seq === m.seq
+        ? [{ ...s, journal: Journal.cases.idle.make({ process: s.journal.attempt.process }) }, []]
+        : unchanged(s),
+    check_threw: (s, m) => {
+      const j = s.journal;
+
+      if (
+        j._tag !== "checking" ||
+        j.attempt.seq !== m.seq ||
+        m.receipt.letter !== j.attempt.letter ||
+        m.receipt.input === null
+      ) {
+        return unchanged(s);
+      }
+
+      const receipts = Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
+        ? s.receipts
+        : [...s.receipts, m.receipt];
+
+      return failed({ ...s, receipts }, j.attempt, m.error, m.reason, m.from);
     },
     finished: (s, m) =>
       s.journal._tag === "stepping" && s.journal.attempt.seq === m.seq
@@ -256,49 +462,14 @@ export const supervisor = Machine.make({
         return unchanged(s);
       }
 
-      const { phase, at, ...fields } = s.journal.attempt;
-      const failure = (phase === "fresh" ? Failure.cases.fresh : Failure.cases.saved).make({
-        ...fields,
-        error: m.error,
-      });
-      const seen = { seq: m.seq, process: fields.process, letter: fields.letter, phase, error: m.error, at };
-
-      if (failure._tag !== "fresh") {
-        return [observe(s, failure, seen, exiting(failure, m.reason, m.from)), []];
-      }
-
-      const old = s.receipts.find((r) => r.letter === failure.letter);
-
-      if (old === undefined) {
-        return unchanged(s);
-      }
-
-      // Observation and the fresh delivery's charge change together, in one saved step.
-      const errors = [...old.errors, m.error];
-      const terminal = errors.length >= (s.maxDeliveries ?? s.policy.maxDeliveries);
-      const receipt = {
-        ...old,
-        errors,
-        tries: errors.length,
-        process: failure.process,
-        result: terminal ? DEAD : null,
-      };
-      const journal = terminal
-        ? Journal.cases.writing_dead.make({ failure, reason: m.reason, from: m.from })
-        : exiting(failure, m.reason, m.from);
-      return [
-        {
-          ...observe(s, failure, seen, journal),
-          receipts: s.receipts.map((r) => (r.letter === failure.letter ? receipt : r)),
-        },
-        [],
-      ];
+      return failed(s, s.journal.attempt, m.error, m.reason, m.from);
     },
     interrupted: (s, m) => {
       const j = s.journal;
+
       // The saved attempt's identity wins; an activity marker alone gets the next sequence.
       const attempt =
-        j._tag === "stepping" && j.attempt.process === m.process
+        (j._tag === "stepping" || j._tag === "checking") && j.attempt.process === m.process
           ? j.attempt
           : j._tag === "idle" && j.process === m.process
             ? { process: m.process, letter: m.letter, build: m.build, seq: s.seq + 1, at: m.at }
@@ -311,6 +482,7 @@ export const supervisor = Machine.make({
       const { process, letter, build, seq } = attempt;
       const failure = Failure.cases.interrupted.make({ process, letter, build, seq });
       const seen = { seq, process, letter, phase: "interrupted" as const, at: attempt.at };
+
       return [observe(s, failure, seen, exiting(failure, m.reason, m.from)), []];
     },
     dead_written: (s, m) =>
@@ -331,6 +503,7 @@ export const supervisor = Machine.make({
         const { id, build } = origin.request;
         const request = again(s, id, m.process, "restart", { program: m.program, hash: build });
         const timing = StartTiming.cases.immediate.make({});
+
         return [
           { ...s, restarts: m.restarts, journal: Journal.cases.waiting_start.make({ request, origin, timing, from }) },
           [],
@@ -348,7 +521,9 @@ export const supervisor = Machine.make({
           program: m.program,
           hash: s.build,
         });
+
         const timing = StartTiming.cases.scheduled.make({ until });
+
         return [
           { ...s, restarts: m.restarts, journal: Journal.cases.waiting_start.make({ request, origin, timing, from }) },
           [],
@@ -356,10 +531,15 @@ export const supervisor = Machine.make({
       }
 
       // The brake: N crashes in T. Down waits until the window has room again.
-      const times = m.restarts.filter((at) => at >= until - s.policy.periodMs).toSorted((a, b) => a - b);
+      const times = Arr.sort(
+        Arr.filter(m.restarts, (at) => at >= until - s.policy.periodMs),
+        Order.Number,
+      );
+
       const edge = times[times.length - s.policy.intensity];
       const held = edge === undefined ? until : Math.max(until, edge + s.policy.periodMs + 1);
       const recovery = { process: m.process, reason, crashes, until: held };
+
       return [{ ...s, restarts: m.restarts, journal: Journal.cases.writing_down.make({ recovery, origin, from }) }, []];
     },
     down_written: (s, m) =>
@@ -382,6 +562,7 @@ export const supervisor = Machine.make({
       const { process, reason, until } = j.recovery;
       const request = again(s, `recover:${process}:${s.seq}`, process, reason, { program: m.program, hash: s.build });
       const timing = StartTiming.cases.scheduled.make({ until });
+
       return [
         { ...s, journal: Journal.cases.waiting_start.make({ request, origin: j.origin, timing, from: m.from }) },
         [],
@@ -415,6 +596,7 @@ export const supervisor = Machine.make({
 
       // A person's request is completed with the restart history that records its successor.
       const manual = j.origin._tag === "manual" ? j.origin.request : null;
+
       return [
         {
           ...s,
@@ -435,17 +617,19 @@ export const supervisor = Machine.make({
       }
 
       const journal = Journal.cases.checkpointing.make({ ...waiting, process: m.process });
+
       return [{ ...s, journal, build: m.build, restarts: m.restarts }, []];
     },
     restart_requested: (s, m) => {
       const j = s.journal;
       const settled = j._tag === "idle" || (waitingFor(j) !== null && j._tag !== "writing_down");
 
-      if (!settled || s.requests.some((r) => r.id === m.id)) {
+      if (!settled || Arr.some(s.requests, (r) => r.id === m.id)) {
         return unchanged(s);
       }
 
       const origin = Origin.cases.manual.make({ request: { id: m.id, build: m.build } });
+
       const journal = m.live
         ? Journal.cases.writing_exit.make({ process: m.process, origin, from: m.from })
         : Journal.cases.waiting_start.make({
@@ -454,6 +638,7 @@ export const supervisor = Machine.make({
             timing: StartTiming.cases.immediate.make({}),
             from: m.from,
           });
+
       return [{ ...s, journal }, []];
     },
     healthy: (s, m) =>

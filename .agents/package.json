@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The skills and the lead's own scripts. A package only so `pnpm typecheck` reads the lane scripts (ticket 486); its imports resolve from the root's dependencies.",
+  "description": "The skills and the lead's own scripts. A package only so `pnpm typecheck` reads the quest scripts (ticket 486); its imports resolve from the root's dependencies.",
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
   },

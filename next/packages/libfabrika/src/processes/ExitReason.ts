@@ -1,8 +1,6 @@
 /**
  * Why a process ended, as data: the exit reason, when two reasons are the same exit, and the
  * decoder for a reason that comes from outside.
- *
- * @stability unstable
  */
 import { Schema } from "effect";
 
@@ -12,6 +10,8 @@ const ErrorClass = Schema.NonEmptyString.check(Schema.isMaxLength(256));
 /**
  * Why a process ended, as OTP keeps it: `normal`, `shutdown`, `kill`, or `crashed` with the phase that
  * failed and the captured error class. Never an exception's message or stack.
+ *
+ * @category schemas
  */
 export const ExitReason = Schema.TaggedUnion({
   normal: {},
@@ -22,16 +22,26 @@ export const ExitReason = Schema.TaggedUnion({
     error: Schema.optionalKey(ErrorClass),
   },
 });
+
 /**
  * Why a process ended, as `ExitReason` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type ExitReason = typeof ExitReason.Type;
 
-/** Two reasons are the same exit when their fields are, wherever each copy came from. */
+/**
+ * Equivalence under which two exit reasons are the same exit when their fields are, wherever each
+ * copy came from.
+ *
+ * @category guards
+ */
 export const sameReason = Schema.toEquivalence(ExitReason);
 
-/** Untrusted input to one exit reason; a string, an unknown tag or an extra field is refused. */
+/**
+ * Decodes untrusted input to one exit reason, as a `Result`. A string, an unknown tag or an extra
+ * field is refused.
+ *
+ * @category decoding
+ */
 export const decodeExitReason = Schema.decodeUnknownResult(ExitReason, { onExcessProperty: "error" });

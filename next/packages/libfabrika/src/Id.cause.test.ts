@@ -2,8 +2,10 @@
 // 12). Audit site: `Id.ts:198`, a throw while drawing random bits. `Id.ts:183` decodes an ID the
 // generator built from its own registered prefix, which no generated input can make fail.
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Duration, Effect, Layer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 
@@ -18,15 +20,15 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 const prefixes = fc.constantFrom("process", "input", "letter", "chaos");
 
 /** The random source throws `failure`, as a platform with no entropy left does. */
-const randomThrows = (failure: unknown) =>
+const randomThrows = (failure: object) =>
   vi.spyOn(crypto, "getRandomValues").mockImplementation(() => {
     throw failure;
   });
 
 describe("T695, Id.Generator keeps why it could not draw an ID", () => {
   // C1, Id.ts:198. Plant: `catch: (error) => error instanceof IdError ? error : new IdError({ reason: "entropy" })`.
-  it("C1: a generated throw from the random source is `entropy` with the thrown value as its cause", async () => {
-    await fc.assert(
+  it("C1: a generated throw from the random source is `entropy` with the thrown value as its cause", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({ failure: failures, prefix: prefixes, before: fc.nat({ max: 3 }) }),
         ({ failure, prefix, before }) =>
@@ -42,6 +44,7 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
 
               // A new millisecond on the test clock, so the next ID draws fresh random bits.
               yield* TestClock.adjust(Duration.millis(1));
+
               const error = yield* Effect.flip(
                 Effect.acquireUseRelease(
                   Effect.sync(() => randomThrows(failure)),
@@ -49,6 +52,7 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
                   (spy) => Effect.sync(() => spy.mockRestore()),
                 ),
               );
+
               expect(error).toBeInstanceOf(Id.IdError);
               expect(error.reason).toBe("entropy");
               expect(error.cause).toBe(failure);
@@ -56,6 +60,5 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
           ),
       ),
       { seed: SEED, numRuns: 100 },
-    );
-  });
+    ));
 });

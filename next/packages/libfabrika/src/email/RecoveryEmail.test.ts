@@ -40,6 +40,7 @@ type Msg =
 
 // What the child asks its parent to do. Each has one answer below.
 type Command = { readonly type: "issue" | "old" | "check" | "redeem" };
+
 type Ctx = { readonly cloud: boolean; readonly binding: Binding };
 
 const email = pureModule<{
@@ -93,13 +94,16 @@ it("not built: P36 / P36.10 RecoveryEmail restores every saved state without adm
       ({ cloud, sequence }) => {
         const ctx = { cloud, binding: binding() };
         let [saved] = machine.init(null, ctx);
+
         const restore = () => {
           const codec = Schema.fromJsonString(machine.model);
           const back = Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(saved));
           const [restored] = machine.init(back, ctx);
           expect(restored).toEqual(saved);
+
           return restored;
         };
+
         restore();
 
         for (const message of sequence) {
@@ -179,6 +183,7 @@ it.effect.prop(
       const parent = yield* loadParent;
       const { calls, services } = parentAnswers(flow);
       const [model] = parent.Recovery.init({ cloud: true });
+
       const [next, commands] = parent.Recovery.update(model, {
         type: "email",
         msg: { type: "code", secret: "secret-holder-ref" },
@@ -224,6 +229,7 @@ it("not built: P36 / 0138 every generated message on the live-device notice yiel
         location: "test location",
         at: EPOCH,
       });
+
       expect(notice.actions).toEqual([]);
       expect(notice.update(message)[1]).toEqual([]);
     }),

@@ -1,3 +1,8 @@
+---
+state: "decided 2026-11-01"
+summary: "Talk a plan through in free form, file it as a ticket, and the plan step makes the real plan. A tier is a project. Tier 1 goes this way after ticket 117, with its split into tickets by hand, once. No splitter on today's version; the whole flow is built in `next/`, in Tier 6."
+---
+
 # A free-form plan goes to the planner
 
 Decided 2026-11-01, with all its leans. Tier 1 goes this way once, with its last step by hand. The
@@ -16,7 +21,7 @@ report it as one tracker ticket    a `filed` fact, title and body   today's vers
 triage, then the plan step         the planner reads that text      today's version has it
 the owner approves the plan        `approve`, `change` or `no`      today's version has it
 one plan becomes small tickets     Tier 1: by hand, once            next/: built properly, Tier 6
-each small ticket runs its lane    plan, tests, build, ...          today's version has it
+each small ticket runs its quest   plan, tests, build, ...          today's version has it
 ```
 
 ## What was decided
@@ -53,22 +58,22 @@ The first two lines are today's real shapes. The rest is by hand, once.
 
 // By hand, once. For each task in `data.tasks`, an agent checks the tracker and `field/`, then:
 tracker.file({title: "notes: a save is one fact", body: "From the Tier 1 plan, version 1, task t7. ..."})
-// One row in field/ per ticket filed. Each ticket then runs its own lane.
+// One row in field/ per ticket filed. Each ticket then runs its own quest.
 ```
 
 ## What today's plan step does
 
 All of this is today's version. Paths start at `packages/pipeline/src/`, except the brief.
 
-**What goes in.** The lane hands the planner the ticket's title and body, fenced, with the
+**What goes in.** The quest hands the planner the ticket's title and body, fenced, with the
 code at main in its folder (`stages/pipeline/program.ts:255-262`, body from `:667`). The
-planner may Read, Grep and Glob, and nothing else (`stages/plan/planner.ts:133`). In the lane,
+planner may Read, Grep and Glob, and nothing else (`stages/plan/planner.ts:133`). In the quest,
 facts about the code are not gathered: the slots say "None gathered"
 (`stages/pipeline/program.ts:258-259`).
 
 **What comes out.** One `PlanDraft`: a summary, stories, tasks, a goal, pointers, questions,
 properties, an interface and exam changes (`stages/plan/plan.ts:167-175`, and the brief at
-`programs/pipeline/briefs/plan.md:45-76`). The lane writes one `planned` fact for one ticket
+`programs/pipeline/briefs/plan.md:45-76`). The quest writes one `planned` fact for one ticket
 (`stages/pipeline/program.ts:275`). The owner answers `approve`, `change` or `no`
 (`asks/ask.ts:123`, `:179`).
 
@@ -118,7 +123,7 @@ a new one, so it could file every ticket again.
 
 ## What this cannot tell us
 
-- **How Tier 1's lane stops at the owner's yes.** By my reading, a lane goes on to the next
+- **How Tier 1's quest stops at the owner's yes.** By my reading, a quest goes on to the next
   steps after an approval, and it must not here, since it would build every task in one pull
   request. Build stops on a closed ticket (`stages/pipeline/machine.ts:268`), but the test writer
   comes first. Closing it right after the yes has not been tried. One rehearsal on a throwaway
@@ -129,6 +134,6 @@ a new one, so it could file every ticket again.
 - **Whether each task comes out PR-sized.** The planner is told tasks land together, so a task
   may be too large or too small to be a ticket. The owner's look is the only check.
 - **Whether the owner can approve so many tasks** in one look, or needs them walked step by step.
-- **How `next/` reaches the lane.** That question stays open as
-  [`tier-1.md`](../plan/tier-1.md#still-open-how-next-reaches-the-lane) says.
+- **How `next/` reaches the quest.** That question stays open as
+  [`tier-1.md`](../plan/tier-1.md#still-open-how-next-reaches-the-quest) says.
 - **Whether the size of the route not taken was right.** I read the code and did not sketch it.

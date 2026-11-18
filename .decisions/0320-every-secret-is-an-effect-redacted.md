@@ -56,3 +56,7 @@ fabrika builds public repositories too, so anything it writes may be read by any
 - Tests may read a made-up secret back with `Redacted.value`; the second rule leaves tests out.
 - Not decided here: how an edge line is marked, by a file listed in `.oxlintrc.json` with its
   reason or by a reasoned disable comment at the line. Both are in use today.
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/no-secret-env` with the Effect checker's `processEnv` and `processEnvInEffect`, and `fabrika/no-redacted-value` with oxlint's `no-restricted-properties` on `Redacted.value`, each in the pull request that turns theirs on at zero hits. The rule about secrets does not change.

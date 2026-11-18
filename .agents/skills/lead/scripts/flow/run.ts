@@ -11,11 +11,12 @@
 // that changed since. `--lead` says the lead session started this process: only then does a `lead`
 // step run. The steps' runners are the landing table and the host step (./host.ts).
 //
-// Exit codes, as the lane chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
+// Exit codes, as the quest chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer, Option, Path, Runtime, Schema, Stream } from "effect";
+import { Array as Arr, Console, Effect, Formatter, Layer, Option, Path, Runtime, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
+import { Digest } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as Flow from "./Flow.ts";
 import { runners as hosting } from "./host.ts";
@@ -24,12 +25,16 @@ import * as Runners from "./Runners.ts";
 import { ending, runFlow, Usage } from "./walk.ts";
 
 /** The flow parked on an ask: exit 20. */
-export class Parked extends Schema.TaggedError<Parked>()("Parked", { reason: Schema.String }) {
+export class Parked extends Schema.TaggedError<Parked, { readonly brand: unique symbol }>()("Parked", {
+  reason: Schema.String,
+}) {
   readonly [Runtime.errorExitCode] = 20;
 }
 
 /** The flow is stuck: exit 30. */
-export class Stuck extends Schema.TaggedError<Stuck>()("Stuck", { reason: Schema.String }) {
+export class Stuck extends Schema.TaggedError<Stuck, { readonly brand: unique symbol }>()("Stuck", {
+  reason: Schema.String,
+}) {
   readonly [Runtime.errorExitCode] = 30;
 }
 
@@ -39,26 +44,31 @@ const boxes = Effect.fn("flow.boxes")(
     const path = yield* Path.Path;
     const env = path.join(import.meta.dirname, "..", "env.sh");
     const handle = yield* ChildProcess.make("sh", ["-c", '. "$0" && printf "%s" "$BOXES"', env]);
+
     const [out, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.stdout)), handle.exitCode], {
       concurrency: 2,
     });
-    return Number(code) === 0 && out !== "" ? out : yield* new Usage({ reason: "env.sh gave no BOXES" });
+
+    return Number(code) === 0 && out !== "" ? out : yield* Usage.make({ reason: "env.sh gave no BOXES" });
   },
   Effect.scoped,
-  Effect.catchTag("PlatformError", () => Effect.fail(new Usage({ reason: "env.sh could not run" }))),
+  Effect.catchTag("PlatformError", () => Effect.fail(Usage.make({ reason: "env.sh could not run" }))),
 );
 
 /** The flow file's default export, read as a Flow. */
 const load = Effect.fn("flow.load")(function* (file: string) {
   const path = yield* Path.Path;
+
   const url = yield* path
     .toFileUrl(path.resolve(file))
-    .pipe(Effect.mapError(() => new Usage({ reason: `${file} is no path` })));
-  const unloadable = (e: unknown) => new Usage({ reason: `${file} does not load: ${String(e)}` });
+    .pipe(Effect.mapError(() => Usage.make({ reason: `${file} is no path` })));
+
+  const unloadable = (cause: unknown) => Usage.make({ reason: `${file} does not load: ${String(cause)}` });
   // oxlint-disable-next-line fabrika/no-promises -- edge: Node loads a module by its path only through import()
   const module = yield* Effect.tryPromise({ try: () => import(url.href), catch: unloadable });
+
   return yield* Schema.decodeUnknownEffect(Flow.Flow)(module.default).pipe(
-    Effect.mapError((e) => new Usage({ reason: `${file}'s default export is no Flow: ${e.message}` })),
+    Effect.mapError((e) => Usage.make({ reason: `${file}'s default export is no Flow: ${e.message}` })),
   );
 });
 
@@ -75,23 +85,25 @@ const flowCommand = Command.make(
       const flow = yield* load(file);
       const path = yield* Path.Path;
       const saved = Option.isSome(state) ? state.value : path.join(yield* boxes(), "state", `flow-${flow.name}.json`);
+
       const model = yield* runFlow(flow, { state: saved, resume, lead }).pipe(
         Effect.catchTag(["StoreFailed", "SubFailed"], (e) =>
-          Effect.fail(new Stuck({ reason: `${e._tag}: ${String(e.cause)}` })),
+          Effect.fail(Stuck.make({ reason: `${e._tag}: ${String(e.cause)}` })),
         ),
       );
+
       const end = ending(model);
-      const spent = model.history.reduce((sum, a) => sum + (a.spent?.usd ?? 0), 0);
+      const spent = Arr.reduce(model.history, 0, (sum, a) => sum + (a.spent?.usd ?? 0));
       yield* Console.log(
-        JSON.stringify({ ...end, flow: flow.name, state: saved, attempts: model.history.length, usd: spent }),
+        Formatter.formatJson({ ...end, flow: flow.name, state: saved, attempts: model.history.length, usd: spent }),
       );
 
       if (end.outcome === "ask") {
-        return yield* new Parked({ reason: end.reason });
+        return yield* Parked.make({ reason: end.reason });
       }
 
       if (end.outcome === "stuck") {
-        return yield* new Stuck({ reason: end.reason });
+        return yield* Stuck.make({ reason: end.reason });
       }
     }).pipe(
       Effect.tapError((e) =>
@@ -103,7 +115,12 @@ const flowCommand = Command.make(
 if (import.meta.main) {
   NodeRuntime.runMain(
     Command.runWith(flowCommand, { version: "0.0.0" })(process.argv.slice(2)).pipe(
-      Effect.provide(Layer.provideMerge(Runners.layer({ ...landing, ...hosting }), NodeServices.layer)),
+      Effect.provide(
+        Layer.provideMerge(
+          Runners.layer({ ...landing, ...hosting }),
+          Layer.merge(NodeServices.layer, Digest.layerWebCrypto),
+        ),
+      ),
     ),
     { disableErrorReporting: true },
   );
