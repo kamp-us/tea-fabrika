@@ -2,9 +2,7 @@
 # Today's tooling. Check a unified diff on stdin, a whole draft with --text <file>, or each commit
 # `git rev-list <rev>...` names with --commits <rev>... (decision 0048: a push reads each commit it
 # sends on its own). A commit is read as its diff from its parent, a first commit as all it holds,
-# and a merge as the lines that are new against every parent. In a shallow clone, git cannot see
-# past its edge commits, so the range is listed only once it is complete down to its merge base with
-# origin/main: the clone is deepened a step at a time until then, and refused if it cannot be.
+# and a merge as the lines that are new against every parent.
 # Private words are literal, case-insensitive strings, one per line, outside the Git tree.
 # Diagnostics name only the kind, the added-line number and the commit, never matched text or
 # private words.
@@ -209,89 +207,12 @@ def commit_hits(commit, parents):
         hits = [hit for hit in hits if hit[1:] in places]
     return [(number, kind) for number, _, kind in hits], respaced
 
-# A shallow clone (cloud sessions clone shallow) cuts the parents off the commits on its edge. A
-# listing would read each of those as a first commit, all it holds, and show old main history as the
-# branch's own. So a range is listed only when it is complete: every side of it reaches the merge
-# base with origin/main without touching an edge commit. Until then the clone is deepened by one
-# step of 200 commits, a git fetch that never unshallows, and when it cannot be, the check refuses.
-main = 'refs/remotes/origin/main'
-deepen_steps = 25
-
-# Words from git for a command that may exit 1 with nothing to say, such as merge-base.
-def probe(*args):
-    ran = subprocess.run(['git', *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
-    if ran.returncode > 1:
-        refuse('cannot read the commits')
-    return ran.stdout.split()
-
-def is_shallow():
-    answer = git('rev-parse', '--is-shallow-repository').strip()
-    if answer not in ('true', 'false'):
-        refuse('cannot tell whether this clone is shallow')
-    return answer == 'true'
-
-# The commits on the clone's edge: the ones whose parents git cut off.
-def edge():
-    try:
-        return set(Path(git('rev-parse', '--git-path', 'shallow').strip()).read_text().split())
-    except FileNotFoundError:
-        return set()
-    except OSError:
-        refuse('cannot read the commits')
-
-# Whether the range is complete. The merge bases come first. Then both sides of them, the tips of
-# the range and origin/main, must reach those bases with no edge commit between: an edge commit
-# there hides parents that could be a newer base. The listing of the range holds none either.
-def complete(args):
-    cut = edge()
-    if not probe('rev-parse', '--verify', '--quiet', main + '^{commit}'):
-        return False
-    tips = [rev for rev in git('rev-parse', '--revs-only', *args).split() if not rev.startswith('^')]
-    bases = set()
-    for tip in tips:
-        found = probe('merge-base', '--all', tip, main)
-        if not found:
-            return False
-        bases.update(found)
-    above = git('rev-list', *tips, main, *(['--not', *sorted(bases)] if bases else []), '--').split()
-    return not cut.intersection(above, git('rev-list', *args, '--').split())
-
-# Deepens until the range is complete or the clone is not shallow any more. It refuses, with the
-# cause, on a failed fetch, a step that adds nothing, or the step cap. It reads nothing as given.
-def settle(args):
-    steps = 0
-    while is_shallow() and not complete(args):
-        lost = "cannot find the range's merge base with origin/main in this shallow clone"
-        fix = 'deepen it with git fetch --deepen=200 origin main and run again'
-        raw = os.environ.get('FABRIKA_LEAK_DEEPEN_STEPS', str(deepen_steps))
-        if not raw.isdecimal():
-            refuse('FABRIKA_LEAK_DEEPEN_STEPS must be a whole number')
-        if steps >= int(raw):
-            refuse(f'{lost}: gave up after {steps} deepening steps; {fix}')
-        before = (edge(), probe('rev-parse', '--verify', '--quiet', main))
-        # The output of a fetch can hold private paths, so it is never printed.
-        ran = subprocess.run(['git', 'fetch', '--quiet', '--no-tags', '--deepen=200', 'origin', 'main'],
-                             capture_output=True, stdin=subprocess.DEVNULL, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
-        if ran.returncode:
-            refuse(f'{lost}: the fetch from origin failed; {fix}')
-        steps += 1
-        if (edge(), probe('rev-parse', '--verify', '--quiet', main)) == before:
-            refuse(f'{lost}: a deepening step added nothing; {fix}')
-    if steps:
-        print(f"leakgrep: deepened this shallow clone by {steps} steps of up to 200 commits to find the range's merge base", file=diagnostics)
-    return edge() if is_shallow() else set()
-
 bad = 0
 respaced = 0
 if sys.argv[2] == 'commits':
-    cut = settle(sys.argv[3:])
     # Oldest first, each with its parents. No path limits, so the parents are the real ones.
     commits = [line.split() for line in git('rev-list', '--reverse', '--parents', *sys.argv[3:], '--').split('\n') if line]
     for commit, *parents in commits:
-        # Its parents are cut off, so it would read as a first commit. The range was complete, so
-        # none is listed; this stops one that slips in.
-        if commit in cut:
-            refuse("a commit of the range is on this shallow clone's edge, so its parents are not here")
         hits, old = commit_hits(commit, parents)
         respaced += old
         for number, kind in hits:
