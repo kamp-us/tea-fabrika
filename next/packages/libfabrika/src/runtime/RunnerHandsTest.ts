@@ -804,7 +804,7 @@ const walk = (
         case "poke": {
           const before = (yield* model(name))?.pokes ?? 0;
           world.sentBy.set(`letter-${++world.n}`, current);
-          const sent = yield* answers(runner(name).msg(letter(world.n, { type: move })), `${name}'s ${move}`);
+          const sent = yield* answers(runner(name).msg(letter(world.n, Msg.cases[move].make({}))), `${name}'s ${move}`);
 
           if (move === "poke" && Result.isSuccess(sent) && sent.success._tag === "accepted") {
             // L20: a later input steps, whatever hands work this program or another has out.
