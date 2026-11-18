@@ -4,8 +4,17 @@
  * the RPC as checked data.
  */
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
-import { Cause, Effect, Option, Predicate, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 import { Admission, type Input, ProgramDown, stepper, Step, type Prepared, type Stepper } from "./Program.ts";
@@ -46,7 +55,7 @@ export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
 /** A program's own throw rides in deletable content; a cause the runtime kept for diagnosis,
  *  which may hold the input that failed, never leaves memory. */
 const shown = (error: ProgramDown): unknown =>
-  !Object.hasOwn(error, "cause")
+  !("cause" in error)
     ? error
     : error.error === "ProgramDown"
       ? new ProgramDown({ reason: error.reason, error: error.error })
@@ -66,7 +75,7 @@ export const executionFailure = (error: ProgramDown) =>
   ExecutionFailure.make({
     reason: error.reason,
     error: error.errorClass,
-    content: Cause.pretty(Cause.fail(shown(error))).slice(0, MOST_CONTENT),
+    content: Str.slice(0, MOST_CONTENT)(Cause.pretty(Cause.fail(shown(error)))),
   });
 
 const programFailure = (failure: typeof ExecutionFailure.Type) => {
@@ -186,7 +195,7 @@ const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
 const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean => {
   const typed = Schema.decodeUnknownOption(Typed)(m);
 
-  if (Option.isNone(typed) || !Object.hasOwn(inputs, typed.value.type)) {
+  if (Option.isNone(typed) || !Rec.has(inputs, typed.value.type)) {
     return false;
   }
 
@@ -201,7 +210,7 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
 
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
   const type = Schema.decodeUnknownSync(Typed)(cmd).type;
-  const def = defs.find((d) => d.cmdType === type);
+  const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.cmdType === type));
 
   if (def === undefined) {
     throw new ProgramDown({ reason: "step" });

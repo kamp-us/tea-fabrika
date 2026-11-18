@@ -3,7 +3,7 @@
 // `Effect.all<T>(x)` and `x.Effect.all(y)` did not. The rules keep that exactly: README.md says how
 // that was measured.
 import type { Context, ESTree, Visitor } from "@oxlint/plugins";
-import { Predicate } from "effect";
+import { Array as Arr, Predicate } from "effect";
 
 type Source = Context["sourceCode"];
 
@@ -164,7 +164,7 @@ export function* below(node: Node): Generator<Node> {
     }
 
     // Only a node has a string `type`: a primitive, null or a plain list of numbers has none.
-    for (const part of Array.isArray(value) ? value : [value]) {
+    for (const part of Arr.isArray(value) ? value : [value]) {
       if (Predicate.isString(part?.type)) {
         yield* below(part);
       }

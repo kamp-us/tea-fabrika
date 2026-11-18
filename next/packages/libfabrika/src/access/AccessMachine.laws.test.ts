@@ -17,7 +17,9 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
@@ -152,7 +154,10 @@ const idsIn = (model: Folded): ReadonlySet<string> => (model._tag === "founded" 
 const at = <A>(xs: ReadonlyArray<A>, n: number): A | undefined => (xs.length === 0 ? undefined : xs[n % xs.length]);
 
 const withStanding = (model: Folded, test: (key: Key) => boolean): ReadonlyArray<string> =>
-  [...keysIn(model)].filter(([, key]) => test(key)).map(([name]) => name);
+  Arr.map(
+    Arr.filter([...keysIn(model)], ([, key]) => test(key)),
+    ([name]) => name,
+  );
 
 /** Signer pools by standing, each with its weight: the walk picks among those the Model holds. */
 const SIGNERS: ReadonlyArray<readonly [number, (key: Key) => boolean]> = [
@@ -167,9 +172,13 @@ const SIGNERS: ReadonlyArray<readonly [number, (key: Key) => boolean]> = [
 /** A signer read off the Model: mostly a live person key, else a sheet, a leaf, a key of each stopped
  *  standing, or a key the Model does not hold. */
 const pickSigner = (model: Folded, c: Choice, n: number): string => {
-  const pools = SIGNERS.map(([weight, test]) => [weight, withStanding(model, test)] as const)
-    .filter(([, keys]) => keys.length > 0)
-    .flatMap(([weight, keys]) => Array.from({ length: weight }, () => keys));
+  const pools = Arr.flatMap(
+    Arr.filter(
+      Arr.map(SIGNERS, ([weight, test]): [number, ReadonlyArray<string>] => [weight, withStanding(model, test)]),
+      ([, keys]) => keys.length > 0,
+    ),
+    ([weight, keys]) => Array.from({ length: weight }, () => keys),
+  );
 
   const pool = at([...pools, []], c.pool) ?? [];
 
@@ -202,7 +211,7 @@ const pickTarget = (model: Folded, c: Choice, n: number, fresh: string): string 
 };
 
 const pickDrops = (model: Folded, c: Choice, signer: string): Array<string> =>
-  c.drops.map(([which, n]) =>
+  Arr.map(c.drops, ([which, n]) =>
     Match.value(which).pipe(
       Match.when(0, () => signer),
       Match.when(
@@ -353,7 +362,7 @@ const plain = (model: Folded) => ({
   tag: model._tag,
   person: model._tag === "founded" ? model.person : null,
   name: model._tag === "founded" ? model.name : null,
-  keys: [...keysIn(model)].map(([name, k]) => [name, k._tag, k.rank, k.under] as const).sort(),
+  keys: Arr.map([...keysIn(model)], ([name, k]) => [name, k._tag, k.rank, k.under] as const).sort(),
   ids: [...idsIn(model)].sort(),
 });
 
@@ -361,7 +370,7 @@ const plain = (model: Folded) => ({
 const viewed = (m: Access) => ({
   person: m.person,
   name: m.name,
-  keys: [...m.keys].map(([name, k]) => [name, k.rank, k.live, k.under] as const).sort(),
+  keys: Arr.map([...m.keys], ([name, k]) => [name, k.rank, k.live, k.under] as const).sort(),
   spent: [...m.spent].sort(),
 });
 
@@ -477,13 +486,13 @@ const chain = (keys: ReadonlyMap<string, Key>, name: string): ReadonlyArray<stri
 describe("ticket 706, the access machine's types", () => {
   it("unfounded carries no founder data, and each key has exactly one standing", () => {
     walks((steps, start) => {
-      for (const model of [start, ...steps.map((s) => s.post)]) {
+      for (const model of [start, ...Arr.map(steps, (s) => s.post)]) {
         if (model._tag === "unfounded") {
-          expect(Object.keys(model).sort()).toEqual(["_tag", "reply"]);
+          expect(Rec.keys(model).sort()).toEqual(["_tag", "reply"]);
         }
 
         for (const [name, k] of keysIn(model)) {
-          expect(Object.keys(k).sort(), name).toEqual(["_tag", "rank", "under"]);
+          expect(Rec.keys(k).sort(), name).toEqual(["_tag", "rank", "under"]);
           expect(["live", "revoked", "spent", "replaced"]).toContain(k._tag);
         }
       }
@@ -628,8 +637,13 @@ describe("ticket 706, the access machine walked from init", () => {
         }
 
         const signer = event.signed.signer;
-        const changed = [...pre.keys].filter(([name, k]) => post.keys.get(name)?._tag !== k._tag).map(([n]) => n);
-        const added = [...post.keys.keys()].filter((name) => !pre.keys.has(name));
+
+        const changed = Arr.map(
+          Arr.filter([...pre.keys], ([name, k]) => post.keys.get(name)?._tag !== k._tag),
+          ([n]) => n,
+        );
+
+        const added = Arr.filter([...post.keys.keys()], (name) => !pre.keys.has(name));
 
         if (event._tag === "granted") {
           expect(changed).toEqual([]);
@@ -650,8 +664,8 @@ describe("ticket 706, the access machine walked from init", () => {
           const { adds, drops } = event.add;
           const bySheet = pre.keys.get(signer)?.rank === "recovery";
           const sheets = withStanding(pre, (k) => k._tag === "live" && k.rank === "recovery");
-          const ended = adds._tag === "recovery" ? sheets.filter((name) => name !== adds.key) : [];
-          const named = new Set([...drops.filter((d) => d !== signer), ...ended, ...(bySheet ? [signer] : [])]);
+          const ended = adds._tag === "recovery" ? Arr.filter(sheets, (name) => name !== adds.key) : [];
+          const named = new Set([...Arr.filter(drops, (d) => d !== signer), ...ended, ...(bySheet ? [signer] : [])]);
 
           for (const name of changed) {
             expect(named.has(name), `${name} changed but the event never named it`).toBe(true);
@@ -668,7 +682,7 @@ describe("ticket 706, the access machine walked from init", () => {
           }
 
           const joined = adds._tag === "person" ? [adds.key, adds.window] : [adds.key];
-          expect(added.every((name) => joined.includes(name))).toBe(true);
+          expect(Arr.every(added, (name) => joined.includes(name))).toBe(true);
           const fresh = pre.keys.get(adds.key) === undefined;
           expect(post.keys.get(adds.key)?.rank).toBe(adds._tag);
           expect(post.keys.get(adds.key)?.under).toBe(fresh ? null : pre.keys.get(adds.key)?.under);
@@ -772,22 +786,23 @@ describe("ticket 706, the access machine walked from init", () => {
           );
         }
 
-        const stopped = [...keysIn(pre)]
-          .filter(([name, k]) => k._tag === "live" && keys.get(name)?._tag !== "live")
-          .map(([name]) => name);
+        const stopped = Arr.map(
+          Arr.filter([...keysIn(pre)], ([name, k]) => k._tag === "live" && keys.get(name)?._tag !== "live"),
+          ([name]) => name,
+        );
 
         for (const name of keysIn(pre).keys()) {
           if (!dials(keysIn(pre), name)) {
             continue;
           }
 
-          const hit = chain(keysIn(pre), name).some((on) => stopped.includes(on));
+          const hit = Arr.some(chain(keysIn(pre), name), (on) => stopped.includes(on));
 
           if (!hit && stopped.length > 0) {
             independent++;
           }
 
-          expect("as" in admitted(view, name), `${name} after stopping ${stopped.join(", ")}`).toBe(!hit);
+          expect("as" in admitted(view, name), `${name} after stopping ${Arr.join(stopped, ", ")}`).toBe(!hit);
         }
       }
     });
@@ -798,12 +813,12 @@ describe("ticket 706, the access machine walked from init", () => {
     walks((steps, start) => {
       expect(plain(EMPTY)).toEqual(plain(start));
       expect(viewed(members(start))).toEqual({ person: "", name: "", keys: [], spent: [] });
-      const events = steps.map((s) => s.event);
+      const events = Arr.map(steps, (s) => s.event);
       const copies = structuredClone(events);
       expect(
-        steps.map((s) => plain(s.pre)),
+        Arr.map(steps, (s) => plain(s.pre)),
         "an earlier Model changed",
-      ).toEqual(steps.map((s) => s.kept));
+      ).toEqual(Arr.map(steps, (s) => s.kept));
 
       for (const [i, { pre, event, post }] of steps.entries()) {
         expect(viewed(foldAccess(events.slice(0, i + 1))), `cut ${i + 1}`).toEqual(viewed(members(post)));
@@ -818,8 +833,8 @@ describe("ticket 706, the access machine walked from init", () => {
         const view = members(post);
         expect(view.person).toBe(post._tag === "founded" ? post.person : "");
         expect(view.name).toBe(post._tag === "founded" ? post.name : "");
-        expect([...view.keys].map(([name, k]) => [name, k.rank, k.live, k.under] as const).sort()).toEqual(
-          [...keysIn(post)].map(([name, k]) => [name, k.rank, k._tag === "live", k.under] as const).sort(),
+        expect(Arr.map([...view.keys], ([name, k]) => [name, k.rank, k.live, k.under] as const).sort()).toEqual(
+          Arr.map([...keysIn(post)], ([name, k]) => [name, k.rank, k._tag === "live", k.under] as const).sort(),
         );
         expect([...view.spent].sort()).toEqual([...withStanding(post, (k) => k._tag === "spent")].sort());
       }

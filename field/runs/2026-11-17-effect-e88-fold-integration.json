@@ -1,0 +1,213 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-effect-e88-fold-integration",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T23:53:05-08:00",
+  "ended": "2026-11-17T08:17:12.406900+00:00",
+  "parent": "2026-11-16-effect-e88-build-audit",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "The named Effect fold is joined to E88 next/ by an ordinary merge. All54 source conflicts are resolved. This row records bounded local checks, not a merge-ready verdict.",
+  "note": "The final source passed19 safe plain test files with148 tests and no skipped tests. Six temporary R3/R4 signing faults each failed the intended tests, then the restored signing suite passed28 tests. Scoped format and lint passed on54 conflict files. Full compiler and typed API checks were not run during this integration because their shared slot was reserved. Remote39-file proof, R5/R6 fault checks and fresh whole-diff review remain pending. The2 existing scratch files were preserved. No local workerd, Electron, launchd or real-signal law ran. Exact model, usage and billing are unavailable.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputHead": "dd8e97f7973b950935d00beb3a4b2ef46ffe30fa",
+  "foldHead": "67706e7fed7dffaeda28a508ecb203226c4d88b7",
+  "base": "eeb8ecdbbaaa11365d893962e7ccd6fa32d9f0ee",
+  "checkedHead": "ac9a0e19dd17475bc97dba74a622725aafb693d0",
+  "mergeReady": false,
+  "scratchPreserved": true,
+  "guardedLawsRun": false,
+  "sourceChecks": {
+    "conflictsResolved": 54,
+    "syntaxFiles": 54,
+    "syntaxErrors": 0,
+    "assertionCountsBelowEitherParent": 0,
+    "scopedLintExit": 0,
+    "scopedFormatExit": 0,
+    "unchangedTrackedFileHashes": 5241
+  },
+  "safeTests": [
+    {
+      "file": "next/apps/fabrika/src/build.test.ts",
+      "sha256": "4eee92c116f54ecccd35050c263c1c37fcecdace68705f4b5dc3005503377e93",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/door-spans.test.ts",
+      "sha256": "99572a40329addf4dd490baad3b1ce493f5e7496c75e7d77f594ab6282972e61",
+      "numPassedTests": 6,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/error-cause.test.ts",
+      "sha256": "0f184749286b071465878745fdc8f14ab41c7f4435a7e4daaed3098804ce429a",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/instance-watch.laws.test.ts",
+      "sha256": "372050ddedeef6441faed31ad4bc6cfa80bb9ad782c14f90eeb043b4a75f42c0",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/runtime-quotas.laws.test.ts",
+      "sha256": "367653d03ea883dea6c893857b59090497533be945efb0c850d2b418dc9d457b",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/runtime.decode.test.ts",
+      "sha256": "b4b401a7825c7cfb987761dd1d9ea412726a8d0cc9911ea7d587b7ad9861b092",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/connection.test.ts",
+      "sha256": "504760d8004d3e6b2f78f58b4cdcfe2084b695579b2e00a2f2c291a688538ccd",
+      "numPassedTests": 11,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts",
+      "sha256": "163a098a6e91c0039760e7c01f346998c21a3142d7df904740c2965d964d4d9e",
+      "numPassedTests": 6,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/error-cause.test.ts",
+      "sha256": "d8f9a29341d99a4cd11856b022b1eeda049aa355979b7964eb48e2f2f2b955c3",
+      "numPassedTests": 12,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/fetch.test.ts",
+      "sha256": "45ece0781940ff6922df36af2cf394fd96160ab6140b9120118296c25e84e9bb",
+      "numPassedTests": 9,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/index.test.ts",
+      "sha256": "70404bb04a331a06ab2589cfe97be9a5200bd9445f84cccbff8ab19356d4e4ef",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/leave.laws.test.ts",
+      "sha256": "848370e235c449e549626b00e23f54d2ba4c77bb9f2940c651c9e39bdeea6919",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/mail.test.ts",
+      "sha256": "2de60926542d142ce93df7602bfbb0a0dafac8440c44262fab501b2e53dc6637",
+      "numPassedTests": 8,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/readers.laws.test.ts",
+      "sha256": "229fb2af55a7179d1b074648f987073a48e6406942575d53cefe30a197a3d256",
+      "numPassedTests": 39,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/reload.laws.test.ts",
+      "sha256": "fd1a1c78da278d57c0fe5afdbe753dd15703b9c85cd016d81a10d27a539debac",
+      "numPassedTests": 11,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/transport/Sshsig.test.ts",
+      "sha256": "62754093ab35684cdfe3a0652e868d399faca4324833ff8a492f1c7d7c06bb55",
+      "numPassedTests": 28,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/p14.test.ts",
+      "sha256": "94fa73274bda08cda1719c9fab1f1450be125d35274cae3d9aef46dab497db86",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/runtime/Built.test.ts",
+      "sha256": "4049c8e69c66cade6fdb1c2174287f085917a4b01441d145de090d678db29e3a",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts",
+      "sha256": "ee9c00192f99d8f268b5483dbae0afcd58ce42645cd2383ce64958dff36a5029",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    }
+  ],
+  "plants": [
+    {
+      "law": "R3",
+      "plant": "R3-text",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "R3-blob-fingerprint",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "R3-namespace",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "R3-version",
+      "result": "red"
+    },
+    {
+      "law": "R3",
+      "plant": "R3-signature-wrapper",
+      "result": "red"
+    },
+    {
+      "law": "R4",
+      "plant": "R4-field-length",
+      "result": "red"
+    }
+  ],
+  "pending": [
+    "Whole compiler and typed API checks at the joined head",
+    "Remote39-file runtime proof",
+    "R5 loopback and outbound fault checks",
+    "R6 wrong-tree fault check with an owned sibling process tree",
+    "Fresh whole-diff review"
+  ]
+}

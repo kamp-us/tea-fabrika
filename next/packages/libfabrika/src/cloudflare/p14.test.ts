@@ -1,3 +1,7 @@
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 // P14 slice 1, next/ (ticket 698): the Worker serves a built tab's page at `/` (S1.3). Later slices
 // add the control and bootstrap laws here.
 //
@@ -10,9 +14,11 @@
 // S1.3 is a generated walk. Each step reads the walk's state (the table the brain carries now, the
 // tables it carried before) and builds a move that state allows: a rebuild, or a request for a route
 // the current table holds, a fresh absent route or `/`, with the current validator or a stale one.
-import { createHash } from "node:crypto";
+
 import { Stub } from "@kampus/vitest";
-import { Cause, Effect, Exit, Match } from "effect";
+import * as Digest from "effect/crypto/Digest";
+import * as Rec from "effect/Record";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as Start from "../settings/Start.ts";
@@ -25,7 +31,13 @@ type Asset = { readonly hash: string; readonly type: string; readonly body: stri
 
 type Assets = Readonly<Record<string, Asset>>;
 
-const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+/** A text's SHA-256 in hex, through Effect's Digest on the platform's WebCrypto. */
+const sha = (text: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
 
 const HTML = "text/html; charset=utf-8";
 
@@ -36,18 +48,19 @@ const CSS = "text/css; charset=utf-8";
 const PAGE = "/index.html";
 
 const config = (port: number) =>
-  instanceFixture({
-    name: "p14",
-    port,
-    person: "person-test",
-    founder: "public-test",
-    window: null,
-    build: "test",
-  });
+  Effect.runPromise(
+    StartsTest.fixture({
+      name: "p14",
+      port,
+      person: "person-test",
+      founder: "public-test",
+      window: null,
+      build: "test",
+    }),
+  );
 
 /** An environment whose every stub call is written down, so the law can say none was made. */
-const world = (port: number) => {
-  const input = config(port);
+const world = (input: Awaited<ReturnType<typeof config>>) => {
   const calls: Array<string> = [];
   /** Any call on the stub for `to`: written down, and answered `{ _tag: "ok" }`. */
   const recorded = (to: string) => (method: string) => async () => {
@@ -105,21 +118,21 @@ type Step = typeof step extends fc.Arbitrary<infer S> ? S : never;
 const METHODS = ["GET", "HEAD", "POST", "PUT", "DELETE"] as const;
 
 /** A rebuild's table, derived from the step: a page or none, the tab's script, and other files. */
-const rebuilt = (s: Step, generation: number): Assets => {
+const rebuilt = async (s: Step, generation: number): Promise<Assets> => {
   const assets: Record<string, Asset> = {};
 
-  const add = (route: string, type: string, body: string) => {
-    assets[route] = { hash: sha(body), type, body };
+  const add = async (route: string, type: string, body: string) => {
+    assets[route] = { hash: await sha(body), type, body };
   };
 
   if (s.pick % 3 !== 0) {
-    add(PAGE, HTML, `<!doctype html>${s.text}<!-- ${generation} -->`);
+    await add(PAGE, HTML, `<!doctype html>${s.text}<!-- ${generation} -->`);
   }
 
-  add("/window.js", JS, `export const g = ${generation}; ${JSON.stringify(s.text)};`);
+  await add("/window.js", JS, `export const g = ${generation}; ${JSON.stringify(s.text)};`);
 
   for (const [n, name] of s.extra.entries()) {
-    add(`/${name}-${n}.${n % 2 === 0 ? "js" : "css"}`, n % 2 === 0 ? JS : CSS, `/* ${generation} ${name} */`);
+    await add(`/${name}-${n}.${n % 2 === 0 ? "js" : "css"}`, n % 2 === 0 ? JS : CSS, `/* ${generation} ${name} */`);
   }
 
   return assets;
@@ -137,7 +150,8 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
         fc.integer({ min: 1024, max: 65_535 }),
         fc.array(step, { minLength: 1, maxLength: 24 }),
         async (port, steps) => {
-          const { env, calls } = world(port);
+          const input = await config(port);
+          const { env, calls } = world(input);
           const origin = `http://127.0.0.1:${port}`;
           // The walk's state: the table the brain carries now (none before the first build), and every
           // validator an earlier table served.
@@ -148,15 +162,15 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
           for (const s of steps) {
             // A rebuild is always possible; the first move of a walk with no table yet may also be one.
             if (s.move % 4 === 0) {
-              for (const asset of Object.values(current ?? {})) {
+              for (const asset of Rec.values(current ?? {})) {
                 stale.push(asset.hash);
               }
 
-              current = rebuilt(s, ++generation);
+              current = await rebuilt(s, ++generation);
               continue;
             }
 
-            const routes = Object.keys(current ?? {});
+            const routes = Rec.keys(current ?? {});
             const choices = ["/", ...routes, `/${s.word}-absent.js`];
             const path = choices[s.pick % choices.length]!;
             const method = METHODS[s.method % METHODS.length]!;
@@ -166,10 +180,10 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
               Match.when(1, () => origin),
               Match.orElse(() => null),
             );
-            const target = path === "/" ? (current !== undefined && Object.hasOwn(current, PAGE) ? PAGE : null) : path;
+            const target = path === "/" ? (current !== undefined && Rec.has(current, PAGE) ? PAGE : null) : path;
 
             const asset =
-              target !== null && current !== undefined && Object.hasOwn(current, target) ? current[target] : undefined;
+              target !== null && current !== undefined && Rec.has(current, target) ? current[target] : undefined;
 
             const validators = [
               ...(asset === undefined ? [] : [`"${asset.hash}"`]),
@@ -198,7 +212,7 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
                     ...(method === "GET" || method === "HEAD" ? {} : { body: s.text }),
                   }),
                   env,
-                  config(port),
+                  input,
                   current,
                 ),
               ),
@@ -272,9 +286,3 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
     expect([...reached].sort(), "every serving case was reached by the generated walks").toEqual([...REACH].sort());
   });
 });
-
-function instanceFixture(config: StartsTest.Fixture) {
-  return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
-}

@@ -5,8 +5,9 @@
 import { RecordedStart } from "@kampus/libfabrika";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Layer, Predicate, Result } from "effect";
+import { Effect, Exit, Formatter, Layer, Predicate, Result } from "effect";
 import { Digest } from "effect/crypto";
+
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -55,10 +56,10 @@ StartsTest.law(
   ([recipe]) =>
     Effect.gen(function* () {
       const input = yield* StartsTest.input(recipe);
-      const config = yield* decode({ INSTANCE: JSON.stringify(input) });
+      const config = yield* decode({ INSTANCE: Formatter.formatJson(input) });
       expect(config.port).toBe(recipe.port);
       expect(config.build).toBe(recipe.build);
-      const bad = yield* Effect.exit(decode({ INSTANCE: JSON.stringify(StartsTest.corrupt(input, 6)) }));
+      const bad = yield* Effect.exit(decode({ INSTANCE: Formatter.formatJson(StartsTest.corrupt(input, 6)) }));
       expect(Exit.isFailure(bad)).toBe(true);
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );
@@ -66,7 +67,7 @@ StartsTest.law(
 /** The `inputs.name` callback, as the runtime composes it. */
 const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const ctx: unknown = { id: { name: "project-a" } };
-  const input = RecordWireTest.settingsFixture(settings);
+  const input = await Effect.runPromise(RecordWireTest.settingsFixture(settings));
   const env = { INSTANCE: JSON.stringify(input) };
   const runtime: ReturnType<typeof projectRuntime> = Reflect.apply(projectRuntime, undefined, [ctx, env]);
   await runtime.runPromise(Effect.void);

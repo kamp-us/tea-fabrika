@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { it as property } from "@effect/vitest";
-import { Schema } from "effect";
+import { Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { jobs } from "./changes.mjs";
@@ -43,7 +43,7 @@ const result = fc.constantFrom("success", "skipped", "failure", "cancelled", "")
 
 // A workflow's needs where every job passed; gated jobs skip when their flag is "false".
 const green = fc.tuple(...gated.map(() => fc.constantFrom("true", "false"))).map((flags) => {
-  const outputs: Record<string, string | undefined> = Object.fromEntries(
+  const outputs: Record<string, string | undefined> = Rec.fromEntries(
     gated.flatMap((name, i) => gates[name].map((flag) => [flag, flags[i]])),
   );
 
@@ -62,13 +62,13 @@ const green = fc.tuple(...gated.map(() => fc.constantFrom("true", "false"))).map
 it("1, 9: every job success passes, whatever changes said, and each needs entry gets one line", () => {
   fc.assert(
     fc.property(green, (needs) => {
-      for (const job of Object.values(needs)) {
+      for (const job of Rec.values(needs)) {
         job.result = "success";
       }
 
       const verdict = judge(needs);
       expect(verdict.pass).toBe(true);
-      expect(verdict.lines).toHaveLength(Object.keys(needs).length);
+      expect(verdict.lines).toHaveLength(Rec.keys(needs).length);
     }),
     options,
   );
@@ -177,13 +177,13 @@ it("the verdict passes exactly when every job passes on its own", () => {
       fc.tuple(...gated.map(() => fc.tuple(result, flag))),
       (top, rows) => {
         const outputs: Record<string, string | undefined> = {
-          ...Object.fromEntries(gated.map((name, i) => [name, rows[i]![1]])),
+          ...Rec.fromEntries(gated.map((name, i) => [name, rows[i]![1]])),
           field: top.field,
         };
 
         const needs: Record<string, Job> = {
           changes: { result: top.changes, outputs },
-          ...Object.fromEntries(gated.map((name, i) => [name, { result: rows[i]![0] }])),
+          ...Rec.fromEntries(gated.map((name, i) => [name, { result: rows[i]![0] }])),
         };
 
         const passes = (name: string) =>
@@ -197,7 +197,7 @@ it("the verdict passes exactly when every job passes on its own", () => {
             ) &&
             (name !== "check" || top.field === "false"));
 
-        expect(judge(needs).pass).toBe(Object.keys(needs).every(passes));
+        expect(judge(needs).pass).toBe(Rec.keys(needs).every(passes));
       },
     ),
     options,
@@ -254,7 +254,7 @@ const needed = (flags: Readonly<Record<string, boolean>>, name: (typeof gated)[n
 /** The needs one run gives when every job its flags turned on passed, from changes.mjs's own flags. */
 const ran = (flags: Record<string, boolean>): Record<string, Job> => {
   const outputs = {
-    ...Object.fromEntries(Object.entries(flags).map(([name, on]) => [name, String(on)])),
+    ...Rec.fromEntries(Rec.toEntries(flags).map(([name, on]) => [name, String(on)])),
     related: "false",
   };
 
@@ -381,9 +381,7 @@ it("property: a draft passes with its heavy jobs skipped; a ready PR fails when 
 // started skips, since its `!cancelled()` is now false, while its flag still said it runs. Whatever
 // the others ended as, such a run never passes: a leg canceled because a sibling failed is no pass.
 it("property: a run stopped at its first red job never passes", () => {
-  const succeeded = (needs: Record<string, Job>) =>
-    Object.keys(needs).filter((name) => needs[name]!.result === "success");
-
+  const succeeded = (needs: Record<string, Job>) => Rec.keys(needs).filter((name) => needs[name]!.result === "success");
   fc.assert(
     fc.property(
       paths,

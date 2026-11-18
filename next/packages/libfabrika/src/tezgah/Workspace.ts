@@ -6,7 +6,9 @@
  * A layout is a tile, or a container that runs in one of two directions and holds its parts in
  * order, each with its own `percent` of the container (0277, from AeroSpace's tree in 0505).
  */
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as Id from "../Id.ts";
 import { ProcessName } from "../processes/Process.ts";
 
@@ -174,7 +176,8 @@ export type TezgahView = typeof TezgahView.Type;
 
 /** An id's body: what follows its fixed prefix. A process name allows no `_`, so a name carries
  *  only the body, and the fixed prefix of each kind keeps it whole. */
-const body = (id: string, prefix: string): string => (id.startsWith(`${prefix}_`) ? id.slice(prefix.length + 1) : id);
+const body = (id: string, prefix: string): string =>
+  Str.startsWith(`${prefix}_`)(id) ? Str.slice(prefix.length + 1)(id) : id;
 
 /**
  * Returns the registered name of a person's tezgah, `tezgah:<the person id's body>`: one tezgah
@@ -190,5 +193,11 @@ export const tezgahName = (person: string): string => `tezgah:${body(person, "pe
  *
  * @category getters
  */
-export const childName = (program: string, tile: TileId): string =>
-  `${program.slice(program.lastIndexOf("/") + 1)}:${body(tile, "tile")}`;
+export const childName = (program: string, tile: TileId): string => {
+  const own = Option.match(Str.lastIndexOf("/")(program), {
+    onNone: () => program,
+    onSome: (slash) => Str.slice(slash + 1)(program),
+  });
+
+  return `${own}:${body(tile, "tile")}`;
+};

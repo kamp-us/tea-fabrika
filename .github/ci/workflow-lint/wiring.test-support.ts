@@ -4,6 +4,7 @@
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
 import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -121,8 +122,8 @@ const vitestCommand =
 // 0536: a pull request that asked for its visual tests.
 export const visualLabel = "contains(github.event.pull_request.labels.*.name, 'visual')";
 
-export const visualRoute =
-  "(github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')";
+// 0536: where next's full fallback starts the visual legs, a push to main and a labeled pull request.
+export const visualRoute = `(github.event_name == 'push' || ${visualLabel})`;
 
 const automatic = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
 
@@ -149,8 +150,9 @@ export const nextLegs = (count: number) => [
   "5",
 ];
 
-// S1: the matrix is changes' `shards`, else a fallback (legs.ts): the full matrix on a pull request
-// with the `visual` label, the vitest legs alone everywhere else (0536, E10).
+// S1: the matrix is changes' `shards`, else a fallback (legs.ts): the full matrix on a push to main
+// and on a pull request with the `visual` label, the vitest legs alone everywhere else, the merge
+// queue among them (0536, E10).
 export const sizedLegs = (legs: readonly unknown[], plain: readonly unknown[] = ["1", "2", "3", "4", "5"]) =>
   `\${{ fromJSON(needs.changes.outputs.shards || (${visualRoute} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`;
 
@@ -255,7 +257,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       // SAFETY: every value below is a string, and the wider map type lets a plant add or remove an output.
       outputs: {
-        ...Object.fromEntries(
+        ...Rec.fromEntries(
           ["check", "typecheck", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
         ),
         // The plan for CI paths, slice 2: the parser's pass prints these two again, and the size step
@@ -335,7 +337,7 @@ const valid = (label: string, extra: string) => ({
           env: {
             ...diff.env,
             TESTED: `\${{ github.sha }}`,
-            ...Object.fromEntries(
+            ...Rec.fromEntries(
               ["check", "typecheck", "field", "build"].map((key) => [
                 key.toUpperCase(),
                 `\${{ steps.diff.outputs.${key} }}`,

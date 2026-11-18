@@ -120,11 +120,13 @@ export const assign = (
     x.path < y.path ? -1 : x.path > y.path ? 1 : 0;
   const order = files
     .map((file, at) => ({ path: file.path, seconds: file.seconds, at }))
-    .toSorted((x, y) =>
-      x.seconds === undefined || y.seconds === undefined
-        ? Number(x.seconds === undefined) - Number(y.seconds === undefined) || byPath(x, y)
-        : y.seconds - x.seconds || byPath(x, y),
-    );
+    .toSorted((x, y) => {
+      const bySeconds =
+        x.seconds === undefined || y.seconds === undefined
+          ? Number(x.seconds === undefined) - Number(y.seconds === undefined)
+          : y.seconds - x.seconds;
+      return bySeconds !== 0 ? bySeconds : byPath(x, y);
+    });
   const load = Array.from({ length: count }, (_, i) => start[i] ?? 0);
   const machines = files.map(() => 0);
 

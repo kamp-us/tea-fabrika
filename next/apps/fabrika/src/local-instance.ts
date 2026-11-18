@@ -1,5 +1,6 @@
-import { Cause, Effect, Path, Predicate, Schema } from "effect";
+import { Array as Arr, Cause, Effect, Path, Predicate, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
+
 import type { Options } from "./settings.ts";
 
 class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
@@ -20,7 +21,8 @@ const addressInUse = (cause: unknown): boolean =>
   (Predicate.hasProperty(cause, "cause") && cause.cause !== cause && addressInUse(cause.cause));
 
 const portTaken = (cause: Cause.Cause<unknown>) =>
-  cause.reasons.some(
+  Arr.some(
+    cause.reasons,
     (reason) =>
       (Cause.isFailReason(reason) && addressInUse(reason.error)) ||
       (Cause.isDieReason(reason) && addressInUse(reason.defect)),

@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect } from "effect";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
@@ -27,52 +27,56 @@ const PBT = "@demlik/tea/pbt";
 const codeFiles = (dir: string): ReadonlyArray<string> =>
   !existsSync(dir)
     ? []
-    : readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    : Arr.flatMap(readdirSync(dir, { withFileTypes: true }), (entry) => {
         const path = join(dir, entry.name);
 
         if (!entry.isDirectory()) {
           return /\.tsx?$/.test(entry.name) ? [path] : [];
         }
 
-        const skip = ["node_modules", "dist"].includes(entry.name) || entry.name.startsWith(".");
-
+        const skip = ["node_modules", "dist"].includes(entry.name) || pipe(entry.name, Str.startsWith("."));
         return skip ? [] : codeFiles(path);
       });
 
 /** The names a file imports from, read from lines that start with `import` and name a `from`. */
 const importsInFile = (file: string): ReadonlyArray<string> =>
-  [...readFileSync(file, "utf8").matchAll(/^[ \t]*import\b[^;]*?\bfrom\s*["']([^"']+)["']/gm)].flatMap((m) =>
-    m[1] === undefined ? [] : [m[1]],
+  Arr.flatMap(
+    [...pipe(readFileSync(file, "utf8"), Str.matchAll(/^[ \t]*import\b[^;]*?\bfrom\s*["']([^"']+)["']/gm))],
+    (m) => (m[1] === undefined ? [] : [m[1]]),
   );
 
 /** Each machine under `next`, with the laws files beside it: `<name>.laws.test.ts` and the like. */
 const machines = (next: string): ReadonlyArray<{ readonly path: string; readonly laws: ReadonlyArray<string> }> => {
   const files = codeFiles(next);
 
-  return files
-    .filter((file) => !/\.test\.tsx?$/.test(file) && readFileSync(file, "utf8").includes("defineMachine("))
-    .map((machine) => {
-      const stem = basename(machine).replace(/\.tsx?$/, "");
-
-      const laws = files.filter(
+  return pipe(
+    files,
+    Arr.filter(
+      (file) => !/\.test\.tsx?$/.test(file) && pipe(readFileSync(file, "utf8"), Str.includes("defineMachine(")),
+    ),
+    Arr.map((machine) => {
+      const stem = pipe(basename(machine), Str.replace(/\.tsx?$/, ""));
+      const laws = Arr.filter(
+        files,
         (file) =>
           dirname(file) === dirname(machine) &&
-          basename(file).startsWith(`${stem}.`) &&
-          basename(file).endsWith(".laws.test.ts"),
+          pipe(basename(file), Str.startsWith(`${stem}.`)) &&
+          pipe(basename(file), Str.endsWith(".laws.test.ts")),
       );
-
-      return { path: relative(next, machine).split(sep).join("/"), laws };
-    })
-    .sort((a, b) => (a.path < b.path ? -1 : 1));
+      return { path: Arr.join(Str.split(relative(next, machine), sep), "/"), laws };
+    }),
+  ).sort((a, b) => (a.path < b.path ? -1 : 1));
 };
 
-const hasPbt = (laws: ReadonlyArray<string>) => laws.some((file) => importsInFile(file).includes(PBT));
+const hasPbt = (laws: ReadonlyArray<string>) => Arr.some(laws, (file) => importsInFile(file).includes(PBT));
 
 /** Each file under `next` that makes a machine and has no laws file beside it using tea's pbt. */
 const lawless = (next: string): ReadonlyArray<string> =>
-  machines(next)
-    .filter((m) => !hasPbt(m.laws))
-    .map((m) => m.path);
+  pipe(
+    machines(next),
+    Arr.filter((m) => !hasPbt(m.laws)),
+    Arr.map((m) => m.path),
+  );
 
 const SYNC_TEST = "syncTest(";
 
@@ -83,16 +87,17 @@ const LEFT_OUT = /\/\/[ \t]*sync test left out:[ \t]*\S/;
  * names its reason for leaving it out. A machine with no laws is `lawless`'s, not this list's.
  */
 const unsynced = (next: string): ReadonlyArray<string> =>
-  machines(next)
-    .filter((m) => hasPbt(m.laws))
-    .filter((m) =>
-      m.laws.every((file) => {
+  pipe(
+    machines(next),
+    Arr.filter((m) => hasPbt(m.laws)),
+    Arr.filter((m) =>
+      Arr.every(m.laws, (file) => {
         const text = readFileSync(file, "utf8");
-
-        return !text.includes(SYNC_TEST) && !LEFT_OUT.test(text);
+        return !pipe(text, Str.includes(SYNC_TEST)) && !LEFT_OUT.test(text);
       }),
-    )
-    .map((m) => m.path);
+    ),
+    Arr.map((m) => m.path),
+  );
 
 describe("the real next/", () => {
   it("has laws beside every machine", () => {
@@ -135,7 +140,7 @@ describe("planted machines", () => {
     Effect.sync(() => {
       const folder = mkdtempSync(join(tmpdir(), "next-exam-"));
 
-      for (const [path, text] of Object.entries(planted)) {
+      for (const [path, text] of Rec.toEntries(planted)) {
         mkdirSync(dirname(join(folder, path)), { recursive: true });
         writeFileSync(join(folder, path), `${text}\n`);
       }

@@ -27,9 +27,19 @@ import { describe, expect, it } from "@effect/vitest";
 import { Stub } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { RpcCallError } from "alchemy/Rpc";
-import type { Layer } from "effect";
-import { Effect, Option, Predicate, Schema, Scope, Stream } from "effect";
-import { TestClock } from "effect/testing";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import type * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
@@ -66,7 +76,7 @@ const home = folder.pipe(
         return known;
       }
 
-      const made = connect(join(dir, `${name.replaceAll("/", "_")}.db`));
+      const made = connect(join(dir, `${Str.replaceAll("/", "_")(name)}.db`));
       dbs.set(name, made);
 
       return made;
@@ -115,7 +125,7 @@ const row = (spanId: string, fill = 0): Row => ({
   attributes: {
     "fab.process": PROCESS,
     "fab.letter.id": "m-17",
-    ...(fill > 0 ? { "fab.fill": "f".repeat(fill) } : {}),
+    ...(fill > 0 ? { "fab.fill": Str.repeat(fill)("f") } : {}),
   },
   events: [],
   links: [],
@@ -123,7 +133,7 @@ const row = (spanId: string, fill = 0): Row => ({
   ok: true,
 });
 
-const id = (n: number) => `s${String(n).padStart(15, "0")}`;
+const id = (n: number) => `s${Str.padStart(15, "0")(String(n))}`;
 
 const CAP = 64 * 1024;
 
@@ -146,7 +156,7 @@ const send = (chain: ChainValue, from: number, rows: ReadonlyArray<{ span: Row; 
       }
 
       const had = new Set(answer.had);
-      left = left.filter((r) => !had.has(r.span.spanId));
+      left = Arr.filter(left, (r) => !had.has(r.span.spanId));
       at += 1;
       expect(answer.next).toBe(chain._tag === "job" ? `job/${chain.process}/${at}` : `spans/${at}`);
     }
@@ -191,16 +201,16 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
 
         expect(used.size, "80 rows of about 2 KB under a 64 KB cap need more than one part").toBeGreaterThan(1);
         const all = yield* read(job);
-        expect(all.map((r) => r.spanId)).toEqual(Array.from({ length: 80 }, (_, n) => id(n)));
+        expect(Arr.map(all, (r) => r.spanId)).toEqual(Array.from({ length: 80 }, (_, n) => id(n)));
 
         if (parts !== undefined) {
           for (const p of [...used].sort((x, y) => x - y).slice(0, -1)) {
             const rolled = parts.rows(part(p), "rolled");
             expect(rolled, `${part(p)} keeps one rolled row`).toHaveLength(1);
-            const values = Object.values(rolled[0] ?? {});
+            const values = Rec.values(rolled[0] ?? {});
             expect(values, "rolled names the next part").toContain(part(p + 1));
             expect(
-              values.some((v) => Predicate.isNumber(v) && v >= CAP),
+              Arr.some(values, (v) => Predicate.isNumber(v) && v >= CAP),
               "rolled keeps the part's size then, at or past the cap",
             ).toBe(true);
           }
@@ -238,7 +248,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
         }
 
         yield* send(job, 1, [kept(row(id(n - 1))), kept(row(id(1000))), kept(row(id(1001))), kept(row(id(1002)))]);
-        const all = (yield* read(job)).map((r) => r.spanId);
+        const all = Arr.map(yield* read(job), (r) => r.spanId);
         expect(all).toHaveLength(held + 4);
         expect(new Set(all).size).toBe(all.length);
       }).pipe(Effect.provide(layer));
@@ -263,16 +273,11 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
           expect(answer._tag).toBe("rolled");
 
           if (answer._tag === "rolled") {
-            expect([...answer.had].sort()).toEqual(
-              first
-                .slice(30)
-                .map((r) => r.span.spanId)
-                .sort(),
-            );
+            expect([...answer.had].sort()).toEqual(Arr.map(first.slice(30), (r) => r.span.spanId).sort());
           }
 
           yield* send(job, 0, again);
-          const all = (yield* read(job)).map((r) => r.spanId);
+          const all = Arr.map(yield* read(job), (r) => r.spanId);
           expect(all).toEqual(Array.from({ length: 41 }, (_, n) => id(n)));
         }).pipe(Effect.provide(layer));
       }),
@@ -290,7 +295,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
           expect(yield* records.write(job, 0, batch)).toEqual({ _tag: "written" });
         }
 
-        expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: made }, (_, n) => id(n)));
+        expect(Arr.map(yield* read(job), (r) => r.spanId)).toEqual(Array.from({ length: made }, (_, n) => id(n)));
       }).pipe(Effect.provide(layer));
     }),
   );
@@ -307,12 +312,15 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
         }
 
         expect(at).toBeGreaterThan(0);
-        expect((yield* read(spans)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
+        expect(Arr.map(yield* read(spans), (r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
         expect(yield* read(job)).toEqual([]);
 
         if (parts !== undefined) {
           expect(
-            parts.asked.filter((name) => name.startsWith("spans/")).every((name) => /^spans\/\d+$/.test(name)),
+            Arr.every(
+              Arr.filter(parts.asked, (name) => Str.startsWith("spans/")(name)),
+              (name) => /^spans\/\d+$/.test(name),
+            ),
           ).toBe(true);
           expect(parts.names()).toContain("spans/0");
           expect(parts.names()).toContain("spans/1");
@@ -429,7 +437,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
 
               if (parts !== undefined) {
                 expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
-                const content = JSON.stringify(parts.rows(part(0), "content"));
+                const content = Formatter.formatJson(parts.rows(part(0), "content"));
                 expect(content).not.toContain("note-body-p100");
                 expect(content).toContain("owner");
               }
@@ -497,7 +505,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
               expect(yield* records.content(job, id(0))).toEqual(
                 Option.some({ _tag: "deleted", spanId: id(0), by: "owner", at: T, reason: value }),
               );
-              expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
+              expect(Arr.map(yield* read(job), (r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
             }).pipe(Effect.provide(layer));
           }),
         { concurrency: 1, discard: true },
@@ -525,7 +533,7 @@ describe("RecordManager.remote, the record object's stub", () => {
       const records = yield* RecordManager;
       expect(yield* records.write(job, 2, [kept(row(id(0)))])).toEqual({ _tag: "written" });
       expect(yield* records.write(spans, 0, [kept(row(id(1)))])).toEqual({ _tag: "written" });
-      expect(calls.map((c) => c.name)).toEqual([part(2), "spans/0"]);
+      expect(Arr.map(calls, (c) => c.name)).toEqual([part(2), "spans/0"]);
     }).pipe(Effect.provide(RecordManager.remote(make)));
   });
 
@@ -634,11 +642,11 @@ describe("RecordManager.remote, the record object's stub", () => {
               stub(() => Effect.succeed({ spans: [{ ...row(id(0)), events }], after: 1, rolled: false }));
 
             const good = yield* read(job).pipe(Effect.provide(RecordManager.remote(page([event]).make)));
-            expect(good.map((r) => r.events)).toEqual([[event]]);
+            expect(Arr.map(good, (r) => r.events)).toEqual([[event]]);
 
             for (const broken of [{}, { ...event, name: 7 }, { ...event, attributes: { "fab.n": {} } }]) {
               const bad = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(page([broken]).make))));
-              expect(bad.reason, JSON.stringify(broken)).toBe("bad_row");
+              expect(bad.reason, Formatter.format(broken)).toBe("bad_row");
             }
           }),
         { concurrency: 1, discard: true },

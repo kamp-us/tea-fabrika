@@ -9,21 +9,28 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
@@ -45,6 +52,11 @@ import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as OpenRepository from "./OpenRepository.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
+/** A failed confirm whose message carries the secret, so a leak of it shows in every output. */
+class ConfirmFault extends Schema.TaggedError<ConfirmFault, { readonly brand: unique symbol }>()("ConfirmFault", {
+  message: Schema.String,
+}) {}
+
 const services = Layer.mergeAll(NodeServices.layer, RepositoryOpenTest.toml, Digest.layerWebCrypto);
 
 const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
@@ -64,12 +76,12 @@ const tape = fc.array(cell, { minLength: 1, maxLength: 8 });
 
 const repoSnapshot = (text: string | null) =>
   Schema.decodeSync(RepoSnapshot)({
-    key: "a".repeat(64),
+    key: Function.pipe("a", Str.repeat(64)),
     branch: "release",
-    commit: "b".repeat(40),
+    commit: Function.pipe("b", Str.repeat(40)),
     file: document,
     text,
-    hash: "c".repeat(64),
+    hash: Function.pipe("c", Str.repeat(64)),
   });
 
 const reader = (text: string | null, touches: Array<string>) =>
@@ -93,8 +105,8 @@ const reader = (text: string | null, touches: Array<string>) =>
   });
 
 describe("T878 composed repository opening", () => {
-  it("L3: every load uses supplied text once, checks scope/version first, and retains exact origins and checked hash", async () => {
-    await fc.assert(
+  it("L3: every load uses supplied text once, checks scope/version first, and retains exact origins and checked hash", () =>
+    fc.assert(
       fc.asyncProperty(tape, fc.integer({ min: 1, max: 65535 }), async (cells, port) => {
         await Effect.runPromise(
           Effect.scoped(
@@ -154,7 +166,7 @@ describe("T878 composed repository opening", () => {
                 const index = c.pick % docs.length;
                 invalidPerson = c.move % 2 !== 0 && reasons[index] === null;
                 const padding = c.move % 6;
-                const body = docs[index] === null ? null : "\n".repeat(padding) + docs[index]!;
+                const body = docs[index] === null ? null : Function.pipe("\n", Str.repeat(padding)) + docs[index]!;
 
                 const result = yield* OpenRepository.prepare("selected-repo", options).pipe(
                   Effect.provide([reader(body, touches), fs, counted]),
@@ -163,7 +175,7 @@ describe("T878 composed repository opening", () => {
 
                 expect(Exit.isSuccess(result)).toBe(reasons[index] === null && !invalidPerson);
                 expect(personReads).toBe(index === 3 || index === 6 || index === 8 ? 0 : 1);
-                expect(parsed.filter((value) => value === body)).toHaveLength(body === null ? 0 : 1);
+                expect(Arr.filter(parsed, (value) => value === body)).toHaveLength(body === null ? 0 : 1);
 
                 if (Exit.isSuccess(result)) {
                   const saved = result.value.settings;
@@ -182,8 +194,8 @@ describe("T878 composed repository opening", () => {
                   expect(saved.hash).toBe(checked.snapshot.hash);
                   expect(result.value.snapshot.commit).toBe(repoSnapshot(body).commit);
                 } else {
-                  expect(result.cause.reasons.some((r) => r._tag === "Fail")).toBe(true);
-                  const failure = result.cause.reasons.find((r) => r._tag === "Fail");
+                  expect(Arr.some(result.cause.reasons, (r) => r._tag === "Fail")).toBe(true);
+                  const failure = Option.getOrUndefined(Arr.findFirst(result.cause.reasons, (r) => r._tag === "Fail"));
 
                   if (failure?._tag === "Fail") {
                     expect(failure.error.reason._tag).toBe("InvalidDocument");
@@ -207,12 +219,11 @@ describe("T878 composed repository opening", () => {
         );
       }),
       { seed: 119120, numRuns: 200 },
-    );
-  });
+    ));
 
-  it("L3: a malformed snapshot made upstream is refused rather than defaulted or returned unchecked", async () => {
+  it("L3: a malformed snapshot made upstream is refused rather than defaulted or returned unchecked", () =>
     // A fault at the saved-data boundary makes bypassing Snapshot.read observable.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (cells) => {
         const original = SettingsSnapshot.make;
         const spy = vi.spyOn(SettingsSnapshot, "make");
@@ -250,14 +261,13 @@ describe("T878 composed repository opening", () => {
         );
       }),
       { seed: 119120, numRuns: 200 },
-    );
-  });
+    ));
 });
 
 const forms = (word: string) => [
   word,
   encodeURIComponent(word),
-  JSON.stringify(word).slice(1, -1),
+  Function.pipe(JSON.stringify(word), Str.slice(1, -1)),
   Buffer.from(word).toString("base64"),
   Buffer.from(word).toString("base64url"),
 ];
@@ -281,7 +291,7 @@ it.effect.prop(
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-open-code-" });
         const marker = path.join(root, "executed");
         const touches: Array<string> = [];
-        const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'executed');`;
+        const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${Formatter.formatJson(marker)}, 'executed');`;
 
         for (const name of ["settings.mjs", "program.mjs", "build.mjs", "start.mjs"]) {
           yield* fs.writeFileString(path.join(root, name), tripwire);
@@ -289,7 +299,7 @@ it.effect.prop(
 
         yield* fs.writeFileString(
           path.join(root, "package.json"),
-          JSON.stringify({
+          Formatter.formatJson({
             type: "module",
             scripts: { build: "node build.mjs", start: "node start.mjs" },
           }),
@@ -332,8 +342,8 @@ it.effect.prop(
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
-it("L9 [secrets]: generated opening flows redact every report, pending state, error, span, ledger envelope and snapshot", async () => {
-  await fc.assert(
+it("L9 [secrets]: generated opening flows redact every report, pending state, error, span, ledger envelope and snapshot", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.stringMatching(/^[a-zA-Z][a-zA-Z0-9]{11,23}$/),
       tape,
@@ -414,10 +424,13 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 const source = c.pick % 9;
 
                 const body = Match.value(source).pipe(
-                  Match.when(0, () => `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`),
-                  Match.when(3, () => `fabrika-version = ${JSON.stringify(secret)}\n`),
-                  Match.when(4, () => `[${JSON.stringify(secret)}]\nvalue = true\n`),
-                  Match.when(5, () => `fabrika-version = ${JSON.stringify(secret)} [\n`),
+                  Match.when(
+                    0,
+                    () => `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${Formatter.formatJson(secret)}\n`,
+                  ),
+                  Match.when(3, () => `fabrika-version = ${Formatter.formatJson(secret)}\n`),
+                  Match.when(4, () => `[${Formatter.formatJson(secret)}]\nvalue = true\n`),
+                  Match.when(5, () => `fabrika-version = ${Formatter.formatJson(secret)} [\n`),
                   Match.orElse(() => 'fabrika-version = "0.0.0"\n'),
                 );
 
@@ -436,8 +449,8 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                   }
 
                   const args = command.args;
-                  const commit = "b".repeat(40);
-                  const blob = "d".repeat(40);
+                  const commit = Function.pipe("b", Str.repeat(40));
+                  const blob = Function.pipe("d", Str.repeat(40));
                   let output = "";
 
                   if (args.includes("--show-toplevel")) {
@@ -501,7 +514,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
 
                 if (Exit.isFailure(checked)) {
                   outputs.error.push(String(checked.cause), checked.cause);
-                  outputs.errorJson.push(JSON.stringify(checked.cause));
+                  outputs.errorJson.push(Formatter.formatJson(checked.cause));
                 } else {
                   outputs.settings.push(checked.value.settings);
 
@@ -516,7 +529,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                       outputs.pending.push(snapshot);
 
                       return source === 8
-                        ? Effect.fail(new Error(`${url} ${folder} ${secret}`))
+                        ? Effect.fail(ConfirmFault.make({ message: `${url} ${folder} ${secret}` }))
                         : Effect.succeed(c.move % 2 === 0);
                     },
                   }).pipe(
@@ -548,10 +561,10 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                       outputs.pending.push(opened.value);
                     }
 
-                    outputs.report.push(JSON.stringify(opened.value));
+                    outputs.report.push(Formatter.formatJson(opened.value));
                   } else {
                     outputs.error.push(String(opened.cause), opened.cause);
-                    outputs.errorJson.push(JSON.stringify(opened.cause));
+                    outputs.errorJson.push(Formatter.formatJson(opened.cause));
                   }
                 }
               }
@@ -559,7 +572,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           ).pipe(Effect.provide([services, logger]), Effect.withTracer(tracer)),
         );
         outputs.spans.push(
-          ...spans.map((span) => ({
+          ...Arr.map(spans, (span) => ({
             name: span.name,
             attributes: [...span.attributes],
             events: span.events,
@@ -567,7 +580,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           })),
         );
 
-        for (const [name, values] of Object.entries(outputs)) {
+        for (const [name, values] of Rec.toEntries(outputs)) {
           expect(values.length, `${name} must be observed`).toBeGreaterThan(0);
 
           const output =
@@ -575,12 +588,11 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
               Predicate.isBigInt(value) ? value.toString() : value,
             ) + inspect(values, { depth: null });
 
-          for (const spelling of [secret, folder, url].flatMap(forms)) {
+          for (const spelling of Arr.flatMap([secret, folder, url], forms)) {
             expect(output, name).not.toContain(spelling);
           }
         }
       },
     ),
     { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
-  );
-});
+  ));

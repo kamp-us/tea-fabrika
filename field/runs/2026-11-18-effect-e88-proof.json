@@ -1,0 +1,262 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-effect-e88-proof",
+  "ticket": "1075",
+  "pr": "kamp-us/tea-fabrika#1562",
+  "started": "2026-11-18T02:57:58+00:00",
+  "ended": "2026-11-18T03:22:30+00:00",
+  "parent": "2026-11-18-effect-e88-fix3",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "The E88 plan's real-resource proof at acdcd27c, next/: each of the 39 paths named in field/runs/2026-11-16-effect-e88-fix1.json (remotePending) ran once, one file per vitest run, in a disposable cloud container, not the owner's laptop. All 39 pass: 516 tests passed, none failed; the one skipped test is port-home's own runIf/skipIf writer pair, as on main. The R5 and R6 plants are in field/runs/2026-11-18-effect-e88-fix3.json.",
+  "note": "Node 26.13.0, nice 15, --maxWorkers=1, TYPESAFE_API_KEY unset, default test depth, openssh-client installed in the container. one-file.visual first failed 2 of 2 because the pinned Playwright 1.64.1 expects headless shell build 1248 and only 1243 is installed and the download host is blocked; rerun with PLAYWRIGHT_BROWSERS_PATH pointing build 1248's folder at the installed 1243 build, 2 of 2 passed. That is a near browser build, not the pinned one; CI's chromium step runs the pinned build. No launchd, Electron or signal to a process the run did not start.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 24.5,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "billing": null,
+  "checkedHead": "acdcd27caaf96901e6c5352a80450b8b16ee6702",
+  "guardedLawsRun": true,
+  "files": [
+    {
+      "file": "next/apps/fabrika/e2e/chaos-revoke.integration.test.ts",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/e2e/one-file.visual.test.ts",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/brain-life.integration.test.ts",
+      "numPassedTests": 5,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/build-command.integration.test.ts",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/build.integration.test.ts",
+      "numPassedTests": 11,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts",
+      "numPassedTests": 6,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/door-recovery.integration.test.ts",
+      "numPassedTests": 21,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/door.integration.test.ts",
+      "numPassedTests": 153,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/file-services.laws.integration.test.ts",
+      "numPassedTests": 13,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/hands-launcher.integration.test.ts",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/input-recording.integration.test.ts",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/instance-one-file.integration.test.ts",
+      "numPassedTests": 7,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/instance-records.integration.test.ts",
+      "numPassedTests": 13,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/instance-wire.integration.test.ts",
+      "numPassedTests": 15,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/local-instance.integration.test.ts",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/memory-replace.laws.integration.test.ts",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/port-home.laws.integration.test.ts",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 1
+    },
+    {
+      "file": "next/apps/fabrika/src/repository-open.integration.test.ts",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts",
+      "numPassedTests": 14,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/runtime.laws.integration.test.ts",
+      "numPassedTests": 29,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/settings-start.integration.test.ts",
+      "numPassedTests": 7,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/sibling.laws.integration.test.ts",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/start-child.laws.integration.test.ts",
+      "numPassedTests": 23,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/start-member.laws.integration.test.ts",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/tasks-wire.integration.test.ts",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/worker-mail.integration.test.ts",
+      "numPassedTests": 6,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/worker-monitor.integration.test.ts",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/worker-quotas.integration.test.ts",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/worker-supervision.integration.test.ts",
+      "numPassedTests": 4,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/worker-usage.integration.test.ts",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts",
+      "numPassedTests": 7,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts",
+      "numPassedTests": 12,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts",
+      "numPassedTests": 7,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/runtime/RecoveryStore.integration.test.ts",
+      "numPassedTests": 8,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/runtime/Runner.integration.test.ts",
+      "numPassedTests": 117,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/transport/Sshsig.integration.test.ts",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    }
+  ]
+}

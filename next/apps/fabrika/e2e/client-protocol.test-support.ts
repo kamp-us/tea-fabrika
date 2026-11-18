@@ -21,8 +21,21 @@ import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { type ClientRow, ClientRows } from "@kampus/libfabrika/transport/ClientRows";
-import { Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { build } from "../src/build.ts";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
@@ -120,13 +133,12 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
     yield* backend.add("milk");
     yield* until(
       `${backend.name}: milk in the view`,
-      Effect.map(backend.shown, (rows) => rows.some((r) => r.name === "milk" && !r.checked)),
+      Effect.map(backend.shown, (rows) => Arr.some(rows, (r) => r.name === "milk" && !r.checked)),
       backend.last,
     );
     const r = yield* reader(h, dev);
     const inbox = yield* r.read(`${PROCESS}/inbox`);
-    const sent = inbox.filter((e) => named(e.body) === "milk");
-
+    const sent = Arr.filter(inbox, (e) => named(e.body) === "milk");
     return { first, kept, sent: sent.length };
   });
 
@@ -185,7 +197,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
     const showing = Effect.map(state, (s) => ({
       link: s.link._tag,
       handshake: s.handshake._tag,
-      rows: rows.map((r) => r.record._tag),
+      rows: Arr.map(rows, (r) => r.record._tag),
     }));
 
     const backend: Backend = {
@@ -214,10 +226,9 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
         run.dispatch({ type: "press", tile: "tile_1", m: { type: "add", name }, via: "button" }).pipe(Effect.orDie),
       shown: Effect.map(state, (s) => {
         const pid = s.tiles[0]?.last;
-        const view = pid ? s.client.views[pid]?.view : undefined;
+        const view = pid !== null && pid !== undefined && pid !== "" ? s.client.views[pid]?.view : undefined;
         const data = Option.getOrUndefined(Schema.decodeOption(checklistWindow.data)(view));
-
-        return (data?.items ?? []).map((i) => ({ name: i.name, checked: i.state === "checked" }));
+        return Arr.map(data?.items ?? [], (i) => ({ name: i.name, checked: i.state === "checked" }));
       }),
       dials: count,
       last: showing,
@@ -314,7 +325,7 @@ export const served = (h: Home) =>
 
     const instance = yield* localInstance(
       built,
-      RecordWireTest.startupFixture({
+      yield* RecordWireTest.startupFixture({
         home: h.dir,
         name: PROJECT,
         person: PERSON,
@@ -322,8 +333,7 @@ export const served = (h: Home) =>
         window: null,
         port,
       }),
-    ).pipe(Effect.provide(localState()), Effect.provide(SecureRandom.layerWebCrypto));
-
+    ).pipe(Effect.provide(localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto))));
     const control = instance.project(PROJECT);
     // The private binding already speaks the project's public ledger-call protocol.
     const { append, read, wait } = control;
@@ -341,13 +351,11 @@ export const served = (h: Home) =>
         Effect.provide(ledger),
         Effect.orDie,
       );
-
-    const blob = Buffer.from(h.publicKey.split(" ")[1] ?? "", "base64");
-
+    const blob = Buffer.from(Str.split(h.publicKey, " ")[1] ?? "", "base64");
     const from = () => ({
-      by: `SHA256:${createHash("sha256").update(blob).digest("base64").replace(/=+$/, "")}`,
+      by: `SHA256:${pipe(createHash("sha256").update(blob).digest("base64"), Str.replace(/=+$/, ""))}`,
       for: PERSON,
-      sentAt: new Date().toISOString(),
+      sentAt: DateTime.formatIso(DateTime.nowUnsafe()),
       seen: 0,
       parent: null,
       traceId: TRACE,
@@ -377,10 +385,10 @@ const invoke = Effect.fnUntraced(function* <A>(method: string, call: () => Promi
 
 /** The pid of the name's newest life fact, started or restarted. */
 const newest = (facts: ReadonlyArray<Fact>) =>
-  facts
-    .filter((f) => f._tag === "started" || f._tag === "restarted")
-    .map((f) => String(read(f.body).process))
-    .at(-1);
+  Arr.map(
+    Arr.filter(facts, (f) => f._tag === "started" || f._tag === "restarted"),
+    (f) => String(read(f.body).process),
+  ).at(-1);
 
 /**
  * E1's walk: grant the client and wait for its open tile, end the tile's process as crashed through
@@ -439,23 +447,22 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     yield* backend.add("milk");
     yield* until(
       `${backend.name}: milk in the successor's view`,
-      Effect.map(backend.shown, (rows) => rows.some((r) => r.name === "milk" && !r.checked)),
+      Effect.map(backend.shown, (rows) => Arr.some(rows, (r) => r.name === "milk" && !r.checked)),
       backend.last,
     );
-
-    const restarted = (yield* s.facts(`processes/${PROCESS}`)).find(
-      (f) => f._tag === "restarted" && read(f.body).process === second,
+    const restarted = Option.getOrUndefined(
+      Arr.findFirst(
+        yield* s.facts(`processes/${PROCESS}`),
+        (f) => f._tag === "restarted" && read(f.body).process === second,
+      ),
     );
-
-    const sent = (yield* s.facts(`${PROCESS}/inbox`)).filter((f) => named(f.body) === "milk");
-
-    const watches = (yield* s.facts("processes")).filter((f) => f._tag === "monitored" && watcher(f.body) === tab);
+    const sent = Arr.filter(yield* s.facts(`${PROCESS}/inbox`), (f) => named(f.body) === "milk");
+    const watches = Arr.filter(yield* s.facts("processes"), (f) => f._tag === "monitored" && watcher(f.body) === tab);
 
     yield* backend.close;
 
     const ends = (stream: ReadonlyArray<Fact>) =>
-      stream.filter((f) => f._tag === "demonitored" && watcher(f.body) === tab);
-
+      Arr.filter(stream, (f) => f._tag === "demonitored" && watcher(f.body) === tab);
     yield* until(
       `${backend.name}: its session's watch ended after the close`,
       Effect.map(s.facts("processes"), (all) => ends(all).length > 0),
@@ -469,9 +476,12 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       endedBody,
       shownPid,
       restartedAt: restarted?.rev ?? null,
-      sent: sent.map((f) => f.rev),
-      watched: watches.map((f) => ({ ref: String(read(f.body).ref), process: String(read(f.body).process) })),
-      unwatched: ends(yield* s.facts("processes")).map((f) => ({
+      sent: Arr.map(sent, (f) => f.rev),
+      watched: Arr.map(watches, (f) => ({
+        ref: String(read(f.body).ref),
+        process: String(read(f.body).process),
+      })),
+      unwatched: Arr.map(ends(yield* s.facts("processes")), (f) => ({
         ref: String(read(f.body).ref),
         reason: String(read(f.body).reason),
       })),

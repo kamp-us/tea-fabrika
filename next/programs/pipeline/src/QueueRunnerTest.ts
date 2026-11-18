@@ -1,19 +1,21 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import {
+  Array as Arr,
   Arbitrary,
   Cause,
   Effect,
   Exit,
   Fiber,
+  Formatter,
   Logger,
+  Match,
+  Option,
   Predicate,
   Redacted,
   Schema,
-  type Scope,
-  type Tracer,
-  Match,
 } from "effect";
+import type { Scope, Tracer } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Mail from "./Mail.ts";
@@ -78,7 +80,10 @@ export type Driver = {
 };
 
 const replies = (snapshot: Snapshot, change: number) =>
-  snapshot.letters.filter((l) => l.name === `quest:${change}`).map((l) => Schema.decodeUnknownSync(Mail.Reply)(l.m));
+  Arr.map(
+    Arr.filter(snapshot.letters, (l) => l.name === `quest:${change}`),
+    (l) => Schema.decodeUnknownSync(Mail.Reply)(l.m),
+  );
 
 const finish = Effect.fnUntraced(function* (h: World) {
   for (let turn = 0; turn < 96; turn++) {
@@ -98,7 +103,7 @@ const finish = Effect.fnUntraced(function* (h: World) {
   expect((yield* h.snapshot).model?._tag, "a finite landing finishes").toBe("idle");
 });
 
-const started = (s: Snapshot) => s.starts.filter((p) => p.program === "pipeline/merger");
+const started = (s: Snapshot) => Arr.filter(s.starts, (p) => p.program === "pipeline/merger");
 
 const allNormal = (s: Snapshot) => {
   for (const merger of started(s)) {
@@ -199,7 +204,7 @@ export const suite = (driver: Driver) =>
           expect(replies(refused, change)).toEqual([]);
           yield* h.allowStart(true);
           yield* h.resume;
-          expect(started(yield* h.snapshot).map((p) => p.name)).toEqual([`merger:${change}.2`]);
+          expect(Arr.map(started(yield* h.snapshot), (p) => p.name)).toEqual([`merger:${change}.2`]);
           yield* finish(h);
           const landed = yield* h.snapshot;
           expect(landed.model?._tag).toBe("idle");
@@ -226,22 +231,24 @@ export const suite = (driver: Driver) =>
           const answerIds: Array<string> = [];
 
           const inspect = (s: Snapshot, attempts: number, refused: number) => {
-            const queue = s.starts.find((p) => p.name === "queue:1");
+            const queue = Option.getOrUndefined(Arr.findFirst(s.starts, (p) => p.name === "queue:1"));
             expect(queue).toBeDefined();
-            const inbox = s.letters.filter((l) => l.name === "queue:1");
+            const inbox = Arr.filter(s.letters, (l) => l.name === "queue:1");
 
-            const requests = inbox.filter((l) =>
+            const requests = Arr.filter(inbox, (l) =>
               Schema.is(Schema.Struct({ type: Schema.Literals(["enqueue", "resume"]) }))(l.m),
             );
 
-            const answers = inbox.filter((l) =>
+            const answers = Arr.filter(inbox, (l) =>
               Schema.is(Schema.Struct({ type: Schema.Literals(["start_child_ok", "start_child_err"]) }))(l.m),
             );
 
             expect(requests).toHaveLength(attempts);
-            expect(answers.map((l) => l.id)).toEqual(requests.map((l) => `${queue?.process}/${l.pos}/0/answer`));
-            expect(answers.slice(0, answerIds.length).map((l) => l.id)).toEqual(answerIds);
-            expect(new Set(answers.map((l) => l.id)).size).toBe(attempts);
+            expect(Arr.map(answers, (l) => l.id)).toEqual(
+              Arr.map(requests, (l) => `${queue?.process}/${l.pos}/0/answer`),
+            );
+            expect(Arr.map(answers.slice(0, answerIds.length), (l) => l.id)).toEqual(answerIds);
+            expect(new Set(Arr.map(answers, (l) => l.id)).size).toBe(attempts);
 
             for (const answer of answers.slice(0, refused)) {
               expect(answer.m).toMatchObject({
@@ -257,7 +264,7 @@ export const suite = (driver: Driver) =>
             expect(s.model?.attempt).toBe(attempts);
             expect(s.model?.late).toBe(0);
 
-            return answers.map((l) => l.id);
+            return Arr.map(answers, (l) => l.id);
           };
 
           for (const [index, before] of reopens.entries()) {
@@ -289,7 +296,7 @@ export const suite = (driver: Driver) =>
           yield* finish(h);
           const s = yield* h.snapshot;
           inspect(s, reopens.length + 1, reopens.length);
-          expect(started(s).map((p) => p.name)).toEqual([`merger:${change}.${reopens.length + 1}`]);
+          expect(Arr.map(started(s), (p) => p.name)).toEqual([`merger:${change}.${reopens.length + 1}`]);
           expect(s.model?._tag).toBe("idle");
           expect(replies(s, change)).toHaveLength(1);
           expect(replies(s, change)[0]).toHaveProperty("_tag", "merged");
@@ -311,12 +318,12 @@ export const suite = (driver: Driver) =>
         yield* finish(h);
         const s = yield* h.snapshot;
         expect(s.model?._tag).toBe("idle");
-        expect(started(s).map((p) => p.name)).toEqual(["merger:1.1", "merger:2.2", "merger:3.3"]);
+        expect(Arr.map(started(s), (p) => p.name)).toEqual(["merger:1.1", "merger:2.2", "merger:3.3"]);
         expect(
-          h.host
-            .calls()
-            .filter((c) => c.method === "merge")
-            .map((c) => c.change),
+          Arr.map(
+            Arr.filter(h.host.calls(), (c) => c.method === "merge"),
+            (c) => c.change,
+          ),
         ).toEqual([1, 2, 3]);
 
         for (let change = 1; change <= 3; change++) {
@@ -324,7 +331,8 @@ export const suite = (driver: Driver) =>
           expect(replies(s, change)[0]).toHaveProperty("_tag", "merged");
           expect(replies(s, change)[0]).toMatchObject({ type: "reply", ref: `own:${change}` });
 
-          const first = s.letters.filter(
+          const first = Arr.filter(
+            s.letters,
             (l) => l.name === `merger:${change}.${change}` && Predicate.hasProperty(l.m, "type") && l.m.type === "land",
           );
 
@@ -347,7 +355,7 @@ export const suite = (driver: Driver) =>
         expect((yield* h.snapshot).model).toEqual(before.model);
         yield* finish(h);
         const s = yield* h.snapshot;
-        expect(started(s).map((p) => p.name)).toEqual(["merger:1.1", "merger:2.2"]);
+        expect(Arr.map(started(s), (p) => p.name)).toEqual(["merger:1.1", "merger:2.2"]);
         expect(replies(s, 1)).toHaveLength(1);
         expect(replies(s, 2)).toHaveLength(1);
         expect(s.model?._tag).toBe("idle");
@@ -378,13 +386,13 @@ export const suite = (driver: Driver) =>
         expect(before).toBeDefined();
         expect(h.ci.starts()).toContain(before?.head);
         expect(replies(yield* h.snapshot, 1)).toHaveLength(1);
-        expect(h.host.calls().filter((c) => c.method === "merge" && c.change === 2)).toEqual([]);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge" && c.change === 2)).toEqual([]);
         yield* h.green(2);
         yield* h.moveMain;
         yield* h.step;
         const after = yield* h.host.read(2);
         expect(after?.head).not.toBe(before?.head);
-        expect(h.host.calls().filter((c) => c.method === "merge" && c.change === 2)).toEqual([]);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge" && c.change === 2)).toEqual([]);
         expect(h.ci.starts()).toContain(after?.head);
         yield* finish(h);
         const s = yield* h.snapshot;
@@ -397,7 +405,9 @@ export const suite = (driver: Driver) =>
         }
 
         expect(s.model?._tag).toBe("idle");
-        expect(h.host.calls().filter((c) => c.method === "update" && c.change === 2).length).toBeGreaterThanOrEqual(3);
+        expect(
+          Arr.filter(h.host.calls(), (c) => c.method === "update" && c.change === 2).length,
+        ).toBeGreaterThanOrEqual(3);
       }),
     );
     it.effect("scenario: QR4 an outside write after the last look stops the line until resume", () =>
@@ -443,7 +453,12 @@ export const suite = (driver: Driver) =>
                 Effect.acquireRelease(
                   Effect.sync(() =>
                     vi.spyOn(console, method).mockImplementation((...args: ReadonlyArray<unknown>) => {
-                      logs.push(args.map((arg) => `${String(arg)} ${JSON.stringify(arg)}`).join(" "));
+                      logs.push(
+                        Arr.join(
+                          Arr.map(args, (arg) => `${String(arg)} ${JSON.stringify(arg)}`),
+                          " ",
+                        ),
+                      );
                     }),
                   ),
                   (spy) => Effect.sync(() => spy.mockRestore()),
@@ -462,10 +477,10 @@ export const suite = (driver: Driver) =>
                 const s = yield* h.snapshot;
                 driver.unleaked(
                   [
-                    JSON.stringify(s.letters),
-                    JSON.stringify(s.saved),
-                    JSON.stringify(s.model),
-                    JSON.stringify(s.view),
+                    Formatter.formatJson(s.letters),
+                    Formatter.formatJson(s.saved),
+                    Formatter.formatJson(s.model),
+                    Formatter.formatJson(s.view),
                     ...capture.text(),
                     ...logs,
                   ],
@@ -539,10 +554,10 @@ export const suite = (driver: Driver) =>
               }
 
               const s = seen;
-              expect(s.letters.some((l) => l.name === "queue:1")).toBe(true);
-              expect(s.letters.some((l) => l.name === "quest:1")).toBe(true);
+              expect(Arr.some(s.letters, (l) => l.name === "queue:1")).toBe(true);
+              expect(Arr.some(s.letters, (l) => l.name === "quest:1")).toBe(true);
               expect(started(s).length).toBeGreaterThan(0);
-              const spans = capture.text().join("\n");
+              const spans = Arr.join(capture.text(), "\n");
               expect(spans).toContain("start_child");
               expect(spans).toContain("merger:1.1");
               yield* inspect;

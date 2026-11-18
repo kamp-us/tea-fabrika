@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Match, Predicate } from "effect";
+import { Array as Arr, pipe, Match, Predicate, Record as Rec } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
@@ -92,7 +92,7 @@ describe("T930 L1 a fire advises only when it is one of the six and graded a war
           { requiredKeys: [] },
         ),
         (fire) => {
-          const six = SIX.some((code) => code === fire.code);
+          const six = Arr.some(SIX, (code) => code === fire.code);
           const member = /^'([^']*)' is restricted from being used\.$/.exec(fire.message ?? "")?.[1];
           const guard = fire.code !== "eslint(no-restricted-properties)" || member === "JSON.parse";
           const want = six && guard && fire.severity === "warning";
@@ -130,7 +130,7 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
         folders.chain((names) =>
           fc.record({
             lines: fc.tuple(
-              ...names.map((folder) =>
+              ...Arr.map(names, (folder) =>
                 fc.record({
                   folder: fc.constant(folder),
                   kind: fc.constantFrom<Kind>("tree", "files", "file"),
@@ -150,9 +150,9 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
           }),
         ),
         ({ lines, fires }) => {
-          const warn: WarnLine[] = lines.map(({ folder, kind, rule }) => ({ rule, glob: globOf(folder, kind) }));
+          const warn: WarnLine[] = Arr.map(lines, ({ folder, kind, rule }) => ({ rule, glob: globOf(folder, kind) }));
 
-          const advice: Fire[] = fires.map(({ folder, place, rule }) => ({
+          const advice: Fire[] = Arr.map(fires, ({ folder, place, rule }) => ({
             code: rule,
             severity: "warning",
             filename: Match.value(place).pipe(
@@ -162,14 +162,15 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
             ),
           }));
 
-          const want = lines.flatMap(({ folder, kind, rule }, i) => {
+          const want = Arr.flatMap(lines, ({ folder, kind, rule }, i) => {
             const line = warn[i]!;
 
             if (kind === "file") {
               return [{ _tag: "file", line }];
             }
 
-            const held = fires.some(
+            const held = Arr.some(
+              fires,
               (f) =>
                 f.rule === rule &&
                 f.folder === folder &&
@@ -206,7 +207,7 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
   writeFileSync(join(at, ".oxlintrc.json"), Predicate.isString(config) ? config : JSON.stringify(config));
 
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(at, path)), { recursive: true });
     writeFileSync(join(at, path), text);
   }
@@ -261,7 +262,7 @@ const small = (dirty: readonly string[] = ["next/dirty"]) => ({
     },
     { files: ["next/**/*"], rules: { "eslint/no-restricted-properties": parse("error") } },
     ...FROZEN,
-    ...dirty.flatMap((folder) => [
+    ...Arr.flatMap(dirty, (folder) => [
       {
         files: [`${folder}/**`],
         rules: {
@@ -297,7 +298,7 @@ const PLANTS: Readonly<Record<(typeof FIVE)[number], { readonly file: string; re
 };
 
 const planted = (folder: string) =>
-  Object.fromEntries(Object.values(PLANTS).map(({ file, text }) => [`${folder}/${file}`, text]));
+  Rec.fromEntries(Arr.map(Rec.values(PLANTS), ({ file, text }) => [`${folder}/${file}`, text]));
 
 describe("T1087 fixes and ledger matching read the same source", () => {
   const config = {
@@ -438,10 +439,10 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
     const { lint, done } = repo(small(), { ...planted("next/clean"), ...planted("next/dirty") });
 
     try {
-      const clean = lint(...Object.values(PLANTS).map(({ file }) => `next/clean/${file}`));
+      const clean = lint(...Arr.map(Rec.values(PLANTS), ({ file }) => `next/clean/${file}`));
       expect(clean.out).toContain(`oxlint: ${FIVE.length} blocking, 0 advice`);
       expect(clean.status, clean.out).toBe(1);
-      const dirty = lint(...Object.values(PLANTS).map(({ file }) => `next/dirty/${file}`));
+      const dirty = lint(...Arr.map(Rec.values(PLANTS), ({ file }) => `next/dirty/${file}`));
       expect(dirty.out).toContain(`oxlint: 0 blocking, ${FIVE.length} advice`);
       expect(dirty.status, dirty.out).toBe(0);
     } finally {
@@ -492,8 +493,8 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
 
     const { lint, done } = repo(
       config,
-      Object.fromEntries(
-        [clean, ...folders].flatMap((folder) => [
+      Rec.fromEntries(
+        Arr.flatMap([clean, ...folders], (folder) => [
           [`${folder}/Planted.ts`, text],
           [`${folder}/Planted.test.ts`, text],
         ]),
@@ -509,8 +510,8 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
       // Judged by its own lines: libfabrika's module rule also refuses a planted top file in `src/`,
       // and lint.ts fails on a fire only when it blocks, so a jsdocs line that advises cannot fail it.
       if (folders.length > 0) {
-        const warn = lint(...folders.map((folder) => `${folder}/Planted.ts`));
-        const lines = warn.out.split("\n").filter((line) => line.includes(" fabrika(jsdocs) "));
+        const warn = lint(...Arr.map(folders, (folder) => `${folder}/Planted.ts`));
+        const lines = Arr.filter(warn.out.split("\n"), (line) => line.includes(" fabrika(jsdocs) "));
         expect(lines, warn.out).toHaveLength(2 * folders.length);
 
         for (const line of lines) {
@@ -519,13 +520,13 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
 
         for (const folder of folders) {
           expect(
-            lines.filter((line) => line.startsWith(`${folder}/Planted.ts:`)),
+            Arr.filter(lines, (line) => line.startsWith(`${folder}/Planted.ts:`)),
             folder,
           ).toHaveLength(2);
         }
       }
 
-      const tests = lint(...[clean, ...folders].map((folder) => `${folder}/Planted.test.ts`));
+      const tests = lint(...Arr.map([clean, ...folders], (folder) => `${folder}/Planted.test.ts`));
       expect(tests.out).not.toContain("fabrika(jsdocs)");
     } finally {
       done();
@@ -551,18 +552,20 @@ const jsdocsWarnFolders = ({ at, done }: { readonly at: string; readonly done: (
     const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
       JSON.parse(printed.stdout);
 
-    return overrides
-      .filter(({ rules }) => {
+    return pipe(
+      overrides,
+      Arr.filter(({ rules }) => {
         const setting = rules["fabrika/jsdocs"];
 
-        return (Array.isArray(setting) ? setting[0] : setting) === "warn";
-      })
-      .flatMap(({ files }) => files)
-      .map((glob) => {
+        return (Arr.isArray(setting) ? setting[0] : setting) === "warn";
+      }),
+      Arr.flatMap(({ files }) => files),
+      Arr.map((glob) => {
         expect(glob, "a jsdocs warn line names one folder").toMatch(/^next\/packages\/[^/*]+\/src(\/[^/*]+)?\/\*\*?$/);
 
         return glob.replace(/\/\*\*?$/, "");
-      });
+      }),
+    );
   } finally {
     done();
   }
@@ -649,7 +652,7 @@ describe("T930 L10 the five stop saying they only advise", () => {
       symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
       const files = planted("next/packages/zero/src/clean");
 
-      for (const [path, text] of Object.entries(files)) {
+      for (const [path, text] of Rec.toEntries(files)) {
         mkdirSync(dirname(join(at, path)), { recursive: true });
         writeFileSync(join(at, path), text);
       }
@@ -661,7 +664,7 @@ describe("T930 L10 the five stop saying they only advise", () => {
           "--disable-nested-config",
           "--no-ignore",
           "--format=json",
-          ...Object.keys(files),
+          ...Rec.keys(files),
         ],
         { cwd: at, encoding: "utf8", timeout: 60_000, maxBuffer: 2 ** 28 },
       );
@@ -675,8 +678,8 @@ describe("T930 L10 the five stop saying they only advise", () => {
         }>;
       } = JSON.parse(ran.stdout);
 
-      const fires = report.diagnostics.filter((d) => FIVE.some((code) => code === d.code));
-      expect([...new Set(fires.map((d) => d.code))].sort()).toEqual([...FIVE].sort());
+      const fires = Arr.filter(report.diagnostics, (d) => Arr.some(FIVE, (code) => code === d.code));
+      expect([...new Set(Arr.map(fires, (d) => d.code))].sort()).toEqual([...FIVE].sort());
 
       for (const d of fires) {
         expect(`${d.message} ${d.help ?? ""}`, d.code).not.toMatch(/advice|does not block/i);
@@ -709,7 +712,7 @@ const banned = (dirty: readonly string[] = ["next/dirty"]) => {
     overrides: [
       ...base.overrides,
       { files: ["next/clean/**"], rules: { "eslint/no-restricted-properties": ban("error") } },
-      { files: dirty.map((folder) => `${folder}/**`), rules: { "eslint/no-restricted-properties": ban("warn") } },
+      { files: Arr.map(dirty, (folder) => `${folder}/**`), rules: { "eslint/no-restricted-properties": ban("warn") } },
     ],
   };
 };
@@ -762,8 +765,8 @@ describe("Reflect ban L3 a Reflect fire does not keep a JSON.parse warn line ali
   // five plants kept, so only the JSON.parse warn line can go stale.
   // Plant: count every warning of the rule as holding the line, and the stale line is not named.
   it("scenario: a whole run names the rule's warn line stale once only Reflect fires are left, and not while JSON.parse is", () => {
-    const others = Object.fromEntries(
-      Object.entries(planted("next/dirty")).filter(([path]) => !path.endsWith("/parse.ts")),
+    const others = Rec.fromEntries(
+      Arr.filter(Rec.toEntries(planted("next/dirty")), ([path]) => !path.endsWith("/parse.ts")),
     );
 
     const stuck = repo(banned(), { ...others, "next/dirty/reflect.ts": REFLECTS });
@@ -869,13 +872,13 @@ describe("Reflect ban L4 each tracked code file of next/ ends with the setting t
   it("pinned: every tracked code file of next/ ends with JSON.parse and the ban at one level, a new folder and client/ at error with both retry entries, and a file that advises sits in a folder with a JSON.parse fire", () => {
     const git = spawnSync("git", ["ls-files", "next"], { cwd: ROOT, encoding: "utf8", maxBuffer: 2 ** 28 });
     expect(git.status, git.stderr).toBe(0);
-    const tracked = git.stdout.split("\n").filter((file) => /\.(?:ts|tsx|js|mjs)$/.test(file));
+    const tracked = Arr.filter(git.stdout.split("\n"), (file) => /\.(?:ts|tsx|js|mjs)$/.test(file));
 
     // Coverage: the file kinds and the places the globs of the config are written for.
-    expect(tracked.some((file) => file.endsWith(".test.ts"))).toBe(true);
-    expect(tracked.some((file) => file.endsWith(".tsx"))).toBe(true);
-    expect(tracked.some((file) => file.endsWith(".d.ts"))).toBe(true);
-    expect(tracked.some((file) => file.startsWith("next/packages/libfabrika/src/client/"))).toBe(true);
+    expect(Arr.some(tracked, (file) => file.endsWith(".test.ts"))).toBe(true);
+    expect(Arr.some(tracked, (file) => file.endsWith(".tsx"))).toBe(true);
+    expect(Arr.some(tracked, (file) => file.endsWith(".d.ts"))).toBe(true);
+    expect(Arr.some(tracked, (file) => file.startsWith("next/packages/libfabrika/src/client/"))).toBe(true);
 
     const { at, done } = repo(readFileSync(join(ROOT, ".oxlintrc.json"), "utf8"), {});
 
@@ -895,15 +898,17 @@ describe("Reflect ban L4 each tracked code file of next/ ends with the setting t
       // Beside the tracked files, one sample in the stem folder of each folder glob a block of the rule
       // writes, so a glob for a folder with no tracked code file yet is met too. This only adds sample
       // points: what each file ends with is still read from oxlint.
-      const stems = overrides
-        .filter(({ rules }) => Array.isArray(rules["no-restricted-properties"]))
-        .flatMap(({ files }) => files)
-        .filter((glob) => glob.startsWith("next/"))
-        .map((glob) => glob.replace(/(?:\/\*\*?)+$/, ""))
-        .filter((stem) => !stem.includes("*"))
-        .map((stem) => `${stem}/zz-sample.ts`);
+      const stems = pipe(
+        overrides,
+        Arr.filter(({ rules }) => Arr.isArray(rules["no-restricted-properties"])),
+        Arr.flatMap(({ files }) => files),
+        Arr.filter((glob) => glob.startsWith("next/")),
+        Arr.map((glob) => glob.replace(/(?:\/\*\*?)+$/, "")),
+        Arr.filter((stem) => !stem.includes("*")),
+        Arr.map((stem) => `${stem}/zz-sample.ts`),
+      );
 
-      const planted = [...new Set([...tracked, ...stems, "next/zz-new-folder/zz-sample.ts"])];
+      const planted = Arr.dedupe([...tracked, ...stems, "next/zz-new-folder/zz-sample.ts"]);
 
       for (const file of planted) {
         mkdirSync(dirname(join(at, file)), { recursive: true });
@@ -917,10 +922,10 @@ describe("Reflect ban L4 each tracked code file of next/ ends with the setting t
       );
 
       const ended = endings(JSON.parse(ran.stdout));
-      const advising = planted.filter((file) => ended.get(file)?.["JSON.parse"] === "warning");
+      const advising = Arr.filter(planted, (file) => ended.get(file)?.["JSON.parse"] === "warning");
 
       // Coverage: every planted file was read, and some end at warn and some at error.
-      expect(planted.filter((file) => ended.get(file) === undefined)).toEqual([]);
+      expect(Arr.filter(planted, (file) => ended.get(file) === undefined)).toEqual([]);
       expect(advising.length).toBeGreaterThan(0);
       expect(planted.length - advising.length).toBeGreaterThan(0);
 
@@ -945,9 +950,9 @@ describe("Reflect ban L4 each tracked code file of next/ ends with the setting t
       }
 
       // The tree's own fires: the real files a warn file's top holds, linted with the real config.
-      const tops = [...new Set(advising.map((file) => topOf(dirname(file))))];
+      const tops = Arr.dedupe(Arr.map(advising, (file) => topOf(dirname(file))));
       const inside = (dir: string, top: string) => dir === top || (!directOnly(top) && dir.startsWith(`${top}/`));
-      const files = tracked.filter((file) => tops.some((top) => inside(dirname(file), top)));
+      const files = Arr.filter(tracked, (file) => Arr.some(tops, (top) => inside(dirname(file), top)));
 
       const real = spawnSync(
         OXLINT,
@@ -955,13 +960,15 @@ describe("Reflect ban L4 each tracked code file of next/ ends with the setting t
         { cwd: ROOT, encoding: "utf8", maxBuffer: 2 ** 28, timeout: 100_000 },
       );
 
-      const fires = [...endings(JSON.parse(real.stdout))]
-        .filter(([, ending]) => ending["JSON.parse"] === "warning")
-        .map(([file]) => dirname(file));
+      const fires = pipe(
+        Arr.fromIterable(endings(JSON.parse(real.stdout))),
+        Arr.filter(([, ending]) => ending["JSON.parse"] === "warning"),
+        Arr.map(([file]) => dirname(file)),
+      );
 
       for (const top of tops) {
         expect(
-          fires.some((fire) => inside(fire, top)),
+          Arr.some(fires, (fire) => inside(fire, top)),
           `${top} advises for JSON.parse and has no JSON.parse fire left, so it blocks at zero`,
         ).toBe(true);
       }

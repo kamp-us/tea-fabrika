@@ -5,6 +5,7 @@
  *
  * Explicitly set keys show, and `all` adds the keys their defaults supply. Which rows show depends on each origin's `_tag`, never on a value, so a key set to its own default still shows, and `all` never changes what a row says.
  */
+import * as Str from "effect/String";
 import type { Row, Warning } from "./Reference.ts";
 import { Origin } from "./Sources.ts";
 
@@ -15,7 +16,7 @@ const from = (origin: Origin) =>
     (origin) => origin.name,
   );
 
-const indent = (text: string) => text.replace(/\n/g, "\n  ");
+const indent = (text: string) => Str.replace(/\n/g, "\n  ")(text);
 
 /**
  * Formats rows as the report text: one block per shown row, then a count of the hidden ones.

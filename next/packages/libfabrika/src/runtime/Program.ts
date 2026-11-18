@@ -4,7 +4,14 @@
  * runs a Cmd: the runner does that, after the input is saved.
  */
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
-import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
@@ -187,8 +194,8 @@ export type EventPolicy = typeof EventPolicy.Type;
  *  that message arrives on: the load refuses one that does not, before any `DOWN` can be dropped. */
 const downDeclared = Schema.makeFilter(
   (program: { readonly machine: Steps; readonly inputs: Readonly<Record<string, unknown>> }) =>
-    !(program.machine.cmds ?? []).some((cmd) => cmd.cmdType === "monitor") ||
-    Object.hasOwn(program.inputs, "DOWN") ||
+    !Arr.some(program.machine.cmds ?? [], (cmd) => cmd.cmdType === "monitor") ||
+    Rec.has(program.inputs, "DOWN") ||
     "a program whose cmds hold monitor must declare a DOWN input",
 );
 
@@ -386,8 +393,8 @@ const construct = (raw: unknown) =>
       state: { ...spec.state, schema: spec.machine.model },
       msg: spec.machine.msg,
       view: { data: Schema.Json, select: spec.view },
-      inputs: Object.fromEntries(
-        Object.entries(spec.inputs).map(([key, port]) => [
+      inputs: Rec.fromEntries(
+        Arr.map(Rec.toEntries(spec.inputs), ([key, port]) => [
           key,
           !Predicate.isString(port) && "_tag" in port
             ? port
@@ -638,7 +645,7 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
       return this.error;
     }
 
-    const original = Object.hasOwn(this, "cause") ? this.cause : this;
+    const original = "cause" in this ? this.cause : this;
 
     return original instanceof Error ? original.constructor.name : original === null ? "null" : typeof original;
   }
@@ -680,7 +687,7 @@ const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Number));
 
 /** What each failed result failed with, in order: a check that meets several keeps them all. */
 const failures = (results: ReadonlyArray<Result.Result<unknown, unknown>>): ReadonlyArray<unknown> =>
-  results.flatMap((result) => (Result.isFailure(result) ? [result.failure] : []));
+  Arr.flatMap(results, (result) => (Result.isFailure(result) ? [result.failure] : []));
 
 /** Runs `f`, turning any throw into ProgramDown with `reason`. */
 const guard = <A>(reason: ProgramDown["reason"], f: () => A): A => {
@@ -714,7 +721,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
   }
 
   const type = typed.value.type;
-  const def = defs.find((d) => d.okType === type || d.errType === type);
+  const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.okType === type || d.errType === type));
 
   if (def === undefined || !Predicate.isObjectOrArray(msg)) {
     return Option.none();
@@ -788,7 +795,10 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
 
     if (
       !saved &&
-      Option.exists(typed, (m) => m.type === "timer" || defs.some((d) => d.okType === m.type || d.errType === m.type))
+      Option.exists(
+        typed,
+        (m) => m.type === "timer" || Arr.some(defs, (d) => d.okType === m.type || d.errType === m.type),
+      )
     ) {
       return Option.none();
     }
@@ -814,7 +824,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       return false;
     }
 
-    const def = defs.find((d) => d.cmdType === typed.value.type);
+    const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.cmdType === typed.value.type));
 
     if (def === undefined) {
       return true;
@@ -830,9 +840,14 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     const encoded = encodeModel(next);
     const view = guard(reason, () => encodeView(program.view.select(next)));
     const wake = guard(reason, () => decodeWake(program.wake(next)));
-    const json = cmds.map((cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
+    const json = Arr.map(cmds, (cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
 
-    if (Result.isFailure(encoded) || Result.isFailure(view) || Result.isFailure(wake) || json.some(Result.isFailure)) {
+    if (
+      Result.isFailure(encoded) ||
+      Result.isFailure(view) ||
+      Result.isFailure(wake) ||
+      Arr.some(json, Result.isFailure)
+    ) {
       throw new ProgramDown({ reason, error: "ProgramDown", cause: failures([encoded, view, wake, ...json]) });
     }
 
@@ -846,7 +861,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     return Step.cases.stepped.make({
       model: model.success,
       view: shown.success,
-      cmds: json.flatMap((one) => (Result.isSuccess(one) ? [one.success] : [])),
+      cmds: Arr.flatMap(json, (one) => (Result.isSuccess(one) ? [one.success] : [])),
       wake: wake.success,
     });
   };

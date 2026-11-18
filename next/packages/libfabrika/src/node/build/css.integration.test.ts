@@ -8,17 +8,27 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import type * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
 import type * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { BuildError } from "../../runtime/Built.ts";
 
-type Inline = (file: string) => Effect.Effect<string, unknown, FileSystem.FileSystem | Path.Path>;
+type Inline = (file: string) => Effect.Effect<string, BuildError, FileSystem.FileSystem | Path.Path>;
+
+// The build fails with what `build.ts` names: a refusal or a disk failure.
+type BuildFailure = BuildError | PlatformError.PlatformError;
 
 type Build = {
   readonly build: (options: {
@@ -33,10 +43,10 @@ type Build = {
     readonly files: readonly string[];
     readonly ledger: readonly unknown[];
     readonly chaos: boolean;
-  }) => Effect.Effect<unknown, unknown, FileSystem.FileSystem | Path.Path>;
+  }) => Effect.Effect<unknown, BuildFailure, FileSystem.FileSystem | Path.Path>;
 };
 
-const product = async <A>(file: string, name: string) => {
+const product = <A>(file: string, name: string) => {
   const path = join(import.meta.dirname, file);
   assert(existsSync(path), `P16 not built: ${name} absent`);
 
@@ -100,7 +110,7 @@ const fixture = (id: number) => {
 };
 
 // Every refusal is the build's typed bundle failure. A thrown parser error rejects instead.
-const failure = async (stylesheet: Effect.Effect<string, unknown>) => {
+const failure = async (stylesheet: Effect.Effect<string, BuildError>) => {
   const result = await Effect.runPromise(Effect.result(stylesheet));
 
   if (result._tag !== "Failure") {
@@ -125,7 +135,7 @@ type CssGraph = typeof cssGraphs extends fc.Arbitrary<infer A> ? A : never;
 
 const graphFixture = (graph: CssGraph, mixed: boolean) => {
   const f = fixture(graph.id),
-    order = mixed ? graph.order : graph.order.filter((n) => n < 2),
+    order = mixed ? graph.order : Arr.filter(graph.order, (n) => n < 2),
     statement = "@layer a, b;",
     body = (n: number) => {
       const rule = (layer: string) => `.same.source${n}${layer} { --winner: source${n}-${graph.id}; }`;
@@ -145,7 +155,7 @@ const graphFixture = (graph: CssGraph, mixed: boolean) => {
   }
 
   const render = (expanded: boolean, sources = order, late = false) => {
-    const parts = sources.flatMap((n, i) => [
+    const parts = Arr.flatMap(sources, (n, i) => [
       ...(i === 0 && graph.before && !late ? [statement] : []),
       ...(i === 1 && graph.between && !late ? [statement] : []),
       expanded
@@ -157,7 +167,7 @@ const graphFixture = (graph: CssGraph, mixed: boolean) => {
       parts.push(statement);
     }
 
-    return parts.join("\n");
+    return Arr.join(parts, "\n");
   };
 
   const file = join(f.home, "root.css");
@@ -239,10 +249,11 @@ afterEach(() => {
 });
 
 describe("P16 CSS tokens", () => {
-  it("CSS refusals keep their exact reason and named span in root and imported files", async () => {
+  it("CSS refusals keep their exact reason and named span in root and imported files", () => {
     vi.resetModules();
     const read = inlineStylesheet;
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(
         ids,
         fc.boolean(),
@@ -280,8 +291,10 @@ describe("P16 CSS tokens", () => {
           expect(await failure(read(file).pipe(Effect.withTracer(tracer)))).toMatchObject({
             message: reason,
           });
-          expect(spans.map((span) => span.name)).toContain("build.css");
-          expect(spans.find((span) => span.name === "build.css")?.status._tag).toBe("Ended");
+          expect(Arr.map(spans, (span) => span.name)).toContain("build.css");
+          expect(Option.getOrUndefined(Arr.findFirst(spans, (span) => span.name === "build.css"))?.status._tag).toBe(
+            "Ended",
+          );
         },
       ),
       runs,
@@ -292,8 +305,8 @@ describe("P16 CSS tokens", () => {
   // https://www.w3.org/TR/css-cascade-5/#layer-order
   // https://www.w3.org/TR/css-cascade-5/#at-import
   for (const kind of ["before", "between", "named", "mixed"] as const) {
-    it(`CSS graph cascade: ${kind} imports keep layer priority and source rule order or refuse with BuildError`, async () => {
-      await fc.assert(
+    it(`CSS graph cascade: ${kind} imports keep layer priority and source rule order or refuse with BuildError`, () =>
+      fc.assert(
         fc.asyncProperty(cssGraphs, async (generated) => {
           const graph = {
             ...generated,
@@ -320,10 +333,11 @@ describe("P16 CSS tokens", () => {
           }
 
           const remoteAfterLocal =
-            kind === "mixed" && f.order.some((n, i) => n >= 2 && f.order.slice(0, i).some((previous) => previous < 2));
+            kind === "mixed" &&
+            Arr.some(f.order, (n, i) => n >= 2 && Arr.some(f.order.slice(0, i), (previous) => previous < 2));
 
           if (remoteAfterLocal) {
-            const hoisted = [...f.order.filter((n) => n >= 2), ...f.order.filter((n) => n < 2)];
+            const hoisted = [...Arr.filter(f.order, (n) => n >= 2), ...Arr.filter(f.order, (n) => n < 2)];
             expect(() => verify(f.expanded(f.render(true, hoisted)))).toThrow("source rule order");
           }
 
@@ -355,8 +369,7 @@ describe("P16 CSS tokens", () => {
           // Pinned round-4 bugs: parent layer priority and a later remote import overtaking a local.
           endOnFailure: true,
         },
-      );
-    });
+      ));
   }
 
   // The expected rule comes from the file, never from decoding the generated import spelling.
@@ -375,8 +388,8 @@ describe("P16 CSS tokens", () => {
     }
   };
 
-  it("escaped at-keywords import the same file as their unescaped spelling", async () => {
-    await fc.assert(
+  it("escaped at-keywords import the same file as their unescaped spelling", () =>
+    fc.assert(
       fc.asyncProperty(
         ids,
         fc.constantFrom("im\\70ort", "\\69mport", "\\000069mport", "i\\mport"),
@@ -390,10 +403,9 @@ describe("P16 CSS tokens", () => {
         },
       ),
       { ...runs, examples: [[0, "im\\70ort"]] }, // Pinned round-3 escaped @import bug.
-    );
-  });
-  it("escaped url functions import the same file as their unescaped spelling", async () => {
-    await fc.assert(
+    ));
+  it("escaped url functions import the same file as their unescaped spelling", () =>
+    fc.assert(
       fc.asyncProperty(
         ids,
         fc.constantFrom("u\\72l", "\\75rl", "\\000075rl", "u\\rl"),
@@ -407,8 +419,7 @@ describe("P16 CSS tokens", () => {
         },
       ),
       { ...runs, examples: [[0, "u\\72l", '"']] }, // Pinned round-3 escaped url() bug.
-    );
-  });
+    ));
 
   // CSS Syntax 3 normalizes CRLF, CR and form feed to LF before consuming strings.
   // https://www.w3.org/TR/css-syntax-3/#input-preprocessing
@@ -418,8 +429,8 @@ describe("P16 CSS tokens", () => {
     ["CR", "\r"],
     ["form feed", "\f"],
   ]) {
-    it(`${ending} string continuations import the same disk name after CSS input preprocessing`, async () => {
-      await fc.assert(
+    it(`${ending} string continuations import the same disk name after CSS input preprocessing`, () =>
+      fc.assert(
         fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
           const f = fixture(id),
             css = `@import ${quote}./chi\\${newline}ld${id}.css${quote};`;
@@ -428,12 +439,11 @@ describe("P16 CSS tokens", () => {
           imported(await Effect.runPromise(f.read(css)), id);
         }),
         runs,
-      );
-    });
+      ));
   }
 
-  it("comments and whitespace around a quoted import URL keep every imported rule", async () => {
-    await fc.assert(
+  it("comments and whitespace around a quoted import URL keep every imported rule", () =>
+    fc.assert(
       fc.asyncProperty(
         ids,
         fc.constantFrom(" ", "\t", "\n", "\r", "\f", "/**/", " /*first*/\t/*second*/ "),
@@ -443,13 +453,13 @@ describe("P16 CSS tokens", () => {
           const f = fixture(id);
           // A quoted url() allows whitespace before its quote, but no comment there.
           // https://www.w3.org/TR/css-syntax-3/#consume-ident-like-token
-          const space = gap.includes("/*") ? " " : gap;
+          const space = Function.pipe(gap, Str.includes("/*")) ? " " : gap;
           imported(
             await Effect.runPromise(f.read(`@import${gap}url(${space}${quote}./child${id}.css${quote}${gap});`)),
             id,
           );
 
-          if (gap.includes("/*")) {
+          if (Function.pipe(gap, Str.includes("/*"))) {
             expect(
               await failure(f.read(`@import${gap}url(${gap}${quote}./child${id}.css${quote}${gap});`)),
             ).toMatchObject({ message: expect.stringContaining("stylesheet has a broken url()") });
@@ -457,32 +467,29 @@ describe("P16 CSS tokens", () => {
         },
       ),
       runs,
-    );
-  });
+    ));
 
-  it("hex escapes consume only their digits and optional whitespace, including CRLF", async () => {
-    await fc.assert(
+  it("hex escapes consume only their digits and optional whitespace, including CRLF", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom("", " ", "\t", "\n", "\r", "\f", "\r\n"), async (id, gap) => {
         const f = fixture(id);
         imported(await Effect.runPromise(f.read(`@import "\\63${gap}hild${id}.css";`)), id);
       }),
       runs,
-    );
-  });
+    ));
 
-  it("an asterisk inside a quoted filename does not start a comment", async () => {
-    await fc.assert(
+  it("an asterisk inside a quoted filename does not start a comment", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
         const f = fixture(id);
         writeFileSync(join(f.home, `*child${id}.css`), f.body);
         imported(await Effect.runPromise(f.read(`@import url(${quote}*child${id}.css${quote});`)), id);
       }),
       runs,
-    );
-  });
+    ));
 
-  it("whitespace ends an unquoted URL only when the closing parenthesis follows", async () => {
-    await fc.assert(
+  it("whitespace ends an unquoted URL only when the closing parenthesis follows", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom(" ", "\t", "\n", "\r", "\f"), async (id, gap) => {
         const f = fixture(id);
         imported(await Effect.runPromise(f.read(`@import url(./child${id}.css${gap});`)), id);
@@ -491,33 +498,30 @@ describe("P16 CSS tokens", () => {
         });
       }),
       runs,
-    );
-  });
+    ));
 
-  it("zero, surrogate and out-of-range hex escapes name the replacement character", async () => {
-    await fc.assert(
+  it("zero, surrogate and out-of-range hex escapes name the replacement character", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom("0", "d800", "dfff", "110000"), async (id, hex) => {
         const f = fixture(id);
         writeFileSync(join(f.home, `child�${id}.css`), f.body);
         imported(await Effect.runPromise(f.read(`@import "child\\${hex} ${id}.css";`)), id);
       }),
       runs,
-    );
-  });
+    ));
 
-  it("a hex escape ends after six digits even when the filename continues with hex digits", async () => {
-    await fc.assert(
+  it("a hex escape ends after six digits even when the filename continues with hex digits", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom("af", "face", "00"), async (id, suffix) => {
         const f = fixture(id);
         writeFileSync(join(f.home, `c${suffix}${id}.css`), f.body);
         imported(await Effect.runPromise(f.read(`@import "\\000063${suffix}${id}.css";`)), id);
       }),
       runs,
-    );
-  });
+    ));
 
-  it("a newline in a quoted reference fails instead of accepting a different disk name", async () => {
-    await fc.assert(
+  it("a newline in a quoted reference fails instead of accepting a different disk name", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
         const f = fixture(id);
         writeFileSync(join(f.home, `child\n${id}.css`), f.body);
@@ -526,21 +530,19 @@ describe("P16 CSS tokens", () => {
         });
       }),
       runs,
-    );
-  });
+    ));
 
-  it("a string token ending at the end of the file still imports its stylesheet", async () => {
-    await fc.assert(
+  it("a string token ending at the end of the file still imports its stylesheet", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
         const f = fixture(id);
         imported(await Effect.runPromise(f.read(`@import ${quote}child${id}.css`)), id);
       }),
       runs,
-    );
-  });
+    ));
 
-  it("media comments become whitespace and do not hide the following root rule", async () => {
-    await fc.assert(
+  it("media comments become whitespace and do not hide the following root rule", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom("", "note", "* longer *", "line\nnext"), async (id, note) => {
         const f = fixture(id),
           last = `.root${id} { color: blue; }`;
@@ -572,13 +574,12 @@ describe("P16 CSS tokens", () => {
         }
       }),
       runs,
-    );
-  });
+    ));
 
-  it("layer and supports imports fail before their rules can become a media query", async () => {
+  it("layer and supports imports fail before their rules can become a media query", () =>
     // 1.33.0 reports layer:null for both bare layer and no layer, and dependencies omit it.
     // Keep the refusal: flattening an anonymous layer changes the cascade. Raw CSS retains it.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(
         ids,
         fc.constantFrom("layer", "layer(theme)", "supports(display: grid)", "LAYER(theme)"),
@@ -590,11 +591,10 @@ describe("P16 CSS tokens", () => {
         },
       ),
       { ...runs, examples: [[0, "layer"]] }, // Pinned 1.33.0 anonymous-layer loss.
-    );
-  });
+    ));
 
-  it("a bare layer on a later import is refused after ordinary imports and line breaks", async () => {
-    await fc.assert(
+  it("a bare layer on a later import is refused after ordinary imports and line breaks", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom(" ", "\n", "\r\n", "\r", "\f"), async (id, gap) => {
         const f = fixture(id),
           first = `@import "child${id}.css";${gap}`,
@@ -610,11 +610,10 @@ describe("P16 CSS tokens", () => {
         await expect(verify("")).rejects.toThrow("expected stylesheet failure");
       }),
       runs,
-    );
-  });
+    ));
 
-  it("nested stylesheets keep remote imports with their media conditions before local rules", async () => {
-    await fc.assert(
+  it("nested stylesheets keep remote imports with their media conditions before local rules", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom("print", "screen and (color)"), async (id, media) => {
         const f = fixture(id),
           remote = `@import url("https://test.invalid/theme${id}.css") ${media};`,
@@ -637,11 +636,10 @@ describe("P16 CSS tokens", () => {
         }
       }),
       runs,
-    );
-  });
+    ));
 
-  it("broken CSS reports a BuildError that names the broken token", async () => {
-    await fc.assert(
+  it("broken CSS reports a BuildError that names the broken token", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom("string", "url()", "@import"), async (id, token) => {
         const f = fixture(id);
 
@@ -668,11 +666,10 @@ describe("P16 CSS tokens", () => {
         }
       }),
       runs,
-    );
-  });
+    ));
 
-  it("CSS multiplication does not hide a later local file reference", async () => {
-    await fc.assert(
+  it("CSS multiplication does not hide a later local file reference", () =>
+    fc.assert(
       fc.asyncProperty(ids, async (id) => {
         const f = fixture(id);
         expect(
@@ -680,11 +677,10 @@ describe("P16 CSS tokens", () => {
         ).toMatchObject({ message: expect.stringContaining("stylesheet references a file") });
       }),
       runs,
-    );
-  });
+    ));
 
-  it("unquoted remote URLs reject quote and parenthesis characters", async () => {
-    await fc.assert(
+  it("unquoted remote URLs reject quote and parenthesis characters", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom('"', "'", "("), async (id, char) => {
         const f = fixture(id);
         expect(await failure(f.read(`a { background: url(https://test.invalid/a${char}${id}); }`))).toMatchObject({
@@ -692,11 +688,10 @@ describe("P16 CSS tokens", () => {
         });
       }),
       runs,
-    );
-  });
+    ));
 
-  it("a scheme-like word inside a relative path still names a local file", async () => {
-    await fc.assert(
+  it("a scheme-like word inside a relative path still names a local file", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom("https", "data", "custom+3"), async (id, scheme) => {
         const f = fixture(id);
         expect(await failure(f.read(`a { background: url(./folder/${scheme}:${id}.png); }`))).toMatchObject({
@@ -704,16 +699,17 @@ describe("P16 CSS tokens", () => {
         });
       }),
       runs,
-    );
-  });
+    ));
 
-  it("an escaped identifier ending in url is not a URL function", async () => {
-    await fc.assert(
+  it("an escaped identifier ending in url is not a URL function", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom("61", "000061", "62", "000062"), async (id, hex) => {
         const f = fixture(id),
           css = `a { --value: \\${hex}url(./file${id}.png); }`;
 
-        const expected = cssRules(`a { --value: ${hex.endsWith("61") ? "a" : "b"}url(./file${id}.png); }`);
+        const expected = cssRules(
+          `a { --value: ${Function.pipe(hex, Str.endsWith("61")) ? "a" : "b"}url(./file${id}.png); }`,
+        );
 
         const verify = (rules: readonly Rule[]) =>
           expect(meaning(rules), "the escaped function and its argument must remain").toEqual(meaning(expected));
@@ -726,11 +722,10 @@ describe("P16 CSS tokens", () => {
         }
       }),
       runs,
-    );
-  });
+    ));
 
-  it("parentheses without the URL keyword are a broken import", async () => {
-    await fc.assert(
+  it("parentheses without the URL keyword are a broken import", () =>
+    fc.assert(
       fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
         const f = fixture(id);
         expect(await failure(f.read(`@import (${quote}child${id}.css${quote});`))).toMatchObject({
@@ -738,11 +733,10 @@ describe("P16 CSS tokens", () => {
         });
       }),
       runs,
-    );
-  });
+    ));
 
-  it("an imported file cannot hide an import cycle behind another relative path", async () => {
-    await fc.assert(
+  it("an imported file cannot hide an import cycle behind another relative path", () =>
+    fc.assert(
       fc.asyncProperty(ids, async (id) => {
         const f = fixture(id);
         writeFileSync(join(f.home, `child${id}.css`), '@import "./root.css";');
@@ -751,6 +745,5 @@ describe("P16 CSS tokens", () => {
         });
       }),
       runs,
-    );
-  });
+    ));
 });

@@ -2,8 +2,19 @@
 // The tests step's field row records the failing plants for all nine laws (0093).
 // Answer letters, shown program state and URLs belong to later slices.
 import { describe, expect, it } from "@effect/vitest";
-import type { Scope } from "effect";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Match } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+
 import { expectTypeOf } from "vitest";
 import { inbox } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
@@ -135,8 +146,7 @@ const failed = Effect.fnUntraced(function* <A>(
 const readReport = Effect.fnUntraced(function* (nemesis: Service, binding = target) {
   const report = yield* nemesis.check(binding);
   const codec = Schema.toCodecJson(Chaos.Report);
-  expect(Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(report))).toEqual(report);
-
+  expect(yield* Schema.decodeUnknownEffect(codec)(yield* Schema.encodeEffect(codec)(report))).toEqual(report);
   return report;
 });
 
@@ -147,8 +157,13 @@ const marker = Arbitrary.schema(Schema.String.check(Schema.isMinLength(12), Sche
 const noLeak = (output: unknown, secret: string, name = "output") => {
   const text = JSON.stringify(output);
 
-  for (const form of [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret), encodeURI(secret)]) {
-    expect(text.includes(form), `private content entered ${name}`).toBe(false);
+  for (const form of [
+    secret,
+    Str.slice(1, -1)(JSON.stringify(secret)),
+    encodeURIComponent(secret),
+    encodeURI(secret),
+  ]) {
+    expect(Str.includes(form)(text), `private content entered ${name}`).toBe(false);
   }
 };
 
@@ -273,7 +288,7 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             const nemesis = yield* service(sql, () => Effect.die("check must never fire"), { tails });
             const report = yield* readReport(nemesis);
             expect(report).toMatchObject({ ...expected, letters: count, doubled: 0, gaps: 0 });
-            expect(report.restarts.map((row) => row.ref)).toEqual(["restart-1"]);
+            expect(Arr.map(report.restarts, (row) => row.ref)).toEqual(["restart-1"]);
             expect(yield* head(sql, inbox(target.name))).toBeGreaterThan(expected.boundary);
             expect(yield* head(sql, `processes/${target.name}`)).toBeGreaterThan(expected.processBoundary);
           }),
@@ -360,8 +375,7 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             // Each service owns its error. Nemesis retains ProcessHistory's error, which retains Ledger's.
             expect(translated.reason.cause).toHaveProperty("_tag", "ProcessHistoryError");
             expect(translated.reason.cause).toHaveProperty("reason.cause._tag", "LedgerError");
-
-            const chain = Schema.decodeUnknownSync(
+            const chain = yield* Schema.decodeUnknownEffect(
               Schema.Struct({ reason: Schema.Struct({ cause: Schema.Struct({ cause: Schema.Unknown }) }) }),
             )(translated.reason.cause);
 
@@ -417,29 +431,30 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
 
             // The operation spans have ended before flush. These are stored JobRecord rows, not a spy.
             const { rows, health } = yield* recording.read;
-            const own = rows.filter((row) => /nemesis/i.test(row.name));
-            expect(own.filter((row) => /fire/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
-            expect(own.filter((row) => /check/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
+            const own = Arr.filter(rows, (row) => /nemesis/i.test(row.name));
+            expect(Arr.filter(own, (row) => /fire/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
+            expect(Arr.filter(own, (row) => /check/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
             expect(health.length).toBeGreaterThanOrEqual(4);
 
             // Each named output is visited separately; an empty list cannot stand in for stored spans.
             // Failed fire keeps its private cause in memory; it produces no public outcome.
             // Its real stored span and health row are inspected below, including the failure branch.
-            const returned = outputs.answers.flatMap((answer) => (answer._tag === "Success" ? [answer.success] : []));
-
+            const returned = Arr.flatMap(outputs.answers, (answer) =>
+              answer._tag === "Success" ? [answer.success] : [],
+            );
             const publicOutputs = {
               report: outputs.report,
               returned,
               offFire: outputs.offFire,
               offCheck: outputs.offCheck,
               health,
-              attributes: own.map((row) => row.attributes),
-              events: own.flatMap((row) => row.events),
-              links: own.flatMap((row) => row.links),
+              attributes: Arr.map(own, (row) => row.attributes),
+              events: Arr.flatMap(own, (row) => row.events),
+              links: Arr.flatMap(own, (row) => row.links),
               records: own,
             };
 
-            for (const [name, output] of Object.entries(publicOutputs)) {
+            for (const [name, output] of Rec.toEntries(publicOutputs)) {
               for (const secret of [body, errorText, keyText]) {
                 noLeak(output, secret, name);
               }

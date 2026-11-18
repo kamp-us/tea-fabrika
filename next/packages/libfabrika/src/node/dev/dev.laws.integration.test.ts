@@ -7,6 +7,7 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { it as effectIt } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -15,18 +16,24 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
-import { expect, it, vi } from "vitest";
+import { expect, it, type Mock, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
 import type { Install } from "../../runtime/Code.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
@@ -59,8 +66,8 @@ const step = fc.record({
   delay: fc.integer({ min: 0, max: 10_000 }),
 });
 
-it("the control plugin returns a typed error for malformed platform port data", async () => {
-  await fc.assert(
+it("the control plugin returns a typed error for malformed platform port data", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.jsonValue().filter((raw) => !Schema.is(Schema.Int)(raw)),
       async (raw) => {
@@ -73,19 +80,25 @@ it("the control plugin returns a typed error for malformed platform port data", 
               startDev({ name: "port-test", port: 18787, build: "test", home, ...BRAIN }, (local) =>
                 Effect.suspend(() => {
                   // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
-                  const plugin = [...local.mapUnsafe.values()].find(
-                    (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
+                  const plugin = Option.getOrUndefined(
+                    Arr.findFirst(
+                      [...local.mapUnsafe.values()],
+                      (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
+                    ),
                   ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
 
                   return plugin.start({ "fabrika-control": raw });
                 }),
               ),
             ).pipe(
-              Effect.provide(fetchClient),
-              Effect.provide(ProcessIdGenerator.layer),
-              Effect.provide(SecureRandom.layerWebCrypto),
-              Effect.provide(rssLayer(() => 0)),
-              Effect.provide(NodeServices.layer),
+              Effect.provide(
+                FetchHttpClient.layer.pipe(
+                  Layer.provideMerge(ProcessIdGenerator.layer),
+                  Layer.provideMerge(SecureRandom.layerWebCrypto),
+                  Layer.provideMerge(rssLayer(() => 0)),
+                  Layer.provideMerge(NodeServices.layer),
+                ),
+              ),
             ),
           );
 
@@ -106,8 +119,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
       },
     ),
     { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [1.5]] },
-  );
-});
+  ));
 
 type Step = ReturnType<typeof step.generate>["value"];
 
@@ -121,8 +133,8 @@ const sequence = fc.record({
   reason: fc.constantFrom<"intensity" | "restart_failed">("intensity", "restart_failed"),
 });
 
-it("every observed exit is durable once across restart or brake, with its reason and RSS", async ({ signal }) => {
-  await fc.assert(
+it("every observed exit is durable once across restart or brake, with its reason and RSS", ({ signal }) =>
+  fc.assert(
     fc.asyncProperty(sequence, async ({ restarts, final, reason }) => {
       const platform = { rss: 0, samples: 0 };
 
@@ -134,7 +146,7 @@ it("every observed exit is durable once across restart or brake, with its reason
       vi.stubEnv("FABRIKA_HOME", home);
       const kill = vi.spyOn(process, "kill").mockReturnValue(true);
 
-      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
         // SAFETY: the dev client posts each call as JSON that names its `method`.
         const call = JSON.parse(bodyText(options)) as { method: string };
 
@@ -186,7 +198,7 @@ it("every observed exit is durable once across restart or brake, with its reason
                   for (;;) {
                     const rows = yield* outbox.pending;
 
-                    if (rows.some(ready)) {
+                    if (Arr.some(rows, ready)) {
                       return rows;
                     }
 
@@ -204,11 +216,11 @@ it("every observed exit is durable once across restart or brake, with its reason
 
               const assertExits = Effect.gen(function* () {
                 const rows = yield* outbox.pending;
-                const exits = rows.filter((event) => event._tag === "exited");
+                const exits = Arr.filter(rows, (event) => event._tag === "exited");
                 expect(exits).toHaveLength(expected.length);
-                expect(new Set(exits.map((event) => event.id)).size).toBe(expected.length);
+                expect(new Set(Arr.map(exits, (event) => event.id)).size).toBe(expected.length);
                 expect(
-                  exits.map(({ start, reason, exitCode, signal, bytes }) => ({
+                  Arr.map(exits, ({ start, reason, exitCode, signal, bytes }) => ({
                     start,
                     reason,
                     exitCode,
@@ -237,14 +249,17 @@ it("every observed exit is durable once across restart or brake, with its reason
                 if (item.rss !== null) {
                   // The replace records its fact before the SIGTERM goes out, so the signal may follow
                   // the sample by a file write. The enclosing test's abort signal bounds this wait.
-                  while (!kill.mock.calls.some(([pid, sent]) => pid === 27001 + index && sent === "SIGTERM")) {
+                  while (!Arr.some(kill.mock.calls, ([pid, sent]) => pid === 27001 + index && sent === "SIGTERM")) {
                     yield* TestClock.withLive(Effect.sleep("10 millis"));
                   }
                 }
 
                 const rows = yield* outbox.pending;
+
                 // Startup may already be acknowledged; last remains durable in either case.
-                const start = rows.filter((event) => event._tag === "started").at(-1)?.start ?? (yield* outbox.last)!;
+                const start =
+                  Arr.filter(rows, (event) => event._tag === "started").at(-1)?.start ?? (yield* outbox.last)!;
+
                 const exit = { exitCode: item.exitCode, signal: item.signal, stderr: "" };
                 expected.push({
                   start,
@@ -259,7 +274,12 @@ it("every observed exit is durable once across restart or brake, with its reason
                   observe({ type: "restart", worker: "life-test", exit, delay: item.delay });
                   yield* waitForEvent((event) => event._tag === "restarting" && event.start === start);
                   expect(
-                    (yield* outbox.pending).find((event) => event._tag === "restarting" && event.start === start),
+                    Option.getOrUndefined(
+                      Arr.findFirst(
+                        yield* outbox.pending,
+                        (event) => event._tag === "restarting" && event.start === start,
+                      ),
+                    ),
                   ).toMatchObject({ reason: item.rss === null ? "crash" : "memory" });
                   yield* assertExits;
                   observe({ type: "start", worker: "life-test", pid: 27002 + index });
@@ -267,12 +287,17 @@ it("every observed exit is durable once across restart or brake, with its reason
                   // The replacement listens, so calls that waited for it are answered.
                   yield* listen;
                   expect(
-                    (yield* outbox.pending).find((event) => event._tag === "started" && event.after === start),
+                    Option.getOrUndefined(
+                      Arr.findFirst(
+                        yield* outbox.pending,
+                        (event) => event._tag === "started" && event.after === start,
+                      ),
+                    ),
                   ).toMatchObject({ reason: item.rss === null ? "crash" : "memory" });
                 } else {
                   observe({ type: "stop", worker: "life-test", exit, reason });
                   const pending = yield* waitForEvent((event) => event._tag === "braked" && event.start === start);
-                  expect(pending.filter((event) => event._tag === "braked")).toMatchObject([
+                  expect(Arr.filter(pending, (event) => event._tag === "braked")).toMatchObject([
                     { start, reason, exitCode: exit.exitCode, signal: expected.at(-1)!.signal },
                   ]);
                   // Review 5: HEAD keeps braked but loses the final exited event and its RSS.
@@ -280,25 +305,29 @@ it("every observed exit is durable once across restart or brake, with its reason
                 }
               }
 
-              const memoryPids = [...restarts, final].flatMap((item, i) => (item.rss === null ? [] : [27001 + i]));
-              expect(kill.mock.calls).toEqual(memoryPids.map((pid) => [pid, "SIGTERM"]));
+              const memoryPids = Arr.flatMap([...restarts, final], (item, i) => (item.rss === null ? [] : [27001 + i]));
+              expect(kill.mock.calls).toEqual(Arr.map(memoryPids, (pid) => [pid, "SIGTERM"]));
             }),
           ).pipe(
-            Effect.provide(fetchClient),
-            Effect.provide(ProcessIdGenerator.layer),
-            Effect.provide(SecureRandom.layerWebCrypto),
+            Effect.provideService(FetchHttpClient.Fetch, fetch),
             Effect.provide(
-              rssLayer(
-                () => {
-                  platform.samples++;
+              FetchHttpClient.layer.pipe(
+                Layer.provideMerge(ProcessIdGenerator.layer),
+                Layer.provideMerge(SecureRandom.layerWebCrypto),
+                Layer.provideMerge(
+                  rssLayer(
+                    () => {
+                      platform.samples++;
 
-                  return platform.rss;
-                },
-                (command, args) => spawned.push({ command, args }),
+                      return platform.rss;
+                    },
+                    (command, args) => spawned.push({ command, args }),
+                  ),
+                ),
+                Layer.provideMerge(NodeServices.layer),
+                Layer.provideMerge(TestClock.layer()),
               ),
             ),
-            Effect.provide(NodeServices.layer),
-            Effect.provide(TestClock.layer()),
           ),
           { signal },
         );
@@ -310,7 +339,7 @@ it("every observed exit is durable once across restart or brake, with its reason
           ),
         );
 
-        expect(pending.filter((event) => event._tag === "stopped")).toMatchObject([{ reason: "stop" }]);
+        expect(Arr.filter(pending, (event) => event._tag === "stopped")).toMatchObject([{ reason: "stop" }]);
         // A braked brain reaches no runtime, so what it could not send waits in this home for the next
         // start, which delivers it. The next start's own platform answers every call.
         fetch.mockImplementation(async (_url, options) => {
@@ -329,16 +358,20 @@ it("every observed exit is durable once across restart or brake, with its reason
               }),
             ),
           ).pipe(
-            Effect.provide(fetchClient),
-            Effect.provide(ProcessIdGenerator.layer),
-            Effect.provide(SecureRandom.layerWebCrypto),
-            Effect.provide(rssLayer(() => 0)),
-            Effect.provide(NodeServices.layer),
+            Effect.provide(
+              FetchHttpClient.layer.pipe(
+                Layer.provideMerge(ProcessIdGenerator.layer),
+                Layer.provideMerge(SecureRandom.layerWebCrypto),
+                Layer.provideMerge(rssLayer(() => 0)),
+                Layer.provideMerge(NodeServices.layer),
+              ),
+            ),
+            Effect.provideService(FetchHttpClient.Fetch, fetch),
           ),
           { signal },
         );
         // The memory sampler asks ps for one runtime's RSS, never another command.
-        const pids = new Set([...restarts, final].map((_, i) => String(27001 + i)));
+        const pids = new Set(Arr.map([...restarts, final], (_, i) => String(27001 + i)));
         expect(spawned.length).toBeGreaterThan(0);
 
         for (const { command, args } of spawned) {
@@ -349,7 +382,7 @@ it("every observed exit is durable once across restart or brake, with its reason
         }
 
         // Lifecycle events go to the project object's own brain method, with no name.
-        const brainCalls = calls.filter((call) => call.method === "brain");
+        const brainCalls = Arr.filter(calls, (call) => call.method === "brain");
         expect(brainCalls.length).toBeGreaterThan(0);
 
         for (const call of brainCalls) {
@@ -361,22 +394,22 @@ it("every observed exit is durable once across restart or brake, with its reason
         }
 
         // A stop while a replacement waits fails that replacement, and the failure is recorded.
-        const failed = calls
-          .filter((call) => call.target === "record" && call.method === "write")
-          .flatMap(
+        const writes = Arr.filter(calls, (call) => call.target === "record" && call.method === "write");
+
+        const failed = Arr.filter(
+          Arr.flatMap(
+            writes,
             (call) =>
               // SAFETY: a record write's third argument is its list of spans, or absent.
               (call.args[2] as Array<{
                 span: { name: string; ok: boolean; attributes: Record<string, unknown> };
               }>) ?? [],
-          )
-          .filter(
-            ({ span }) => span.name === "brain.restart" && !span.ok && span.attributes["error.type"] === "ControlError",
-          );
+          ),
+          ({ span }) => span.name === "brain.restart" && !span.ok && span.attributes["error.type"] === "ControlError",
+        );
 
         expect(failed.length).toBeGreaterThan(0);
       } finally {
-        fetch.mockRestore();
         kill.mockRestore();
         vi.unstubAllEnvs();
         rmSync(home, { recursive: true, force: true });
@@ -393,8 +426,7 @@ it("every observed exit is durable once across restart or brake, with its reason
         [{ restarts: [crashBrake], final: memoryBrake, reason: "intensity" }],
       ],
     },
-  );
-});
+  ));
 
 // L7 and L8: one replace, driven through the real driver. The stand-in runtime is the walk's own:
 // the process that grew too big (pid 27001, control port 27002) and its replacement (27003 on 27004).
@@ -408,7 +440,13 @@ const REPLACE = "replace-test";
 
 const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 
-const install: Install = { id: "install-1", program: "p/replace", hash: "a".repeat(64), source: "", from: "watch" };
+const install: Install = {
+  id: "install-1",
+  program: "p/replace",
+  hash: Function.pipe("a", Str.repeat(64)),
+  source: "",
+  from: "watch",
+};
 
 const Body = Schema.fromJsonString(Schema.Struct({ method: Schema.String }));
 
@@ -432,15 +470,18 @@ const until = Effect.fnUntraced(function* <A>(label: string, look: Effect.Effect
     yield* TestClock.withLive(Effect.sleep("10 millis"));
   }
 
-  return yield* Effect.die(new Error(`${label}: not seen; last ${JSON.stringify(yield* look)}`));
+  return yield* Effect.die(new Error(`${label}: not seen; last ${Formatter.format(yield* look)}`));
 });
 
-const replaceWorld = Effect.fnUntraced(function* (c: {
-  readonly limit: number;
-  readonly kib: number;
-  readonly grace: number;
-  readonly honors: boolean;
-}) {
+const replaceWorld = Effect.fnUntraced(function* (
+  fetch: Mock<typeof globalThis.fetch>,
+  c: {
+    readonly limit: number;
+    readonly kib: number;
+    readonly grace: number;
+    readonly honors: boolean;
+  },
+) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "mr-" });
   const clock = yield* Clock.Clock;
@@ -448,34 +489,29 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   const requests: Array<Request> = [];
   const world: { startup: boolean; ended: string | null; asked: number } = { startup: true, ended: null, asked: 0 };
 
-  yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        const body = Schema.decodeSync(Body)(bodyText(options));
-        const port = Number(new URL(String(url)).port);
-        requests.push({ port, method: body.method, at: clock.currentTimeMillisUnsafe() });
+  fetch.mockImplementation(async (url, options) => {
+    const body = Schema.decodeSync(Body)(bodyText(options));
+    const port = Number(new URL(String(url)).port);
+    requests.push({ port, method: body.method, at: clock.currentTimeMillisUnsafe() });
 
-        if (port === OLD.port && signals.length > 0) {
-          // The old workerd closed its control socket on the SIGTERM.
-          throw new TypeError("fetch failed", {
-            cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
-          });
-        }
+    if (port === OLD.port && signals.length > 0) {
+      // The old workerd closed its control socket on the SIGTERM.
+      throw new TypeError("fetch failed", {
+        cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
+      });
+    }
 
-        if (body.method === "brain" && !world.startup) {
-          // Keep lifecycle rows in the real outbox so the law reads every one.
-          return Response.json({ error: { reason: "offline" } });
-        }
+    if (body.method === "brain" && !world.startup) {
+      // Keep lifecycle rows in the real outbox so the law reads every one.
+      return Response.json({ error: { reason: "offline" } });
+    }
 
-        if (body.method === "codeInstall") {
-          return Response.json({ value: { _tag: "same" } });
-        }
+    if (body.method === "codeInstall") {
+      return Response.json({ value: { _tag: "same" } });
+    }
 
-        return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
-      }),
-    ),
-    (spy) => Effect.sync(() => spy.mockRestore()),
-  );
+    return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+  });
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
@@ -536,7 +572,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
     observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
     observe({ type: "start", worker: REPLACE, pid: NEW.pid });
     yield* until("the replacement's started row", rows, (all) =>
-      all.some((row) => row._tag === "started" && row.after === first),
+      Arr.some(all, (row) => row._tag === "started" && row.after === first),
     );
   });
 
@@ -565,15 +601,23 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   return { dev, life, home, signals, requests, world, first, rows, replaced, term, listen, observe: report };
 });
 
-const replaced = <A, E, R>(work: Effect.Effect<A, E, R>) =>
-  work.pipe(
+// Each run gets its own platform stand-in, which the work answers through.
+const replaced = <A, E, R>(work: (fetch: Mock<typeof globalThis.fetch>) => Effect.Effect<A, E, R>) => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+
+  return work(fetch).pipe(
     Effect.scoped,
-    Effect.provide(fetchClient),
-    Effect.provide(ProcessIdGenerator.layer),
-    Effect.provide(SecureRandom.layerWebCrypto),
-    Effect.provide(NodeServices.layer),
-    Effect.provide(TestClock.layer()),
+    Effect.provide(
+      FetchHttpClient.layer.pipe(
+        Layer.provideMerge(ProcessIdGenerator.layer),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(TestClock.layer()),
+      ),
+    ),
+    Effect.provideService(FetchHttpClient.Fetch, fetch),
   );
+};
 
 // L7. Plant: main's dev.ts, with no `replacing`: SIGTERM goes out every second, no SIGKILL comes, and
 // L7 fails on the signals.
@@ -589,10 +633,10 @@ effectIt.effect.prop(
     honors: Schema.Boolean,
   },
   ({ limit, over, grace, seconds, honors }) =>
-    replaced(
+    replaced((fetch) =>
       Effect.gen(function* () {
         const kib = Math.ceil(limit / 1024) + over;
-        const w = yield* replaceWorld({ limit, kib, grace, honors });
+        const w = yield* replaceWorld(fetch, { limit, kib, grace, honors });
         const sent = yield* w.term();
 
         if (honors) {
@@ -605,7 +649,7 @@ effectIt.effect.prop(
         }
 
         // Nothing but the first SIGTERM before the grace runs out.
-        expect(w.signals.map(({ signal }) => signal)).toEqual(["SIGTERM"]);
+        expect(Arr.map(w.signals, ({ signal }) => signal)).toEqual(["SIGTERM"]);
         yield* TestClock.setTime(sent.at + grace);
 
         if (!honors) {
@@ -635,14 +679,14 @@ effectIt.effect.prop(
               ],
         );
         const rows = yield* w.rows;
-        expect(rows.map((row) => row._tag)).toEqual(
+        expect(Arr.map(rows, (row) => row._tag)).toEqual(
           honors
             ? ["replacing", "exited", "restarting", "started"]
             : ["replacing", "killed", "exited", "restarting", "started"],
         );
-        expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
+        expect(new Set(Arr.map(rows, (row) => row.id)).size).toBe(rows.length);
         const bytes = kib * 1024;
-        expect(rows.find((row) => row._tag === "replacing")).toMatchObject({
+        expect(Option.getOrUndefined(Arr.findFirst(rows, (row) => row._tag === "replacing"))).toMatchObject({
           start: w.first,
           at: sent.at,
           reason: "memory",
@@ -651,16 +695,16 @@ effectIt.effect.prop(
           limit,
           grace,
         });
-        expect(rows.filter((row) => row._tag === "killed")).toEqual(
+        expect(Arr.filter(rows, (row) => row._tag === "killed")).toEqual(
           honors ? [] : [expect.objectContaining({ start: w.first, at: sent.at + grace, pid: OLD.pid })],
         );
-        expect(rows.find((row) => row._tag === "exited")).toMatchObject({
+        expect(Option.getOrUndefined(Arr.findFirst(rows, (row) => row._tag === "exited"))).toMatchObject({
           start: w.first,
           reason: "memory",
           bytes,
           signal: honors ? null : "SIGKILL",
         });
-        expect(rows.find((row) => row._tag === "started")).toMatchObject({
+        expect(Option.getOrUndefined(Arr.findFirst(rows, (row) => row._tag === "started"))).toMatchObject({
           after: w.first,
           pid: NEW.pid,
           reason: "memory",
@@ -690,24 +734,24 @@ effectIt.effect.prop(
     broken: Schema.Boolean,
   },
   ({ grace, delay, calls, stop, broken }) =>
-    replaced(
+    replaced((fetch) =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const limit = 500_000_000;
-        const w = yield* replaceWorld({ limit, kib: 600_000, grace, honors: false });
+        const w = yield* replaceWorld(fetch, { limit, kib: 600_000, grace, honors: false });
         const sent = yield* w.term();
         const heard = grace + delay;
         const bound = grace + 30_000;
         const share = (part: number) => Math.floor((part * heard) / 10_000);
         const ending = stop === null ? null : share(stop);
         // A call after the stop meets a stopped brain, which the stop law already covers.
-        const moments = calls.map(share).filter((at) => ending === null || at < ending);
+        const moments = Arr.filter(Arr.map(calls, share), (at) => ending === null || at < ending);
         const kills = ending === null || grace <= ending;
 
         type Move = { readonly at: number; readonly move: "call" | "kill" | "listen" | "stop" };
 
         const moves: Array<Move> = [
-          ...moments.map((at): Move => ({ at, move: "call" })),
+          ...Arr.map(moments, (at): Move => ({ at, move: "call" })),
           ...(kills ? [{ at: grace, move: "kill" } satisfies Move] : []),
           ...(ending === null
             ? [{ at: heard, move: "listen" } satisfies Move]
@@ -772,7 +816,7 @@ effectIt.effect.prop(
 
         yield* TestClock.withLive(Effect.sleep("10 millis"));
         // No control request reaches the old port once the replace began.
-        expect(w.requests.filter((r) => r.port === OLD.port && r.at >= sent.at)).toEqual([]);
+        expect(Arr.filter(w.requests, (r) => r.port === OLD.port && r.at >= sent.at)).toEqual([]);
 
         // An install that failed names how in its cause: the call's own ControlError.
         const offline = (exit: Exit.Exit<unknown, unknown>) => {
@@ -811,7 +855,7 @@ effectIt.effect.prop(
         }
 
         // A stop before the grace ends the replace without a SIGKILL.
-        expect(w.signals.filter((s) => s.signal === "SIGKILL")).toHaveLength(kills ? 1 : 0);
+        expect(Arr.filter(w.signals, (s) => s.signal === "SIGKILL")).toHaveLength(kills ? 1 : 0);
       }),
     ),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 20 }) } },
@@ -834,7 +878,7 @@ effectIt.effect.prop(
   "L13 a start that reports a pid of zero, below zero or not whole is refused, so the first start fails as bad_pid and a later one is never sampled or signaled",
   { pid: NoPid, first: Schema.Boolean },
   ({ pid, first }) =>
-    replaced(
+    replaced((fetch) =>
       Effect.gen(function* () {
         if (first) {
           const fs = yield* FileSystem.FileSystem;
@@ -845,12 +889,7 @@ effectIt.effect.prop(
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
 
-          yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ value: null })),
-            ),
-            (spy) => Effect.sync(() => spy.mockRestore()),
-          );
+          fetch.mockImplementation(async () => Response.json({ value: null }));
 
           const exit = yield* startDev({ name: REPLACE, port: 18787, build: "test", home, ...BRAIN }, (local) =>
             Effect.gen(function* () {
@@ -866,18 +905,18 @@ effectIt.effect.prop(
           });
           expect(kill).not.toHaveBeenCalled();
           const rows = yield* (yield* brainOutbox(home)).pending;
-          expect(rows.filter((row) => row._tag === "started")).toEqual([]);
+          expect(Arr.filter(rows, (row) => row._tag === "started")).toEqual([]);
 
           return;
         }
 
         // The first process crashes before any sample, and its replacement reports no process's pid.
-        const w = yield* replaceWorld({ limit: 500_000_000, kib: 600_000, grace: 5000, honors: false });
+        const w = yield* replaceWorld(fetch, { limit: 500_000_000, kib: 600_000, grace: 5000, honors: false });
         const exit: Ended = { exitCode: 1, signal: null, stderr: "" };
         w.observe({ type: "exit", worker: REPLACE, exit });
         w.observe({ type: "restart", worker: REPLACE, exit, delay: 250 });
         w.observe({ type: "start", worker: REPLACE, pid });
-        yield* until("the crash's exited row", w.rows, (all) => all.some((row) => row._tag === "exited"));
+        yield* until("the crash's exited row", w.rows, (all) => Arr.some(all, (row) => row._tag === "exited"));
 
         for (let n = 0; n < 5; n++) {
           yield* TestClock.adjust("1 second");
@@ -886,7 +925,7 @@ effectIt.effect.prop(
 
         expect(w.world.asked, "no sample of any process").toBe(0);
         expect(w.signals).toEqual([]);
-        expect((yield* w.rows).filter((row) => row._tag === "started" && row.after === w.first)).toEqual([]);
+        expect(Arr.filter(yield* w.rows, (row) => row._tag === "started" && row.after === w.first)).toEqual([]);
       }),
     ),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 40 }) } },

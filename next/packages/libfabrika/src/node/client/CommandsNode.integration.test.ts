@@ -12,9 +12,13 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
+import * as Str from "effect/String";
+
 import { Commands } from "../../client/Commands.ts";
 import { Command } from "../../tasks/Task.ts";
 import * as CommandsNode from "./CommandsNode.ts";
@@ -30,17 +34,20 @@ describe("P39 slice 4b: the real command on a real host", () => {
         const commands = yield* Commands;
         expect(commands.has, "C4: the runner has git on its PATH").toEqual(["git"]);
         const answer = yield* commands.execute(Command.cases.git_version.make({}));
-        expect(answer._tag, `C4: real git exits: ${JSON.stringify(answer)}`).toBe("exited");
+        expect(answer._tag, `C4: real git exits: ${Formatter.format(answer)}`).toBe("exited");
 
         if (answer._tag !== "exited") {
           return;
         }
 
         expect(answer.code).toBe(0);
-        expect(answer.version.startsWith("git version "), `C4: ${JSON.stringify(answer.version)}`).toBe(true);
-        expect(answer.version.endsWith("\n"), "C4: the trailing newline is dropped").toBe(false);
+        expect(
+          Function.pipe(answer.version, Str.startsWith("git version ")),
+          `C4: ${Formatter.format(answer.version)}`,
+        ).toBe(true);
+        expect(Function.pipe(answer.version, Str.endsWith("\n")), "C4: the trailing newline is dropped").toBe(false);
         // The line C1's vectors replay: one line, far under the cap.
-        expect(answer.version.includes("\n")).toBe(false);
+        expect(Function.pipe(answer.version, Str.includes("\n"))).toBe(false);
         expect(new TextEncoder().encode(answer.version).length).toBeLessThan(CAP);
       }).pipe(Effect.provide(CommandsNode.layer.pipe(Layer.provideMerge(NodeServices.layer)))),
     30_000,

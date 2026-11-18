@@ -1,3 +1,4 @@
+import { Array as Arr, Option } from "effect";
 import valueParser from "postcss-value-parser";
 import { plugin } from "../css-support.ts";
 
@@ -10,7 +11,7 @@ const pixels = (nodes: valueParser.Node[]) => {
 
     const dimension = valueParser.unit(node.value);
 
-    if (dimension && dimension.unit.toLowerCase() === "px") {
+    if (dimension !== false && dimension.unit.toLowerCase() === "px") {
       found = true;
     }
   });
@@ -30,7 +31,7 @@ const hasUnit = (nodes: valueParser.Node[], units: RegExp) => {
   valueParser.walk(nodes, (node) => {
     const dimension = node.type === "word" ? valueParser.unit(node.value) : false;
 
-    if (dimension && units.test(dimension.unit)) {
+    if (dimension !== false && units.test(dimension.unit)) {
       found = true;
     }
   });
@@ -41,11 +42,11 @@ const hasUnit = (nodes: valueParser.Node[], units: RegExp) => {
 // https://drafts.csswg.org/css-fonts-4/#font-prop
 // [style || variant || weight || width]? size [/ line-height]? family
 const fontSize = (all: valueParser.Node[]) => {
-  const nodes = all.filter((node) => node.type !== "space" && node.type !== "comment");
-  const slash = nodes.findIndex((node) => node.type === "div" && node.value === "/");
+  const nodes = Arr.filter(all, (node) => node.type !== "space" && node.type !== "comment");
+  const slash = Arr.findFirstIndex(nodes, (node) => node.type === "div" && node.value === "/");
 
-  if (slash !== -1) {
-    return nodes[slash - 1];
+  if (Option.isSome(slash)) {
+    return nodes[slash.value - 1];
   }
 
   for (let index = 0; index < nodes.length; index++) {

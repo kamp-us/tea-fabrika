@@ -1,7 +1,6 @@
 // P12, next/. The settings entry flows (L10, L16): saved and wire values enter the five real
 // entries over in-memory platform handles. Split out of readers.laws.test.ts unchanged so each file
 // stays under about 60 s on a CI leg.
-import { createHash, generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
   DurableObjectState as ObjectState,
@@ -9,7 +8,13 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Exit, Layer, Match, Option, Predicate, Schema, Scope, Tracer } from "effect";
-import { Digest } from "effect/crypto";
+
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Signature from "effect/crypto/Signature";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Formatter from "effect/Formatter";
+import * as Str from "effect/String";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -19,11 +24,11 @@ import type { Sql } from "../Sql.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
 import type { GatewayCalls } from "./bindings.ts";
+// Loading record.ts registers RecordPart's constructor, which the objects.ts mock below captures.
+import "./record.ts";
 import { ConnectionService, connectionRuntime } from "./connection.ts";
 import { fetch } from "./fetch.ts";
 import type { RecordShape } from "./objects.ts";
-// Loading record.ts registers RecordPart's constructor, which the objects.ts mock below captures.
-import "./record.ts";
 import { ProcessService, ProjectService, processRuntime, projectRuntime, settingsReply, type Env } from "./runtime.ts";
 import * as SettingsTest from "./SettingsTest.ts";
 
@@ -44,13 +49,27 @@ const recordConstructor = vi.hoisted(() => {
 });
 
 // The Project keeps each built-in program by its hash, the SHA-256 of its source (`BuiltProgram`).
-const FIXTURE = { hash: createHash("sha256").update("fixture").digest("hex"), source: "fixture" };
+const FIXTURE = {
+  hash: await Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode("fixture"))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  ),
+  source: "fixture",
+};
+
+/** A fresh Ed25519 public key in JWK's `x` form (base64url), from Effect's Signature on WebCrypto. */
+const freshPublicKey = Signature.Signature.use((signature) => signature.generateKeyPair(Signature.ed25519)).pipe(
+  Effect.flatMap(({ publicKey }) => Signature.toBytes(publicKey)),
+  Effect.map(Base64Url.encode),
+  Effect.provide(Signature.layerWebCrypto.pipe(Layer.provide(SecureRandom.layerWebCrypto))),
+);
 
 // SQL drivers throw at the synchronous platform boundary, before the service translates them.
 const settingsExec =
   (base: Sql, failed: () => boolean, cause: Error, counted: (kind: "read" | "append") => void): Sql["exec"] =>
   (query, ...args) => {
-    const settings = args.some((arg) => Predicate.isString(arg) && arg.startsWith("settings/instance/"));
+    const settings = args.some((arg) => Predicate.isString(arg) && Str.startsWith("settings/instance/")(arg));
 
     if (settings && /SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
       counted("read");
@@ -114,14 +133,14 @@ SettingsTest.suite((recipe, secret) =>
     let appends = 0;
     let consumers = 0;
     const databases: DatabaseSync[] = [];
-    const key = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
+    const key = yield* freshPublicKey;
 
     let input = {
       ...(yield* StartsTest.input(recipe)),
       founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key, window: null },
     };
 
-    captured.transport.push(JSON.stringify(input));
+    captured.transport.push(Formatter.formatJson(input));
     const lower = new Error(secret, { cause: { password: secret } });
 
     const database = Effect.acquireRelease(
@@ -226,6 +245,7 @@ SettingsTest.suite((recipe, secret) =>
     );
 
     const open: SettingsTest.Driver["open"] = Effect.fnUntraced(function* (path, corrupt) {
+      const context = yield* Effect.context<never>();
       const config = { ...input, ...input.founding, port: Number(input.settings.values["instance.port"]) };
       const db = path === "Project" ? local : yield* database;
       const sql = path === "Project" ? settingsSql : nodeSql(db);
@@ -237,7 +257,7 @@ SettingsTest.suite((recipe, secret) =>
         build: input.build,
         owner: Writer.cases.person.make({ key: "fixture-writer", for: input.founding.person }),
       });
-      const encoded = JSON.stringify(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
+      const encoded = Formatter.formatJson(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
 
       let attached = Attached.cases.online.make({
         client: "fixture-client",
@@ -267,8 +287,8 @@ SettingsTest.suite((recipe, secret) =>
       const ctx = {
         id: {
           name: Match.value(path).pipe(
-            Match.when("Process", () => JSON.stringify([input.name, "worker"])),
-            Match.when("RecordPart", () => JSON.stringify([input.name, "spans/0"])),
+            Match.when("Process", () => Formatter.formatJson([input.name, "worker"])),
+            Match.when("RecordPart", () => Formatter.formatJson([input.name, "spans/0"])),
             Match.orElse(() => input.name),
           ),
         },
@@ -319,7 +339,7 @@ SettingsTest.suite((recipe, secret) =>
         UNRELATED_PASSWORD: secret,
         PROJECT: {
           getByName: () => ({
-            settingsStart: (wire: unknown) => Effect.runPromise(gate(wire)),
+            settingsStart: (wire: unknown) => Effect.runPromiseWith(context)(gate(wire)),
             route: async () => ({ _tag: "ok", result: {} }),
           }),
         },
@@ -488,7 +508,7 @@ SettingsTest.suite((recipe, secret) =>
     return {
       deploy: Effect.fnUntraced(function* (next: StartsTest.Recipe) {
         input = { ...(yield* StartsTest.input(next)), founding: input.founding };
-        captured.transport.push(JSON.stringify(input));
+        captured.transport.push(Formatter.formatJson(input));
       }, Effect.provide(Digest.layerWebCrypto)),
       open,
       fault: (next) => {

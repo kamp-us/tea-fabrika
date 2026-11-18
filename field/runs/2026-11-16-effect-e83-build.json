@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e83-build",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-16T01:20:08-08:00",
+  "ended": "2026-11-16T01:37:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step for judgment slice E83 of the Effect-check sweep (preferEffectRecord), in next/, on branch fabrikalfa/effect-e83 from the tests step's head dfd033025. It fixed the 86 product hits the tests row listed, in 24 product files (the tests row's 25 counted one file twice): libfabrika's runtime, settings, cloudflare, processes, telemetry and gateway folders and the app's src/build.ts. Object.keys, entries, values, fromEntries and hasOwn became Rec.keys, toEntries, values, fromEntries and has, imported as import * as Rec from \"effect/Record\" in libfabrika (0577) and as Record as Rec from the barrel in the app; Snapshot.ts kept the Record as Rec it already took. Where Record's types did not fit, with no cast: Rec.has<string, unknown> for a literal-keyed cases table and a string key (Process.ts, processTable.ts); new Set<string> for Runner's RESERVED, since Rec.keys types the keys as literals; Predicate.isObject in place of a hand-written object test in Runner's operands and withoutInput, which also drops two `as Record<string, unknown>` casts, and operands' fields parameter typed as a readonly record in place of object; Predicate.isObjectOrArray in place of the same test in JsonSchema's printed, so Rec.toEntries gets a record; an Array.isArray branch in JsonSchema's loose, since Object.values on an array gave its elements; Predicate.hasProperty then Rec.has<string, unknown> with String(key) in TomlParser's put and edit.ts's read, where a key may be an array index, which keeps the own-property check. Two own-property checks became `in`: the four Object.hasOwn(error, \"cause\") on a ProgramDown instance (Execution.ts, Program.ts, Runner.ts twice), since a class instance is not a record; a probe showed no class in a Schema.TaggedError's prototype chain has a cause, so the answers are the same; and TomlParser's hole check on an array, Predicate.hasProperty(value, i), which differs only if Array.prototype or Object.prototype held that index. Predicate.hasProperty on the error instances typed one branch as never in Runner, so plain `in` is used at all four.",
+  "laws": [
+    {
+      "law": "L1 for E83: effect-tsgo diagnostics with only preferEffectRecord at error shows 0 hits in the slice's folders",
+      "red": "86 product hits at dfd033025, 0 after; no other check's count moved in libfabrika or the app"
+    }
+  ],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Count: effect-tsgo diagnostics --format json with --lspconfig {diagnosticSeverity: {preferEffectRecord: error}, includeSuggestionsInTsc: true}, for next/packages/libfabrika and next/apps/fabrika, joined by file and offset, filtered to the slice's folders: 86 before, 0 after. libfabrika's preferEffectRecord total went 232 to 148 and the app's 70 to 68, the rest in other slices' folders. Checks: tsc --noEmit -p . for libfabrika and the app under Node 26.13.0, exit 0; pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 18 parts passed; ratchet.ts exit 0 against the merge base with origin/main; loosening.sh from dfd033025 to the build head, 0 hits. Tests under nice -n 19 with --maxWorkers=1 and the pinned Node, one file at a time, all green: the 19 plain test files beside a changed file, plus TomlEdit.test.ts (edit.ts), Mailbox.test.ts (Process.ts), error-cause.test.ts (runtime.ts and box.ts), RunnerRecovery.laws.test.ts and EffectFunctions.test.ts (Runner.ts) and telemetry/internal/sums.test.ts (Sink.ts), 25 files, 202 tests. Not run, since the brief keeps .integration. files to a box: build.integration.test.ts, Runner.integration.test.ts and Sink.integration.test.ts. Not run: pnpm typecheck and the full suite.",
+  "costUsd": null,
+  "billed": null,
+  "step": "build"
+}

@@ -13,7 +13,10 @@
 // importKey, sign and verify share).
 import { describe, expect } from "@effect/vitest";
 import { Effect, Predicate, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Base64Url } from "effect/encoding";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
@@ -124,10 +127,10 @@ export const suite = (law: Law, { fresh }: Harness) => {
         Effect.gen(function* () {
           const store = gatewayStore(fresh());
           yield* store.atomic(() => store.set(name, Schema.String, value));
-          store.sql.exec("UPDATE gateway_state SET value=? WHERE name=?", JSON.stringify(bad), name);
+          store.sql.exec("UPDATE gateway_state SET value=? WHERE name=?", Formatter.formatJson(bad), name);
           const error = yield* Effect.flip(store.atomic(() => store.get(name, Schema.String)));
           expect(error._tag).toBe("GatewayError");
-          const row = chain(error).find(isBadRow);
+          const row = Option.getOrUndefined(Arr.findFirst(chain(error), isBadRow));
           expect(row, "a `BadRow` GatewayError is in the chain").toBeDefined();
           expect(Schema.isSchemaError(beneath(row)), "it holds the decoder's own failure").toBe(true);
         }),

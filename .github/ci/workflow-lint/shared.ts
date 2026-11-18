@@ -1,6 +1,6 @@
+import { Predicate, Record as Rec, Result } from "effect";
 // Today's CI, serving both versions. What every workflow-lint rule reads with: the parsed
 // workflow's parts, step lists, expression spacing, and the values more than one rule pins.
-import { Predicate, Result } from "effect";
 import { parse } from "yaml";
 
 /** A parsed check.yaml, cut into the parts every rule reads. */
@@ -41,7 +41,7 @@ export const isStop = (step: Record<string, unknown>) =>
   compact(step["if"]) === STOP.if &&
   JSON.stringify(step["env"]) === JSON.stringify(STOP.env) &&
   step["run"] === STOP.run &&
-  Object.keys(step).length === Object.keys(STOP).length;
+  Rec.keys(step).length === Rec.keys(STOP).length;
 
 // The CLI's `gh run cancel`, and the REST API's `cancel` and `force-cancel` calls on a run.
 const CANCEL = /\brun\s+cancel\b|\/(?:force-)?cancel\b/;
@@ -88,8 +88,9 @@ export const classifier = { ...env, DRAFT: `\${{ github.event.pull_request.draft
 // false in the merge queue and on main.
 export const VISUAL_LABEL = "contains(github.event.pull_request.labels.*.name, 'visual')";
 
-export const VISUAL_ROUTE =
-  "(github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')";
+// Where next's full fallback starts the visual legs: a push to main, and a pull request that asked
+// for them. A pull request without the label and a merge queue group never start them (0536).
+export const VISUAL_ROUTE = `(github.event_name == 'push' || ${VISUAL_LABEL})`;
 
 export const RELATED =
   "(github.event_name == 'merge_group' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && steps.diff.outputs.check != 'false'";
@@ -112,8 +113,9 @@ export const chromium =
 // The next job's machines. Each is a string, so a workflow `if` compares a string with a string.
 // The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
 // vitest.shards.test.ts (E4) pins N from measured seconds. The matrix is changes' size step's
-// `shards`, else its fallback: the full matrix on the PR, queue and main line, and the
-// vitest legs alone on other events.
+// `shards`, else its fallback: the full matrix on a push to main and on a pull request with the
+// `visual` label, and the vitest legs alone everywhere else, the merge queue among them (0536,
+// legs.ts).
 export const E2E_PREFIX = "e2e-";
 
 export const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
@@ -123,11 +125,15 @@ export const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.vi
 
 const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
-const parsed = (text: string | undefined): unknown[] => {
-  const value = Result.getOrUndefined(Result.try((): unknown => JSON.parse(text ?? "")));
+const parsed = (text: string | undefined): unknown[] =>
+  Result.getOrElse(
+    Result.try((): unknown[] => {
+      const value: unknown = JSON.parse(text ?? "");
 
-  return Array.isArray(value) ? value : [];
-};
+      return Array.isArray(value) ? value : [];
+    }),
+    (): unknown[] => [],
+  );
 
 /**
  * next's matrix, `fromJSON(needs.changes.outputs.shards || (<when> && '<full>' || '<vitest legs>'))`:
@@ -139,7 +145,7 @@ export const fallbacks = (job: Record<string, unknown>) => {
   return { when: found?.[1] ?? "", full: parsed(found?.[2]), plain: parsed(found?.[3]) };
 };
 
-/** The full fallback includes visual and in-memory legs. */
+/** The full fallback's legs, visual and in-memory: what a push to main or a labeled pull request runs unsized. */
 export const legs = (job: Record<string, unknown>): unknown[] => fallbacks(job).full;
 
 /** The legs that run vitest: the ones written as a quoted whole number. */

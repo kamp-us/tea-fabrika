@@ -2,7 +2,11 @@
  * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
  * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
  */
-import { Effect, Equal, Predicate, Redacted, Result, Schema } from "effect";
+import { Effect, Equal, Redacted, Result, Schema } from "effect";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Connection } from "../presence/Connections.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
@@ -290,7 +294,14 @@ export const control = Effect.fn("runtime.control")(function* (
   token: Redacted.Redacted<string>,
   programs: Readonly<Record<string, ProgramSource>>,
 ) {
-  const bearer = Redacted.make(request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1]);
+  const bearer = Redacted.make(
+    Function.pipe(
+      request.headers.get("authorization") ?? "",
+      Str.match(/^Bearer (.+)$/),
+      Option.map((found) => found[1]),
+      Option.getOrUndefined,
+    ),
+  );
 
   if (!Equal.equals(token, bearer)) {
     return new Response(null, { status: 403 });

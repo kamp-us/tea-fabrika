@@ -17,12 +17,30 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
+import { it } from "@effect/vitest";
+import type { BuildError } from "@kampus/libfabrika/runtime/Built";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Result, Schema, Scope } from "effect";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Record as Rec,
+  Config,
+  Effect,
+  Exit,
+  Option,
+  Result,
+  Schema,
+  Scope,
+  Formatter,
+  Layer,
+} from "effect";
+import type { PlatformError } from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import * as fc from "fast-check";
 import { chromium } from "playwright";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import type { Built } from "../src/build.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
@@ -46,7 +64,10 @@ type Build = {
     readonly chaos: boolean;
     readonly files: readonly string[];
     readonly ledger: readonly unknown[];
-  }) => Effect.Effect<Built & { readonly assets: Readonly<Record<string, Asset>> }, unknown>;
+  }) => Effect.Effect<
+    Built & { readonly assets: Readonly<Record<string, Asset>> },
+    BuildError | PlatformError.PlatformError
+  >;
 };
 
 const field = (v: string | Buffer) => {
@@ -59,15 +80,15 @@ const field = (v: string | Buffer) => {
 };
 
 describe("P16 real browser from a copied one-file build", () => {
-  it("assets: generated secondary imports execute and CSS loads; blocking the secondary route kills the same check", async () => {
-    await fc.assert(
+  it("assets: generated secondary imports execute and CSS loads; blocking the secondary route kills the same check", () =>
+    fc.assert(
       fc.asyncProperty(
         fc
           .array(fc.constantFrom("雪", "🫖", "</script>", "\\", "'", '"', "\r\n"), {
             minLength: 1,
             maxLength: 6,
           })
-          .map((v) => v.join("")),
+          .map((v) => Arr.join(v, "")),
         async (text) => {
           const home = mkdtempSync("/tmp/fh."),
             oldHome = process.env.FABRIKA_HOME;
@@ -106,7 +127,7 @@ describe("P16 real browser from a copied one-file build", () => {
             writeFileSync(join(pkg, "window.css"), "#p16 {color: rgb(12, 34, 56);}");
             cpSync(join(APP, "src"), join(home, "src"), {
               recursive: true,
-              filter: (p) => !p.endsWith(".test.ts"),
+              filter: (p) => !pipe(p, Str.endsWith(".test.ts")),
             });
             const file = join(ROOT, "next/packages/libfabrika/src/node/build/build.ts");
             assert(existsSync(file), "P16 not built: reusable library build absent");
@@ -122,7 +143,7 @@ describe("P16 real browser from a copied one-file build", () => {
                   // The app's brain starts every name on its boot list (runtime.ts), so the build holds the
                   // app's whole table. Only `fabrika/counter` comes from this fixture's package, which
                   // re-exports the real counter and keeps its name.
-                  programs: programs.map((p) =>
+                  programs: Arr.map(programs, (p) =>
                     p.name === "fabrika/counter" ? { ...p, package: "@p16/browser", export: "program" } : p,
                   ),
                   chaos: false,
@@ -149,44 +170,50 @@ describe("P16 real browser from a copied one-file build", () => {
             const { localState } = await import("alchemy/State/LocalState");
 
             const instance = await Effect.runPromise(
-              localInstance(
-                { ...built, brain: join(alone, "brain.mjs") },
-                RecordWireTest.startupFixture({
-                  home,
-                  name: "p16-browser",
-                  person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-                  founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
-                  window: null,
-                  port,
-                }),
-              ).pipe(
+              RecordWireTest.startupFixture({
+                home,
+                name: "p16-browser",
+                person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+                founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
+                window: null,
+                port,
+              }).pipe(
+                Effect.flatMap((fixture) => localInstance({ ...built, brain: join(alone, "brain.mjs") }, fixture)),
                 Effect.provideService(Scope.Scope, scope),
-                Effect.provide(localState()),
-                Effect.provide(SecureRandom.layerWebCrypto),
-                Effect.provide(NodeServices.layer),
+                Effect.provide(
+                  localState().pipe(
+                    Layer.provideMerge(SecureRandom.layerWebCrypto),
+                    Layer.provideMerge(NodeServices.layer),
+                  ),
+                ),
               ),
             );
 
-            const entry = Object.entries(built.assets).find(
-              ([, a]) => a.type.startsWith("text/javascript") && a.body.includes("__p16Ready"),
+            const entry = Option.getOrUndefined(
+              Arr.findFirst(
+                Rec.toEntries(built.assets),
+                ([, a]) => pipe(a.type, Str.startsWith("text/javascript")) && pipe(a.body, Str.includes("__p16Ready")),
+              ),
             );
 
             assert(entry, "entry script missing");
             // P40: the window's entry route keeps its qualified program name.
             expect(entry[0]).toContain("fabrika/counter");
-            const scripts = Object.entries(built.assets).filter(([, a]) => a.type.startsWith("text/javascript"));
+            const scripts = Arr.filter(Rec.toEntries(built.assets), ([, a]) =>
+              pipe(a.type, Str.startsWith("text/javascript")),
+            );
             expect(scripts.length).toBeGreaterThan(1);
             const page = await browser.newPage();
             await page.goto(instance.url);
 
-            for (const [route, asset] of Object.entries(built.assets)) {
+            for (const [route, asset] of Rec.toEntries(built.assets)) {
               const response = await page.request.get(instance.url + route);
               expect(response.status()).toBe(200);
               expect(response.headers()["content-type"]).toBe(asset.type);
               expect(await response.text()).toBe(asset.body);
               expect(createHash("sha256").update(asset.body).digest("hex")).toBe(asset.hash);
 
-              if (asset.type.startsWith("text/css")) {
+              if (pipe(asset.type, Str.startsWith("text/css"))) {
                 await page.addStyleTag({ url: instance.url + route });
               }
             }
@@ -218,8 +245,7 @@ describe("P16 real browser from a copied one-file build", () => {
         },
       ),
       { seed: 119120, numRuns: runsFor({ fast: 2, full: 2 }) },
-    );
-  });
+    ));
 });
 
 // P14 slice 1 (ticket 698): S1.5 and the scoped browser fixture S1.6 supervises. The real counter
@@ -245,12 +271,18 @@ const Fault = Schema.Struct({
   kind: Schema.Literals(["setup", "test", "hold"]),
 });
 
-const fault =
-  process.env.P14_E2E_FAULT === undefined
-    ? undefined
-    : Schema.decodeSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+// What the supervisor planted, read once through Config. A fault it cannot decode fails the file at
+// load, as the old decode did.
+const planted = Effect.runSync(
+  Config.all({
+    fault: Config.option(Config.schema(Schema.fromJsonString(Fault), "P14_E2E_FAULT")),
+    trace: Config.option(Config.String("P14_E2E_TRACE")),
+  }),
+);
 
-const trace = process.env.P14_E2E_TRACE;
+const fault = Option.getOrUndefined(planted.fault);
+
+const trace = Option.getOrUndefined(planted.trace);
 
 class SetupFault extends Schema.TaggedError<SetupFault, { readonly brand: unique symbol }>()("SetupFault", {
   at: Schema.String,
@@ -266,7 +298,7 @@ const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
  *  exits at once on SIGTERM or SIGINT and its worker dies with it, so no scope would close. Raced
  *  against the fixture, this closes the scope first, as `NodeRuntime.runMain` does for a main. */
 const stopped = Effect.callback<never, Stopped>((resume) => {
-  const stops = STOPS.map((reason) => {
+  const stops = Arr.map(STOPS, (reason) => {
     const stop = () => resume(Effect.fail(Stopped.make({ reason })));
     process.once(reason, stop);
 
@@ -283,7 +315,7 @@ const stopped = Effect.callback<never, Stopped>((resume) => {
 const note = (row: Readonly<Record<string, unknown>>) =>
   Effect.sync(() => {
     if (trace !== undefined) {
-      appendFileSync(trace, `${JSON.stringify(row)}\n`);
+      appendFileSync(trace, `${Formatter.formatJson(row)}\n`);
     }
   });
 
@@ -379,7 +411,7 @@ const servedCounter = Effect.gen(function* () {
   mkdirSync(tab);
   writeFileSync(join(tab, "entry.tsx"), TAB_ENTRY);
   writeFileSync(join(tab, "tab.css"), "output { color: rgb(12, 34, 56); }\n");
-  cpSync(join(APP, "src"), join(home, "src"), { recursive: true, filter: (p) => !p.endsWith(".test.ts") });
+  cpSync(join(APP, "src"), join(home, "src"), { recursive: true, filter: (p) => !pipe(p, Str.endsWith(".test.ts")) });
 
   // SAFETY: build.ts exports `build`, whose Options mirror Build's above and add the optional `tab`, an entry and its stylesheets.
   const api = (yield* Effect.promise(
@@ -413,20 +445,18 @@ const servedCounter = Effect.gen(function* () {
 
   const instance = yield* owned(
     "server",
-    localInstance(
-      built,
-      RecordWireTest.startupFixture({
-        home,
-        name: "p14-browser",
-        person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-        founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
-        window: null,
-        port,
-      }),
-    ).pipe(
-      Effect.provide(localState()),
-      Effect.provide(SecureRandom.layerWebCrypto),
-      Effect.provide(NodeServices.layer),
+    RecordWireTest.startupFixture({
+      home,
+      name: "p14-browser",
+      person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+      founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
+      window: null,
+      port,
+    }).pipe(
+      Effect.flatMap((fixture) => localInstance(built, fixture)),
+      Effect.provide(
+        localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+      ),
     ),
     // localInstance registers its own release on this scope; the instance's port is what must close.
     () => Effect.void,
@@ -462,83 +492,89 @@ const servedCounter = Effect.gen(function* () {
 });
 
 describe("P14 slice 1: the typed counter view in a real tab", () => {
-  it("S1.5 generated presses: the rendered counter shows its program's data and emits only its program's messages", async () => {
-    const { stepper } = await import("@kampus/libfabrika");
-    const { counter } = await import("@kampus/counter");
-    const program = Result.getOrThrow(stepper(counter));
-    const inputs = Object.keys(counter.inputs);
-    const pressedTypes = new Set<string>();
-    await Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const { built, instance, page } = yield* servedCounter;
-          yield* Effect.promise(async () => {
-            if (fault?.kind === "test") {
-              expect.fail(`scenario: a test that fails after ${fault.at} was acquired`);
-            }
+  it.live(
+    "S1.5 generated presses: the rendered counter shows its program's data and emits only its program's messages",
+    () =>
+      Effect.gen(function* () {
+        const { stepper } = yield* Effect.promise(() => import("@kampus/libfabrika"));
+        const { counter } = yield* Effect.promise(() => import("@kampus/counter"));
+        const program = Result.getOrThrow(stepper(counter));
+        const inputs = Rec.keys(counter.inputs);
+        const pressedTypes = new Set<string>();
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const { built, instance, page } = yield* servedCounter;
+            yield* Effect.promise(async () => {
+              if (fault?.kind === "test") {
+                expect.fail(`scenario: a test that fails after ${fault.at} was acquired`);
+              }
 
-            // The real root serves the carried page, and the page alone loads the carried script.
-            const root = await page.goto(`${instance.url}/`);
-            expect(root?.status()).toBe(200);
-            expect(root?.headers()["content-type"]).toBe("text/html; charset=utf-8");
-            expect(await root?.text(), "/ is the carried page").toBe(built.assets["/index.html"]?.body);
-            const script = await page.request.get(`${instance.url}/window.js`);
-            expect(await script.text(), "/window.js is the carried script").toBe(built.assets["/window.js"]?.body);
-            await page.waitForFunction(() => "__p14" in globalThis);
-            const count = page.getByRole("status");
+              // The real root serves the carried page, and the page alone loads the carried script.
+              const root = await page.goto(`${instance.url}/`);
+              expect(root?.status()).toBe(200);
+              expect(root?.headers()["content-type"]).toBe("text/html; charset=utf-8");
+              expect(await root?.text(), "/ is the carried page").toBe(built.assets["/index.html"]?.body);
+              const script = await page.request.get(`${instance.url}/window.js`);
+              expect(await script.text(), "/window.js is the carried script").toBe(built.assets["/window.js"]?.body);
+              await page.waitForFunction(() => "__p14" in globalThis);
+              const count = page.getByRole("status");
 
-            const button = (input: string) =>
-              page.getByRole("button", {
-                name: Object.entries(counter.inputs).find(([name]) => name === input)![1].description,
-              });
+              const button = (input: string) =>
+                page.getByRole("button", {
+                  name: Option.getOrThrow(Arr.findFirst(Rec.toEntries(counter.inputs), ([name]) => name === input))[1]
+                    .description,
+                });
 
-            const pressed = () => page.evaluate(() => globalThis.__p14?.pressed ?? []);
-            const render = (view: unknown) => page.evaluate((data) => globalThis.__p14?.render(data), view);
+              const pressed = () => page.evaluate(() => globalThis.__p14?.pressed ?? []);
+              const render = (view: unknown) => page.evaluate((data) => globalThis.__p14?.render(data), view);
 
-            // Each walk starts at the program's real init; each step reads the folded model, picks an
-            // input the program accepts from it, presses its button, then installs the stepped view.
-            await fc.assert(
-              fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 10 }), async (picks) => {
-                let step = program.init(null);
-                assert(step._tag === "stepped");
-                await render(step.view);
-                const start = (await pressed()).length;
-                // SAFETY: the counter program's view is its model, `{ count }`, as `fabrika/counter` declares it.
-                expect(await count.textContent()).toBe(String((step.view as { count: number }).count));
-                expect(await count.evaluate((e) => getComputedStyle(e).color), "the page's styles apply").toBe(
-                  "rgb(12, 34, 56)",
-                );
-
-                for (const [n, pick] of picks.entries()) {
-                  const model = step.model;
-                  const available = inputs.filter((type) => program.step(model, { type })._tag === "stepped");
-                  const type = available[pick % available.length]!;
-                  pressedTypes.add(type);
-                  await button(type).click();
-                  const sent = (await pressed()).slice(start);
-                  expect(sent, "each press emits one Msg, the program's own").toEqual([...sent.slice(0, n), { type }]);
-                  expect(sent.every((m) => Exit.isSuccess(Schema.decodeUnknownExit(counter.msg)(m)))).toBe(true);
-                  // The view never steps the program: until the next view arrives, the count stays.
-                  expect(await count.textContent(), "a press alone changes nothing shown").toBe(
-                    // SAFETY: this step came from the same counter program, whose view is always `{ count }`.
-                    String((step.view as { count: number }).count),
-                  );
-                  step = program.step(model, { type });
+              // Each walk starts at the program's real init; each step reads the folded model, picks an
+              // input the program accepts from it, presses its button, then installs the stepped view.
+              await fc.assert(
+                fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 10 }), async (picks) => {
+                  let step = program.init(null);
                   assert(step._tag === "stepped");
                   await render(step.view);
-                  expect(await count.textContent(), "the shown count is the program's").toBe(
-                    // SAFETY: the view installed here is the counter's, which carries a numeric `count`.
-                    String((step.view as { count: number }).count),
+                  const start = (await pressed()).length;
+                  // SAFETY: the counter program's view is its model, `{ count }`, as `fabrika/counter` declares it.
+                  expect(await count.textContent()).toBe(String((step.view as { count: number }).count));
+                  expect(await count.evaluate((e) => getComputedStyle(e).color), "the page's styles apply").toBe(
+                    "rgb(12, 34, 56)",
                   );
-                }
-              }),
-              // Each step is a real click and render round trip in Chromium: 20 walks of up to 10 steps.
-              { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
-            );
-          });
-        }),
-      ).pipe(Effect.raceFirst(stopped)),
-    );
-    expect([...pressedTypes].sort(), "the walks pressed every input").toEqual([...inputs].sort());
-  });
+
+                  for (const [n, pick] of picks.entries()) {
+                    const model = step.model;
+                    const available = Arr.filter(inputs, (type) => program.step(model, { type })._tag === "stepped");
+                    const type = available[pick % available.length]!;
+                    pressedTypes.add(type);
+                    await button(type).click();
+                    const sent = (await pressed()).slice(start);
+                    expect(sent, "each press emits one Msg, the program's own").toEqual([
+                      ...sent.slice(0, n),
+                      { type },
+                    ]);
+                    expect(Arr.every(sent, (m) => Exit.isSuccess(Schema.decodeUnknownExit(counter.msg)(m)))).toBe(true);
+                    // The view never steps the program: until the next view arrives, the count stays.
+                    expect(await count.textContent(), "a press alone changes nothing shown").toBe(
+                      // SAFETY: this step came from the same counter program, whose view is always `{ count }`.
+                      String((step.view as { count: number }).count),
+                    );
+                    step = program.step(model, { type });
+                    assert(step._tag === "stepped");
+                    await render(step.view);
+                    expect(await count.textContent(), "the shown count is the program's").toBe(
+                      // SAFETY: the view installed here is the counter's, which carries a numeric `count`.
+                      String((step.view as { count: number }).count),
+                    );
+                  }
+                }),
+                // Each step is a real click and render round trip in Chromium: 20 walks of up to 10 steps.
+                { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
+              );
+            });
+          }),
+        ).pipe(Effect.raceFirst(stopped));
+        expect([...pressedTypes].sort(), "the walks pressed every input").toEqual([...inputs].sort());
+      }),
+  );
 });

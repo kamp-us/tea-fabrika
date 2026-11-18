@@ -1,6 +1,6 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's next job: its legs (E1, E10), each leg's
 // `--shard` (E2), the vitest and end-to-end steps (E3, E11), and its pinned commands.
-import { Predicate } from "effect";
 import {
   CHANGED_FROM_BASE,
   chromium,
@@ -48,13 +48,21 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   const expectedLegs = [...Array.from({ length: e2eCount }, (_, i) => `${E2E_PREFIX}${i + 1}`), ...VITEST_LEGS];
   require(e2eCount >= 1 &&
     JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
-    Object.keys(matrix).length ===
+    Rec.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
-  // Eligible visual tests run automatically on the PR, queue and main line.
+  // E10 (0536, the owner's ruling of 2026-11-18). A visual test needs a browser or Electron, so it
+  // never starts unasked on a pull request or in the merge queue: the full fallback runs on a push
+  // to main and on a pull request with the `visual` label, and every other unsized run, the merge
+  // queue among them, gets the vitest legs alone. Main's full run runs every visual file. Plants in
+  // next-job.test.ts, each run once on check.yaml and restored: the full fallback alone (red); the
+  // pull request, queue and main route of PR 1581 back (red); the merge queue beside the label
+  // (red); the label or the push dropped (red); the vitest fallback with e2e-1 (red).
   const { when, plain } = fallbacks(nextJob);
   require(compact(when) === compact(VISUAL_ROUTE) &&
     JSON.stringify(plain) ===
-      JSON.stringify(VITEST_LEGS), "E10: next's full fallback includes visual tests on the PR, queue and main line");
+      JSON.stringify(
+        VITEST_LEGS,
+      ), "E10: next's full fallback runs only on a push to main or with the visual label, else the vitest legs 1 to 5 alone");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
 
   // The vitest step's paths, unquoted so each path is its own argument. On a sized run (a pull
@@ -110,7 +118,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
     "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes changes' files, else filter, with the fallback next/");
-  require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
+  require(JSON.stringify(Rec.keys(map(testStep?.["env"])).toSorted()) ===
     JSON.stringify([
       "FABRIKA_TEST_DEPTH",
       "FILTER",

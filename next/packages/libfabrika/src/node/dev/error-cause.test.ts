@@ -6,10 +6,13 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { brainOutbox } from "./local-dev.ts";
 
@@ -50,7 +53,7 @@ const disk = (calls: Partial<FileSystem.FileSystem>) => Layer.merge(FileSystem.l
 // SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it, and the Effect only fails, so its success type is free.
 const fails = <A>(failure: object) => Effect.fail(failure as never) as Effect.Effect<A, never>;
 
-const pendingFile = (path: string) => path.endsWith("brain.pending.jsonl");
+const pendingFile = (path: string) => Function.pipe(path, Str.endsWith("brain.pending.jsonl"));
 
 type Read = "exists" | "read" | "decode";
 

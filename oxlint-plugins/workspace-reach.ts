@@ -10,7 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Predicate, Result } from "effect";
+import { Array as Arr, pipe, Predicate, Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
@@ -43,10 +43,10 @@ const read = (file: string): Manifest => {
     throw new Error(`${file}: not an object`);
   }
 
-  const deps = FIELDS.flatMap((field) => {
+  const deps = Arr.flatMap(FIELDS, (field) => {
     const map = manifest[field];
 
-    return isMap(map) ? Object.keys(map) : [];
+    return isMap(map) ? Rec.keys(map) : [];
   });
 
   return { name: Predicate.isString(manifest["name"]) ? manifest["name"] : null, deps };
@@ -69,15 +69,22 @@ if (tracked.status !== 0) {
 
 const run = (): { readonly unreached: readonly string[]; readonly total: number } => {
   const workspace: unknown = parse(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8"));
-  const globs = isMap(workspace) && Array.isArray(workspace["packages"]) ? workspace["packages"] : [];
-  const members = globs.filter((g): g is string => Predicate.isString(g)).map(matcher);
-  const starts = STARTS.map(matcher);
+  const globs = isMap(workspace) && Arr.isArray(workspace["packages"]) ? workspace["packages"] : [];
 
-  const folders = tracked.stdout
-    .split("\0")
-    .filter((file) => file !== "" && file !== "package.json")
-    .map((file) => dirname(file))
-    .filter((folder) => !LEFT_OUT.test(folder) && members.some((m) => m.test(folder)));
+  const members = pipe(
+    globs,
+    Arr.filter((g): g is string => Predicate.isString(g)),
+    Arr.map(matcher),
+  );
+
+  const starts = Arr.map(STARTS, matcher);
+
+  const folders = pipe(
+    tracked.stdout.split("\0"),
+    Arr.filter((file) => file !== "" && file !== "package.json"),
+    Arr.map((file) => dirname(file)),
+    Arr.filter((folder) => !LEFT_OUT.test(folder) && Arr.some(members, (m) => m.test(folder))),
+  );
 
   const byName = new Map<string, { readonly folder: string; readonly manifest: Manifest }>();
 
@@ -93,9 +100,11 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
 
   const queue = [
     ...read("package.json").deps,
-    ...[...byName.values()]
-      .filter(({ folder }) => starts.some((s) => s.test(folder)))
-      .flatMap(({ manifest }) => (manifest.name === null ? [] : [manifest.name])),
+    ...pipe(
+      [...byName.values()],
+      Arr.filter(({ folder }) => Arr.some(starts, (s) => s.test(folder))),
+      Arr.flatMap(({ manifest }) => (manifest.name === null ? [] : [manifest.name])),
+    ),
   ];
 
   for (let name = queue.pop(); name !== undefined; name = queue.pop()) {
@@ -109,17 +118,19 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
     queue.push(...found.manifest.deps);
   }
 
-  const unreached = [...byName.entries()]
-    .filter(([name]) => !reached.has(name))
-    .map(([name, { folder }]) => `${folder} (${name})`)
-    .sort();
+  const unreached = pipe(
+    [...byName.entries()],
+    Arr.filter(([name]) => !reached.has(name)),
+    Arr.map(([name, { folder }]) => `${folder} (${name})`),
+  ).sort();
 
   return { unreached, total: byName.size };
 };
 
-const ran = Result.try(run);
-
-const result = Result.isSuccess(ran) ? ran.success : fail(`could not read: ${String(ran.failure)}`);
+const result: ReturnType<typeof run> = Result.match(Result.try(run), {
+  onSuccess: (ran) => ran,
+  onFailure: (error) => fail(`could not read: ${String(error)}`),
+});
 
 if (result.unreached.length > 0) {
   for (const line of result.unreached) {
