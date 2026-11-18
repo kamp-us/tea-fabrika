@@ -209,6 +209,77 @@ const plants: Plant[] = [
   ],
 ];
 
+// T1076 O4. Each new fault goes through the existing whole-workflow acceptance path alone.
+plants.push(
+  [
+    "O4 legacy next-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}",
+      });
+    },
+  ],
+  [
+    "O4 fallback without literal separator",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/kalfa/' }}",
+      });
+    },
+  ],
+  [
+    "O4 Kalfa-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'kalfa/' }}",
+      });
+    },
+  ],
+  [
+    "O4 quoted two-root fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter|| '\"next/ kalfa/\"' }}",
+      });
+    },
+  ],
+  [
+    "O4 extra project in fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER:
+          "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/ kalfa/ --project tooling' }}",
+      });
+    },
+  ],
+  [
+    "O4 classifier before sized files",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.filter || needs.changes.outputs.files || 'next/ kalfa/' }}",
+      });
+    },
+  ],
+  [
+    "O4 ordinary command receives another changed restriction",
+    (w) => {
+      step(w, "next", "vitest").run += " --changed=HEAD";
+    },
+  ],
+  [
+    "O4 ordinary command adds a project",
+    (w) => {
+      step(w, "next", "vitest").run += " --project tooling";
+    },
+  ],
+  [
+    "O4 ordinary step receives an extra env input",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, { CHANGED: "--changed=HEAD" });
+    },
+  ],
+);
+
 rejects(plants);
 
 // T1, T2 and T6 on the checked-in check.yaml: each plant puts back one piece of how today's tests
@@ -355,4 +426,20 @@ it("scenario: a workflow that no pull request or merge queue starts is no merge 
   expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([]);
   workflow["on"] = ["merge_group"];
   expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual([hostError]);
+});
+
+it("scenario: O4 the legacy filter is rejected by this guard even when another guard also rejects it", () => {
+  // Plant unrun here: accept legacy next/ in this guard. Another rule's error cannot mask it.
+  const workflow: Parsed = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
+  expect(lint(JSON.stringify(workflow))).toEqual([]);
+  const found = workflow.jobs["next"]!.steps.find(
+    (candidate) =>
+      typeof candidate["run"] === "string" &&
+      candidate["run"].startsWith("pnpm exec vitest run --project next $FILTER "),
+  );
+  expect(found).toBeDefined();
+  Object.assign(found!["env"]!, {
+    FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}",
+  });
+  expect(lint(JSON.stringify(workflow))).toContain("check.yaml: T1: next runs no tooling test (0539)");
 });

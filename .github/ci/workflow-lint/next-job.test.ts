@@ -13,6 +13,7 @@ import {
   options,
   place,
   type Plant,
+  type Parsed,
   rejects,
   setLegs,
   sizedLegs,
@@ -630,6 +631,77 @@ const plants: Plant[] = [
   ],
 ];
 
+// T1076 O4. Each new fault goes through the existing whole-workflow acceptance path alone.
+plants.push(
+  [
+    "O4 legacy next-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}",
+      });
+    },
+  ],
+  [
+    "O4 fallback without literal separator",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/kalfa/' }}",
+      });
+    },
+  ],
+  [
+    "O4 Kalfa-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'kalfa/' }}",
+      });
+    },
+  ],
+  [
+    "O4 quoted two-root fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter|| '\"next/ kalfa/\"' }}",
+      });
+    },
+  ],
+  [
+    "O4 extra project in fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER:
+          "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/ kalfa/ --project tooling' }}",
+      });
+    },
+  ],
+  [
+    "O4 classifier before sized files",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: "${{ needs.changes.outputs.filter || needs.changes.outputs.files || 'next/ kalfa/' }}",
+      });
+    },
+  ],
+  [
+    "O4 ordinary command receives another changed restriction",
+    (w) => {
+      step(w, "next", "vitest").run += " --changed=HEAD";
+    },
+  ],
+  [
+    "O4 ordinary command adds a project",
+    (w) => {
+      step(w, "next", "vitest").run += " --project tooling";
+    },
+  ],
+  [
+    "O4 ordinary step receives an extra env input",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, { CHANGED: "--changed=HEAD" });
+    },
+  ],
+);
+
 rejects(plants);
 
 it("names the next command whose step or condition is wrong", () => {
@@ -744,5 +816,23 @@ it.each(faults)("LE2: names %s when it alone is planted", (_fault, mutate, error
       expect(lint(JSON.stringify(broken))).toEqual([`check.yaml: ${error}`]);
     }),
     options,
+  );
+});
+
+it("scenario: O4 the legacy filter is rejected by this guard even when another guard also rejects it", () => {
+  // Plant unrun here: accept legacy next/ in this guard. Another rule's error cannot mask it.
+  const workflow: Parsed = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
+  expect(lint(JSON.stringify(workflow))).toEqual([]);
+  const found = workflow.jobs["next"]!.steps.find(
+    (candidate) =>
+      typeof candidate["run"] === "string" &&
+      candidate["run"].startsWith("pnpm exec vitest run --project next $FILTER "),
+  );
+  expect(found).toBeDefined();
+  Object.assign(found!["env"]!, {
+    FILTER: "${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}",
+  });
+  expect(lint(JSON.stringify(workflow))).toContain(
+    "check.yaml: next's vitest step takes changes' files, else filter, with the fallback next/ kalfa/",
   );
 });

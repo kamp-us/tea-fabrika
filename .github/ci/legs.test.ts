@@ -3,6 +3,8 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { it as effectIt } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { beforeAll, expect, it } from "vitest";
 import { readers } from "./changes.mjs";
@@ -11,6 +13,9 @@ import {
   fewest,
   type Legs,
   limits,
+  list,
+  ordinary,
+  scopeOf,
   outputs,
   room,
   type Run,
@@ -420,7 +425,7 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
     env: {
       PATH: process.env["PATH"],
       EVENT: "merge_group",
-      FILTER: "next/",
+      FILTER: "next/ kalfa/",
       BUDGET: String(budget),
       GITHUB_OUTPUT: output,
     },
@@ -562,3 +567,89 @@ it("property: global rerun selection never narrows owed visual files a second ti
     options,
   );
 });
+
+// T1076 O1/O2. Actual configured discovery runs only in CI; these source plants remain unrun.
+const packageLaws = [
+  "kalfa/config/src/App.test.ts",
+  "kalfa/config/src/TomlParser.test.ts",
+  "kalfa/config/src/Toml.types.test.ts",
+];
+
+let ordinaryFull: string[] = [];
+let ordinaryChanged: string[] = [];
+let ordinaryReaders: string[] = [];
+
+beforeAll(() => {
+  ordinaryFull = ordinary(ROOT, pr, true);
+});
+
+beforeAll(() => {
+  // CI checks out full history. Use the ancestor before these paths were added, so the changed
+  // CLI route must reach real package laws even when today's diff has no package edit.
+  const additions = spawnSync("git", ["log", "--no-renames", "--diff-filter=A", "--format=%H", "--", ...packageLaws], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  expect(additions.status).toBe(0);
+  const first = additions.stdout.trim().split("\n").at(-1);
+  expect(first).toMatch(/^[a-f0-9]{40}$/);
+  const ancestor = spawnSync("git", ["rev-parse", `${first}^`], { cwd: ROOT, encoding: "utf8" });
+  expect(ancestor.status).toBe(0);
+  const from = ancestor.stdout.trim();
+  expect(from).toMatch(/^[a-f0-9]{40}$/);
+  ordinaryChanged = ordinary(ROOT, { ...pr, base: from }, false);
+});
+
+beforeAll(() => {
+  ordinaryReaders = list(ROOT, ["--project", "next", ...readers]);
+});
+
+it("scenario: O2 the two-root fallback is the entire ordinary project and exact readers alone may narrow", () => {
+  // Plant: restore either next-only fallback or make unknown sizing filters reader-only.
+  expect(ordinaryFull).toEqual(list(ROOT, ["--project", "next", "next/", "kalfa/"]));
+  for (const path of packageLaws) expect(ordinaryFull).toContain(path);
+  expect(ordinaryReaders.length).toBeGreaterThan(0);
+  expect(scopeOf(readers.join(" "))).toBe("readers");
+  for (const filter of [undefined, "", "next/", "next/ kalfa/", "next/ ", "kalfa/", "bad"]) {
+    expect(scopeOf(filter)).toBe("all");
+  }
+  expect(ordinary(ROOT, { ...pr, scope: "readers" }, false)).toEqual([]);
+  expect(ordinary(ROOT, { ...pr, base: "" }, true)).toEqual([]);
+  expect(outputs({ ...pr, base: "" }, full, { vitest: [], e2e: [] })).not.toContainEqual(
+    expect.stringMatching(/^files=/),
+  );
+});
+
+const OrdinarySelection = Schema.Struct({
+  changed: Schema.Boolean,
+  duplicate: Schema.Boolean,
+  filter: Schema.String,
+  seconds: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 600 })),
+});
+
+effectIt.effect.prop(
+  "O1 actual full and changed ordinary selections plus readers partition once within the existing leg limits",
+  { input: OrdinarySelection },
+  ({ input }) =>
+    Effect.sync(() => {
+      // Plant: restore the positional next/ restriction in ordinary's actual list call.
+      // Both routes are checked per sample, so generated choices cannot omit a required route.
+      expect(scopeOf(input.filter)).toBe(input.filter === readers.join(" ") ? "readers" : "all");
+      for (const changed of [input.changed, !input.changed]) {
+        const picked = changed ? ordinaryChanged : ordinaryFull;
+        const selected = withReaders(picked, input.duplicate ? [...ordinaryReaders, ...picked] : ordinaryReaders);
+        const expected = [...new Set([...picked, ...ordinaryReaders])].toSorted();
+        expect(selected).toEqual(expected);
+        for (const path of packageLaws) expect(selected).toContain(path);
+        const table = Object.fromEntries(selected.map((path) => [path, input.seconds]));
+        const legs = size(pr, { vitest: selected, e2e: [] }, full, limit, table);
+        expect(legs.vitest).toBeGreaterThan(0);
+        expect(legs.vitest).toBeLessThanOrEqual(full.vitest);
+        const kept = split(selected, legs.vitest, table).flat();
+        expect(kept.toSorted()).toEqual(expected);
+        expect(new Set(kept).size).toBe(expected.length);
+        expect(outputs(pr, legs, { vitest: selected, e2e: [] })).toContain(`files=${selected.join(" ")}`);
+      }
+    }),
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);

@@ -125,3 +125,140 @@ it.prop(
   },
   { arbitrary: { seed: 119120, runs: 100, size: 100 } },
 );
+
+// P4 is an exact workflow scenario: every bounded refusal is exercised once against the real
+// checked-in workflow. Keep the original generated fault property and its input domain unchanged.
+const CONFIG_FAULTS = [
+  "output",
+  "verify",
+  "event",
+  "draft",
+  "event_guard",
+  "unselected",
+  "success",
+  "integration_success",
+  "verified_success",
+  "head",
+  "requested",
+  "order",
+  "result",
+  "path",
+  "extra_path",
+  "no_archive",
+  "no_receipt",
+  "missing_warn",
+  "missing_ignore",
+  "name",
+  "soft",
+  "upload_soft",
+  "duplicate",
+  "other_job",
+  "token",
+] as const;
+
+it.each(CONFIG_FAULTS)("scenario: P4/Q1 rejects the isolated config upload fault %s", (fault) => {
+  expect(lintWorkflow(text)).toEqual([]);
+
+  const workflow = parse(text);
+
+  const config = workflow.jobs.related.steps.find((step: { id?: string }) => step.id === "config");
+
+  const archive = workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "config archive");
+
+  const integration = workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "integration");
+
+  switch (fault) {
+    case "output":
+      delete workflow.jobs.select.outputs.config;
+      break;
+    case "verify":
+      config.run = "node .github/ci/related.ts";
+      break;
+    case "event":
+      config.env.EVENT = "workflow_dispatch";
+      break;
+    case "draft":
+      config.env.DRAFT = "false";
+      break;
+    case "event_guard":
+      archive.if = archive.if.replace("github.event_name == 'merge_group'", "github.event_name != 'workflow_dispatch'");
+      break;
+    case "unselected":
+      archive.if = archive.if.replace("fromJSON(needs.select.outputs.config)[matrix.shard] == true", "true");
+      break;
+    case "success":
+      archive.if = archive.if.replace("success()", "always()");
+      break;
+    case "integration_success":
+      config.if = config.if.replace("steps.integration.outcome == 'success'", "true");
+      break;
+    case "verified_success":
+      archive.if = archive.if.replace("steps.config.outcome == 'success'", "true");
+      break;
+    case "head":
+      config.env.HEAD = `\${{ github.event.pull_request.head.sha }}`;
+      break;
+    case "requested":
+      config.env.REQUESTED = `\${{ github.sha }}`;
+      break;
+    case "order": {
+      const at = workflow.jobs.related.steps.indexOf(config);
+      workflow.jobs.related.steps.splice(at, 1);
+      workflow.jobs.related.steps.splice(workflow.jobs.related.steps.indexOf(integration), 0, config);
+      break;
+    }
+    case "result":
+      delete integration.id;
+      break;
+    case "path":
+      archive.with.path = `\${{ runner.temp }}/kalfa-config-package/**`;
+      break;
+    case "extra_path":
+      archive.with.path += `\n\${{ runner.temp }}/other.json`;
+      break;
+    case "no_archive":
+      archive.with.path = archive.with.path
+        .split("\n")
+        .filter((path: string) => !path.includes(".tgz"))
+        .join("\n");
+      break;
+    case "no_receipt":
+      archive.with.path = archive.with.path
+        .split("\n")
+        .filter((path: string) => !path.includes("receipt.json"))
+        .join("\n");
+      break;
+    case "missing_warn":
+      archive.with["if-no-files-found"] = "warn";
+      break;
+    case "missing_ignore":
+      archive.with["if-no-files-found"] = "ignore";
+      break;
+    case "name":
+      archive.with.name = `tested-\${{ github.sha }}`;
+      break;
+    case "soft":
+      config["continue-on-error"] = true;
+      break;
+    case "upload_soft":
+      archive["continue-on-error"] = true;
+      break;
+    case "duplicate":
+      workflow.jobs.related.steps.splice(workflow.jobs.related.steps.indexOf(archive), 0, structuredClone(archive));
+      break;
+    case "other_job":
+      workflow.jobs.related.steps.splice(workflow.jobs.related.steps.indexOf(archive), 1);
+      workflow.jobs.next.steps.splice(-1, 0, archive);
+      break;
+    case "token":
+      config.env.GITHUB_TOKEN = `\${{ github.token }}`;
+      break;
+  }
+
+  const errors = lintWorkflow(JSON.stringify(workflow));
+
+  expect(
+    errors.some((error) => error.includes("Q1:")),
+    "the global uploader guard itself rejects this isolated fault",
+  ).toBe(true);
+});

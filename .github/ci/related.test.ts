@@ -1,10 +1,13 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { it as effectIt } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
 import { parse } from "yaml";
 import { measured } from "../../vitest.shards.ts";
+import { select } from "./related.ts";
 import { vitestLegs } from "./workflow-lint.ts";
 
 // Today's CI for both versions. Vitest 5.0.5's public node API, read in
@@ -149,6 +152,8 @@ describe("next workflow coverage", () => {
   const denominator = Number(/\|\|\s*([1-9]\d*)\s*\}\}$/.exec(expression)?.[1]);
   const contexts: Vitest[] = [];
   let nextSpecs: TestSpecification[];
+  let ordinarySpecs: TestSpecification[];
+  let relatedSpecs: TestSpecification[];
   const repoPath = (spec: TestSpecification) => relative(root, spec.moduleId).replaceAll("\\", "/");
 
   const partition = async (specs: TestSpecification[]) => {
@@ -170,7 +175,10 @@ describe("next workflow coverage", () => {
   beforeAll(async () => {
     const baseline = await createVitest("test", { root, watch: false, maxWorkers: 1 });
     contexts.push(baseline);
-    nextSpecs = (await baseline.globTestSpecifications()).filter((spec) => repoPath(spec).startsWith("next/"));
+    const discovered = await baseline.globTestSpecifications();
+    nextSpecs = discovered.filter((spec) => repoPath(spec).startsWith("next/"));
+    ordinarySpecs = discovered.filter((spec) => spec.project.config.name === "next");
+    relatedSpecs = discovered.filter((spec) => ["next-integration", "tooling"].includes(spec.project.config.name));
 
     for (const index of indices) {
       contexts.push(
@@ -247,4 +255,83 @@ describe("next workflow coverage", () => {
       options,
     );
   });
+
+  it("scenario: O2 the complete fallback selects exactly the ordinary project, disjoint from related work", async () => {
+    // Plants unrun here: omit Kalfa from fallback discovery or add an ordinary file to related.
+    const universe = ordinarySpecs.map(repoPath).toSorted();
+    expect(universe.length).toBeGreaterThan(0);
+    const required = ["App.test.ts", "TomlParser.test.ts", "Toml.types.test.ts"].map(
+      (name) => `kalfa/config/src/${name}`,
+    );
+    for (const path of required) expect(universe).toContain(path);
+    const fallback = (await contexts[0]!.globTestSpecifications(["next/", "kalfa/"]))
+      .filter((spec) => spec.project.config.name === "next")
+      .map(repoPath)
+      .toSorted();
+    expect(fallback).toEqual(universe);
+    complete(await partition(ordinarySpecs), universe);
+    const files = {
+      "next-integration": relatedSpecs.filter((spec) => spec.project.config.name === "next-integration").map(repoPath),
+      tooling: relatedSpecs.filter((spec) => spec.project.config.name === "tooling").map(repoPath),
+    };
+    const selected = select(
+      files,
+      {
+        "next-integration": { most: 5, limit: 100 },
+        tooling: { most: 2, limit: 200 },
+        table: measured,
+      },
+      1,
+    );
+    const related = Object.values(selected.legs).flat();
+    expect(related.toSorted()).toEqual(relatedSpecs.map(repoPath).toSorted());
+    expect(related.filter((path) => universe.includes(path))).toEqual([]);
+    expect(related.filter((path) => path === "kalfa/config/src/Package.integration.test.ts")).toHaveLength(1);
+    expect(related.filter((path) => path === "scripts/kalfa-config.test.ts")).toHaveLength(1);
+  });
+
+  const OrdinarySelection = Schema.Struct({
+    start: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10 })),
+    reverse: Schema.Boolean,
+  });
+
+  class PartitionFailure extends Schema.TaggedError<PartitionFailure, { readonly brand: unique symbol }>()(
+    "PartitionFailure",
+    {
+      cause: Schema.Defect(),
+    },
+  ) {}
+
+  effectIt.effect.prop(
+    "O1 configured shards partition generated ordinary subsets including the moved package laws once",
+    { input: OrdinarySelection },
+    ({ input }) =>
+      Effect.tryPromise({
+        try: async () => {
+          // The original nextSpecs property and its external specifications remain unchanged above.
+          const required = ordinarySpecs.filter((spec) =>
+            [
+              "kalfa/config/src/App.test.ts",
+              "kalfa/config/src/TomlParser.test.ts",
+              "kalfa/config/src/Toml.types.test.ts",
+            ].includes(repoPath(spec)),
+          );
+          expect(required).toHaveLength(3);
+          const picked = Array.from(
+            { length: input.count },
+            (_, index) => ordinarySpecs[(input.start + index) % ordinarySpecs.length]!,
+          );
+          const files = [...new Map([...required, ...picked].map((spec) => [repoPath(spec), spec])).values()];
+          const ordered = input.reverse ? files.toReversed() : files;
+          const first = await partition(ordered);
+          complete(first, files.map(repoPath));
+          const reversed = await partition(ordered.toReversed());
+          complete(reversed, files.map(repoPath));
+          expect(reversed.map((paths) => paths.toSorted())).toEqual(first.map((paths) => paths.toSorted()));
+        },
+        catch: (cause) => PartitionFailure.make({ cause }),
+      }),
+    { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+  );
 });

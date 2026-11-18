@@ -38,7 +38,7 @@ const LEGS_OUTPUTS = [
 // held before the push (0534), the classify step's BASE.
 const SIZE_ENV = {
   EVENT: `\${{ github.event_name }}`,
-  FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}`,
+  FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/ kalfa/' }}`,
   BASE: env.BASE,
   VISUAL: `\${{ ${VISUAL_LABEL} }}`,
 };

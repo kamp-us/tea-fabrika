@@ -2,6 +2,8 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { it as effectIt } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
@@ -940,7 +942,7 @@ const envOf = (event: string, draft: boolean) => ({
 });
 
 /** What a run prints for a scope: the reader paths, or all of next/. */
-const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : "next/");
+const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : "next/ kalfa/");
 
 it("property: probe changes no flag: the first pass prints the same flags for any diff text", async () => {
   await fc.assert(
@@ -1011,7 +1013,7 @@ it("scenario: with no parser to import, --same prints what the first pass printe
     const one = await ci.outputs({ same: true, env, run, load: proves((p) => !p.endsWith("Wire.ts")) });
     expect(one).toMatchObject({
       next: "true",
-      filter: paths.includes("next/packages/libfabrika/src/transport/Wire.ts") ? "next/" : filterOf("readers"),
+      filter: paths.includes("next/packages/libfabrika/src/transport/Wire.ts") ? "next/ kalfa/" : filterOf("readers"),
     });
   }
 
@@ -1020,9 +1022,9 @@ it("scenario: with no parser to import, --same prints what the first pass printe
   const env = envOf("pull_request", false);
   expect(await ci.outputs({ same: true, env, run: broken, load: rejects })).toMatchObject({
     next: "true",
-    filter: "next/",
+    filter: "next/ kalfa/",
   });
-  expect(await ci.outputs({ same: false, env, run: broken })).toMatchObject({ next: "true", filter: "next/" });
+  expect(await ci.outputs({ same: false, env, run: broken })).toMatchObject({ next: "true", filter: "next/ kalfa/" });
 });
 
 // A push to main that a merge queue run already tested (changes.mjs's `tested`). The queue moves
@@ -1521,6 +1523,7 @@ const flagText = fc.oneof(
 
 const filterText = fc.oneof(
   fc.constantFrom(
+    "next/ kalfa/",
     "next/",
     ci.readers.join(" "),
     "",
@@ -1550,7 +1553,8 @@ it("property: a printed flag counts as a job that ran only when it is exactly tr
         expect(read[job], job).toBe(printed[job] === "true");
       }
 
-      const scope = printed.filter === "next/" ? "all" : printed.filter === ci.readers.join(" ") ? "readers" : "none";
+      const scope =
+        printed.filter === "next/ kalfa/" ? "all" : printed.filter === ci.readers.join(" ") ? "readers" : "none";
       expect(read.scope).toBe(scope);
     }),
     options,
@@ -2074,4 +2078,68 @@ it("property: a green historical partial run cannot skip the new automatic proje
     }),
     options,
   );
+});
+
+const PrintedSelection = Schema.Struct({
+  flag: Schema.String,
+  filter: Schema.String,
+  ready: Schema.Boolean,
+});
+
+effectIt.effect.prop(
+  "O3 only the exact complete filter records expanded ordinary coverage",
+  { input: PrintedSelection },
+  ({ input }) =>
+    Effect.sync(() => {
+      // Plants, unrun here: decode legacy next/ as all, or let record bypass expanded coverage.
+      const paths = ["kalfa/config/src/App.ts"];
+      const needed = neededOf(paths);
+      expect(needed.next).toBe(true);
+      expect(needed.scope).toBe("all");
+      for (const filter of [
+        undefined,
+        "next/ kalfa/",
+        "next/",
+        "",
+        "next/ ",
+        "kalfa/",
+        ci.readers.join(" "),
+        input.filter,
+      ]) {
+        for (const flag of ["true", "false", input.flag]) {
+          const shown: Record<string, string | undefined> = { ...printedOf(needed), NEXT: flag, FILTER: filter };
+          const read = ci.selectionOf({
+            check: shown["CHECK"],
+            typecheck: shown["TYPECHECK"],
+            field: shown["FIELD"],
+            build: shown["BUILD"],
+            next: flag,
+            filter,
+          });
+          expect(read.next).toBe(flag === "true");
+          expect(read.scope).toBe(
+            filter === "next/ kalfa/" ? "all" : filter === ci.readers.join(" ") ? "readers" : "none",
+          );
+          for (const ready of [input.ready, !input.ready]) {
+            const made = ci.record(
+              { ...recordEnv(needed, !ready), ...shown },
+              prGit(paths, { merge: tree.head, base: tree.base }),
+            );
+            expect(made.name).toBe(
+              ready && flag === "true" && filter === "next/ kalfa/" ? ci.recordName(tree.head, tree.base) : null,
+            );
+          }
+        }
+      }
+    }),
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);
+
+it("scenario: O3 a same-program result cannot lower a Kalfa change to reader-only coverage", async () => {
+  // Kalfa is not a same-program candidate, even if a parser claims every path.
+  const paths = ["kalfa/config/src/App.ts"];
+  const load = () => Promise.resolve({ samePaths: () => paths });
+  expect(
+    await ci.outputs({ same: true, env: envOf("pull_request", false), run: git(paths, "+// note"), load }),
+  ).toMatchObject({ next: "true", filter: "next/ kalfa/" });
 });

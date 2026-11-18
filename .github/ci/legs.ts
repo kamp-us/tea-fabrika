@@ -235,6 +235,16 @@ export const list = (root: string, args: readonly string[]): string[] => {
     .toSorted();
 };
 
+/** Only the exact reader filter narrows sizing; an absent or unknown filter keeps full coverage. */
+export const scopeOf = (filter: string | undefined): Run["scope"] => (filter === readers.join(" ") ? "readers" : "all");
+
+/** The configured ordinary project's full or changed selection, before the reader union. */
+export const ordinary = (root: string, run: Run, force: boolean): string[] => {
+  const changed = validSha(run.base) && !force ? [`--changed=${run.base}`] : [];
+
+  return sizes(run) && (run.scope === "all" || force) ? list(root, ["--project", "next", ...changed]) : [];
+};
+
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {
   const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -243,7 +253,7 @@ if (import.meta.main) {
 
   const run: Run = {
     event: process.env["EVENT"] ?? "",
-    scope: (process.env["FILTER"] ?? "next/") === "next/" ? "all" : "readers",
+    scope: scopeOf(process.env["FILTER"]),
     base: process.env["BASE"] ?? "",
     visual: process.env["VISUAL"] === "true",
   };
@@ -257,7 +267,7 @@ if (import.meta.main) {
   const sized = sizes(run);
   // The reader tests are listed whole, with no `--changed`: Vitest's own match of changes' paths.
   // The existing matrix keeps next and visual files separate; related.ts adds other projects.
-  const picked = sized && (run.scope === "all" || force) ? list(root, ["--project", "next", "next/", ...changed]) : [];
+  const picked = ordinary(root, run, force);
   const readerFiles = sized ? list(root, ["--project", "next", ...readers]) : [];
 
   const selected: Selected = sized

@@ -24,7 +24,20 @@ const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
  */
 const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path) || /^field\/(?:notes|runs|findings)\//.test(path);
 
-const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
+const readTrees = ["programs/", "fixtures/", "packages/", "next/", "kalfa/"];
+
+/** The config archive reads package files and its consumer inputs outside Vitest's import graph. @param {string} path */
+export const configPath = (path) =>
+  path.startsWith("kalfa/config/") ||
+  path === "scripts/kalfa-config.test.ts" ||
+  [
+    ".github/ci/changes.mjs",
+    ".github/ci/related.ts",
+    ".github/ci/related-selection.test.ts",
+    ".github/ci/workflow-lint/related.ts",
+    ".github/ci/workflow-lint/related.test.ts",
+    ".github/workflows/check.yaml",
+  ].includes(path);
 
 const skillTrees = [".agents/skills/", ".claude/skills/"];
 
@@ -506,7 +519,7 @@ export const recordName = (tree, base) => `tested-${tree}-${base}`;
 /**
  * What a run's changes job selected, from what it printed: a job runs only when its flag is exactly
  * "true", so an empty or unknown value counts as a job that did not run. The filter names all of
- * next/ or the reader tests; anything else covers no next/ test.
+ * next/ and Kalfa or the reader tests; anything else proves no ordinary coverage.
  * @param {Record<string, string | undefined>} printed
  * @returns {Selection}
  */
@@ -516,7 +529,7 @@ export const selectionOf = (printed) => ({
   next: printed["next"] === "true",
   field: printed["field"] === "true",
   build: printed["build"] === "true",
-  scope: printed["filter"] === "next/" ? "all" : printed["filter"] === readers.join(" ") ? "readers" : "none",
+  scope: printed["filter"] === "next/ kalfa/" ? "all" : printed["filter"] === readers.join(" ") ? "readers" : "none",
 });
 
 /**
@@ -652,8 +665,8 @@ const matched = async (base, head, run, api) => {
 /** A group a pull request run already tested runs no job but changes and ci-required. @type {Flags} */
 const none = { check: false, typecheck: false, next: false, field: false, build: false };
 
-/** What the next job runs: its path argument, the reader tests or all of next/. @param {Scope} need */
-const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/");
+/** What the next job runs: its path arguments, the reader tests or the whole ordinary project. @param {Scope} need */
+const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/ kalfa/");
 
 /**
  * The paths a proof could lower: next/ paths that need all of next/ only because nobody proved

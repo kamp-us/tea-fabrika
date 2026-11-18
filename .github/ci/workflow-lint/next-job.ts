@@ -60,7 +60,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // request, a merge queue group or a push to main, 0534) changes' `files`: what `--changed` picked
   // and every reader test, each once (legs.ts), so the step takes no `--changed` of its own, which
   // would drop the readers again. Else the plan for CI paths, slice 2: `filter` from changes, the
-  // reader tests or `next/`, and a missing filter runs all of next/.
+  // reader tests or `next/ kalfa/`, and a missing filter runs both roots.
   const nextCommand =
     'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
 
@@ -108,7 +108,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // after, so every other run keeps it. Only depth, SHARD and FILTER belong here: a CHANGED would
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
-    "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes changes' files, else filter, with the fallback next/");
+    "needs.changes.outputs.files||needs.changes.outputs.filter||'next/ kalfa/'", "next's vitest step takes changes' files, else filter, with the fallback next/ kalfa/");
   require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
     JSON.stringify([
       "FABRIKA_TEST_DEPTH",

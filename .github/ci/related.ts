@@ -1,14 +1,108 @@
 // Today's CI, both versions. The missing projects of an automatic PR/queue check; next and visual
 // remain on the existing next matrix. A selector error fails the required check, never means zero.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Schema } from "effect";
 import { rowsAt } from "../../vitest.shards.ts";
-import { readers, validSha } from "./changes.mjs";
+import { configPath, readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, list, room, withReaders } from "./legs.ts";
 import type { Request } from "./plant-cases.ts";
 import { checklistCases, fixture, wanted } from "./plant-related.ts";
 import { isTrigger, legsOf, slots, whole } from "./proof.ts";
+
+export const configConsumer = "kalfa/config/src/Package.integration.test.ts";
+
+/** Config delivery is automatic on a ready pull request or the protected merge queue. */
+export const configEvent = (event: string | undefined, draft: string | undefined): boolean =>
+  event === "merge_group" || (event === "pull_request" && draft === "false");
+
+/** Add the real package consumer only after Vitest confirms it exists in the integration project. */
+export const withConfig = (selected: readonly string[], discovered: readonly string[], needed: boolean): string[] => {
+  if (needed && (discovered.length !== 1 || discovered[0] !== configConsumer)) {
+    throw new Error("related: config consumer must be discovered in the existing integration project");
+  }
+
+  return withReaders(selected, needed ? discovered : []);
+};
+
+const Receipt = Schema.Struct({
+  source: Schema.String,
+  requested: Schema.String,
+  archive: Schema.Literal("kalfa-config-0.0.0.tgz"),
+  sha256: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
+  versions: Schema.Struct({ node: Schema.String, pnpm: Schema.String, npm: Schema.String, compiler: Schema.String }),
+  exports: Schema.Record(Schema.String, Schema.Unknown),
+  stages: Schema.Struct({
+    build: Schema.Literal("passed"),
+    pack: Schema.Literal("passed"),
+    install: Schema.Literal("passed"),
+    runtime: Schema.Literal("passed"),
+    imports: Schema.Literal("passed"),
+    private: Schema.Literal("passed"),
+    types: Schema.Literal("passed"),
+  }),
+  negatives: Schema.Struct({
+    source: Schema.Literal("refused"),
+    parser: Schema.Literal("refused"),
+    declarations: Schema.Literal("refused"),
+    workspace: Schema.Literal("refused"),
+  }),
+});
+
+const Results = Schema.Struct({
+  success: Schema.Literal(true),
+  numFailedTests: Schema.Literal(0),
+  numFailedTestSuites: Schema.Literal(0),
+  testResults: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      status: Schema.String,
+      assertionResults: Schema.Array(Schema.Struct({ status: Schema.String })),
+    }),
+  ),
+});
+
+/** Verify the delivered bytes against the consumer's own receipt and the successful test report. */
+export const checkedConfig = (
+  receipt: unknown,
+  archive: Uint8Array,
+  results: unknown,
+  source: string,
+  requested: string,
+) => {
+  const value = Schema.decodeUnknownSync(Receipt)(receipt);
+
+  const report = Schema.decodeUnknownSync(Results)(results);
+
+  const consumers = report.testResults.filter(
+    (file) => file.name.replaceAll("\\", "/").endsWith(`/${configConsumer}`) || file.name === configConsumer,
+  );
+
+  if (!validSha(source) || !validSha(requested) || value.source !== source || value.requested !== requested) {
+    throw new Error("related: config receipt must name the actual checkout and requested head separately");
+  }
+
+  if (value.sha256 !== createHash("sha256").update(archive).digest("hex")) {
+    throw new Error("related: config archive differs from the tested receipt digest");
+  }
+
+  const consumer = consumers[0];
+
+  if (
+    consumers.length !== 1 ||
+    consumer === undefined ||
+    consumer.status !== "passed" ||
+    consumer.assertionResults.length === 0 ||
+    consumer.assertionResults.some((test) => test.status !== "passed")
+  ) {
+    throw new Error("related: config upload requires the successful, unskipped consumer result");
+  }
+
+  return value;
+};
 
 const PROJECTS = ["next-integration", "tooling"] as const;
 
@@ -78,7 +172,17 @@ export const select = (
     throw new Error("related: every checklist case must have exactly one existing integration leg");
   }
 
-  return { legs, projects, slots: groups, plants: assignment };
+  const config = Object.fromEntries(
+    Object.entries(legs)
+      .filter(([leg, paths]) => projects[leg] === "next-integration" && paths.includes(configConsumer))
+      .map(([leg]) => [leg, true]),
+  );
+
+  if (all.includes(configConsumer) && Object.keys(config).length !== 1) {
+    throw new Error("related: config consumer must have one integration owner");
+  }
+
+  return { legs, projects, slots: groups, plants: assignment, config };
 };
 
 export const outputs = (selection: ReturnType<typeof select>): string[] => [
@@ -88,9 +192,36 @@ export const outputs = (selection: ReturnType<typeof select>): string[] => [
   `projects=${JSON.stringify(selection.projects)}`,
   `slots=${JSON.stringify(selection.slots)}`,
   `plants=${JSON.stringify(selection.plants)}`,
+  `config=${JSON.stringify(selection.config)}`,
 ];
 
-if (import.meta.main) {
+if (import.meta.main && process.argv[2] === "--config") {
+  const directory = process.env["RUNNER_TEMP"];
+
+  const source = process.env["HEAD"];
+
+  const requested = process.env["REQUESTED"];
+
+  if (!directory || !source || !requested) {
+    throw new Error("related: config verification requires the runner directory, tested commit and requested head");
+  }
+
+  if (!configEvent(process.env["EVENT"], process.env["DRAFT"])) {
+    throw new Error("related: config delivery requires a ready pull request or protected merge queue event");
+  }
+
+  const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+
+  checkedConfig(
+    decodeJson(readFileSync(join(directory, "kalfa-config-package/receipt.json"), "utf8")),
+    readFileSync(join(directory, "kalfa-config-package/kalfa-config-0.0.0.tgz")),
+    decodeJson(readFileSync(join(directory, "related.json"), "utf8")),
+    source,
+    requested,
+  );
+
+  console.log("related: exact tested config archive and receipt verified");
+} else if (import.meta.main) {
   const run = whole("RUN_NUMBER", process.env["RUN_NUMBER"]);
   slots(run);
 
@@ -135,13 +266,21 @@ if (import.meta.main) {
 
   const plants = wanted(changed);
 
+  const configNeeded = full || changed?.some(configPath) === true;
+
+  const configFiles = configNeeded ? list(root, ["--project", "next-integration", configConsumer]) : [];
+
   const files = {
-    "next-integration": withReaders(integration, [
-      ...(!full && changed?.some((path) => path.startsWith("next/"))
-        ? list(root, ["--project", "next-integration", ...readers])
-        : []),
-      ...(plants ? [fixture] : []),
-    ]),
+    "next-integration": withConfig(
+      withReaders(integration, [
+        ...(!full && changed?.some((path) => path.startsWith("next/") || path.startsWith("kalfa/"))
+          ? list(root, ["--project", "next-integration", ...readers])
+          : []),
+        ...(plants ? [fixture] : []),
+      ]),
+      configFiles,
+      configNeeded,
+    ),
     tooling: list(root, ["--project", "tooling", ...narrowed]),
   };
 

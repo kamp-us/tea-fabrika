@@ -1,3 +1,4 @@
+import { configUpload } from "./related.ts";
 // Today's CI, serving both versions. check.yaml's Q1: the record a ready pull request run leaves
 // for the merge queue, its one upload, and every job testing the tree the record names.
 import { allSteps, classifier, compact, FLAGS, map, type Rule, sameEntries, steps, uses } from "./shared.ts";
@@ -20,7 +21,7 @@ const RECORD_UPLOAD = {
   "if-no-files-found": "error",
 };
 
-export const record: Rule = ({ jobs }, require) => {
+export const record: Rule = ({ workflow, jobs }, require) => {
   const changes = map(jobs["changes"]),
     outputs = map(changes["outputs"]);
 
@@ -149,10 +150,16 @@ export const record: Rule = ({ jobs }, require) => {
     return found;
   });
 
+  const related = map(jobs["related"]);
+
+  const configUploads = allSteps(related).filter((step) => configUpload(workflow, "related", related, step));
+  require(configUploads.length ===
+    1, "Q1: exactly one selected successful config archive upload uses the bounded two-file contract");
+
   const timingsUploads = TIMED_LEGS.flatMap(([name]) => allSteps(map(jobs[name])).filter(isTimings));
   require(upload !== undefined &&
     uploaders.filter((s) => s === upload).length === 1 &&
     uploaders.every(
-      (s) => s === upload || timingsUploads.includes(s) || reportUploads.includes(s),
-    ), "Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings");
+      (s) => s === upload || timingsUploads.includes(s) || reportUploads.includes(s) || configUploads.includes(s),
+    ), "Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings and the exact config consumer archive");
 };

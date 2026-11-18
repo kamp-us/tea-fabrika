@@ -53,9 +53,78 @@ const selector = (workflow: Record<string, unknown>) => {
     set?.["run"] === "node .github/ci/related.ts" &&
     env["RUN_NUMBER"] === `\${{ github.run_number }}` &&
     env["HEAD"] === `\${{ github.sha }}` &&
-    ["run", "legs", "files", "projects", "slots", "plants"].every(
+    ["run", "legs", "files", "projects", "slots", "plants", "config"].every(
       (key) => outputs[key] === `\${{ steps.set.outputs.${key} }}`,
     )
+  );
+};
+
+const CONFIG = "node .github/ci/related.ts --config";
+
+const CONFIG_IF =
+  "success()&&(github.event_name=='merge_group'||(github.event_name=='pull_request'&&!github.event.pull_request.draft))&&fromJSON(needs.select.outputs.config)[matrix.shard]==true&&steps.config.outcome=='success'";
+
+const CONFIG_VERIFY_IF =
+  "success()&&(github.event_name=='merge_group'||(github.event_name=='pull_request'&&!github.event.pull_request.draft))&&fromJSON(needs.select.outputs.config)[matrix.shard]==true&&steps.integration.outcome=='success'";
+
+/** One exact successful consumer archive upload, kept separate from tested-tree records. */
+export const configUpload = (
+  workflow: Record<string, unknown>,
+  name: string,
+  job: Record<string, unknown>,
+  step: Record<string, unknown>,
+): boolean => {
+  const all = steps(job);
+
+  const checks = all.filter((candidate) => candidate["id"] === "config");
+
+  const verify = checks[0];
+
+  const integration = all.find((candidate) => candidate["run"] === INTEGRATION);
+
+  const env = map(verify?.["env"]);
+
+  const given = map(step["with"]);
+
+  const paths =
+    typeof given["path"] === "string"
+      ? given["path"]
+          .trim()
+          .split(/\r?\n/)
+          .map((path) => path.trim())
+      : [];
+
+  return (
+    name === "related" &&
+    selector(workflow) &&
+    mapped(job) &&
+    checks.length === 1 &&
+    verify !== undefined &&
+    integration !== undefined &&
+    integration["id"] === "integration" &&
+    verify["name"] === "verify config archive" &&
+    verify["run"] === CONFIG &&
+    Object.keys(verify).length === 5 &&
+    compact(verify["if"]) === CONFIG_VERIFY_IF &&
+    Object.keys(env).length === 4 &&
+    env["EVENT"] === `\${{ github.event_name }}` &&
+    env["DRAFT"] === `\${{ github.event.pull_request.draft }}` &&
+    env["HEAD"] === `\${{ github.sha }}` &&
+    env["REQUESTED"] ===
+      `\${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}` &&
+    all.indexOf(integration) < all.indexOf(verify) &&
+    all.indexOf(verify) < all.indexOf(step) &&
+    step["name"] === "config archive" &&
+    uses(step, "actions/upload-artifact") &&
+    Object.keys(step).length === 4 &&
+    compact(step["if"]) === CONFIG_IF &&
+    Object.keys(given).length === 4 &&
+    given["name"] === `kalfa-config-\${{ github.sha }}` &&
+    paths.length === 2 &&
+    paths[0] === `\${{ runner.temp }}/kalfa-config-package/kalfa-config-0.0.0.tgz` &&
+    paths[1] === `\${{ runner.temp }}/kalfa-config-package/receipt.json` &&
+    given["if-no-files-found"] === "error" &&
+    given["retention-days"] === 7
   );
 };
 
@@ -125,6 +194,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
       INTEGRATION,
       "node .github/ci/plant-related.ts",
       TOOLING,
+      CONFIG,
       "node .github/ci/time-table.ts",
     ]), "R1: only the declared integration and tooling workloads run");
 
@@ -166,6 +236,16 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
       map(step["with"])["filter"] === "blob:none" &&
       !("ref" in map(step["with"])),
   ), "R1: related tests use the tested commit with complete ancestry and blobless history");
+
+  const uploads = steps(related).filter((step) => step["name"] === "config archive");
+  require(uploads.length === 1 &&
+    uploads[0] !== undefined &&
+    configUpload(
+      workflow,
+      "related",
+      related,
+      uploads[0],
+    ), "P4: upload only the owning leg's exact tested config archive and receipt after successful source/head/digest verification");
 
   const next = map(jobs["next"]);
 

@@ -198,7 +198,7 @@ jobs:
         continue-on-error: true
         env:
           EVENT: ${{ github.event_name }}
-          FILTER: ${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/' }}
+          FILTER: ${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/ kalfa/' }}
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
           VISUAL: ${{ contains(github.event.pull_request.labels.*.name, 'visual') }}
           # The setting for how long a vitest leg's files may take, in seconds of vitest.shards.json's
@@ -382,6 +382,7 @@ jobs:
           path: &tsc |
             apps/*/node_modules/.cache/tsc
             packages/*/node_modules/.cache/tsc
+            kalfa/*/node_modules/.cache/tsc
             programs/*/node_modules/.cache/tsc
             docs/tutorials/*/node_modules/.cache/tsc
             oxlint-plugins/node_modules/.cache/tsc
@@ -461,7 +462,7 @@ jobs:
         if: ${{ !startsWith(matrix.shard, 'e2e-') }}
         env:
           SHARD: ${{ matrix.shard }}/${{ needs.changes.outputs.vitest-legs || 5 }}
-          FILTER: ${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}
+          FILTER: ${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/ kalfa/' }}
           FABRIKA_TEST_DEPTH: full
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers.
@@ -542,6 +543,7 @@ jobs:
       projects: ${{ steps.set.outputs.projects }}
       slots: ${{ steps.set.outputs.slots }}
       plants: ${{ steps.set.outputs.plants }}
+      config: ${{ steps.set.outputs.config }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -595,6 +597,7 @@ jobs:
       - uses: ./.github/actions/pnpm
       - run: pnpm install --frozen-lockfile
       - name: integration
+        id: integration
         if: fromJSON(needs.select.outputs.projects)[matrix.shard] == 'next-integration'
         timeout-minutes: *related-integration-limit
         env:
@@ -617,6 +620,25 @@ jobs:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           FABRIKA_TEST_DEPTH: full
         run: pnpm exec vitest run --project tooling $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"
+      - name: verify config archive
+        id: config
+        if: success() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && fromJSON(needs.select.outputs.config)[matrix.shard] == true && steps.integration.outcome == 'success'
+        env:
+          EVENT: ${{ github.event_name }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          HEAD: ${{ github.sha }}
+          REQUESTED: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+        run: node .github/ci/related.ts --config
+      - name: config archive
+        if: success() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && fromJSON(needs.select.outputs.config)[matrix.shard] == true && steps.config.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: kalfa-config-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/kalfa-config-package/kalfa-config-0.0.0.tgz
+            ${{ runner.temp }}/kalfa-config-package/receipt.json
+          if-no-files-found: error
+          retention-days: 7
       - name: results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
