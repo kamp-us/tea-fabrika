@@ -56,10 +56,10 @@ name: scheduled
 # its change reaches, on a changed set or a full set: only main's full run does (0602). A change to a
 # file in vitest.config.ts's `forceRerunTriggers` (a config, .oxlintrc.json, a tsconfig, the
 # lockfile, a package.json) runs the full set, on the `tests` legs above, and so does a hand start
-# that asks `scope: full` for the test file that needs it (`law`). Any other change runs its set on
+# whose `scope` input is `full`, for the test file that needs it (`law`). Any other change runs its set on
 # the `changed` legs, as many as the set needs and one when it is small, each its own list; a set of
 # zero files starts no leg and the run is green. `scope` is `changed` unless a person says `full`
-# (0590). The run keeps what it tested, and the law of a `full` ask, as its `proof-set` artifact and
+# (0590). The run keeps what it tested, and the `law` of a `full` start, as its `proof-set` artifact and
 # in its summary. On main `select` never runs, so `tests` runs every test there whatever `scope` says:
 # a push, the catch-up and a hand start on main (SC15, SC17, SC21).
 #
@@ -325,8 +325,8 @@ jobs:
   # main, so main's push, catch-up and hand start never narrow (SC17). The whole history, blobless as
   # in check.yaml, so git can diff the branch with origin/main from their merge base, and an install,
   # since Vitest lists the set. It says `full` when the change touches a rerun trigger or the hand
-  # start asked `scope: full` for a `law`, else `changed` with each leg's files, and keeps that record,
-  # the commits it chose from, the ask and when, as the run's `proof-set` artifact, after a failed
+  # start's `scope` input is `full`, for a `law`, else `changed` with each leg's files, and keeps that record,
+  # the commits it chose from, the inputs and when, as the run's `proof-set` artifact, after a failed
   # select too, so a broken choice can be read. `SCOPE` and `LAW` are the hand start's two inputs,
   # and only this step reads them (SC21). `MOST`, the most legs at once, is PROOF_SLOTS, so the
   # `changed` matrix's `max-parallel` is its alias too, and the legs rotate over the proof groups by

@@ -173,9 +173,28 @@ const RECORD = `\${{ runner.temp }}/proof-set.json`;
 // set, so the lint holds it the way SC16 holds the gap's floor.
 const SELECT_READS = { SCOPE: "inputs.scope", LAW: "inputs.law" };
 
-// A read of the inputs: the `inputs` context, `github.event.inputs`, or the whole event or `github`
-// context as JSON, which holds them. GitHub's context and function names are case-insensitive.
-const READS_INPUTS = /\binputs\b|toJSON\(\s*github(?:\.event)?\s*\)/i;
+// Whether `value` is exactly the `${{ }}` expression `read`, its spacing free. A bare `inputs.scope` is
+// text the step would get as words, not a read of the input.
+const readsOnly = (value: unknown, read: string): boolean =>
+  Predicate.isString(value) && /^\s*\$\{\{[\s\S]*\}\}\s*$/.test(value) && compact(value) === read;
+
+// A read of the inputs, each pattern one way to reach them: the `inputs` context (and
+// `github.event.inputs`); the whole `github` context, as a bare name or the `.*` filter; and the whole
+// `github.event`, bare or the `.*` filter. A property of either (`github.ref`, `github.event_name`) is
+// no read. GitHub's context and function names are case-insensitive, and an index with a quoted name
+// reads the same as a dot (`github['event']`, `github['*']`), so `readsInputs` writes it as a dot first.
+const READS_INPUTS = [
+  /\binputs\b/i,
+  /(?<![\w./-])github\b(?![\w-])(?!\s*\.)/i,
+  /\bgithub\s*\.\s*\*/i,
+  /\bgithub\s*\.\s*event\b(?!\s*\.\s*\w)/i,
+];
+
+const readsInputs = (text: string): boolean => {
+  const dotted = text.replace(/\[\s*'([^']*)'\s*\]/g, ".$1");
+
+  return READS_INPUTS.some((reads) => reads.test(dotted));
+};
 
 // `tests` runs after a skipped `select`, on main, or after one that said `full`.
 const TESTS_IF = `\${{ !cancelled() && ${STARTED} && (needs.${SELECT_JOB}.result == 'skipped' || needs.${SELECT_JOB}.outputs.scope == 'full') }}`;
@@ -417,7 +436,7 @@ const dispatchInputs = (workflow: Record<string, unknown>, require: Require): vo
   const set = steps(map(map(rest["jobs"])[SELECT_JOB])).find((s) => s["id"] === SELECT_STEP);
   Reflect.deleteProperty(map(set?.["env"]), "SCOPE");
   Reflect.deleteProperty(map(set?.["env"]), "LAW");
-  require(!READS_INPUTS.test(
+  require(!readsInputs(
     JSON.stringify(rest),
   ), "SC21: only select's set step reads the hand start's inputs, as SCOPE and LAW, so main's runs never read scope");
 };
@@ -660,8 +679,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(Object.keys(selectEnv)) === JSON.stringify(selectKeys) &&
     selectEnv["RUN_NUMBER"] === RUN_NUMBER &&
     selectEnv["RECORD"] === RECORD &&
-    compact(selectEnv["SCOPE"]) === SELECT_READS.SCOPE &&
-    compact(selectEnv["LAW"]) === SELECT_READS.LAW &&
+    readsOnly(selectEnv["SCOPE"], SELECT_READS.SCOPE) &&
+    readsOnly(selectEnv["LAW"], SELECT_READS.LAW) &&
     selectCheckouts.length === 1 &&
     map(selectCheckouts[0]?.["with"])["fetch-depth"] === 0 &&
     records.length === 1 &&
