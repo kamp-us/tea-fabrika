@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-dev-watch-native-compiler-lead",
+  "ticket": "1122",
+  "pr": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "parked",
+  "why": "next/ watcher repair at8a6e70aeb4d5727910899498de8ad81578e0b9fa passed a whole workspace compiler check with Node26.13.0 verified both directly and through a nested pnpm child. A command-local PATH selected native pnpm before the pinned Node binary. The unchanged compiler wrapper held the existing global lock. Every package finished without an engine warning. This clears compiler proof only; the controlled watcher regression, full-depth laws, plants and fresh review remain pending.",
+  "note": "The earlier exit-zero compiler runs used nested Node22.22.3 and remain invalid pinned-runtime proof. Their original records and correction are preserved. No product or law bytes changed for this check. No guarded law, real watcher, process signal or plant ran locally. The lead also published the previously approved plan bodyadbb966cf5cc in a normal follow-up commit. Usage, elapsed time and list price were unavailable.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "head": "8a6e70aeb4d5727910899498de8ad81578e0b9fa",
+  "plants": []
+}

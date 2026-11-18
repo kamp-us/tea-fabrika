@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-watch-trace-lines-not-in-event-order",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": null,
+  "rule": "doc_drift",
+  "location": {
+    "path": "field/runs/2026-11-18-dev-watch-rebuild-fix-cloud-proof.json",
+    "line": 1263
+  },
+  "says": "The next/ watcher proof row's R1 trace lists its lines in an order the law's code cannot produce, so it reads as the log order of concurrent fibers, not the reply and gate order the plan asked to record.",
+  "proof": "In next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts the save awaits the held reply at line 819 before writing the file at line 828, and the consumer awaits the release at line 793 before recording the reply at line 800. The trace at line 1263 and after reads 'write move=edit value=1', then 'held tag=same hash=7bbf4ef4', then 'reply tag=same hash=7bbf4ef4', then 'release gate=true': write before held, and reply before release.",
+  "cost": "A reader of the one ordering record the plan said could not be recovered later would conclude the duplicate was held after the save's write, the opposite of what the controlled scenario forces.",
+  "head": "132e2ab0a1f388d49acf1376fa7d0d0c49ac2637",
+  "ticket": "kamp-us/tea-fabrika#1122",
+  "pr": "kamp-us/tea-fabrika#1542"
+}

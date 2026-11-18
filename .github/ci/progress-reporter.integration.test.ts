@@ -10,6 +10,7 @@ import {
   Exit,
   Fiber,
   FileSystem,
+  Option,
   Path,
   Queue,
   Result,
@@ -118,9 +119,11 @@ const probe = Effect.fnUntraced(function* (
   const observerFile = path.join(scratch, "observer.mjs");
   const enabled = diagnostic !== "off";
   const temp = diagnostic === "unwritable" ? config : scratch;
-  const configText = `export default { test: { name: "tooling", include: ${JSON.stringify(names)}, maxWorkers: 1, fileParallelism: false, disableConsoleIntercept: true, includeTaskLocation: true } };`;
+  // Only the cutoff child gets no test deadline (Vitest 0 means none), so its blocked test can never end
+  // and Vitest can never write final JSON before the kill lands. Normal and timeout keep the default.
+  const configText = `export default { test: { name: "tooling", include: ${JSON.stringify(names)}, maxWorkers: 1, fileParallelism: false, disableConsoleIntercept: true, includeTaskLocation: true${mode === "cutoff" ? ", testTimeout: 0" : ""} } };`;
   yield* fs.writeFileString(config, configText);
-  // Normal and blocked bodies differ only in this final statement. Vitest's own default deadline stays.
+  // Normal and blocked bodies differ only in this final statement. The timeout body ends on Vitest's own default deadline.
   const last = mode === "normal" ? "return;" : "await new Promise<void>(() => {});";
 
   const fixture = `import { test, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
@@ -299,7 +302,13 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
       }),
     );
 
-    before = yield* Effect.raceFirst(observation, Effect.exit(handle.exitCode).pipe(Effect.as(null)));
+    // Fixed 30-second safety bound, not a speed threshold: a journal that never shows the active test fails
+    // at the not-null check below instead of hanging. It is half the project's 60-second test deadline
+    // (vitest.config.ts testTimeout), so this check fails first. The cutoff child has no deadline of its own.
+    before = yield* Effect.raceFirst(
+      observation.pipe(Effect.timeoutOption("30 seconds"), Effect.map(Option.getOrNull)),
+      Effect.exit(handle.exitCode).pipe(Effect.as(null)),
+    );
     expect(before).not.toBeNull();
 
     if (before === null) {

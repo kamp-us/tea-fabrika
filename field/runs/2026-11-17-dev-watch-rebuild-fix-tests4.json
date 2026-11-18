@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-dev-watch-rebuild-fix-tests4",
+  "ticket": "1122",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1542",
+  "role": "step",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "fail",
+  "why": "Actual next/ watcher proof at d19 fails the initial declaration-format predicate while the fixture assignment contains the correct numeric value. The law now checks the value consumed by that assignment through the existing syntax reader. Standalone controls pass. The repaired watcher laws and planned breaks still need protected remote execution before this tests step can pass.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [],
+  "note": "Actual failed proof: https://github.com/kamp-us/tea-fabrika/actions/runs/44052554722 at d19d769f20e7ea4851a8c01ae582ee20add5df42. Both changed watcher laws fail before a saved edit or held duplicate. The bounded diagnostic reports zero parse errors, one fixture assignment, a two-element array outside a function, and a second element that is the numeric literal zero, matching the expected initial value. This proves a test-format fault, not a product fault or a successful regression. The replacement requires one direct top-level simple fixture assignment with a two-element array whose second element is a numeric literal equal to the generated value. Unknown shapes and binding-based values fail. Standalone controls against the extracted helper and assertion first found three nesting false accepts; after correction all 17 controls passed. Two additional reader counterexamples, a shadowed global object and a later static computed fixture write, then failed their negative controls before correction. All 19 controls now pass. Earlier red and green results are preserved. Bindings named globalThis are conservatively rejected without scope resolution. Static computed fixture assignments count as ambiguity and are never accepted. The saved actual CI diagnostic matches the expected bounded value shape, but it does not prove the new guards against actual source. No guarded test file was imported, and no bundle was executed. Generated inputs, seed, counts, value bounds, deadlines, source hash, bytes, span histories, failure facts, privacy, R1 delivery gates and cleanup checks remain unchanged. Scoped format, scoped lint, diff and leak checks passed. No product file changed. No new compiler, full lint, code-graph API, protected watcher law, signal, CI run or runtime plant ran. Still owed: the controlled original-assertion red and repaired scenario; five separate full-depth save-driven passes; one whole-file full-depth pass; every planned break once with restoration; and final-head eligible branch proof before review. Unknown usage and cost remain null."
+}
