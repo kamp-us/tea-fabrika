@@ -10,8 +10,10 @@
 //   the same events, the reader tests alone      sized from the reader tests, with or without a base
 //   anything else                                the full matrix: all of next/ with no base
 //
-// Related visual tests run automatically on the PR, queue and main line. The visual label also
-// keeps its explicit opt-in meaning for other events. Global triggers select every file.
+// End-to-end legs run the `next-visual` project. A pull request starts them only when it carries the
+// `visual` label, and a merge queue group never does (0536, the owner's ruling of 2026-11-18). A push
+// to main runs the visual files its change reaches. Main's full run (scheduled.yaml) runs them all.
+// Global triggers select every file.
 //
 // The reader tests (changes.mjs's `readers`) read source as text, so `--changed`, which follows
 // imports, misses them. A sized run adds them to the vitest files, each once, and prints that list
@@ -150,8 +152,13 @@ export const isTrigger = (path: string): boolean =>
  */
 const sizes = (run: Run) => LINE.has(run.event) && (run.scope === "readers" || validSha(run.base));
 
-/** Related visual tests run on the merge line, or when explicitly requested. */
-const visual = (run: Run) => LINE.has(run.event) || run.visual;
+/**
+ * Whether a run's end-to-end legs, which run the visual tests, may start (0536): on a pull request
+ * only when it asked with the `visual` label, never in the merge queue, and on a push to main. A
+ * visual law needs a browser or Electron, a real resource, so it stays off the pull request and the
+ * merge queue unless asked. check.yaml's fallback says the same (workflow-lint.ts, E10).
+ */
+const visual = (run: Run) => run.event === "push" || (run.event === "pull_request" && run.visual);
 
 /**
  * The legs a run starts: sized on a merge line run, each kind to its own limit, else `full`, each
