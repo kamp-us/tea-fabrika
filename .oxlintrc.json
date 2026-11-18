@@ -3022,6 +3022,7 @@
     {
       // 0563: no runtime `typeof` check but a probe for a binding that may not exist.
       "files": [
+        "kalfa/config/**",
         ".agents/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/access/**",
@@ -3107,6 +3108,7 @@
     {
       // 0567: a ternary chain over one value's literals is a Match.
       "files": [
+        "kalfa/config/**",
         ".github/ci/**",
         "next/apps/fabrika/**",
         "next/packages/libfabrika/src/*",
