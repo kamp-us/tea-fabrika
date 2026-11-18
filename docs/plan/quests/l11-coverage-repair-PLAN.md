@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0014, 0093, 0036, 0052, 0590, 0161, 0164; body 60f93d9b86e9
+Approved by the lead agent, builds 0014, 0093, 0036, 0052, 0590, 0161, 0164; body 29e728777ba8
 Plancheck-Version: 3
 
 ```ts
@@ -189,6 +189,22 @@ need this app's test wiring. Product contracts and layers do not move.
 | `field/runs/` | New tests, build and review rows with ticket 1129 and exact proof, preserving old historical rows | records | lead |
 | `field/notes/` | Record the coverage correction and actual speed result or unresolved cause | records | lead |
 | `docs/plan/README.md` | Short repair status if needed; no P42 completion change | docs | lead |
+
+### Bounded tests amendment: measure one equivalent output walker
+
+The tests step may also use the already-reviewed single-buffer walk in `outputText` in
+`start-child.laws.integration.test.ts`. It visits the same keys and leaves in the same order,
+emits the same raw and JSON-encoded strings, and still excludes the error causes. Only the
+tests owner changes this function. Product code and all coverage stay as above.
+
+The cache-only candidate timed out at 60,036 ms. The unchanged main law has timed out at
+60,019 ms and passed at 45,312 ms and 35,548 ms. These runs show variation. They do not identify
+the cause, show a speedup, or test this buffer candidate. Keep the cache-only comparison
+separate. Collect the next candidate's evidence through automatic full-depth PR and protected
+queue CI. Preserve input-sequence comparison, all seventeen L11 laws, the sixteen storage
+flows, the seed and run counts, fresh cuts, each named-output failure and restoration,
+consecutive full-depth passes, and the 60,000 ms deadline. If the cost remains unproven, keep
+the remote worker profile requirement. No further optimization is approved here.
 
 ## Validation
 
