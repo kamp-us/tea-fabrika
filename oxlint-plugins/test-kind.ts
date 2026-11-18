@@ -23,6 +23,7 @@ import { join } from "node:path";
 import { Array as Arr, pipe, Option, Predicate, Schema } from "effect";
 import { type Argument, type Expression, parseSync, Visitor } from "oxc-parser";
 import { DRIVES, reader, type Open, type Receiver } from "./starters.ts";
+import { isIntegration } from "./test-names.ts";
 
 /** The folders whose test files this check holds. Each tooling slice of ticket 1073 adds its own. */
 const SCOPE = ["next"];
@@ -42,8 +43,6 @@ type Finding =
       readonly via: ReadonlyArray<string>;
       readonly opens: Pick<Open<null>, "_tag" | "call">;
     };
-
-const INTEGRATION = /\.integration\.test\.tsx?$/;
 
 const TEST = /\.test\.tsx?$/;
 
@@ -202,7 +201,7 @@ export const judge = (modules: ReadonlyMap<string, Module>): ReadonlyArray<Findi
 
   const failures = pipe(
     tests,
-    Arr.filter((file) => INTEGRATION.test(file) && reach(modules, file, (at) => read(at).any) === null),
+    Arr.filter((file) => isIntegration(file) && reach(modules, file, (at) => read(at).any) === null),
     Arr.map((file): Finding => ({ _tag: "integration_opens_nothing", file })),
   );
 
