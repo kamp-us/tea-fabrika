@@ -14,5 +14,5 @@
   "cost": "A brain answer with a fractional rev kills the window's update with a defect instead of being dropped. Before #1619 the same value went quietly into `client.seen` and threw on the next press, so the gap is older and #1619 moved the throw earlier.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
   "ticket": null,
-  "pr": null
+  "pr": "kamp-us/tea-fabrika#1651"
 }

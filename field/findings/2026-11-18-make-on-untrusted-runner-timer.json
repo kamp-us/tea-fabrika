@@ -14,5 +14,5 @@
   "cost": "A stored or sent wake that is not a number makes the timer letter throw a defect. Before #1619 the literal was sent as JSON and never checked at all, so the cost is small; the call still breaks decision 0215 for storage read back.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
   "ticket": null,
-  "pr": null
+  "pr": "kamp-us/tea-fabrika#1651"
 }

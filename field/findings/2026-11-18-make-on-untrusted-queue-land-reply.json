@@ -14,5 +14,5 @@
   "cost": "A queue built with an empty name dies with a defect inside its update on the first land, where before #1619 the child decoded its input. Only tests call `queue` today, with a constant name, so the cost is low.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
   "ticket": null,
-  "pr": null
+  "pr": "kamp-us/tea-fabrika#1651"
 }

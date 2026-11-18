@@ -14,5 +14,5 @@
   "cost": "A program whose `wake` returns 0.5 or -1 runs normally until a code swap, and the swap then dies with a defect. Before #1619 the plain literal went into `complete`, whose `Effect.try` turned the supervisor's own make into a typed `bad_row`.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
   "ticket": null,
-  "pr": null
+  "pr": "kamp-us/tea-fabrika#1651"
 }

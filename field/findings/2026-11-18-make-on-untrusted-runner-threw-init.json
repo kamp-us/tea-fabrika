@@ -14,5 +14,5 @@
   "cost": "A program that throws an anonymous Error subclass (`constructor.name` is empty) crashes the runner with a defect instead of a typed failure. The `Failure.cases.*.make` on the line before predates #1619 and throws on the same value first, so #1619 did not cause it; the call still breaks decision 0215.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
   "ticket": null,
-  "pr": null
+  "pr": "kamp-us/tea-fabrika#1651"
 }

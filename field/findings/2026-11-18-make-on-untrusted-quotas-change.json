@@ -14,5 +14,5 @@
   "cost": "A caller that passes a non-finite count or time gets a throw instead of a typed `QuotasError`. Mostly this threw before #1619 too, at `save` (`Schema.encodeSync`, QuotasSql.ts:40); which callers turn it into a defect was not followed.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
   "ticket": null,
-  "pr": null
+  "pr": "kamp-us/tea-fabrika#1651"
 }

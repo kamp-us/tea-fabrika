@@ -14,5 +14,5 @@
   "cost": "A caller that reads its attachment back without decoding gets a defect on a bad saved row. The one in-tree caller decodes first (next/packages/libfabrika/src/cloudflare/connection.ts:157), and the same value threw before #1619 in `loaded()` (next/packages/libfabrika/src/transport/internal/connection.ts:63-74); this is decision 0215's saved-state case.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
   "ticket": null,
-  "pr": null
+  "pr": "kamp-us/tea-fabrika#1651"
 }

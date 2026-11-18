@@ -14,5 +14,5 @@
   "cost": "A library caller that passes an event it built by hand gets a defect from `write` instead of a typed refusal. Before #1619 such an event was folded and appended, and every later read then failed as `bad_row`, so the old path was not safe either.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
   "ticket": null,
-  "pr": null
+  "pr": "kamp-us/tea-fabrika#1651"
 }
