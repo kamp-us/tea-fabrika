@@ -15,7 +15,7 @@ export const find = (history: ReadonlyArray<string>, query: string, from: number
   }
 
   for (let at = from; at >= 0 && at < history.length; at += way === "back" ? 1 : -1) {
-    if (history[at]!.includes(query)) {
+    if (history.at(at)?.includes(query) === true) {
       return at;
     }
   }

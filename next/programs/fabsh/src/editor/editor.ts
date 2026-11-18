@@ -182,7 +182,7 @@ const backFrom = (s: Model): string => {
 
 const leave = (s: Model): string => {
   const d = display(s);
-  return d === null ? "" : back(d.at, s.cols) + "\x1b[J" + d.colored + NEWLINE;
+  return d === null ? "" : `${back(d.at, s.cols)}\x1b[J${d.colored}${NEWLINE}`;
 };
 
 const redraw = (before: Model, after: Model, prefix = ""): Step => {
@@ -190,8 +190,8 @@ const redraw = (before: Model, after: Model, prefix = ""): Step => {
   const b = display(after);
   const row =
     !before.resized && a !== null && b !== null && fitsRow(a.plain, before.cols) && fitsRow(b.plain, after.cols);
-  const bytes = row && b !== null ? redrawRow(b.colored, b.at) : backFrom(before) + drawn(after);
-  return [{ ...after, resized: false }, [write({ bytes: prefix + bytes })]];
+  const bytes = row && b !== null ? redrawRow(b.colored, b.at) : `${backFrom(before)}${drawn(after)}`;
+  return [{ ...after, resized: false }, [write({ bytes: `${prefix}${bytes}` })]];
 };
 
 const bell = (s: Model): Step => [s, [write({ bytes: BELL })]];
@@ -206,11 +206,23 @@ const word = (c: string) => /[\p{L}\p{N}]/u.test(c);
 const beforeWord = (chars: ReadonlyArray<string>, at: number, inside = word): number => {
   let n = at;
 
-  while (n > 0 && !inside(chars[n - 1]!)) {
+  while (n > 0) {
+    const char = chars.at(n - 1);
+
+    if (char === undefined || inside(char)) {
+      break;
+    }
+
     n -= 1;
   }
 
-  while (n > 0 && inside(chars[n - 1]!)) {
+  while (n > 0) {
+    const char = chars.at(n - 1);
+
+    if (char === undefined || !inside(char)) {
+      break;
+    }
+
     n -= 1;
   }
 
@@ -220,11 +232,23 @@ const beforeWord = (chars: ReadonlyArray<string>, at: number, inside = word): nu
 const afterWord = (chars: ReadonlyArray<string>, at: number): number => {
   let n = at;
 
-  while (n < chars.length && !word(chars[n]!)) {
+  while (n < chars.length) {
+    const char = chars.at(n);
+
+    if (char === undefined || word(char)) {
+      break;
+    }
+
     n += 1;
   }
 
-  while (n < chars.length && word(chars[n]!)) {
+  while (n < chars.length) {
+    const char = chars.at(n);
+
+    if (char === undefined || !word(char)) {
+      break;
+    }
+
     n += 1;
   }
 
@@ -282,9 +306,10 @@ const atPrompt = (s: Model, mode: Prompt, key: Key): Step => {
 
     if (cut !== "") {
       const joined = s.last !== null && KILLS.has(s.last);
+      const first = ring.at(0);
       ring =
         joined && ring.length > 0
-          ? [backwards ? cut + ring[0]! : ring[0]! + cut, ...ring.slice(1)]
+          ? [backwards ? `${cut}${String(first)}` : `${String(first)}${cut}`, ...ring.slice(1)]
           : [cut, ...ring].slice(0, 10);
     }
 
@@ -361,7 +386,12 @@ const atPrompt = (s: Model, mode: Prompt, key: Key): Step => {
           }
 
           const index = (mode.yank.index + 1) % s.ring.length;
-          const text = s.ring[index]!;
+          const text = s.ring.at(index);
+
+          if (text === undefined) {
+            return bell(s);
+          }
+
           const all = left + right;
           return edit(
             { left: all.slice(0, mode.yank.at) + text, right: all.slice(mode.yank.at + mode.yank.length) },
@@ -384,8 +414,15 @@ const atPrompt = (s: Model, mode: Prompt, key: Key): Step => {
 
           const at = cursor === chars.length ? cursor - 1 : cursor;
           const next = [...chars];
-          next[at] = chars[at - 1]!;
-          next[at - 1] = chars[at]!;
+          const before = chars.at(at - 1);
+          const current = chars.at(at);
+
+          if (before === undefined || current === undefined) {
+            return bell(s);
+          }
+
+          next[at] = before;
+          next[at - 1] = current;
           return edit(cutAt(next, at + 1));
         }
 
@@ -394,7 +431,13 @@ const atPrompt = (s: Model, mode: Prompt, key: Key): Step => {
         case "capitalize-word": {
           let start = cursor;
 
-          while (start < chars.length && !word(chars[start]!)) {
+          while (start < chars.length) {
+            const char = chars.at(start);
+
+            if (char === undefined || word(char)) {
+              break;
+            }
+
             start += 1;
           }
 
@@ -457,13 +500,13 @@ const atPrompt = (s: Model, mode: Prompt, key: Key): Step => {
           }
 
           return s.last === "complete"
-            ? [s, [write({ bytes: leave(s) + columns(candidates.map(clean), s.cols) + drawn(s) })]]
+            ? [s, [write({ bytes: `${leave(s)}${columns(candidates.map(clean), s.cols)}${drawn(s)}` })]]
             : bell(s);
         }
 
         case "interrupt": {
           const next = { ...s, mode: prompt() };
-          return [next, [write({ bytes: leave(s).replace(/\r\n$/, "") + "^C" + NEWLINE + drawn(next) })]];
+          return [next, [write({ bytes: `${leave(s).replace(/\r\n$/, "")}^C${NEWLINE}${drawn(next)}` })]];
         }
 
         case "end-of-file":
@@ -479,7 +522,9 @@ const atPrompt = (s: Model, mode: Prompt, key: Key): Step => {
   });
 };
 
-const inSearch = (s: Model, mode: Extract<typeof Mode.Type, { readonly _tag: "search" }>, key: Key): Step => {
+type SearchMode = ReturnType<typeof Mode.cases.search.make>;
+
+const inSearch = (s: Model, mode: SearchMode, key: Key): Step => {
   const newest = [...s.history].reverse();
   const change = (search: Search): Step => redraw(s, { ...s, mode: Mode.cases.search.make({ ...mode, search }) });
   const found = newest[mode.search.at];
@@ -534,7 +579,7 @@ const one = (s: Model, key: Key): Step => {
     asking: (mode): Step => {
       const answered = (allow: boolean): Step => {
         const feedback = `  ${allow ? "y: allowed once" : "n: refused"}${NEWLINE}`;
-        const bytes = s.status === null ? feedback : "\r\x1b[J" + feedback + statusRow(s.status, s.cols);
+        const bytes = s.status === null ? feedback : `\r\x1b[J${feedback}${statusRow(s.status, s.cols)}`;
         return [
           { ...s, mode: Mode.cases.busy.make({ ahead: mode.ahead, flushes: mode.flushes }) },
           [write({ bytes }), answer({ job: mode.job, allow })],
@@ -559,7 +604,9 @@ const one = (s: Model, key: Key): Step => {
   return [{ ...next, mode, last: command }, outputs];
 };
 
-type Ahead = Pick<Extract<typeof Mode.Type, { readonly _tag: "busy" }>, "ahead" | "flushes">;
+type BusyMode = ReturnType<typeof Mode.cases.busy.make>;
+
+type Ahead = Pick<BusyMode, "ahead" | "flushes">;
 
 const queued = (s: Model, mode: Ahead, data: string): Step => {
   if (data.includes("\x03")) {
@@ -567,7 +614,7 @@ const queued = (s: Model, mode: Ahead, data: string): Step => {
     const [framing] = keys.init(null, undefined);
     return [
       { ...s, framing, status: null, mode: Mode.cases.busy.make({ ahead: rest === "" ? [] : [rest], flushes: [] }) },
-      [write({ bytes: (s.status === null ? "" : "\r\x1b[J") + "^C" + NEWLINE }), interrupt({})],
+      [write({ bytes: `${s.status === null ? "" : "\r\x1b[J"}^C${NEWLINE}` }), interrupt({})],
     ];
   }
 
@@ -631,7 +678,7 @@ const ready = (s: Model, mode: Ahead): Step => {
   const [framing] = keys.init(null, undefined);
   const next: Model = { ...s, framing, mode: prompt(), status: null };
   let current = next;
-  const outputs: Output[] = [write({ bytes: (s.status === null ? "" : "\r\x1b[J") + drawn(next) })];
+  const outputs: Output[] = [write({ bytes: `${s.status === null ? "" : "\r\x1b[J"}${drawn(next)}` })];
   const text = mode.ahead.join("") + pending(s.framing);
   let from = 0;
 
@@ -686,7 +733,7 @@ export const editor = Machine.make<Model, typeof Msg.Type, (typeof CMDS)[number]
       talk: { names: [], harnesses: [] },
       status: null,
     };
-    return [s, [write({ bytes: "\x1b[?2004h" + drawn(s) })]];
+    return [s, [write({ bytes: `\x1b[?2004h${drawn(s)}` })]];
   },
   update: {
     keys: (s, msg) => input(s, msg.data),
@@ -711,8 +758,8 @@ export const editor = Machine.make<Model, typeof Msg.Type, (typeof CMDS)[number]
               display(s) === null
                 ? s.status === null
                   ? text
-                  : "\r\x1b[J" + text + statusRow(s.status, s.cols)
-                : backFrom(s) + "\x1b[J" + text + drawn(s),
+                  : `\r\x1b[J${text}${statusRow(s.status, s.cols)}`
+                : `${backFrom(s)}\x1b[J${text}${drawn(s)}`,
           }),
         ],
       ];
@@ -727,8 +774,8 @@ export const editor = Machine.make<Model, typeof Msg.Type, (typeof CMDS)[number]
               display(s) === null
                 ? s.status === null
                   ? bytes
-                  : "\r\x1b[J" + bytes + statusRow(s.status, s.cols)
-                : backFrom(s) + "\x1b[J" + bytes + drawn(s),
+                  : `\r\x1b[J${bytes}${statusRow(s.status, s.cols)}`
+                : `${backFrom(s)}\x1b[J${bytes}${drawn(s)}`,
           }),
         ],
       ];
@@ -740,7 +787,7 @@ export const editor = Machine.make<Model, typeof Msg.Type, (typeof CMDS)[number]
       display(s) === null
         ? [
             { ...s, status: msg.text },
-            [write({ bytes: "\r\x1b[J" + (msg.text === null ? "" : statusRow(msg.text, s.cols)) })],
+            [write({ bytes: `\r\x1b[J${msg.text === null ? "" : statusRow(msg.text, s.cols)}` })],
           ]
         : [s, []],
     asked: (s, msg): Step =>

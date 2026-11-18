@@ -193,7 +193,11 @@ const generate = Effect.fn("fabsh.table")(function* () {
                 const cells = terminal.getViewport();
 
                 for (let row = 0; row < batch.texts.length; row += 1) {
-                  const slot = batch.slots[row]!;
+                  const slot = batch.slots.at(row);
+
+                  if (slot === undefined) {
+                    throw new Error(`table row ${row} has no generated slot`);
+                  }
 
                   if (batch.markers[row]) {
                     for (let col = COLS - 1; col >= 0; col -= 1) {

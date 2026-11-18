@@ -105,13 +105,17 @@ export const wire = (
     }
   }
 
-  return matches.length === 1
-    ? Result.succeed(matches[0]!)
-    : Result.fail(
-        matches.length === 0
-          ? `${writer.name}'s outputs fit no input of ${reader.name}`
-          : "several ports fit: name >output or <input",
-      );
+  const match = matches.at(0);
+
+  if (matches.length === 1 && match !== undefined) {
+    return Result.succeed(match);
+  }
+
+  return Result.fail(
+    matches.length === 0
+      ? `${writer.name}'s outputs fit no input of ${reader.name}`
+      : "several ports fit: name >output or <input",
+  );
 };
 
 /** Edit distance supplies the same small typo hint for programs and declared parts. */
@@ -122,13 +126,27 @@ const distance = (left: string, right: string): number => {
     const next = [i + 1];
 
     for (let j = 0; j < right.length; j += 1) {
-      next.push(Math.min(next[j]! + 1, row[j + 1]! + 1, row[j]! + (left.charAt(i) === right.charAt(j) ? 0 : 1)));
+      const above = next.at(j);
+      const inserted = row.at(j + 1);
+      const replaced = row.at(j);
+
+      if (above === undefined || inserted === undefined || replaced === undefined) {
+        throw new Error("edit-distance row is incomplete");
+      }
+
+      next.push(Math.min(above + 1, inserted + 1, replaced + (left.charAt(i) === right.charAt(j) ? 0 : 1)));
     }
 
     row = next;
   }
 
-  return row[right.length]!;
+  const result = row.at(right.length);
+
+  if (result === undefined) {
+    throw new Error("edit-distance row is incomplete");
+  }
+
+  return result;
 };
 
 const guess = (name: string, names: Iterable<string>): string | null => {
@@ -222,9 +240,10 @@ const checkedPipe = (
 
     if (asked !== undefined && asked.help !== null) {
       const declared = yield* entry(asked, programs);
-      const name = asked.help.name?.name;
+      const helpName = asked.help.name;
 
-      if (name !== undefined) {
+      if (helpName !== null) {
+        const name = helpName.name;
         const part = name.startsWith("--")
           ? name.slice(2)
           : name.startsWith(">") || name.startsWith("<")
@@ -241,7 +260,7 @@ const checkedPipe = (
               : [declared.flags, declared.inputs, declared.outputs];
 
         if (!fields.some((names) => Object.hasOwn(names, part))) {
-          return yield* Result.fail(refusal(asked.help.name!.at.start, `${declared.name} has no part named ${name}`));
+          return yield* Result.fail(refusal(helpName.at.start, `${declared.name} has no part named ${name}`));
         }
       }
 
@@ -257,20 +276,36 @@ const checkedPipe = (
     const wires: Wire[] = [];
 
     for (let i = 0; i < pipeline.bars.length; i += 1) {
-      const from = pipeline.commands[i]!;
-      const to = pipeline.commands[i + 1]!;
-      const bar = pipeline.bars[i]!;
+      const from = pipeline.commands.at(i);
+      const to = pipeline.commands.at(i + 1);
+      const bar = pipeline.bars.at(i);
+      const fromEntry = entries.at(i);
+      const toEntry = entries.at(i + 1);
+
+      if (
+        from === undefined ||
+        to === undefined ||
+        bar === undefined ||
+        fromEntry === undefined ||
+        toEntry === undefined
+      ) {
+        return yield* Result.fail(refusal(bar?.start ?? pipeline.at.start, "pipe needs a program on each side"));
+      }
+
       wires.push(
-        yield* Result.mapError(
-          wire(entries[i]!, entries[i + 1]!, from.out?.name ?? null, to.into?.name ?? null),
-          (reason) => refusal(bar.start, reason),
+        yield* Result.mapError(wire(fromEntry, toEntry, from.out?.name ?? null, to.into?.name ?? null), (reason) =>
+          refusal(bar.start, reason),
         ),
       );
     }
 
     for (let i = 0; i < pipeline.commands.length; i += 1) {
-      const command = pipeline.commands[i]!;
-      const declared = entries[i]!;
+      const command = pipeline.commands.at(i);
+      const declared = entries.at(i);
+
+      if (command === undefined || declared === undefined) {
+        return yield* Result.fail(refusal(pipeline.at.start, "pipeline needs a program"));
+      }
 
       if (command.help !== null) {
         return yield* Result.fail(refusal(command.help.at.start, "--help gives no value to a $( )"));
@@ -342,8 +377,16 @@ export const pipeErrors = (parsed: Parsed, programs: ProgramList): ReadonlyArray
   const errors = new Map<number, Refused>();
   const visit = (pipeline: Pipeline): void => {
     for (let i = 0; i < pipeline.bars.length; i += 1) {
-      const from = pipeline.commands[i]!;
-      const to = pipeline.commands[i + 1]!;
+      const from = pipeline.commands.at(i);
+      const to = pipeline.commands.at(i + 1);
+      const bar = pipeline.bars.at(i);
+
+      if (from === undefined || to === undefined || bar === undefined) {
+        const at = bar?.start ?? pipeline.at.start;
+        errors.set(at, refusal(at, "pipe needs a program on each side"));
+        continue;
+      }
+
       const writer = programs.get(from.program.name);
       const reader = programs.get(to.program.name);
 
@@ -351,7 +394,7 @@ export const pipeErrors = (parsed: Parsed, programs: ProgramList): ReadonlyArray
         const result = wire(writer, reader, from.out?.name ?? null, to.into?.name ?? null);
 
         if (Result.isFailure(result)) {
-          const at = pipeline.bars[i]!.start;
+          const at = bar.start;
           errors.set(at, refusal(at, result.failure));
         }
       }

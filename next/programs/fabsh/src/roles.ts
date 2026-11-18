@@ -12,6 +12,7 @@ export const Role = Schema.TaggedUnion({
   pipe: {},
   separator: {},
   mention: {},
+  // oxlint-disable-next-line eslint/id-denylist -- a conversation room (0091), not a module
   room: {},
   string: {},
   substitution: {},
@@ -56,7 +57,11 @@ export function roles(line: string, programs: ProgramList, cursor = line.length)
   let head = true;
 
   for (let i = 0; i < read.tokens.length; i += 1) {
-    const token = read.tokens[i]!;
+    const token = read.tokens[i];
+
+    if (token === undefined) {
+      continue;
+    }
     const unfinished = Token.guards.word(token) && token.start <= cursor && cursor <= token.end;
     const role = Token.match(token, {
       op: (t): Role => {

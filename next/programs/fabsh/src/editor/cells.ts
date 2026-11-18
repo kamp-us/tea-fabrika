@@ -33,7 +33,12 @@ export const tableText = (packed: Uint8Array): string => {
 
   for (let end = 1; end <= packed.length; end += 1) {
     if (end === packed.length || packed[end] !== packed[start]) {
-      const code = packed[start]!;
+      const code = packed.at(start);
+
+      if (code === undefined) {
+        break;
+      }
+
       text += (end - start).toString(36) + String.fromCharCode(65 + Math.floor(code / 26), 65 + (code % 26));
       start = end;
     }
@@ -49,11 +54,17 @@ const entries: Facts[] = [];
 let next = 0;
 
 for (const match of TABLE.matchAll(/([0-9a-z]+)([A-Z]{2})/g)) {
-  const letters = match[2]!;
+  const length = match[1];
+  const letters = match[2];
+
+  if (length === undefined || letters === undefined) {
+    throw new Error("invalid generated cell table");
+  }
+
   const code = (letters.charCodeAt(0) - 65) * 26 + letters.charCodeAt(1) - 65;
   starts.push(next);
   entries.push({ width: code & 3, class: CLASSES[(code >> 2) & 15] ?? "other", vs: (code & 64) !== 0 });
-  next += Number.parseInt(match[1]!, 36);
+  next += Number.parseInt(length, 36);
 }
 
 export const facts = (cp: number): Facts => {
@@ -63,7 +74,9 @@ export const facts = (cp: number): Facts => {
   while (low < high) {
     const middle = (low + high + 1) >>> 1;
 
-    if (starts[middle]! <= cp) {
+    const start = starts.at(middle);
+
+    if (start !== undefined && start <= cp) {
       low = middle;
     } else {
       high = middle - 1;
@@ -170,7 +183,11 @@ export function spot(text: string, cols: number): number {
       const previous = row[at];
 
       if (previous !== undefined && previous.points.length > 0 && joins(previous.points, cp)) {
-        const base = previous.points[0]!;
+        const base = previous.points.at(0);
+
+        if (base === undefined) {
+          continue;
+        }
 
         if (cp === 0xfe0e || cp === 0xfe0f) {
           if (!facts(base).vs) {

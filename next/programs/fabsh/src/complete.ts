@@ -6,7 +6,7 @@ import { Token, words } from "./words.ts";
 export interface Job {
   readonly program: string;
   readonly inputs: Declaration["inputs"];
-  readonly stages?: ReadonlyArray<{
+  readonly processes?: ReadonlyArray<{
     readonly process: string;
     readonly program: string;
     readonly inputs: Declaration["inputs"];
@@ -89,7 +89,11 @@ export function complete(
       let start = 0;
 
       for (let i = cut - 1; i >= 0; i -= 1) {
-        const token = before[i]!;
+        const token = before[i];
+
+        if (token === undefined) {
+          continue;
+        }
 
         if (Token.guards.op(token)) {
           if (token.op === ")") {
@@ -139,7 +143,9 @@ export function complete(
     }
 
     return result(
-      rest.length >= 3 ? ["as"] : ["as", ...(talk.offers?.[rest[0]!] ?? []).filter((name) => !rest.includes(name))],
+      rest.length >= 3
+        ? ["as"]
+        : ["as", ...(talk.offers?.[String(rest.at(0))] ?? []).filter((name) => !rest.includes(name))],
     );
   }
 
@@ -156,13 +162,16 @@ export function complete(
 
     if (job === undefined) {
       return result(
-        [...jobs].flatMap(([number, entry]) => [`%${number}`, ...(entry.stages ?? []).map((stage) => stage.process)]),
+        [...jobs].flatMap(([number, job]) => [
+          `%${number}`,
+          ...(job.processes ?? []).map((process) => process.process),
+        ]),
       );
     }
 
     const numbered = /^%[0-9]+$/.test(job) ? jobs.get(Number(job.slice(1))) : undefined;
-    const stage = [...jobs.values()].flatMap((entry) => entry.stages ?? []).find((entry) => entry.process === job);
-    const entry = stage ?? numbered?.stages?.[0] ?? numbered;
+    const process = [...jobs.values()].flatMap((entry) => entry.processes ?? []).find((entry) => entry.process === job);
+    const entry = process ?? numbered?.processes?.at(0) ?? numbered;
 
     if (entry === undefined || (head !== "tell" && head !== "close")) {
       return result([]);

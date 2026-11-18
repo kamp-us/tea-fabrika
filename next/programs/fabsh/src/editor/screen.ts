@@ -20,6 +20,7 @@ const ANSI: Record<Role["_tag"], { readonly color: number; readonly underline: b
   pipe: { color: 33, underline: false },
   separator: { color: 33, underline: false },
   mention: { color: 35, underline: false },
+  // oxlint-disable-next-line eslint/id-denylist -- a conversation room (0091), not a module
   room: { color: 35, underline: false },
   string: { color: 33, underline: false },
   substitution: { color: 35, underline: false },
@@ -166,7 +167,7 @@ const clipped = (text: string, width: number): string => {
     cut += char;
   }
 
-  return cut + "…";
+  return `${cut}…`;
 };
 
 /** Table data is laid out at the viewer's width, and every cell is made safe before painting. */
@@ -174,7 +175,7 @@ export const table = (value: typeof Table.Type, cols: number): string => {
   const lines = [
     "",
     toned(single(value.title), "strong") +
-      toned(`  ${value.total}${value.note === null ? "" : " · " + single(value.note)}`, "muted"),
+      toned(`  ${value.total}${value.note === null ? "" : ` · ${single(value.note)}`}`, "muted"),
     "",
   ];
 
@@ -189,7 +190,13 @@ export const table = (value: typeof Table.Type, cols: number): string => {
 
   for (let i = 0; i < natural.length; i += 1) {
     if (i !== value.cut) {
-      fixed += natural[i]!;
+      const width = natural.at(i);
+
+      if (width === undefined) {
+        throw new Error(`table column ${i} has no width`);
+      }
+
+      fixed += width;
     }
   }
 
@@ -198,8 +205,14 @@ export const table = (value: typeof Table.Type, cols: number): string => {
     "  " +
     entries
       .map((cell, i) => {
-        const text = i === value.cut ? clipped(single(cell.text), widths[i]!) : single(cell.text);
-        const pad = " ".repeat(Math.max(0, widths[i]! - cells(text)));
+        const width = widths.at(i);
+
+        if (width === undefined) {
+          throw new Error(`table column ${i} has no width`);
+        }
+
+        const text = i === value.cut ? clipped(single(cell.text), width) : single(cell.text);
+        const pad = " ".repeat(Math.max(0, width - cells(text)));
         return value.columns[i]?.align === "right"
           ? pad + toned(text, cell.tone)
           : toned(text, cell.tone) + (i === entries.length - 1 ? "" : pad);
@@ -230,7 +243,7 @@ export const table = (value: typeof Table.Type, cols: number): string => {
           used = 0;
         }
 
-        line += (used === 0 ? "" : " ") + toned(part.text, part.tone);
+        line += `${used === 0 ? "" : " "}${toned(part.text, part.tone)}`;
         used += (used === 0 ? 0 : 1) + width;
       }
     }

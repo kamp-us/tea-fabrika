@@ -40,11 +40,15 @@ export function words(line: string) {
     const double = pair === "$(" || pair === "&&" || pair === "||" ? pair : null;
     const single = char === "|" || char === "&" || char === ";" || char === ")" ? char : char === "\n" ? ";" : null;
 
-    if (double !== null || single !== null) {
-      const op = double ?? single!;
-      const length = double === null ? 1 : 2;
-      tokens.push(Token.cases.op.make({ start: at, end: at + length, op }));
-      at += length;
+    if (double !== null) {
+      tokens.push(Token.cases.op.make({ start: at, end: at + 2, op: double }));
+      at += 2;
+      continue;
+    }
+
+    if (single !== null) {
+      tokens.push(Token.cases.op.make({ start: at, end: at + 1, op: single }));
+      at += 1;
       continue;
     }
 

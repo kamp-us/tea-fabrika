@@ -75,6 +75,7 @@ export const Statement = Schema.TaggedUnion({
     text: Schema.String,
   },
   said: {
+    // oxlint-disable-next-line eslint/id-denylist -- a conversation room (0091), not a module
     room: Schema.NullOr(Named),
     mentions: Schema.Array(Named),
     prose: Schema.Struct({ text: Schema.String, at: At }),
@@ -108,14 +109,14 @@ const said = (line: string): Statement | null => {
 
   let end = start + match.length;
   const name = { name: match.slice(1), at: { start: start + 1, end } };
-  const room = mark === "#" ? name : null;
+  const conversation = mark === "#" ? name : null;
   const mentions: Named[] = mark === "@" ? [name] : [];
 
   if (/[ \t]/.test(line.charAt(end))) {
     end += 1;
   }
 
-  if (room !== null) {
+  if (conversation !== null) {
     while (line.charAt(end) === "@") {
       const mention = /^[^\s]*/.exec(line.slice(end))?.[0] ?? "";
       mentions.push({ name: mention.slice(1), at: { start: end + 1, end: end + mention.length } });
@@ -128,7 +129,8 @@ const said = (line: string): Statement | null => {
   }
 
   return Statement.cases.said.make({
-    room,
+    // oxlint-disable-next-line eslint/id-denylist -- a conversation room (0091), not a module
+    room: conversation,
     mentions,
     prose: { text: line.slice(end), at: { start: end, end: line.length } },
     text: line,
@@ -206,7 +208,11 @@ export function parse(line: string): Parsed {
       let scan = pos;
 
       for (; scan < tokens.length; scan += 1) {
-        const t = tokens[scan]!;
+        const t = tokens[scan];
+
+        if (t === undefined) {
+          break;
+        }
 
         if (Token.guards.op(t)) {
           if (t.op === "$(") {
@@ -243,7 +249,11 @@ export function parse(line: string): Parsed {
       }
 
       while (pos < tokens.length) {
-        const t = peek()!;
+        const t = peek();
+
+        if (t === undefined) {
+          break;
+        }
 
         if (!Token.guards.word(t)) {
           break;
@@ -312,12 +322,16 @@ export function parse(line: string): Parsed {
       const snapshot = (): Pipeline => ({
         commands,
         bars,
-        at: { start: head.at.start, end: commands.at(-1)!.at.end },
+        at: { start: head.at.start, end: commands.at(-1)?.at.end ?? head.at.end },
       });
       readable.push(snapshot());
 
       while (op("|")) {
-        const bar = peek()!;
+        const bar = peek();
+
+        if (bar === undefined || !Token.guards.op(bar) || bar.op !== "|") {
+          return yield* fail("expected a command after |");
+        }
         pos += 1;
         const next = yield* command();
         bars.push({ start: bar.start, end: bar.end });
@@ -325,7 +339,7 @@ export function parse(line: string): Parsed {
         readable[slot] = snapshot();
       }
 
-      return readable[slot]!;
+      return snapshot();
     });
 
   const result = Result.gen(function* () {
@@ -351,7 +365,11 @@ export function parse(line: string): Parsed {
         const args: Named[] = [];
 
         while (pos < tokens.length) {
-          const t = peek()!;
+          const t = peek();
+
+          if (t === undefined) {
+            break;
+          }
 
           if (!Token.guards.word(t)) {
             break;
