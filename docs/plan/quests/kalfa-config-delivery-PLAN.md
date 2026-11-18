@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0602 and 0599 on the delivery plan, amended by the lead's ruling that delivery comes from main's full run; body 3e7221f27992
 Plancheck-Version: 3
 
 # Plan: CI delivers the tested @kalfa/config archive from main's full run, then two CI speed items
