@@ -1,12 +1,12 @@
 ---
 id: 0585
-title: "Our tooling is five @kalfa packages grouped by domain, config, ci, records, quality and a thin cli, reached through one kalfa command, never one small package per tool, its settings never take a FABRIKA_ name, and every record folder moves under one .kalfa/ folder"
+title: "Our tooling is six @kalfa packages grouped by domain, config, ci, codehost, records, quality and a thin cli, reached through one kalfa command, never one small package per tool, its settings never take a FABRIKA_ name, and every record folder moves under one .kalfa/ folder"
 status: accepted
 date: 2026-11-15
-tags: [kalfa, packages, tooling, ci, cli, config, settings, records, vitest, oxlint, leak-check, ship]
+tags: [kalfa, packages, tooling, ci, codehost, cli, config, settings, records, vitest, oxlint, leak-check, ship]
 ---
 
-# 0585: Our tooling is five @kalfa packages grouped by domain, config, ci, records, quality and a thin cli, reached through one kalfa command, never one small package per tool, its settings never take a FABRIKA_ name, and every record folder moves under one .kalfa/ folder
+# 0585: Our tooling is six @kalfa packages grouped by domain, config, ci, codehost, records, quality and a thin cli, reached through one kalfa command, never one small package per tool, its settings never take a FABRIKA_ name, and every record folder moves under one .kalfa/ folder
 
 ```mermaid
 flowchart LR
@@ -15,14 +15,17 @@ flowchart LR
   ci["@kalfa/ci: legs and changes"]
   checks["@kalfa/ci/checks"]
   ship["@kalfa/ci/ship"]
+  codehost["@kalfa/codehost"]
   records["@kalfa/records: every record folder"]
   quality["@kalfa/quality: vitest, stryker, oxlint, oxfmt, stylelint"]
   fabrika["fabrika: .fabrika and FABRIKA_*"]
   cli -->|builds in the cli tree of| config
   cli -->|finds the cli tree of| ci
+  cli -->|finds the cli tree of| codehost
   cli -->|finds the cli tree of| records
   ci --> checks
   ci --> ship
+  ship -->|uses the protocol of| codehost
   config -->|used by| fabrika
   config -->|used by| ci
   config -->|used by| records
@@ -38,6 +41,7 @@ kalfa/
                 @kalfa/ci/checks  leakgrep, loosening, governance, sizecap, skillscheck,
                                   plants, pin, redact, unlisted, movecheck
                 @kalfa/ci/ship    today's land.ts and pr/
+  codehost/   @kalfa/codehost the code host protocol, once (0614)
   records/    @kalfa/records    find, list, next, show, resolve; field rows; frontmatter Schemas
   quality/    @kalfa/quality    testing, linting and formatting, one subpath per tool
                 @kalfa/quality/vitest   0557's test toolbox
@@ -86,10 +90,10 @@ so the count below does not include them.
 
 ## Decision
 
-**Our tooling is five `@kalfa` packages, grouped by domain. A tool goes in the package for its
+**Our tooling is six `@kalfa` packages, grouped by domain. A tool goes in the package for its
 domain and is exported by subpath, never made into a small package of its own.**
 
-### The five packages
+### The six packages
 
 - **`@kalfa/config`** (`kalfa/config/`): one settings engine, named by the app that uses it.
   - fabrika uses it for `.fabrika` and `FABRIKA_*`. Every `@kalfa` package uses it for `.kalfa`
@@ -108,11 +112,14 @@ domain and is exported by subpath, never made into a small package of its own.**
     pin, redact, unlisted and movecheck. A shell or Python check becomes TypeScript and Effect as it
     moves (0113).
   - **`@kalfa/ci/ship`** is today's `land.ts` and `pr/`, named for its job: check, leak check,
-    merge main, sign, push, open the pull request, queue, arm.
-    - GitHub stays the only real code host. The direct `gh` calls in `land.ts` move behind the code
-      host service (0231).
+    merge main, sign, push, open the pull request, queue, arm. Shipping is the CD half of CI/CD, so
+    it lives with CI ([0614](0614-kalfa-codehost-holds-the-code-host-protocol-once.md)).
+    - GitHub is the only real code host, as the Layer at `@kalfa/codehost/github`. The direct `gh`
+      calls in `land.ts` move behind the code host services (0231), which `ship` uses to merge.
     - It refuses to merge unless leakgrep passed in the same run.
     - It refuses to arm while the pull request's text is still draft text.
+- **`@kalfa/codehost`** (`kalfa/codehost/`): the code host protocol, once (0614). It holds no
+  pipeline logic.
 - **`@kalfa/records`** (`kalfa/records/`): every record folder: decisions, patterns, glossary,
   runbooks, experiments, direction notes and field rows.
   - It holds the commands `records.ts` has today (`list`, `next`, `find`, `resolve`), adds `show`,
@@ -228,8 +235,8 @@ field = ".kalfa/field"
 ### When it lands
 
 - **Plans start now.** Builds land at the tail of the sev0 list, in this order: config, with
-  `@kalfa/quality`'s `/stryker` beside it, then ci (with checks, ship and the leak-words move), then
-  records, then quality's `/vitest`, then its `/oxlint`.
+  `@kalfa/quality`'s `/stryker` beside it, then ci (with checks and the leak-words move), then
+  codehost, then ci's ship, then records, then quality's `/vitest`, then its `/oxlint`.
 - **The move under `.kalfa/` builds at the sev0's tail too, after `@kalfa/records` exists,** since
   the move is done by its command.
 - **A build that moves `oxlint-plugins/` or `.github/ci` waits** until the Effect-check and
@@ -238,8 +245,8 @@ field = ".kalfa/field"
 
 **Binding constraints:**
 
-- There are five `@kalfa` tooling packages. A new tool is a subpath of the package for its domain,
-  never a sixth small package, unless a later decision adds one. The small libraries of
+- There are six `@kalfa` tooling packages. A new tool is a subpath of the package for its domain,
+  never a seventh small package, unless a later decision adds one. The small libraries of
   [0601](0601-program-make-with-optional-pipes.md) are not tooling and are not counted.
 - A package's commands are its `./cli` export, an `effect/cli` `Command`, named by its
   `kalfa.cli` field. `kalfa` loads only the project's own dependencies that carry that field,
@@ -284,6 +291,6 @@ These are the lead's reading of what follows from the ruling. They are not the o
 
 ## Records
 
-- `.glossary/TERMS.md`: the `kalfa` row gains the five packages, the `kalfa` command and the
+- `.glossary/TERMS.md`: the `kalfa` row gains the six packages, the `kalfa` command and the
   `.kalfa/` folder. No new word is coined: `ship` keeps its glossary meaning, the one merge
   authority.
