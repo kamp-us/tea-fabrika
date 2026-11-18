@@ -69,12 +69,15 @@ type StackFixture = {
 const stackLayer = (fixture: StackFixture) => {
   const selected = fixture.selected ?? selection();
   const held = fixture.held ?? selected.layers.map(({ number, oid: head }) => ({ number, oid: head }));
+
   const queue: MergeQueue | null =
     fixture.queue === undefined ? { build: 2, merge: 3, method: "SQUASH" } : fixture.queue;
+
   const branchQueue = fixture.branchQueue === undefined ? queue : fixture.branchQueue;
   const views = new Map<number, number>();
   let mergeAsked = false;
   let queueLookedUp = false;
+
   const spawner = Recorder.layer(ChildProcessSpawner.ChildProcessSpawner, {
     spawn: (command) => {
       if (!ChildProcess.isStandardCommand(command)) {
@@ -96,6 +99,7 @@ const stackLayer = (fixture: StackFixture) => {
         const late = queueLookedUp && fixture.duringQueue?.number === number ? fixture.duringQueue.change : undefined;
         const current = late === undefined ? found : { ...found, ...late };
         const mergeCommit = after === undefined ? current.mergeCommit : after.mergeCommit;
+
         const body = {
           number,
           headRefName: current.head,
@@ -305,6 +309,7 @@ describe("PullRequestsGh native stack merge", () => {
 
   it.effect("scenario: a boolean-like branch stays a string in the GraphQL queue lookup", () => {
     const original = selection();
+
     const fixture: StackFixture = {
       selected: {
         ...original,
@@ -319,6 +324,7 @@ describe("PullRequestsGh native stack merge", () => {
       Effect.gen(function* () {
         const answer = yield* runStack(fixture);
         const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+
         const command = calls.find(
           ([spawned]) => ChildProcess.isStandardCommand(spawned) && commandArgs(spawned)[1] === "graphql",
         )?.[0];
@@ -339,6 +345,7 @@ describe("PullRequestsGh native stack merge", () => {
 
   it.effect("scenario: an open child retargeted after its parent squash is checked from the squash commit", () => {
     const parentCommit = "a".repeat(40);
+
     const fixture: StackFixture = {
       selected: {
         ...selection(),
@@ -359,6 +366,7 @@ describe("PullRequestsGh native stack merge", () => {
 
   it.effect("scenario: direct pending accepts an omitted false bypass field and keeps its identity", () => {
     const uuid = "9fb26355-cb81-4596-bce0-4097e262e8e4";
+
     const fixture: StackFixture = {
       reply: JSON.stringify({
         status: "pending",
@@ -397,6 +405,7 @@ describe("PullRequestsGh native stack merge", () => {
 
   it.effect("scenario: official queue pending response keeps its UUID and request identity", () => {
     const uuid = "630b9d5e-3f2a-4f7e-8b0c-2d5f9a8c1e42";
+
     const fixture: StackFixture = {
       reply: JSON.stringify({
         status: "pending",
@@ -537,6 +546,7 @@ describe("PullRequestsGh native stack merge", () => {
       number,
       oid: number === 11 ? oid(9) : head,
     }));
+
     const fixture: StackFixture = { held, reply: JSON.stringify({ status: "enqueued" }) };
 
     return withStack(
@@ -556,6 +566,7 @@ describe("PullRequestsGh native stack merge", () => {
       { number: 10, oid: oid(0) },
       ...selection().layers.map(({ number, oid: head }) => ({ number, oid: head })),
     ];
+
     const fixture: StackFixture = { held, reply: JSON.stringify({ status: "enqueued" }) };
 
     return withStack(
@@ -624,6 +635,7 @@ describe("PullRequestsGh native stack merge", () => {
 
   it.effect("scenario: a merged reply with only the bottom landed is not reported as merged", () => {
     const commit = "f".repeat(40);
+
     const fixture: StackFixture = {
       reply: JSON.stringify({ status: "merged", details: { sha: commit } }),
       after: new Map<number, { readonly state: "OPEN" | "MERGED"; readonly mergeCommit: string | null }>([
@@ -645,6 +657,7 @@ describe("PullRequestsGh native stack merge", () => {
 
   it.effect("scenario: a merged reply is reported only after every selected layer reports merged", () => {
     const commit = "f".repeat(40);
+
     const fixture: StackFixture = {
       reply: JSON.stringify({ status: "merged", details: { sha: commit } }),
       after: new Map<number, { readonly state: "OPEN" | "MERGED"; readonly mergeCommit: string | null }>([
