@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0250 and 0594; body f82fa119ab9b
+Approved by the lead agent, builds 0250, 0587, 0594; body dfceb2a78bbd
 Plancheck-Version: 3
 # Keep CI progress when a test run is cut short
 
@@ -94,6 +94,7 @@ The per-event time, exact run identity and unfinished-operation ID are facts los
 
 ## Existing tools
 
+- `readQueueWait` in `.github/ci/time-table.ts`: checked the existing `readSteps` decoder and timing collection. Reuse the same [GitHub Actions job response](https://docs.github.com/en/rest/actions/workflow-jobs?apiVersion=2022-11-28#get-a-job-for-a-workflow-run) and Effect Schema decoding. The response gives the job timestamps and runner identity. The steps decoder reads step timestamps. This helper checks the job timestamps and skips entries without an actual runner.
 - `.github/ci/progress.ts`: searched the existing time-table reader, plant reporter, Vitest JSON/blob reporters and installed Effect NDJSON and Schema tools. Reuse Effect decoding and the existing Leg identity. No installed reporter saves this restricted metadata before run end and supplies it to our existing timings artifact. New projection and replay helpers stay here, rather than copying the final JSON reader.
 - `.github/ci/progress-reporter.ts`: searched installed Vitest Reporter callbacks and the existing plant reporter. Reuse Reporter and ManagedRuntime plus Effect FileSystem, Path and Clock. Do not extend PlantReporter, which owns causal fault witnesses and has another active owner. No native filesystem helper or service is needed.
 - Progress projection: searched Vitest task ID, relative module ID and source location. Use its deterministic ID and validated repository-relative path. Do not invent a second test naming scheme.
