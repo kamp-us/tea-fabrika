@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-oxlintrc-still-runs-no-redacted-value",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".oxlintrc.json",
+    "line": 75
+  },
+  "says": "0573 decides that oxlint's no-restricted-properties on Redacted.value replaces fabrika/no-redacted-value, and 0320 now says so, but the config still runs fabrika/no-redacted-value as an error and has no no-restricted-properties entry for Redacted.value. Ticket text: land the 0573 swap: turn on no-restricted-properties on Redacted.value at zero hits, then delete fabrika/no-redacted-value.",
+  "proof": "rg -n 'no-redacted-value|no-secret-env' .oxlintrc.json prints line 73 `fabrika/no-secret-env: error` (matches 0573) and line 75 `fabrika/no-redacted-value: error`, plus off-overrides at lines 544, 594, 599, 604, 609 and 614.",
+  "cost": "0320 names a rule the config does not yet run, so a reader trusting the record finds the old rule in the config until the swap lands.",
+  "head": "7b63f09b0a109363abe07f950ad7e02f6f5ce9e6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}

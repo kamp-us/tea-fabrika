@@ -49,8 +49,9 @@ This amends 0129: its order is withdrawn.
 
 - 0129's order (decided rules move, then the test, then the cut) is withdrawn. The cut is one pull
   request, opened as soon as it is written.
-- That pull request still carries 0129's table: one row per rule removed, saying where it went or
-  which check holds it. It is the guard that no rule was lost.
+- That pull request still carries the table of every line removed
+  ([0610](0610-agents-md-follows-memory-guide.md)): one row per rule removed, saying where it went
+  or which check holds it. It is the guard that no rule was lost.
 - An edit that shortens or moves instruction text (`AGENTS.md`, a folder's `AGENTS.md`, a skill's
   prose) is lead tooling: the lead or one agent changes it directly, keeps the change small, and
   merges on green CI with a clean leak grep. It needs no plan, no experiment and no table.

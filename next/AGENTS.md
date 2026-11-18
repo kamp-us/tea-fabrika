@@ -16,10 +16,9 @@ libfabrika
 
 - Follow the decisions and `docs/direction`, not today's code. Read today's code and its tests to
   learn which jobs exist and what was learned, then rethink. Never import it and never copy it
-  across ([0217](../.decisions/0217-next-grows-beside-today.md),
+  across. The pull request that switches a job to `next/` deletes the old part
+  ([0217](../.decisions/0217-next-grows-beside-today.md),
   [rethink, do not port](../docs/direction/rethink-do-not-port.md)).
-- When `next/` takes a job over, the pull request that switches to it deletes the old part. Its
-  tests or laws are ported first (0217).
 - The shell is `fabsh`. `tsh` stays in today's version
   ([0432](../.decisions/0432-next-has-fabsh-rethought-from-tsh.md)).
 - Hands, a window and an agent dial the brain, and `client` means any of them at the door
@@ -32,29 +31,11 @@ libfabrika
 
 `pnpm lint` refuses these in `next/**`, and each message says what to do. The rules are set in
 [`.oxlintrc.json`](../.oxlintrc.json) and explained in
-[`oxlint-plugins/README.md`](../oxlint-plugins/README.md).
-
-| Rule | Check |
-|---|---|
-| Effect all the way: nothing is built on Promises | `fabrika/no-promises` |
-| Effect's platform modules, not `node:` imports | `fabrika/no-node-imports` |
-| An edge is one line under a marked comment with its reason | `fabrika/edge-comment` |
-| No bare `of` and no `xOf` name; `Lease.of(...)` through its module is fine | `fabrika/no-of` |
-| No hand-written `_tag`: Effect Schema writes it | `fabrika/no-hand-tag` |
-| No loop or `reduce` callback spreads its running result back into itself (0559) | `oxc/no-accumulating-spread` |
-| No question word as a name | `eslint/id-denylist`, `fabrika/no-question-word-key` |
-| One exported tea machine, or one factory, per file | `fabrika/one-machine-per-file` |
-| One store hook, tea's `useRuntime` | `fabrika/one-store-hook` |
-| A module's files, names and `internal/` | `fabrika/modules`, `eslint/no-restricted-imports` |
-| A module imports only from lower layers | `pnpm lint:layers`, from `layer-rules.json` |
-| A part imports only the parts its row lists, and every library and tuval file has a row | `pnpm lint:layers`: a row's `imports`, and `roots` |
-| A part imports only the names of our packages its table allows, and no file of the library, tests included, names another of ours | `fabrika/package-imports` |
-| A file sits in a package and imports only what its `package.json` lists, through each package's `exports`, never by a relative path out of it; in an app only `src/entry/electron-main.ts` imports `electron` (p65) | `fabrika/package-deps` |
-| A secret read enters `Redacted` at its source, and every TypeScript file of a package is in the program its `typecheck` checks | `pnpm lint:promise-types`: `fabrika(secret-types)`, `fabrika(tsconfig-scope)` |
-| A test that drives a real resource is named `*.integration.test.ts`, or `*.visual.test.ts` for a browser or Electron, so pull requests leave it to the schedule (0536) | `fabrika/integration-test-name` |
-| A test opens a SQLite file through `@kampus/vitest/TestDatabase`: `make` for a file it owns, `open` for one another party owns; only `":memory:"` keeps `new DatabaseSync` | `fabrika/test-database` |
-| No `Reflect.get`, `Reflect.set` or `Reflect.has`, and no `globalThis.Reflect`: decode with Schema, narrow with `Predicate.hasProperty`, or assign through the type ([0554](../.decisions/0554-no-reflect-get-set-has.md)). It is on for all of `next/` by the base blocks that set the rule, so a folder that is new gets it the day it appears, and no list of folders is left | `eslint/no-restricted-properties` |
-| The anti-slop plugin, vendored whole and pinned: eight of its rules, each on folder by folder where it has no hit ([0563](../.decisions/0563-anti-slop-plugin-as-it-ships.md)); see [the section in the plugins README](../oxlint-plugins/README.md#the-anti-slop-plugin-taken-as-it-ships) | `anti-slop/*`, `anti-slop-effect/*` |
+[`oxlint-plugins/README.md`](../oxlint-plugins/README.md). Two rules of `pnpm lint:layers` do not
+say the fix. A module imports only from lower layers: it prints `[upward]`, and the fix is in
+[0043](../.decisions/0043-rooms-on-floors.md) and [0091](../.decisions/0091-modules-and-layers.md).
+A part imports only the parts its row in `layer-rules.json` lists, and every library and tuval file
+has a row (a row's `imports`, and `roots`).
 
 A Promise edge the platform demands is one line, marked
 `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, and the lead reads each one at
@@ -64,58 +45,29 @@ has nothing, marked as an edge with its reason
 
 ## What lint does not hold yet
 
-- **Use the platform through Alchemy, never directly,** in the cloud and on the laptop alike: no
-  `cloudflare:*`, `miniflare`, `workerd`, `wrangler` or `@cloudflare/*` import, no raw platform
-  type, and nothing that starts or talks to the local runtime except through Alchemy. A gap is
-  patched locally with its upstream issue filed the same day; a direct use stays only as a marked
-  edge with the issue link. The six gaps 0042 lists are patched without an issue. Today's direct
-  uses move with their ports, and the lint rule is ticket 506
+- **Use the platform through Alchemy, never directly,** in the cloud and on the laptop alike
   ([0042](../.decisions/0042-platform-pieces-go-through-alchemy.md)).
-- **A resource is acquired in a scope.** A child process, a test window, a database, a file handle,
-  a socket, a temp folder, a timer or a subscription is opened with `Effect.acquireRelease` and
-  offered as a `Layer` or a scoped Effect, so the scope gives it back. No `try/finally` and no
-  `afterEach` that releases it, and no "remember to close" in prose. A raw handle from the platform
-  is wrapped once, at the edge. A process killed with SIGKILL runs no finalizer, so a resource that
-  must not outlive it needs a guard outside the process too
+- **A resource is acquired in a scope,** never with `try/finally` or an `afterEach`
   ([0061](../.decisions/0061-resources-are-acquired-in-a-scope.md)).
-- **A service file holds only its contract.** The service class, its own error and the types it
-  speaks in, with its type written out: no layer, no SQL, nothing that runs. Each layer is a sibling
-  file read through its module, as `LedgerSql.layer(...)`, and no service class has a static layer.
-  A module keeps domain, application and infrastructure files apart, and a file that names a
-  platform lives in `cloudflare/` or `node/`, so one platform's bundle holds no other's code
+- **A service file holds only its contract**
   ([0095](../.decisions/0095-a-service-file-holds-only-its-contract.md)).
 - **An object class stays thin.** It holds what the platform gives it and a one-line handoff. The
   logic is plain code that also runs on Node in tests
   ([an object class stays thin](../docs/direction/object-classes-stay-thin.md),
   [0041](../.decisions/0041-object-classes-are-effect-objects.md)).
-- **A folder of libfabrika is a module, and its rank is a layer,** like rooms on floors, which stays
-  only the analogy ([0091](../.decisions/0091-modules-and-layers.md)). A module holds one subject,
-  with front files and an `internal/` no other module imports, and it re-exports no other module's
-  names. Its layer is one line in `layer-rules.json`: a module imports only from lower layers, never
-  from its own. A module offers Effect services in its own types and errors, plus the shared names
-  beside `Id.ts`: a lower module's error is translated at the service, with its cause kept, and
-  `runtime/` never imports `ledger/`. A new file goes in its module now, before the move lands
-  ([0043](../.decisions/0043-rooms-on-floors.md)).
-- **Test files keep the layers too,** with no exemption: a module whose laws need a real database
-  writes them as a suite, read through its module as `SinkTest.suite(nodeSql)`, and the module that
-  owns the driver runs it; a helper two modules share sits on a layer both may import
+- **A folder of libfabrika is a module, and its rank is a layer**
+  ([0091](../.decisions/0091-modules-and-layers.md),
+  [0043](../.decisions/0043-rooms-on-floors.md)).
+- **Test files keep the layers too,** with no exemption
   ([0062](../.decisions/0062-test-files-keep-the-floors.md)).
-- **A window reads state through tea's own React hook.** State lives in a tea machine, never
-  `useState` ([Elm first](../docs/direction/elm-first.md)). The hook is `useRuntime`: it takes an
-  Effect-engine run, hands back a `send` that returns nothing, and reads one part through a
-  selector, as in `useRuntime(run, (m) => m.views[id])`. No stand-in hook
-  ([0466](../.decisions/0466-one-store-hook-no-hand-memo.md)).
-- **Every state machine is explicit.** A stored value that changes and decides what is legal next is
-  control state. It gets one named type with its transitions in one place, never flags, a position
-  in code or an order two parties assume. A plan asks of new code: what are its states?
+- **A window reads state through tea's own React hook,** `useRuntime`, and state lives in a tea
+  machine, never `useState` ([Elm first](../docs/direction/elm-first.md),
+  [0466](../.decisions/0466-one-store-hook-no-hand-memo.md)).
+- **Every state machine is explicit**
   ([0037](../.decisions/0037-implicit-state-machines-made-explicit.md)).
-- **Every state machine is a tea machine.** No plain union with a transition function. The machine's
-  Model, Msg and update live in its file, with no input or output code, and nothing outside it edits
-  the Model by hand: it sends a Msg. A small private helper machine may share its parent's file. A
-  file may export one machine factory in place of the machine, never both
+- **Every state machine is a tea machine**
   ([0046](../.decisions/0046-one-tea-machine-per-file.md)).
-- **A tagged value is matched, never compared by hand,** in an `update` handler too: the union's
-  own `match`, `matchOrElse` or `isAnyOf` first, then Effect's `Match` module
+- **A tagged value is matched, never compared by hand,** in an `update` handler too
   ([0567](../.decisions/0567-a-tagged-value-is-matched.md),
   [the pattern](../.patterns/effect-tagged-value-is-matched.md)).
 
@@ -125,10 +77,9 @@ has nothing, marked as an edge with its reason
   run only; one start of a program is a process, and a restart is a new process, as in OTP. A place,
   a path, a ref, a state, a reason or a total gets its own word (`location`, `path`, `ref`, `state`,
   `reason`, `total`). `rg` the word under `docs/direction/` and `next/` before you use it.
-- An entry's two clocks have their own names: `arrivedAt` is the referee's, when the entry reached
-  the ledger, and `sentAt` is the writer's own, when it wrote it (Kafka's LogAppendTime and
-  CreateTime). A ledger entry keeps `sentAt` from day one, but leases and limits use only
-  `arrivedAt`. Today's code says `at` and `said`.
+- An entry's two clocks are `arrivedAt`, the referee's, and `sentAt`, the writer's own. A ledger
+  entry keeps `sentAt` from day one, but leases and limits use only `arrivedAt`
+  ([`.glossary/TERMS.md`](../.glossary/TERMS.md)).
 - `kind` on ledger entries is `_tag` here too
   ([0214](../.decisions/0214-unions-are-tagged-with-tag.md)). Today's code keeps `kind` and `why`
   until that code goes.

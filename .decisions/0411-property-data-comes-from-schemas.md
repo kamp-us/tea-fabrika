@@ -1,12 +1,12 @@
 ---
 id: 0411
-title: A new property draws its data from an existing Schema or its Effect Arbitrary, with tea's machine-law tools kept and fast-check only for unsupported data, and the lint for it only advises
-status: amended-in-part by [0523](0523-advice-rules-block-where-clean.md)
+title: A new property draws its data from an existing Schema or its Effect Arbitrary, with tea's machine-law tools kept and fast-check only for unsupported data, and the lint for it blocks wherever its folder is clean
+status: accepted
 date: 2026-11-08
 tags: [tests, property-tests, effect, schema, lint]
 ---
 
-# 0411: A new property draws its data from an existing Schema or its Effect Arbitrary, with tea's machine-law tools kept and fast-check only for unsupported data, and the lint for it only advises
+# 0411: A new property draws its data from an existing Schema or its Effect Arbitrary, with tea's machine-law tools kept and fast-check only for unsupported data, and the lint for it blocks wherever its folder is clean
 
 **What this decides:** where a property's generated data comes from in `next/` tests.
 
@@ -20,17 +20,17 @@ From [skills keep judgment, K20](../docs/direction/skills-hold-only-judgment.md#
 
 **Effect's own data comes first.**
 
-- A new property uses an existing Schema, or its own Effect Arbitrary exported beside it.
+- A new property uses an existing Schema, or its own Effect Arbitrary exported beside it, as
+  `it.prop` or `it.effect.prop` with Schemas as its inputs, and the seed is set once in the package
+  setup, never per law ([0579](0579-property-laws-use-it-prop.md) is its home).
 - tea's machine-law tools stay.
 - fast-check data is for what Effect cannot generate, and for edge cases.
 - A law moved onto a Schema's Arbitrary keeps its old size, run count and reach of the real limit.
-- The lint for it, `fabrika/prefer-schema-arbitrary`, only advises. It scanned 71 `next/` test files
-  with six useful hits and no false ones, which does not prove complete recall.
+- The lint for it, `fabrika/prefer-schema-arbitrary`, blocks in each folder at zero hits and
+  advises in a folder still above zero ([0523](0523-advice-rules-block-where-clean.md) is its
+  home). It scanned 71 `next/` test files with six useful hits and no false ones, which does not
+  prove complete recall.
 
 ## Consequences
 
 - A reason beside a declaration keeps an edge-case or unsupported generator.
-
-## Amendments
-
-- 2026-11-15: [0579](0579-property-laws-use-it-prop.md) makes the form concrete: a property law is `it.prop` or `it.effect.prop` with Schemas as inputs, and the seed is set once in the package setup, never per law.

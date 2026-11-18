@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-compiler-ledger-still-read",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/apps/fabrika/src/exam/compiler.ts",
+    "line": 25
+  },
+  "says": "pnpm lint:compiler still reads compiler-ledger.json, although 0524 replaced the ledger row with an edge: line and 0464 now says so. Ticket text: make the compiler check fail on a \"use no memo\" with no edge: line, then delete compiler-ledger.json.",
+  "proof": "compiler-ledger.json still exists at the repo root (`[]`) and next/apps/fabrika/src/exam/compiler.ts reads it (lines about 16-47). Decision 0464 now says the exit is \"use no memo\" plus an edge: line.",
+  "cost": "The code checks a rule the decision no longer has, and an edge: line gets no check.",
+  "head": "7b63f09b0a109363abe07f950ad7e02f6f5ce9e6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}

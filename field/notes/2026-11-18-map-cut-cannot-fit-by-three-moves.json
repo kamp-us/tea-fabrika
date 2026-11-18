@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1633"
+  ],
+  "id": "2026-11-18-map-cut-cannot-fit-by-three-moves",
+  "stage": "build",
+  "kind": "friction",
+  "person": true,
+  "what": "Slice 6 of the rules and records build plan could not cut AGENTS.md, and AGENTS.md with next/AGENTS.md, to 0608's 32,768 bytes by 0129's three moves alone. The build reached 36,536 and 41,773 bytes with no rule dropped, then stopped as the plan says, and the lead took it to the owner. The plan was wrong for this slice in two places: its baseline (49,582 bytes) was 50,301 by the time the slice ran, and its Doubts said the cut was about 16.8 KB 'under 0129's rules' without counting how much of the map has no home but the map.",
+  "cause": "About 8,400 bytes of the root are rules no check, decision or folder file holds (Finish your task, Before you design anything, Changing the product, How to write here), 0129's flowchart keeps such a rule in the map, and 0130 says a direction note is no home, so the rules that only a direction note explains stay too.",
+  "primitive": "Check",
+  "fix": "The owner picks: record decisions for the homeless rule groups so they become one line and a link, let a rule move to the skill or how-to read for its job with a pointer left in the map, or name the rules that go.",
+  "test": "After the owner's call, a second build of slice 6 reaches 32,768 bytes for the pair with a removal row for every line."
+}
