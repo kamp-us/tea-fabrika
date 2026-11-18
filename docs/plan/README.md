@@ -79,8 +79,8 @@ prefix, home variable, version key and list command. Fabrika keeps its existing 
 own binding. The engine stays inside libfabrika; moving it to `@kalfa/config` and adding
 `kalfa config get|set` remain later slices. The dependent
 [readable-spacing child](https://github.com/kamp-us/tea-fabrika/pull/1525), ticket 1057, applies the
-agreed rule scopes while keeping program code, comments and literal contents. The complete pair
-uses its native stack. The PRs link their independent reviews and CI evidence. This slice supplies
+agreed rule scopes while keeping program code, comments and literal contents. The pair lands
+layer by layer, bottom first, with no native stack link (0603). The PRs link their independent reviews and CI evidence. This slice supplies
 neither the later package move nor the CLI.
 
 *2026-11-17, extraction source:* ticket 1076 slice 2 moves the engine into
