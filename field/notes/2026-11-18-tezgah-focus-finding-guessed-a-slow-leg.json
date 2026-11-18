@@ -1,0 +1,17 @@
+{
+  "id": "2026-11-18-tezgah-focus-finding-guessed-a-slow-leg",
+  "date": "2026-11-18",
+  "quests": ["tea-fabrika#1612"],
+  "stage": "review",
+  "kind": "failure",
+  "what": "In next/, the finding row 2026-11-18-tezgah-focus-runs-past-its-wait-limit says the tezgah focus scenario 'runs close to' its 30 s limit, so a slow e2e leg times out. That was a wrong guess, and the row stays as written (rows are never edited). The file passes in 31.5 s against a 420 s limit, and the two failures on PR 1525 came at 38.8 s and 38.2 s: the law hung once, about 8 s in, for 30 s. Nothing ran slow. The same hang hit tezgah fold L33 (strip 'open checklist, t7' in the same job, and again on PR 1583 as the coordinator reports).",
+  "cause": "drawn and foldDrawn in next/apps/fabrika/e2e/tezgah.test-support.ts take region and strip names from one ariaSnapshot, then call boundingBox() on each name in turn. boundingBox() waits up to 30 s for its locator to match, so a tile closed or a strip opened between the snapshot and its read blocks there, and settle's polls never get another turn. Both PR 1525 attempts hung on 'checklist, t2', the one tile the focus law closes.",
+  "person": false,
+  "primitive": null,
+  "fix": "Tracker ticket 1166 (and L33), PR 1612: drawn and foldDrawn read every name and box in one page call that does not wait, so a region that left is simply absent and settle polls again. No timeout grows, nothing is retried, nothing is skipped (0036).",
+  "test": "T1 in next/apps/fabrika/e2e/tezgah-drawn.visual.test.ts: removals at generated moments during a read, and each read returns within 2 s; put back the per-name boundingBox read and it blocks for 30 s.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1612",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44243295809"
+  ]
+}
