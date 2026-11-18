@@ -1,7 +1,7 @@
 ---
 id: 0074
 title: An agent composes work by handing fabrika a flow as data, which fabrika checks and runs as a recorded process, so the goal is the agent's and the loop stays fabrika's, never a loop held in the agent's context
-status: amended-in-part by [0082](0082-approvals-is-a-floor-for-every-run.md)
+status: accepted
 date: 2026-11-10
 tags: [flow, agent, client, primitives, libfabrika, mcp, door, walls, next]
 ---
@@ -66,9 +66,8 @@ is not the agent's own model-and-tool loop inside its harness, which stays the h
 It builds on these, and changes none of them:
 
 - [Control lives in code](../docs/direction/control-in-code.md): an agent "does not decide what the
-  pipeline does next". That still holds inside the pipeline. An agent that hands over a flow picks
-  the steps before they start, as data, and code runs them; it never decides the next step from
-  inside a running loop.
+  pipeline does next". An agent that hands over a flow picks the steps before they start, as data,
+  and code runs them; it never decides the next step from inside a running loop.
 
 - [0064](0064-the-lead-drives-with-flows.md): the lead drives with flows, a list of typed steps one
   program runs, and no agent holds a loop. This record says the same of any agent that composes
@@ -156,10 +155,10 @@ agent's, and the loop stays fabrika's (owner, 2026-11-10).**
     tool per program input. A reading of the makers' pages is
     [experiment 265](../experiments/265-code-mode-for-the-mcp-door.md).
   - **What fabrika checks before it runs a handed-over flow, and who must look:** a case of
-    [0071](0071-risk-tier-decides-who-looks.md)'s risk tier.
-    *2026-11-10: partly answered by [0082](0082-approvals-is-a-floor-for-every-run.md): a flow with
-    fewer review steps than the repo's `approvals` floor is refused before any step runs.*
-    *2026-11-10, later: 0082's amendment renames that setting `review.human-approvals`.*
+    [0071](0071-risk-tier-decides-who-looks.md)'s risk tier. A flow with fewer review steps than the
+    repo's `review.human-approvals` floor is refused before any step runs
+    ([0082](0082-approvals-is-a-floor-for-every-run.md)); what else fabrika checks, and who else must
+    look, stays open.
   - **The wall for view code an agent wrote,** which runs in a person's window.
   - **How today's primitives are rethought for `next/`.** They live in today's `packages/pipeline`
     and are rethought, not ported ([rethink, do not port](../docs/direction/rethink-do-not-port.md)).
@@ -169,5 +168,4 @@ agent's, and the loop stays fabrika's (owner, 2026-11-10).**
 
 - [`.glossary/TERMS.md`](../.glossary/TERMS.md): a row for `flow`, in Pipeline, with 0064's
   meaning, which this record keeps.
-- [0064](0064-the-lead-drives-with-flows.md): a one-line pointer in its Consequences. Its status
-  does not change.
+- [0064](0064-the-lead-drives-with-flows.md): a one-line pointer in its Consequences.

@@ -8,19 +8,21 @@ tags: [names, keys, settings, scope, location, reason, lint, next, agents]
 
 # 0081: A question word is never a name, so where, why, what, who and how give way to the noun for the value stored
 
-**What this decides:** `where`, `why` and `what` are never a key, a field, an option or a settings
-key; each becomes the noun for the value it holds.
+**What this decides:** `where`, `why`, `what`, `who` and `how` are never a key, a field, an option,
+a parameter or a settings key; each becomes the noun for the value it holds.
 
 ```ts
 // No: the key names the question, so the reader guesses what kind of value sits there.
 { where: "person" }            // a setting's declaration
 { label: "Mac A", where: "Istanbul" }
 new Failed({ what: "could not write a temp file" })
+{ _tag: "ask", who: "owner", for: "approval" }
 
 // Yes: the key names the answer.
 { scope: "person" }
 { label: "Mac A", location: "Istanbul" }
 new Failed({ message: "could not write a temp file" })
+{ _tag: "ask", to: "owner", for: "approval" }
 ```
 
 ## Context
@@ -40,37 +42,38 @@ The owner decided this on 2026-11-10, tracker ticket 682.
     local, global, system, command)" ([git-config](https://git-scm.com/docs/git-config)).
 - **This generalizes a rule we already have.** On 2026-11-09 the owner picked `reason` over `why`
   for `next/`'s data keys (ticket 337), written in AGENTS.md's "Data keys are short everyday words"
-  and in the glossary's `reason` row; `fabrika/no-why-key` holds it. That ruling has no decision
-  file, so nothing is superseded or amended. This record covers `why` and adds `where` and `what`
-  for the same reason. It builds on [use the industry's names](../docs/direction/use-the-industrys-names.md),
+  and in the glossary's `reason` row; a lint rule, first `fabrika/no-why-key`, holds it. That ruling has no decision
+  file, so nothing is superseded or amended. This record covers `why` and adds `where`, `what`,
+  `who` and `how` for the same reason. It builds on [use the industry's names](../docs/direction/use-the-industrys-names.md),
   [0029](0029-format-and-names-follow-effect.md) on names, and [0033](0033-agents-code-follows-next-rules.md),
   which holds `.agents/` to `next/`'s rules.
 
 ## Decision
 
-**A question word names the question, not the answer, so `where`, `why` and `what` are never a key,
-a field name, an option name or a settings key: each is replaced by the noun for the thing
-stored.**
+**A question word names the question, not the answer, so `where`, `why`, `what`, `who` and `how` are
+never a key, a field name, an option name, a parameter or a settings key: each is replaced by the
+noun for the thing stored.**
 
 - **The noun comes from the value.** A place is a `location` (AGENTS.md already reserves the word),
   a cause is a `reason`, the files or layers a setting may come from are its `scope`, and an error's
   words are its `message`. Where the noun is not obvious, the rename's plan picks it after reading
   what the value holds.
+- **`for` stays.** It is a preposition, not a question word.
 - **Where it holds:** `next/` and `.agents/` code, product and tests alike, and every note, plan
   and decision written from now on.
 - **Today's version keeps its words** until that code goes, as with `kind` and `why` already.
   Older notes and decisions are records and keep theirs.
 - **An outside shape keeps its own keys** at the edge where it is read, as Schema's `encodeKeys`
   already does for `exam-paths.json`'s `why` in `next/apps/fabrika/src/exam/commits.ts:160`.
-- **It is held by a lint rule, never a test** (AGENTS.md). The rule exists in part:
-  `fabrika/no-why-key` (`oxlint-plugins/no-why-key.ts`) blocks a statically named `why` key in an
-  object, class or type in `next/` and `.agents/`, tests included. The sweep widens it to `where`
-  and `what`, under a name that says question words. Per [0040](0040-existing-tools-before-hand-written.md),
-  its plan first tries oxlint's own [`eslint/id-denylist`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist)
-  (oxlint 1.90.0 is installed; the rule came in 1.76.0). Its page says it flags object keys and
-  class members, and does not say whether it reads type members such as a `TSPropertySignature`,
-  which ours does. The plan settles that with a test, and keeps ours only for a case the oxlint
-  rule cannot see.
+- **It is held by a lint rule, never a test** (AGENTS.md). Per
+  [0040](0040-existing-tools-before-hand-written.md), oxlint's own
+  [`eslint/id-denylist`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist) holds the
+  five words where it can read them: keys written as identifiers (the `oxlint` entry in
+  `pnpm-workspace.yaml`'s catalog is the version; the rule came in 1.76.0). Ours,
+  `fabrika/no-question-word-key` in `oxlint-plugins/no-question-word-key.ts` (ticket 337 wrote it
+  as `no-why-key`, and the sweep renamed it), keeps only what the native rule does not decode: a
+  quoted, escaped, computed or template string key. Both block in `next/` and `.agents/`, tests
+  included. See [the plugins' README](../oxlint-plugins/README.md).
 - **The lint rule and the rename are code,** their own change under ticket 682, with the steps.
   This pull request is docs only.
 
@@ -96,31 +99,56 @@ key left after ticket 337.
   rename changes the bytes a person signs. Today only test ledgers hold them: `next/` is not in
   daily use, as [0080](0080-a-running-copy-is-an-instance.md) found the same day. The rename reads
   no old key. If a real ledger exists by then, it comes with a migration and its own plan, because
-  a signed event cannot be rewritten.
+  a signed event cannot be rewritten. `how` sits inside the same signed text, next to `where`, and
+  its rename lands with `where`'s.
 - The waiting rows sit in the brain's store under `waiting`, and expire. Nothing to move.
 - `exam-paths.json` writes `why` and is read through `encodeKeys`. It is a trusted root file, so a
   rename of its key is an exam change and is not in the sweep unless its plan says so.
 - `field/runs.jsonl` has 6,075 `"why"` keys and `field/notes.jsonl` has 560 `"what"` keys. They
   are lab records with a schema in `field/README.md`. This record does not change them.
 
+**The same read for `who` and `how`,** from main on 2026-11-10 with
+`rg '\b(readonly )?(who|how)\??:'` over `next/` and `.agents/` TypeScript: `who` on 19 product lines
+and 28 test lines, `how` on 4 and 63. A `*.test-support.ts` file counts as a test here.
+
+| Group | Today | Becomes |
+|---|---|---|
+| `who` on an ask: the one being asked (2 product lines, 4 test lines) | `Answer`'s `ask` in `next/apps/fabrika/src/exam/commits.ts:71,311`; `commits.test.ts:109`, `commits-git.test-support.ts:203`, `.agents/skills/lead/scripts/box.test.ts:1216`, `lane.test.ts:126` | `to`, as `send` already says. `commits.ts` is an exam file, so it goes through the test writer |
+| `who` on today's outcome (2 product lines, 2 test lines) | `.agents/skills/lead/scripts/drive.ts:420,480`, `drive.test.ts:645,664`, today's shape with `kind` | keeps `who` until today's outcome changes, as its `why` does |
+| `who` as the admitted caller, `Who` = `{ key, person, as }` (9 product lines, 9 test lines) | `next/packages/libfabrika/src/transport/Wire.ts:23,44`, `Hello.ts:44,132`, `Answer.ts:23`, `gateway/Gateway.ts:473,547`, `cloudflare/connection.ts:90,99`; tests in `transport/`, `runtime/Gateway.laws.test.ts`, `cloudflare/readers.laws.test.ts`, `node/dev/dev-secrets.laws.test.ts`, `next/apps/fabrika/src/runtime.laws.test.ts`, `exam/agent-may.test.ts` | picked in the sweep's plan. Not `client`: `Attached.online` already holds the client's id under `client` beside it (`Wire.ts:43`) |
+| `who` as a layer's own object (6 product lines, 2 test lines) | `ledger/Ledger.ts:60,75` (`{ reader }`, the glossary's `reader`), `telemetry/Sink.ts:220,229` (`{ object }`), `runtime/RecoveryStore.ts:39` (`{ name, capacity }`), `runtime/ProcessStore.ts:90` (`{ process, storage }`); `RecoveryStore.test.ts:20`, `RunnerSupervision.test.ts:1547` | picked in the sweep's plan |
+| `who` in other test helpers (11 test lines) | a signer's name in `commits-git.test-support.ts:53-148` and `commits-git-steps.test.ts:205`; `drafted(who)` in `drive.test.ts:907`; `record(..., who: From)` in `runtime/Runner.test.ts:553`; `door.test.ts:643`; `exam/agents.test.ts:140,182` | `from` in `Runner.test.ts`, as `ProcessStore.ts:84` names it; the rest picked in the sweep's plan |
+| `how` in what a person saw (4 product lines, 39 test lines) | `Saw`, `Took` and `AddSaw` in `next/packages/libfabrika/src/access/Access.ts:15,38,70`; `next/apps/fabrika/grant.ts:78`; tests in `access/`, `gateway/`, `door*.test.ts`, `stage-*.test.ts`, `runtime*.laws.test.ts`, `grant-readers.laws.test.ts`, `exam/agent-may.test.ts`, with the `addSaw(how)` helpers | `method`, the way the person checked (RFC 8176 names these authentication methods); the glossary has no word for it |
+| `how` on a note's save (23 test lines) | `SaveDetails` in `next/apps/fabrika/src/exam/notes-contract.test.ts:931-1406`, `notes-fixture.test.ts`, `notes.laws.test.ts` (`pause`, `leave`, `done`, `kept`) | picked in the sweep's plan; exam files, so through the test writer |
+| `how` as a test parameter (1 test line) | `dying(how)` in `ledger/LedgerSpans.test.ts:581` | picked in the sweep's plan |
+
+What is stored under `who` and `how` today, and what the rename must do:
+
+- `who` sits in `Attached.online`, which `cloudflare/connection.ts:87` saves as the socket's
+  attachment, and in the hello answer a client reads. The rename reads no old key: an open socket
+  from before it fails to decode and reconnects. The door and its clients change in one pull
+  request.
+- The exam's `ask` answer is printed by the commits check and read by `.agents/` scripts as JSON
+  lines, never stored. It is an exam change, so its rename goes through the test writer.
+- `field/runs.jsonl` and `field/notes.jsonl` hold no `"who"` key. The rule changes no `field/` row.
+
 **Binding constraints:**
 
-- No new code in `next/` or `.agents/`, and no new note, plan or decision, uses `where`, `why` or
-  `what` as a key, field, option or settings key.
+- No new code in `next/` or `.agents/`, and no new note, plan or decision, uses `where`, `why`,
+  `what`, `who` or `how` as a key, field, option, parameter or settings key.
 - The settings note uses `scope` before it is decided.
 - The rename changes no law: same behavior, new names.
 
 ## Consequences
 
-- One sweep is owed, under ticket 682: the widened lint rule and the renames in the table. Until it
-  lands, `where` and `what` stay in the code, and the lint rule's ledger shrinks as they go.
+- One sweep is owed, under ticket 682: the widened lint rule and the renames in the tables. Until it
+  lands, the five words stay in the code, and the lint rule's ledger shrinks as they go.
 - The settings note in PR 831 changes `where` to `scope` in its declaration sketch and its `Where`
   type.
 - `scope` may become a glossary word when the settings note is decided. It is not added here: the
   glossary has no `scope` row, and the note is still proposed.
-- `who` and `how` were left open here on the first day; the amendment below covers them.
 - Not decided here: the exact noun for each `what` parameter and for `field/`'s keys, and the nouns
-  the amendment leaves to the sweep's plan.
+  the `who` and `how` rows leave to the sweep's plan.
 | `apps/fabrika/src/asks.ask-desk.test.ts` | Tests beside each changed module; e2e checks | Tests |
 | `apps/fabrika/src/asks.page.ask-desk.test.ts` | Tests beside each changed module; e2e checks | Tests |
 | `apps/fabrika/src/asks.test.ts` | Tests beside each changed module; e2e checks | Tests |
@@ -197,42 +225,3 @@ key left after ticket 337.
 | `programs/tracker/src/seal-order.ask-desk.test.ts` | Tests beside each changed module; e2e checks | Tests |
 | `programs/tracker/src/steps.ts` | `programs/tracker/src/head.ts:56`, `rows.ts:124`, `steps.ts:57` | Build |
 | `programs/tracker/src/ticket.ts` | `programs/tracker/src/ticket.ts:61`, `ledger.ts:177`, `index.ts:225` | Build |
-
-## Amendments
-
-- **2026-11-10, owner, ticket 682: the rule also covers `who` and `how`.** No key, field, option,
-  parameter or setting is named `who` or `how`; each becomes the noun for its value, as with the
-  other three. This moves both out of "not decided here". `for` stays: it is a preposition, not a
-  question word. AGENTS.md's example now reads `{ _tag: "ask", to: "owner", for: "approval" }`.
-
-  What the rename covers, read from main on 2026-11-10 with `rg '\b(readonly )?(who|how)\??:'` over
-  `next/` and `.agents/` TypeScript: `who` on 19 product lines and 28 test lines, `how` on 4 and
-  63. A `*.test-support.ts` file counts as a test here, which is why `who` differs from the first
-  count above (25 and 22).
-
-  | Group | Today | Becomes |
-  |---|---|---|
-  | `who` on an ask: the one being asked (2 product lines, 4 test lines) | `Answer`'s `ask` in `next/apps/fabrika/src/exam/commits.ts:71,311`; `commits.test.ts:109`, `commits-git.test-support.ts:203`, `.agents/skills/lead/scripts/box.test.ts:1216`, `lane.test.ts:126` | `to`, as `send` already says. `commits.ts` is an exam file, so it goes through the test writer |
-  | `who` on today's outcome (2 product lines, 2 test lines) | `.agents/skills/lead/scripts/drive.ts:420,480`, `drive.test.ts:645,664`, today's shape with `kind` | keeps `who` until today's outcome changes, as its `why` does |
-  | `who` as the admitted caller, `Who` = `{ key, person, as }` (9 product lines, 9 test lines) | `next/packages/libfabrika/src/transport/Wire.ts:23,44`, `Hello.ts:44,132`, `Answer.ts:23`, `gateway/Gateway.ts:473,547`, `cloudflare/connection.ts:90,99`; tests in `transport/`, `runtime/Gateway.laws.test.ts`, `cloudflare/readers.laws.test.ts`, `node/dev/dev-secrets.laws.test.ts`, `next/apps/fabrika/src/runtime.laws.test.ts`, `exam/agent-may.test.ts` | picked in the sweep's plan. Not `client`: `Attached.online` already holds the client's id under `client` beside it (`Wire.ts:43`) |
-  | `who` as a layer's own object (6 product lines, 2 test lines) | `ledger/Ledger.ts:60,75` (`{ reader }`, the glossary's `reader`), `telemetry/Sink.ts:220,229` (`{ object }`), `runtime/RecoveryStore.ts:39` (`{ name, capacity }`), `runtime/ProcessStore.ts:90` (`{ process, storage }`); `RecoveryStore.test.ts:20`, `RunnerSupervision.test.ts:1547` | picked in the sweep's plan |
-  | `who` in other test helpers (11 test lines) | a signer's name in `commits-git.test-support.ts:53-148` and `commits-git-steps.test.ts:205`; `drafted(who)` in `drive.test.ts:907`; `record(..., who: From)` in `runtime/Runner.test.ts:553`; `door.test.ts:643`; `exam/agents.test.ts:140,182` | `from` in `Runner.test.ts`, as `ProcessStore.ts:84` names it; the rest picked in the sweep's plan |
-  | `how` in what a person saw (4 product lines, 39 test lines) | `Saw`, `Took` and `AddSaw` in `next/packages/libfabrika/src/access/Access.ts:15,38,70`; `next/apps/fabrika/grant.ts:78`; tests in `access/`, `gateway/`, `door*.test.ts`, `stage-*.test.ts`, `runtime*.laws.test.ts`, `grant-readers.laws.test.ts`, `exam/agent-may.test.ts`, with the `addSaw(how)` helpers | `method`, the way the person checked (RFC 8176 names these authentication methods); the glossary has no word for it |
-  | `how` on a note's save (23 test lines) | `SaveDetails` in `next/apps/fabrika/src/exam/notes-contract.test.ts:931-1406`, `notes-fixture.test.ts`, `notes.laws.test.ts` (`pause`, `leave`, `done`, `kept`) | picked in the sweep's plan; exam files, so through the test writer |
-  | `how` as a test parameter (1 test line) | `dying(how)` in `ledger/LedgerSpans.test.ts:581` | picked in the sweep's plan |
-
-  What is stored under these keys today, and what the rename must do:
-
-  - `how` sits inside the signed text of grants, removals and `added` events, next to `where`. The
-    rename changes the bytes a person signs, as `where` to `location` does, and lands with it. Only
-    test ledgers hold them today; if a real ledger exists by then, it needs a migration and its own
-    plan.
-  - `who` sits in `Attached.online`, which `cloudflare/connection.ts:87` saves as the socket's
-    attachment, and in the hello answer a client reads. The rename reads no old key: an open socket
-    from before it fails to decode and reconnects. The door and its clients change in one pull
-    request.
-  - The exam's `ask` answer is printed by the commits check and read by `.agents/` scripts as JSON
-    lines, never stored. It is an exam change, so its rename goes through the test writer.
-  - `field/runs.jsonl` and `field/notes.jsonl` hold no `"who"` key. This amendment changes no
-    `field/` row.
-  - The lint rule widens to all five words under ticket 682, with the rest of the sweep.
