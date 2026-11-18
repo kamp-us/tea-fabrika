@@ -74,6 +74,20 @@
       ]
     },
     {
+      "name": "next-workers-project-audit-test",
+      "paths": ["next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts"],
+      "imports": [
+        "next-vitest",
+        "next-workers",
+        "next-runtime",
+        "next-processes",
+        "next-ledger",
+        "next-settings",
+        "next-transport",
+        "next-shared"
+      ]
+    },
+    {
       "name": "next-workers",
       "layer": 9,
       "paths": ["next/packages/libfabrika/src/cloudflare"],

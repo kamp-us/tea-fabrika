@@ -38,6 +38,7 @@ const loop = Effect.gen(function* () {
 
     // The last key of the first round is saved: every key now holds a saved entry.
     if (n === TASKS.length - 1) {
+      // oxlint-disable-next-line eslint/no-restricted-properties -- a child process's ready line on its own stdout, which the parent law reads as its start signal; it is the process's output channel, not a log
       process.stdout.write("ready\n");
     }
   }
