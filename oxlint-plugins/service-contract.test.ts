@@ -5,7 +5,7 @@ import { Array as Arr, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 import { serviceContract } from "./service-contract.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */

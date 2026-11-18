@@ -1,6 +1,6 @@
 import { Array as Arr, Record as Rec } from "effect";
 import { describe, expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 
 const code = "fabrika(door-is-library)";
 
