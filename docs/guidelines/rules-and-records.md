@@ -1,4 +1,4 @@
-**Proposed 2026-11-17.** From [experiment 298](../../experiments/298-rules-and-records-guidelines.md).
+**Approved 2026-11-18.** By [0604](../../.decisions/0604-rules-and-records-guidelines-approved.md), from [experiment 298](../../experiments/298-rules-and-records-guidelines.md).
 This area has no screen, so it has no Design canvas.
 
 Where a rule lives, for code and for agents: decisions, skills, `AGENTS.md`, pattern docs, the
@@ -47,9 +47,9 @@ a reader   -> reads the home; git log is its history; the record says why
   ([legislation.gov.uk](https://www.legislation.gov.uk/help)).
 - **Example:** [0581](../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md) changed when
   the full run starts by editing `.github/workflows/scheduled.yaml` (`cron: "17 * * * *"`).
-- **Held by:** nothing yet. Proposed: a records check in `pnpm lint`, in `@kalfa/records`
-  ([0585](../../.decisions/0585-kalfa-is-six-domain-packages.md)), that fails those headings and
-  lines in `.decisions/`.
+- **Held by:** [0605](../../.decisions/0605-no-record-patches-another.md): a records check in
+  `pnpm lint`, in `@kalfa/records`, that fails those headings and lines in `.decisions/`. Built by
+  [the build plan](../plan/quests/rules-and-records-build-PLAN.md).
 - **Breaks today:** `.decisions/0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md:89`,
   an `## Amendments` section, while its title at `:3` still says "every 3 hours";
   `.decisions/0023-next-follows-effects-code-style.md:40`, "the rest of this file still holds".
@@ -83,8 +83,8 @@ a reader   -> reads the home; git log is its history; the record says why
   it as superseded" ([Nygard](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)).
 - **Example:** `.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md:4`, a whole
   reversal: `status: superseded by [0162](0162-no-friction-before-a-merge.md)`.
-- **Held by:** nothing yet. Proposed: the frontmatter Schema in `@kalfa/records`, which 0585
-  already gives each kind of record.
+- **Held by:** [0606](../../.decisions/0606-a-record-is-accepted-or-superseded.md): the frontmatter
+  Schema in `@kalfa/records`, checked by `pnpm lint`. Built by [the build plan](../plan/quests/rules-and-records-build-PLAN.md).
 - **Breaks today:** 116 records say `amended-in-part`, such as
   `.decisions/0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md:4`, with five links;
   `.decisions/0012-twelve-agents-at-once.md:4` is patched by a record that is itself superseded.
@@ -99,7 +99,8 @@ a reader   -> reads the home; git log is its history; the record says why
   ([memory docs](https://code.claude.com/docs/en/memory)).
 - **Example:** `node .agents/skills/lead/scripts/records.ts resolve 0146` prints
   `0146  superseded  live: .decisions/0162-no-friction-before-a-merge.md`.
-- **Held by:** nothing yet. Proposed: `resolve` run over those folders by `pnpm lint`.
+- **Held by:** [0607](../../.decisions/0607-every-link-lands-on-a-live-record.md): a link check in
+  `pnpm lint` that resolves each link in those files. Built by [the build plan](../plan/quests/rules-and-records-build-PLAN.md).
 - **Breaks today:** `docs/plan/README.md:243` links superseded 0146 to say a pull request "now"
   lands only on CI that saw main; `AGENTS.md:210` says 0023 "lists the differences", and that list
   is stale.
@@ -116,7 +117,8 @@ a reader   -> reads the home; git log is its history; the record says why
   ([memory docs](https://code.claude.com/docs/en/memory)).
 - **Example:** Effect's repo `AGENTS.md` is about 55 lines: layout, the narrowest check for each
   kind of change, and generated files.
-- **Held by:** nothing yet. Proposed: a size check in `pnpm lint`, its limit a setting.
+- **Held by:** [0608](../../.decisions/0608-the-map-fits-its-readers-limits.md): a size check in
+  `pnpm lint`, its limit a setting with its source. Built by [the build plan](../plan/quests/rules-and-records-build-PLAN.md).
 - **Breaks today:** `AGENTS.md` is 39,103 bytes; at 32 KiB a reader stops at line 389, before
   "How to write here" (`AGENTS.md:396`). With `next/AGENTS.md` it is 49,516 bytes.
 
