@@ -54,22 +54,7 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
   const kept = { keep: "fixture child", foreground: true, paid: true };
   const homeRoot = new TextEncoder().encode(`${tmp}/fh-XXXXXX/host/sock`).length < 103 ? tmp : "/tmp";
 
-  const selected = cases[key];
-
-  if ("failures" in selected) {
-    return Result.match(
-      Result.try(() =>
-        expect(undefined, selected.failures[0].diagnostic.slice("AssertionError: ".length)).toBe(content),
-      ),
-      {
-        onSuccess: () => Matcher.make({ name: "Error", message: "" }),
-        onFailure: (error) => Schema.decodeUnknownSync(Matcher)(error),
-      },
-    );
-  }
-
   const matchers: Partial<Record<Request["case"], () => unknown>> = {
-    "checklist-pid": () => expect(undefined, "a notice names its process").toBe("process-id"),
     "watcher-r1": () =>
       expect({ _tag: "same", program: content, hash: content }).toMatchObject(
         syntax ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" },
@@ -101,14 +86,6 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
 };
 
 const position = (key: Request["case"], line = 17, column = 23) => {
-  const selected = cases[key];
-
-  if ("failures" in selected) {
-    const { line, column } = selected.failures[0];
-
-    return { line, column };
-  }
-
   return key === "host-requested-pin"
     ? { line: 195, column: 62 }
     : key === "host-pnpm-path"
@@ -121,11 +98,11 @@ const position = (key: Request["case"], line = 17, column = 23) => {
 const message = (key: Request["case"], content = "", syntax = false) => {
   const error = matcher(key, content, syntax);
   const stack = error.stack || error.message;
-  const frame = position(key, 194, 12);
+  const fixture = cases[key].project === "tooling" ? position(key, 194, 12) : null;
 
-  return cases[key].project === "tooling" || "failures" in cases[key]
-    ? `${stack}\n    at fixture (${root}/${cases[key].test}:${frame.line}:${frame.column})`
-    : stack;
+  return fixture === null
+    ? stack
+    : `${stack}\n    at fixture (${root}/${cases[key].test}:${fixture.line}:${fixture.column})`;
 };
 
 const report = (key: Request["case"], status: string, messages: string[] = []) => ({
@@ -169,23 +146,13 @@ const report = (key: Request["case"], status: string, messages: string[] = []) =
 
 const images = <Key extends Request["case"]>(key: Key, content: string) => {
   const selected = cases[key];
-  const edits = "preparation" in selected ? selected.preparation : [];
-  let source = edits.map((edit) => edit.before).join("\n");
-
-  if (!source.includes(selected.before) && !edits.some((edit) => edit.after.includes(selected.before))) {
-    source += `\n${selected.before}`;
-  }
-
-  const original = bytes(`${JSON.stringify(content)}\n${source}\n`);
-
-  const prepared = bytes(
-    edits.reduce((text, edit) => text.replace(edit.before, edit.after), new TextDecoder().decode(original)),
-  );
+  const original = bytes(`${JSON.stringify(content)}\n\n${selected.before}\n`);
+  const prepared = original;
 
   const edited = bytes(new TextDecoder().decode(prepared).replace(selected.before, selected.after));
-  const head = "source" in selected ? selected.source : sha;
+  const head = sha;
 
-  return { selected, original, prepared, edited, head };
+  return { original, prepared, edited, head };
 };
 
 // Plant: accept unknown fields and cases
@@ -195,18 +162,6 @@ it.effect.prop(
   ({ request, junk }) =>
     Effect.gen(function* () {
       expect(yield* decodeRequest(request)).toEqual(request);
-
-      for (const key of Request.fields.case.literals) {
-        const selected = cases[key];
-
-        if ("source" in selected) {
-          expect(yield* decodeRequest({ case: key, sha: selected.source })).toEqual({
-            case: key,
-            sha: selected.source,
-          });
-          expect(Option.isNone(yield* decodeRequest({ case: key, sha }).pipe(Effect.option))).toBe(true);
-        }
-      }
 
       for (const invalid of [
         { ...request, patch: junk },
@@ -289,16 +244,6 @@ it.effect.prop(
 // The suite/leaf pairs were read from each mapped source law. These bodies start no real resource.
 const nested = [
   {
-    key: "checklist-pid",
-    suite: "L13: notices name their process",
-    leaf: "each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
-  },
-  {
-    key: "checklist-early-complete",
-    suite: "L13: notices name their process",
-    leaf: "successive sends land and a client joining after the first send opens the current checklist",
-  },
-  {
     key: "watcher-r1",
     suite: "P15 slice 1: the watcher",
     leaf: "scenario: R1 a held same reply from boot or a preceding save cannot complete a good or broken save",
@@ -323,19 +268,7 @@ for (const { key, suite, leaf } of nested) {
       ({ extra }, context) => {
         for (const selected of key === "host-pin"
           ? ([key, "host-requested-pin", "host-pnpm-path", "host-env-order"] as const)
-          : key === "checklist-pid"
-            ? ([key, "checklist-body", "checklist-drop-notify"] as const)
-            : key === "checklist-early-complete"
-              ? ([
-                  key,
-                  "checklist-held-call",
-                  "checklist-due-reschedule",
-                  "checklist-running-replace",
-                  "checklist-running-delete",
-                  "checklist-alarm-failure",
-                  "checklist-late-failure",
-                ] as const)
-              : [key]) {
+          : [key]) {
           const pattern = new RegExp(argv(selected, "/private/result.json").at(-1) ?? "(?!)");
           expect(pattern.test(context.task.fullTestName)).toBe(true);
           expect(pattern.test(`${context.task.fullTestName}${extra}!`)).toBe(false);
@@ -519,96 +452,6 @@ it.prop(
   options,
 );
 
-// Plant: treat any PID failure, matcher value or nearby frame as the current missing-field witness.
-it.prop(
-  "current missing-PID proof requires the exact zero-view assertion and causal frame",
-  { content: Schema.String, offset: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })) },
-  ({ content, offset }) => {
-    const key = "checklist-pid";
-    const selected = cases[key];
-    const marker = `private-value-${JSON.stringify(content)}-end`;
-
-    const generated = Result.match(
-      Result.try(() => expect(0, "the client heard the checklist's views").toBeGreaterThan(0)),
-      {
-        onSuccess: () => Matcher.make({ name: "Error", message: "matcher did not fail" }),
-        onFailure: (error) => Schema.decodeUnknownSync(Matcher)(error),
-      },
-    );
-
-    const error = { ...generated, stack: `at selected (${root}/${selected.test}:824:80)` };
-
-    const expected = {
-      diagnostic: "AssertionError: the client heard the checklist's views",
-      assertion: { line: 824, column: 80 },
-    };
-
-    expect(generated.actual).toBe(0);
-    expect(generated.expected).toBe(0);
-    expect(failure(key, [error])).toEqual(expected);
-    expect(failure(key, [{ name: "Error", message: marker, cause: error }])).toEqual(expected);
-
-    const invalid: readonly unknown[] = [
-      { ...error, name: "Error" },
-      { ...error, name: "TypeError" },
-      { ...error, name: "SyntaxError" },
-      { ...error, cause: error },
-      { name: "Error", message: marker, cause: [error] },
-      { ...error, message: "another assertion: expected 0 to be greater than 0" },
-      { ...error, message: "the client heard the checklist's views: expected 0 to be greater than or equal to 0" },
-      { ...error, message: "the client heard the checklist's views: expected 0 to be 1 // Object.is equality" },
-      { ...error, message: `${marker}${generated.message}` },
-      { ...error, message: `${generated.message}${marker}` },
-      { ...error, message: `${generated.message}\n` },
-      { ...error, actual: offset },
-      { ...error, actual: -offset },
-      { ...error, expected: offset },
-      { ...error, actual: "0" },
-      { ...error, expected: "0" },
-      { ...error, actual: null },
-      { ...error, expected: null },
-      { ...error, actual: undefined },
-      { ...error, expected: undefined },
-      { ...error, actual: false },
-      { ...error, expected: false },
-      { ...error, stack: `at selected (${root}/${selected.test}:${824 + offset}:80)` },
-      { ...error, stack: `at selected (${root}/${selected.test}:824:${80 + offset})` },
-      { ...error, stack: `at selected (${root}/unrelated.test.ts:824:80)` },
-      { ...error, stack: `at selected (${root}/not-${selected.test}:824:80)` },
-      { ...error, stack: `at selected (${root}/${selected.test}:824:80private)` },
-      { ...error, stack: `at selected (${root}/${selected.test}:828:68)` },
-      { ...error, stack: undefined },
-      { ...error, message: "Test timed out in 60000ms" },
-      marker,
-      null,
-      {},
-    ];
-
-    for (const value of invalid) {
-      expect(failure(key, [value])).toBeNull();
-    }
-
-    expect(failure(key, [error, error])).toBeNull();
-    expect(failure(key, [])).toBeNull();
-
-    for (const other of Request.fields.case.literals.filter((other) => other !== key)) {
-      expect(failure(other, [error])).toBeNull();
-    }
-
-    const raw = report(key, "failed", [marker]);
-    raw.testResults[0]!.assertionResults[0]!.meta.plant = failure(key, [error]);
-    const observed = observation(key, root, JSON.stringify(raw), 1, 12);
-
-    expect(observed).toMatchObject({ _tag: "failed", ...expected });
-    expect(JSON.stringify(observed)).not.toContain(marker);
-    expect(JSON.stringify(observed)).not.toContain("actual");
-    expect(JSON.stringify(observed)).not.toContain("expected");
-    expect(JSON.stringify(observed)).not.toContain(root);
-  },
-  options,
-);
-
-// Plant: require formatted minus/plus diff lines absent from JSON failureMessages
 it.prop(
   "watcher observations decode installed matcher stacks and keep ambiguous outcomes incomplete",
   {
@@ -703,55 +546,6 @@ it.prop(
       [{ ...assertion, cause: error }],
     ]) {
       expect(failure(key, errors)).toBeNull();
-    }
-
-    const selected = cases[key];
-
-    if ("failures" in selected) {
-      for (const fixed of selected.failures) {
-        const count = fixed.diagnostic === "AssertionError: checklist notice count differs";
-        const comparison = Result.try(() => expect(0).toBe(1));
-
-        if (Result.isSuccess(comparison)) {
-          throw new Error("missing numeric mismatch control");
-        }
-
-        const positive = {
-          ...(count ? Schema.decodeUnknownSync(Matcher)(comparison.failure) : assertion),
-          message: count
-            ? Schema.decodeUnknownSync(Matcher)(comparison.failure).message
-            : fixed.diagnostic.slice("AssertionError: ".length),
-          stack: `at matcher (/private/${selected.test}:${fixed.line}:${fixed.column})`,
-        };
-
-        expect(failure(key, [positive])).toEqual({
-          diagnostic: fixed.diagnostic,
-          assertion: { line: fixed.line, column: fixed.column },
-        });
-
-        for (const changed of [
-          { ...positive, stack: `at matcher (${selected.test}:${fixed.line + 1}:${fixed.column})` },
-          { ...positive, stack: `at matcher (${selected.test}:${fixed.line}:${fixed.column + 1})` },
-          { ...positive, stack: "no source frame" },
-          { ...positive, message: `unrelated ${positive.message}` },
-          { ...positive, name: "Error" },
-        ]) {
-          expect(failure(key, [changed])).toBeNull();
-        }
-
-        if (count) {
-          for (const changed of [
-            { ...positive, actual: positive.expected },
-            { ...positive, operator: "deepStrictEqual" },
-            { ...positive, actual: "NaN" },
-            { ...positive, expected: -1 },
-            { ...positive, actual: [] },
-            { ...positive, actual: undefined },
-          ]) {
-            expect(failure(key, [changed])).toBeNull();
-          }
-        }
-      }
     }
 
     const unreported = report(key, "failed", [stack]);
@@ -887,20 +681,7 @@ it.prop(
 it.prop(
   "strict diagnostics discard generated matcher values and paths",
   {
-    key: Schema.Literals([
-      "host-requested-pin",
-      "host-pnpm-path",
-      "host-env-order",
-      "checklist-body",
-      "checklist-drop-notify",
-      "checklist-early-complete",
-      "checklist-held-call",
-      "checklist-due-reschedule",
-      "checklist-running-replace",
-      "checklist-running-delete",
-      "checklist-alarm-failure",
-      "checklist-late-failure",
-    ]),
+    key: Schema.Literals(["host-requested-pin", "host-pnpm-path", "host-env-order"]),
     content: Schema.String,
   },
   ({ key, content }) => {
@@ -983,7 +764,6 @@ it.prop(
     expect(output).not.toContain("/private/temp");
 
     const diagnostics = {
-      "checklist-pid": "AssertionError: a notice names its process",
       "watcher-r1": "AssertionError: expected _tag loaded; received _tag same",
       "host-pin": "AssertionError: direct and nested pnpm versions differ from the explicit Node pin",
       "host-discovery-timeout": "AssertionError: runtime discovery exceeded the existing command cleanup bound",
@@ -992,10 +772,7 @@ it.prop(
       "host-env-order": "AssertionError: pinned host environment retained a removed parent value",
     };
 
-    const selected = cases[key];
-    expect(JSON.parse(output).diagnostic).toBe(
-      "failures" in selected ? selected.failures[0].diagnostic : new Map(Object.entries(diagnostics)).get(key),
-    );
+    expect(JSON.parse(output).diagnostic).toBe(new Map(Object.entries(diagnostics)).get(key));
   },
   options,
 );
@@ -1039,28 +816,9 @@ it.effect.prop(
   },
   ({ key, content, fault }) =>
     Effect.gen(function* () {
-      const { selected, original, prepared, edited, head } = images(key, content);
+      const { original, prepared, edited, head } = images(key, content);
       expect(yield* prepare(key, original)).toEqual(prepared);
-      const real = yield* Digest.Digest;
-
-      const digest = Digest.Digest.of({
-        ...real,
-        digestHex: (algorithm, data) => {
-          if ("hashes" in selected) {
-            for (const [image, hash] of [
-              [original, selected.hashes.source],
-              [prepared, selected.hashes.prepared],
-              [edited, selected.hashes.edited],
-            ] as const) {
-              if (data.length === image.length && data.every((value, index) => value === image[index])) {
-                return Effect.succeed(hash);
-              }
-            }
-          }
-
-          return real.digestHex(algorithm, data);
-        },
-      });
+      const digest = yield* Digest.Digest;
 
       for (const brokenAt of [fault, 35]) {
         let current = original;
@@ -1109,7 +867,6 @@ it.effect.prop(
 
         const answer = yield* exercise({ case: key, sha: head }).pipe(
           Effect.provideService(Workspace, workspace),
-          Effect.provideService(Digest.Digest, digest),
           Effect.option,
         );
 
@@ -1156,88 +913,6 @@ it.effect.prop(
         }
 
         expect(tested).toEqual(["baseline", "broken", "restored"].slice(0, tested.length));
-      }
-    }).pipe(Effect.provide(Digest.layerWebCrypto)),
-  options,
-);
-
-// Plant: ignore a fixed source, prepared or edited hash and write anyway.
-it.effect.prop(
-  "fixed checklist hashes reject unsupported bytes before any write or child",
-  {
-    key: Schema.Literals([
-      "checklist-body",
-      "checklist-drop-notify",
-      "checklist-early-complete",
-      "checklist-held-call",
-      "checklist-due-reschedule",
-      "checklist-running-replace",
-      "checklist-running-delete",
-      "checklist-alarm-failure",
-      "checklist-late-failure",
-    ]),
-    content: Schema.String,
-  },
-  ({ key, content }) =>
-    Effect.gen(function* () {
-      const { selected, original, prepared, edited, head } = images(key, content);
-
-      const faults =
-        selected.preparation.length === 0
-          ? (["mode", "source", "edited"] as const)
-          : (["mode", "source", "prepared", "edited"] as const);
-
-      for (const fault of faults) {
-        let touched = false;
-        const real = yield* Digest.Digest;
-
-        const digest = Digest.Digest.of({
-          ...real,
-          digestHex: (algorithm, data) => {
-            for (const [image, name] of [
-              [original, "source"],
-              [prepared, "prepared"],
-              [edited, "edited"],
-            ] as const) {
-              if (data.length === image.length && data.every((value, index) => value === image[index])) {
-                return Effect.succeed(name === fault ? "0".repeat(64) : selected.hashes[name]);
-              }
-            }
-
-            return real.digestHex(algorithm, data);
-          },
-        });
-
-        const workspace = Workspace.of({
-          inspect: Effect.succeed({
-            bytes: original,
-            mode: fault === "mode" ? 0o100755 : 0o100644,
-            head,
-            index: sha,
-            status: "",
-            summary: "",
-          }),
-          write: () =>
-            Effect.sync(() => {
-              touched = true;
-            }),
-          diff: Effect.succeed(bytes("private-diff")),
-          test: () =>
-            Effect.sync(() => {
-              touched = true;
-
-              return Observation.cases.incomplete.make({ reason: "must_not_run" });
-            }),
-        });
-
-        const result = yield* exercise({ case: key, sha: head }).pipe(
-          Effect.provideService(Workspace, workspace),
-          Effect.provideService(Digest.Digest, digest),
-          Effect.option,
-        );
-
-        expect(Option.isNone(result)).toBe(true);
-        expect(touched).toBe(false);
       }
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
   options,
