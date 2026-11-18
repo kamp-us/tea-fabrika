@@ -53,7 +53,7 @@ This record amends 0068, 0078 and 0088 in part. The thin slices they ask for are
 for these four primitives. Their other slices (hands, programs written outside fabrika, a flow fabrika
 runs) are not changed here. It also amends
 [0279](0279-tuval-is-a-package-desk-in-tier-2.md) in its timing only: a second tile and its keys no
-longer wait for Tier 2. That the desk is a program stands.
+longer wait for Tier 2.
 
 ## Decision
 
