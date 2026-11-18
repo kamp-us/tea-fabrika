@@ -13,6 +13,8 @@
 //   hello(A), grant, knock(A) leaves A with no `granted` news.
 // - W2: a release that notifies the rows it found and takes them afterwards, so the knock's and the
 //   grant's releases both reach one row. A client of it is told twice.
+// - W2, held read: a knock that reads the members before it writes its row (check, then register).
+//   A knock held right after that read, until the grant has drained, then writes a row nobody wakes.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
@@ -31,7 +33,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, Deferred, Effect, Layer, Order, Schema, Stream } from "effect";
+import { Array as Arr, Context, Deferred, Effect, Layer, Order, Schema, Stream } from "effect";
 import { RateLimiter } from "effect/persistence";
 import { Gateway } from "./door.ts";
 
@@ -125,17 +127,27 @@ const pauses = Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maxi
 );
 
 /**
- * One draw per client for a race: whether its knock waits for the grant to be applied, and how many
- * times it yields before it knocks.
+ * One draw per client for a race: whether its knock waits for the grant to be applied, how many
+ * times it yields before it knocks, and whether its read of the members is held, right after the
+ * read returns, until the grant has finished its drain.
  */
 const Lag = Schema.Struct({
   late: Schema.Boolean,
   wait: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 12 })),
+  held: Schema.Boolean,
 });
 
 const lags = Schema.Array(Lag).check(Schema.isMinLength(3), Schema.isMaxLength(3));
 
-const world = Effect.fnUntraced(function* (gaps: ReadonlyArray<number>) {
+/**
+ * The gate a fiber's reads of the membership stream wait at, once each read has returned. Only the
+ * fiber that `act` set it on is held; every other fiber reads straight through.
+ */
+const Hold = Context.Reference<Deferred.Deferred<void> | null>("@kampus/fabrika/door-waiting.Hold", {
+  defaultValue: () => null,
+});
+
+const world = Effect.fnUntraced(function* (gaps: ReadonlyArray<number>, reached: Set<string>) {
   const root = yield* SshsigTest.identity,
     window = yield* SshsigTest.identity,
     granted = yield* SshsigTest.identity,
@@ -161,6 +173,8 @@ const world = Effect.fnUntraced(function* (gaps: ReadonlyArray<number>) {
   // has not drained yet, the window a knock can fall into.
   const applied = yield* Deferred.make<void>();
   const granting = { now: false };
+  // Opens when the grant has returned, its drain included: what a held read waits for.
+  const drained = yield* Deferred.make<void>();
 
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
@@ -171,6 +185,22 @@ const world = Effect.fnUntraced(function* (gaps: ReadonlyArray<number>) {
     const times = gaps[reads++ % gaps.length] ?? 0;
 
     return Effect.forEach(Arr.range(1, times), () => Effect.yieldNow, { concurrency: 1, discard: true });
+  });
+
+  // A held fiber stops right after its read of the members returned, so what it read stays what it
+  // knows while a grant applies and drains. The knock that reads before it registers is the one this
+  // catches: its row lands after the drain.
+  const hold = Effect.gen(function* () {
+    const gate = yield* Hold;
+
+    if (gate !== null) {
+      reached.add(
+        (yield* Deferred.isDone(applied))
+          ? "a read held after the grant applied"
+          : "a read held before the grant applied",
+      );
+      yield* Deferred.await(gate);
+    }
   });
 
   const ledger = Layer.effect(
@@ -188,7 +218,13 @@ const world = Effect.fnUntraced(function* (gaps: ReadonlyArray<number>) {
             ),
         read: (stream: string, after: Parameters<typeof actual.read>[1]) =>
           stream === "gateway/access"
-            ? Stream.unwrap(gap.pipe(Effect.as(Stream.concat(actual.read(stream, after), Stream.fromEffectDrain(gap)))))
+            ? Stream.unwrap(
+                gap.pipe(
+                  Effect.as(
+                    Stream.concat(actual.read(stream, after), Stream.fromEffectDrain(hold.pipe(Effect.andThen(gap)))),
+                  ),
+                ),
+              )
             : actual.read(stream, after),
       })),
     ),
@@ -246,7 +282,7 @@ const world = Effect.fnUntraced(function* (gaps: ReadonlyArray<number>) {
     events: { personOnly: [] },
   }).pipe(Layer.provideMerge(env));
 
-  return { root, window, keys: { A: granted, B: granted, C: bystander }, notices, layer, applied, granting };
+  return { root, window, keys: { A: granted, B: granted, C: bystander }, notices, layer, applied, granting, drained };
 });
 
 type World = Effect.Success<ReturnType<typeof world>>;
@@ -315,7 +351,7 @@ const play = Effect.fnUntraced(function* (
   mode: "in a sequence" | { readonly raced: ReadonlyArray<typeof Lag.Type> },
   reached: Set<string>,
 ) {
-  const w = yield* world(gaps);
+  const w = yield* world(gaps, reached);
 
   return yield* Effect.gen(function* () {
     const door = yield* Gateway;
@@ -333,6 +369,7 @@ const play = Effect.fnUntraced(function* (
         w.granting.now = true;
         yield* grant(door, w).pipe(Effect.ensuring(Deferred.succeed(w.applied, undefined)));
         grantTime.done = true;
+        yield* Deferred.succeed(w.drained, undefined);
 
         return;
       }
@@ -353,7 +390,9 @@ const play = Effect.fnUntraced(function* (
         return yield* Effect.die(`the order ${Arr.join(Arr.map(order, named), ", ")} knocks before ${peer}'s hello`);
       }
 
-      const answer = yield* door.knock(client, { label: `tab ${peer}` });
+      const knocking = door.knock(client, { label: `tab ${peer}` }),
+        held = mode !== "in a sequence" && mode.raced[{ A: 0, B: 1, C: 2 }[peer]]?.held === true;
+      const answer = yield* held ? Effect.provideService(knocking, Hold, w.drained) : knocking;
 
       if (answer._tag === "ok") {
         knocked.add(peer);
@@ -482,7 +521,12 @@ describe("L15, a knock that lands after a grant is woken", () => {
     checks,
   );
 
-  it("W2 scenario: the races reach a knock that is answered before the grant and one answered after it", () => {
-    expect([...reachedRaced].sort()).toEqual(["knock answered after the grant", "knock answered before the grant"]);
+  it("W2 scenario: the races reach a knock answered before the grant, one answered after it, and a knock whose read of the members is held before the grant applied", () => {
+    expect([...reachedRaced].sort()).toEqual([
+      "a read held after the grant applied",
+      "a read held before the grant applied",
+      "knock answered after the grant",
+      "knock answered before the grant",
+    ]);
   });
 });
