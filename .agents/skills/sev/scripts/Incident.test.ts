@@ -2,10 +2,12 @@
 // asks GitHub or git. The log goes to a temporary folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
 import {
   Array as Arr,
   String as Str,
   pipe,
+  DateTime,
   Duration,
   Effect,
   FileSystem,
@@ -21,7 +23,7 @@ import * as PullRequestsTest from "../../lead/scripts/pr/PullRequestsTest.ts";
 import * as AlertsTest from "./AlertsTest.ts";
 import * as Incident from "./Incident.ts";
 import * as Level from "./Level.ts";
-import { Run } from "./WorkflowRuns.ts";
+import { Run, WorkflowRuns } from "./WorkflowRuns.ts";
 import * as WorkflowRunsTest from "./WorkflowRunsTest.ts";
 
 const AT = "2026-11-14T19:00:00.000Z";
@@ -100,11 +102,14 @@ describe("close", () => {
             yield* Level.write(dir, canceled(r));
           }
 
-          const closed = yield* Incident.close(dir, "lead", Duration.zero).pipe(
-            Effect.provide(services({ github, prs: prWorld, behind })),
-          );
+          const { closed, cancels } = yield* Effect.gen(function* () {
+            return {
+              closed: yield* Incident.close(dir, "lead", Duration.zero),
+              cancels: yield* Recorder.calls(WorkflowRuns, "cancel"),
+            };
+          }).pipe(Effect.provide(services({ github, prs: prWorld, behind })));
 
-          expect(github.calls).toEqual([]);
+          expect(cancels).toEqual([]);
           expect(github.runs).toEqual(runs);
           expect(prWorld.calls).toEqual([]);
 
@@ -297,5 +302,20 @@ describe("summary", () => {
       `${AT} closed by the owner`,
       "3 runs canceled on 2 branches; 1 GitHub calls failed",
     ]);
+  });
+
+  it("vector: a call GitHub refused for its rate limit counts as a failed call", () => {
+    const entries: ReadonlyArray<Level.Entry> = [
+      Level.Entry.cases.opened.make({ at: AT, by: "owner", reason: "slow", allow: [], issues: [] }),
+      Level.Entry.cases.limited.make({
+        at: AT,
+        call: "unfinished",
+        id: null,
+        until: DateTime.makeUnsafe(AT),
+        reason: "HTTP 403: API rate limit exceeded",
+      }),
+    ];
+
+    expect(Incident.summary(entries).at(-1)).toBe("0 runs canceled on 0 branches; 1 GitHub calls failed");
   });
 });

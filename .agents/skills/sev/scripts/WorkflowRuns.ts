@@ -16,6 +16,15 @@ export class WorkflowRunsError extends Schema.TaggedError<WorkflowRunsError, { r
   },
 ) {}
 
+/**
+ * GitHub refused the call for its rate limit, which every agent on the login shares. It takes calls
+ * again at `until`; one asked before then only spends more of the next hour's.
+ */
+export class RateLimited extends Schema.TaggedError<RateLimited, { readonly brand: unique symbol }>()("RateLimited", {
+  until: Schema.DateTimeUtc,
+  reason: Schema.String,
+}) {}
+
 /** One workflow run, as GitHub lists it. */
 export const Run = Schema.Struct({
   /** GitHub's run id, the one `gh run cancel` takes. */
@@ -42,8 +51,8 @@ export class WorkflowRuns extends Context.Service<
   WorkflowRuns,
   {
     /** Every run of the repo that has not completed yet. */
-    readonly unfinished: Effect.Effect<ReadonlyArray<Run>, WorkflowRunsError>;
+    readonly unfinished: Effect.Effect<ReadonlyArray<Run>, WorkflowRunsError | RateLimited>;
     /** Asks GitHub to cancel run `id`. */
-    readonly cancel: (id: number) => Effect.Effect<void, WorkflowRunsError>;
+    readonly cancel: (id: number) => Effect.Effect<void, WorkflowRunsError | RateLimited>;
   }
 >()("sev/WorkflowRuns") {}

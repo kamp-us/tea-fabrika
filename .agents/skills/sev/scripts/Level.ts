@@ -40,11 +40,22 @@ export const Entry = Schema.TaggedUnion({
   /** A cancel loop started, in process `pid`. */
   looping: { at: Schema.String, pid: Schema.Finite },
   canceled: { at: Schema.String, run: Run },
-  /** A call to GitHub that failed; `id` is the run it was for, `null` for a list. */
+  /**
+   * A call to GitHub that failed; `id` is the run it was for, `null` for a list. A failed cancel is
+   * not asked again in this sev0.
+   */
   failed: {
     at: Schema.String,
     call: Schema.Literals(["unfinished", "cancel"]),
     id: Schema.NullOr(Schema.Finite),
+    reason: Schema.String,
+  },
+  /** GitHub refused a call for its rate limit, so the loop asks it nothing until `until`. */
+  limited: {
+    at: Schema.String,
+    call: Schema.Literals(["unfinished", "cancel"]),
+    id: Schema.NullOr(Schema.Finite),
+    until: Schema.DateTimeUtcFromString,
     reason: Schema.String,
   },
   /** The loop ended: it saw the close (`loop`), or no loop answered the close in time (`close`). */
@@ -113,6 +124,7 @@ export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev
     case "looping":
     case "canceled":
     case "failed":
+    case "limited":
     case "ended":
       return Result.succeed(sev0);
   }
