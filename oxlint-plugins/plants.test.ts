@@ -36,6 +36,8 @@ import {
   REFLECT,
   REFLECT_NEW_FOLDERS,
   TAGGED_ERROR,
+  VI_METHODS,
+  VI_PROPERTIES,
 } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 import { plant as lintCopies } from "./plant.ts";
@@ -471,6 +473,33 @@ describe("each rule refuses what it is there to refuse", () => {
     expect(firesInPlanted(at.file, p.code)).toEqual(at.want);
   });
 
+  // M2, the `vi` lock is a pair: the vitest rule's plant is the built-in one above, and this is the
+  // properties rule's, planted in the same lines. A line is held when either refuses it, which is
+  // the whole lock; a chained call is held by the properties rule alone, `v.fn()` by the vitest rule alone.
+  // Plant: drop the block's `vi` entries from `eslint/no-restricted-properties`, and the two chained
+  // lines are not refused; delete the block, and the refused lines are not refused.
+  const viProperties = write(VI_PROPERTIES, "vi-properties");
+
+  const viMethods = write(VI_METHODS, "vi-methods");
+
+  it("scenario: built in, on with 0 hits: eslint(no-restricted-properties) refuses the vi member access, chained or not", () => {
+    expect(firesInPlanted(viProperties.file, VI_PROPERTIES.code)).toEqual(viProperties.want);
+  });
+
+  it("scenario: the vi lock holds every banned line, and no other, through the pair of rules", () => {
+    const held = [
+      ...new Set([
+        ...firesInPlanted(viMethods.file, "vitest(no-restricted-vi-methods)"),
+        ...firesInPlanted(viProperties.file, VI_PROPERTIES.code),
+      ]),
+    ].sort((a, b) => a - b);
+
+    // The two plants hold the same lines in the same order, so one line number is one line of each.
+    expect(viMethods.text).toEqual(viProperties.text);
+    // Each plant's `want` is the lines it marks refused; the lock holds the union of the two.
+    expect(held).toEqual([...new Set([...viMethods.want, ...viProperties.want])].sort((a, b) => a - b));
+  });
+
   it("built in, on with 0 hits: import(no-self-import)", () => {
     expect(firesInPlanted(self, "import(no-self-import)")).toEqual([1]);
   });
@@ -903,7 +932,9 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
   it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
     inConfigCopy(({ printed, lint }) => {
-      const globs = globsHolding(printed, isReflectGet);
+      // A glob two blocks list, as `oxlint-plugins/**` in the tooling block and the `vi` lock after it,
+      // is planted once: the last block holds the ban's entries again, and this run reads them.
+      const globs = Arr.dedupeWith(globsHolding(printed, isReflectGet), (a, b) => a.glob === b.glob);
       // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
       expect(Arr.map(globs, ({ glob }) => glob)).toEqual(
         expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
@@ -1343,6 +1374,26 @@ describe("rules that apply by path", () => {
       expect(fires(file, "oxc(no-accumulating-spread)")).toEqual([2]);
     },
   );
+
+  const VI_FN = 'import { vi } from "vitest";\nexport const f = vi.fn();\n';
+
+  // M3, scenario: the `vi` lock (0555, 0579) is on only where a folder is at zero, so each row is one
+  // real folder, read by the real oxlint through the repository's own config; both halves of the pair.
+  // Plants, run once: with the pair moved to the root `rules`, the `next/` and `packages/` rows are
+  // red; with `oxlint-plugins/**` dropped from the block's `files`, its row is red.
+  it("scenario: a vi.fn() in a test under oxlint-plugins/ is refused by both halves of the lock", () => {
+    const { at, file } = plantIn("oxlint-plugins", VI_FN, "planted.test.ts");
+    made.push(at);
+    expect(fires(file, "vitest(no-restricted-vi-methods)")).toEqual([2]);
+    expect(fires(file, "eslint(no-restricted-properties)")).toEqual([2]);
+  });
+
+  it.each(["next", "packages"])("scenario: the same vi.fn() under %s/, not yet at zero, is left alone", (folder) => {
+    const { at, file } = plantIn(folder, VI_FN, "planted.test.ts");
+    made.push(at);
+    expect(fires(file, "vitest(no-restricted-vi-methods)")).toEqual([]);
+    expect(fires(file, "eslint(no-restricted-properties)")).toEqual([]);
+  });
 
   it.each(["packages", "programs", "apps"])(
     "scenario: the same line under %s/, today's app, is left alone",
