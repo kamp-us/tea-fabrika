@@ -1,0 +1,126 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-cloud-commits-step-tools-build",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1610",
+  "started": "2026-11-17T23:09:00-08:00",
+  "ended": "2026-11-17T23:51:16-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In today's lead tooling, built the fast-tracked fix for the ticket text 'botpush.mjs and stepcommit.sh refuse plain cloud commits and 0177 fix rounds' (no tracker in the cloud). botpush.mjs now pushes the branch alone when the worktree has no step notes, as decisions 0161 and 0164 make every commit plain; with notes the atomic push, the notes merge and the one retry are unchanged; branch - with no notes refuses before any keychain or network call; a failing keychain read prints one plain line and exits 1. stepcommit.sh gained a fix step for a 0177 fix round that may hold exam paths, takes tests' and build's paths and an exam path the plan gives to no step, signs nothing and still pushes. Every law in botpush.test.ts and stepcommit.test.ts is green, and each plant went red.",
+  "note": "Found on the way: fast-check ran only numRuns of the pinned examples, so the K4 exam-path law ran 6 of its 9 and the botpush leak law would have run 10 of its 16; both numRuns now cover every example. This cloud box has Node 22, so the pinned Node 26.13.0 came from npm into a scratch folder; box.test.ts needs ssh-keygen, which this box lacked and apt supplied (outside the repo). The start time is the first scratch folder's creation, rounded to the minute. Usage and cost are not recorded. No botpush or step-commit script ran for real here: the box has no keychain, so every push was a plain git push of the branch.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "driver_caused": false,
+  "billed": null,
+  "costUsd": null,
+  "listUsd": null,
+  "plants": [
+    {
+      "law": "T1610 botpush pushes the notes a tree has, and a plain branch when it has none > B1 B2 pushes the branch alone without notes, and the notes with the branch atomically with them",
+      "plant": "restore the notes refusal",
+      "result": "red"
+    },
+    {
+      "law": "T1610 botpush pushes the notes a tree has, and a plain branch when it has none > B1 B2 pushes the branch alone without notes, and the notes with the branch atomically with them",
+      "plant": "always include the notes refspec",
+      "result": "red"
+    },
+    {
+      "law": "T1610 botpush pushes the notes a tree has, and a plain branch when it has none > B1 B2 pushes the branch alone without notes, and the notes with the branch atomically with them",
+      "plant": "fetch or merge the remote's notes with no notes of our own",
+      "result": "red"
+    },
+    {
+      "law": "T1610 botpush pushes the notes a tree has, and a plain branch when it has none > B1 B2 pushes the branch alone without notes, and the notes with the branch atomically with them",
+      "plant": "drop --atomic from the push",
+      "result": "red"
+    },
+    {
+      "law": "T1610 botpush pushes the notes a tree has, and a plain branch when it has none > B1 B2 pushes the branch alone without notes, and the notes with the branch atomically with them",
+      "plant": "drop the notes refspec from the with-notes push",
+      "result": "red"
+    },
+    {
+      "law": "T1610 botpush pushes the notes a tree has, and a plain branch when it has none > B3 scenario: branch - with no step notes refuses before any keychain read or network call",
+      "plant": "let branch - through when there are no notes",
+      "result": "red"
+    },
+    {
+      "law": "T325 K6 botpush: scans every submitted commit from the merge base at the requested source",
+      "plant": "skip both leak greps when the tree has no step notes",
+      "result": "red"
+    },
+    {
+      "law": "T1610 botpush pushes the notes a tree has, and a plain branch when it has none > B5 a failing keychain read exits 1 with one plain line, no stack and no key, and pushes nothing",
+      "plant": "let the raw keychain error throw",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F1 one fix commit holds a tests-owned exam path and a build-owned product path, unsigned and pushed",
+      "plant": "keep build's exit 3 exam refusal for fix",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F1 one fix commit holds a tests-owned exam path and a build-owned product path, unsigned and pushed",
+      "plant": "sign a fix commit as build",
+      "result": "red"
+    },
+    {
+      "law": "T321 K4 a tests commit takes an exam path the plan gives to no step, and nothing else of another's (now also fix)",
+      "plant": "let fix take any path",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F2 a fix commit refuses a path the plan gives to lead or to nobody, and commits nothing",
+      "plant": "let fix take any path",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F3 a fix commit takes an exam path the plan gives to no step, beside a build-owned path",
+      "plant": "drop fix from the unlisted-exam exception",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F4 build still refuses an exam path with exit 3, and an unknown step exits 2",
+      "plant": "let any step name through",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F4 build still refuses an exam path with exit 3, and an unknown step exits 2",
+      "plant": "drop build's exam refusal",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F5 a fix commit whose push fails exits 6 with the commit made and no claim it was signed",
+      "plant": "say signed for a fix commit",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F5 a fix commit whose push fails exits 6 with the commit made and no claim it was signed",
+      "plant": "pass when the push fails",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F5 --commit-only and a box's commit make the fix commit and push nothing",
+      "plant": "push on --commit-only",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F5 --commit-only and a box's commit make the fix commit and push nothing",
+      "plant": "push in a box's commit",
+      "result": "red"
+    },
+    {
+      "law": "T321 K4 a tests commit takes an exam path the plan gives to no step, and nothing else of another's (now also fix)",
+      "plant": "sign a fix commit under its own role",
+      "result": "red"
+    }
+  ]
+}
