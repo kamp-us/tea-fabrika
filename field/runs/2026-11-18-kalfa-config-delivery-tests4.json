@@ -89,7 +89,7 @@
     {
       "law": "D2 a stage no one asked for is recorded",
       "plant": "drop the stage-key check",
-      "result": "not red at first; case added, then red"
+      "result": "green"
     },
     {
       "law": "D3 no receipt and no archive upload in check.yaml",
@@ -109,6 +109,11 @@
     {
       "law": "Q1 check.yaml uploads no kalfa-config- artifact",
       "plant": "let record.ts allow a kalfa-config- upload",
+      "result": "red"
+    },
+    {
+      "law": "D2 a stage no one asked for is recorded, the case added after the first plant",
+      "plant": "drop the stage-key check, run again",
       "result": "red"
     }
   ],
