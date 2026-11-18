@@ -1067,9 +1067,10 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
   // REFLECT's lines planted in folders that no block names, at generated names under each shape in
   // REFLECT_NEW_FOLDERS. The prefix keeps a name from being a folder that exists. The second half
   // reads the blocks, in order: of the overrides that name a next/ folder and hold the ban, one is next/
-  // whole, then comes the JSON.parse warn block, the only list there is, and client/ comes last. A file
-  // takes the last block that matches it, so client/ after the warn block means no glob added to the
-  // warn block can strip client/'s retry entries or turn its JSON.parse into advice (L4 holds the files).
+  // whole, then comes the JSON.parse warn block, the only list there is, then client/, and last the
+  // mock sweep's two e2e lock blocks, which match no client/ file. A file takes the last block that
+  // matches it, so client/ after the warn block means no glob added to the warn block can strip
+  // client/'s retry entries or turn its JSON.parse into advice (L4 holds the files).
   // Plant: leave the four Reflect entries out of the next/ block, and the folders are not refused
   // and the blocks are two; put one of the three deleted list blocks back, and the blocks are four;
   // move client/'s block back before the warn block, and the order is red.

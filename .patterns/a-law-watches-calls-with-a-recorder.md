@@ -149,7 +149,7 @@ platform object or a global such as `fetch` or `console` is not a service, so it
 change to a service first (0555, 0579). `Console` is the one service the Recorder cannot watch,
 since its members answer `void`: a law provides Effect's `TestConsole.layer` and reads
 `TestConsole.warnLines` (ours, through `patches/effect@4.1.3.patch`), as L17 does after `bundle.ts` prints through `Console.Console`
-(`next/apps/fabrika/e2e/reload.visual.test.ts:302`).
+(`next/apps/fabrika/e2e/reload.visual.test.ts:371`).
 
 ## Why it is not obvious
 
