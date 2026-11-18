@@ -1128,18 +1128,19 @@ describe("P15 slice 1: the watcher", () => {
       expect(tied.has(seen.span), "one install per rebuild").toBe(false);
       tied.add(seen.span);
 
+      // The `Ended` case's exit, held in an object: a bare `Exit` here would widen to its `Effect` supertype.
       const exit = () =>
-        Match.valueTags(seen.span.status, { Started: () => undefined, Ended: (status) => status.exit });
+        Match.valueTags(seen.span.status, { Started: () => undefined, Ended: (status) => ({ exit: status.exit }) });
 
       yield* until(() => exit() !== undefined, "10 seconds", "a started rebuild never ended");
       const finished = exit();
       assert(finished !== undefined, "the install's rebuild ended");
 
-      if (closed && Exit.hasInterrupts(finished)) {
+      if (closed && Exit.hasInterrupts(finished.exit)) {
         return;
       }
 
-      expect(Exit.isSuccess(finished), "the install's rebuild completed normally").toBe(true);
+      expect(Exit.isSuccess(finished.exit), "the install's rebuild completed normally").toBe(true);
       expect(seen.span.attributes.get("program"), "an install runs in its own program's rebuild").toBe(
         seen.code.program,
       );
