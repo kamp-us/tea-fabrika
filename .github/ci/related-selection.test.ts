@@ -133,11 +133,12 @@ const toolingOf = (plain: number, real: number) => [
 // scenario: by the same call (0602), a tooling law that starts a process is an `.integration.` law
 // and stays on the full run (0584). Run 44278795643 put
 // `.github/ci/workflow-lint/scheduled.integration.test.ts`, which spawns a process, on a pull
-// request's tooling leg. Plants, each run once on related.ts and restored: the merge line keeps
-// tooling's `.integration.` files (red, they land on legs); every event drops them (red, a push keeps
-// them no more).
+// request's tooling leg. The `tooling-integration` project now keeps such a file out of tooling's
+// list; this holds the merge line to the name whatever a list gives. Plants, each run once on
+// related.ts and restored: the merge line keeps tooling's `.integration.` files (red, they land on
+// legs); every event drops them (red, a push keeps them no more).
 it.prop(
-  "a pull request or queue group runs tooling's plain laws alone, and any other event keeps its .integration. laws",
+  "a pull request or queue group drops every .integration. name from tooling's list, and any other event keeps the list whole",
   {
     event: Schema.Literals(["pull_request", "merge_group", "push"]),
     plain: count,

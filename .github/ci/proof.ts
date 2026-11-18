@@ -4,14 +4,15 @@
 //
 //   the branch's change against origin/main      the run tests
 //   touches a file in forceRerunTriggers         the full set, on the `tests` job, as main does,
-//                                                less the `next-integration` laws (0602)
+//                                                less every `.integration.` law (0602)
 //   reaches some tests                           those, on as many `changed` legs as they need
 //   reaches no test                              nothing: the run is green with no test leg
 //
 // The set is Vitest's own (0040): `vitest list --changed <base>` over the `next`, `next-visual` and
 // `tooling` projects, the import graph `--changed` walks, with the files vitest.config.ts hands it as
-// watched files. The `next-integration` laws run only on main's full run (0602), so a proof run
-// lists none of them, even one its change reaches; today's run in no CI job (0533). A next/ change
+// watched files. The `.integration.` laws, `next-integration`'s and `tooling-integration`'s, run
+// only on main's full run (0602), so a proof run lists none of them, even one its change reaches,
+// and `choose` drops any name a list still gives; today's run in no CI job (0533). A next/ change
 // adds the in-memory reader tests too (changes.mjs's `readers`), as the merge line does: they read
 // next/'s source as text, so the import graph cannot reach them, and making each file they read a
 // rerun trigger would make every next/ change run everything.
@@ -39,6 +40,7 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Config, DateTime, Result, Schema } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
+import { isIntegration } from "../../oxlint-plugins/test-names.ts";
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, fewest, isTrigger, list, room, seconds, split, withReaders } from "./legs.ts";
@@ -47,8 +49,8 @@ import { readEnv, stepFiles } from "./step-env.ts";
 export { isTrigger };
 
 /**
- * The projects a proof run lists and runs: every one CI runs but `next-integration`, which only
- * main's full run runs (0602), and today's left out (0533).
+ * The projects a proof run lists and runs: every one CI runs but `next-integration` and
+ * `tooling-integration`, which only main's full run runs (0602), and today's left out (0533).
  */
 export const PROJECTS = ["next", "next-visual", "tooling"] as const;
 
@@ -58,7 +60,7 @@ const flags = (projects: readonly string[]) => projects.flatMap((project) => ["-
 /**
  * The `vitest list` calls a changed set is read from: `reached`, the tests the change reaches
  * against `base` over PROJECTS, and `readers`, the in-memory reader tests, asked for only when the
- * change touches next/ (`null` otherwise). Neither names `next-integration` (0602).
+ * change touches next/ (`null` otherwise). Neither names an integration project (0602).
  */
 export const listings = (base: string, changed: readonly string[]) => ({
   reached: [...flags(PROJECTS), `--changed=${base}`],
@@ -119,7 +121,9 @@ export const legsOf = (files: readonly string[], sizing: Sizing): Record<string,
 
 /**
  * What the run tests. `triggers` comes first: a change to a rerun trigger is the full set whatever
- * the import graph says. Else `files`, the set Vitest listed, split by `sizing`.
+ * the import graph says. Else `files`, the set Vitest listed, split by `sizing`, less every
+ * `.integration.` law, of next/ or of tooling: only main's full run runs those (0602). PROJECTS
+ * already lists none of them; the name holds them out whatever a list gives.
  */
 export const choose = (seen: Seen, triggers: readonly string[], files: readonly string[], sizing: Sizing): Proof => {
   if (triggers.length > 0) {
@@ -130,7 +134,10 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
     throw new Error("proof: a test file's path holds a space, so it cannot be one word of a leg's list");
   }
 
-  const legs = legsOf(files, sizing);
+  const legs = legsOf(
+    files.filter((path) => !isIntegration(path)),
+    sizing,
+  );
 
   return {
     _tag: "changed",
@@ -201,7 +208,7 @@ export const summary = (proof: Proof): string => {
     return [
       head,
       "",
-      "The full set: the change touches a rerun trigger, so it runs every test but the `next-integration` laws, which only main's full run runs (decision 0602).",
+      "The full set: the change touches a rerun trigger, so it runs every test but the `.integration.` laws, which only main's full run runs (decision 0602).",
       "",
       ...proof.triggers.map((path) => `- \`${path}\``),
       "",

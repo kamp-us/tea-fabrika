@@ -1,12 +1,13 @@
 // Today's CI, both versions. The missing projects of an automatic PR/queue check; next and visual
 // remain on the existing next matrix. A pull request and a queue group pick tooling's plain laws
-// alone: every `.integration.` law, `next-integration`'s and tooling's alike, runs only on main's
-// full run (scheduled.yaml, on a push to main and hourly, 0581), never on a pull request, a queue
-// group or a branch's proof run (0602, 0584; `onMergeLine`). A selector error fails the required
-// check, never means zero.
+// alone: every `.integration.` law, `next-integration`'s and `tooling-integration`'s alike, runs only
+// on main's full run (scheduled.yaml, on a push to main and hourly, 0581), never on a pull request, a
+// queue group or a branch's proof run (0602, 0584; `onMergeLine`). A selector error fails the
+// required check, never means zero.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isIntegration } from "../../oxlint-plugins/test-names.ts";
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, list, room, withReaders } from "./legs.ts";
@@ -40,19 +41,13 @@ export const wantsChecklistLaw = (paths: readonly string[] | null): boolean =>
  * queue group. The owner moved every `.integration.` law back to main's full run on 2026-11-18
  * (0602), after real-resource laws failed about a dozen of that night's pull request and queue runs
  * on code those changes never touched (0536's rule). Any other event, which in check.yaml is a push
- * to main whose changes job failed, picks as before.
+ * to main whose changes job failed, picks both lists, as before; tooling's laws that start a process
+ * are in neither, since they are `tooling-integration`'s.
  */
 const onMergeLine = (event: string | undefined): boolean => event === "pull_request" || event === "merge_group";
 
 /** The projects a related run picks from: tooling alone on the merge line, both otherwise. */
 const projectsOf = (event: string | undefined): readonly Project[] => (onMergeLine(event) ? ["tooling"] : PROJECTS);
-
-/**
- * A law that reaches a real thing, by its name: `*.integration.test.ts` or `.tsx`, in any project.
- * A tooling law that starts a process is one too, and stays on the full run (0584), so the merge
- * line drops it from tooling's files.
- */
-const reachesReal = (path: string): boolean => /\.integration\.test\.tsx?$/.test(path);
 
 /** Each project's files, asked for only when the run picks that project, so a skipped one is never listed. */
 type Lists = Readonly<Record<Project, () => readonly string[]>>;
@@ -69,8 +64,11 @@ export const select = (event: string | undefined, lists: Lists, sizing: Sizing) 
     throw new Error("related: selected files must be distinct paths without whitespace");
   }
 
+  // A tooling law that starts a process is an `.integration.` law too (0584). Its own project,
+  // `tooling-integration`, already keeps it out of tooling's list; the name holds it off the merge
+  // line whatever a list gives.
   const picked = listed.map(
-    ([project, paths]) => [project, onMergeLine(event) ? paths.filter((path) => !reachesReal(path)) : paths] as const,
+    ([project, paths]) => [project, onMergeLine(event) ? paths.filter((path) => !isIntegration(path)) : paths] as const,
   );
 
   const legs: Record<string, readonly string[]> = {};

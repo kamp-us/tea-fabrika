@@ -23,12 +23,6 @@ import {
 } from "./shared.ts";
 import { TIME_TABLE, timed } from "./time-tables.ts";
 
-// Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
-// `tooling` project alone: next/ and the three trees of today's tests are projects of their own, and
-// a project ignores `--exclude` (vitest.config.ts; merge-line.test.ts holds the tooling project's
-// globs). No call in check.yaml runs it (0539).
-const TOOLING_PROJECT = "--project tooling";
-
 // The full run (0534, 0581): scheduled.yaml runs all of next/ and every tooling test on main, and a
 // red run opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull
 // requests keep theirs (0595). The ten jobs are MAIN_SLOTS groups for main's full run, PROOF_SLOTS for
@@ -215,7 +209,15 @@ const NEXT_PROJECTS = `\${{ ${ON_MAIN} && '--project next --project next-integra
 
 const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
 
-const WHOLE_TOOLING = `pnpm exec vitest run ${TOOLING_PROJECT} --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+// Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
+// tooling projects alone: next/ and the three trees of today's tests are projects of their own, and
+// a project ignores `--exclude` (vitest.config.ts; merge-line.test.ts holds the tooling projects'
+// globs). The tooling legs read their projects from the ref (TOOLING_PROJECTS), as the vitest legs
+// do: main's full run runs `tooling` and `tooling-integration`, the tooling laws that start a
+// process (0584), and a branch's full set, a proof run, runs `tooling` alone (0602).
+const WHOLE_TOOLING = `pnpm exec vitest run $PROJECTS --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+
+const TOOLING_PROJECTS = `\${{ ${ON_MAIN} && '--project tooling --project tooling-integration' || '--project tooling' }}`;
 
 // A changed leg's one command: its own list, `$FILES` from `select`, over every project proof.ts
 // lists: today's left out (0533), and `next-integration`, which only main's full run runs (0602). No
@@ -791,6 +793,10 @@ export const lintScheduled = (text: string, check: string): string[] => {
       JSON.stringify(
         Array.from({ length: toolingLegs.length }, (_, i) => `${TOOLING_LEG}${i + 1}`),
       ), "SC8: the tooling legs run every tooling test once, legs tooling-1 to tooling-N, each its share of them");
+  require(compact(map(toolingRuns[0]?.["env"])["PROJECTS"]) ===
+    compact(
+      TOOLING_PROJECTS,
+    ), "SC8: the tooling legs run the tooling and tooling-integration projects on main, and tooling alone on a branch's full set, which runs no tooling law that starts a process (0602)");
 
   // SC9. The commands are only these: no step runs another test command or narrows one.
   require(JSON.stringify(commandsOf(tests).toSorted()) ===
@@ -814,12 +820,16 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC11. Every test leg runs at full depth: a law that reads FABRIKA_TEST_DEPTH runs its full case
   // count here, and unset means `fast`, as on the merge line (pull request 1274).
-  for (const command of [WHOLE_NEXT, WHOLE_E2E, WHOLE_TOOLING]) {
+  for (const [legs, command] of [
+    ["next's vitest legs", WHOLE_NEXT],
+    ["the e2e legs", WHOLE_E2E],
+    ["the tooling legs", WHOLE_TOOLING],
+  ] as const) {
     const found = Rec.values(jobs).flatMap((job) => steps(map(job)).filter((s) => s["run"] === command));
     require(found.length > 0 &&
       found.every(
         (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,
-      ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
+      ), `SC11: every step of ${legs} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }
 
   // SC12. SC2's group holds every run on the same ref, so a waiting run is

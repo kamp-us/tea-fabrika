@@ -42,8 +42,9 @@ name: scheduled
 #                          projects, every file, no `--changed`; a branch's full set runs `next`
 #                          alone (0602)
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
-#   tooling tests   2      legs tooling-1 and tooling-2, the `tooling` project, every file, no
-#                          `--changed`; the 9 legs above are one matrix, the `tests` job
+#   tooling tests   2      legs tooling-1 and tooling-2, the `tooling` and `tooling-integration`
+#                          projects, every file, no `--changed`; a branch's full set runs
+#                          `tooling` alone (0602); the 9 legs above are one matrix, the `tests` job
 #   report          1      after the others, on any result but the gate's `false`; it fails unless
 #                          the run is green, so a run whose red leg left no failed job still ends
 #                          `failure`
@@ -173,11 +174,12 @@ jobs:
   # project on their half of the visual files. A project, not a path, picks the files: `next/` as
   # a path would start `next-visual` on legs with no Chromium. Then every tooling test, on
   # `tooling-1` and `tooling-2`: the tests of neither version's product code (CI's own, the lint
-  # plugins, the root scripts and the skill scripts), the `tooling` project, since a project
-  # ignores `--exclude` (0536). The only CI job that runs
-  # them: the merge line runs none, and a tooling change's author runs its narrow tests on the
-  # laptop (0539). Today's tests run in no CI job (0533). Nothing is narrowed: no `--changed`, no
-  # list.
+  # plugins, the root scripts and the skill scripts), the `tooling` project and, on main alone, the
+  # `tooling-integration` one, its laws that start a process (0584, 0602), since a project ignores
+  # `--exclude` (0536). `PROJECTS` reads the ref, as on the vitest legs. The merge line runs only
+  # the plain tooling laws a change reaches (check.yaml's related job), so this is the only CI job
+  # that runs them all. Today's tests run in no CI job (0533). Nothing is narrowed: no `--changed`,
+  # no list.
   #
   # The full set, wherever it runs: on main, where `select` never runs, and on a branch whose
   # `select` said `full`. A run starts this job or `changed`, never both, so each red leg still stops
@@ -259,7 +261,8 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}/2
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project tooling --shard "${SHARD#tooling-}" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+          PROJECTS: ${{ github.ref == 'refs/heads/main' && '--project tooling --project tooling-integration' || '--project tooling' }}
+        run: pnpm exec vitest run $PROJECTS --shard "${SHARD#tooling-}" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
       # The leg's Vitest report, for the report job to name each failing test. After a red step too,
       # so the leg that failed is the one whose report is kept. Named `results-next-<leg>` and
       # `results-tooling-<k>`, as before the two jobs became one: vitest.shards.ts's rows are

@@ -1038,26 +1038,45 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   [
     "SC8: tooling runs today's tests too",
-    (w) => {
-      const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--project tooling", "--project tooling --project today");
-    },
+    (w) =>
+      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project tooling --project tooling-integration --project today' || '--project tooling' }}`),
   ],
   [
-    "SC8: tooling loses its project, so it runs every project",
-    (w) => {
-      const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("--project tooling ", "");
-    },
+    "SC8: tooling loses its projects, so an empty $PROJECTS runs every project",
+    (w) => Reflect.deleteProperty(step(w, "tests", "tooling tests").env!, "PROJECTS"),
   ],
   [
     "SC8: tooling leaves the trees out with --exclude, which a project ignores",
     (w) => {
       const s = step(w, "tests", "tooling tests");
       s["run"] = String(s["run"]).replace(
-        "--project tooling ",
+        "$PROJECTS ",
         "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' ",
       );
+    },
+  ],
+  // 0602 and 0584: main's full run runs every tooling law that starts a process, and a branch's full
+  // set none. Plants, each run once on scheduled.ts and restored: SC8's PROJECTS check dropped (red on
+  // the first two, and on "tooling runs today's tests too" and "tooling loses its projects" above;
+  // the third is caught by the command check above it).
+  [
+    "SC8: main's full run drops tooling-integration, so the tooling laws that start a process run nowhere",
+    (w) =>
+      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project tooling' || '--project tooling' }}`),
+  ],
+  [
+    "SC8: a branch's full set runs tooling-integration, which only main's full run runs",
+    (w) =>
+      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
+        `\${{ ${REF} && '--project tooling --project tooling-integration' || '--project tooling --project tooling-integration' }}`),
+  ],
+  [
+    "SC8: the tooling legs name both projects in the command again, so a branch's full set runs tooling-integration",
+    (w) => {
+      const s = step(w, "tests", "tooling tests");
+      s["run"] = String(s["run"]).replace("$PROJECTS ", "--project tooling --project tooling-integration ");
     },
   ],
   [
