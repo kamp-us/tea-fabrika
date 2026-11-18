@@ -9,7 +9,8 @@
 // - It prints the row with `Console.log`, one JSON line, and nothing else on stdout.
 // - It reads the events file and its `<events>.redacted` receipt through Effect's `FileSystem`
 //   (`exists`, `stat`, `readFileString` or `readFile`), the time from `Clock`, the zone from
-//   `DateTime.CurrentTimeZone`, and `CODEX_MODEL` and `CODEX_EFFORT` through Effect's `Config`.
+//   `DateTime.CurrentTimeZone`, requested-profile events, and older `CODEX_MODEL` and
+//   `CODEX_EFFORT` values through Effect's `Config`.
 //   When no `--started` or `--ended` is given, the events file's birth and change times are the
 //   row's bounds; with no events file either, both are the clock's now.
 //
@@ -47,7 +48,19 @@ interface Usage {
 /** One line of a Codex events file, and what fieldrow.py makes of it. */
 type Line =
   | { readonly _tag: "turn"; readonly usage: Usage; readonly text: string }
-  | { readonly _tag: "skipped"; readonly text: string };
+  | { readonly _tag: "skipped"; readonly text: string }
+  | {
+      readonly _tag: "profile";
+      readonly model: unknown;
+      readonly effort: unknown;
+      readonly text: string;
+    };
+
+type ProfileLine = Extract<Line, { readonly _tag: "profile" }>;
+
+const isProfile = (line: Line): line is ProfileLine => line._tag === "profile";
+
+const profileValue = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
 
 interface Case {
   readonly zone: string;
@@ -127,8 +140,17 @@ const summed = (lines: ReadonlyArray<Line> | null): Usage | null => {
  * the reason is `why`; here it is `reason`, the word this repo's new code uses.
  */
 const expected = (c: Case): Record<string, unknown> => {
-  const model = c.model.flag ?? c.model.env ?? "gpt-6-astra";
-  const effort = c.effort.flag ?? c.effort.env ?? "medium";
+  const profile = (c.lines ?? []).find(isProfile);
+  const modelValue = c.model.flag ?? (profile === undefined ? c.model.env || null : profileValue(profile.model));
+  const effortValue = c.effort.flag ?? (profile === undefined ? c.effort.env || null : profileValue(profile.effort));
+  const model = modelValue || "unknown";
+  const effort = effortValue || null;
+  const requested =
+    profile !== undefined ||
+    c.model.flag !== null ||
+    c.effort.flag !== null ||
+    modelValue !== null ||
+    effortValue !== null;
 
   const begun =
     c.started === null
@@ -142,6 +164,13 @@ const expected = (c: Case): Record<string, unknown> => {
 
   const u = summed(c.lines);
   const rate = LIST.get(model);
+  const profileNote = requested
+    ? ` Requested profile: model ${model}, effort ${effort ?? "unknown"}; effective API context unknown.`
+    : "";
+  const priceNote =
+    rate === undefined
+      ? ""
+      : ` Dollars are ${model}'s standard list price (packages/pipeline/src/stages/price.ts); runs use the standard tier.`;
 
   const usd =
     rate === undefined || u === null
@@ -171,7 +200,7 @@ const expected = (c: Case): Record<string, unknown> => {
     model,
     effort,
     outcome: c.outcome,
-    reason: c.reason.join(" "),
+    reason: `${c.reason.join(" ")}${profileNote}${priceNote}`,
     tokens: null,
     tools: null,
     minutes: pyRound((ended.ms - begun.ms) / 1000 / 60, 1),
@@ -228,6 +257,45 @@ const skipped: fc.Arbitrary<Line> = fc
   )
   .map((text) => ({ _tag: "skipped", text }));
 
+/** A requested profile bound to the event stream. */
+const requestedProfile = (model: unknown, effort: unknown): Line => ({
+  _tag: "profile",
+  model,
+  effort,
+  text: JSON.stringify({
+    type: "fabrika.requested_profile",
+    ...(model === null ? {} : { model }),
+    ...(effort === null ? {} : { effort }),
+  }),
+});
+
+const profile: fc.Arbitrary<Line> = fc
+  .record({
+    model: fc.option(fc.constantFrom<unknown>("gpt-6-luna", "gpt-6.2-astra", "gpt-6.1-sol", "", null, 0, false), {
+      nil: null,
+    }),
+    effort: fc.option(fc.constantFrom<unknown>("max", "high", "medium", "", null, 0, false), { nil: null }),
+  })
+  .map(({ model, effort }) => requestedProfile(model, effort));
+
+const profilePair: fc.Arbitrary<ReadonlyArray<Line>> = fc
+  .record({
+    model: fc.constantFrom<unknown>("gpt-6-luna", "gpt-6.2-astra", "", 0, false),
+    effort: fc.constantFrom<unknown>("max", "high", "", 0, false),
+  })
+  .map(({ model, effort }) => [
+    requestedProfile(model, effort),
+    requestedProfile(
+      profileValue(model) === "gpt-6-luna" ? "gpt-6.2-astra" : "gpt-6-luna",
+      profileValue(effort) === "max" ? "high" : "max",
+    ),
+  ]);
+
+const events: fc.Arbitrary<ReadonlyArray<Line>> = fc.oneof(
+  fc.array(fc.oneof(turn, skipped, profile), { maxLength: 8 }),
+  profilePair,
+);
+
 const ZONES = ["UTC", "America/Los_Angeles", "Asia/Kolkata", "Europe/Istanbul"] as const;
 
 const OFFSETS = ["+00:00", "-08:00", "-07:00", "+05:30", "+03:00"] as const;
@@ -261,7 +329,7 @@ const cases: fc.Arbitrary<Case> = fc
   .record({
     zone: fc.constantFrom(...ZONES),
     now: fc.integer({ min: FROM, max: TO }),
-    lines: fc.option(fc.array(fc.oneof(turn, skipped), { maxLength: 8 }), { nil: null, freq: 5 }),
+    lines: fc.option(events, { nil: null, freq: 5 }),
     birth: fc.integer({ min: FROM, max: TO }),
     // Milliseconds, as a file's change time has them: the row prints whole seconds.
     took: fc.integer({ min: 0, max: 5 * 3_600_000 }),
@@ -276,11 +344,11 @@ const cases: fc.Arbitrary<Case> = fc
       { nil: null },
     ),
     model: fc.record({
-      flag: fc.option(named, { nil: null }),
+      flag: fc.option(fc.oneof(named, fc.constant("")), { nil: null }),
       env: fc.option(fc.oneof(named, fc.constant("")), { nil: null }),
     }),
     effort: fc.record({
-      flag: fc.option(fc.constantFrom("low", "medium", "high"), { nil: null }),
+      flag: fc.option(fc.constantFrom("", "low", "medium", "high"), { nil: null }),
       env: fc.option(fc.constantFrom("", "low", "medium", "high", "xhigh"), { nil: null }),
     }),
     parent: fc.option(word, { nil: null }),
@@ -397,20 +465,24 @@ const check = (c: Case) =>
     expect(got.stdout).toHaveLength(1);
     const want = expected(c);
     const row = JSON.parse(got.stdout[0] ?? "") as Record<string, unknown>;
-    // The reason keeps the caller's words first; a priced model adds its source after them.
-    const { reason: words, ...wanted } = want;
+    const { reason: expectedReason, ...wanted } = want;
     const fields = Object.fromEntries(Object.entries(row).filter(([key]) => key !== "why"));
     const written = String(row["why"]);
     expect(fields).toEqual(wanted);
     expect(Object.keys(row)).toEqual(Object.keys(want).map((key) => (key === "reason" ? "why" : key)));
-    expect(written.startsWith(String(words))).toBe(true);
-    expect(written === words).toBe(!LIST.has(String(want.model)));
+    expect(written).toBe(expectedReason);
   });
 
 /** The cases of the plan's law that a case reaches. */
 const reaches = (c: Case): ReadonlyArray<string> => {
   const u = summed(c.lines);
-  const model = c.model.flag ?? c.model.env ?? "gpt-6-astra";
+  const profiles = (c.lines ?? []).filter(isProfile);
+  const profile = profiles[0];
+  const later = profiles[1];
+  const profileModel = profile === undefined ? null : profileValue(profile.model);
+  const profileEffort = profile === undefined ? null : profileValue(profile.effort);
+  const modelValue = c.model.flag ?? (profile === undefined ? c.model.env || null : profileModel);
+  const model = modelValue || "unknown";
 
   const marks: ReadonlyArray<readonly [string, boolean]> = [
     ["no events file", c.lines === null],
@@ -427,11 +499,62 @@ const reaches = (c: Case): ReadonlyArray<string> => {
     ["turns", (c.lines ?? []).filter((line) => line._tag === "turn").length > 1],
     ["file times", c.lines !== null && c.started === null],
     ["given times", c.started !== null],
-    ["model from env", c.model.flag === null && c.model.env !== null],
-    ["empty model from env", c.model.flag === null && c.model.env === ""],
-    ["empty model with usage", c.model.flag === null && c.model.env === "" && u !== null],
-    ["empty effort from env", c.effort.flag === null && c.effort.env === ""],
-    ["model default", c.model.flag === null && c.model.env === null],
+    ["model from env", profile === undefined && c.model.flag === null && c.model.env !== null],
+    ["empty model flag", c.model.flag === ""],
+    ["empty model from env", profile === undefined && c.model.flag === null && c.model.env === ""],
+    ["empty model with usage", profile === undefined && c.model.flag === null && c.model.env === "" && u !== null],
+    ["empty effort flag", c.effort.flag === ""],
+    ["empty effort from env", profile === undefined && c.effort.flag === null && c.effort.env === ""],
+    [
+      "unprofiled model",
+      profile === undefined &&
+        c.model.flag === null &&
+        (c.model.env === null || c.model.env === "") &&
+        c.effort.flag === null &&
+        (c.effort.env === null || c.effort.env === ""),
+    ],
+    ["requested profile", profile !== undefined],
+    [
+      "profile flags override",
+      profile !== undefined &&
+        ((c.model.flag !== null && c.model.flag !== profileModel) ||
+          (c.effort.flag !== null && c.effort.flag !== profileEffort)),
+    ],
+    [
+      "profile beats env",
+      profile !== undefined &&
+        ((c.model.flag === null && c.model.env !== null && c.model.env !== "" && profileModel !== c.model.env) ||
+          (c.effort.flag === null && c.effort.env !== null && c.effort.env !== "" && profileEffort !== c.effort.env)),
+    ],
+    [
+      "profile missing values",
+      profile !== undefined &&
+        ((c.model.flag === null && profileModel === null) || (c.effort.flag === null && profileEffort === null)),
+    ],
+    [
+      "first profile wins",
+      profile !== undefined &&
+        later !== undefined &&
+        ((c.model.flag === null && profileModel !== profileValue(later.model)) ||
+          (c.effort.flag === null && profileEffort !== profileValue(later.effort))),
+    ],
+    [
+      "invalid first profile stays unknown",
+      profile !== undefined &&
+        later !== undefined &&
+        ((c.model.flag === null &&
+          profileModel === null &&
+          profile.model !== null &&
+          profile.model !== undefined &&
+          typeof profile.model !== "string" &&
+          profileValue(later.model) !== null) ||
+          (c.effort.flag === null &&
+            profileEffort === null &&
+            profile.effort !== null &&
+            profile.effort !== undefined &&
+            typeof profile.effort !== "string" &&
+            profileValue(later.effort) !== null)),
+    ],
     ["step bounds", c.step !== null && c.status !== null],
     ["bounds without step", c.step === null && c.status !== null],
     ["receipt", c.receipt !== null],
@@ -442,24 +565,32 @@ const reaches = (c: Case): ReadonlyArray<string> => {
 
 const REQUIRED = [
   "bounds without step",
+  "empty effort flag",
   "empty effort from env",
+  "empty model flag",
   "empty model from env",
   "empty model with usage",
   "file times",
   "given times",
   "known astra price",
   "known sol price",
-  "model default",
+  "first profile wins",
+  "invalid first profile stays unknown",
   "model from env",
   "no events file",
   "no usage",
   "priced cache",
+  "profile beats env",
+  "profile flags override",
+  "profile missing values",
   "prototype model with usage",
   "prototype model without usage",
+  "requested profile",
   "receipt",
   "skipped lines",
   "step bounds",
   "turns",
+  "unprofiled model",
   "usage",
   "unknown model with usage",
   "unknown model without usage",

@@ -103,8 +103,8 @@ const info = (entry: Entry): FileSystem.File.Info => ({
 const children = (disk: Disk, folder: string): Array<string> =>
   [...disk.keys()].filter((p) => p !== folder && folderAbove(p) === folder).map(lastName);
 
-/** Effect's `FileSystem` over the disk. With `refuse`, every write fails, as a full or read-only disk does. */
-const layer = (disk: Disk, refuse = false): Layer.Layer<FileSystem.FileSystem> => {
+/** Effect's `FileSystem` over the disk. With `refuse`, only the named call fails. */
+const layer = (disk: Disk, refuse?: "makeDirectory" | "rename"): Layer.Layer<FileSystem.FileSystem> => {
   const found = (method: string, path: string, follow: boolean) =>
     Effect.suspend(() => {
       const at = locate(disk, path, follow);
@@ -266,21 +266,17 @@ const layer = (disk: Disk, refuse = false): Layer.Layer<FileSystem.FileSystem> =
       ),
   };
 
-  const refused = (method: string) => (path: string) => fail("PermissionDenied", method, path);
+  const refused = (method: "makeDirectory" | "rename") => (path: string) => fail("PermissionDenied", method, path);
 
   return FileSystem.layerNoop(
-    refuse
-      ? {
-          ...impl,
-          makeDirectory: refused("makeDirectory"),
-          rename: refused("rename"),
-          copy: refused("copy"),
-          copyFile: refused("copyFile"),
-          remove: refused("remove"),
-          writeFile: refused("writeFile"),
-          symlink: refused("symlink"),
-        }
-      : impl,
+    refuse === undefined
+      ? impl
+      : refuse === "makeDirectory"
+        ? {
+            ...impl,
+            makeDirectory: refused("makeDirectory"),
+          }
+        : { ...impl, rename: refused("rename") },
   );
 };
 
@@ -340,7 +336,7 @@ const withHome = (body: (disk: Disk, main: string, root: string) => void) => {
 };
 
 /** One keep through RunsFs on the disk, read as the old script's exit and stdout were. */
-const run = (disk: Disk, main: string, folder: string, refuse = false) => {
+const run = (disk: Disk, main: string, folder: string, refuse?: "makeDirectory" | "rename") => {
   const kept = Effect.gen(function* () {
     const runs = yield* Runs;
 
@@ -365,7 +361,7 @@ describe("keepruns.sh, today's tooling", () => {
         fc.array(tree, { maxLength: 2 }),
         (name, runs, taken) =>
           withHome((disk, main, root) => {
-            const folder = `${root}/${name}`;
+            const folder = `${root}/boxes/${name}`;
             mkdir(disk, folder);
             write(disk, `${folder}/runs`, runs);
 
@@ -419,12 +415,12 @@ describe("keepruns.sh, today's tooling", () => {
     });
   });
 
-  // keepruns.sh's own comment names three refusals no law above pins: a runs/ that is a file, a
-  // runs/ link whose target is gone (`[ -L ]` counts it as there), and a move that failed. Each
-  // keeps the folder, and nothing on the disk changes. Plants: read a dangling link as "no runs/";
-  // answer kept after a refused write; move a runs/ that is a file.
+  // keepruns.sh's own comment names refusals no law above pins: a runs/ that is a file, any runs/
+  // link, MAIN's own runs/, a refused directory creation and a refused move. Each keeps the folder,
+  // and nothing on the disk changes. Plants: read a dangling link as "no runs/"; answer kept after
+  // a refused write; move a runs/ that is a file.
   it("property: a runs/ that is a file, any runs/ link, MAIN's own runs/ or a refused write keeps the folder and changes nothing", () => {
-    const cases = ["file", "link", "dangling", "main", "refused"] as const;
+    const cases = ["file", "link", "dangling", "main", "makeDirectory-refused", "rename-refused"] as const;
     const reached = new Set<string>();
     fc.assert(
       fc.property(
@@ -435,11 +431,18 @@ describe("keepruns.sh, today's tooling", () => {
         (name, kind, runs, taken) =>
           withHome((disk, main, root) => {
             reached.add(`${kind} ${taken ? "taken" : "free"}`);
-            const folder = kind === "main" ? main : `${root}/${name}`;
+            const folder = kind === "main" ? main : `${root}/boxes/${name}`;
             mkdir(disk, folder);
 
             if (taken) {
               write(disk, `${main}/runs/${name}`, { "taken.json": "taken" });
+            }
+
+            const savedName = name === "already-saved" ? "saved-elsewhere" : "already-saved";
+            const saved = { "saved.json": "saved" };
+
+            if (kind === "makeDirectory-refused" || kind === "rename-refused") {
+              write(disk, `${main}/runs/${savedName}`, saved);
             }
 
             if (kind === "file") {
@@ -454,9 +457,16 @@ describe("keepruns.sh, today's tooling", () => {
             }
 
             const before = JSON.stringify([...disk.entries()]);
-            const got = run(disk, main, folder, kind === "refused");
+            const refuse =
+              kind === "makeDirectory-refused" ? "makeDirectory" : kind === "rename-refused" ? "rename" : undefined;
+            const got = run(disk, main, folder, refuse);
             expect(got.code, kind).toBe(1);
             expect(JSON.stringify([...disk.entries()]), kind).toBe(before);
+
+            if (refuse !== undefined) {
+              expect(filesIn(disk, `${folder}/runs`), kind).toEqual(runs);
+              expect(filesIn(disk, `${main}/runs/${savedName}`), kind).toEqual(saved);
+            }
           }),
       ),
       { seed: 119120, numRuns: 100 },

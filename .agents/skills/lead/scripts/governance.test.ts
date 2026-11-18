@@ -360,4 +360,25 @@ describe("governance.ts", () => {
     expect(Exit.isSuccess(got.exit)).toBe(true);
     expect(got.lines).toEqual([NO_MATCH]);
   });
+
+  // scenario: decision files read with CRLF keep tags available to the matcher.
+  it("scenario: a changed word in tags matches a CRLF decision", () => {
+    const base = {
+      ".decisions/0001-unrelated-record.md":
+        "---\r\ntitle: Unrelated record\r\ntags:\r\n  [script]\r\n---\r\n\r\n# Unrelated\r\n",
+    };
+    const head = { ...base, "src/change.ts": "new script\n" };
+    const model: GitTest.Model = {
+      top: TOP,
+      commits: {
+        b: { parents: [], tree: base },
+        h: { parents: ["b"], tree: head },
+      },
+      refs: { HEAD: "h", "origin/main": "b" },
+    };
+
+    const got = runCommand(model, []);
+    expect(Exit.isSuccess(got.exit)).toBe(true);
+    expect(got.lines).toEqual([".decisions/0001-unrelated-record.md: script"]);
+  });
 });
