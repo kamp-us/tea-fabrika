@@ -1,6 +1,6 @@
 ---
 id: 0565
-title: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time, with three exceptions: apiStabilityLeak may stay off while hits remain, strictEffectProvide covers source but not test files, and four bare-Node CI scripts are excluded by path
+title: "In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time, with three exceptions: apiStabilityLeak may stay off while hits remain, strictEffectProvide covers source but not test files, and four bare-Node CI scripts are excluded by path"
 status: accepted
 date: 2026-11-15
 tags: [effect, tsgo, typecheck, checks, array, string, record, schema, sweep, next, tooling]
