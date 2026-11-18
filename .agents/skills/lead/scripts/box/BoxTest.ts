@@ -1,6 +1,6 @@
 // BoxTest: the laws of the box command, as suites a world runs (0062). A world makes MAIN and one clean box
 // in a fresh temp folder and gives the layers rm runs on: `BoxTest.memory` answers Git and the runs/
-// move from memory, `BoxTestGit.world` uses real git and keepruns.sh, so the memory one stays honest.
+// move from memory, `BoxTestGit.world` uses real git and RunsFs, so the memory one stays honest.
 //
 //   BoxTest.rm.suite("memory", BoxTest.memory, run, { numRuns: 300, seed: 119120 })
 //

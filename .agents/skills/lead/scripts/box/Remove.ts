@@ -22,7 +22,7 @@ export const Verdict = Schema.TaggedUnion({
 
 export type Verdict = typeof Verdict.Type;
 
-/** One rm: the name as its line shows it, what keepruns.sh said first ("" for nothing), the verdict. */
+/** One rm: the name as its line shows it, what the runs/ move said first ("" for nothing), the verdict. */
 export type Removal = { readonly shown: string; readonly runs: string; readonly verdict: Verdict };
 
 /** The one result line. */
@@ -709,7 +709,7 @@ const inspect = Effect.fn("Remove.inspect")(function* (
 
 /**
  * Remove the box `name` under `boxes` when MAIN keeps all it saved. Never fails: every refusal is a
- * `kept` verdict, and what keepruns.sh said comes back beside it.
+ * `kept` verdict, and what the runs/ move said comes back beside it.
  */
 export const remove = Effect.fn("Remove.remove")(function* (name: string, folders: { boxes: string; main: string }) {
   if (invalid(name)) {
