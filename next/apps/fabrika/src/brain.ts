@@ -14,6 +14,7 @@ import type { Published } from "@kampus/libfabrika/runtime/News";
 import { fetch } from "@kampus/libfabrika/workers";
 import type { ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import { control } from "@kampus/libfabrika/workers/control";
+import * as DispatcherLive from "@kampus/libfabrika/workers/DispatcherLive";
 import { ProjectService, signingReply, commitReply, settingsWire } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
 import { Effect, Redacted, Schema } from "effect";
@@ -332,7 +333,11 @@ export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the private local control socket enters Effect
-    return Effect.runPromise(control(request, this.env, Redacted.make(this.ctx.props.token), programs));
+    return Effect.runPromise(
+      control(request, this.env, Redacted.make(this.ctx.props.token), programs).pipe(
+        Effect.provide(DispatcherLive.layer),
+      ),
+    );
   }
 }
 
