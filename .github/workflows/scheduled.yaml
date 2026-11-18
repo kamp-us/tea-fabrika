@@ -1,9 +1,10 @@
 name: scheduled
 
 # The full run, the whole suite (0534). The merge line runs only the tests a change reaches: a pull
-# request and a merge queue group each run the in-memory and visual next/ tests and the plain
-# tooling tests their diff reaches (check.yaml's next and related jobs, 0584), and never an
-# `.integration.` law, of next/ or of tooling (0602). This runs all of next/, every layer of it
+# request and a merge queue group each run the in-memory next/ tests and the plain tooling tests
+# their diff reaches (check.yaml's next and related jobs, 0584), a pull request with the `visual`
+# label its visual tests too (0536), and never an `.integration.` law, of next/ or of tooling
+# (0602). This runs all of next/, every layer of it
 # (0536): the in-memory tests, the real-resource ones (`*.integration.test.ts`), which only this
 # run runs, and the visual ones (`*.visual.test.ts`), and every tooling test, on main's head. A
 # push to main starts it when no full run on main started in the last hour, and an hourly catch-up

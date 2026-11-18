@@ -237,13 +237,13 @@ const scriptReads: Plugin = {
 const VISUAL_LIMIT = 120_000;
 
 // One Vitest project per layer, picked by `--project` (0536). Pull requests and the merge queue run
-// the `next` and `next-visual` tests and the `tooling` tests their change reaches (check.yaml); main's
-// full run runs every project but `today`, and only it runs `next-integration` and
-// `tooling-integration` (0602). The tooling tests are their own projects and today's version's
-// theirs (`today`), so `--project tooling` leaves today's out. The visual project starts one file
-// at a time, since each starts a brain, Chromium or Electron, and keeps no setup file, as the
-// end-to-end runner did. A file is in exactly one project: `next` leaves the other two next names
-// out, and `tooling` leaves out `tooling-integration`'s.
+// the `next` and `tooling` tests their change reaches, and a pull request with the `visual` label
+// its `next-visual` tests too (check.yaml); main's full run runs every project but `today`, and
+// only it runs `next-integration` and `tooling-integration` (0602). The tooling tests are their own
+// projects and today's version's theirs (`today`), so `--project tooling` leaves today's out. The
+// visual project starts one file at a time, since each starts a brain, Chromium or Electron, and
+// keeps no setup file, as the end-to-end runner did. A file is in exactly one project: `next`
+// leaves the other two next names out, and `tooling` leaves out `tooling-integration`'s.
 export const projects = [
   { extends: true, test: { name: "today", include: [...TODAY], exclude: [...EXCLUDE] } },
   { extends: true, test: { name: "tooling", include: [...TOOLING], exclude: [...EXCLUDE, ...TOOLING_INTEGRATION] } },
