@@ -125,6 +125,7 @@ type Output =
   | ReturnType<typeof close>
   | ReturnType<typeof keep>
   | ReturnType<typeof answer>;
+
 type Step = readonly [Model, ReadonlyArray<Output>];
 
 const EMPTY: Line = { left: "", right: "" };

@@ -332,6 +332,7 @@ export function parse(line: string): Parsed {
         if (bar === undefined || !Token.guards.op(bar) || bar.op !== "|") {
           return yield* fail("expected a command after |");
         }
+
         pos += 1;
         const next = yield* command();
         bars.push({ start: bar.start, end: bar.end });

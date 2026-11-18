@@ -62,6 +62,7 @@ export function roles(line: string, programs: ProgramList, cursor = line.length)
     if (token === undefined) {
       continue;
     }
+
     const unfinished = Token.guards.word(token) && token.start <= cursor && cursor <= token.end;
     const role = Token.match(token, {
       op: (t): Role => {

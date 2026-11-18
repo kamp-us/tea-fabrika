@@ -202,8 +202,7 @@ export const table = (value: typeof Table.Type, cols: number): string => {
 
   const widths = natural.map((n, i) => (i === value.cut ? Math.max(12, Math.min(n, cols - fixed, 80)) : n));
   const row = (entries: ReadonlyArray<typeof TableCell.Type>) =>
-    "  " +
-    entries
+    `  ${entries
       .map((cell, i) => {
         const width = widths.at(i);
 
@@ -217,7 +216,7 @@ export const table = (value: typeof Table.Type, cols: number): string => {
           ? pad + toned(text, cell.tone)
           : toned(text, cell.tone) + (i === entries.length - 1 ? "" : pad);
       })
-      .join("   ");
+      .join("   ")}`;
   lines.push(row(value.columns.map((column) => ({ text: column.header.toUpperCase(), tone: "faint" }))));
   lines.push(...value.rows.map(row));
   const more = value.total - value.rows.length;
