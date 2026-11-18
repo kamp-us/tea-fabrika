@@ -2,7 +2,7 @@
 // lead tooling, run on our own laptop; it is not product. Run it in the background and read the
 // last line only: one JSON object with the outcome, the new head and the report's path.
 //
-//   node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude]
+//   node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--sandbox danger-full-access]
 //                 [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>]
 //                 [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]
 //
@@ -12,7 +12,7 @@
 // the user's own Codex config and Codex's own sandbox (./codexexec.ts). The box's git data sits outside the box, where the harness lets no
 // command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
 // its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
-// commits them as one signed step commit through stepcommit, with main's own signer. A mutation
+// commits them as one unsigned step commit through stepcommit (0161, 0164). A mutation
 // step's Stryker run happens before its agent starts, in a container with its own network
 // (mutbox.ts, decision 0045): drive runs it on the step's start head with the tests a `RELATED=`
 // line of the brief names, and the agent only reads the report, which rides in its prompt. A run
@@ -30,7 +30,7 @@
 //                      phase's time goes on the step's entry in state/<quest>.json as `phases`
 //   starting   Act     box.sh new, at the quest's head
 //   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
-//   reading    Gather  collect the tree and sign it, then the commits, the commits check's held
+//   reading    Gather  collect the tree, then the commits, the commits check's held
 //                      rules, exam paths, leaks and the report
 //   (update)   Check   pure: what the step answered and what the reads found make one outcome
 //                      (a manifest the lockfile must follow, changed with the lockfile left alone,
@@ -123,6 +123,7 @@ import {
   stepRow,
   type Turned,
 } from "./agents.ts";
+import type { Sandbox } from "./codexexec.ts";
 import { pgrepAnswer, skipLine } from "./pgrep.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
@@ -332,6 +333,7 @@ const Ask = Schema.Struct({
   quest: Schema.String,
   step: Schema.Literals(STEPS),
   agent: Schema.Literals(AGENTS),
+  sandbox: Schema.optionalKey(Schema.Literal("danger-full-access")),
   /** The model as the harness names it, and its effort where the harness offers one. */
   model: Schema.String,
   effort: Schema.NullOr(Schema.String),
@@ -872,9 +874,27 @@ export type Env = {
   readonly MAIN: string;
   readonly BOXES: string;
   readonly GH_REPO: string;
-  /** The model a Codex box runs and its effort (env.sh, decision 0022). */
+  /** The coordination and judgment model and effort (env.sh, decision 0022). */
   readonly CODEX_MODEL: string;
   readonly CODEX_EFFORT: string;
+  /** Role profiles resolved by env.sh. `prepare` refuses a missing profile. */
+  readonly CODEX_PLAN_MODEL?: string | undefined;
+  readonly CODEX_PLAN_EFFORT?: string | undefined;
+  readonly CODEX_BUILD_MODEL?: string | undefined;
+  readonly CODEX_BUILD_EFFORT?: string | undefined;
+  readonly CODEX_REVIEW_MODEL?: string | undefined;
+  readonly CODEX_REVIEW_EFFORT?: string | undefined;
+};
+
+/** Read the role profile env.sh resolved; the old coordination profile is never a role fallback. */
+const codexProfile = (env: Env, step: StepName) => {
+  const model =
+    step === "plan" ? env.CODEX_PLAN_MODEL : step === "review" ? env.CODEX_REVIEW_MODEL : env.CODEX_BUILD_MODEL;
+
+  const effort =
+    step === "plan" ? env.CODEX_PLAN_EFFORT : step === "review" ? env.CODEX_REVIEW_EFFORT : env.CODEX_BUILD_EFFORT;
+
+  return model && effort ? { model, effort } : null;
 };
 
 export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
@@ -896,17 +916,41 @@ const writtenReport = (ask: Ask) => {
 export const loadEnv = (): Env => {
   const r = sh("sh", [
     "-c",
-    '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$CODEX_MODEL" "$CODEX_EFFORT"',
+    '. "$0" && printf "%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$FABRIKA_COORD_MODEL" "$FABRIKA_COORD_EFFORT" "$CODEX_PLAN_MODEL" "$CODEX_PLAN_EFFORT" "$CODEX_BUILD_MODEL" "$CODEX_BUILD_EFFORT" "$CODEX_REVIEW_MODEL" "$CODEX_REVIEW_EFFORT"',
     join(HERE, "env.sh"),
   ]);
 
-  const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = r.out.split("\n");
+  const [
+    MAIN = "",
+    BOXES = "",
+    GH_REPO = "",
+    CODEX_MODEL = "",
+    CODEX_EFFORT = "",
+    CODEX_PLAN_MODEL,
+    CODEX_PLAN_EFFORT,
+    CODEX_BUILD_MODEL,
+    CODEX_BUILD_EFFORT,
+    CODEX_REVIEW_MODEL,
+    CODEX_REVIEW_EFFORT,
+  ] = r.out.split("\n");
 
   if (r.code !== 0 || !MAIN) {
     throw new Error(`env.sh failed: ${r.err}`);
   }
 
-  return { MAIN, BOXES, GH_REPO, CODEX_MODEL, CODEX_EFFORT };
+  return {
+    MAIN,
+    BOXES,
+    GH_REPO,
+    CODEX_MODEL,
+    CODEX_EFFORT,
+    CODEX_PLAN_MODEL,
+    CODEX_PLAN_EFFORT,
+    CODEX_BUILD_MODEL,
+    CODEX_BUILD_EFFORT,
+    CODEX_REVIEW_MODEL,
+    CODEX_REVIEW_EFFORT,
+  };
 };
 
 // Shapes that leak on any machine: home and temp folders, key prefixes, private keys, em dashes.
@@ -1128,10 +1172,10 @@ export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string)
 /**
  * The agent holds no key and cannot reach the box's git data, so it commits nothing. Its changes
  * are read from the tree and copied into a fresh worktree of the main checkout at the base;
- * stepcommit commits them as the bot and signs them as the step, with main's own signer. The
- * branch then points at that one signed commit, or stays at the base when nothing changed.
+ * stepcommit checks ownership and formatting, then makes the bot's unsigned hand-run commit
+ * (0161, 0164). The branch points at that commit, or stays at the base when nothing changed.
  */
-const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
+export const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   const git = (...args: string[]) => {
     const r = spawnSync("git", ["-C", env.MAIN, ...args], { encoding: "utf8", env: SAFE_GIT });
 
@@ -1151,6 +1195,17 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   }
 
   try {
+    // Install the base before copying edits, so a manifest change still reaches the lockfile check.
+    const installed = spawnSync("pnpm", ["install", "--offline", "--frozen-lockfile", "--ignore-scripts"], {
+      cwd: wt,
+      encoding: "utf8",
+      env: { ...SAFE_GIT, PATH: process.env.PATH },
+    });
+
+    if (installed.status !== 0) {
+      return { code: installed.status ?? -1, out: "", err: `collect install: ${installed.stdout}${installed.stderr}` };
+    }
+
     const box = boxTree(env.BOXES, ask.box);
 
     for (const { xy, path, from: old } of changes) {
@@ -1183,6 +1238,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
       "sh",
       [
         join(HERE, "../../step-commit/scripts/stepcommit.sh"),
+        "--commit-only",
         ask.step,
         ask.ticket,
         subject,
@@ -1193,10 +1249,8 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
         encoding: "utf8",
         env: {
           ...SAFE_GIT,
-          // The fresh worktree has no node_modules, so stepcommit's format check finds
-          // oxfmt in the main checkout's, where the signer comes from too.
-          PATH: `${join(env.MAIN, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
-          STEPCOMMIT_SIGNER: `node ${join(env.MAIN, "next/apps/fabrika/src/exam/commits.ts")}`,
+          PATH: `${join(wt, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
+          BOXES: env.BOXES,
           // The sign worktree is not the box: name the box whose facts stepcommit checks.
           STEPCOMMIT_BOX: ask.box,
         },
@@ -1470,6 +1524,12 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         const { ask } = e;
         const notes: string[] = [];
         const ended = new Date().toISOString();
+
+        const profileNote =
+          ask.agent === "claude"
+            ? ""
+            : ` Requested profile: model ${ask.model}, effort ${ask.effort ?? "unknown"}; effective API context unknown.`;
+
         dropView(env, ask.box);
 
         // The saved files are scrubbed first (redact.sh prints only a count), then the field row,
@@ -1492,7 +1552,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
               model: ask.model,
               effort: ask.effort,
               outcome: rowOf(e.outcome),
-              reason: `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}${faultNote(e.outcome, e.reason)}. ${e.reason}`,
+              reason: `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}${faultNote(e.outcome, e.reason)}. ${e.reason}${profileNote}`,
               started: new Date(ask.started),
               ended: new Date(ended),
               spent: e.spent,
@@ -1954,7 +2014,7 @@ export const holdsElectron = (step: StepName, flagged: boolean) => step === "mut
 
 const usage = () => {
   console.error(
-    "usage: node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
+    "usage: node drive.ts <quest> <plan|tests|build|mutation|review> <brief-file> [--agent codex|codex-exec|claude] [--sandbox danger-full-access] [--model sonnet|opus] [--electron] [--from <ref>] [--ticket <n>] [--branch fabrikalfa/<name>] [--plan <approved plan>] [--plan-only]",
   );
   process.exit(2);
 };
@@ -2059,7 +2119,8 @@ export interface StepArgs {
   readonly step: StepName;
   readonly brief: string;
   readonly agent: AgentName;
-  /** Claude's model; a Codex box runs env.sh's CODEX_MODEL. */
+  readonly sandbox?: Sandbox | undefined;
+  /** Claude's model; a Codex step uses its resolved role profile from env.sh. */
   readonly model?: string | undefined;
   readonly electron: boolean;
   readonly ticket?: string | undefined;
@@ -2094,6 +2155,10 @@ const usageError = (reason: string): Refusal => refusal({ outcome: "usage", reas
 export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const { quest, step, agent, electron } = p;
 
+  if (p.sandbox !== undefined && (agent !== "codex-exec" || p.sandbox !== "danger-full-access")) {
+    return usageError("--sandbox danger-full-access is for --agent codex-exec");
+  }
+
   if (!/^[a-z0-9][a-z0-9-]*$/.test(quest) || !existsSync(p.brief)) {
     return usageError("a quest name and a brief file are required");
   }
@@ -2113,7 +2178,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   }
 
   if (agent !== "claude" && p.model !== undefined) {
-    return usageError("--model is for --agent claude; a Codex box reads CODEX_MODEL");
+    return usageError("--model is for --agent claude; a Codex step uses its role profile from env.sh");
   }
 
   // A chain holds its quest already; a step run alone takes it here, before any box is made.
@@ -2183,16 +2248,34 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError(`${base.slice(0, 8)} shares no history with origin/main`);
   }
 
+  const claude = agent === "claude";
+  let model: string;
+  let effort: string | null;
+
+  if (claude) {
+    model = p.model ?? "sonnet";
+    effort = null;
+  } else {
+    const profile = codexProfile(env, step);
+
+    if (profile === null) {
+      return usageError(`env.sh did not resolve the Codex profile for ${step}`);
+    }
+
+    model = profile.model;
+    effort = profile.effort;
+  }
+
   const box = RunId.next(quest, step, runNames(env.BOXES, quest));
   const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
-  const claude = agent === "claude";
 
   const ask: Ask = {
     quest,
     step,
     agent,
-    model: claude ? (p.model ?? "sonnet") : env.CODEX_MODEL,
-    effort: claude ? null : env.CODEX_EFFORT,
+    ...(p.sandbox === undefined ? {} : { sandbox: p.sandbox }),
+    model,
+    effort,
     ticket,
     plan,
     branch,
@@ -2437,10 +2520,12 @@ const main = () => {
   const args = process.argv.slice(2);
   const [quest = "", step = "", brief = ""] = args;
   const agent = flag(args, "--agent") ?? "codex";
+  const sandbox = flag(args, "--sandbox");
 
   if (
     !(STEPS as readonly string[]).includes(step) ||
     !(AGENTS as readonly string[]).includes(agent) ||
+    (args.includes("--sandbox") && (agent !== "codex-exec" || sandbox !== "danger-full-access")) ||
     !existsSync(brief)
   ) {
     usage();
@@ -2455,6 +2540,7 @@ const main = () => {
     step: step as StepName,
     brief,
     agent: agent as AgentName,
+    ...(sandbox === "danger-full-access" ? { sandbox } : {}),
     model: flag(args, "--model"),
     electron: args.includes("--electron"),
     ticket: flag(args, "--ticket"),
@@ -2492,7 +2578,7 @@ const main = () => {
   }
 
   const program = Effect.gen(function* () {
-    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
+    const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN, prepared.ask.sandbox);
     const line = yield* driveStep(env, agents, prepared);
     console.log(JSON.stringify(line));
     process.exitCode = line.exit;

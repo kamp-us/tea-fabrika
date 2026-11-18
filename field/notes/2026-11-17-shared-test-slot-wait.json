@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-17-shared-test-slot-wait",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1149"],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "Today's scheduled CI, serving both versions: PR 1570's changed leg 2 waited 705 seconds, from 15:14:09Z to 15:25:54Z. Its shared group 2 was executing earlier jobs for 702 seconds. Group 6 had no executing or already-created waiting job for the final 286 seconds. Across all nine groups, empty groups added up to 780 group-seconds during that wait. This measures shared group use, not free hosted machines.",
+  "cause": "Changed legs use their number as their shared group. Full browser leg 2 also used group 2 and ended at 15:25:53Z; the proof leg started one second later. Full core leg 4 released group 6 at 15:21:08Z. All 215 retained scheduled-run records created before the wait ended were examined; five overlapped the wider 15:13:00Z to 15:25:54Z interval, all on attempt 1 with byte-identical shared-group workflow definitions.",
+  "person": false,
+  "primitive": null,
+  "fix": "Swap the full matrix's browser leg 2 and core leg 4 group assignments, 2 and 6. Keep the same nine distinct test groups and one control group. This changes who waits behind whom; it does not provide first-free scheduling or establish a future speedup.",
+  "test": "Existing SC19 laws accept every permutation of the nine full-matrix groups and reject missing, duplicate and private groups. New actual CI comparison is still owed. No historical proof is relabeled.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1570",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44111772408/job/134139691185",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44110991848/job/134137577118",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44110991848/job/134137576762"
+  ]
+}

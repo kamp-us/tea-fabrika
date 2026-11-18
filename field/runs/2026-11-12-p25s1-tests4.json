@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-12",
+  "run": "2026-11-12-p25s1-tests4",
+  "ticket": "888",
+  "pr": null,
+  "started": "2026-11-12T15:45:28-08:00",
+  "ended": "2026-11-12T15:52:09-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "outcome": "fail",
+  "why": "next/, P25 slice 1. drive.ts tests in box p25s1-tests4 at bfd9f7bb: send:build:step_said. next/: extended T1/T2 in Tools.test.ts:357 for suspended schemas, alternatives, multi-literal tags, and encoded-key mappings, with seed 119120 and 300 runs each; ten new cases fail while ten existing tests pass on Node 26.13.0. Fix Program.port schema loss; format and lint pass, all plants were restored by copy, only the allowed test path changed, typechecking remains for CI, and later tests ran without refused nice. Dollars are gpt-6.1-sol's standard list price (fieldrow.py's table); the plan bills no call.",
+  "tokens": null,
+  "tools": 45,
+  "minutes": 6.7,
+  "note": null,
+  "costUsd": null,
+  "listUsd": 0.569,
+  "billed": 2607640,
+  "inputTokens": 2598028,
+  "cachedTokens": 2485888,
+  "outputTokens": 9612,
+  "step": "tests",
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "T1",
+      "plant": "Program.ts: return the whole Msg schema instead of the port schema.",
+      "result": "red"
+    },
+    {
+      "law": "T2",
+      "plant": "Tools.ts: expose person-only inputs as tools.",
+      "result": "red"
+    },
+    {
+      "law": "T5",
+      "plant": "Tools.ts: import gateway/Gateway.ts; lint reports next-mcp -> next-door.",
+      "result": "red"
+    }
+  ]
+}

@@ -118,38 +118,45 @@ describe("T325 K9 machine caps, today's tooling", () => {
   it("R5 refuses mismatched or missing local Node versions and lets CI run", () => {
     const pinned = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).engines?.node;
     expect(pinned).toBe("26.13.0");
-    fc.assert(
-      fc.property(fc.tuple(fc.integer({ min: 20, max: 30 }), fc.nat({ max: 30 }), fc.nat({ max: 30 })), (parts) => {
-        const different = parts.join(".") === pinned ? `${parts[0]}.0.99` : parts.join(".");
+    const cache = mkdtempSync(join(tmpdir(), "caps-compile-"));
 
-        for (const version of [pinned, different, undefined]) {
-          for (const ci of [undefined, "1"]) {
-            const ran = probe(root, ["run", "--maxWorkers=1", "scripts/caps.test.ts"], {
-              CI: ci,
-              TEST_NODE_VERSION: version,
-              TEST_NODE_MISSING: version === undefined ? "1" : undefined,
-            });
-            const refused = !ci && version !== pinned;
-            expect(ran.status, ran.stderr).toBe(refused ? 1 : 0);
+    try {
+      fc.assert(
+        fc.property(fc.tuple(fc.integer({ min: 20, max: 30 }), fc.nat({ max: 30 }), fc.nat({ max: 30 })), (parts) => {
+          const different = parts.join(".") === pinned ? `${parts[0]}.0.99` : parts.join(".");
 
-            if (refused) {
-              const lines = ran.stderr.split("\n").filter((line) => line.includes("Local test run refused"));
-              expect(lines).toHaveLength(1);
-              expect(lines[0]).toContain(version === undefined ? process.version : `v${version}`);
-              expect(lines[0]).toContain(`v${pinned}`);
-              expect(lines[0]).toContain(`volta run --node ${pinned}`);
+          for (const version of [pinned, different, undefined]) {
+            for (const ci of [undefined, "1"]) {
+              const ran = probe(root, ["run", "--maxWorkers=1", "scripts/caps.test.ts"], {
+                CI: ci,
+                NODE_COMPILE_CACHE: process.env.NODE_V8_COVERAGE ? undefined : cache,
+                TEST_NODE_VERSION: version,
+                TEST_NODE_MISSING: version === undefined ? "1" : undefined,
+              });
+              const refused = !ci && version !== pinned;
+              expect(ran.status, ran.stderr).toBe(refused ? 1 : 0);
+
+              if (refused) {
+                const lines = ran.stderr.split("\n").filter((line) => line.includes("Local test run refused"));
+                expect(lines).toHaveLength(1);
+                expect(lines[0]).toContain(version === undefined ? process.version : `v${version}`);
+                expect(lines[0]).toContain(`v${pinned}`);
+                expect(lines[0]).toContain(`volta run --node ${pinned}`);
+              }
             }
           }
-        }
-      }),
-      {
-        ...options,
-        seed: 119120,
-        numRuns: 5,
-        endOnFailure: true,
-        examples: [[[26, 13, 1]], [[26, 0, 0]]],
-      },
-    );
+        }),
+        {
+          ...options,
+          seed: 119120,
+          numRuns: 5,
+          endOnFailure: true,
+          examples: [[[26, 13, 1]], [[26, 0, 0]]],
+        },
+      );
+    } finally {
+      rmSync(cache, { recursive: true, force: true });
+    }
   });
 
   // R4 finding 4. With no lock named, every shell gets the same system file, whatever its TMPDIR.

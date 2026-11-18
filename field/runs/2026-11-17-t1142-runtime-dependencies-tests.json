@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1142-runtime-dependencies-tests",
+  "ticket": "kamp-us/tea-fabrika#1142",
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "started": "2026-11-17T03:35:41.312195-08:00",
+  "ended": "2026-11-17T03:40:27.977627-08:00",
+  "parent": null,
+  "active": null,
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.78,
+  "costUsd": null,
+  "billed": null,
+  "why": "Tests step for the separate next/ runtime dependency preparation. Generated pnpm-lock.yaml through pinned pnpm 12.16.1 in a disposable prospective-manifest copy. The actual product manifest stays unchanged for the builder. Semantic comparison of both lock documents finds only the three approved importer entries moved from development to runtime; all versions, peer bindings, integrity values, patches, catalogs and other importers stay identical. Before build, the isolated production deployment cannot resolve @effect/vitest, fast-check or vitest, and the old manifest with the generated lock fails the normal frozen check with ERR_PNPM_OUTDATED_LOCKFILE. The existing Depth four, Recorder seven and Stub three laws passed. The selected in-memory setup-failure property passed, with its other 17 declarations filtered explicitly.",
+  "note": "Source base 1d893ccc507bea94c62e5a0d79d3374521702acc. Approved plan body f043b1261ec6. Normal format passed with zero original tracked-file changes. An initial legacy-deploy command failed before resolution with ERR_PNPM_UNUSED_PATCH and earns no product red credit. After the lead corrected the plan to the installed pnpm default deploy, the unchanged-source production deployment succeeded, then the required all-three resolution check exited 1 with three MODULE_NOT_FOUND results. Offline, production-only, frozen lock and ignored lifecycle-script options were retained; no patch or workspace setting was changed. Full lint, compiler, post-build production resolution and CI remain for later steps. No source law, generator, count, assertion or deadline changed. No protected resource test ran.",
+  "plants": [
+    {
+      "law": "An isolated production deployment resolves all three packages from its own install without workspace development packages",
+      "plant": "Keep the unmodified development-only declarations in the disposable baseline",
+      "result": "red"
+    },
+    {
+      "law": "The generated dependency importer requires the matching product manifest before a frozen install",
+      "plant": "Use the generated lock with the unchanged old manifest in the disposable baseline",
+      "result": "red"
+    }
+  ]
+}
