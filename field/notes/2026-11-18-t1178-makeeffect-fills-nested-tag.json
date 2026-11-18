@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-18",
+  "quests": ["t1178"],
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1643", "https://github.com/kamp-us/tea-fabrika/issues/1631"],
+  "id": "2026-11-18-t1178-makeeffect-fills-nested-tag",
+  "stage": "tests",
+  "kind": "broke",
+  "person": false,
+  "what": "The approved plan for ticket 1178 fixed the tasks ledger's five write calls by swapping Schema `make` for `makeEffect`. The tests step tried that fix before the build and found L8 still red: `makeEffect` fills a nested `Result`'s missing `_tag` from a constructor default, so a result with no tag is accepted and answers `conflict`, not `bad_input`. The plan went back for one amendment: decode each caller field with the schema's decoder before the Msg is made, as 0215 says.",
+  "cause": "The plan read `makeEffect` as the decoder's Effect form. It is the constructor's Effect form, and a constructor applies defaults that a decoder does not.",
+  "primitive": "Check",
+  "fix": "A plan that turns untrusted input into a typed value names a decoder (`Schema.decodeUnknownEffect` or `decodeUnknownResult`), never a maker, and traces a value with a defaulted field left out.",
+  "test": "The next plan for an untrusted-input fix names a decoder and traces a value with a defaulted field missing."
+}

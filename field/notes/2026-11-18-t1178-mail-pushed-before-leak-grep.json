@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-18",
+  "quests": ["t1178"],
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1643"],
+  "id": "2026-11-18-t1178-mail-pushed-before-leak-grep",
+  "stage": "lead",
+  "kind": "broke",
+  "person": false,
+  "what": "The lead of ticket 1178 pushed its first mail commit on a new mail branch with the leak grep and the push joined by `;`, not `&&`. `leakgrep.sh --commits HEAD` stopped on that commit, which shares no history with main, and the push went out anyway. The lead then ran the net-text check by hand and the text was clean. The coordinator's ruling the same day: a red leak grep stops the push, and a commit is fixed before anything leaves.",
+  "cause": "The lead joined the check and the push so that a failing check did not stop the push, and the leak grep cannot read a commit with no parent on main.",
+  "primitive": "Check",
+  "fix": "Each push runs after its leak grep with `&&`. A mail branch's commits are checked with `git show <commit> | leakgrep.sh`, which reads the added text without needing main's history.",
+  "test": "No mail branch push in a lead's run goes out after a leak grep that did not pass."
+}
