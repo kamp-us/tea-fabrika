@@ -449,10 +449,10 @@ const commandMove = (pid: number) =>
     (w) =>
       Effect.gen(function* () {
         w.table.running.set(commandPid(pid), w.disk.now - 1_000);
-        yield* Effect.orDie(w.got.get(pid)!.running(Option.some(commandPid(pid))));
+        yield* w.got.get(pid)!.running(Option.some(commandPid(pid)));
         w.table.running.delete(commandPid(pid));
-        yield* Effect.orDie(w.got.get(pid)!.running(Option.none()));
-      }),
+        yield* w.got.get(pid)!.running(Option.none());
+      }).pipe(Effect.orDie),
   );
 
 const reuseMove = (pid: number) =>
