@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds slice A of the two-flakes plan (0036), as the lead (fabrikaa-merger) approved it on 2026-11-18; body c0cf5aca14ba
 Plancheck-Version: 3
 
 # Slice A of the two-flakes plan: `drawn` and `foldDrawn` read each region in one non-waiting call, in next/ (tickets 1166 and L33, decision 0036)
