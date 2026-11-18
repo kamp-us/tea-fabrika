@@ -3,8 +3,6 @@
  * runner libfabrika's laws shared, moved here unchanged in what it does. Each case runs in a `Scope`
  * of its own, from the shared seed the package sets when `Law.ts` loads, under the law's own signal,
  * and a case past the law's abort ends the whole fast-check run, shrinking included.
- *
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -15,7 +13,6 @@ import * as fc from "fast-check";
  * A property's fast-check inputs, by name: each value is one of the property's arbitraries, in key
  * order, so one input `{ log: Log }` runs `fc.asyncProperty(Log, ...)` as the old runner did.
  *
- * @stability unstable
  * @category models
  */
 export type Inputs = { readonly [name: string]: fc.Arbitrary<unknown> };
@@ -23,7 +20,6 @@ export type Inputs = { readonly [name: string]: fc.Arbitrary<unknown> };
 /**
  * The values one case draws, by the input's name.
  *
- * @stability unstable
  * @category models
  */
 export type Values<Arbs> = { [K in keyof Arbs]: Arbs[K] extends fc.Arbitrary<infer A> ? A : never };
@@ -35,7 +31,6 @@ type Drawn = { readonly [name: string]: unknown };
  * fast-check's own failure report, with its counterexample and the law's own error, as a law's
  * typed failure. Its message is the report, so vitest prints it as the law's error.
  *
- * @stability unstable
  * @category errors
  */
 export class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", {
@@ -55,7 +50,6 @@ export class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("Proper
  * synchronously with fast-check's own interruption, `PreconditionFailure(true)`, which ends the run
  * there. A case that starts before the abort passes through unchanged.
  *
- * @stability unstable
  * @category testing
  */
 const stopOnAbort = (signal: AbortSignal) =>
@@ -75,7 +69,6 @@ const report = (cause: unknown): string => (cause instanceof Error ? cause.messa
  * in flight is interrupted too, so its scope closes, and `stopOnAbort` ends the fast-check run, so
  * no shrink starts another case that would go on into later laws.
  *
- * @stability unstable
  * @category testing
  */
 export const check = Effect.fnUntraced(function* <R>(
@@ -87,10 +80,13 @@ export const check = Effect.fnUntraced(function* <R>(
   const services = yield* Effect.context<Exclude<R, Scope.Scope>>();
   const names = Object.keys(inputs);
   const arbitraries = names.flatMap((name) => inputs[name] ?? []);
+
   const values = (drawn: ReadonlyArray<unknown>): Drawn =>
     Object.fromEntries(names.map((name, at) => [name, drawn[at]]));
+
   const run = (drawn: ReadonlyArray<unknown>) =>
     stopOnAbort(signal).pipe(Effect.andThen(Effect.scoped(law(values(drawn)))), Effect.asVoid);
+
   const [first, ...rest] = arbitraries;
 
   if (first === undefined) {

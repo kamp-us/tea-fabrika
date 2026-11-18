@@ -61,7 +61,9 @@ const SHARED_RUNNER = "property";
 
 /** Vitest's two compile-time checks, and the modules that give them. */
 const CHECKS = new Set(["expectTypeOf", "assertType"]);
+
 const VITEST = new Set(["vitest", "@effect/vitest", "@kampus/vitest", "@kalfa/vitest"]);
+
 /** The package whose `it` takes the label as an option (0580). */
 const OURS = new Set(["@kampus/vitest", "@kalfa/vitest"]);
 
@@ -179,6 +181,7 @@ const optionLabel = (args: readonly Node[]): Label | "none" => {
         : property.key.type === "Literal" && typeof property.key.value === "string"
           ? property.key.value
           : null;
+
     const found = LABELS.find((label) => label === key);
 
     if (found !== undefined) {
@@ -394,6 +397,7 @@ export const lawShape: CreateRule = {
           const option = optionLabel(node.arguments);
           // A title the source does not decide stays unjudged in either kind of file.
           const label = !ours ? titled : option === "none" && titled === null ? null : option;
+
           const bodies = node.arguments.flatMap((arg): Fn[] =>
             isFn(arg) ? [arg] : arg.type === "Identifier" ? (local.get(arg.name) ?? []) : [],
           );

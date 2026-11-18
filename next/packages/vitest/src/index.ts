@@ -19,53 +19,51 @@ export * from "./Depth.ts";
  * @category testing
  */
 export * as Recorder from "./Recorder.ts";
+
 export {
   /**
    * A law's declaration (decisions 0579 and 0580): `it`, with `it.effect`, `it.live`, `it.prop`,
    * `it.effect.prop` and `it.live.prop`, each taking its plant and label as options.
    *
-   * @stability unstable
    * @category testing
    */
   it,
 } from "./Law.ts";
+
 export {
   /**
    * vitest's own `assertType`, so a type law's file has one import.
    *
-   * @stability unstable
    * @category testing
    */
   assertType,
   /**
    * vitest's own `describe`, so a law file has one import.
    *
-   * @stability unstable
    * @category testing
    */
   describe,
   /**
    * vitest's own `expect`, so a law file has one import.
    *
-   * @stability unstable
    * @category testing
    */
   expect,
   /**
    * vitest's own `expectTypeOf`, so a type law's file has one import.
    *
-   * @stability unstable
    * @category testing
    */
   expectTypeOf,
 } from "vitest";
+
 /**
  * A plant's record from a run's tasks (decision 0580): `Plants.records(files, root)`.
  *
- * @stability unstable
  * @category testing
  */
 export * as Plants from "./Plants.ts";
+
 /**
  * The one stand-in for a platform object (decision 0554): `Stub.make(rest, own)` answers `own`'s
  * members as given and every other method with `rest(name)`.

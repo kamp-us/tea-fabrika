@@ -47,6 +47,7 @@ const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;
 
 /** A fire's line and what it says, or the message a planted line should fire with: `null` for none. */
 type Fire = readonly [number, string];
+
 type Fires = typeof MESSAGE | typeof TYPE_MESSAGE | ReturnType<typeof optionMessage> | null;
 
 /** Lints planted files as `pnpm lint` does, and answers the law-shape fires in one of them, each as its line and message. */
@@ -387,6 +388,7 @@ const theirs = fc.constantFrom(
 );
 
 const member = fc.constantFrom("it", "it.effect", "it.live");
+
 /** An option label's value: a reason, or a ticket for pinned. */
 const why = (label: string, reason: string) => (label === "pinned" ? "1497" : `"${reason}"`);
 
@@ -397,8 +399,10 @@ const each = async (head: string, lines: readonly ((label: string) => readonly [
     const top = head.split("\n");
     const text = [...top, 'const opts = { plant: "a break" };', ...made.map(([line]) => line)].join("\n");
     const expected = made.flatMap(([, fires], i): Fire[] => (fires === null ? [] : [[top.length + 2 + i, fires]]));
+
     return { path: `next/packages/libfabrika/src/options/${label}.test.ts`, text, expected };
   });
+
   const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
 
   for (const { path, text, expected } of files) {
