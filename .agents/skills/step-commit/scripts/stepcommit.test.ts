@@ -37,9 +37,37 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 type Owner = "tests" | "build" | "lead" | "mutation";
 
 /** gh's answer to stepcommit's open-PR query. */
-const open = (nodes: unknown[], totalCount = nodes.length) => ({
+const open = <A>(nodes: A[], totalCount = nodes.length) => ({
   data: { repository: { pullRequests: { totalCount, nodes } } },
 });
+
+const sha = (value: number) => value.toString(16).padStart(40, "0");
+
+type ComparePage = {
+  ahead_by: number;
+  total_commits: number;
+  base_commit: { sha: string };
+  commits: Array<{ sha: string }>;
+};
+
+const comparePages = (oids: string[], base: string): ComparePage[] =>
+  Array.from({ length: Math.ceil(oids.length / 100) }, (_, page) => ({
+    ahead_by: oids.length,
+    total_commits: oids.length,
+    base_commit: { sha: base },
+    commits: oids.slice(page * 100, (page + 1) * 100).map((oid) => ({ sha: oid })),
+  }));
+
+const truncatedPr = (branch: string, base: string, oids: string[]) =>
+  open([
+    {
+      number: 609,
+      headRefName: branch,
+      baseRefOid: base,
+      headRefOid: oids[oids.length - 1],
+      commits: { totalCount: oids.length, nodes: oids.slice(0, 100).map((oid) => ({ commit: { oid } })) },
+    },
+  ]);
 
 const put = (path: string, value: string) => {
   mkdirSync(dirname(path), { recursive: true });
@@ -83,6 +111,7 @@ class Repo {
       T321_CALLS: join(this.dir, "calls"),
       T321_OXFMT: join(root, "node_modules/.bin/oxfmt"),
       T390_PRS: join(this.dir, "prs.json"),
+      T390_COMPARE: join(this.dir, "compare.json"),
     };
 
     const stub = String.raw`
@@ -102,11 +131,24 @@ console.error("fixture refuses package or network command"); process.exit(97);
     // gh answers the open-PR query from T390_PRS, a JSON file (no file: no open PRs; "fail": exit 1).
     const gh = String.raw`
 const fs=require("node:fs");
-fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["gh",...process.argv.slice(2)])+"\n");
+const args=process.argv.slice(2);
+fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["gh",...args])+"\n");
+if(args.includes("--paginate")) {
+ const compared=fs.existsSync(process.env.T390_COMPARE)?fs.readFileSync(process.env.T390_COMPARE,"utf8"):"fail";
+ if(compared.trim()==="fail"){console.error("gh: compare unavailable");process.exit(1);}
+ process.stdout.write(compared);process.exit(0);
+}
 const f=process.env.T390_PRS;
 const prs=f&&fs.existsSync(f)?fs.readFileSync(f,"utf8"):JSON.stringify({data:{repository:{pullRequests:{totalCount:0,nodes:[]}}}});
 if(prs.trim()==="fail"){console.error("gh: offline");process.exit(1);}
-process.stdout.write(prs);
+let answer;
+try{answer=JSON.parse(prs);}catch{process.stdout.write(prs);process.exit(0);}
+if(Array.isArray(answer)) {
+ const calls=fs.readFileSync(process.env.T321_CALLS,"utf8").trim().split("\n").map(line=>JSON.parse(line));
+ const used=calls.filter(call=>call[0]==="gh"&&call[1]==="api"&&call[2]==="graphql").length;
+ answer=answer[used-1];
+}
+process.stdout.write(JSON.stringify(answer));
 `;
 
     writeFileSync(join(bin, "gh"), `#!${process.execPath}\n${gh}`, { mode: 0o755 });
@@ -208,6 +250,19 @@ console.log("publish: pushed");
           .map((s) => JSON.parse(s))
           .filter((a: string[]) => a[0] === "publish")
       : [];
+  }
+
+  calls(): string[][] {
+    return existsSync(join(this.dir, "calls"))
+      ? readFileSync(join(this.dir, "calls"), "utf8")
+          .trim()
+          .split("\n")
+          .map((s) => JSON.parse(s))
+      : [];
+  }
+
+  compareCalls(): string[][] {
+    return this.calls().filter((call) => call[0] === "gh" && call.includes("--paginate"));
   }
 
   asked(): boolean {
@@ -879,11 +934,12 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
         }
 
         expect(r.asked()).toBe(step === "lead" && !only);
+        expect(r.compareCalls()).toEqual([]);
       }),
     );
   }, 180_000);
 
-  // scenario: gh fails, more than 100 open PRs, or a PR with more than 250 commits.
+  // scenario: gh fails, more than 100 open PRs, or a truncated PR lacks frozen compare refs.
   it("T390 refuses a signed lead commit when open PRs cannot be read whole", () => {
     const commits = { totalCount: 251, nodes: [] };
     each(
@@ -903,6 +959,148 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
           expect(r.signs()).toEqual([]);
         }),
     );
+  });
+
+  it("T390 scenario: a stale note on commit 408 blocks the lead sign", () => {
+    withRepo([["src/owned.ts", "lead"]], (r) => {
+      r.openPr("fabrikalfa/quest", "321");
+      const base = sha(5000);
+      const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+      put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
+      put(join(r.dir, "compare.json"), JSON.stringify(comparePages(oids, base)));
+      r.changed("src/owned.ts");
+
+      const got = r.commit("lead", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(5);
+      expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/quest");
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      expect(r.git("diff", "--cached", "--name-only")).toBe("");
+      expect(r.signs()).toEqual([]);
+      expect(r.published()).toEqual([]);
+      expect(r.compareCalls()).toHaveLength(1);
+      expect(r.compareCalls()[0]).toContain(`repos/{owner}/{repo}/compare/${base}...${r.base}?per_page=100`);
+      expect(
+        r
+          .calls()
+          .find((call) => call[0] === "gh" && call[1] === "api" && call[2] === "graphql")
+          ?.join(" "),
+      ).toContain("commits(first:100)");
+    });
+  });
+
+  it("T390 scenario: five complete compare pages allow fallback after a PR reread", () => {
+    withRepo([["src/owned.ts", "lead"]], (r) => {
+      const base = sha(5000);
+      const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+      put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
+      put(join(r.dir, "compare.json"), JSON.stringify(comparePages(oids, base)));
+      r.changed("src/owned.ts");
+
+      const got = r.commit("lead", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(0);
+      expect(r.git("rev-parse", "HEAD").trim()).not.toBe(r.base);
+      expect(r.signs()).toHaveLength(1);
+      expect(r.published()).toHaveLength(1);
+      expect(r.compareCalls()).toHaveLength(1);
+      expect(r.calls().filter((call) => call[0] === "gh" && call[1] === "api" && call[2] === "graphql")).toHaveLength(
+        2,
+      );
+    });
+  });
+
+  it("T390 scenario: an incomplete or malformed compare page blocks before staging", () => {
+    each(
+      [
+        "missing-page",
+        "wrong-count",
+        "wrong-ahead",
+        "wrong-base",
+        "duplicate",
+        "invalid-sha",
+        "wrong-tip",
+        "replaced-listed",
+      ] as const,
+      (fault) =>
+        withRepo([["src/owned.ts", "lead"]], (r) => {
+          const base = sha(5000);
+          const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+          const pages = comparePages(oids, base);
+
+          if (fault === "missing-page") {
+            pages.pop();
+          }
+
+          if (fault === "wrong-count") {
+            pages[0]!.total_commits -= 1;
+          }
+
+          if (fault === "wrong-ahead") {
+            pages[0]!.ahead_by -= 1;
+          }
+
+          if (fault === "wrong-base") {
+            pages[0]!.base_commit.sha = sha(5001);
+          }
+
+          if (fault === "duplicate") {
+            pages[1]!.commits[0]!.sha = pages[0]!.commits[0]!.sha;
+          }
+
+          if (fault === "invalid-sha") {
+            pages[0]!.commits[0]!.sha = "not-a-sha";
+          }
+
+          if (fault === "wrong-tip") {
+            const lastPage = pages[pages.length - 1]!;
+            lastPage.commits[lastPage.commits.length - 1]!.sha = sha(6000);
+          }
+
+          if (fault === "replaced-listed") {
+            pages[0]!.commits[0]!.sha = sha(10000);
+          }
+
+          put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
+          put(join(r.dir, "compare.json"), JSON.stringify(pages));
+          r.changed("src/owned.ts");
+          const got = r.commit("lead", ["src/owned.ts"]);
+
+          expect(got.code, got.text).toBe(5);
+          expect(got.text).toContain("open PRs cannot be read");
+
+          if (fault === "replaced-listed") {
+            expect(got.text).toContain("PR 609 compare omitted a listed PR commit");
+          }
+
+          expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+          expect(r.git("diff", "--cached", "--name-only")).toBe("");
+          expect(r.signs()).toEqual([]);
+          expect(r.published()).toEqual([]);
+        }),
+    );
+  });
+
+  it("T390 scenario: a changed head ref during compare blocks the lead sign", () => {
+    withRepo([["src/owned.ts", "lead"]], (r) => {
+      const base = sha(5000);
+      const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+      const initial = truncatedPr("fabrikalfa/quest", base, oids);
+      const moved = truncatedPr("fabrikalfa/quest", base, oids);
+      moved.data.repository.pullRequests.nodes[0]!.headRefOid = sha(6000);
+      put(join(r.dir, "prs.json"), JSON.stringify([initial, moved]));
+      put(join(r.dir, "compare.json"), JSON.stringify(comparePages(oids, base)));
+      r.changed("src/owned.ts");
+
+      const got = r.commit("lead", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(5);
+      expect(got.text).toContain("open PR data changed during the check");
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      expect(r.git("diff", "--cached", "--name-only")).toBe("");
+      expect(r.signs()).toEqual([]);
+      expect(r.published()).toEqual([]);
+    });
   });
 });
 

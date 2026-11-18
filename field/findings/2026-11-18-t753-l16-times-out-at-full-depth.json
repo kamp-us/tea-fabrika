@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-t753-l16-times-out-at-full-depth",
+  "date": "2026-11-18",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts",
+    "line": 1161
+  },
+  "says": "In next/, the law 'T753 L16 real first/later process steps, recovery and successors keep the shared instance gate' times out at its 60 s limit at full depth (100 cases) on a scheduled leg, and the required related job on pull requests runs it at full depth since PR 1581; third sighting after 2026-11-14-t753-l16-times-out-on-a-loaded-ci-machine and 2026-11-16-t753-l16-at-its-timeout-in-the-cloud-box.",
+  "proof": "Scheduled run https://github.com/kamp-us/tea-fabrika/actions/runs/44110982551 leg changed (9): the law timed out at 60 s. The lead's local measurement, law alone at full depth on a 4-core box with Node 26.13.0: 36.0 s on main 397e63f and 35.6 s on 0fe5ff4b, CPU-bound with 2% idle, about 0.36 s per case alone against about 0.6 s per case on a loaded CI leg.",
+  "cost": "Any pull request whose related job reaches this file, and every scheduled run, can go red for no fault of the change; a rerun hides it and 0036 forbids that.",
+  "head": "a6761bce1d846d856d7260b2e8c8338d86a16448",
+  "ticket": null,
+  "pr": null
+}

@@ -1,6 +1,7 @@
 /**
  * The span sink: every object installs one Tracer, and a span that ends is in the object's own
- * SQLite before `end` returns. `flush` ships it to its record later, when the runner says.
+ * SQLite before `end` returns, or, inside a `batch`, before the call that made it ends. `flush` ships
+ * it to its record later, when the runner says.
  *
  * The queue is a table, `unsent`, not memory: an object sleeps and loses memory, and a timer fiber
  * is what "a wait is data" forbids. Nothing is dropped. A write that cannot land (`SQLITE_FULL`) is
@@ -16,6 +17,7 @@ import {
   Context,
   Effect,
   Exit,
+  Fiber,
   Layer,
   Option,
   Predicate,
@@ -307,15 +309,19 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
   };
 };
 
-/** A span that tells the sink when it ends. Effect calls `end` once, synchronously. */
+/** A span that tells its sink when it ends. Effect calls `end` once, synchronously. `owner` is the sink
+ *  whose tracer made it. */
 class SinkSpan extends Tracer.NativeSpan {
+  readonly owner: symbol;
   private readonly onEnd: (span: SinkSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>) => void;
 
   constructor(
     options: ConstructorParameters<typeof Tracer.NativeSpan>[0],
+    owner: symbol,
     onEnd: (span: SinkSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>) => void,
   ) {
     super(options);
+    this.owner = owner;
     this.onEnd = onEnd;
   }
 
@@ -336,8 +342,10 @@ class SinkSpan extends Tracer.NativeSpan {
  * **Details**
  *
  * A span that ends is in the object's own SQLite, with its measurement, before `end` returns, so
- * an object that sleeps loses nothing. A span that carries the refusal tag is only counted, by
- * piece and hour: it leaves no span row and no measurement.
+ * an object that sleeps loses nothing. A span that ends inside `batch` waits for the batch's end:
+ * the whole call's spans land in one transaction before the call answers, on success, failure or
+ * interruption (0122, "flushed before each call ends"). A span that carries the refusal tag is only
+ * counted, by piece and hour: it leaves no span row and no measurement.
  *
  * **Gotchas**
  *
@@ -350,7 +358,9 @@ class SinkSpan extends Tracer.NativeSpan {
 export class SpanSink extends Context.Service<
   SpanSink,
   {
-    /** Collects spans ended by this work and commits them together, including after a failed write. */
+    /** Collects the spans this work ends, through this sink's own tracer, and commits them together
+     *  when it ends or when `flush` runs inside it, including after a failed write. Every tracer
+     *  that wraps the sink's keeps tagging them. A span that ends after the batch closed lands at once. */
     readonly batch: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
     /** Sends `unsent` to each chain's current part, deleting each row only after a good answer and
      *  following `rolled`; then archives each due day of raw health rows. Fails with `storage`,
@@ -375,7 +385,21 @@ export class SpanSink extends Context.Service<
     );
 }
 
+/** A span that ended inside a batch, held for the batch's commit. */
+type Done = { readonly span: SinkSpan; readonly time: bigint; readonly exit: Exit.Exit<unknown, unknown> };
+
+/** One open batch: the spans its sink's tracer collected, and whether it ended. A batch belongs to the
+ *  sink that opened it, so another sink's span, made in the same fiber, ignores it. */
+type Open = { readonly sink: symbol; readonly spans: Array<Done>; closed: boolean };
+
+/** The batch the running fiber is inside, if any. A reference, not a swapped tracer: every tracer that
+ *  wraps the sink's still sees each span, so their tags stay. A forked fiber inherits it. */
+const Batch = Context.Reference<Open | null>("@kampus/libfabrika/telemetry/Sink.Batch", {
+  defaultValue: () => null,
+});
+
 const make = (sql: Sql, options: { readonly object: string }) => {
+  const self = Symbol(options.object);
   let ready = false;
   /** Spans held after a full disk, a failure owed to the next flush, and the newest hour sized.
    *  Changed only by what `applyCell` returns. Memory only: a wake checks once more. */
@@ -464,55 +488,79 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     return true;
   };
 
+  /** Lands one ended span, or counts it when it is refused. */
+  const commitOne = (span: SinkSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>) => {
+    const at = Number(endTime / 1_000_000n);
+
+    if (countRefusal(span, at)) {
+      commit([], at, true);
+      return;
+    }
+
+    commit([ended(span, endTime, exit, options.object)], at, true);
+  };
+
+  /** Lands the open batch's spans in one commit, and empties it. A span of its own refusal tag, or under
+   *  an ancestor's, is counted and leaves no row. A failed commit holds the whole batch. */
+  const commitOpen = (open: Open, now: number) => {
+    const done = open.spans.splice(0);
+    const rows: Array<Ended> = [];
+
+    for (const { span, time, exit } of done) {
+      let ancestor: Tracer.AnySpan | undefined = span;
+
+      while (ancestor?._tag === "Span" && !ancestor.attributes.has(REFUSED)) {
+        ancestor = Option.getOrUndefined(ancestor.parent);
+      }
+
+      const marked = ancestor?._tag === "Span" ? ancestor : undefined;
+
+      if (!countRefusal(span, Number(time / 1_000_000n), marked)) {
+        rows.push(ended(span, time, exit, options.object));
+      }
+    }
+
+    if (rows.length > 0 || counts.size > 0) {
+      commit(rows, now, true);
+    }
+  };
+
+  /** Where a span ends: into the batch it was made in, if that batch is this sink's and still open, else
+   *  at once. */
+  const ending = (open: Open | null) => (span: SinkSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>) => {
+    if (open !== null && open.sink === self && !open.closed) {
+      open.spans.push({ span, time: endTime, exit });
+    } else {
+      commitOne(span, endTime, exit);
+    }
+  };
+
   const tracer = Tracer.make({
-    span: (init) =>
-      new SinkSpan(init, (span, endTime, exit) => {
-        const at = Number(endTime / 1_000_000n);
-
-        if (countRefusal(span, at)) {
-          commit([], at, true);
-          return;
-        }
-
-        commit([ended(span, endTime, exit, options.object)], at, true);
-      }),
+    span: (init) => new SinkSpan(init, self, ending(Fiber.getCurrent()?.getRef(Batch) ?? null)),
   });
 
+  /** The tracer a batch runs under. A span the running tracer already made through this sink's own
+   *  tracer, wrappers and all, is kept as it is, so every wrapper's tags stay. When the running tracer does
+   *  not lead to this sink, the span is this sink's own, collected by the batch. */
+  const collecting = (running: Tracer.Tracer, open: Open): Tracer.Tracer =>
+    Tracer.make({
+      ...(running.context === undefined ? {} : { context: running.context }),
+      span: (init) => {
+        const made = running.span(init);
+        return made instanceof SinkSpan && made.owner === self ? made : new SinkSpan(init, self, ending(open));
+      },
+    });
+
   const batch = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.suspend(() => {
-      const spans: Array<{ span: SinkSpan; time: bigint; exit: Exit.Exit<unknown, unknown> }> = [];
-      const collecting = Tracer.make({
-        span: (init) =>
-          new SinkSpan(init, (span, time, exit) => {
-            spans.push({ span, time, exit });
-          }),
-      });
+    Effect.flatMap(Tracer.Tracer, (running) => {
+      const open: Open = { sink: self, spans: [], closed: false };
       return work.pipe(
-        Effect.withTracer(collecting),
+        Effect.withTracer(collecting(running, open)),
+        Effect.provideService(Batch, open),
         Effect.ensuring(
-          Effect.gen(function* () {
-            const now = yield* Clock.currentTimeMillis;
-            yield* Effect.sync(() => {
-              const rows: Array<Ended> = [];
-
-              for (const { span, time, exit } of spans) {
-                let ancestor: Tracer.AnySpan | undefined = span;
-
-                while (ancestor?._tag === "Span" && !ancestor.attributes.has(REFUSED)) {
-                  ancestor = Option.getOrUndefined(ancestor.parent);
-                }
-
-                const marked = ancestor?._tag === "Span" ? ancestor : undefined;
-
-                if (!countRefusal(span, Number(time / 1_000_000n), marked)) {
-                  rows.push(ended(span, time, exit, options.object));
-                }
-              }
-
-              if (rows.length > 0 || counts.size > 0) {
-                commit(rows, now, true);
-              }
-            });
+          Effect.map(Clock.currentTimeMillis, (now) => {
+            open.closed = true;
+            commitOpen(open, now);
           }),
         ),
       );
@@ -571,6 +619,12 @@ const make = (sql: Sql, options: { readonly object: string }) => {
   });
 
   const flush = Effect.gen(function* () {
+    const open = yield* Batch;
+
+    if (open !== null && open.sink === self) {
+      commitOpen(open, yield* Clock.currentTimeMillis);
+    }
+
     const before = state;
     state = applyCell(machine, state, { type: "flush_checked" })[0];
 
