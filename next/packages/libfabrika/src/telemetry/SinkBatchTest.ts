@@ -70,11 +70,14 @@ const open = Effect.fnUntraced(function* (memory: Memory, object: string) {
     },
     size: () => raw.size(),
   };
+
   const context = yield* Layer.build(
     SpanSink.layer(sql, { object }).pipe(Layer.provideMerge(Layer.merge(RecordManager.memory(BIG), Archive.memory))),
   );
+
   const count = (table: string): number => Number(raw.exec(`SELECT count(*) AS n FROM ${table}`)[0]?.["n"]);
   const pragma = (text: string) => raw.exec(`PRAGMA ${text}`)[0] ?? {};
+
   const tables = (): ReadonlySet<string> =>
     new Set(raw.exec(`SELECT name FROM sqlite_master WHERE type='table'`).map((row) => String(row["name"])));
 
@@ -205,6 +208,7 @@ export const suite = (memory: Memory, runs: number) =>
                   unsent: w.rows("unsent"),
                   measurements: w.rows("measurements"),
                 };
+
                 const gate = yield* Deferred.make<void>();
                 // What the store held when the batch's work was done, read inside and checked after.
                 let during = { unsent: -1, measurements: -1, landings: -1 };
@@ -229,6 +233,7 @@ export const suite = (memory: Memory, runs: number) =>
                     return yield* Effect.never;
                   }
                 });
+
                 const call = w.sink.batch(work).pipe(Effect.provideContext(w.context));
 
                 if (end === "interrupt") {
@@ -406,6 +411,7 @@ export const suite = (memory: Memory, runs: number) =>
               for (const one of lateSpans) {
                 const open = yield* Deferred.make<void>();
                 const waiting = Deferred.await(close);
+
                 const run =
                   one.started === "inside"
                     ? Deferred.succeed(open, undefined).pipe(
@@ -416,6 +422,7 @@ export const suite = (memory: Memory, runs: number) =>
                         Effect.andThen(waiting),
                         Effect.andThen(Effect.void.pipe(Effect.withSpan(`${one.name}.late`))),
                       );
+
                 late.push(yield* Effect.forkDetach(run));
                 // The late span is made, or its fiber is waiting to make it, before the batch closes.
                 yield* Deferred.await(open);
@@ -541,6 +548,7 @@ export const suite = (memory: Memory, runs: number) =>
       const missing = Object.entries(REQUIRED).flatMap(([law, kinds]) =>
         kinds.filter((kind) => !(reached.get(law)?.has(kind) ?? false)).map((kind) => `${law}: ${kind}`),
       );
+
       expect(missing, "cases a law's generator never reached").toEqual([]);
     });
   });
