@@ -1,7 +1,7 @@
 ---
 date: "2026-11-18"
 scripts: "related-legs.ts, on the branch fabrikalfa/ci-related-tooling-legs-script at experiments/299-related-legs.ts. It reads job rows fetched with the GitHub MCP list_workflow_jobs call and prints the per-run lines, the split rule and the medians below. The fetched rows stayed in a scratch folder and are not committed (0027)."
-summary: "Today's CI; about $8.50 at list price. Should the related job get more tooling legs (MOST_TOOLING is 2)? Not on this evidence. Of the 7 first-attempt runs since decision 0598 whose related legs all finished, the split rule fires in 1, so it cannot reach 7 of 10. A tooling leg finishes last in every run, and the tooling pair is the biggest part of every wall time. What sets the slowest runs apart from the median is runner wait: median 24 s on the critical path, but 209 and 357 s in the two slowest groups, and a median of 88 s (max 522 s) across 49 legs of canceled runs. That wait is the organization's runners, which decision 0598 said were not the bottleneck. Only 2 complete runs carry the refreshed shard rows of PR 1588."
+summary: "Today's CI; about $11 at list price. Should the related job get more tooling legs (MOST_TOOLING is 2)? Not on this evidence. Of the 7 first-attempt runs since decision 0598 whose related legs all finished, the split rule fires in 1, so it cannot reach 7 of 10. A tooling leg finishes last in every run, and the tooling pair is the biggest part of every wall time. What sets the slowest runs apart from the median is runner wait: median 24 s on the critical path, but 209 and 357 s in the two slowest groups, and a median of 88 s (max 522 s) across 49 legs of canceled runs. That wait is the organization's runners, which decision 0598 said were not the bottleneck. Only 2 complete runs carry the refreshed shard rows of PR 1588."
 ---
 
 # 299. Does today's related job need more tooling legs, or is the long tail queue wait?
@@ -32,9 +32,9 @@ result: 7 first-attempt runs whose related legs all finished green, 4 of them wi
 
 - **Runs.** Every `pull_request` and `merge_group` run of `check.yaml` created after decision 0598
   merged (PR https://github.com/kamp-us/tea-fabrika/pull/1590, `92f5f416b`, whose push run on main
-  started at 2026-11-18 02:05:12 UTC), to 03:23 UTC, from GitHub's run list for the workflow: 59
-  runs. 30 ended green and 29 ended canceled. A newer push or a queue rebuild canceled most of them,
-  but at least 1 (https://github.com/kamp-us/tea-fabrika/actions/runs/44221238262, whose `lint`
+  was made at 2026-11-18 02:05:12 UTC), to 03:23 UTC, from GitHub's run list for the workflow: 59
+  runs. When the list was read, 30 had ended green and 29 canceled. A newer push or a queue rebuild
+  canceled most of them, but at least 1 (https://github.com/kamp-us/tea-fabrika/actions/runs/44221238262, whose `lint`
   step failed) canceled itself after a failure. check.yaml's `stop the run` step (line 256) turns a
   red job into a cancel of the whole run.
 - **Jobs.** For each run, the GitHub MCP `list_workflow_jobs` call with `filter: latest`, which
@@ -158,10 +158,11 @@ group slot. Its context says the organization's runners were not the bottleneck,
 
 A guess, not measured: the slow queue runs share the organization's runners with main's own runs,
 which under 0598 still take up to 5 `scheduled-main` slots, and with branch proofs, which take up
-to 4 more. Main's push run of `ad93a08f` started at 02:50:36
-(https://github.com/kamp-us/tea-fabrika/actions/runs/44226175701), 111 s before run 44226178362's
-legs were made at 02:52:27. 11 other check runs were made in the 10 minutes before run
-44224819283. What would settle it: count the running jobs of all workflows at each slow leg's
+to 4 more. Main's full run of `ad93a08f` (scheduled.yaml,
+https://github.com/kamp-us/tea-fabrika/actions/runs/44226175684) was made at 02:50:36, 111 s
+before run 44226178362's legs were made at 02:52:27. In the 10 minutes before run 44224819283, 11
+pull request and queue runs were made, plus main's push runs of `9a716504` at 02:32:07, among them
+its full run (https://github.com/kamp-us/tea-fabrika/actions/runs/44223971922). What would settle it: count the running jobs of all workflows at each slow leg's
 `created_at`, from every run's job list in that window.
 
 ## What the numbers say to do
@@ -197,10 +198,10 @@ five-minute cache writes; Claude Opus 5.5 at $4, $20, $0.20 and $5.
 |---|---|---|---|---|---|
 | Fetch jobs of 19 green runs | Claude Sonnet 5.5 | 8 | 898,071, 137,614, 16 | 6,697 | $0.50 |
 | Fetch jobs of 29 canceled and new runs | Claude Sonnet 5.5 | 10 | 1,381,948, 218,361, 20 | 13,035 | $0.81 |
-| Review of this write-up | Claude Opus 5.5, effort high | 21 | 2,688,134, 170,115, 44 | 29,141 | $1.97 |
-| Lead session (fetch, script, write-up, fixes), to the commit that filled this row | Claude Opus 5.5 | 63 | 13,794,463, 255,431, 123 | 61,354 | $5.26 |
+| Review of this write-up and its recheck | Claude Opus 5.5, effort high | 27 | 3,613,377, 363,749, 58 | 35,884 | $3.26 |
+| Lead session (fetch, script, write-up, fixes), to the commit that filled this row | Claude Opus 5.5 | 78 | 18,687,174, 272,288, 155 | 70,509 | $6.51 |
 
-All four come to $8.54. The lead session's calls after this row (watching CI, landing) are not counted. No Jev call and no paid API call ran. GitHub Actions minutes are not counted: nothing was run on
+All four come to $11.08. The lead session's calls after this row (watching CI, landing) are not counted. No Jev call and no paid API call ran. GitHub Actions minutes are not counted: nothing was run on
 CI for this write-up.
 
 ## What this cannot tell us
