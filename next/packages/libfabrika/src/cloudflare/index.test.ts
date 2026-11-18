@@ -106,10 +106,13 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
         const refuse = () => {
           throw new Error("an asset request reached a binding");
         };
+
         const project = Stub.make<ProjectBinding>(() => refuse, {
           settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(config) }),
         });
+
         const connection = Stub.make<ConnectionBinding>(() => refuse);
+
         // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles stand in for the two namespaces fetch can name
         const env = {
           INSTANCE: JSON.stringify(config),

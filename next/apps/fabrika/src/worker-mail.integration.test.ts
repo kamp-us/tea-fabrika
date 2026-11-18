@@ -375,6 +375,7 @@ const world = async (
               const program = `p41/${name.replace(":", "-")}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
+
               const started = await instance.project(PROJECT).start(
                 {
                   _tag: "first",
@@ -786,6 +787,7 @@ const checklistWorld = async (
           start: async (name, program = "fabrika/checklist") => {
             const code = built.programs[program];
             expect(code).toBeDefined();
+
             const started = await instance.project(PROJECT).start(
               {
                 _tag: "first",
@@ -999,9 +1001,11 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
 
       yield* Effect.promise(async () => {
         const project = instance.project(PROJECT);
+
         const start = async (request: Start) =>
           Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(await project.start(request, from))
             .process;
+
         const code = (role: string) => ({ program: `t1041/${role}`, hash: built.programs[`t1041/${role}`]!.hash });
 
         const writer = await start({

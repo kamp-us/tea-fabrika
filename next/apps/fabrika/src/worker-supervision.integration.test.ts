@@ -396,6 +396,7 @@ const worldScoped = Effect.gen(function* () {
       const started = await instance
         .project(PROJECT)
         .start({ _tag: "first", id: `start-${name}`, name, code: { program: PROGRAM, hash: code!.hash } }, from);
+
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
   };

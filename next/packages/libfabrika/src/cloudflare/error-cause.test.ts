@@ -284,6 +284,7 @@ describe("T695, the object adapters keep what failed", () => {
                 "00",
               ),
             );
+
             expect(error.reason).toBe("crypto");
             expect(error.cause).toBe(failure);
           }),
@@ -305,6 +306,7 @@ describe("T695, the object adapters keep what failed", () => {
             "not-a-digest",
           ),
         );
+
         expect(error.reason).toBe("bad_row");
         expect(error.cause).toBeUndefined();
       }),

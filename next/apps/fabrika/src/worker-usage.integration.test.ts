@@ -317,6 +317,7 @@ const read = (world: World["Service"], process: string) =>
   Effect.gen(function* () {
     // A later runner call flushes already delivered tails to the public JobRecord.
     yield* call(() => world.instance.process(process).open("usage-probe"));
+
     const page = yield* invoke(
       world.instance.record(PROJECT, `job/${process}/0`),
       "read",
@@ -419,6 +420,7 @@ it.layer(
             build: built.programs["fabrika/checklist"]?.hash ?? "missing",
           }),
         );
+
         const started = yield* until(
           call(() => instance.project(PROJECT).read("processes/checklist:2", 0, "usage-probe")).pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(lifecycle)),

@@ -413,6 +413,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     );
     const ended = yield* backend.state;
     const endedBody = yield* backend.body;
+
     const started = yield* invoke("start", () =>
       s.control.start(
         Start.cases.again.make({
@@ -425,6 +426,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
         s.from(),
       ),
     );
+
     const second = String(read(started).process);
     yield* until(
       `${backend.name}: the tile is online on the successor`,

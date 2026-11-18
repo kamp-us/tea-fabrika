@@ -358,9 +358,11 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
               const program = `m13/${name.split(":")[0]}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
+
               const started = await instance
                 .project(PROJECT)
                 .start({ _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } }, from);
+
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             },
           }),

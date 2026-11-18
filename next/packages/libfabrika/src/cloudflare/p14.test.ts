@@ -49,11 +49,14 @@ const config = (port: number) =>
 const world = (port: number) => {
   const input = config(port);
   const calls: Array<string> = [];
+
   /** Any call on the stub for `to`: written down, and answered `{ _tag: "ok" }`. */
   const recorded = (to: string) => (method: string) => async () => {
     calls.push(`${to}.${method}`);
+
     return { _tag: "ok" };
   };
+
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members these routes call
   const env = {
     INSTANCE: JSON.stringify(input),

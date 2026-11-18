@@ -973,6 +973,7 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
 
         const own = (u: unknown) =>
           Predicate.hasProperty(u, "maxDeliveries") && Object.hasOwn(u, "maxDeliveries") ? u.maxDeliveries : undefined;
+
         // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
         const p: unknown = Program.make(raw);
         expect(own(p)).toBe(limit);
@@ -1042,6 +1043,7 @@ const oldCode = (u: unknown) => typeof u === "function";
 /** A made program's `machine`. A value that is not an object fails the law, as reading it would. */
 const madeMachine = (made: unknown): unknown => {
   expect(Predicate.isObjectKeyword(made)).toBe(true);
+
   return Predicate.hasProperty(made, "machine") ? made.machine : undefined;
 };
 
@@ -1323,6 +1325,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         },
         get: (t, key, receiver) => {
           trace.push(`get:${String(key)}`);
+
           // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
           return typeof key === "string" && key in fields ? next(key) : Reflect.get(t, key, receiver);
         },

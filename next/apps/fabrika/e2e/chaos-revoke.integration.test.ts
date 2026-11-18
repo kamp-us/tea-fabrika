@@ -374,8 +374,10 @@ const served = Effect.gen(function* () {
       from,
     ),
   );
+
   const { process: pid } = yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started);
   const read = (stream: string) => invoke(() => instance.project(PROJECT).read(stream, 0, "p17b-audit"));
+
   return { root, old, other, instance, pid, read, built: built.build };
 }).pipe(Effect.provide(NodeServices.layer));
 
@@ -448,6 +450,7 @@ it.live(
             has: [],
           },
         });
+
         const armored = yield* root.proof(grant);
         expect(yield* RevokeTest.invoke(() => project.grant({ text: grant, armored }))).toMatchObject({
           _tag: "applied",
@@ -472,6 +475,7 @@ it.live(
             // @ts-expect-error p90-control is no ConnectionId: only the test's control binding takes it (chaos-revoke.worker.test-support.ts:90)
             project.route("p90-control", method, params, "p90-control"),
           );
+
         yield* Effect.acquireRelease(hold("p90.arm", { process: pid }), () => hold("p90.release").pipe(Effect.orDie));
 
         const delayed = yield* Effect.forkScoped(
@@ -547,10 +551,12 @@ it.live(
               sentAt: RevokeTest.SENT,
               saw: { label: "Old test client", location: "local", method: "command", check: "none" },
             });
+
             const armored = yield* root.proof(text);
             expect(yield* RevokeTest.invoke(() => project.grant({ text, armored }))).toMatchObject({
               _tag: "applied",
             });
+
             return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
           });
 

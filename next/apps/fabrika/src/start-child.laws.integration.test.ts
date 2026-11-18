@@ -213,6 +213,7 @@ const world = (
 
 const helpers = ({ instance, hashes, from }: Fixture) => {
   const project = () => (instance as Instance).project(PROJECT);
+
   return {
     start: async (name: string, program: "starter" | "child") => {
       const started = await project().start(

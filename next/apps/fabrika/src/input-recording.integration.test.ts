@@ -195,6 +195,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     traceId: TRACE,
     build: built.build,
   };
+
   const started = yield* invoke(() =>
     project.start(
       Start.cases.first.make({
@@ -205,6 +206,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       from,
     ),
   );
+
   const pid = Schema.decodeUnknownSync(Started)(started).process;
 
   const connect = Effect.fnUntraced(function* (n: number) {
@@ -218,6 +220,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       space: "fabrika-client",
       sign: (bytes) => Effect.sync(() => sign(null, bytes, pair.privateKey)),
     });
+
     const answer = yield* invoke(() =>
       project.initialize(
         client,
@@ -236,6 +239,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
         { url: instance.url, tab, name: fingerprint },
       ),
     );
+
     expect(answer).toMatchObject({ _tag: "online" });
 
     return client;
@@ -295,8 +299,10 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       } as const;
 
       const letter = `wire-${++serial}`;
+
       const route = () =>
         invoke(() => project.route(client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 }));
+
       let result;
 
       if (move === "reply_write" || move === "reply_complete") {

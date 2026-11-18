@@ -127,6 +127,7 @@ const keyFingerprint = (x: string) =>
 const method = (project: DevProject, name: Exclude<keyof LauncherProject, keyof DevProject>) => {
   // @ts-expect-error these are the fixture's own calls, which only its Control takes (hands-launcher.test-support.ts:136); DevProject names the real door's calls, and the dev client sends any name to the wire
   const picked: (...args: ReadonlyArray<unknown>) => Promise<unknown> = project[name];
+
   return picked;
 };
 

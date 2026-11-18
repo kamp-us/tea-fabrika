@@ -65,11 +65,13 @@ it.effect.prop(
   ({ call, name, text }) =>
     Effect.gen(function* () {
       const kind = faults.find((fault) => fault.name === name)!;
+
       // A real Request, so a client that hands `fetch` to a typed stub has one to read; the
       // rejecting stub ignores what every other method is given.
       const answer: Effect.Effect<unknown, unknown> = Reflect.apply(everyCall(kind.make(text)).get(call)!, undefined, [
         new Request("http://127.0.0.1:8787/client/a/b"),
       ]);
+
       const error = yield* Effect.flip(answer);
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       assert(error instanceof LedgerError);
@@ -162,6 +164,7 @@ it.effect.prop(
       // The bridge answers a typed failure as this envelope (alchemy, Rpc.ts `encodeRpcError`). A
       // Connection stub whose every call resolves with it, as the object's bridge answers.
       const envelope = { _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason })) };
+
       const typed = yield* Effect.flip(
         method(
           Stub.make<ConnectionBinding>(
@@ -350,6 +353,7 @@ it.effect.prop(
         client === "Gateway"
           ? GatewayClient.make(Stub.make<ConnectionBinding>(() => thrower(thrown)))
           : ProcessClient.make(Stub.make<ProcessBinding>(() => thrower(thrown)));
+
       const lost: Effect.Effect<unknown, unknown> = Reflect.apply(
         named(service).get(method)!,
         undefined,

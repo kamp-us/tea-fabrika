@@ -249,6 +249,7 @@ const world = async (
             start: async (name, program) => {
               const code = built.programs[program];
               expect(code, `fixture program ${program} must be built`).toBeDefined();
+
               const started = await instance.project("p12-records").start(
                 {
                   _tag: "first",

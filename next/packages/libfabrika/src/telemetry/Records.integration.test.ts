@@ -513,11 +513,14 @@ describe("RecordManager.remote, the record object's stub", () => {
   /** A stub that answers any method the builder names; `then` stays undefined so it is no thenable. */
   const stub = (answer: () => Effect.Effect<unknown, unknown>) => {
     const calls: Array<{ name: string; method: string }> = [];
+
     const make = (name: string) =>
       Stub.make<RecordCalls>((method) => () => {
         calls.push({ name, method });
+
         return answer();
       });
+
     return { make, calls };
   };
 

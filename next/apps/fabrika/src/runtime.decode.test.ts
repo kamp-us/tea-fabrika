@@ -90,6 +90,7 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const name = Predicate.hasProperty(inputs, "name") ? inputs.name : undefined;
   expect(typeof name).toBe("function");
   assert(Predicate.isFunction(name));
+
   return (m) => Reflect.apply(name, undefined, [m]);
 };
 

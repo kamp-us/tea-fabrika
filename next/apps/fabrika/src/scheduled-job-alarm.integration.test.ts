@@ -194,7 +194,9 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
             const before = Schema.decodeUnknownSync(View)(
               yield* Effect.promise(() => instance.process(pid).open("scheduled-job-observer")),
             );
+
             const alarm = yield* Effect.promise(() => instance.process(pid).savedAlarm());
+
             const after = Schema.decodeUnknownSync(View)(
               yield* Effect.promise(() => instance.process(pid).open("scheduled-job-observer")),
             );

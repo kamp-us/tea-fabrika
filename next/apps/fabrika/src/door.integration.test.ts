@@ -6186,11 +6186,13 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           const rang = w.rings.length;
           yield* ProcessManager.use((p) => p.exit(counter, CRASHED, brainFrom)).pipe(Effect.provide(brain));
           const exited = yield* inboxRows(tab);
+
           const letter = (row: (typeof exited)[number]) => [
             row.id,
             row.by,
             Predicate.hasProperty(row.body, "m") ? row.body.m : undefined,
           ];
+
           expect(exited.map(letter), "the exit's DOWN in the window's own inbox").toEqual([
             [signalId(to, "w9", 1), BRAIN_KEY, Down.make({ ref: "w9", process: counter, reason: CRASHED, to })],
           ]);

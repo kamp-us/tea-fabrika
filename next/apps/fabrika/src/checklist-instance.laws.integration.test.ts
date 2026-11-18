@@ -199,6 +199,7 @@ const storage = (db: DatabaseSync, alarm?: (at: number | null) => void) => {
 const callByName = (service: object, method: string, args: ReadonlyArray<unknown>): unknown => {
   const member = Predicate.hasProperty(service, method) ? service[method] : undefined;
   assert(Predicate.isFunction(member), `the service has no ${method} call`);
+
   return Reflect.apply(member, service, args);
 };
 
@@ -330,6 +331,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
 
         return project.run((p) => {
           const work = callByName(p, method, args) as Effect.Effect<unknown, unknown>;
+
           return method === "sign"
             ? signingReply(work as never)
             : method === "commit"
@@ -426,6 +428,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
             };
 
             const current = processes.get(storageKey) ?? made();
+
             return Stub.make<ProcessBinding>(
               (method) =>
                 (...args: ReadonlyArray<unknown>) =>
@@ -433,6 +436,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
               {
                 configure: (descriptor: Descriptor) => {
                   configured.push(structuredClone(descriptor));
+
                   return current.object.configure(descriptor);
                 },
                 descriptor: () => current.object.descriptor(),

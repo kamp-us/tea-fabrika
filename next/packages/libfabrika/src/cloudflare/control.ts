@@ -134,7 +134,9 @@ const entries =
     );
 
 const onProject = entries<ProjectClient["Service"]>();
+
 const onProcess = entries<ProcessClient["Service"]>();
+
 const onRecord = entries<RecordClient["Service"]>();
 
 /** One target's calls by name, keyed exactly as its payloads are. A Map, so a name such as
@@ -242,6 +244,7 @@ const dispatch = Effect.fnUntraced(function* (
     }
 
     const call = yield* entry(args);
+
     return yield* rpc(call(ProjectClient.make(projectStub(env, project))));
   }
 
@@ -253,11 +256,14 @@ const dispatch = Effect.fnUntraced(function* (
     }
 
     const call = yield* entry(args);
+
     // A process ID reaches the object its registered name owns; the Project refuses an unknown ID.
     const client = ProcessClient.make(
       processStub(env, project, yield* rpc(ProjectClient.make(projectStub(env, project)).processObject(name))),
     );
+
     const answer = call(client);
+
     return yield* method === "abort" ? answer.pipe(Effect.ignore) : rpc(answer);
   }
 
@@ -268,6 +274,7 @@ const dispatch = Effect.fnUntraced(function* (
   }
 
   const call = yield* entry(args);
+
   return yield* rpc(call(RecordClient.make(recordStub(env, project, name))));
 });
 
