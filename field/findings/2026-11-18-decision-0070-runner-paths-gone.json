@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-decision-0070-runner-paths-gone",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0070-flow-runner-stays-a-machine.md",
+    "line": 25
+  },
+  "says": "0070's code sketch and Context cite `next/packages/libfabrika/src/app/runner.ts`, `.../workers/runtime.ts` and `.../testing.ts`, and these folders and files are not in libfabrika's `src/` today.",
+  "proof": "`ls next/packages/libfabrika/src/app` fails with 'No such file or directory'. `src/` has `runtime/`, `cloudflare/` and `Testing.ts`, and no `app/` or `workers/` folder. 0070 cites the paths at lines 25, 46, 48 and 53.",
+  "cost": "A reader checking the seven services against the cited lines finds no file, and cannot tell the sketch is a 2026-11-10 snapshot.",
+  "head": "65edf5c27a8c2f5cc24cbded287695da91f57edd",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1629"
+}
