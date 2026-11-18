@@ -3132,6 +3132,7 @@
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/tasks/**",
+        "kalfa/quality/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
@@ -3257,6 +3258,7 @@
         "kalfa/config/src/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
+        "kalfa/quality/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/inbox/**"
@@ -3269,6 +3271,7 @@
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/repositories/**",
+        "kalfa/quality/**",
         "next/packages/vitest/**",
         "next/programs/counter/**",
         "next/programs/inbox/**"
