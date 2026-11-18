@@ -2,6 +2,7 @@
  * `RepositoryTrust` on the ledger: one stream per person and clone.
  */
 
+import * as Snapshot from "@kalfa/config/Snapshot";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -12,7 +13,6 @@ import * as Stream from "effect/Stream";
 import { Ledger } from "../ledger/Ledger.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
 import * as Declarations from "../settings/Declarations.ts";
-import * as Snapshot from "../settings/Snapshot.ts";
 import {
   Event,
   InvalidHistory,

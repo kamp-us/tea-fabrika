@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-l5-title-row-count-drifted",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "vitest.shards.test.ts",
+    "line": 712
+  },
+  "says": "In today's CI tooling, L5's title says 281 next rows, but the table and the samples it checks hold 285.",
+  "proof": "Counting nextSamples, integrationSamples and e2eSamples.files in vitest.shards.test.ts gives 158 + 119 + 8 = 285, and vitest.shards.json has 285 keys under next/ or kalfa/, with no difference either way; origin/main f1540a317 also has 285 next/ rows under the same 'L5 all 281 next rows' title, which was true (281) at d0f136909 (#1276).",
+  "cost": "A reader trusting the title miscounts the rows the law covers; the number drifts again with each added row.",
+  "head": "6a1282785be61911c22083c300a128504ab496af",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1583"
+}

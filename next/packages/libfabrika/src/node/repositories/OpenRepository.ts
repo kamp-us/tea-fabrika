@@ -2,6 +2,7 @@
  * Opening a selected repository on Node: read and check it before the instance starts, then record
  * the selection and the person's trust answer once there is a ledger.
  */
+import * as Files from "@kalfa/config/Files";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -18,7 +19,6 @@ import * as Open from "../../packs/Open.ts";
 import { Event, RepositoryId, RepositoryTrust, TrustDecision } from "../../packs/RepositoryTrust.ts";
 import { Repositories } from "../../repositories/Repositories.ts";
 import * as Declarations from "../../settings/Declarations.ts";
-import * as Files from "../../settings/Files.ts";
 import * as Load from "../settings/Load.ts";
 
 class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {

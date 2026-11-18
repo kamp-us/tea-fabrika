@@ -1,6 +1,7 @@
 /**
  * Native brain lifecycle with the durable recording queue.
  */
+import type * as Snapshot from "@kalfa/config/Snapshot";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -9,7 +10,6 @@ import type { BrainProbe } from "../../desktop/BrainProbe.ts";
 import { BrainServiceError, Operation } from "../../desktop/BrainService.ts";
 import * as Managed from "../../desktop/BrainServiceManaged.ts";
 import type { BrainSpec } from "../../desktop/BrainSpec.ts";
-import type * as Snapshot from "../../settings/Snapshot.ts";
 import { devRecording } from "../dev/dev-recording.ts";
 import * as Control from "./BrainControlLaunchd.ts";
 

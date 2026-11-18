@@ -359,11 +359,11 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/settings/Start.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/settings/Toml.types.test.ts": [0.0, 0.0, 0.0],
+  "kalfa/config/src/Toml.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/settings/TomlEdit.test.ts": [6.4, 5.6, 5.5],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/settings/TomlParser.test.ts": [0.2, 0.2, 0.2],
+  "kalfa/config/src/TomlParser.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/telemetry/ErrorCause.test.ts": [0.2, 0.1, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -700,7 +700,11 @@ it("vector: L5 all 268 next rows, vitest and end-to-end, are the median of three
       ([path, samples]) => [path, row(samples)],
     ),
   );
-  expect(Object.fromEntries(Object.entries(measured).filter(([path]) => path.startsWith("next/")))).toEqual(expected);
+  expect(
+    Object.fromEntries(
+      Object.entries(measured).filter(([path]) => path.startsWith("next/") || path.startsWith("kalfa/")),
+    ),
+  ).toEqual(expected);
 });
 
 it("vector: E5 each end-to-end row is the median of its three samples", () => {
@@ -1552,9 +1556,10 @@ describe("full, the rows at full depth", () => {
       });
 
       try {
-        const specs = (await vitest.globTestSpecifications()).filter((spec) =>
-          relative(ROOT, spec.moduleId).startsWith("next/"),
-        );
+        const specs = (await vitest.globTestSpecifications()).filter((spec) => {
+          const path = relative(ROOT, spec.moduleId);
+          return path.startsWith("next/") || path.startsWith("kalfa/");
+        });
         const sequencer = new Sequencer(vitest);
         const order = (await sequencer.sort(await sequencer.shard(specs))).map((spec) => relative(ROOT, spec.moduleId));
         const seconds = order.map((path) => rows[path] ?? noRow);
@@ -1613,9 +1618,10 @@ describe("Shards", () => {
       });
 
       try {
-        const specs = (await vitest.globTestSpecifications()).filter((spec) =>
-          relative(ROOT, spec.moduleId).startsWith("next/"),
-        );
+        const specs = (await vitest.globTestSpecifications()).filter((spec) => {
+          const path = relative(ROOT, spec.moduleId);
+          return path.startsWith("next/") || path.startsWith("kalfa/");
+        });
         const sequencer = new vitest.config.sequence.sequencer(vitest);
         const order = (await sequencer.sort(await sequencer.shard(specs))).map((spec) => relative(ROOT, spec.moduleId));
         const seconds = order.map((path) => rows[path] ?? noRow);
@@ -1921,7 +1927,12 @@ describe("the end-to-end legs", () => {
         name: "next-visual",
         root: ROOT,
         include: ["next/**/*.visual.test.{ts,tsx}"],
-        exclude: [...configDefaults.exclude, ".agents/skills/*/scripts/**/fixtures/**", "next/**/dist/**"],
+        exclude: [
+          ...configDefaults.exclude,
+          ".agents/skills/*/scripts/**/fixtures/**",
+          "next/**/dist/**",
+          "kalfa/**/dist/**",
+        ],
         maxWorkers: 1,
         fileParallelism: false,
         testTimeout: 120_000,

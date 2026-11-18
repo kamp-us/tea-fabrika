@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "head": "2d85d89a82ae74aac74ac418cffb30287d163b3b",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": "kamp-us/tea-fabrika#1583",
+  "id": "2026-11-18-kalfa-config-rule-block-has-no-law",
+  "rule": "missing_test",
+  "location": {
+    "path": ".oxlintrc.json",
+    "line": 745
+  },
+  "says": "The kalfa/config copy of the next/** rule block in .oxlintrc.json is held by no law, so it can drift from the next/** block without a red check.",
+  "proof": "edge-config.test.ts law 3 compares only the .agents/ mirror with the next/** block; no test reads the override whose files are [\"kalfa/config/src/**\", \"kalfa/config/*.ts\"].",
+  "cost": "A rule added to the next/** block later can miss kalfa/config, and kalfa/ is then held to less than next/'s rules (0556) with no check to say so."
+}

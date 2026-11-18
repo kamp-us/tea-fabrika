@@ -13,7 +13,7 @@ import { plant } from "./plant.ts";
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 // L9's callers: where an import sits, and whether it may take the TOML adapter or the parser.
-const ADAPTER = "next/packages/libfabrika/src/settings/TomlParser.ts";
+const ADAPTER = "kalfa/config/src/TomlParser.ts";
 
 const RULE = "eslint(no-restricted-imports)";
 
@@ -96,7 +96,7 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
             .map(([c, t]) => {
               const spec =
                 t === "package"
-                  ? "@kampus/libfabrika/settings/TomlParser"
+                  ? "@kalfa/config/TomlParser"
                   : t === "relative"
                     ? relative(c.file, ADAPTER)
                     : t === "relative-bare"

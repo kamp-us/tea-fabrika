@@ -14,11 +14,11 @@
 //   oxlint's own `no-restricted-imports`; its law is oxlint-plugins/settings-imports.test.ts (0591).
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
+import * as JsonSchema from "@kalfa/config/JsonSchema";
+import * as Reference from "@kalfa/config/Reference";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Setting from "@kampus/libfabrika/settings/Fabrika";
-import * as Files from "@kampus/libfabrika/settings/Files";
-import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
-import * as Reference from "@kampus/libfabrika/settings/Reference";
 import { Array as Arr, String as Str, Effect, FileSystem, Path, Result, Schema, Record as Rec } from "effect";
 import * as fc from "fast-check";
 

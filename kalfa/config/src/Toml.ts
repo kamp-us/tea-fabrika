@@ -79,4 +79,4 @@ export class Toml extends Context.Service<
     readonly set: (text: string, path: ReadonlyArray<string>, value: unknown) => Effect.Effect<string, TomlError>;
     readonly remove: (text: string, path: ReadonlyArray<string>) => Effect.Effect<string, TomlError>;
   }
->()("@kampus/libfabrika/settings/Toml") {}
+>()("@kalfa/config/Toml") {}

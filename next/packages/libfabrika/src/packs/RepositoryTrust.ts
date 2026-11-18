@@ -2,6 +2,7 @@
  * Repository trust: a person's saved answer on whether to open one clone, and the events that
  * record an opening. This file is the contract only (0095).
  */
+import { Snapshot } from "@kalfa/config/Snapshot";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -9,7 +10,6 @@ import * as Id from "../Id.ts";
 import type { Line } from "../ledger/Log.ts";
 import { Hash, ObjectId, Branch } from "../repositories/Repositories.ts";
 import { Rev } from "../Rev.ts";
-import { Snapshot } from "../settings/Snapshot.ts";
 
 /**
  * Schema for a repository's id, `repository_<26 chars>`: made at a clone's first selection by one

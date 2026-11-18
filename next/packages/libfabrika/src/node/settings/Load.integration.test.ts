@@ -13,6 +13,10 @@
 //   read before any source overrides it. With no repo place there is no `repo` field.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { SettingsError } from "@kalfa/config/Files";
+import * as Print from "@kalfa/config/Print";
+import * as Reference from "@kalfa/config/Reference";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { runsFor } from "@kampus/vitest";
 import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
@@ -30,10 +34,6 @@ import * as Str from "effect/String";
 
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
-import { SettingsError } from "../../settings/Files.ts";
-import * as Print from "../../settings/Print.ts";
-import * as Reference from "../../settings/Reference.ts";
-import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Load from "./Load.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats

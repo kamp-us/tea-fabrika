@@ -39,6 +39,13 @@ const DESIGN = "@kampus/fabrika-design";
 
 const DESIGN_TAKERS: ReadonlySet<string> = new Set(["@kampus/tuval", "@kampus/fabrika"]);
 
+/** The config engine moved out of `next/` to `kalfa/config` (0585). The approved plan names its two
+ *  consumers: the library (kalfa-config-PLAN.md:310) and the app (kalfa-config-package-amendment-PLAN.md:224).
+ *  No other `next/` package may name it. */
+const CONFIG = "@kalfa/config";
+
+const CONFIG_TAKERS: ReadonlySet<string> = new Set(["@kampus/libfabrika", "@kampus/fabrika"]);
+
 /** What is wrong with a manifest, as the command prints it. */
 const REASONS = {
   public: "not private",
@@ -88,7 +95,8 @@ export const manifestFaults = (root: string): ReadonlyArray<ManifestFault> => {
         ...(dependency.endsWith("-old") ? [{ file, reason: "today" as const, dependency }] : []),
         ...(range.startsWith("workspace:") &&
         !ours.has(dependency) &&
-        !(dependency === DESIGN && DESIGN_TAKERS.has(m.name))
+        !(dependency === DESIGN && DESIGN_TAKERS.has(m.name)) &&
+        !(dependency === CONFIG && CONFIG_TAKERS.has(m.name))
           ? [{ file, reason: "outside" as const, dependency }]
           : []),
       ]),
