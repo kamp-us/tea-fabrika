@@ -111,6 +111,53 @@ export const TAGGED_ERROR: Plant = {
   ],
 };
 
+/**
+ * The lines of the `vi` lock (decisions 0555, 0579), each with whether oxlint's `vitest` rule alone
+ * refuses it and whether `eslint/no-restricted-properties` alone does. The vitest rule misses a call
+ * chained onto the `vi` call (oxc#29656), and the properties rule never sees `v` after
+ * `import { vi as v }`; the lock holds a line when either refuses it.
+ */
+const VI_LOCK: readonly (readonly [line: string, vitest: boolean, properties: boolean])[] = [
+  ["const a = vi.fn();", true, true],
+  ["const b = v.fn();", true, false],
+  ['vi.spyOn(console, "log");', true, true],
+  ['vi.mock("./c.ts");', true, true],
+  ['vi.doMock("./d.ts");', true, true],
+  ['vi.stubEnv("E", "f");', true, true],
+  // Chained: the vitest rule does not see these, the member access is refused by the properties rule.
+  ['vi.spyOn(console, "warn").mockImplementation(() => undefined);', false, true],
+  ["const m = vi.fn().mockReturnValue(1);", false, true],
+  // Not banned: the rest of `vi`, a comment, a string, another object's `fn`, a plain list.
+  ["const n = vi.hoisted(() => 1);", false, false],
+  ["const o = vi.waitFor(() => 1);", false, false],
+  ["// vi.fn() in a comment", false, false],
+  ['const q = "vi.fn()";', false, false],
+  ["other.fn();", false, false],
+  ['const g: Array<string> = []; g.push("h");', false, false],
+];
+
+const viPlant = (code: string, pick: (line: (typeof VI_LOCK)[number]) => boolean): Plant => ({
+  code,
+  file: "planted.test.ts",
+  prelude: [TEST, 'import { vi as v } from "vitest";', "declare const other: { fn: () => void };"],
+  lines: VI_LOCK.map((line) => [line[0], pick(line)]),
+});
+
+/**
+ * M2 of the mock sweep's lock (decisions 0555, 0579): what oxlint's `vitest/no-restricted-vi-methods`
+ * refuses alone, in a test file under `oxlint-plugins/`. A chained call stays `false` here: the
+ * rule does not see it, and `VI_PROPERTIES` refuses it.
+ * Plant: delete the lock's block from `.oxlintrc.json`, and the refused lines are not refused.
+ */
+export const VI_METHODS: Plant = viPlant("vitest(no-restricted-vi-methods)", ([, vitest]) => vitest);
+
+/**
+ * M2's second half (the lock's amendment of 2026-11-16): what `eslint/no-restricted-properties`
+ * refuses alone, under the code `REFLECT` has. plants.test.ts holds a line when either plant refuses it.
+ * Plant: drop the block's `vi` entries from that rule, and the chained lines are not refused.
+ */
+export const VI_PROPERTIES: Plant = viPlant("eslint(no-restricted-properties)", ([, , properties]) => properties);
+
 const eslint: readonly Plant[] = [
   REFLECT,
   {
@@ -730,6 +777,7 @@ const typescript: readonly Plant[] = [
 ];
 
 const vitest: readonly Plant[] = [
+  VI_METHODS,
   {
     code: "vitest(valid-describe-callback)",
     file: "planted.test.ts",

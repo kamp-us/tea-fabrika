@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-oxlint-plugins-tests1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1636",
+  "started": "2026-11-18T11:22:00-08:00",
+  "ended": "2026-11-18T11:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In today's tooling (oxlint-plugins/ and .oxlintrc.json), wrote M1 to M4 of docs/plan/quests/mock-oxlint-plugins-PLAN.md. M1: the one vi.fn in oxlint-plugins/no-question-word-key.test.ts is a plain list of diagnostics the test owns. M2: a new override in .oxlintrc.json, after the tooling block that holds the five no-restricted-properties entries, sets vitest/no-restricted-vi-methods (fn, mock, doMock, spyOn, stubEnv) and eslint/no-restricted-properties (the five old entries written out again, then the five vi entries) for oxlint-plugins/**; VI_METHODS and VI_PROPERTIES in oxlint-plugins/builtin-plants.ts hold the same 14 lines and plants.test.ts holds a line as refused when either rule refuses it. M3: three path rows (oxlint-plugins/ refused, next/ and packages/ left alone). M4: pnpm lint passes with the lock on and no oxlint-disable line names either rule of the lock. Both test paths are green (5 and 264 tests). One existing law, the Reflect ban's L1 scenario, needed a dedupe of globs, since oxlint-plugins/** now sits in two blocks that hold the ban.",
+  "note": "Started and ended are approximate (the container clock, converted). Usage and cost are not recorded. Model and effort are the requested values; the effective context is unknown. The container has Node 22 and the pin is Node 26, so vitest ran with CI=1 for the local-limit guard. Before count, re-counted on head c3074d58 with rg -o for the call forms: 1 vi.fn( call (oxlint-plugins/no-question-word-key.test.ts), 0 vi.spyOn( calls, 0 toHaveBeenCalled*; the text matches are 2 vi.mock( in builtin-plants.ts and a vi.spyOn( and a vi.fn( inside strings of integration-test-name.test.ts, which are data, not calls. Renamed-import probe on oxlint 1.90.0: v.fn() after import { vi as v } from vitest is refused by vitest/no-restricted-vi-methods (VI_METHODS line 2, refused), and not by eslint/no-restricted-properties, which matches the object name vi. The vitest rule alone does not refuse vi.spyOn(...).mockImplementation(...) or vi.fn().mockReturnValue(1) (both false in VI_METHODS), so the pair is needed. No later block that matches oxlint-plugins/** sets either rule again. The ratchet script exists and exits 0. M4's plant was run with oxlint on the one file (exit 1, both rules name no-question-word-key.test.ts:295), not through the whole of pnpm lint. The hoisted-apis-on-top plant kept its vi.mock line and passes as the plan said. Not run here: typecheck, --changed (the lead runs them).",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "c3074d58f6b26dbb552f44d984c85adb28ab9c5b",
+  "plants": [
+    { "law": "M1 the format law lists each question-word key once with the one message and no autofix", "plant": "no-question-word-key.ts reports with a fix: () => null field", "result": "red" },
+    { "law": "M1 the format law lists each question-word key once with the one message and no autofix", "plant": "no-question-word-key.ts skips the report for \"how\"", "result": "red" },
+    { "law": "M2 the lock refuses vi.fn, vi.spyOn, vi.mock, vi.doMock, vi.stubEnv and v.fn, and takes a plain list", "plant": "delete the lock's override from .oxlintrc.json (the same as before it exists): VI_METHODS, VI_PROPERTIES and the either-rule law", "result": "red" },
+    { "law": "M2 the lock refuses chained vi calls through the pair", "plant": "drop the five vi entries from the override's eslint/no-restricted-properties, the vitest rule kept", "result": "red" },
+    { "law": "M3 the lock is on only where the folder is at zero", "plant": "(a) the override's files set to **, so it reaches next/ and packages/", "result": "red" },
+    { "law": "M3 the lock is on only where the folder is at zero", "plant": "(b) oxlint-plugins/** dropped from the override's files", "result": "red" },
+    { "law": "M4 the folder is at zero and no lock rule is disabled by comment", "plant": "put const report = vi.fn(); back in no-question-word-key.test.ts, oxlint on that file", "result": "red" }
+  ]
+}
