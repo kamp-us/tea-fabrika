@@ -1,7 +1,7 @@
 ---
 id: 0183
 title: The lead admin-merges a docs-only pull request without asking, after it checks that the change is not broken
-status: amended-in-part by [0530](0530-lead-turns-on-merge-when-ready.md)
+status: amended-in-part by [0530](0530-lead-turns-on-merge-when-ready.md), [0603](0603-lead-admin-merges-every-ready-pull-request.md)
 date: 2026-11-13
 tags: [merge, admin, docs, queue, lead, owner, main]
 ---

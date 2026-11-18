@@ -84,7 +84,7 @@ const merged = (m: ReturnType<typeof memory>, route: Merge.Route) =>
 
 const queue = Merge.Route.cases.queue.make({});
 
-const admin = (sev0: ReadonlyArray<string> = []) => Merge.Route.cases.admin.make({ sev0 });
+const admin = () => Merge.Route.cases.admin.make({});
 
 /** The three leak checks, in order, as the gate runs them on pull request 1415. */
 const gate = [
@@ -95,25 +95,27 @@ const gate = [
 
 describe("merge: the lead's one way to merge by hand runs the leak gate first", () => {
   // Plants: merge before the gate, or past a refusal from it; skip the commit or the word grep;
-  // admin-merge a pull request with one file that is not docs; admin-merge a sev0 fix on a red head.
+  // admin-merge a pull request with a file that is not docs on a red head; admin-merge one that
+  // changes no files.
   it.effect.prop(
-    "property: GitHub's merge is asked once, pinned to the head, only when all three leak checks passed, and --admin only for a docs-only pull request or a branch an open sev0 allows whose ci-required is green",
+    "property: GitHub's merge is asked once, pinned to the head, only when all three leak checks passed, and --admin lands any ready pull request whose every file is docs or whose ci-required is green (0603)",
     {
       route: Schema.Literals(["queue", "admin"]),
       leak: Leak,
       files: Files,
-      sev0: Schema.Boolean,
       required: Schema.Literals(["success", "failure"]),
     },
-    ({ route, leak, files, sev0, required }) =>
+    ({ route, leak, files, required }) =>
       Effect.gen(function* () {
         const m = memory({ leak, files, required });
-        const { answer, leaks } = yield* merged(m, route === "queue" ? queue : admin(sev0 ? [branch] : []));
+        const { answer, leaks } = yield* merged(m, route === "queue" ? queue : admin());
         const clean = leak === "clean";
         const docs = files === "docs";
 
         const merges =
-          route === "queue" ? clean && required === "success" : clean && (docs || (sev0 && required === "success"));
+          route === "queue"
+            ? clean && required === "success"
+            : clean && files !== "none" && (docs || required === "success");
 
         const asked = route === "queue" ? "enqueue" : "admin";
         expect(m.github.calls).toEqual(merges ? [{ _tag: asked, number: 1415, oid }] : []);
@@ -123,8 +125,8 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
           expect(leaks).toEqual(gate);
         }
 
-        // An admin merge GitHub's rules would not allow refuses before any grep runs.
-        if (route === "admin" && !docs && !sev0) {
+        // An admin merge of a change with no files refuses before any grep runs.
+        if (route === "admin" && files === "none") {
           expect(leaks).toEqual([]);
         }
       }),
@@ -166,17 +168,29 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
     }),
   );
 
+  // Plant: keep the old rule, where only a docs change or a sev0 fix could take --admin.
+  it.effect("scenario: a ready code pull request whose ci-required is green is admin-merged, with no sev0 open", () =>
+    Effect.gen(function* () {
+      const m = memory({ files: "code" });
+      const done = yield* merge(m, admin());
+      expect(m.github.calls).toEqual([{ _tag: "admin", number: 1415, oid }]);
+      expect(Merge.line(done)).toBe(
+        `pr 1415: admin-merged at ${oid}, ci-required green (0603); read the push run on main next`,
+      );
+    }),
+  );
+
   it.effect(
-    "vector: --admin on a pull request with a file that is not docs names it and refuses; one that changes no files refuses; a `Plan:` title refuses",
+    "vector: --admin on a code pull request whose ci-required is red names it and refuses; one that changes no files refuses; a `Plan:` title refuses",
     () =>
       Effect.gen(function* () {
-        const code = yield* Effect.flip(merge(memory({ files: "code" }), admin()));
+        const code = yield* Effect.flip(merge(memory({ files: "code", required: "failure" }), admin()));
         expect(code).toMatchObject({
           _tag: "NotMerged",
-          reason: `pr 1415: not docs only (0183), and no open sev0 allows ${branch} (0532); --admin refused: docs/tutorials/one/package.json`,
+          reason: `pr 1415: ci-required is failure at ${oid}, not a success; not merged`,
         });
         const none = yield* Effect.flip(merge(memory({ files: "none" }), admin()));
-        expect(none).toMatchObject({ reason: "pr 1415: it changes no files, so it is not docs only; refused" });
+        expect(none).toMatchObject({ reason: "pr 1415: it changes no files; refused" });
         const plan = yield* Effect.flip(merge(memory({ title: "Plan: a room" }), admin()));
         expect(plan.reason).toContain("its title starts `Plan:`");
       }),

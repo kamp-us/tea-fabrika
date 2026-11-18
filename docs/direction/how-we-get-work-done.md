@@ -113,7 +113,7 @@ is **event** in `next/` (renamed 2026-11-08); today's code says fact.
 | Shape | a plan file approved on its line 1, by the lead when it builds a decided note | a `plan` with criteria and properties, approved by version and hash |
 | Do | `test_writer` and `build`, run by `drive.ts`, chained by `chain.ts` (a tea machine) | steps are tea machines that answer in five verbs; an `attested` link per commit, checked by `next/`'s exam |
 | Check | `mutation`, `review`, CI, `leakgrep.sh`, `loosening.sh`, the lead's hand check | `mutation`, `review`, the `exam`; a person only for a `judgment` |
-| Ship | `land.ts queue` under the lead, into GitHub's merge queue (0014, 0162) | `ship`, the one merge authority |
+| Ship | `land.ts merge --admin` under the lead, one pull request at a time in order (0014, 0603) | `ship`, the one merge authority |
 | Learn | `field/` rows and notes, findings a person rates, `.decisions/` | a `finding` row until Tier 6; `asked` and `answered` events, with `needed` |
 
 The full table, with a source for each name, is in experiment 250, part 8.

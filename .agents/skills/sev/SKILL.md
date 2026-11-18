@@ -20,9 +20,9 @@ sev0 --(every fix merged, or the owner calls it off: close)--> sev1 if an issue 
 | | sev0 | sev1 |
 |---|---|---|
 | What is broken | Nothing can land, or every run makes it worse | Changes land, but the full run is red or a speed number is over its goal ([0541](../../../.decisions/0541-ci-speed-has-a-goal-and-a-daily-check.md)) |
-| Merge line | Stopped; the owner empties the queue | Runs as normal ([0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md)) |
+| Merge line | Stopped; only the allowed fix merges | Runs as normal: the lead admin-merges in order ([0603](../../../.decisions/0603-lead-admin-merges-every-ready-pull-request.md)) |
 | CI runs | All canceled, except the one fix's | All run |
-| How a fix lands | One at a time, by admin merge | Through the merge line, ahead of other changes |
+| How a fix lands | One at a time, by admin merge | By admin merge, ahead of other changes |
 | Other work | Stops; every agent saves and waits | Keeps going |
 | Who calls it | Only the owner | Nobody: the full run or the daily speed check opens its issue |
 | Ends when | Every fix has merged, or the owner calls it off; it then becomes a sev1 or ends | That issue closes, which the same check does when it is green or inside the goal again |
@@ -52,11 +52,10 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
   start moved by [0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)); "CI
   speed: a stage is over its goal" is the daily check's (0541). `status` lists them.
 - **What the lead does:** the response only. Find each cause the same day and ticket it. Put each
-  fix first on the merge line, ahead of other changes. The queue no longer runs the full suite
-  (0534), so a fix lands at the speed of its own changed tests.
+  fix first in the lead's merge order, ahead of other changes. A fix lands at the speed of its own
+  changed tests (0534).
 - **A fix is proven only by main's next full run,** never by a branch's own full run: a fix's pull
-  request is armed once its review passed, as any other is
-  ([0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md)). Visual and real-resource tests do not run on pull
+  request is admin-merged once its review passed, as any other is ([0603](../../../.decisions/0603-lead-admin-merges-every-ready-pull-request.md)). Visual and real-resource tests do not run on pull
   requests ([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)), and
   tooling tests run only locally and on the schedule
   ([0539](../../../.decisions/0539-the-merge-line-runs-no-tooling-tests.md)). On 2026-11-14 a
@@ -89,8 +88,8 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
 - **A red fix stops the line.** Fix it, or tell the owner what is red and ask what happens next.
 - **A check that is not required and already known red elsewhere** does not hold the admin merge
   (on 2026-11-14 that was `launchd`). Find its root cause and ticket it the same turn.
-- **Docs wait too.** They land by [0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)
-  once it ends.
+- **Docs land at once, even in a sev0** ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md),
+  0603): a docs-only pull request starts no CI, so it takes no runner from the fix.
 - **Ending it:** when every fix has merged, or the owner calls it off; never when CI "looks
   better". `close` stops the loop and prints the walk and the level after.
 - **After close, rerun nothing.** A run the freeze canceled and a red run that stopped itself both
@@ -120,13 +119,16 @@ tool's sessions. What kept the work moving on 2026-11-17, and what slowed it:
   message is only for a decision, a conflict an agent cannot resolve, or the owner's yes. A
   coordinator that relays status adds a wait to every question; it fills slots and keeps one
   writer per file instead.
-- **No agent waits on CI or on a reply.** It keeps building, reviews, and arms its own pull request
-  when the checks are green and the leak grep is clean. Only what needs the lead's machine waits.
-- **A stack lands whole, from its top,** with `land.ts stack <top>`, which makes one merge pinned to
-  the top's head ([0599](../../../.decisions/0599-native-stacks-link-whole-and-merge-children-current.md)).
-  Never one layer at a time: on 2026-11-17 the lead landed a stack's bottom alone. GitHub refuses
-  auto-merge and enqueue for a stack member, so an agent never arms one; it marks the layer ready.
-  Children stay current by merging their parent's head in, never by a rebase.
+- **No agent waits on CI or on a reply.** It keeps building, reviews, and marks its own pull request
+  ready; the lead admin-merges it in order once `ci-required` is green (0603). No agent arms or
+  enqueues one. Only what needs the lead's machine waits.
+- **A stack lands one layer at a time, bottom first,** each with `land.ts merge <n> --admin`, and
+  no native stack link (0603). GitHub refuses `gh pr merge` on a pull request still in a native
+  stack; on 2026-11-18 that held a three-layer stack while the queue built two entries at once.
+  Unstack an old one with `gh stack unstack <number>`. Children stay current by merging their
+  parent's head in, never by a rebase.
+- **Sweeps go first.** A ready format or code-quality sweep jumps the merge order, since every pull
+  request that lands before it adds conflicts to it (0603).
 - **Lead tooling and CI fixes take the fast track:** no plan step, one builder, one review.
 - **Proof comes from the automatic changed and related CI.** A hand-started proof run that the
   automatic CI already covers takes shared slots from every other pull request.
@@ -155,8 +157,10 @@ node $S status                                   # the level now: sev0, sev1 or 
 node $S open 0 --reason "..." --allow fabrikalfa/ci-cache   # in the background, on the owner's call
 node $S next fabrikalfa/ci-legs                  # that fix alone is allowed; the one before is canceled from now
 node $S allow fabrikalfa/ci-flake                # one more fix branch, without replacing the list
-git merge origin/main && git push                # in the fix's own worktree, so its checks run on main as it is
-node .agents/skills/lead/scripts/land.ts merge <n> --admin  # leak-checks it; refuses unless the sev0 allows it and ci-required is green
+BOT="-c user.name=fabrikalfa[bot] -c user.email=353269643+fabrikalfa[bot]@users.noreply.github.com"
+git $BOT merge origin/main                       # in the fix's own worktree, as the bot (0407)
+node .agents/skills/lead/scripts/botpush.mjs . <branch>  # refuses a commit that is not the bot's
+node .agents/skills/lead/scripts/land.ts merge <n> --admin  # leak-checks it; refuses unless ci-required is green (docs excepted)
 node $S close --by lead                          # every fix merged; --by owner when he called it off
 node $S loop                                     # only if the open 0 loop died with its shell
 ```

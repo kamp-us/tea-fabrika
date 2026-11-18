@@ -51,22 +51,15 @@
 //
 //   land.ts merge <pr> [--admin]
 //     the lead session, the only way it merges a pull request by hand (pr/Merge.ts); never a bare
-//     `gh pr merge`. Without --admin, as `queue`. With --admin, an admin merge past the queue, only
-//     for a docs-only pull request (0183: every file Markdown in a docs folder, or a field row) or a
-//     branch an open sev0 allows (0532, whose fix also needs `ci-required` green). Both run the
-//     leak gate first, on the change, each commit, the title and the description, and refuse on any
-//     hit or on a grep that could not run.
-//
-//   land.ts stack <top-pr>
-//     the lead session, the one way a native stack lands (pr/Stack.ts, ticket 1115); never a bare
-//     `gh stack merge`, and `arm` cannot land a stacked pull request (github/gh-stack#591). Refuses
-//     unless the top is in an open stack whose layers from the bottom up to it are open and ready;
-//     runs `arm`'s gates on each layer, the leak gate on its change, commits and words and the
-//     `## New names` check; refuses unless `ci-required` is a success at each layer's head
-//     (ticket 1119); rereads the selected ordered prefix, its base, branch links and heads; then asks
-//     GitHub's async merge API with the selected top head SHA. A SQUASH merge queue keeps its own
-//     merge method; without a queue, the request is an explicit squash. The result says merged,
-//     enqueued or pending, and never reports a queued or pending request as merged.
+//     `gh pr merge`. With --admin, the lead's route for every ready pull request (0603): an admin
+//     merge past the queue, one at a time, in the order the lead lands them. It refuses one that is
+//     not open, a draft, not into main, titled `Plan:` or changing no files; runs the leak gate on
+//     the change, each commit, the title and the description, and refuses on any hit or on a grep
+//     that could not run; runs the `## New names` check (0587); and, unless every file is docs
+//     (0183), refuses unless `ci-required` is a success at the head. Then one pinned squash with
+//     --admin. Without --admin, as `queue`. A stacked pull request lands on its own, bottom first,
+//     once its parent has merged and GitHub has moved it onto main; native stack links are not used
+//     (0603), and GitHub refuses `gh pr merge` on a pull request still in one.
 //
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
@@ -90,7 +83,6 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
-import * as Level from "../../sev/scripts/Level.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as RunsGh from "./ci/RunsGh.ts";
 import * as Arm from "./pr/Arm.ts";
@@ -99,7 +91,6 @@ import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
-import * as Stack from "./pr/Stack.ts";
 import * as SweepsProcess from "./pr/SweepsProcess.ts";
 import * as TicketsCli from "./pr/TicketsCli.ts";
 
@@ -115,7 +106,6 @@ const Check = Schema.Literals([
   "pr",
   "queue",
   "arm",
-  "stack",
 ]);
 
 class Refused extends Schema.TaggedError<Refused>()("Refused", {
@@ -736,52 +726,13 @@ const armCommand = Command.make(
   }),
 );
 
-const stackCommand = Command.make(
-  "stack",
-  { top: Argument.Int("top-pr") },
-  Effect.fn("land.stackCommand")(function* ({ top }) {
-    const env = yield* loadEnv;
-
-    const landed = yield* Stack.land({ dir: env.MAIN, top }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
-          PushesProcess.layer(HERE),
-          ChecksGh.layer(env.GH_REPO),
-        ),
-      ),
-      Effect.mapError(refusedAt("stack")),
-    );
-
-    yield* Console.log(Stack.line(landed));
-  }),
-);
-
-/** The branches an open sev0 allows, from the sev log in the main checkout; none when none is open. */
-const sev0Allows = Effect.fn("land.sev0Allows")(function* (main: string) {
-  const { sev0 } = yield* Level.read(`${main}/runs/sev`).pipe(
-    Effect.mapError(
-      (e) =>
-        new Refused({
-          check: "merge",
-          reason: `the sev log does not read: ${e._tag === "Refused" ? e.reason : e.message}`,
-          output: "",
-        }),
-    ),
-  );
-
-  return sev0._tag === "open" ? sev0.allow : [];
-});
-
 const mergeCommand = Command.make(
   "merge",
   { pr: PrNumber, admin: Flag.Boolean("admin") },
   Effect.fn("land.mergeCommand")(function* ({ pr, admin }) {
     const env = yield* loadEnv;
 
-    const route = admin
-      ? Merge.Route.cases.admin.make({ sev0: yield* sev0Allows(env.MAIN) })
-      : Merge.Route.cases.queue.make({});
+    const route = admin ? Merge.Route.cases.admin.make({}) : Merge.Route.cases.queue.make({});
 
     const done = yield* Merge.merge({ dir: env.MAIN, pr, route }).pipe(
       Effect.provide(queueServices(env)),
@@ -827,7 +778,7 @@ const closeNamed = Command.make(
 );
 
 const land = Command.make("land").pipe(
-  Command.withSubcommands([ready, run, queueCommand, armCommand, stackCommand, mergeCommand, merged, closeNamed]),
+  Command.withSubcommands([ready, run, queueCommand, armCommand, mergeCommand, merged, closeNamed]),
 );
 
 if (import.meta.main) {
