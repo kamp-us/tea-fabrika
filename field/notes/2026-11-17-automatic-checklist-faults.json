@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-17-automatic-checklist-faults",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1155", "tea-fabrika#1126"],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "Today's CI serves both versions. The checklist tests in next/ need their existing fault exercises on the actual pull-request or queue merge after ordinary full-depth coverage, rather than a separate manual proof.",
+  "cause": "The trusted-main manual entry binds its source to one catalog commit. A tested merge is a different commit, even when its fixture is byte-identical. The original recipe source and main also held different complete lockfiles.",
+  "person": false,
+  "primitive": null,
+  "fix": "Record recipe origin a062f7a2515aa1917dfae05d3af95e3705b88812, catalog source 3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db and actual tested merge separately. The catalog source includes the main dependency join. Require catalog ancestry, exact target bytes and mode, all applicable manifests, workspace settings and the complete lockfile, plus supported runtime versions. Keep all 27 pinned images unchanged. Assign the nine pinned cases and the existing PID case once across the existing integration legs, round-robin. The current five legs get two cases each, serially after their own ordinary files. The fixture's unchanged ordinary full100 suite runs once in its owning leg. No ordinary file is duplicated. The nine shared test slots, control slot, 20-minute job and 17-minute steps stay in place. The manual trusted-main entry keeps its guards.",
+  "test": "Implementation and negative binding laws are prepared. Actual current-source full-depth runtime, all ten fault triplets and CI checks remain pending. No current triplet is credited from the historical different-source runs. Both L13 properties keep their 100 worlds, seed, move bounds, assertions, examples and 60000ms limit. No local test, compiler, lint, fault or benchmark ran.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1543", "https://github.com/kamp-us/tea-fabrika/pull/1569", "https://github.com/kamp-us/tea-fabrika/pull/1581"]
+}

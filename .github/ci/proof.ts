@@ -34,14 +34,14 @@
 // cannot be worked out again later.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { Result, Schema } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
-import { testConfig } from "../../vitest.config.ts";
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
-import { E2E_SETUP, fewest, list, room, seconds, split, withReaders } from "./legs.ts";
+import { E2E_SETUP, fewest, isTrigger, list, room, seconds, split, withReaders } from "./legs.ts";
+
+export { isTrigger };
 
 /** The projects a proof run lists and runs: every one CI runs, today's left out (0533). */
 export const PROJECTS = ["next", "next-integration", "next-visual", "tooling"] as const;
@@ -86,13 +86,6 @@ export type Sizing = {
   readonly limit: number;
   readonly table: Readonly<Record<string, number>>;
 };
-
-// vitest.config.ts's own match: Vitest's installed picomatch, with dot files.
-const match = createRequire(import.meta.resolve("vitest/package.json"))("picomatch");
-
-/** Whether a path from the repo's top is one of vitest.config.ts's rerun triggers, as Vitest matches them. */
-export const isTrigger = (path: string): boolean =>
-  match.isMatch(path, testConfig.test.forceRerunTriggers, { dot: true });
 
 /** The changed files that match a rerun trigger, in git's order. */
 export const triggered = (changed: readonly string[], isTrigger: (path: string) => boolean): string[] =>
