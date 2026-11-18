@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body dbe42cb23e78
+Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body ff7b3eb93cc0
 Plancheck-Version: 3
 
 # Plan: no `Reflect.get`, `Reflect.set` or `Reflect.has` is left in `next/` and our tooling, and a lint rule holds it
@@ -1352,6 +1352,61 @@ where it blocks, and every law stayed green. The rows are
   for 66 folders; the fold pull request's tests step measures it.
 - Whether a glob for a file kind no tracked file has could still pass. That is the stated limit of
   any sample of the real tree.
+
+#### 10. Slice 15 starts from main, 2026-11-18 (lead)
+
+**The answer first.** Slice 15 starts on `fabrikalfa/reflect-fold`, cut from main at `f79fc38db`,
+where https://github.com/kamp-us/tea-fabrika/pull/1494 landed. This point records the count there
+and what the steps build. Amendment 9 already set the shape, so this point makes no new design call.
+
+**The count at `f79fc38db`.** No folder of `next/` or our tooling has a fire. The text matches left
+are the six allowed disable lines, `next/AGENTS.md`'s row, and the kind 11 text in
+`exam/twin.integration.test.ts`. The only folder no list block names is
+`next/packages/libfabrika/src/mcp/`, and it has no call.
+
+**What the steps build.**
+
+```jsonc
+// .oxlintrc.json after the fold, a sketch. Order: next/**/*, then the JSON.parse warn block, then
+// client/**, so client/'s entries win by order for every client/ file whatever glob the warn block gains.
+{ "files": ["next/**/*"], "rules": { "eslint/no-restricted-properties": ["error", /* Data.TaggedError, JSON.parse, the four */] } },
+{ "files": [/* the JSON.parse warn block's folders, unchanged */], "rules": { "eslint/no-restricted-properties": ["warn", /* Data.TaggedError, JSON.parse, the four */] } },
+{ "files": ["next/packages/libfabrika/src/client/**"], "rules": { "eslint/no-restricted-properties": ["error", /* Data.TaggedError, JSON.parse, Effect.retry, Stream.retry, the four */] } }
+```
+
+- **The config.** The four Reflect entries go after each base block's own entries. The three `next/`
+  Reflect list blocks go. The tooling block stays. The `client/**` block moves after the warn block.
+  Every other block that sets the rule keeps its place.
+- **L4.** In a temp copy of the repo, L4 writes one sample at every tracked `next/` code file's own
+  path, plus one in a new folder. The sample holds one fire each of `JSON.parse`, the four Reflect
+  forms, `Effect.retry` and `Stream.retry`. L4 lints the copy with the real config and reads each
+  file's final severity per fire. It holds:
+  - every file ends with `JSON.parse` and the four at one level;
+  - every file outside the warn block's reach, the new folder's and every `client/` file end at
+    error, and `client/` files with both retry entries;
+  - a file that ends at warn sits in a folder that holds a real `JSON.parse` fire, counted at the
+    grain the warn glob is written for.
+  The grain rules of `4dc340aab` on `fabrikalfa/reflect-rest` hold: a package's `src` root and an
+  app's `src` and `e2e` roots count only their direct files, and each child folder is its own top.
+- **Its plants.** Each must be red:
+  - the three globs the reviews named, in `field/runs/2026-11-18-reflect-ban-s13-s15-review1.json`,
+    `-review2.json` and `-review3.json`;
+  - the fix rounds' plants, from `field/runs/2026-11-18-reflect-ban-s15-tests2.json` and `-tests3.json`;
+  - `client/**` moved back before the warn block;
+  - a retry entry dropped, and `client/` set to warn.
+- **L10.** Its expected block order follows the move.
+- **Where to look.** Slice 15's first round on `fabrikalfa/reflect-rest` (`cbb780add`, `76384f4ed`,
+  `4dc340aab`, reverted in `5c9f7a977`) is a reference for the fold and L10, not a source to
+  copy whole: L4 is rebuilt as above.
+- **Files.** The tests step owns `.oxlintrc.json`, `oxlint-plugins/builtin-plants.ts`,
+  `oxlint-plugins/plants.test.ts`, `oxlint-plugins/advice.test.ts` and `oxlint-plugins/README.md`,
+  as slice 1's table gives them. The build step owns `next/AGENTS.md`'s row.
+
+**What point 10 cannot tell us.**
+
+- How long L4 takes with a sample at every tracked file; the tests step measures it.
+- Whether a glob for a file kind no tracked file has could pass. That is the stated limit of any
+  sample of the real tree.
 
 ## Open questions
 
