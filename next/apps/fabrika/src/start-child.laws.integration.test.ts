@@ -273,16 +273,19 @@ const ProjectTape = fc
 
 // Read stored JSON values and their string leaves. Error causes are deliberately excluded: only
 // the message that runPromise actually put in its rejected Error is an error output.
-const outputText = (value: unknown): Array<string> => {
+const outputText = (value: unknown, texts: Array<string> = []): Array<string> => {
   if (typeof value === "string") {
-    return [value, JSON.stringify(value)];
+    texts.push(value, JSON.stringify(value));
   }
 
   if (typeof value === "object" && value !== null) {
-    return Object.entries(value).flatMap(([key, entry]) => [key, ...outputText(entry)]);
+    for (const [key, entry] of Object.entries(value)) {
+      texts.push(key);
+      outputText(entry, texts);
+    }
   }
 
-  return [];
+  return texts;
 };
 
 const projectSecrets = Effect.fnUntraced(function* (
