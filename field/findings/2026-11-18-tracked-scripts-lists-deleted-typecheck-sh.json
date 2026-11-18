@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tracked-scripts-lists-deleted-typecheck-sh",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "oxlint-plugins/tracked-scripts.ts",
+    "line": 35
+  },
+  "says": "In today's tooling, pnpm lint fails on main: oxlint-plugins/tracked-scripts.ts (added by PR 1517) keeps scripts/typecheck.sh on NOT_YET_PORTED, and PR 1506 deleted that script, so the list's own check refuses a name git no longer tracks. The two landed one after the other during the sev0, whose freeze canceled main's check runs, so no run has shown it yet. The fix is deleting that one line, since the list only shrinks.",
+  "proof": "At main 4909b55df880ce09d9667a0e1cd3d782e5bb354d, merged into fabrikalfa/l13-guard-bundle: pnpm lint printed 'parallel: 1 of 19 parts failed' with 'tracked-scripts: scripts/typecheck.sh is on NOT_YET_PORTED, and git does not track it: delete its line in oxlint-plugins/tracked-scripts.ts, since the list only shrinks.'; git ls-tree origin/main scripts/ lists typecheck.ts and no typecheck.sh, and git show origin/main:oxlint-plugins/tracked-scripts.ts line 35 reads \"scripts/typecheck.sh\". Main's check runs 44356753231 and 44355856902 ended cancelled.",
+  "cost": "Every pull request's lint job goes red after it merges main, for a cause none of them owns, until the line is deleted.",
+  "head": "4909b55df880ce09d9667a0e1cd3d782e5bb354d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1622"
+}
