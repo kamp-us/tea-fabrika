@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0122; body 635a36fa6321
+Approved by the lead agent, builds 0122; body dd11e6a067bb
 Plancheck-Version: 3
 # T753 L16 fits its 60 s bound at full depth, next/
 
@@ -504,10 +504,19 @@ further cut (the per-row sink work, the Quotas SQL, the ledger fold), which is a
   write moves, so an answer a write overtook is not kept. A read outside a step is always fresh.
 - `ensure` reads `status` fresh while `supervision` is null, and from the step's snapshot after that.
   The review checks that `at` still comes from a fresh read where the referee needs one.
-- `publish` gets a batch that commits nothing today: its spans are not made by the sink's tracer.
+- `publish` stays unbatched, as on main. Corrected after the first review: the batch the build put
+  around it made the sink record a new, untagged `project.publish` row on every publish (its span runs
+  under the runtime's default tracer). The fix round removed it, and a law pins that a publish adds no
+  span row, commit or landing to the Project's database.
+- B1's crash and restart moves are budgeted per call as four steps each (the turn plus `writing_exit`,
+  `waiting_start` and `checkpointing`), since the driver sees only a call's total. Measured at full
+  depth: crash 4 reads, restart 5 to 8, against 12 allowed. A per-step view would hold them tighter; that
+  is not built here.
 
 **Sent back.** B2's three snapshot plants stay green on the build, so B2 does not bite. The tests step
-strengthens it, so that each named plant turns it red, before the review.
+strengthened it before the review. The first review then sent A6 (its flush plant) and B3 (its
+`ChildrenLedger` plant) back. The fix round made both bite, and B3 now walks `start_child` and
+`stop_child` through the real `ChildrenLedger`.
 
 ## Ready tracker ticket
 
