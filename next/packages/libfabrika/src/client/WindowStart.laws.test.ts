@@ -24,20 +24,27 @@
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Random from "effect/Random";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";
@@ -48,9 +55,38 @@ import { windowMachineFor, type WindowModel, type WindowMsg, write } from "./Win
 import { MemorySocket } from "./WindowStart.test-support.ts";
 import { start } from "./WindowStart.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  admitted: {},
+  ask_again: {},
+  beat: {},
+  check: {},
+  open_ok: {},
+  ping_err: {},
+  press: {},
+  write_err: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 const SEED = 119120;
+
 const BUILD = "build_test";
+
 const ORIGIN = "http://127.0.0.1:18787";
+
 const PID = "process_01m6v5270hf3c8x2q7w9z4k5mn";
 
 /** A list view, the checklist's shape cut to what these laws read. Tuval may not import a program. */
@@ -65,16 +101,19 @@ const list = (n: number) => ({
 });
 
 const window = windowMachineFor({ decode: () => Schema.decodeUnknownSync(ListView), tile: () => undefined });
+
 /** Every Cmd the window's update hands the start. */
 type WindowCmd = ReturnType<typeof window.init>[1][number];
+
 const tiles = [{ id: "tile_1", name: "checklist:1" }];
+
 /** The browser's facts, as the browser entry passes them. */
 const BROWSER = { platform: "browser", os: "unknown", has: [], label: "Browser" } as const;
 
 /** One JSON-RPC 2.0 call as the page frames it. */
 const Call = Schema.fromJsonString(
   Schema.Struct({
-    id: Schema.Union([Schema.Number, Schema.String]),
+    id: Schema.Union([Schema.Finite, Schema.String]),
     method: Schema.String,
     params: Schema.optionalKey(Schema.Unknown),
   }),
@@ -84,6 +123,18 @@ const decodeFrame = Schema.decodeUnknownOption(Call);
 
 /** One sent frame as the whole JSON value the page wrote, every key kept. */
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+
+/** The fields of a frame's params these laws read, each as loose as the page wrote it. */
+const Params = Schema.Struct({
+  pid: Schema.optionalKey(Schema.Unknown),
+  stream: Schema.optionalKey(Schema.Unknown),
+  signed: Schema.optionalKey(Schema.Unknown),
+  tab: Schema.optionalKey(Schema.Unknown),
+});
+
+/** A frame's params, decoded once: a value that is not an object, or lacks a field, reads it as undefined. */
+const paramsIn = (params: unknown): typeof Params.Type =>
+  Option.getOrElse(Schema.decodeUnknownOption(Params)(params), () => ({}));
 
 /** A notice that makes the page say hello: a nonce to sign, from the first challenge or a grant. */
 const asksHello = Schema.is(
@@ -123,13 +174,15 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
   // waits on `quiet` before it moves the clock: no virtual time passes while real work is running.
   const owed = new Map<MemorySocket, number>();
   let waiting: Deferred.Deferred<void> | null = null;
-  const settled = () => [...owed.values()].every((n) => n === 0);
+  const settled = () => Arr.every([...owed.values()], (n) => n === 0);
+
   const wake = () => {
     if (waiting !== null && settled()) {
       Deferred.doneUnsafe(waiting, Effect.void);
       waiting = null;
     }
   };
+
   const owe = (events: MemorySocket, n: number) => {
     const before = owed.get(events);
 
@@ -139,20 +192,24 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
       wake();
     }
   };
+
   const quiet = Effect.suspend(() => {
     if (settled()) {
       return Effect.void;
     }
 
     waiting ??= Deferred.makeUnsafe<void>();
+
     return Deferred.await(waiting);
   });
-  const message = (frame: unknown) => {
+
+  const message = (frame: Schema.Json) => {
     if (asksHello(frame)) {
       owe(open!, 1);
     }
 
     open!.receive(JSON.stringify(frame));
+
     return true;
   };
 
@@ -177,13 +234,14 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
     const frame = decoded.value;
 
     ids.set(frame.method, frame.id);
-    const result = (value: unknown) => message({ jsonrpc: "2.0", id: frame.id, result: value });
+    const result = (value: Schema.Json) => message({ jsonrpc: "2.0", id: frame.id, result: value });
 
     if (frame.method === "initialize") {
       owe(events, -1);
 
-      if (script.waiting) {
+      if (script.waiting === true) {
         message({ jsonrpc: "2.0", id: frame.id, error: { data: { reason: "not_granted" } } });
+
         return true;
       }
 
@@ -221,6 +279,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
   const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
     dials.push(url);
     resources.sockets++;
+
     const events: MemorySocket = new MemorySocket(url, {
       send: (text, from) => void answer(text, from),
       closed: (from) => {
@@ -230,29 +289,34 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
         wake();
       },
     });
+
     const listen = events.addEventListener.bind(events);
     const unlisten = events.removeEventListener.bind(events);
     events.addEventListener = (type, listener, options) => {
       resources.streams += type === "message" ? 1 : 0;
       listen(type, listener, options);
     };
+
     events.removeEventListener = (type, listener) => {
       resources.ended += type === "message" ? 1 : 0;
       unlisten(type, listener);
     };
+
     open = events;
     owed.set(events, 0);
     events.open();
     message({ jsonrpc: "2.0", method: "challenge", params: { nonce: nonce(dials.length) } });
+
     return events;
   });
+
   return {
     socket,
     sent,
     dials,
     resources,
     knocks: () => knocks,
-    message: (frame: unknown) => open !== null && message(frame),
+    message: (frame: Schema.Json) => open !== null && message(frame),
     /** The door closes the open socket with `code`. */
     drop: (code: number) => open?.drop(code),
     /** Moves TestClock once every hello the door asked for is sent, or its socket is gone. */
@@ -261,7 +325,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
 };
 
 /** WebCrypto refused to make or export the test key: the test's own failure, never the product's. */
-class TestKeyError extends Schema.TaggedError<TestKeyError>()("TestKeyError", {}) {}
+class TestKeyError extends Schema.TaggedError<TestKeyError, { readonly brand: unique symbol }>()("TestKeyError", {}) {}
 
 /** A constructor's refusal, as a browser's `new WebSocket` throws one: a DOMException of a platform class. */
 const refuse = (message: string, name: string): never => {
@@ -274,21 +338,26 @@ const identity = Effect.gen(function* () {
     try: () => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]),
     catch: () => TestKeyError.make({}),
   });
+
   const raw = new Uint8Array(
     yield* Effect.tryPromise({
       try: () => crypto.subtle.exportKey("raw", pair.publicKey),
       catch: () => TestKeyError.make({}),
     }),
   );
+
   const field = (bytes: Uint8Array) => [...new Uint8Array(new Uint32Array([bytes.length]).buffer).reverse(), ...bytes];
   const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
+  const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
+
   return {
     fingerprint: "SHA256:test",
-    raw: btoa(String.fromCharCode(...raw))
-      .replaceAll("+", "-")
-      .replaceAll("/", "_")
-      .replace(/=+$/, ""),
+    raw: Function.pipe(
+      btoa(String.fromCharCode(...raw)),
+      Str.replaceAll("+", "-"),
+      Str.replaceAll("/", "_"),
+      Str.replace(/=+$/, ""),
+    ),
     line,
     found: "reused" as const,
     sign: (bytes: Uint8Array) =>
@@ -299,7 +368,7 @@ const identity = Effect.gen(function* () {
   };
 });
 
-const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<unknown>) =>
+const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<ClientRow>) =>
   Layer.mergeAll(
     socket,
     Layer.effect(
@@ -310,11 +379,16 @@ const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<
         persist: Effect.succeed(true),
       })),
     ),
-    Layer.succeed(ClientRows, { put: (row: unknown) => Effect.sync(() => void rows.push(row)) }),
+    Layer.succeed(ClientRows, { put: (row) => Effect.sync(() => void rows.push(row)) }),
     Id.Generator.layer,
   );
 
-const press = { type: "press", tile: "tile_1", m: { type: "check", name: "item 0" }, via: "button" } as const;
+const press = {
+  ...Tag.cases.press.make({}),
+  tile: "tile_1",
+  m: { ...Tag.cases.check.make({}), name: "item 0" },
+  via: "button",
+} as const;
 
 const choice = fc.record({
   move: fc.nat(),
@@ -335,6 +409,7 @@ const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number
     const clock = yield* Clock.Clock;
     const opened: Array<number> = [];
     let events: MemorySocket | undefined;
+
     // Each dial's socket opens at once and the door never speaks, so the link stays dialing until
     // the walk drops it or its stall timer fires.
     const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
@@ -342,8 +417,10 @@ const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number
       const made = new MemorySocket(url);
       events = made;
       made.open();
+
       return made;
     });
+
     const layers = Layer.mergeAll(
       socket,
       Layer.succeed(ClientKey, {
@@ -354,10 +431,13 @@ const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number
       Layer.succeed(ClientRows, { put: () => Effect.void }),
       Id.Generator.layer,
     );
+
     const started = clock.currentTimeMillisUnsafe();
+
     const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
       Effect.provide(layers),
     );
+
     const run = yield* booting.ready;
     yield* run.idle();
     yield* tick(0);
@@ -406,16 +486,22 @@ const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number
   }).pipe(Effect.scoped, Random.withSeed(seed), Effect.provide(TestClock.layer()));
 
 describe("L2: retry jitter in the dial", () => {
-  it("L2 scenario: a retry dial opens no earlier than backoff(tries), no later than the jitter bound, and never past 30 s", async () => {
-    const seen = new Map<number, Set<number>>();
-    await fc.assert(
-      fc.asyncProperty(fc.array(choice, { minLength: 1, maxLength: 40 }), fc.integer(), async (list, seed) => {
-        await Effect.runPromise(retryTiming(list, seed, seen));
+  it.live(
+    "L2 scenario: a retry dial opens no earlier than backoff(tries), no later than the jitter bound, and never past 30 s",
+    () =>
+      Effect.gen(function* () {
+        const seen = new Map<number, Set<number>>();
+        yield* promised(() =>
+          fc.assert(
+            fc.asyncProperty(fc.array(choice, { minLength: 1, maxLength: 40 }), fc.integer(), async (list, seed) => {
+              await Effect.runPromise(retryTiming(list, seed, seen));
+            }),
+            { seed: SEED, numRuns: 100 },
+          ),
+        );
+        expect(seen.get(1)?.size ?? 0, "Random spreads the first retry's wait").toBeGreaterThan(1);
       }),
-      { seed: SEED, numRuns: 100 },
-    );
-    expect(seen.get(1)?.size ?? 0, "Random spreads the first retry's wait").toBeGreaterThan(1);
-  });
+  );
 });
 
 describe("L10: real runtime progress", () => {
@@ -436,16 +522,21 @@ describe("L10: real runtime progress", () => {
         const script: Script = { pong: true, open: plan.open, waiting: plan.waiting, send: false, junk: [] };
         const clock = yield* Clock.Clock;
         let lastPong = clock.currentTimeMillisUnsafe();
+
         const door = peer(script, () => {
           lastPong = clock.currentTimeMillisUnsafe();
         });
-        const rows: Array<unknown> = [];
+
+        const rows: Array<ClientRow> = [];
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+
         const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
           Effect.provide(services(door.socket, rows)),
           Scope.provide(scope),
         );
+
         const run = yield* booting.ready;
+
         const idleNow = Effect.gen(function* () {
           const idle = yield* Effect.forkChild(run.idle());
           yield* door.tick(1);
@@ -466,8 +557,8 @@ describe("L10: real runtime progress", () => {
               yield* door.tick(500);
             }
           } else if (state.link._tag === "online") {
-            const open = state.tiles.find((t) => t.reach._tag === "open");
-            const opening = state.flight.find((f) => f.call._tag === "open");
+            const open = Option.getOrUndefined(Arr.findFirst(state.tiles, (t) => t.reach._tag === "open"));
+            const opening = Option.getOrUndefined(Arr.findFirst(state.flight, (f) => f.call._tag === "open"));
 
             if (open !== undefined && pick % 3 !== 0) {
               yield* run.dispatch({ ...press, tile: open.id });
@@ -529,11 +620,11 @@ describe("L10: real runtime progress", () => {
         expect(rows.length).toBeGreaterThan(0);
 
         for (const row of rows) {
-          expect(Schema.is(ClientRow)(row), JSON.stringify(row)).toBe(true);
+          expect(Schema.is(ClientRow)(row), Formatter.format(row)).toBe(true);
           expect(row).toMatchObject({ build: BUILD });
         }
 
-        expect(new Set(rows.filter(Schema.is(ClientRow)).map((r) => r.tab)).size).toBe(1);
+        expect(new Set(Arr.map(Arr.filter(rows, Schema.is(ClientRow)), (r) => r.tab)).size).toBe(1);
         yield* Scope.close(scope, Exit.void);
         // L11: closing the owner must stop the runtime itself, not just its page.
         expect(door.resources.sockets, "the real run acquired a socket").toBeGreaterThan(0);
@@ -582,7 +673,13 @@ describe("L9: failure classes through the real runtime", () => {
           let injected = 0;
           let writes = 0;
           let failedRecord: ClientRow["record"] | undefined;
-          const op = operation === "sign" ? "key" : operation === "claim" ? "persist" : operation;
+
+          const op = Match.value(operation).pipe(
+            Match.when("sign", () => "key"),
+            Match.when("claim", () => "persist"),
+            Match.orElse(() => operation),
+          );
+
           const provided = Layer.mergeAll(
             // The first dial's constructor throws, as a browser's refuses a URL, with the platform's class.
             Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
@@ -600,6 +697,7 @@ describe("L9: failure classes through the real runtime", () => {
                     Effect.suspend(() => {
                       if (operation === "sign") {
                         injected++;
+
                         return Effect.fail(ClientKeyError.make({ op: "sign", error }));
                       }
 
@@ -609,6 +707,7 @@ describe("L9: failure classes through the real runtime", () => {
               claimPersist: Effect.suspend(() => {
                 if (operation === "claim") {
                   injected++;
+
                   return Effect.fail(ClientKeyError.make({ op: "write", error }));
                 }
 
@@ -624,6 +723,7 @@ describe("L9: failure classes through the real runtime", () => {
                   if (operation === "record" && (row.record._tag === "failure" || writes++ === skip)) {
                     injected++;
                     failedRecord ??= row.record;
+
                     return Effect.fail(ClientRowsError.make({ op: "write", error }));
                   }
 
@@ -632,9 +732,11 @@ describe("L9: failure classes through the real runtime", () => {
             }),
             Id.Generator.layer,
           );
+
           const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
             Effect.provide(provided),
           );
+
           const run = yield* booting.ready;
 
           for (const pick of moves) {
@@ -645,13 +747,13 @@ describe("L9: failure classes through the real runtime", () => {
               script.waiting = false;
               door.message({ jsonrpc: "2.0", method: "client.granted", params: { nonce: `grant_${pick}` } });
             } else if (state.link._tag === "online") {
-              const open = state.tiles.find((tile) => tile.reach._tag === "open");
+              const open = Option.getOrUndefined(Arr.findFirst(state.tiles, (tile) => tile.reach._tag === "open"));
 
               if (open !== undefined) {
                 yield* run.dispatch({
                   ...press,
                   tile: open.id,
-                  m: { type: "check", name: `item ${Math.abs(pick) % 4}` },
+                  m: { ...Tag.cases.check.make({}), name: `item ${Math.abs(pick) % 4}` },
                 });
               }
             }
@@ -660,9 +762,9 @@ describe("L9: failure classes through the real runtime", () => {
           yield* door.tick(1);
           yield* run.idle();
           expect(injected, "the real service reached the failing operation").toBeGreaterThan(0);
-          const failures = rows.filter((row) => row.record._tag === "failure" && row.record.op === op);
+          const failures = Arr.filter(rows, (row) => row.record._tag === "failure" && row.record.op === op);
           expect(
-            failures.map((row) => row.record),
+            Arr.map(failures, (row) => row.record),
             "one attempt keeps the original platform class",
           ).toEqual([{ _tag: "failure", op, error }]);
 
@@ -672,7 +774,7 @@ describe("L9: failure classes through the real runtime", () => {
             expect(row.sentAt.length).toBeGreaterThan(0);
           }
 
-          expect(new Set(rows.map((row) => row.tab)).size).toBe(1);
+          expect(new Set(Arr.map(rows, (row) => row.tab)).size).toBe(1);
 
           if (operation === "record") {
             expect(failedRecord?._tag, "a normal row failed before its failure row").not.toBe("failure");
@@ -691,7 +793,7 @@ describe("L12: wire formats are refused as typed values", () => {
     () =>
       Effect.gen(function* () {
         // The parent also validates this public protocol value before its reducer sees it.
-        const openAnswer = { type: "open_ok", id: 1, dial: 1, ms: 0 };
+        const openAnswer = { ...Tag.cases.open_ok.make({}), id: 1, dial: 1, ms: 0 };
 
         for (const value of [{}, { rev: "one", view: list(1) }, { rev: 1 }]) {
           expect(Schema.is(window.msg)({ ...openAnswer, value }), "an invalid open_ok.value passed").toBe(false);
@@ -725,12 +827,15 @@ describe("L12: wire formats are refused as typed values", () => {
               }),
           ],
         };
+
         const door = peer(script);
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+
         const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
           Effect.provide(services(door.socket, [])),
           Scope.provide(scope),
         );
+
         const run = yield* booting.ready;
 
         for (let n = 0; n < 6; n++) {
@@ -738,14 +843,21 @@ describe("L12: wire formats are refused as typed values", () => {
         }
 
         expect(run.getState().link._tag).toBe("online");
-        const opened = door.sent.flatMap((t) => Option.toArray(decodeFrame(t))).find((f) => f.method === "view.open");
+
+        const opened = Option.getOrUndefined(
+          Arr.findFirst(
+            Arr.flatMap(door.sent, (t) => Option.toArray(decodeFrame(t))),
+            (f) => f.method === "view.open",
+          ),
+        );
+
         expect(opened, "the page opened its tile").toBeDefined();
         const beforeMalformed = run.getState();
         // The open's answer arrives malformed: an empty struct, then a view of the wrong type.
-        door.message({ jsonrpc: "2.0", id: opened?.id, result: {} });
+        door.message({ jsonrpc: "2.0", id: opened?.id ?? null, result: {} });
         yield* door.tick(500);
         expect(run.getState().flight, "a malformed open answer settled a flight").toEqual(beforeMalformed.flight);
-        door.message({ jsonrpc: "2.0", id: opened?.id, result: { rev: 1, view: { items: "one", left: 1 } } });
+        door.message({ jsonrpc: "2.0", id: opened?.id ?? null, result: { rev: 1, view: { items: "one", left: 1 } } });
         yield* door.tick(500);
         expect(run.getState().client.views, "nothing malformed was installed").toEqual({});
         // The run still folds: a well-formed notice with its pid installs.
@@ -762,16 +874,19 @@ describe("L12: wire formats are refused as typed values", () => {
         script.send = false;
         yield* run.dispatch(press);
         yield* door.tick(500);
-        const sends = door.sent
-          .flatMap((t) => Option.toArray(decodeFrame(t)))
-          .filter((f) => f.method === "process.send");
+
+        const sends = Arr.filter(
+          Arr.flatMap(door.sent, (t) => Option.toArray(decodeFrame(t))),
+          (f) => f.method === "process.send",
+        );
+
         expect(sends.length, "the press went out").toBeGreaterThan(0);
         const id = sends.at(-1)!.id;
         door.message({ jsonrpc: "2.0", id, result: { _tag: "refused" } });
         door.message({ jsonrpc: "2.0", id, result: { _tag: "refused", reason: 7 } });
         yield* door.tick(500);
         expect(run.getState().client.pending, "a malformed refusal removed the letter").toHaveLength(1);
-        expect(run.getState().tiles.map((t) => t.refusal)).toEqual([null]);
+        expect(Arr.map(run.getState().tiles, (t) => t.refusal)).toEqual([null]);
         expect(run.getState().link._tag).toBe("online");
         yield* Scope.close(scope, Exit.void);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
@@ -808,9 +923,9 @@ const Act = Schema.Union([
 ]);
 
 /** The number id of a call the start wrote, read from the text it sent. */
-const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
+const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Finite })));
 
-type FrameMsg = { readonly type: "frame"; readonly dial: number; readonly text: string; readonly ms?: number };
+type FrameMsg = { readonly _tag: "frame"; readonly dial: number; readonly text: string; readonly ms?: number };
 
 /** The id of the scripted window's write for a past dial, past any id the real window names. */
 const STALE = 1_000_000;
@@ -821,19 +936,22 @@ const STALE = 1_000_000;
  * kept in `answers` before the real window takes it, and each frame the start hands it in `frames`.
  */
 const scripted = (
-  answers: Array<{ readonly type: string; readonly dial: number }>,
+  answers: Array<{ readonly _tag: string; readonly dial: number }>,
   frames: Array<FrameMsg>,
 ): typeof window => {
   const real = window.update;
-  const kept = (m: { readonly type: string; readonly cmd: { readonly dial: number } }) => {
-    answers.push({ type: m.type, dial: m.cmd.dial });
+
+  const kept = (m: { readonly _tag: string; readonly cmd: { readonly dial: number } }) => {
+    answers.push({ ...keyed(m._tag), dial: m.cmd.dial });
   };
+
   return {
     ...window,
     update: {
       ...real,
       frame: (s, m) => {
         frames.push(m);
+
         return real.frame(s, m);
       },
       beat: (s, m) =>
@@ -842,18 +960,22 @@ const scripted = (
           : [s, [ping({ dial: m.dial }), write({ call: { _tag: "knock" }, id: STALE, dial: m.dial })]],
       ping_ok: (s, m) => {
         kept(m);
+
         return real.ping_ok(s, m);
       },
       ping_err: (s, m) => {
         kept(m);
+
         return real.ping_err(s, m);
       },
       write_ok: (s, m) => {
         kept(m);
+
         return real.write_ok(s, m);
       },
       write_err: (s, m) => {
         kept(m);
+
         return real.write_err(s, m);
       },
     },
@@ -867,10 +989,11 @@ const scripted = (
  * own and is counted apart: every other listener of an ended dial is a reader that outlived it.
  */
 const leftOn = (ws: MemorySocket) => ({
-  readers: (["message", "close", "open", "error"] as const).map(
-    (kind) => ws.attached(kind).filter((fn) => fn !== Function.constVoid).length,
+  readers: Arr.map(
+    ["message", "close", "open", "error"] as const,
+    (kind) => Arr.filter(ws.attached(kind), (fn) => fn !== Function.constVoid).length,
   ),
-  guards: ws.attached("error").filter((fn) => fn === Function.constVoid).length,
+  guards: Arr.filter(ws.attached("error"), (fn) => fn === Function.constVoid).length,
 });
 
 describe("P18 L4: one dial is one constructed socket, one reader and one writer", () => {
@@ -882,13 +1005,15 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
         const key = yield* identity;
         const rows: Array<ClientRow> = [];
         const made: Array<{ readonly ws: MemorySocket; readonly dial: number | null; sentBefore: number | null }> = [];
-        const answers: Array<{ readonly type: string; readonly dial: number }> = [];
+        const answers: Array<{ readonly _tag: string; readonly dial: number }> = [];
         const frames: Array<FrameMsg> = [];
         // The call ids the door has answered, per socket.
         const replied = new Map<MemorySocket, Set<number>>();
+
         let read: () => { readonly link: { readonly _tag: string; readonly dial?: number } } = () => ({
           link: { _tag: "dialing", dial: 1 },
         });
+
         let armed = false;
         let thrown: number | null = null;
         // A hello is signed with real WebCrypto, which TestClock does not move: wait for each one, or
@@ -896,12 +1021,14 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
         let owed = 0;
         let woken: Deferred.Deferred<void> | null = null;
         const live = () => made.at(-1)?.ws;
+
         const lower = () => {
           if (woken !== null && (owed <= 0 || live()?.readyState !== 1)) {
             Deferred.doneUnsafe(woken, Effect.void);
             woken = null;
           }
         };
+
         const quiet = Effect.suspend(() =>
           owed <= 0 || live()?.readyState !== 1
             ? Effect.void
@@ -909,6 +1036,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
                 Effect.raceFirst(TestClock.withLive(Effect.sleep("2 seconds"))),
               ),
         );
+
         const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
           const dial = socketDialIn(read().link);
 
@@ -918,22 +1046,25 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
 
           const ws = new MemorySocket(url, {
             send: (text) => {
-              owed -= text.includes('"initialize"') ? 1 : 0;
+              owed -= Function.pipe(text, Str.includes('"initialize"')) ? 1 : 0;
               lower();
             },
             closed: lower,
           });
+
           owed = 0;
           made.push({ ws, dial, sentBefore: null });
 
           if (armed) {
             armed = false;
             thrown = dial;
+
             return refuse("refused", "NetworkError");
           }
 
           return ws;
         });
+
         const layers = Layer.mergeAll(
           socket,
           Layer.succeed(ClientKey, {
@@ -944,7 +1075,9 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           Layer.succeed(ClientRows, { put: (row: ClientRow) => Effect.sync(() => void rows.push(row)) }),
           Id.Generator.layer,
         );
+
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+
         const booting = yield* start({
           tiles,
           window: scripted(answers, frames),
@@ -952,8 +1085,10 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           origin: ORIGIN,
           client: BROWSER,
         }).pipe(Effect.provide(layers), Scope.provide(scope));
+
         const run = yield* booting.ready;
         read = () => run.getState();
+
         const settle = Effect.gen(function* () {
           yield* quiet;
 
@@ -962,6 +1097,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
             yield* Effect.yieldNow;
           }
         });
+
         yield* settle;
 
         for (const act of acts) {
@@ -971,16 +1107,16 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           let closed: { readonly dial: number; readonly code: number } | null = null;
           let stale: { readonly dial: number; readonly newer: MemorySocket; readonly before: number } | null = null;
           let probe: { readonly ids: ReadonlyArray<number>; readonly first: ReadonlyArray<FrameMsg> } | null = null;
-          const past = made.find((m) => m.dial !== null && m.dial !== dial);
+          const past = Option.getOrUndefined(Arr.findFirst(made, (m) => m.dial !== null && m.dial !== dial));
 
           if (act._tag === "open" && ws !== undefined && ws.readyState === 0) {
             ws.open();
             owed++;
-            ws.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
+            ws.receive(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
           } else if (act._tag === "admit" && state.link._tag === "dialing" && dial !== null) {
-            yield* run.dispatch({ type: "admitted", dial, ping: 30_000, ms: 0 });
+            yield* run.dispatch({ ...Tag.cases.admitted.make({}), dial, ping: 30_000, ms: 0 });
           } else if (act._tag === "beat" && state.link._tag === "online" && dial !== null) {
-            yield* run.dispatch({ type: "beat", dial });
+            yield* run.dispatch({ ...Tag.cases.beat.make({}), dial });
           } else if (act._tag === "frame" && ws?.readyState === 1) {
             ws.receive(act.text);
           } else if (act._tag === "close" && ws !== undefined && ws.readyState < 2 && dial !== null) {
@@ -990,7 +1126,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           } else if (act._tag === "throw") {
             armed = true;
           } else if (act._tag === "again" && state.link._tag === "removed") {
-            yield* run.dispatch({ type: "ask_again", dial: state.dials + 1 });
+            yield* run.dispatch({ ...Tag.cases.ask_again.make({}), dial: state.dials + 1 });
           } else if (act._tag === "wait") {
             yield* TestClock.adjust(act.ms);
           } else if (
@@ -1006,25 +1142,29 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
             if (ws.readyState === 0) {
               ws.open();
               owed++;
-              ws.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
+              ws.receive(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
               yield* settle;
             }
 
             stale = { dial: past.dial, newer: ws, before: ws.sent.length };
             answers.length = 0;
-            yield* run.dispatch({ type: "beat", dial: past.dial });
+            yield* run.dispatch({ ...Tag.cases.beat.make({}), dial: past.dial });
           } else if (act._tag === "answer" && ws?.readyState === 1) {
             const done = replied.get(ws) ?? new Set<number>();
             replied.set(ws, done);
-            const ids = ws.sent
-              .flatMap((text) => Option.toArray(callId(text)).map((c) => c.id))
-              .filter((id) => !done.has(id));
+
+            const ids = Arr.filter(
+              Arr.flatMap(ws.sent, (text) => Arr.map(Option.toArray(callId(text)), (c) => c.id)),
+              (id) => !done.has(id),
+            );
+
             const replyAll = () => {
               for (const id of ids) {
                 ws.receive(JSON.stringify({ jsonrpc: "2.0", id, result: null }));
                 done.add(id);
               }
             };
+
             frames.length = 0;
             replyAll();
             yield* settle;
@@ -1042,9 +1182,9 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           const current = socketDialIn(after.link);
 
           // One constructor call per dial the link is dialing; the start never dials again itself.
-          const dials = made.map((m) => m.dial);
+          const dials = Arr.map(made, (m) => m.dial);
           expect(dials.includes(null), "a socket was made with no dial to make it for").toBe(false);
-          expect(new Set(dials).size, `dials made ${JSON.stringify(dials)}`).toBe(dials.length);
+          expect(new Set(dials).size, `dials made ${Formatter.format(dials)}`).toBe(dials.length);
 
           for (const m of made) {
             expect(m.ws.readers, `dial ${m.dial} has more than one reader`).toBeLessThanOrEqual(1);
@@ -1063,8 +1203,8 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           // A ping and a write for a past dial fail at once, and no byte of theirs reaches the newer dial.
           if (stale !== null) {
             expect(answers, `the ping and the write for past dial ${stale.dial}`).toEqual([
-              { type: "ping_err", dial: stale.dial },
-              { type: "write_err", dial: stale.dial },
+              { ...Tag.cases.ping_err.make({}), dial: stale.dial },
+              { ...Tag.cases.write_err.make({}), dial: stale.dial },
             ]);
             expect(stale.newer.sent.slice(stale.before), "the newer dial took a past dial's bytes").toEqual([]);
           }
@@ -1073,17 +1213,21 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           // written call is answered the start holds no write time, so a second answer is untimed.
           if (probe !== null) {
             const timed = (list: ReadonlyArray<FrameMsg>) =>
-              list.map((f) => [Option.getOrUndefined(callId(f.text))?.id, f.ms !== undefined]);
+              Arr.map(list, (f) => [Option.getOrUndefined(callId(f.text))?.id, f.ms !== undefined]);
+
             expect(timed(probe.first), "each first answer is timed from its write").toEqual(
-              probe.ids.map((id) => [id, true]),
+              Arr.map(probe.ids, (id) => [id, true]),
             );
             expect(timed(frames), "the start still holds an answered call's write time").toEqual(
-              probe.ids.map((id) => [id, false]),
+              Arr.map(probe.ids, (id) => [id, false]),
             );
           }
 
           if (closed !== null) {
-            const connect = rows.filter((r) => r.record._tag === "connect" && r.record.dial === closed.dial).at(-1);
+            const connect = Arr.filter(rows, (r) => r.record._tag === "connect" && r.record.dial === closed.dial).at(
+              -1,
+            );
+
             expect(connect?.record, `close ${closed.code} on dial ${closed.dial}`).toMatchObject({
               _tag: "connect",
               result: closed.code === 4003 ? "removed" : "closed",
@@ -1092,11 +1236,13 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           }
 
           if (thrown !== null) {
-            const failures = rows.filter((r) => r.record._tag === "failure" && r.record.op === "connect");
+            const failures = Arr.filter(rows, (r) => r.record._tag === "failure" && r.record.op === "connect");
             expect(failures.length, "the throw left no failure row").toBeGreaterThan(0);
-            expect(Schema.is(ErrorClass)(Reflect.get(failures.at(-1)!.record, "error"))).toBe(true);
+            const failure = failures.at(-1)!.record;
+            expect(failure._tag === "failure" && Schema.is(ErrorClass)(failure.error)).toBe(true);
             expect(
-              rows.find((r) => r.record._tag === "connect" && r.record.dial === thrown)?.record,
+              Option.getOrUndefined(Arr.findFirst(rows, (r) => r.record._tag === "connect" && r.record.dial === thrown))
+                ?.record,
               "the throw did not close its dial with 1006",
             ).toMatchObject({ result: "closed", code: 1006 });
             thrown = null;
@@ -1129,13 +1275,18 @@ const recording = (spans: Array<Tracer.AnySpan>) =>
       span: (options) => {
         const span = native.span(options);
         spans.push(span);
+
         return span;
       },
     }),
   );
 
 /** The ways a secret can be written out: as it is, URL-encoded, and JSON-escaped. */
-const forms = (secret: string) => [secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)];
+const forms = (secret: string) => [
+  secret,
+  encodeURIComponent(secret),
+  Function.pipe(JSON.stringify(secret), Str.slice(1, -1)),
+];
 
 const Secret = Schema.String.check(Schema.isMinLength(4), Schema.isMaxLength(24));
 
@@ -1146,11 +1297,15 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
     (generated) =>
       Effect.gen(function* () {
         // Marked, so a secret is never a word the start writes anyway.
-        const s = Object.fromEntries(
-          Object.entries(generated).map(([k, v]) => [k, `Q9X${k}${v}Z`]),
+        // SAFETY: the entries keep every key of `generated` and give each a
+        // string, and every field of `generated` is a string.
+        const s = Rec.fromEntries(
+          Arr.map(Rec.toEntries(generated), ([k, v]) => [k, `Q9X${k}${v}Z`]),
         ) as typeof generated;
+
         const spans: Array<Tracer.AnySpan> = [];
         const tracer = yield* recording(spans);
+
         const script: Script = {
           pong: true,
           open: true,
@@ -1167,16 +1322,19 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
               JSON.stringify({ jsonrpc: "2.0", id: 999_999, error: { message: s.frame, data: { reason: s.frame } } }),
           ],
         };
+
         const door = peer(
           script,
           () => {},
           (n) => `${s.nonce}${n}`,
         );
+
         const key = yield* identity;
         const rows: Array<ClientRow> = [];
         const urls: Array<string> = [];
         let first = true;
         const normal = yield* Socket.WebSocketConstructor.pipe(Effect.provide(door.socket));
+
         const layers = Layer.mergeAll(
           // The first dial's constructor throws with a secret in its message; the retry dials as usual.
           Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
@@ -1184,6 +1342,7 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
 
             if (first) {
               first = false;
+
               return refuse(s.failure, "SecurityError");
             }
 
@@ -1201,12 +1360,15 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
           Layer.succeed(ClientRows, { put: (row: ClientRow) => Effect.sync(() => void rows.push(row)) }),
           Id.Generator.layer,
         );
+
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+
         const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
           Effect.provide(layers),
           Scope.provide(scope),
           Effect.withTracer(tracer),
         );
+
         const run = yield* booting.ready;
 
         for (let n = 0; n < 12 && run.getState().tiles[0]?.reach._tag !== "open"; n++) {
@@ -1214,7 +1376,12 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         }
 
         expect(run.getState().tiles[0]?.reach._tag, "the tile opened").toBe("open");
-        yield* run.dispatch({ type: "press", tile: "tile_1", m: { type: "add", name: s.body }, via: "button" });
+        yield* run.dispatch({
+          ...Tag.cases.press.make({}),
+          tile: "tile_1",
+          m: { ...Tag.cases.add.make({}), name: s.body },
+          via: "button",
+        });
 
         for (let n = 0; n < 4; n++) {
           yield* door.tick(1_000);
@@ -1234,40 +1401,49 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         door.message({ jsonrpc: "2.0", method: "view.patch", params: { pid: PID, type: "patch", note: s.frame } });
         yield* door.tick(0);
         yield* Scope.close(scope, Exit.void);
-        const hello = door.sent.flatMap((t) => Option.toArray(decodeFrame(t))).find((f) => f.method === "initialize");
-        const signed = String(Reflect.get(Object(hello?.params), "signed") ?? "");
-        const tab = String(Reflect.get(Object(hello?.params), "tab") ?? "");
+
+        const hello = Option.getOrUndefined(
+          Arr.findFirst(
+            Arr.flatMap(door.sent, (t) => Option.toArray(decodeFrame(t))),
+            (f) => f.method === "initialize",
+          ),
+        );
+
+        const signed = String(paramsIn(hello?.params).signed ?? "");
+        const tab = String(paramsIn(hello?.params).tab ?? "");
         expect(signed.length, "the hello was signed").toBeGreaterThan(0);
         expect(
-          door.sent.some((t) => forms(s.body).some((form) => t.includes(form))),
+          Arr.some(door.sent, (t) => Arr.some(forms(s.body), (form) => Function.pipe(t, Str.includes(form)))),
           "the press reached the door",
         ).toBe(true);
         // Every span the start made is its own, a `Span` with a name: an external one is a parent
         // passed in, which this run never had.
-        const own = spans.filter((span): span is Tracer.Span => span._tag === "Span");
+        const own = Arr.filter(spans, (span): span is Tracer.Span => span._tag === "Span");
         expect(own.length, "a span the start made is not its own").toBe(spans.length);
+
         const outputs = {
-          rows: JSON.stringify(rows),
-          spans: JSON.stringify(
-            own.map((span) => ({
+          rows: Formatter.formatJson(rows),
+          spans: Formatter.formatJson(
+            Arr.map(own, (span) => ({
               name: span.name,
               attributes: [...span.attributes],
-              events: Reflect.get(span, "events") ?? [],
+              events: (Predicate.hasProperty(span, "events") ? span.events : undefined) ?? [],
             })),
           ),
-          urls: JSON.stringify([...urls, ...urls.map((u) => decodeURIComponent(u))]),
+          urls: Formatter.formatJson([...urls, ...Arr.map(urls, (u) => decodeURIComponent(u))]),
         };
-        const secrets = [...Object.values(s).flatMap(forms), ...forms(signed), ...forms(key.raw)];
 
-        for (const [output, text] of Object.entries(outputs)) {
+        const secrets = [...Arr.flatMap(Rec.values(s), forms), ...forms(signed), ...forms(key.raw)];
+
+        for (const [output, text] of Rec.toEntries(outputs)) {
           expect(
-            secrets.filter((secret) => text.includes(secret)),
+            Arr.filter(secrets, (secret) => Function.pipe(text, Str.includes(secret))),
             `${output} holds a secret`,
           ).toEqual([]);
         }
 
         // A dial's URL is the origin's socket path, the fingerprint and the tab, and nothing else.
-        const ws = ORIGIN.replace(/^http/, "ws");
+        const ws = Function.pipe(ORIGIN, Str.replace(/^http/, "ws"));
         expect(
           urls.length,
           "the start dialed three times: the throw, its retry, and after the drop",
@@ -1278,7 +1454,7 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         }
 
         expect(
-          rows.filter((r) => r.record._tag === "failure" && r.record.op === "connect").length,
+          Arr.filter(rows, (r) => r.record._tag === "failure" && r.record.op === "connect").length,
           "the throw wrote its failure row",
         ).toBe(1);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
@@ -1305,12 +1481,16 @@ const LIVE = Schema.Literals([
 const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => {
   const step = (s: WindowModel, m: WindowMsg): readonly [WindowModel, ReadonlyArray<WindowCmd>] => {
     const [next, cmds] = applyCell<WindowModel, WindowMsg, WindowCmd>(window, s, m);
-    writes.push(...cmds.filter((c): c is ReturnType<typeof write> => c.type === "write"));
+    writes.push(...Arr.filter(cmds, (c): c is ReturnType<typeof write> => c._tag === "write"));
+
     return [next, cmds];
   };
+
   return {
     ...window,
-    update: Object.fromEntries(Object.keys(window.update).map((type) => [type, step])) as typeof window.update,
+    // SAFETY: each Msg type keeps its own key, and `step` takes any WindowMsg and
+    // answers the machine's own step, as every cell of `window.update` does.
+    update: Rec.fromEntries(Arr.map(Rec.keys(window.update), (type) => [type, step])) as typeof window.update,
   };
 };
 
@@ -1324,6 +1504,7 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
         const door = peer(script);
         const writes: Array<ReturnType<typeof write>> = [];
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+
         const booting = yield* start({
           tiles,
           window: recorded(writes),
@@ -1331,6 +1512,7 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
           origin: ORIGIN,
           client: BROWSER,
         }).pipe(Effect.provide(services(door.socket, [])), Scope.provide(scope));
+
         const run = yield* booting.ready;
 
         for (let n = 0; n < 6; n++) {
@@ -1338,35 +1520,47 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
         }
 
         expect(run.getState().link._tag, "the page went online").toBe("online");
-        const tab = decodeURIComponent(door.dials[0]!.split("/").at(-1)!);
-        const frames = door.sent.flatMap((t) => Option.toArray(decodeFrame(t)));
-        const waits = writes.filter((w) => w.call._tag === "wait");
-        const monitors = writes.filter((w) => w.call._tag === "monitor");
+        const tab = decodeURIComponent(Str.split(door.dials[0]!, "/").at(-1)!);
+        const frames = Arr.flatMap(door.sent, (t) => Option.toArray(decodeFrame(t)));
+        const waits = Arr.filter(writes, (w) => w.call._tag === "wait");
+        const monitors = Arr.filter(writes, (w) => w.call._tag === "monitor");
         expect(waits.length, "the window waited on its inbox").toBeGreaterThan(0);
         expect(monitors.length, "the window monitored its tile's process").toBeGreaterThan(0);
 
         for (const w of [...waits, ...monitors]) {
+          // SAFETY: a write's `call` is a tagged Call (WindowMachine.ts), an object whose `_tag` is a string.
           const call = w.call as { readonly _tag: string; readonly [key: string]: unknown };
+
           const params =
             call._tag === "wait"
               ? { method: "ledger.wait", params: { stream: call["stream"], after: call["after"] } }
               : { method: "process.monitor", params: { ref: call["ref"], pid: call["pid"] } };
+
           expect(
-            door.sent.map((t) => decodeJson(t)).filter((f) => Reflect.get(Object(f), "id") === w.id),
+            Arr.filter(
+              Arr.map(door.sent, (t) => decodeJson(t)),
+              (f) => Predicate.hasProperty(f, "id") && f.id === w.id,
+            ),
             `the frame of write ${w.id}`,
           ).toEqual([{ jsonrpc: "2.0", id: w.id, ...params }]);
         }
 
         expect(
-          waits.map((w) => Reflect.get(w.call, "stream")),
+          Arr.map(waits, (w) => (w.call._tag === "wait" ? w.call.stream : undefined)),
           "the wait is on the dial's own tab's inbox",
         ).toContain(`client:${tab}/inbox`);
-        const monitored = frames.findIndex((f) => f.method === "process.monitor");
-        const opened = frames.findIndex((f) => f.method === "view.open");
-        expect(Reflect.get(Object(frames[monitored]?.params), "pid"), "the monitor names the read's pid").toBe(pid);
-        expect(opened, "the open went out").toBeGreaterThan(-1);
-        expect(monitored, "the monitor goes before the open").toBeLessThan(opened);
-        expect(Reflect.get(Object(frames[opened]?.params), "pid")).toBe(pid);
+        const monitored = Arr.findFirstIndex(frames, (f) => f.method === "process.monitor");
+        const opened = Arr.findFirstIndex(frames, (f) => f.method === "view.open");
+
+        const paramsAt = (at: Option.Option<number>) =>
+          paramsIn(Option.getOrUndefined(Option.flatMapNullishOr(at, (i) => frames[i]?.params)));
+
+        expect(paramsAt(monitored).pid, "the monitor names the read's pid").toBe(pid);
+        expect(Option.isSome(opened), "the open went out").toBe(true);
+        expect(Option.getOrThrow(monitored), "the monitor goes before the open").toBeLessThan(
+          Option.getOrThrow(opened),
+        );
+        expect(paramsAt(opened).pid).toBe(pid);
         yield* Scope.close(scope, Exit.void);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
     { arbitrary: { seed: SEED, runs: 12 } },
@@ -1390,6 +1584,7 @@ describe("Desk S2a L10: a start with the tezgah option", () => {
       Effect.gen(function* () {
         const door = peer({ pong: true, open: true, send: true, junk: [], person });
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+
         const booting = yield* start({
           tiles,
           window,
@@ -1398,6 +1593,7 @@ describe("Desk S2a L10: a start with the tezgah option", () => {
           client: BROWSER,
           tezgah: { workspace },
         }).pipe(Effect.provide(services(door.socket, [])), Scope.provide(scope));
+
         const run = yield* booting.ready;
 
         for (let n = 0; n < 40 && run.getState().link._tag !== "online"; n++) {
@@ -1406,10 +1602,15 @@ describe("Desk S2a L10: a start with the tezgah option", () => {
 
         yield* door.tick(500);
         expect(run.getState().link._tag, "the window went online").toBe("online");
-        const streams = door.sent
-          .flatMap((text) => Option.toArray(decodeFrame(text)))
-          .filter((frame) => frame.method === "ledger.read")
-          .map((frame) => String(Reflect.get(Object(frame.params), "stream")));
+
+        const streams = Arr.map(
+          Arr.filter(
+            Arr.flatMap(door.sent, (text) => Option.toArray(decodeFrame(text))),
+            (frame) => frame.method === "ledger.read",
+          ),
+          (frame) => String(paramsIn(frame.params).stream),
+        );
+
         expect(streams[0], "L10: the first read is the person's tezgah").toMatch(/^processes\/tezgah:/);
         expect(streams, "L10: a window with the tezgah option reads none of the given tiles").not.toContain(
           "processes/checklist:1",

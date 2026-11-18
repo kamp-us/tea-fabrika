@@ -4,6 +4,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
 import { processId } from "../Id.test-support.ts";
@@ -24,9 +25,19 @@ import { stepper } from "./Program.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 import { ProgramRunner } from "./Runner.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  put: {},
+  boom: {},
+});
+
 const PID = Effect.runSync(processId);
+
 const Model = Schema.Struct({ count: Schema.Int });
-const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+
+const Msg = Schema.TaggedStruct("inc", {});
 
 const program = {
   name: "counter",
@@ -61,7 +72,9 @@ describe("P12 saved mail recovery", () => {
               try {
                 const sql = nodeSql(db),
                   pure = yield* Effect.fromResult(stepper(program));
+
                 let down = false;
+
                 const execution = workerExecution({
                   init: async (saved) => pure.init(saved),
                   fresh: async (model, msg) => {
@@ -72,7 +85,7 @@ describe("P12 saved mail recovery", () => {
                     return Result.getOrThrow(pure.fresh(model, msg));
                   },
                   update: async (model, msg) => Result.getOrThrow(pure.update(model, msg)),
-                  audit: async () => ({ _tag: "ok", value: { type: "inc" } }),
+                  audit: async () => ({ _tag: "ok", value: Tag.cases.inc.make({}) }),
                   admit: async () => {
                     if (down && point === "admit") {
                       return Promise.reject(new Error("temporary RPC loss"));
@@ -91,6 +104,7 @@ describe("P12 saved mail recovery", () => {
                   upgrade: async (saved) => ({ saved, ran: [] }),
                   reply: async () => null,
                 });
+
                 const base = Layer.mergeAll(
                   LedgerSql.layer(sql, { reader: PID }).pipe(
                     Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
@@ -99,6 +113,7 @@ describe("P12 saved mail recovery", () => {
                   Archive.memory,
                   SpanSink.layer(sql, { object: PID }),
                 );
+
                 const dependencies = Layer.mergeAll(
                   Mailbox.layer,
                   ProcessStore.layer(sql, { process: PID }),
@@ -127,6 +142,7 @@ describe("P12 saved mail recovery", () => {
                     own: () => Effect.die("no write declared"),
                   }),
                 ).pipe(Layer.provideMerge(base));
+
                 // Ticket 402: every runner is supervised. The real manager's first start names
                 // PID, and receipts live in the same Sql as ProcessStore.
                 const manager = Layer.effectDiscard(
@@ -165,6 +181,7 @@ describe("P12 saved mail recovery", () => {
                     ),
                   ),
                 );
+
                 const layer = ProgramRunner.layer(
                   {
                     id: PID,
@@ -175,10 +192,12 @@ describe("P12 saved mail recovery", () => {
                   },
                   { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 }, chunk: mailChunk.default },
                 ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
+
                 yield* Effect.gen(function* () {
                   const runner = yield* ProgramRunner,
                     mailbox = yield* Mailbox,
                     store = yield* ProcessStore;
+
                   /** Every counted program failure: a fresh receipt's errors, or a saved-mail observation. */
                   const spent = recoveryStore(sql, {
                     name: "counter:1",
@@ -186,27 +205,23 @@ describe("P12 saved mail recovery", () => {
                     schema: Supervision,
                   }).load.pipe(
                     Effect.map((saved) => [
-                      ...(saved?.receipts ?? []).filter((r) => r.tries > 0 || r.errors.length > 0),
+                      ...Arr.filter(saved?.receipts ?? [], (r) => r.tries > 0 || r.errors.length > 0),
                       ...(saved?.observations ?? []),
                     ]),
                   );
+
                   expect(yield* runner.open("before")).toMatchObject({ rev: 0, view: { count: 0 } });
 
                   for (let n = 0; n < total; n++) {
-                    yield* mailbox.send(
-                      "counter:1",
-                      `${letter}-${n}`,
-                      { type: "inc" },
-                      {
-                        by: "SHA256:fixture",
-                        for: "person-test",
-                        sentAt: "2026-11-08T00:00:00Z",
-                        seen: 0,
-                        parent: null,
-                        traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-                        build: "test",
-                      },
-                    );
+                    yield* mailbox.send("counter:1", `${letter}-${n}`, Tag.cases.inc.make({}), {
+                      by: "SHA256:fixture",
+                      for: "person-test",
+                      sentAt: "2026-11-08T00:00:00Z",
+                      seen: 0,
+                      parent: null,
+                      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+                      build: "test",
+                    });
                   }
 
                   down = true;
@@ -241,10 +256,7 @@ describe("P12 saved mail recovery", () => {
 });
 
 // Ticket 402: the runner's own id_reused refusal, on both paths that know a letter.
-const Reuse = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("inc"), n: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("boom"), n: Schema.Int }),
-]);
+const Reuse = Schema.TaggedUnion({ inc: { n: Schema.Int }, boom: { n: Schema.Int } });
 
 const ReuseModel = Schema.Struct({ count: Schema.Int });
 
@@ -288,24 +300,29 @@ describe("P34 id reuse at the runner", () => {
                 try {
                   const sql = nodeSql(db),
                     pure = yield* Effect.fromResult(stepper(reuseProgram));
+
                   let steps = 0;
+
                   const execution = workerExecution({
                     init: async (saved) => pure.init(saved),
                     admit: async () => true,
                     fresh: async (model, msg) => Result.getOrThrow(pure.fresh(model, msg)),
                     update: async (model, msg) => {
                       steps++;
+
                       return Result.getOrThrow(pure.update(model, msg));
                     },
-                    audit: async () => ({ _tag: "ok", value: { type: "put" } }),
+                    audit: async () => ({ _tag: "ok", value: Tag.cases.put.make({}) }),
                     step: async (model, msg) => {
                       steps++;
+
                       return pure.step(model, msg);
                     },
                     fold: async (model, msg) => pure.fold(model, msg),
                     upgrade: async (saved) => ({ saved, ran: [] }),
                     reply: async () => null,
                   });
+
                   const base = Layer.mergeAll(
                     LedgerSql.layer(sql, { reader: PID }).pipe(
                       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
@@ -314,6 +331,7 @@ describe("P34 id reuse at the runner", () => {
                     Archive.memory,
                     SpanSink.layer(sql, { object: PID }),
                   );
+
                   const dependencies = Layer.mergeAll(
                     Mailbox.layer,
                     ProcessStore.layer(sql, { process: PID }),
@@ -342,6 +360,7 @@ describe("P34 id reuse at the runner", () => {
                       CheckedWriter,
                       Effect.gen(function* () {
                         const mailbox = yield* Mailbox;
+
                         return CheckedWriter.of({
                           sign: () => Effect.die("no write declared"),
                           // The door's append: a fresh letter is saved in the inbox before it is stepped.
@@ -361,6 +380,7 @@ describe("P34 id reuse at the runner", () => {
                       }),
                     ).pipe(Layer.provide(Mailbox.layer)),
                   ).pipe(Layer.provideMerge(base));
+
                   const manager = Layer.effectDiscard(
                     ProcessManager.use((m) =>
                       m.start(
@@ -397,6 +417,7 @@ describe("P34 id reuse at the runner", () => {
                       ),
                     ),
                   );
+
                   const layer = ProgramRunner.layer(
                     {
                       id: PID,
@@ -407,18 +428,20 @@ describe("P34 id reuse at the runner", () => {
                     },
                     { recovery: { sql, name: "counter:1", capacity: 1024 ** 3 }, chunk: mailChunk.default },
                   ).pipe(Layer.provideMerge(Layer.mergeAll(dependencies, manager)));
+
                   const letter = (type: "inc" | "boom", n: number) => ({
                     id,
                     envelope: {
                       id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
                       by: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
                       arrivedAt: 0,
-                      input: { type, n },
+                      input: { ...Tag.cases[type].make({}), n },
                     },
                     sentAt: "2026-11-08T00:00:00Z",
                     seen: 0,
                     span: { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" },
                   });
+
                   const type = path === "placed" ? "inc" : "boom";
                   yield* Effect.gen(function* () {
                     const runner = yield* ProgramRunner;

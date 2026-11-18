@@ -8,18 +8,31 @@
 // value, a short SQLite cell, a blob cell or a cell longer than a page, which SQLite splits across
 // overflow pages. The roots are generated names under a temp folder of the test's own, never a real
 // machine path. The guard also leaves the folder it reads byte for byte as it was.
-// edge: Effect SQL has no plain synchronous open, and the test writes SQLite files with chosen pages
-import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import {
+  Array as Arr,
+  String as Str,
+  Arbitrary,
+  Effect,
+  FileSystem,
+  Formatter,
+  Match,
+  Option,
+  Path,
+  Schema,
+  Record as Rec,
+} from "effect";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const PAGE = 4096; // SQLite's default page size: a longer cell spills onto overflow pages
 
 const Word = Schema.String.check(Schema.isPattern(/^[a-z]{3,10}$/));
+
 const Pick = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }));
 
 const few = <S extends Schema.Top>(item: S, most: number) =>
@@ -56,14 +69,18 @@ const encoder = new TextEncoder();
 const writeHome = Effect.fnUntraced(function* (home: string, base: string, input: Input) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const roots = {
     home: path.join(base, `home-${input.roots.home}${input.spice}`),
     temp: path.join(base, `temp-${input.roots.temp}${input.spice}`),
     repo: path.join(base, `repo-${input.roots.repo}${input.spice}`),
   };
+
   const plant = input.plant;
+
   const planted =
-    plant === null ? null : { root: roots[plant.kind], full: [roots[plant.kind], ...plant.tail].join("/") };
+    plant === null ? null : { root: roots[plant.kind], full: Arr.join([roots[plant.kind], ...plant.tail], "/") };
+
   // The plant as it lands in a text or a cell, in its generated form.
   const text =
     plant === null || planted === null
@@ -71,18 +88,19 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
       : plant.form === "plain"
         ? planted.full
         : plant.form === "json"
-          ? JSON.stringify(planted.full).slice(1, -1)
+          ? Str.slice(1, -1)(Formatter.formatJson(planted.full))
           : (yield* path.toFileUrl(planted.full)).href;
+
   let expected: typeof Hit.Type | null = null;
 
   for (const [n, file] of input.texts.entries()) {
     const name = `${file.name}-${n}.txt`;
-    let words = file.words.join(" ");
+    let words = Arr.join(file.words, " ");
 
     if (plant !== null && planted !== null && plant.place === "text" && plant.pick % input.texts.length === n) {
       const before = file.words.slice(0, plant.at % (file.words.length + 1));
-      const prefix = before.length === 0 ? "" : `${before.join(" ")} `;
-      words = [...before, text, ...file.words.slice(before.length)].join(" ");
+      const prefix = before.length === 0 ? "" : `${Arr.join(before, " ")} `;
+      words = Arr.join([...before, text, ...file.words.slice(before.length)], " ");
       expected = {
         file: name,
         place: Place.cases.byte.make({ offset: encoder.encode(prefix).length }),
@@ -98,17 +116,19 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     const hit = plant !== null && planted !== null && plant.place === "json" && plant.pick % input.jsons.length === n;
     // A JSON file holds the path as a value, so its file holds it JSON-escaped; a URL stays a URL.
     const value = hit ? (plant.form === "url" ? text : planted.full) : file.value;
-    const body = JSON.stringify(
-      file.keys.reduceRight<unknown>((inner, key) => ({ [key]: inner, _note: file.value }), value),
-      null,
-      2,
+
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown, { space: 2 }))(
+      Arr.reduceRight<(typeof file.keys)[number], unknown>(file.keys, value, (inner, key) => ({
+        [key]: inner,
+        _note: file.value,
+      })),
     );
 
     if (hit) {
-      const at = body.indexOf(JSON.stringify(value).slice(1, -1));
+      const at = Option.getOrElse(Str.indexOf(Str.slice(1, -1)(Formatter.formatJson(value)))(body), () => -1);
       expected = {
         file: name,
-        place: Place.cases.byte.make({ offset: encoder.encode(body.slice(0, at)).length }),
+        place: Place.cases.byte.make({ offset: encoder.encode(Str.slice(0, at)(body)).length }),
         root: planted.root,
       };
     }
@@ -118,10 +138,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
 
   for (const [n, file] of input.dbs.entries()) {
     const name = `${file.name}-${n}.sqlite`;
-    const db = yield* Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(home, name))),
-      (open) => Effect.sync(() => open.close()),
-    );
+    const db = yield* TestDatabase.make(path.join(home, name));
     const sqlite = plant !== null && plant.place !== "text" && plant.place !== "json";
     const here = sqlite && plant.pick % input.dbs.length === n;
 
@@ -131,19 +148,29 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
       const insert = db.prepare(`INSERT INTO "${tableName}" (note, body, data) VALUES (?, ?, ?)`);
 
       for (const [row, word] of table.rows.entries()) {
-        const long = `${word} `.repeat(Math.ceil((PAGE + table.long * 8) / (word.length + 1)));
+        const long = Str.repeat(Math.ceil((PAGE + table.long * 8) / (word.length + 1)))(`${word} `);
+
         const target =
           here && plant !== null && planted !== null && plant.at % file.tables.length === t
             ? plant.at % table.rows.length === row
             : false;
+
         const cut = ((plant?.at ?? 0) * 37) % long.length;
         const note = target && plant?.place === "cell" ? `${word} ${text}` : word;
-        const body = target && plant?.place === "overflow" ? `${long.slice(0, cut)}${text}${long.slice(cut)}` : long;
+
+        const body =
+          target && plant?.place === "overflow" ? `${Str.slice(0, cut)(long)}${text}${Str.slice(cut)(long)}` : long;
+
         const data = encoder.encode(target && plant?.place === "blob" ? `${word} ${text}` : word);
         insert.run(note, body, data);
 
         if (target && plant !== null && planted !== null) {
-          const column = plant.place === "cell" ? "note" : plant.place === "overflow" ? "body" : "data";
+          const column = Match.value(plant.place).pipe(
+            Match.when("cell", () => "note"),
+            Match.when("overflow", () => "body"),
+            Match.orElse(() => "data"),
+          );
+
           expected = {
             file: name,
             place: Place.cases.cell.make({ table: tableName, row, column }),
@@ -154,7 +181,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     }
   }
 
-  return { roots: Object.values(roots), expected };
+  return { roots: Rec.values(roots), expected };
 });
 
 /** Every file's name and bytes, to see the guard changed nothing. */
@@ -162,10 +189,13 @@ const snapshot = Effect.fnUntraced(function* (folder: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const files = (yield* fs.readDirectory(folder, { recursive: true })).sort();
+
   return yield* Effect.forEach(
     files,
     (file) =>
-      fs.readFile(path.join(folder, file)).pipe(Effect.map((bytes) => [file, Array.from(bytes).join(",")] as const)),
+      fs
+        .readFile(path.join(folder, file))
+        .pipe(Effect.map((bytes) => [file, Arr.join(Arr.map(Array.from(bytes), String), ",")] as const)),
     { concurrency: 1 },
   );
 });

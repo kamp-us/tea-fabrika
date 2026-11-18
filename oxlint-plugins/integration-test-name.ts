@@ -35,6 +35,7 @@ export const integrationTestName: CreateRule = {
         .replace(/\.test\.tsx?$/, "")
         .split("/")
         .pop() ?? file;
+
     const read = reader<Node>();
 
     return {

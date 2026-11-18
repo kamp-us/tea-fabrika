@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { availableParallelism } from "node:os";
 import { basename, isAbsolute, join, relative } from "node:path";
@@ -7,7 +8,7 @@ import { parseCLI } from "vitest/node";
 import { isScript, isTest, load, reached } from "./oxlint-plugins/script-reads.mjs";
 import packageJson from "./package.json" with { type: "json" };
 import { changedFiles } from "./vitest.changed.ts";
-import { HOST_RUN, hostRun } from "./vitest.hostrun.ts";
+import { hostFiles } from "./vitest.hostrun.ts";
 import { Shards } from "./vitest.shards.ts";
 
 // Today's version's tests. It is frozen, and no CI job runs them (0525, 0533); they run on the laptop.
@@ -29,22 +30,38 @@ const TOOLING = [
   ".agents/skills/*/scripts/**/*.test.ts",
 ];
 
+// The tooling tests that reach a real thing, a process, a server or a file, named
+// `*.integration.test.ts` as in next/ (0584; oxlint-plugins/test-names.ts). They are a project of
+// their own, `tooling-integration`, since a project ignores `--exclude`, and only main's full run
+// runs them (0602): `tooling` leaves them out, as `next` leaves out `next-integration`'s.
+const TOOLING_INTEGRATION = TOOLING.map((glob) => glob.replace(/\.test\.ts$/, ".integration.test.ts"));
+
 // next/'s tests, by the layer they test against (0536). A file's name says which: a test that drives
 // a real resource (a SQLite file, git, workerd, a spawned process, a socket, a bundler, temp files)
 // is `*.integration.test.ts`, and one that drives a browser or Electron is `*.visual.test.ts`, each
 // beside the module it tests. Every other `next/` test runs on our interfaces' in-memory layers.
 // The lint rule `fabrika/integration-test-name` holds the names (oxlint-plugins/README.md).
 const NEXT = [
+  "kalfa/*/src/**/*.test.{ts,tsx}",
   "next/packages/*/src/**/*.test.{ts,tsx}",
   "next/programs/*/src/**/*.test.{ts,tsx}",
   "next/apps/*/src/**/*.test.{ts,tsx}",
 ];
 
-const INTEGRATION = ["next/**/*.integration.test.{ts,tsx}"];
+const INTEGRATION = ["next/**/*.integration.test.{ts,tsx}", "kalfa/**/*.integration.test.{ts,tsx}"];
 const VISUAL = ["next/**/*.visual.test.{ts,tsx}"];
+// A visual file under kalfa/ is in no vitest project yet: the `next` project's `kalfa/` glob would
+// take it, so that project leaves it out. `INTEGRATION` cannot reach one: its names end in
+// `.integration.test`, a visual file's in `.visual.test`.
+const KALFA_VISUAL = ["kalfa/**/*.visual.test.{ts,tsx}"];
 
 // A toy repo's tests under a skill's scripts are its subject, as with `fixtures/` above.
-const EXCLUDE = [...configDefaults.exclude, ".agents/skills/*/scripts/**/fixtures/**", "next/**/dist/**"];
+const EXCLUDE = [
+  ...configDefaults.exclude,
+  ".agents/skills/*/scripts/**/fixtures/**",
+  "next/**/dist/**",
+  "kalfa/**/dist/**",
+];
 
 // What every project shares. Importing it never runs the local CLI guard.
 const shared = {
@@ -109,7 +126,7 @@ const localLimits = () => {
 
   const pinned = packageJson.engines.node;
 
-  if (!process.env.CI && process.versions.node !== pinned) {
+  if ((process.env.CI ?? "") === "" && process.versions.node !== pinned) {
     throw new Error(
       `Local test run refused. Running Node ${process.version}; pinned Node v${pinned}. Use: volta run --node ${pinned} pnpm exec vitest run --maxWorkers=1 <narrow path>`,
     );
@@ -121,7 +138,7 @@ const localLimits = () => {
     return !/[*?[\]{}]/.test(path) && /(?:^|\/)[^/]+\.test\.[cm]?[jt]sx?(?::[\d-]+)?$/.test(path);
   };
 
-  if (!process.env.CI && !(cli.filter.length > 0 && cli.filter.every(narrow))) {
+  if ((process.env.CI ?? "") === "" && !(cli.filter.length > 0 && cli.filter.every(narrow))) {
     const changed = cli.options.changed;
     // The same three sets as Vitest 5.0.5's GitVCSProvider. A net diff loses staged
     // changes canceled in the worktree; two endpoints lose divergent branch changes.
@@ -169,27 +186,26 @@ const localLimits = () => {
 // globs, the path filters, then `--changed`'s import graph, so the files it returns are the files
 // the run would start.
 //
-// Where such a test may start is vitest.hostrun.ts's `hostRun`: in CI, in a cloud box, or with the
-// owner's yes for one command once 0178 has been met (the lead has read every line the test can
-// reach that signals a process or calls launchd, and the owner has said yes to this run). On the
-// laptop, every other proof of such a law is a cloud box or a full run of scheduled.yaml on its
-// branch: `gh workflow run scheduled.yaml --ref <branch>`.
-const HOST_ONLY = /\.(?:integration|visual)\.test\.[cm]?[jt]sx?$/;
+// Plain tooling names can hide real signals too. hostFiles also parses the selected source using
+// the existing test-kind reader, without running it. Signals, real windows and real instances
+// stay off the laptop (0594); an owner marker cannot clear those source checks. This catches the
+// selected file's own calls, not arbitrary calls hidden inside its helpers or shell scripts.
 const checked = new WeakSet<object>();
 
 const hostOnly: Plugin = {
   name: "fabrika-local-host-only",
   async configureVitest({ vitest }) {
     // Each project runs this hook; the files are the whole run's, so one look is enough.
-    if (!cliRun() || hostRun(process.env, process.platform)._tag === "allow" || checked.has(vitest)) {
+    if (!cliRun() || checked.has(vitest)) {
       return;
     }
 
     checked.add(vitest);
     const { filter } = parseCLI(["vitest", ...process.argv.slice(2)], { allowUnknownOptions: true });
-    const reached = (await vitest.getRelevantTestSpecifications(filter))
-      .map((spec) => relative(process.cwd(), spec.moduleId))
-      .filter((path, index, all) => HOST_ONLY.test(path) && all.indexOf(path) === index);
+    const files = (await vitest.getRelevantTestSpecifications(filter)).map((spec) =>
+      relative(process.cwd(), spec.moduleId),
+    );
+    const reached = hostFiles(files, process.env, process.platform, (path) => readFileSync(path, "utf8"));
 
     if (reached.length > 0) {
       throw new Error(
@@ -197,8 +213,7 @@ const hostOnly: Plugin = {
           `Local host-only test run refused (decision 0178). This run reaches ${reached.length} real-resource file(s):`,
           ...reached.slice(0, 5).map((path) => `  ${path}`),
           ...(reached.length > 5 ? [`  and ${reached.length - 5} more`] : []),
-          "Prove the law in a cloud box, or with a full run on its branch: gh workflow run scheduled.yaml --ref <branch>.",
-          `Only after the lead's read and the owner's yes (0178), run it with ${HOST_RUN}=1.`,
+          "Use eligible disposable CI for the selected laws (0594). Portable signal laws may use Linux; Mac-specific laws need macOS.",
         ].join("\n"),
       );
     }
@@ -232,16 +247,21 @@ const scriptReads: Plugin = {
 const VISUAL_LIMIT = 120_000;
 
 // One Vitest project per layer, picked by `--project` (0536). Pull requests and the merge queue run
-// `next`; the 3-hour schedule runs `next-integration` and `next-visual` too; a pull request runs
-// `next-visual` only when it carries the `visual` label (check.yaml). The tooling tests are their
-// own project and today's version's theirs (`today`), so `--project tooling` leaves today's out.
-// The visual project starts one file at a time, since each starts a brain, Chromium or Electron,
-// and keeps no setup file, as the end-to-end runner did. A file is in exactly one project: `next`
-// leaves the other two names out.
+// the `next` and `tooling` tests their change reaches, and a pull request with the `visual` label
+// its `next-visual` tests too (check.yaml); main's full run runs every project but `today`, and
+// only it runs `next-integration` and `tooling-integration` (0602). The tooling tests are their own
+// projects and today's version's theirs (`today`), so `--project tooling` leaves today's out. The
+// visual project starts one file at a time, since each starts a brain, Chromium or Electron, and
+// keeps no setup file, as the end-to-end runner did. A file is in exactly one project: `next`
+// leaves the other two next names out, and `tooling` leaves out `tooling-integration`'s.
 export const projects = [
   { extends: true, test: { name: "today", include: [...TODAY], exclude: [...EXCLUDE] } },
-  { extends: true, test: { name: "tooling", include: [...TOOLING], exclude: [...EXCLUDE] } },
-  { extends: true, test: { name: "next", include: [...NEXT], exclude: [...EXCLUDE, ...INTEGRATION, ...VISUAL] } },
+  { extends: true, test: { name: "tooling", include: [...TOOLING], exclude: [...EXCLUDE, ...TOOLING_INTEGRATION] } },
+  { extends: true, test: { name: "tooling-integration", include: [...TOOLING_INTEGRATION], exclude: [...EXCLUDE] } },
+  {
+    extends: true,
+    test: { name: "next", include: [...NEXT], exclude: [...EXCLUDE, ...INTEGRATION, ...VISUAL, ...KALFA_VISUAL] },
+  },
   { extends: true, test: { name: "next-integration", include: [...INTEGRATION], exclude: [...EXCLUDE] } },
   {
     extends: false,

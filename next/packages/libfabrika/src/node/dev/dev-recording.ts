@@ -35,17 +35,23 @@ export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
   ) => Effect.Effect<unknown, E>,
 ) {
   const fs = yield* FileSystem.FileSystem,
-    path = yield* Path.Path;
+    path = yield* Path.Path,
+    // The services the archive binding's Promise calls run on.
+    context = yield* Effect.context<never>();
+
   yield* fs.makeDirectory(home, { recursive: true });
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => {
       // FileSystem has no SQLite handle; Node owns this durable span queue's database.
       const db = new DatabaseSync(path.join(home, "brain.records.sqlite"));
       db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
+
       return db;
     }),
     (db) => Effect.sync(() => db.close()),
   );
+
   return yield* Layer.build(
     Layer.mergeAll(
       SpanSink.layer(nodeSql(db), { object }),
@@ -58,10 +64,10 @@ export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
       Archive.bucket({
         put: (key, body, sha256) =>
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the archive binding requires a Promise
-          Effect.runPromise(call("bucket", "", "put", [key, [...body], sha256]).pipe(Effect.asVoid)),
+          Effect.runPromiseWith(context)(call("bucket", "", "put", [key, [...body], sha256]).pipe(Effect.asVoid)),
         head: (key) =>
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the archive binding requires a Promise
-          Effect.runPromise(archiveHead(call("bucket", "", "head", [key]))),
+          Effect.runPromiseWith(context)(archiveHead(call("bucket", "", "head", [key]))),
       }),
     ),
   );

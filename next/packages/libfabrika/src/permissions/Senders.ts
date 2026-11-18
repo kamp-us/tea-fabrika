@@ -18,6 +18,7 @@ export const Sender = Schema.TaggedUnion({
   person: { key: Schema.NonEmptyString, for: Schema.NonEmptyString },
   agent: { key: Schema.NonEmptyString, for: Schema.NonEmptyString },
 });
+
 /**
  * The decoded type of `Sender`.
  *
@@ -35,10 +36,13 @@ export type Sender = typeof Sender.Type;
  *
  * @category errors
  */
-export class SendersError extends Schema.TaggedError<SendersError>()("SendersError", {
-  reason: Schema.Literals(["removed", "ended", "storage"]),
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class SendersError extends Schema.TaggedError<SendersError, { readonly brand: unique symbol }>()(
+  "SendersError",
+  {
+    reason: Schema.Literals(["removed", "ended", "storage"]),
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 /**
  * Service that answers who sent an input delivered to a process.

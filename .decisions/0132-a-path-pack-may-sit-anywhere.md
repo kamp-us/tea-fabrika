@@ -47,8 +47,8 @@ the repo.**
   the pack, the path and the file and line that listed it. Nothing else stops.
 - **A path pack hot reloads in dev,** like a built-in program
   ([hot reload](../docs/direction/hot-reload.md)): a save brings the new code into the running app.
-- The rest of 0084 holds: a dot means a path, the base is the folder of the file that names it, and
-  a path pack has no `ref` and no lock line.
+- A dot means a path, the base is the folder of the file that names it, and a path pack has no
+  `ref` and no lock line ([0084](0084-own-pack-listed-by-path.md)).
 
 ## Consequences
 

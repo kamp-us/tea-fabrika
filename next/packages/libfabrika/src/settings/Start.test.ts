@@ -73,7 +73,9 @@ describe("instance start envelope, next/", () => {
 
   it("type: transport has one snapshot and explicit repo presence, as the approved wire table specifies", () => {
     // The schema field names are the serialized Worker protocol.
-    expectTypeOf<typeof Start.Input.Type.settings>().toEqualTypeOf<typeof import("./Snapshot.ts").Snapshot.Type>();
+    expectTypeOf<typeof Start.Input.Type.settings>().toEqualTypeOf<
+      typeof import("@kalfa/config/Snapshot").Snapshot.Type
+    >();
     expectTypeOf<typeof Start.Input.Type.repo>().toEqualTypeOf<{ readonly revision: string } | null>();
   });
 
@@ -104,7 +106,8 @@ describe("instance start envelope, next/", () => {
       const error = new Starts.StartsError({ reason });
       expect(error.reason).toBeInstanceOf(Starts.Missing);
       expect(reason.target).toEqual(target);
-      expect(Object.hasOwn(reason, "cause")).toBe(false);
+      // An error class instance is no record, so its own names are read whole, the hidden ones too.
+      expect(Object.getOwnPropertyNames(reason)).not.toContain("cause");
       expect("cause" in reason).toBe(false);
     },
     StartsTest.options,

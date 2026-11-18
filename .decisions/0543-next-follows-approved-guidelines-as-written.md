@@ -29,24 +29,24 @@ in a plan throws that study away without a new one.
 
 How this relates to the decisions and notes near it:
 
-- **[0217](0217-next-grows-beside-today.md), amended in part.** Its "a lesson, rethought, never
-  copied" now covers code and shapes only. An approved guideline's rules carry over as written. The
-  rest of 0217 holds: `next/` imports nothing from today's version and copies no code.
-- **[0525](0525-todays-version-is-frozen.md)**, which froze today's version, holds. Freezing the
-  code does not retire the guidelines studied on it.
-- **[0136](0136-guidelines-live-in-their-own-pages.md)** holds. A change to a guideline is still an
-  edit to its page with the owner's yes; this decision adds that a different look in `next/` is such
-  a change, so it needs a study first.
-- **[Rethink, do not port](../docs/direction/rethink-do-not-port.md)** holds. Its subject is how
-  jobs and machines are built, and "older code here is a list of lessons" stays true of code. It
-  says nothing about guidelines.
+- **[0217](0217-next-grows-beside-today.md)**: this record amends it in part. Its "a lesson,
+  rethought, never copied" now covers code and shapes only. An approved guideline's rules carry over
+  as written. `next/` still imports nothing from today's version and copies no code.
+- **[0525](0525-todays-version-is-frozen.md)** froze today's version. Freezing the code does not
+  retire the guidelines studied on it.
+- **[0136](0136-guidelines-live-in-their-own-pages.md)**: a change to a guideline is an edit to its
+  page with the owner's yes; this decision adds that a different look in `next/` is such a change,
+  so it needs a study first.
+- **[Rethink, do not port](../docs/direction/rethink-do-not-port.md)**: its subject is how jobs and
+  machines are built, and "older code here is a list of lessons" is true of code. It says nothing
+  about guidelines.
 - **[Clean slate](../docs/direction/clean-slate.md)** repeats 0217's tryout line. Its decided rules
   point at 0217, so this decision reaches it there; the note's text is left alone.
 - **[Tile guidelines](../docs/direction/tile-guidelines.md)** said `next/` reads it "as a lesson".
   That one line now points here. No rule on the page changes.
 - **[0502](0502-a-tiles-state-is-a-word.md)** and the other tile files (0499 to 0504) say "in
   today's version". They are written from this guideline, so through it their rules apply in
-  `next/` too. Their text does not say the opposite, so their status is unchanged.
+  `next/` too. Their text does not say the opposite, so they are not edited.
 
 ## Decision
 

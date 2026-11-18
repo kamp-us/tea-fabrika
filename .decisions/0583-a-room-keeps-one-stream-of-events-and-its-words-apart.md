@@ -37,7 +37,8 @@ Step 8 of [Tier 1's build order](../docs/plan/tier-1.md#the-build-order) asks fo
 any talk line is saved. Calls 1 to 5 are owner rulings of 2026-11-15. **Call 6 was settled by
 research, which the owner was shown and may override.** The note is on that pull request's branch
 only, so it is linked there and not edited here. The doubts it marks open on these six calls are
-settled by the sources below.
+settled by the rulings and sources in this file. The source in call 6(a) names the product, as the
+owner ruled it may.
 
 ## Decision
 
@@ -57,8 +58,8 @@ are kept apart from the ledger.**
    ([0109](0109-a-pipe-is-saved-program-mail.md)).
 4. **A room of two has no direct mark.** `made.via` records how it came to be.
 5. **An agent member stays a member across a restart until it leaves or is dismissed.** This matches
-   the rule that a restarted process keeps the member of the life it replaces, in the Amendments of
-   [0531](0531-a-start-carries-its-member-down.md).
+   the rule that a restarted process keeps the member of the life it replaces
+   ([0531](0531-a-start-carries-its-member-down.md)).
 6. **The room's process,** in four parts:
    - **(a) One process per room.** ejabberd runs each chat room as its own Erlang process
      ([mod_muc_room](https://github.com/processone/ejabberd/blob/master/src/mod_muc_room.erl)), and
@@ -88,10 +89,3 @@ are kept apart from the ledger.**
 - A room of two made by an `@` line is told apart by `via`, which goes stale less than a mark.
 - Not decided here: the verb's final word, two agents with one name in a room, how a room of two is
   named, and the screen.
-
-## Amendments
-
-- 2026-11-15: the doubts on calls 1 to 6 in the note's table are settled by the rulings and sources
-  above. The note stays on its own pull request's branch, which this decision does not edit.
-- 2026-11-15: the source in call 6(a) is restored. The owner ruled that the product may be named,
-  so Discord and its engineering post are cited again.

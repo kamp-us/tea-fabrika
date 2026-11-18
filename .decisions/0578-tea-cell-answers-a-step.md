@@ -16,7 +16,8 @@ flowchart LR
 ```
 
 **What this decides:** what a tea cell hands back. A cell answers a `Step`, a small pipeable
-value, and the Effect entry's `Machine.make` turns each `Step` into tea's tuple once.
+value, and the Effect entry's `Machine.make` turns each `Step` into tea's tuple once. A program's
+functions are not cells: they answer Effects ([0601](0601-program-make-with-optional-pipes.md)).
 
 ## Context
 
@@ -28,14 +29,15 @@ value, and the Effect entry's `Machine.make` turns each `Step` into tea's tuple 
   entry's `make`: a missing Msg handler is still a compile error, a Cmd not in the machine's `cmds`
   is refused at `Step.run`, a wrong model shape is refused at `Step.to`, and the same steps gave
   the same models and Cmds on 12 of 12 traces against the tuple form.
-- [0569](0569-tea-msgs-are-keyed-on-tag.md) is the local patch of tea on 0.27.0 that keys a Msg,
-  a Cmd and the state table on `_tag` ahead of demlik issue 949. This record adds one more change
-  to that same patch. Our patch rules ([patch upstream locally](../docs/direction/patch-upstream-locally.md),
-  [0054](0054-read-upstream-before-patching-it.md)) hold as written, and the bump that takes the
-  release deletes the patch.
+- [0569](0569-tea-msgs-are-keyed-on-tag.md) is the local patch of tea that keys a Msg, a Cmd and
+  the state table on `_tag` ahead of demlik issue 949. This record adds one more change to that
+  same patch. It follows our patch rules
+  ([patch upstream locally](../docs/direction/patch-upstream-locally.md),
+  [0054](0054-read-upstream-before-patching-it.md)): the bump that takes the release deletes the
+  patch.
 - [0567](0567-a-tagged-value-is-matched.md) says a tagged value is matched by its union's own
-  matcher, inside `update` too. [0046](0046-one-tea-machine-per-file.md) shapes the machine's file,
-  and its rules hold: this changes what a handler returns, not where it lives.
+  matcher, inside `update` too. [0046](0046-one-tea-machine-per-file.md) shapes the machine's file:
+  this changes what a handler returns, not where it lives.
 - [0572](0572-pre-release-shape-change-wipes-data.md): a cell's answer is never saved, so this
   change touches no stored shape and needs no wipe.
 
@@ -123,8 +125,8 @@ Rules:
 
 - **`Step.stay`** holds no model. **`Step.to(model)`** moves to a model. **`Step.run(cmd)`** is a
   `dual` combinator, piped after `to`, that adds one Cmd. Cmds run in the order they are piped.
-- **The patch.** The change joins our local tea patch on 0.27.0
-  (`patches/@demlik__tea@0.27.0.patch`, [0569](0569-tea-msgs-are-keyed-on-tag.md)). The Effect
+- **The patch.** The change joins our local tea patch (the `@demlik/tea` entries of
+  `pnpm-workspace.yaml`, [0569](0569-tea-msgs-are-keyed-on-tag.md)). The Effect
   entry's `Machine.make` turns each `Step` into the tuple once. tea's core, `applyCell` and the
   engine are unchanged. Demlik issue 962 carries our diff, as
   [0060](0060-upstream-issue-carries-the-patch.md) says.
@@ -132,6 +134,8 @@ Rules:
   ([0567](0567-a-tagged-value-is-matched.md)). Once demlik issue 949's state table keys on `_tag`
   ([0569](0569-tea-msgs-are-keyed-on-tag.md)), tea's table does that match, and each state's row
   holds only the cells that matter.
+- **Only a hand-written cell answers a `Step`.** A program written with `Program.make` has no cell
+  of its own: its functions answer Effects ([0601](0601-program-make-with-optional-pipes.md)).
 - **The sweep comes after the patch lands,** as its own slices: about 500 to 650 return sites in 35
   machine files. The lead orders the slices against open work.
 
@@ -146,7 +150,7 @@ Rules:
 - Every machine file in `next/` and our tooling changes, in slices after the patch. Today's version
   is untouched.
 - These pages show the tuple and change with the sweep, not here: the decision examples in
-  [0046](0046-one-tea-machine-per-file.md) (its 2026-11-10 amendment, already set aside by 0567) and
+  [0046](0046-one-tea-machine-per-file.md) and
   [0567](0567-a-tagged-value-is-matched.md), and the pattern doc
   [`.patterns/effect-tagged-value-is-matched.md`](../.patterns/effect-tagged-value-is-matched.md),
   whose sketch returns a cell through `stay` and `finish`. Each gets a one-line pointer here and its

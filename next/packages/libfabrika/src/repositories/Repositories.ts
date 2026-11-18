@@ -2,9 +2,12 @@
  * One selected repository, read at one commit: its snapshot, its files and the source folders its
  * settings name. This file is the contract only (0095).
  */
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 /**
  * Schema for a branch name under git's ref name rules (`git check-ref-format`): components
@@ -18,8 +21,11 @@ export const Branch = Schema.String.check(
   Schema.makeFilter(
     (s) =>
       s !== "@" &&
-      [...s].every((c) => c.charCodeAt(0) > 32 && c.charCodeAt(0) !== 127) &&
-      s.split("/").every((p) => !p.startsWith(".") && !p.endsWith(".") && !p.endsWith(".lock")),
+      Arr.every([...s], (c) => Option.exists(Str.charCodeAt(0)(c), (unit) => unit > 32 && unit !== 127)) &&
+      Arr.every(
+        Str.split("/")(s),
+        (p) => !Str.startsWith(".")(p) && !Str.endsWith(".")(p) && !Str.endsWith(".lock")(p),
+      ),
   ),
 );
 
@@ -29,6 +35,7 @@ export const Branch = Schema.String.check(
  * @category schemas
  */
 export const ObjectId = Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/));
+
 /**
  * Schema for a SHA-256 digest in lowercase hex. It holds a snapshot's `key` and the hash of its
  * settings document.
@@ -58,6 +65,7 @@ export const Snapshot = Schema.Struct({
   text: Schema.NullOr(Schema.String),
   hash: Hash,
 });
+
 /**
  * A repository snapshot, as `Repositories.open` answers it.
  *
@@ -71,9 +79,12 @@ export type Snapshot = typeof Snapshot.Type;
  *
  * @category errors
  */
-export class DefaultUnknown extends Schema.TaggedError<DefaultUnknown>()("DefaultUnknown", {
-  cause: Schema.Defect(),
-}) {}
+export class DefaultUnknown extends Schema.TaggedError<DefaultUnknown, { readonly brand: unique symbol }>()(
+  "DefaultUnknown",
+  {
+    cause: Schema.Defect(),
+  },
+) {}
 
 /**
  * Error for a read that failed: git or the file system failed, or what was found has the wrong
@@ -81,13 +92,18 @@ export class DefaultUnknown extends Schema.TaggedError<DefaultUnknown>()("Defaul
  *
  * @category errors
  */
-export class ReadFailed extends Schema.TaggedError<ReadFailed>()("ReadFailed", { cause: Schema.Defect() }) {}
+export class ReadFailed extends Schema.TaggedError<ReadFailed, { readonly brand: unique symbol }>()("ReadFailed", {
+  cause: Schema.Defect(),
+}) {}
+
 /**
  * Error for a source folder's path that does not exist, in the commit or on disk.
  *
  * @category errors
  */
-export class MissingPath extends Schema.TaggedError<MissingPath>()("MissingPath", { cause: Schema.Defect() }) {}
+export class MissingPath extends Schema.TaggedError<MissingPath, { readonly brand: unique symbol }>()("MissingPath", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for any `Repositories` failure. `reason` holds which of the three it was, with the lower
@@ -96,10 +112,13 @@ export class MissingPath extends Schema.TaggedError<MissingPath>()("MissingPath"
  *
  * @category errors
  */
-export class RepositoriesError extends Schema.TaggedError<RepositoriesError>()("RepositoriesError", {
-  reason: Schema.Union([DefaultUnknown, ReadFailed, MissingPath]),
-  message: Schema.optionalKey(Schema.String),
-}) {}
+export class RepositoriesError extends Schema.TaggedError<RepositoriesError, { readonly brand: unique symbol }>()(
+  "RepositoriesError",
+  {
+    reason: Schema.Union([DefaultUnknown, ReadFailed, MissingPath]),
+    message: Schema.optionalKey(Schema.String),
+  },
+) {}
 
 /**
  * Schema for where a source's bytes come from: `committed`, with the commit they were read at, or

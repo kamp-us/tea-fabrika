@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e99-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:00:06-08:00",
+  "ended": "2026-11-16T01:10:15-08:00",
+  "parent": "2026-11-16-effect-e99-tests1",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round of the tests step for Effect sweep slice E99, in next/, after the build sent it back: the libfabrika typecheck failed with TS2375 and the checker's missingEffectContext at cloudflare/error-cause.test.ts:82 and cloudflare/platform.test.ts:53. The cause was the `run` helper the first tests round wrote: it took the member as `unknown`, so after `Effect.isEffect` it was an `Effect<unknown, unknown, unknown>`, while `run` answers `Effect<unknown, unknown, never>`. Fixed by typing the member, not by a cast: each file now has `type Member = Effect.Effect<unknown, unknown, never> | ((...args: ReadonlyArray<never>) => unknown)`, `clients` returns `Record<string, Record<string, Member>>`, and `run` takes `Member | undefined`. `Effect.isEffect` then narrows to the Effect arm, whose context is `never`. The membership check is stronger than before: the type now holds every client member to a call or an Effect that needs no service, and the runtime checks stay (error-cause's `is a call or an Effect` assertion, and `run`'s `Effect.die` for a missing member). In platform.test.ts the member is read by index from the typed clients in place of two `Reflect.get` calls. No assertion changed. No product file was touched; the build's edits (platform.ts, runtime.ts, SettingsStartsLedger.ts) are as the build left them. No lock line, no tsconfig override, no LOCKED row.",
+  "laws": [
+    {
+      "law": "a rejected platform call fails with LedgerError unreachable, carrying the thrown error's name and text",
+      "file": "next/packages/libfabrika/src/cloudflare/platform.test.ts",
+      "red": "none now: only its helper's type changed; it goes red on the plant below"
+    },
+    {
+      "law": "C5: a generated rejection on any client call is `unreachable` and keeps that very value, as its cause or in the one RpcCallError a Connection call wraps it in",
+      "file": "next/packages/libfabrika/src/cloudflare/error-cause.test.ts",
+      "red": "none now: only its helper's type changed; it goes red on the plant below"
+    }
+  ],
+  "plants": [
+    {
+      "law": "the libfabrika typecheck over error-cause.test.ts",
+      "plant": "the head's error-cause.test.ts, with `run` taking `unknown`",
+      "result": "red"
+    },
+    {
+      "law": "a rejected platform call fails with LedgerError unreachable, carrying the thrown error's name and text",
+      "plant": "value-form StorageClient.deleteAlarm whose catch ignores its argument",
+      "result": "red"
+    },
+    {
+      "law": "C5: a generated rejection on any client call is `unreachable` and keeps that very value",
+      "plant": "value-form StorageClient.deleteAlarm whose catch ignores its argument",
+      "result": "red"
+    },
+    {
+      "law": "the libfabrika typecheck over error-cause.test.ts and platform.test.ts (the Member type)",
+      "plant": "StorageClient.sync declared as an Effect that needs StorageClient",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Tests run at 1721721f9 plus this round's two test edits, under nice -n 15 with maxWorkers 3 and TYPESAFE_API_KEY unset: cloudflare/SettingsStarts.test.ts 13 passed, cloudflare/platform.test.ts 9 passed, cloudflare/error-cause.test.ts 12 passed. The libfabrika typecheck (tsc with the Effect checker patched in) exits 0; on the head's error-cause.test.ts it printed TS2375 and missingEffectContext at line 82, as the build saw. pnpm format changed nothing more; the list ratchet exited 0. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) failed only in lint:promise-types with EPIPE, the box's memory limit; run again alone it passed with 0 findings, and a second full run with the field row in passed all 18 parts. Each plant was saved, broken, run once and restored by copy; git status showed only the two test files before the commit.",
+  "step": "tests"
+}

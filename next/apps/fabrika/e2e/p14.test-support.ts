@@ -17,17 +17,32 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Clock,
+  DateTime,
+  Effect,
+  FileSystem,
+  Formatter,
+  Option,
+  Schema,
+  Stream,
+} from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
 import type { TestContext } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
+
 export const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
-export const RESOURCES = ["home", "port", "server", "browser", "context", "page", "socket"] as const;
+const RESOURCES = ["home", "port", "server", "browser", "context", "page", "socket"] as const;
+
 type Resource = (typeof RESOURCES)[number];
 
 const Fault = Schema.Struct({
@@ -39,27 +54,37 @@ const Fault = Schema.Struct({
 export const fault =
   process.env.P14_E2E_FAULT === undefined
     ? undefined
-    : Schema.decodeUnknownSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+    : Schema.decodeSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
 
 const trace = process.env.P14_E2E_TRACE;
 
-class SetupFault extends Schema.TaggedError<SetupFault>()("SetupFault", { at: Schema.String }) {}
+class SetupFault extends Schema.TaggedError<SetupFault, { readonly brand: unique symbol }>()("SetupFault", {
+  at: Schema.String,
+}) {}
 
-class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { reason: Schema.String }) {}
+class Stopped extends Schema.TaggedError<Stopped, { readonly brand: unique symbol }>()("Stopped", {
+  reason: Schema.String,
+}) {}
 
-class DevFailed extends Schema.TaggedError<DevFailed>()("DevFailed", { output: Schema.String }) {}
+class DevFailed extends Schema.TaggedError<DevFailed, { readonly brand: unique symbol }>()("DevFailed", {
+  output: Schema.String,
+}) {}
 
-class KeygenFailed extends Schema.TaggedError<KeygenFailed>()("KeygenFailed", { exitCode: Schema.Number }) {}
+class KeygenFailed extends Schema.TaggedError<KeygenFailed, { readonly brand: unique symbol }>()("KeygenFailed", {
+  exitCode: Schema.Finite,
+}) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
 /** Fails once this worker is told to stop, so a race against the suite closes its scope first. */
-export const stopped = Effect.callback<never, Stopped>((resume) => {
-  const stops = STOPS.map((reason) => {
+const stopped = Effect.callback<never, Stopped>((resume) => {
+  const stops = Arr.map(STOPS, (reason) => {
     const stop = () => resume(Effect.fail(Stopped.make({ reason })));
     process.once(reason, stop);
+
     return () => process.off(reason, stop);
   });
+
   return Effect.sync(() => {
     for (const off of stops) {
       off();
@@ -80,20 +105,23 @@ export const suite = <A>(body: Effect.Effect<A, unknown, import("effect").Scope.
     ).pipe(Effect.raceFirst(stopped)),
     { signal: context.signal },
   );
+
   const finished = () =>
     // oxlint-disable-next-line fabrika/no-promises -- edge: Vitest cleanup waits for the same Promise after a timeout or failure
     running.then(
       () => {},
       () => {},
     );
+
   context.onTestFinished(finished, 90_000);
+
   return running;
 };
 
 const note = (row: Readonly<Record<string, unknown>>) =>
   Effect.sync(() => {
     if (trace !== undefined) {
-      appendFileSync(trace, `${JSON.stringify(row)}\n`);
+      appendFileSync(trace, `${Formatter.formatJson(row)}\n`);
     }
 
     if (fault?.kind === "trace" && row.acquired === fault.at) {
@@ -109,6 +137,7 @@ const note = (row: Readonly<Record<string, unknown>>) =>
  *  `exit` listeners on that exit, synchronously, as the `tmp` package's graceful cleanup does. */
 const onExit = (undo: () => void) => {
   process.on("exit", undo);
+
   return () => process.off("exit", undo);
 };
 
@@ -154,6 +183,7 @@ const childEnv = (home: string, extra: Readonly<Record<string, string>>) => {
   delete env.TYPESAFE_API_KEY;
   delete env.FABRIKA_FOREGROUND;
   delete env.CLOUDFLARE_API_TOKEN;
+
   return env;
 };
 
@@ -162,6 +192,7 @@ export const homeWithCredential = (credential: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
     const dir = yield* owned(
       "home",
       fs.makeTempDirectory({ directory: "/tmp", prefix: "fw." }),
@@ -169,7 +200,9 @@ export const homeWithCredential = (credential: string) =>
       (dir) => ({ home: dir }),
       (dir) => rmSync(dir, { recursive: true, force: true }),
     );
+
     const key = join(dir, "person");
+
     const child = yield* spawner.spawn(
       ChildProcess.make("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", credential, "-f", key], {
         stdin: "ignore",
@@ -177,6 +210,7 @@ export const homeWithCredential = (credential: string) =>
         stderr: "ignore",
       }),
     );
+
     const exitCode = yield* child.exitCode;
 
     if (exitCode !== 0) {
@@ -187,8 +221,8 @@ export const homeWithCredential = (credential: string) =>
       dir,
       key,
       credential,
-      publicKey: (yield* fs.readFileString(`${key}.pub`)).trim().split(/\s+/).slice(0, 2).join(" "),
-      grants: [] as Array<GrantSeen>,
+      publicKey: Arr.join(Str.split(Str.trim(yield* fs.readFileString(`${key}.pub`)), /\s+/).slice(0, 2), " "),
+      grants: Arr.empty<GrantSeen>(),
     };
   }).pipe(Effect.provide(NodeServices.layer));
 
@@ -218,8 +252,10 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
       (held) => held.release,
       (held) => ({ port: held.port - 1 }),
     );
+
     const url = `http://127.0.0.1:${port}`;
     const out: Array<string> = [];
+
     const child = yield* owned(
       "server",
       Effect.sync(() => {
@@ -238,8 +274,10 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
           ],
           { env: childEnv(h.dir, env), cwd: APP, stdio: ["ignore", "pipe", "pipe"] },
         );
+
         c.stdout?.on("data", (b: Buffer) => out.push(b.toString()));
         c.stderr?.on("data", (b: Buffer) => out.push(b.toString()));
+
         return c;
       }),
       stop,
@@ -247,11 +285,12 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
       // dev.ts ends its own detached group on SIGTERM; the exit cannot wait for that.
       (c) => c.kill("SIGTERM"),
     );
+
     // Ready when the real root answers; a child that exits first fails with what it said.
     yield* Effect.gen(function* () {
       for (;;) {
         if (child.exitCode !== null) {
-          return yield* DevFailed.make({ output: out.join("") });
+          return yield* DevFailed.make({ output: Arr.join(out, "") });
         }
 
         // The readiness probe is one HTTP request. A refused connection is "not yet", never a failure.
@@ -268,8 +307,9 @@ export const devServer = (h: Home, env: Readonly<Record<string, string>> = {}) =
         yield* Effect.sleep("250 millis");
       }
     }).pipe(Effect.timeout("180 seconds"));
+
     // A law that reads the whole home stops the instance first, within the 10 s its release gets.
-    return { url, port, output: () => out.join(""), stop: stop(child).pipe(Effect.timeout("10 seconds")) };
+    return { url, port, output: () => Arr.join(out, ""), stop: stop(child).pipe(Effect.timeout("10 seconds")) };
   });
 
 export type Dev = Effect.Success<ReturnType<typeof devServer>>;
@@ -284,6 +324,7 @@ export const browser = Effect.gen(function* () {
     (s) => Effect.promise(() => s.close()),
     (s) => ({ pid: s.process().pid }),
   );
+
   return yield* Effect.acquireRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's connect is a Promise
     Effect.promise(() => chromium.connect(server.wsEndpoint())),
@@ -316,6 +357,7 @@ export type Seen = {
 export const tab = (context: BrowserContext, url: string) =>
   Effect.gen(function* () {
     const seen: Seen = { console: [], errors: [], urls: [], sockets: [], opened: [] };
+
     const page = yield* owned(
       "page",
       // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's newPage is a Promise
@@ -335,8 +377,10 @@ export const tab = (context: BrowserContext, url: string) =>
       // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's close is a Promise
       (p) => Effect.promise(() => p.close()),
     );
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's goto is a Promise
     yield* Effect.promise(() => page.goto(`${url}/`));
+
     return { page, seen };
   });
 
@@ -365,6 +409,7 @@ export const waiting = (page: Page) =>
     Effect.map((value): Waiting => {
       const line = String(value);
       const [, url = "", fingerprint = "", code = ""] = LINE.exec(line) ?? [];
+
       return { line, url, fingerprint, code };
     }),
   );
@@ -412,6 +457,7 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
           additionalFds: { fd3: { type: "output" } },
         },
       );
+
       const [code, out, err, wire] = yield* Effect.all(
         [
           child.exitCode,
@@ -421,16 +467,20 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
         ],
         { concurrency: 4 },
       );
-      const sent = wire
-        .split("\n")
-        .filter((line) => line !== "")
-        .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(GrantWire))(line));
+
+      const sent = Arr.map(
+        Arr.filter(Str.split(wire, "\n"), (line) => line !== ""),
+        (line) => Schema.decodeSync(Schema.fromJsonString(GrantWire))(line),
+      );
+
       const seen: GrantSeen = {
-        urls: sent.map((row) => row.url),
-        signatures: sent.flatMap((row) => (row.signature === undefined ? [] : [row.signature])),
+        urls: Arr.map(sent, (row) => row.url),
+        signatures: Arr.flatMap(sent, (row) => (row.signature === undefined ? [] : [row.signature])),
         output: out + err,
       };
+
       h.grants.push(seen);
+
       return code === 0 ? { ok: true as const } : { ok: false as const, error: seen.output };
     }),
   ).pipe(Effect.provide(NodeServices.layer));
@@ -441,6 +491,7 @@ const Target = Schema.Struct({ key: Schema.String, for: Schema.String, to: Schem
 /** Reads the grant target while the tab waits, so the key can be removed later. */
 export const target = (w: Waiting) => {
   const url = `${new URL(w.url).origin}/grant/client/${encodeURIComponent(w.fingerprint)}?code=${encodeURIComponent(w.code)}`;
+
   return HttpClient.get(url).pipe(
     Effect.flatMap((r) => r.json),
     Effect.flatMap(Schema.decodeUnknownEffect(Target)),
@@ -461,16 +512,20 @@ export const remove = (h: Home, dev: Dev, t: typeof Target.Type) =>
       saw: { label: "first-window", location: "local", method: "command", check: "none" },
       sentAt: DateTime.formatIso(yield* DateTime.now),
     });
+
     const armored = execFileSync("ssh-keygen", ["-Y", "sign", "-n", "fabrika-client", "-f", h.key], {
       input: text,
     }).toString();
-    const body = JSON.stringify({ text, armored });
+
+    const body = Formatter.formatJson({ text, armored });
+
     const r = yield* HttpClientRequest.post(`${dev.url}/grant`).pipe(
       HttpClientRequest.bodyText(body, "application/json"),
       HttpClient.execute,
       Effect.orDie,
       Effect.provide(FetchHttpClient.layer),
     );
+
     return { ok: r.status >= 200 && r.status <= 299, text, armored };
   });
 
@@ -504,8 +559,9 @@ const BOX = /^\s*- checkbox "((?:[^"\\]|\\.)*)"(.*)$/;
 /** The checklist tile of `name`, found by role: its region, its add field, a row's box and remove
  *  button, the rows it shows now, and the words tied to the field. */
 export const tile = (page: Page, name: string) => {
-  const region = page.getByRole("region", { name: new RegExp(name.replace(/[:]/g, "\\:")) });
+  const region = page.getByRole("region", { name: new RegExp(pipe(name, Str.replace(/[:]/g, "\\:"))) });
   const field = region.getByRole("textbox", { name: checklist.inputs.add.description });
+
   return {
     region,
     field,
@@ -534,6 +590,7 @@ export const tile = (page: Page, name: string) => {
         const token = getComputedStyle(probe).color;
         probe.remove();
         const first = body.firstElementChild;
+
         return {
           words: body instanceof HTMLElement ? body.innerText.trim() : "",
           ink: first !== null && getComputedStyle(first).color === token,
@@ -543,10 +600,13 @@ export const tile = (page: Page, name: string) => {
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's ariaSnapshot is a Promise
     shown: Effect.promise(() => region.ariaSnapshot()).pipe(
       Effect.map((yaml): ReadonlyArray<Row> =>
-        yaml.split("\n").flatMap((line) => {
+        Arr.flatMap(Str.split(yaml, "\n"), (line) => {
           const m = BOX.exec(line);
           const [, item = "", state = ""] = m ?? [];
-          return m === null ? [] : [{ name: item.replace(/\\(.)/g, "$1"), checked: state.includes("[checked]") }];
+
+          return m === null
+            ? []
+            : [{ name: pipe(item, Str.replace(/\\(.)/g, "$1")), checked: pipe(state, Str.includes("[checked]")) }];
         }),
       ),
     ),
@@ -570,7 +630,9 @@ export const tile = (page: Page, name: string) => {
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
     size = Buffer.alloc(4);
+
   size.writeUInt32BE(body.length);
+
   return Buffer.concat([size, body]);
 };
 
@@ -579,9 +641,10 @@ const identity = () => {
   const pair = generateKeyPairSync("ed25519"),
     bytes = Buffer.from(pair.publicKey.export({ format: "jwk" }).x ?? "", "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw: bytes.toString("base64url"),
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${pipe(createHash("sha256").update(bytes).digest("base64"), Str.replace(/=+$/, ""))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -590,8 +653,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -601,13 +666,15 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
+
       return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
     },
   };
 };
 
-class WireClosed extends Schema.TaggedError<WireClosed>()("WireClosed", {}) {}
+class WireClosed extends Schema.TaggedError<WireClosed, { readonly brand: unique symbol }>()("WireClosed", {}) {}
 
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Unknown),
@@ -616,7 +683,18 @@ const Frame = Schema.Struct({
   result: Schema.optionalKey(Schema.Unknown),
   error: Schema.optionalKey(Schema.Unknown),
 });
+
 type Frame = typeof Frame.Type;
+
+/** What the reader reads of a challenge's `params`, and of a knock's `result`: every field optional
+ *  and as loose as it was read, so a frame that lacks one reads it as `undefined`. */
+const Said = Schema.Struct({
+  nonce: Schema.optionalKey(Schema.Unknown),
+  code: Schema.optionalKey(Schema.Unknown),
+});
+
+const said = (value: unknown): typeof Said.Type =>
+  Option.getOrElse(Schema.decodeUnknownOption(Said)(value), (): typeof Said.Type => ({}));
 
 const Entries = Schema.Struct({
   entries: Schema.Array(Entry),
@@ -631,17 +709,19 @@ export const reader = (h: Home, dev: Dev) =>
     const tab = "p14-reader";
     const frames: Array<Frame> = [];
     let closed = false;
+
     const ws = yield* owned(
       "socket",
       Effect.sync(() => {
         const socket = new WebSocket(
-          `${dev.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+          `${pipe(dev.url, Str.replace("http", "ws"))}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
         );
+
         socket.addEventListener("message", ({ data }) => {
           const text = String(data);
 
           if (text !== "pong") {
-            frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(text));
+            frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(text));
           }
         });
         socket.addEventListener("close", () => {
@@ -650,6 +730,7 @@ export const reader = (h: Home, dev: Dev) =>
         socket.addEventListener("error", () => {
           closed = true;
         });
+
         return socket;
       }),
       (socket) =>
@@ -662,12 +743,14 @@ export const reader = (h: Home, dev: Dev) =>
           socket.close();
         }),
     );
+
     const next = (test: (f: Frame) => boolean) =>
       Effect.gen(function* () {
         for (;;) {
-          const at = frames.findIndex(test);
-
-          const [frame] = at >= 0 ? frames.splice(at, 1) : [];
+          const [frame] = Option.match(Arr.findFirstIndex(frames, test), {
+            onNone: () => [],
+            onSome: (at) => frames.splice(at, 1),
+          });
 
           if (frame !== undefined) {
             return frame;
@@ -680,17 +763,21 @@ export const reader = (h: Home, dev: Dev) =>
           yield* Effect.sleep("20 millis");
         }
       }).pipe(Effect.timeout("60 seconds"), Effect.orDie);
+
     let serial = 0;
-    const call = (method: string, params: unknown) =>
+
+    const call = (method: string, params: Schema.Json) =>
       Effect.gen(function* () {
         while (ws.readyState === WebSocket.CONNECTING) {
           yield* Effect.sleep("20 millis");
         }
 
         const id = ++serial;
-        ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+        ws.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
+
         return yield* next((f) => f.id === id);
       });
+
     const hello = (nonce: string) =>
       call("initialize", {
         versions: [1],
@@ -701,14 +788,15 @@ export const reader = (h: Home, dev: Dev) =>
         nonce,
         platform: "headless",
         os: "linux",
-        sentAt: new Date().toISOString(),
+        sentAt: DateTime.formatIso(DateTime.nowUnsafe()),
         signed: key.proof(`fabrika-hello\n${dev.url}\n${tab}\n${nonce}`),
       });
-    const nonceIn = (f: Frame) => String(Reflect.get(Object(f.params), "nonce"));
+
+    const nonceIn = (f: Frame) => String(said(f.params).nonce);
     const first = yield* hello(nonceIn(yield* next((f) => f.method === "challenge")));
     expectWaiting(first);
     const knocked = yield* call("gateway.knock", { label: "p14 reader" });
-    const code = String(Reflect.get(Object(knocked.result), "code"));
+    const code = String(said(knocked.result).code);
     const granted = yield* grant(h, { line: "", url: dev.url, fingerprint: key.fingerprint, code });
 
     if (!granted.ok) {
@@ -723,7 +811,7 @@ export const reader = (h: Home, dev: Dev) =>
 
     /** The answer's `result`. A refused call (the door's rate limit, say) fails here by name, with
      *  what the door said, before any decode can blame the frame's shape. */
-    const answered = (method: string, params: unknown) =>
+    const answered = (method: string, params: Schema.Json) =>
       Effect.flatMap(call(method, params), (frame) =>
         frame.error === undefined && frame.result !== undefined
           ? Effect.succeed(frame.result)
@@ -746,6 +834,7 @@ export const reader = (h: Home, dev: Dev) =>
             const value = yield* Schema.decodeUnknownEffect(
               Schema.Struct({ spans: Schema.Array(Schema.Unknown), next: Schema.Int }),
             )(yield* answered("spans.read", { chain, after })).pipe(Effect.orDie);
+
             all.push(...value.spans);
 
             if (value.spans.length < PAGE || value.next <= after) {

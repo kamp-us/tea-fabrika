@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-port-s1-review",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null,
+  "started": "2026-11-15T22:39:38-08:00",
+  "ended": "2026-11-15T22:44:06-08:00",
+  "parent": "2026-11-16-port-s1-tests",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of slice S1 of docs/plan/quests/port-scripts-0113-PLAN.md (the lint hold on 0113, lead tooling under 0033) at edbc685f5, diff origin/fabrikalfa/port-scripts-0113..edbc685f5: merge-ready, three finding rows. oxlint-plugins/tracked-scripts.ts matches the plan's 'The lint hold': a lint step beside workflow-lint.ts in pnpm lint's list, NOT_YET_PORTED holds exactly the plan's 15 scripts plus scripts/typecheck.sh, a stale entry fails, and an edge line needs a non-space reason and (0113) in the first five lines. .github/ci/apt.sh carries its edge line. The four S1 laws match the plan's Laws rows (generators, run counts, plants). Five plants of my own on a scratch copy, never the branch: listed files not skipped (4 red), SCRIPT unanchored (1 red), stale entries ignored (1 red), HEAD 4 (1 red), HEAD 6 (1 red). Two plants stayed green: the edge_unmarked branch is reached by no law (finding row). The tests step's note that the plan's sketched EDGE regex passes '# edge: (0113)' is wrong: node shows it returns false; the port's rule gives the same outcome for a blank reason. oxlint-plugins/README.md lacks the paragraph it keeps for each non-oxlint lint step (finding row). Three tracked extensionless #!/bin/sh files escape a name-only hold (finding row).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Read-only apart from this row. Ran at edbc685f5: nice -n 15 pnpm exec vitest run --maxWorkers=3 oxlint-plugins/tracked-scripts.test.ts, 5 of 5 pass; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint, exit 0, tracked-scripts passed in 0.8 s; node oxlint-plugins/tracked-scripts.ts, exit 0; tsc -p oxlint-plugins/tsconfig.json --noEmit, exit 0; effect-tsgo diagnostics on oxlint-plugins/tsconfig.json, nothing in the new files. No full pnpm typecheck. loosening.sh on the slice range and from the main merge base: two hits, apt.sh line 2 (the added edge comment) and package.json line 11 (the added lint step), neither a test file, no law loosened. git merge-tree with origin/main 9598eee: a text conflict in package.json's lint line, where main added lint:kind; the integrator resolves it by keeping both. No .integration. or .visual. law is reached. 0579 and 0580 (it.prop, plant options) are not buildable here: no @kalfa/vitest package exists yet, so the raw fc.assert and plant comments follow today's oxlint-plugins tests until the sweep.",
+  "step": "review",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}

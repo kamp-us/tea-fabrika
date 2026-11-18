@@ -2,11 +2,14 @@
 // folder they acquire (0061). The laws watch the real handles, files and finalizer order.
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type { Sql } from "../Sql.ts";
@@ -16,6 +19,7 @@ import * as RecordPartSupport from "./RecordPart.test-support.ts";
 // R6, a type law: a store hands its body only `Sql`, never the driver's handle, and acquiring one
 // needs a Scope. `pnpm typecheck` checks these two lines.
 expectTypeOf<Parameters<Parameters<RecordPartTest.Store["use"]>[0]>[0]>().toEqualTypeOf<Sql>();
+
 expectTypeOf<Effect.Services<ReturnType<RecordPartTest.Open>>>().toEqualTypeOf<Scope.Scope>();
 
 const Mode = Schema.Literals(["file", "memory"]);
@@ -40,9 +44,13 @@ const Move = Schema.Union([
 /** Every step the support took, and the checks every law ends with once the outer scope closed. */
 const watched = () => {
   const events: Array<RecordPartSupport.Event> = [];
-  const opened = () => events.flatMap((e) => (e.step === "opened" ? [e.db] : []));
-  const closes = (db: unknown) => events.filter((e) => e.step === "closed" && e.db === db).length;
-  const folders = () => events.flatMap((e) => (e.step === "folder" ? [e.path] : []));
+  const opened = () => Arr.flatMap(events, (e) => (e.step === "opened" ? [e.db] : []));
+
+  const closes = (db: ReturnType<typeof opened>[number]) =>
+    Arr.filter(events, (e) => e.step === "closed" && e.db === db).length;
+
+  const folders = () => Arr.flatMap(events, (e) => (e.step === "folder" ? [e.path] : []));
+
   const released = Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
 
@@ -52,15 +60,17 @@ const watched = () => {
     }
 
     expect(yield* Effect.forEach(folders(), (path) => fs.exists(path), { concurrency: 1 })).toEqual(
-      folders().map(() => false),
+      Arr.map(folders(), () => false),
     );
   });
+
   return { events, opened, closes, folders, released };
 };
 
 /** A watch that records each step and fails the `failing`-th folder or handle acquisition. */
 const failingAt = (failing: number, events: Array<RecordPartSupport.Event>) => {
   let seen = 0;
+
   const watch: RecordPartSupport.Watch = (event) => {
     events.push(event);
 
@@ -68,6 +78,7 @@ const failingAt = (failing: number, events: Array<RecordPartSupport.Event>) => {
       throw new Error("planted acquisition failure");
     }
   };
+
   return { watch, seen: () => seen };
 };
 
@@ -80,7 +91,7 @@ const write = (row: string) => (sql: Sql) =>
 const saved = (sql: Sql) =>
   sql.exec("SELECT name FROM sqlite_master WHERE name = 'saved'").length === 0
     ? []
-    : sql.exec("SELECT row FROM saved ORDER BY rowid").map((r) => r["row"]);
+    : Arr.map(sql.exec("SELECT row FROM saved ORDER BY rowid"), (r) => r["row"]);
 
 describe("T641 record-part stores on node:sqlite", () => {
   it.effect.prop(
@@ -108,23 +119,26 @@ describe("T641 record-part stores on node:sqlite", () => {
               }
 
               const before = watch.opened().length;
+
               const body = (sql: Sql) =>
                 Effect.gen(function* () {
                   yield* write(move.row)(sql);
                   // Every folder acquired so far is still there while a use runs.
                   const folders = watch.folders();
                   expect(yield* Effect.forEach(folders, (path) => fs.exists(path), { concurrency: 1 })).toEqual(
-                    folders.map(() => true),
+                    Arr.map(folders, () => true),
                   );
                 });
 
               if (move.exit === "interrupt") {
                 const ready = yield* Deferred.make<void>();
+
                 const fiber = yield* Effect.forkChild(
                   store.use((sql) =>
                     body(sql).pipe(Effect.andThen(Deferred.succeed(ready, undefined)), Effect.andThen(Effect.never)),
                   ),
                 );
+
                 yield* Deferred.await(ready);
                 yield* Fiber.interrupt(fiber);
               } else {
@@ -132,15 +146,16 @@ describe("T641 record-part stores on node:sqlite", () => {
                   store.use((sql) =>
                     body(sql).pipe(
                       Effect.andThen(
-                        move.exit === "fail"
-                          ? Effect.fail("planted failure")
-                          : move.exit === "throw"
-                            ? Effect.sync(() => expect(move.row).toBe(`${move.row}!`))
-                            : Effect.void,
+                        Match.value(move.exit).pipe(
+                          Match.when("fail", () => Effect.fail("planted failure")),
+                          Match.when("throw", () => Effect.sync(() => expect(move.row).toBe(`${move.row}!`))),
+                          Match.orElse(() => Effect.void),
+                        ),
                       ),
                     ),
                   ),
                 );
+
                 expect(Exit.isSuccess(exit)).toBe(move.exit === "succeed");
                 expect(Exit.hasFails(exit)).toBe(move.exit === "fail");
                 expect(Exit.hasDies(exit)).toBe(move.exit === "throw");
@@ -150,7 +165,7 @@ describe("T641 record-part stores on node:sqlite", () => {
               const handles = watch.opened().slice(before);
               expect(handles).toHaveLength(1);
               expect(handles[0]!.isOpen).toBe(false);
-              expect(watch.closes(handles[0])).toBe(1);
+              expect(watch.closes(handles[0]!)).toBe(1);
             }
           }),
         );
@@ -167,16 +182,19 @@ describe("T641 record-part stores on node:sqlite", () => {
     ({ modes, failAt }) =>
       Effect.gen(function* () {
         // Each file store makes a folder, and each store opens one handle: the points that may fail.
-        const points = modes.filter((mode) => mode === "file").length + modes.length;
+        const points = Arr.filter(modes, (mode) => mode === "file").length + modes.length;
         const failing = failAt % points;
         const watch = watched();
         const failure = failingAt(failing, watch.events);
         const open = RecordPartSupport.make(failure.watch);
+
         // Every store stays open while the next one is acquired: nested uses inside one scope.
         const nest = (stores: ReadonlyArray<RecordPartTest.Store>): Effect.Effect<void> => {
           const [first, ...rest] = stores;
+
           return first === undefined ? Effect.void : first.use(() => nest(rest));
         };
+
         const exit = yield* Effect.exit(
           Effect.scoped(
             Effect.gen(function* () {
@@ -190,6 +208,7 @@ describe("T641 record-part stores on node:sqlite", () => {
             }),
           ),
         );
+
         expect(Exit.hasDies(exit)).toBe(true);
         expect(failure.seen()).toBe(failing + 1);
         yield* watch.released;
@@ -211,7 +230,7 @@ describe("T641 record-part stores on node:sqlite", () => {
             for (const cut of [...cuts, []]) {
               yield* store.use((sql) =>
                 Effect.gen(function* () {
-                  const [now, ...earlier] = watch.opened().toReversed();
+                  const [now, ...earlier] = Arr.reverse(watch.opened());
                   expect(now!.isOpen).toBe(true);
 
                   for (const db of earlier) {
@@ -219,8 +238,8 @@ describe("T641 record-part stores on node:sqlite", () => {
                   }
 
                   // Each earlier handle closed before this one began to open.
-                  const opening = watch.events.findLastIndex((e) => e.step === "opening");
-                  expect(watch.events.slice(0, opening).filter((e) => e.step === "closed")).toHaveLength(
+                  const opening = Option.getOrThrow(Arr.findLastIndex(watch.events, (e) => e.step === "opening"));
+                  expect(Arr.filter(watch.events.slice(0, opening), (e) => e.step === "closed")).toHaveLength(
                     earlier.length,
                   );
                   expect(saved(sql)).toEqual(kept);

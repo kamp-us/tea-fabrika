@@ -1,4 +1,9 @@
-import { Context, Effect, Layer } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
+
 import { LedgerError } from "../ledger/Ledger.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
@@ -47,7 +52,7 @@ export const serveAsset = Effect.fn("brain.asset")(function* (
   request: Request,
   route = new URL(request.url).pathname,
 ) {
-  const asset = Object.hasOwn(assets, route) ? assets[route] : undefined;
+  const asset = Rec.has(assets, route) ? assets[route] : undefined;
   yield* Effect.annotateCurrentSpan({
     "asset.found": asset !== undefined,
     "http.method": request.method,
@@ -75,6 +80,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
 ) {
   const start = Context.get(yield* httpContext(env), RecordedStart);
   const config = { ...start.input, port: start.values.port };
+
   const url = new URL(request.url),
     origin = `http://127.0.0.1:${config.port}`;
 
@@ -86,7 +92,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
     return new Response("Foreign origin", { status: 403 });
   }
 
-  if (url.pathname.startsWith("/client/")) {
+  if (Str.startsWith("/client/")(url.pathname)) {
     return yield* rpc(GatewayClient.make(env.CONNECTION.getByName(url.pathname)).fetch(request));
   }
 
@@ -95,14 +101,16 @@ export const fetch = Effect.fn("workers.fetch")(function* (
   if (url.pathname === "/grant" && request.method === "POST") {
     // oxlint-disable-next-line fabrika/no-promises -- edge: Request JSON body enters Effect
     const input = yield* Effect.tryPromise({ try: () => request.json(), catch: () => null });
+
     return Response.json(yield* rpc(project.grant(input)));
   }
 
-  if (url.pathname.startsWith("/grant/client/") && request.method === "GET") {
+  if (Str.startsWith("/grant/client/")(url.pathname) && request.method === "GET") {
     const target = yield* Effect.try({
-      try: () => decodeURIComponent(url.pathname.slice("/grant/client/".length)),
+      try: () => decodeURIComponent(Str.slice("/grant/client/".length)(url.pathname)),
       catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
     });
+
     return Response.json(yield* rpc(project.target(target, url.searchParams.get("code") ?? "")));
   }
 
@@ -113,7 +121,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
       return yield* serveAsset(assets, request);
     }
 
-    if (Object.hasOwn(assets, PAGE)) {
+    if (Rec.has(assets, PAGE)) {
       return yield* serveAsset(assets, request, PAGE);
     }
   }

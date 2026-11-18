@@ -1,3 +1,4 @@
+import * as Snapshot from "@kalfa/config/Snapshot";
 import * as Digest from "effect/crypto/Digest";
 // After build, review runs each temporary plant and restores by copy:
 // L1 bootstrap a loaded job; accept mismatched argv. L2 return at bootout; remove before absence.
@@ -15,8 +16,7 @@ import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Declarations from "../settings/Declarations.ts";
-import * as Snapshot from "../settings/Snapshot.ts";
-import * as Sources from "../settings/Sources.ts";
+import * as Sources from "../settings/Fabrika.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
@@ -35,6 +35,7 @@ export const timing = Effect.fn("BrainServiceTest.timing")(function* (flags: Rec
     repo: Sources.file("repo", { value: {}, spans: [] }),
     person: Sources.file("person", { value: {}, spans: [] }),
   });
+
   return yield* Snapshot.make(Declarations.all, resolved).pipe(Effect.provide(Digest.layerWebCrypto));
 });
 

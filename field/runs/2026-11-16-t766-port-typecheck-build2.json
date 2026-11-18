@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-build2",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-16T00:41:05-08:00",
+  "ended": "2026-11-16T00:52:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The build step after the plan's amendment of 2026-11-16 (docs/plan/quests/port-typecheck-PLAN.md, 'scripts/typecheck* gets a tsconfig program of its own'), in today's tooling. Wrote scripts/tsconfig.json: it extends ../tsconfig.base.json and includes typecheck.ts, typecheck/*.ts, typecheck.test.ts and typecheck-lock.test.ts, the 18 files, with no allowedDuplicatedPackages. Took the four ../scripts/... include lines and the sentence the first build added back out of .agents/tsconfig.json, which now differs from main only in its comment naming scripts/typecheck.ts. Law T1 is green: the @tea-fabrika/scripts package's own tsc --noEmit -p . exits 0 with no error and no Effect-check warning, so no product file needed a fix, and pnpm typecheck ran both the scripts and the .agents programs clean.",
+  "plants": [
+    { "law": "scripts/tsconfig.json T1", "plant": "(a) hold returns Effect<number, ...> in scripts/typecheck/Locks.ts: the scripts package's tsc fails with TS2322, TS2375, TS2339 and TS2345 in LocksFile.ts, LocksTest.ts, Typecheck.ts and typecheck-lock.test.ts, and pnpm -r --filter @tea-fabrika/scripts typecheck exits 1", "result": "red" },
+    { "law": "scripts/tsconfig.json T1", "plant": "(b) the same wrong type with the scripts glob removed from pnpm-workspace.yaml: pnpm -r --filter @tea-fabrika/scripts typecheck prints No projects matched and exits 0, and .agents' own tsc also exits 0, so nothing checks it", "result": "green" },
+    { "law": "scripts/tsconfig.json T1", "plant": "a floating Effect.log in scripts/typecheck/NodeModulesFs.ts: TS377001 floatingEffect, so Effect's checks are on in the new program", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Each plant ran once, by copy to the scratchpad and copy back; git status showed only the two intended changes after each. Ran in a Linux box with CLAUDE_CODE_REMOTE=true at 5694d60 plus this change, with maxWorkers=1: scripts/typecheck.test.ts (5), scripts/typecheck-lock.test.ts (3), scripts/typecheck.integration.test.ts (7), scripts/caps.test.ts (29), .github/ci/workflow-lint/caches.test.ts (18) and oxlint-plugins/duplicate-packages.test.ts (1), all green; the 0178 guard refused none. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed, all 18 parts, lint:dead and lint:reach included. The list ratchet exited 0. One pnpm typecheck at the end exited 0.",
+  "step": "build"
+}

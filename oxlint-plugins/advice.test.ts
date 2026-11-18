@@ -15,13 +15,16 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, matchesGlob } from "node:path";
+import { dirname, join } from "node:path";
+import { Array as Arr, pipe, Match, Predicate, Record as Rec } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
+
 const runs = { seed: 119120, numRuns: 200 };
 
 /** The five, as oxlint prints them: the oracle, written out apart from `advice.ts`. */
@@ -89,7 +92,7 @@ describe("T930 L1 a fire advises only when it is one of the six and graded a war
           { requiredKeys: [] },
         ),
         (fire) => {
-          const six = SIX.some((code) => code === fire.code);
+          const six = Arr.some(SIX, (code) => code === fire.code);
           const member = /^'([^']*)' is restricted from being used\.$/.exec(fire.message ?? "")?.[1];
           const guard = fire.code !== "eslint(no-restricted-properties)" || member === "JSON.parse";
           const want = six && guard && fire.severity === "warning";
@@ -112,8 +115,13 @@ describe("T930 L1 a fire advises only when it is one of the six and graded a war
 describe("T930 L3 a warn line is stale when no advice fire of its rule is in its folder", () => {
   /** One folder's warn line: a whole tree, its own files only, or one file, which is never a folder. */
   type Kind = "tree" | "files" | "file";
+
   const globOf = (folder: string, kind: Kind) =>
-    kind === "tree" ? `next/${folder}/**` : kind === "files" ? `next/${folder}/*` : `next/${folder}/a.ts`;
+    Match.value(kind).pipe(
+      Match.when("tree", () => `next/${folder}/**`),
+      Match.when("files", () => `next/${folder}/*`),
+      Match.orElse(() => `next/${folder}/a.ts`),
+    );
 
   it("names exactly the lines with no fire of their rule, and each line that names a file", () => {
     const folders = fc.uniqueArray(fc.stringMatching(/^[a-z]{2,5}$/), { minLength: 1, maxLength: 4 });
@@ -122,7 +130,7 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
         folders.chain((names) =>
           fc.record({
             lines: fc.tuple(
-              ...names.map((folder) =>
+              ...Arr.map(names, (folder) =>
                 fc.record({
                   folder: fc.constant(folder),
                   kind: fc.constantFrom<Kind>("tree", "files", "file"),
@@ -142,32 +150,36 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
           }),
         ),
         ({ lines, fires }) => {
-          const warn: WarnLine[] = lines.map(({ folder, kind, rule }) => ({ rule, glob: globOf(folder, kind) }));
-          const advice: Fire[] = fires.map(({ folder, place, rule }) => ({
+          const warn: WarnLine[] = Arr.map(lines, ({ folder, kind, rule }) => ({ rule, glob: globOf(folder, kind) }));
+
+          const advice: Fire[] = Arr.map(fires, ({ folder, place, rule }) => ({
             code: rule,
             severity: "warning",
-            filename:
-              place === "direct"
-                ? `next/${folder}/b.ts`
-                : place === "deep"
-                  ? `next/${folder}/sub/b.ts`
-                  : `next/${folder}x/b.ts`,
+            filename: Match.value(place).pipe(
+              Match.when("direct", () => `next/${folder}/b.ts`),
+              Match.when("deep", () => `next/${folder}/sub/b.ts`),
+              Match.orElse(() => `next/${folder}x/b.ts`),
+            ),
           }));
-          const want = lines.flatMap(({ folder, kind, rule }, i) => {
+
+          const want = Arr.flatMap(lines, ({ folder, kind, rule }, i) => {
             const line = warn[i]!;
 
             if (kind === "file") {
               return [{ _tag: "file", line }];
             }
 
-            const held = fires.some(
+            const held = Arr.some(
+              fires,
               (f) =>
                 f.rule === rule &&
                 f.folder === folder &&
                 (f.place === "direct" || (f.place === "deep" && kind === "tree")),
             );
+
             return held ? [] : [{ _tag: "zero", line }];
           });
+
           expect(stale(warn, advice)).toEqual(want);
         },
       ),
@@ -193,9 +205,9 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
   // The real config loads the vendored anti-slop plugins from here (0563).
   symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
-  writeFileSync(join(at, ".oxlintrc.json"), typeof config === "string" ? config : JSON.stringify(config));
+  writeFileSync(join(at, ".oxlintrc.json"), Predicate.isString(config) ? config : JSON.stringify(config));
 
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(at, path)), { recursive: true });
     writeFileSync(join(at, path), text);
   }
@@ -208,7 +220,9 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
         encoding: "utf8",
         timeout: 60_000,
       });
+
       expect(ran.error).toBeUndefined();
+
       return { status: ran.status, out: ran.stdout + ran.stderr };
     },
     done: () => rmSync(at, { recursive: true, force: true }),
@@ -216,6 +230,7 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
 };
 
 const HINT = "decode with Effect Schema, not a bare JSON.parse";
+
 const parse = (level: string) => [level, { object: "JSON", property: "parse", message: HINT }];
 
 /**
@@ -247,7 +262,7 @@ const small = (dirty: readonly string[] = ["next/dirty"]) => ({
     },
     { files: ["next/**/*"], rules: { "eslint/no-restricted-properties": parse("error") } },
     ...FROZEN,
-    ...dirty.flatMap((folder) => [
+    ...Arr.flatMap(dirty, (folder) => [
       {
         files: [`${folder}/**`],
         rules: {
@@ -283,13 +298,109 @@ const PLANTS: Readonly<Record<(typeof FIVE)[number], { readonly file: string; re
 };
 
 const planted = (folder: string) =>
-  Object.fromEntries(Object.values(PLANTS).map(({ file, text }) => [`${folder}/${file}`, text]));
+  Rec.fromEntries(Arr.map(Rec.values(PLANTS), ({ file, text }) => [`${folder}/${file}`, text]));
+
+describe("T1087 fixes and ledger matching read the same source", () => {
+  const config = {
+    categories: { correctness: "off" },
+    jsPlugins: ["./oxlint-plugins/index.ts"],
+    ignorePatterns: ["oxlint-plugins/**", "node_modules/**"],
+    rules: { "fabrika/no-promises": "error", "fabrika/padding-line-between-statements": "error" },
+    overrides: [{ files: ["next/**", ".agents/**"], rules: { "fabrika/no-promises": "error" } }],
+  };
+
+  const known = "export const known = async () => 2;";
+  const fresh = "export const fresh = async () => 3;";
+  const before = `export function first() {\n  return 1;\n}\n${known}\n\n${fresh}\n`;
+  const after = before.replace(`}\n${known}`, `}\n\n${known}`);
+
+  const folders = [
+    { folder: ".agents", ledger: "agents-ledger.json" },
+    { folder: "next", ledger: "next-ledger.json" },
+  ];
+
+  const entries = (file: string) => [
+    { file, rule: "fabrika(no-promises)", code: known },
+    { file, rule: "fabrika(padding-line-between-statements)", code: known },
+    { file, rule: "fabrika(no-promises)", code: "export const fresh = async () => 1;" },
+    { file, rule: "fabrika(no-promises)", code: "export const deleted = async () => 0;" },
+  ];
+
+  const files = () =>
+    Object.fromEntries(
+      folders.flatMap(({ folder, ledger }) => [
+        [`${folder}/unit.ts`, before],
+        [ledger, `${JSON.stringify({ entries: entries(`${folder}/unit.ts`) })}\n`],
+      ]),
+    );
+
+  it.each(["--fix", "--fix-suggestions", "--fix-dangerously"])(
+    "scenario: %s keeps a moved unchanged finding, prunes fixed, changed and deleted entries, and blocks new code",
+    (flag) => {
+      const fixture = repo(config, files());
+      rmSync(join(fixture.at, "vendor"));
+
+      try {
+        const fixed = fixture.lint("--threads=1", flag);
+        expect(fixed.status, fixed.out).toBe(1);
+        expect(fixed.out).toContain("oxlint: 2 blocking, 0 advice");
+
+        for (const { folder, ledger } of folders) {
+          expect(readFileSync(join(fixture.at, folder, "unit.ts"), "utf8")).toBe(after);
+          expect(fixed.out).toContain(`${folder}/unit.ts:7:22 fabrika(no-promises)`);
+          expect(fixed.out).toContain(`${ledger}: pruned 3 fixed entries`);
+          expect(JSON.parse(readFileSync(join(fixture.at, ledger), "utf8"))).toEqual({
+            entries: [entries(`${folder}/unit.ts`)[0]],
+          });
+        }
+
+        const checked = fixture.lint("--threads=1");
+        expect(checked.status, checked.out).toBe(1);
+        expect(checked.out).toContain("oxlint: 2 blocking, 0 advice");
+        expect(checked.out).not.toContain("pruned");
+
+        for (const { folder } of folders) {
+          writeFileSync(join(fixture.at, folder, "unit.ts"), after.replace(`\n${fresh}\n`, "\n"));
+        }
+
+        const clean = fixture.lint("--threads=1");
+        expect(clean.status, clean.out).toBe(0);
+        expect(clean.out).toContain("oxlint: 0 blocking, 0 advice, 1 in agents-ledger.json, 1 in next-ledger.json");
+        expect(clean.out).not.toContain("pruned");
+      } finally {
+        fixture.done();
+      }
+    },
+  );
+
+  it("scenario: a scoped fix matches moved findings and leaves both ledgers byte-identical", () => {
+    const original = files();
+    const fixture = repo(config, original);
+    rmSync(join(fixture.at, "vendor"));
+
+    try {
+      const fixed = fixture.lint("--threads=1", "--fix", ".agents/unit.ts");
+      expect(fixed.status, fixed.out).toBe(1);
+      expect(fixed.out).toContain("oxlint: 1 blocking, 0 advice");
+      expect(fixed.out).toContain(".agents/unit.ts:7:22 fabrika(no-promises)");
+      expect(readFileSync(join(fixture.at, ".agents/unit.ts"), "utf8")).toBe(after);
+      expect(readFileSync(join(fixture.at, "next/unit.ts"), "utf8")).toBe(before);
+
+      for (const { ledger } of folders) {
+        expect(readFileSync(join(fixture.at, ledger), "utf8")).toBe(original[ledger]);
+      }
+    } finally {
+      fixture.done();
+    }
+  });
+});
 
 describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean folder and advises in a dirty one", () => {
   it.each(FIVE)(
     "scenario: %s blocks in next/clean, advises in next/dirty, and a warning of another rule still fails",
     (code) => {
       const { file } = PLANTS[code];
+
       const { lint, done } = repo(small(), {
         ...planted("next/clean"),
         ...planted("next/dirty"),
@@ -328,10 +439,10 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
     const { lint, done } = repo(small(), { ...planted("next/clean"), ...planted("next/dirty") });
 
     try {
-      const clean = lint(...Object.values(PLANTS).map(({ file }) => `next/clean/${file}`));
+      const clean = lint(...Arr.map(Rec.values(PLANTS), ({ file }) => `next/clean/${file}`));
       expect(clean.out).toContain(`oxlint: ${FIVE.length} blocking, 0 advice`);
       expect(clean.status, clean.out).toBe(1);
-      const dirty = lint(...Object.values(PLANTS).map(({ file }) => `next/dirty/${file}`));
+      const dirty = lint(...Arr.map(Rec.values(PLANTS), ({ file }) => `next/dirty/${file}`));
       expect(dirty.out).toContain(`oxlint: 0 blocking, ${FIVE.length} advice`);
       expect(dirty.status, dirty.out).toBe(0);
     } finally {
@@ -344,6 +455,7 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
   it("scenario: under the real config an Effect.promise blocks in a new folder and in fabrika-design, and advises under apps/", () => {
     const { text } = PLANTS["fabrika(no-effect-promise)"];
     const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
+
     const { lint, done } = repo(config, {
       "newfolder/unit.ts": text,
       "packages/fabrika-design/unit.ts": text,
@@ -378,15 +490,17 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
     const folders = jsdocsWarnFolders(repo(config, {}));
     // A new package: no config line names it, and libfabrika's module rule does not reach it.
     const clean = "next/packages/planted/src";
-    const { lint, done } = repo(
-      config,
-      Object.fromEntries(
-        [clean, ...folders].flatMap((folder) => [
+
+    const { lint, done } = repo(config, {
+      ...Rec.fromEntries(
+        Arr.flatMap([clean, ...folders], (folder) => [
           [`${folder}/Planted.ts`, text],
           [`${folder}/Planted.test.ts`, text],
         ]),
       ),
-    );
+      // The new package's manifest, so `fabrika/package-deps` (p65) finds the file in a package.
+      "next/packages/planted/package.json": JSON.stringify({ name: "@kampus/planted" }),
+    });
 
     try {
       const blocked = lint(`${clean}/Planted.ts`);
@@ -397,8 +511,8 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
       // Judged by its own lines: libfabrika's module rule also refuses a planted top file in `src/`,
       // and lint.ts fails on a fire only when it blocks, so a jsdocs line that advises cannot fail it.
       if (folders.length > 0) {
-        const warn = lint(...folders.map((folder) => `${folder}/Planted.ts`));
-        const lines = warn.out.split("\n").filter((line) => line.includes(" fabrika(jsdocs) "));
+        const warn = lint(...Arr.map(folders, (folder) => `${folder}/Planted.ts`));
+        const lines = Arr.filter(warn.out.split("\n"), (line) => line.includes(" fabrika(jsdocs) "));
         expect(lines, warn.out).toHaveLength(2 * folders.length);
 
         for (const line of lines) {
@@ -407,13 +521,13 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
 
         for (const folder of folders) {
           expect(
-            lines.filter((line) => line.startsWith(`${folder}/Planted.ts:`)),
+            Arr.filter(lines, (line) => line.startsWith(`${folder}/Planted.ts:`)),
             folder,
           ).toHaveLength(2);
         }
       }
 
-      const tests = lint(...[clean, ...folders].map((folder) => `${folder}/Planted.test.ts`));
+      const tests = lint(...Arr.map([clean, ...folders], (folder) => `${folder}/Planted.test.ts`));
       expect(tests.out).not.toContain("fabrika(jsdocs)");
     } finally {
       done();
@@ -433,19 +547,26 @@ const jsdocsWarnFolders = ({ at, done }: { readonly at: string; readonly done: (
       encoding: "utf8",
       timeout: 60_000,
     });
+
     expect(printed.status, printed.stderr).toBe(0);
+
     const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
       JSON.parse(printed.stdout);
-    return overrides
-      .filter(({ rules }) => {
+
+    return pipe(
+      overrides,
+      Arr.filter(({ rules }) => {
         const setting = rules["fabrika/jsdocs"];
-        return (Array.isArray(setting) ? setting[0] : setting) === "warn";
-      })
-      .flatMap(({ files }) => files)
-      .map((glob) => {
+
+        return (Arr.isArray(setting) ? setting[0] : setting) === "warn";
+      }),
+      Arr.flatMap(({ files }) => files),
+      Arr.map((glob) => {
         expect(glob, "a jsdocs warn line names one folder").toMatch(/^next\/packages\/[^/*]+\/src(\/[^/*]+)?\/\*\*?$/);
+
         return glob.replace(/\/\*\*?$/, "");
-      });
+      }),
+    );
   } finally {
     done();
   }
@@ -469,6 +590,7 @@ describe("T930 L4 the warn lines are read from oxlint's own --print-config", () 
         { files: ["next/docs/src/*"], rules: { "fabrika/jsdocs": ["warn", { since: "absent" }] } },
       ],
     };
+
     const { at, done } = repo(config, {});
 
     try {
@@ -477,6 +599,7 @@ describe("T930 L4 the warn lines are read from oxlint's own --print-config", () 
         encoding: "utf8",
         timeout: 60_000,
       });
+
       expect(printed.status, printed.stderr).toBe(0);
       expect(warnLines(JSON.parse(printed.stdout))).toEqual([
         { rule: "fabrika(law-shape)", glob: "next/dirty/**/*{.test.ts,Test.ts}" },
@@ -530,7 +653,7 @@ describe("T930 L10 the five stop saying they only advise", () => {
       symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
       const files = planted("next/packages/zero/src/clean");
 
-      for (const [path, text] of Object.entries(files)) {
+      for (const [path, text] of Rec.toEntries(files)) {
         mkdirSync(dirname(join(at, path)), { recursive: true });
         writeFileSync(join(at, path), text);
       }
@@ -542,10 +665,11 @@ describe("T930 L10 the five stop saying they only advise", () => {
           "--disable-nested-config",
           "--no-ignore",
           "--format=json",
-          ...Object.keys(files),
+          ...Rec.keys(files),
         ],
         { cwd: at, encoding: "utf8", timeout: 60_000, maxBuffer: 2 ** 28 },
       );
+
       const report: {
         readonly diagnostics: ReadonlyArray<{
           readonly code?: string;
@@ -554,8 +678,9 @@ describe("T930 L10 the five stop saying they only advise", () => {
           readonly severity: string;
         }>;
       } = JSON.parse(ran.stdout);
-      const fires = report.diagnostics.filter((d) => FIVE.some((code) => code === d.code));
-      expect([...new Set(fires.map((d) => d.code))].sort()).toEqual([...FIVE].sort());
+
+      const fires = Arr.filter(report.diagnostics, (d) => Arr.some(FIVE, (code) => code === d.code));
+      expect([...new Set(Arr.map(fires, (d) => d.code))].sort()).toEqual([...FIVE].sort());
 
       for (const d of fires) {
         expect(`${d.message} ${d.help ?? ""}`, d.code).not.toMatch(/advice|does not block/i);
@@ -582,12 +707,13 @@ const BAN = [
 const banned = (dirty: readonly string[] = ["next/dirty"]) => {
   const base = small(dirty);
   const ban = (level: string) => [...parse(level), ...BAN];
+
   return {
     ...base,
     overrides: [
       ...base.overrides,
       { files: ["next/clean/**"], rules: { "eslint/no-restricted-properties": ban("error") } },
-      { files: dirty.map((folder) => `${folder}/**`), rules: { "eslint/no-restricted-properties": ban("warn") } },
+      { files: Arr.map(dirty, (folder) => `${folder}/**`), rules: { "eslint/no-restricted-properties": ban("warn") } },
     ],
   };
 };
@@ -640,9 +766,10 @@ describe("Reflect ban L3 a Reflect fire does not keep a JSON.parse warn line ali
   // five plants kept, so only the JSON.parse warn line can go stale.
   // Plant: count every warning of the rule as holding the line, and the stale line is not named.
   it("scenario: a whole run names the rule's warn line stale once only Reflect fires are left, and not while JSON.parse is", () => {
-    const others = Object.fromEntries(
-      Object.entries(planted("next/dirty")).filter(([path]) => !path.endsWith("/parse.ts")),
+    const others = Rec.fromEntries(
+      Arr.filter(Rec.toEntries(planted("next/dirty")), ([path]) => !path.endsWith("/parse.ts")),
     );
+
     const stuck = repo(banned(), { ...others, "next/dirty/reflect.ts": REFLECTS });
     const held = repo(banned(), { ...planted("next/dirty"), "next/dirty/reflect.ts": REFLECTS });
     const line = "eslint(no-restricted-properties) has no fire left in next/dirty/**";
@@ -663,25 +790,97 @@ describe("Reflect ban L3 a Reflect fire does not keep a JSON.parse warn line ali
   }, 120_000);
 });
 
-/** A file inside one folder glob of the config: `next/a/**` and `next/a/*` give `next/a/planted.ts`. */
-const inside = (glob: string): string => `${glob.replace(/(\/\*\*)?\/\*\*?$/, "")}/planted.ts`;
+/**
+ * One sample for every file: one fire of each member the rule restricts, so a file's severities say
+ * what the rule ends with there. It is plain enough to parse as TypeScript, TSX and JavaScript, so it
+ * can be written at the path of any code file.
+ */
+const SAMPLE = [
+  "const Effect = {};",
+  "const Stream = {};",
+  'export const parse = JSON.parse("1");',
+  'export const get = Reflect.get({}, "a");',
+  'export const set = Reflect.set({}, "a", 1);',
+  'export const has = Reflect.has({}, "a");',
+  "export const hidden = globalThis.Reflect;",
+  "export const retries = [Effect.retry, Stream.retry];",
+  "",
+].join("\n");
 
-/** One option of the rule, named as oxlint names its fire: `JSON.parse`, or `setBounds` alone. */
-const nameOf = (entry: unknown): string => {
-  if (typeof entry !== "object" || entry === null) {
-    return "";
+/** What the rule ends with in a file, by member: oxlint's own severity of that member's fire there. */
+type Ending = Readonly<Record<string, "error" | "warning">>;
+
+/** The member a fire names, from oxlint's `'JSON.parse' is restricted from being used.` */
+const memberOf = (message: string): string => /^'([^']*)'/.exec(message)?.[1] ?? "";
+
+interface Report {
+  readonly diagnostics: ReadonlyArray<{ code?: string; message: string; severity: string; filename: string }>;
+}
+
+/** What oxlint reports for no-restricted-properties, by member, for each file it read. */
+const endings = ({ diagnostics }: Report) => {
+  const found = new Map<string, Record<string, "error" | "warning">>();
+
+  for (const { code, message, severity, filename } of diagnostics) {
+    if (code === "eslint(no-restricted-properties)" && (severity === "error" || severity === "warning")) {
+      found.set(filename, { ...found.get(filename), [memberOf(message)]: severity });
+    }
   }
 
-  const object = "object" in entry && typeof entry.object === "string" ? `${entry.object}.` : "";
-  const property = "property" in entry && typeof entry.property === "string" ? entry.property : "";
-  return `${object}${property}`;
+  return found;
 };
 
-describe("Reflect ban L4 each ban block under next/ keeps what the rule held there before", () => {
-  // pinned: the real config, read from oxlint 1.90.0's own --print-config, since the law is about
-  // this one file. A level prints as "deny" or "warn", and a setting as [level, [options]].
-  // Plant: drop JSON.parse from the second ban block, and that block no longer keeps it.
-  it("pinned: every ban block under next/ keeps the JSON.parse entry at its folder's old level, and client/ keeps both retry entries", () => {
+/**
+ * The folder that has to hold a JSON.parse fire for a file in `dir` to advise. The warn block's globs
+ * are written for the direct files of a root (`src` or `e2e` of a package, with `/*`), and for a
+ * folder one level under a root with `**`. So a root counts only its own direct files' fires
+ * (`directOnly`), and each folder one level under a root is its own top: a glob that reaches a folder
+ * where JSON.parse blocks today has no fire to show, and the law is red. The same holds for the folders
+ * above the first level (`next`, a package), which hold no fire. A folder below a first-level folder is
+ * not its own top: it advises with that folder, which is at warn from the fold when the block lists the
+ * first-level folder whole.
+ */
+const topOf = (dir: string): string =>
+  /^next\/(?:apps|packages|programs)\/[^/]+\/(?:(?:src|e2e)\/)?[^/]+/.exec(dir)?.[0] ?? dir;
+
+/** A top that counts only its direct files: a root (`src`, `e2e`), or a folder above the first level. */
+const directOnly = (top: string): boolean =>
+  /\/(?:src|e2e)$/.test(top) || !/^next\/(?:apps|packages|programs)\/[^/]+\/[^/]+/.test(top);
+
+describe("Reflect ban L4 each tracked code file of next/ ends with the setting the rule held there before", () => {
+  // pinned: the real config and the real tree, since the law is about these files. oxlint 1.90.0's
+  // --print-config lists blocks and not what a file ends with, and the last block that matches a file
+  // wins, so this law does not model oxlint's matching. It copies the repo into a temp one, writes the
+  // sample (one fire each of JSON.parse, the four Reflect forms, Effect.retry and Stream.retry) at the
+  // own path and name of every tracked code file of next/ plus one new folder, lints them with the real
+  // config, and reads the severity oxlint gives each fire in each file. A glob for a folder, for a
+  // package, or for one kind of file (`*.test.ts`) meets the sample the way it meets the real file.
+  // It also writes one sample in the stem folder of each folder glob of the rule's blocks, so a glob for
+  // a folder with no tracked code file is met too.
+  // Held: every file ends with JSON.parse and the four at one level; a file in a new folder and every
+  // file of client/ end at error, and client/'s with both retry entries; and a file that ends at warn
+  // sits in a folder that holds a real JSON.parse fire, counted at the grain the warn glob is written
+  // for (topOf, directOnly), so a glob cannot reach a folder that blocks today and keep the stale
+  // warn-line law (T930 L3, per glob) quiet. No list of folders is pinned (0524).
+  // The limit, stated as it is: a sample of the real tree. A glob for a kind of file that no tracked
+  // file has could still pass, and a folder at warn is judged by a fire in any of its files.
+  // A glob that only client/ meets cannot fail it: client/'s block comes last, so those files end
+  // at error whatever the warn block says, which is the point of the order.
+  // Plants, each in a scratch copy of .oxlintrc.json: add "next/packages/libfabrika/**",
+  // "next/apps/fabrika/e2e/**", "next/packages/libfabrika/src/access/inner/**" or
+  // "next/packages/libfabrika/src/**/*.test.ts" to the JSON.parse warn block's files; move client/'s block back before the warn block; drop a retry entry from client/'s
+  // block; set client/'s block to "warn"; drop the four entries from the block for next/ whole.
+  it("pinned: every tracked code file of next/ ends with JSON.parse and the ban at one level, a new folder and client/ at error with both retry entries, and a file that advises sits in a folder with a JSON.parse fire", () => {
+    const git = spawnSync("git", ["ls-files", "next"], { cwd: ROOT, encoding: "utf8", maxBuffer: 2 ** 28 });
+    expect(git.status, git.stderr).toBe(0);
+    const tracked = Arr.filter(git.stdout.split("\n"), (file) => /\.(?:ts|tsx|js|mjs)$/.test(file));
+
+    // Coverage: the file kinds and the places the globs of the config are written for.
+    expect(Arr.some(tracked, (file) => file.endsWith(".test.ts"))).toBe(true);
+    expect(Arr.some(tracked, (file) => file.endsWith(".tsx"))).toBe(true);
+    expect(Arr.some(tracked, (file) => file.endsWith(".d.ts"))).toBe(true);
+    expect(Arr.some(tracked, (file) => file.startsWith("next/packages/libfabrika/src/client/"))).toBe(true);
+
     const { at, done } = repo(readFileSync(join(ROOT, ".oxlintrc.json"), "utf8"), {});
 
     try {
@@ -691,40 +890,91 @@ describe("Reflect ban L4 each ban block under next/ keeps what the rule held the
         maxBuffer: 2 ** 28,
         timeout: 60_000,
       });
+
       expect(printed.status, printed.stderr).toBe(0);
+
       const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
         JSON.parse(printed.stdout);
-      const settings = overrides.flatMap(({ files, rules }) => {
-        const setting = rules["no-restricted-properties"];
-        return Array.isArray(setting) && Array.isArray(setting[1])
-          ? [{ files, level: setting[0], names: setting[1].map(nameOf) }]
-          : [];
-      });
-      // The folders where JSON.parse advised before the ban: the warn override with no Reflect entry.
-      const advised = settings
-        .filter(({ level, names }) => level === "warn" && !names.includes("Reflect.get"))
-        .flatMap(({ files }) => files);
-      const blocks = settings.filter(
-        ({ files, names }) => names.includes("Reflect.get") && files.some((glob) => glob.startsWith("next/")),
+
+      // Beside the tracked files, one sample in the stem folder of each folder glob a block of the rule
+      // writes, so a glob for a folder with no tracked code file yet is met too. This only adds sample
+      // points: what each file ends with is still read from oxlint.
+      const stems = pipe(
+        overrides,
+        Arr.filter(({ rules }) => Arr.isArray(rules["no-restricted-properties"])),
+        Arr.flatMap(({ files }) => files),
+        Arr.filter((glob) => glob.startsWith("next/")),
+        Arr.map((glob) => glob.replace(/(?:\/\*\*?)+$/, "")),
+        Arr.filter((stem) => !stem.includes("*")),
+        Arr.map((stem) => `${stem}/zz-sample.ts`),
       );
-      // Coverage: a block where JSON.parse blocks and one where it still advises.
-      expect(new Set(blocks.map(({ level }) => level))).toEqual(new Set(["deny", "warn"]));
 
-      for (const { files, level, names } of blocks) {
-        expect(names, files.join(" ")).toContain("JSON.parse");
+      const planted = Arr.dedupe([...tracked, ...stems, "next/zz-new-folder/zz-sample.ts"]);
 
-        for (const glob of files) {
-          expect(glob, "a ban block under next/ names next/ folders only").toMatch(/^next\//);
-          const was = advised.some((warn) => matchesGlob(inside(glob), warn)) ? "warn" : "deny";
-          expect(level, glob).toBe(was);
+      for (const file of planted) {
+        mkdirSync(dirname(join(at, file)), { recursive: true });
+        writeFileSync(join(at, file), SAMPLE);
+      }
 
-          if (glob.startsWith("next/packages/libfabrika/src/client/")) {
-            expect(names, glob).toEqual(expect.arrayContaining(["Effect.retry", "Stream.retry"]));
-          }
+      const ran = spawnSync(
+        OXLINT,
+        [`--config=${join(at, ".oxlintrc.json")}`, "--disable-nested-config", "--no-ignore", "--format=json", "next"],
+        { cwd: at, encoding: "utf8", maxBuffer: 2 ** 28, timeout: 150_000 },
+      );
+
+      const ended = endings(JSON.parse(ran.stdout));
+      const advising = Arr.filter(planted, (file) => ended.get(file)?.["JSON.parse"] === "warning");
+
+      // Coverage: every planted file was read, and some end at warn and some at error.
+      expect(Arr.filter(planted, (file) => ended.get(file) === undefined)).toEqual([]);
+      expect(advising.length).toBeGreaterThan(0);
+      expect(planted.length - advising.length).toBeGreaterThan(0);
+
+      for (const file of planted) {
+        const ending: Ending = ended.get(file) ?? {};
+        const level = ending["JSON.parse"];
+
+        expect(level, `${file} ends with JSON.parse restricted`).toBeDefined();
+
+        for (const name of ["Reflect.get", "Reflect.set", "Reflect.has", "globalThis.Reflect"]) {
+          expect(ending[name], `${file} ends with ${name} restricted at JSON.parse's level`).toBe(level);
         }
+
+        if (file === "next/zz-new-folder/zz-sample.ts" || file.startsWith("next/packages/libfabrika/src/client/")) {
+          expect(level, `${file} starts at zero and blocks`).toBe("error");
+        }
+
+        if (file.startsWith("next/packages/libfabrika/src/client/")) {
+          expect(ending["Effect.retry"], `${file} keeps Effect.retry`).toBe("error");
+          expect(ending["Stream.retry"], `${file} keeps Stream.retry`).toBe("error");
+        }
+      }
+
+      // The tree's own fires: the real files a warn file's top holds, linted with the real config.
+      const tops = Arr.dedupe(Arr.map(advising, (file) => topOf(dirname(file))));
+      const inside = (dir: string, top: string) => dir === top || (!directOnly(top) && dir.startsWith(`${top}/`));
+      const files = Arr.filter(tracked, (file) => Arr.some(tops, (top) => inside(dirname(file), top)));
+
+      const real = spawnSync(
+        OXLINT,
+        [`--config=${join(ROOT, ".oxlintrc.json")}`, "--disable-nested-config", "--format=json", ...files],
+        { cwd: ROOT, encoding: "utf8", maxBuffer: 2 ** 28, timeout: 100_000 },
+      );
+
+      const fires = pipe(
+        Arr.fromIterable(endings(JSON.parse(real.stdout))),
+        Arr.filter(([, ending]) => ending["JSON.parse"] === "warning"),
+        Arr.map(([file]) => dirname(file)),
+      );
+
+      for (const top of tops) {
+        expect(
+          Arr.some(fires, (fire) => inside(fire, top)),
+          `${top} advises for JSON.parse and has no JSON.parse fire left, so it blocks at zero`,
+        ).toBe(true);
       }
     } finally {
       done();
     }
-  }, 120_000);
+  }, 180_000);
 });

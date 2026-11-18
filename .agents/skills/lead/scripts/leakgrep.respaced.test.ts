@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 // the ends are trimmed and one last ; or , is dropped. Every diff here is one git itself wrote,
 // with the flags the bot's push reads its diff with, unless a law says it is written by hand.
 const script = process.env.TEST_LEAKGREP ?? join(import.meta.dirname, "leakgrep.sh");
+
 const options = { seed: 500, numRuns: 8 };
 
 // A made-up private word, and one made-up line of each kind the check knows.
@@ -33,14 +34,18 @@ const lab = <A>(
     const words = join(dir, "words");
     mkdirSync(repo);
     writeFileSync(words, `${word}\n`);
+
     const git = (...args: string[]) => {
       const ran = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], {
         cwd: repo,
         encoding: "utf8",
       });
+
       expect(ran.status, ran.stderr).toBe(0);
+
       return ran.stdout;
     };
+
     git("init", "-q");
 
     const write = (files: Files) => {
@@ -62,6 +67,7 @@ const lab = <A>(
         write(before);
         git("commit", "-q", "--allow-empty", "-m", "before");
         write(after);
+
         return git("diff", "--cached", "--no-ext-diff", "--no-textconv", "--unified=0", ...flags, "HEAD");
       },
       // How many hits the check printed. It never prints the text it matched.
@@ -72,6 +78,7 @@ const lab = <A>(
           encoding: "utf8",
           env: { ...process.env, FABRIKA_LEAK_WORDS: list, TYPESAFE_API_KEY: undefined },
         });
+
         const count = ran.stderr.split("\n").filter((line) => line.startsWith("leakgrep: leak ")).length;
         expect(ran.status, ran.stderr).toBe(count === 0 ? 0 : 1);
         expect(ran.stdout.trim()).toBe(count === 0 ? "leakgrep: added text clean" : "");
@@ -90,17 +97,22 @@ const lab = <A>(
 
 // A line is words with one space between them, most often with a flagged word among them.
 const plain = fc.stringMatching(/^[a-z]{1,8}$/);
+
 const words = fc.array(fc.oneof(plain, fc.constantFrom(...leaks)), { minLength: 1, maxLength: 5 });
+
 const end = fc.constantFrom("", ";", ",");
+
 const line = fc.tuple(words, end).map(([tokens, last]) => tokens.join(" ") + last);
 
 // The same words with other spacing: every gap, both ends, and the one last ; or ,.
 const gap = fc.constantFrom(" ", "  ", "\t", " \t ");
+
 const edge = fc.constantFrom("", " ", "\t", "    ");
 
 const respaced = (text: string) =>
   fc.tuple(fc.array(gap, { minLength: 5, maxLength: 5 }), edge, edge, end).map(([gaps, lead, tail, last]) => {
     const tokens = text.replace(/[;,]$/, "").split(" ");
+
     return lead + tokens.map((token, n) => (n === 0 ? "" : gaps[n]) + token).join("") + last + tail;
   });
 
@@ -135,6 +147,8 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
         ([before, after], at, position, leak, joint) => {
           lab(({ diff, hits }) => {
             const n = at % before.length;
+            // SAFETY: `after` is `before` respaced line by line (`file` above), so
+            // it is as long as `before` and `after[n]` is a string.
             const tokens = (after[n] as string).trim().split(/[ \t]+/);
             const spot = position % (tokens.length + 1);
             // The new word may bring a ; or , of its own.
@@ -291,10 +305,12 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
       const binary = diff({ "a.bin": [bytes] }, { "a.bin": [bytes + bytes] });
       expect(binary).toContain("Binary files");
       expect(hits(binary)).toBe(0);
+
       const beside = diff(
         { "a.bin": [bytes], "a.txt": ["keep"] },
         { "a.bin": [bytes + bytes], "a.txt": ["keep", now] },
       );
+
       expect(hits(beside)).toBe(1);
     });
   });

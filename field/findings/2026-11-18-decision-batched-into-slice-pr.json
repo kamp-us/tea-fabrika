@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-decision-batched-into-slice-pr",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": ".decisions/0609-agents-md-follows-memory-guide.md",
+    "line": 2
+  },
+  "says": "The lead's decision that replaces 0129 and 0608 was committed inside slice 6's pull request instead of landing at once in its own docs pull request, so it waited on the slice's review while another session took the same number on main.",
+  "proof": ".agents/skills/lead/SKILL.md:701 '**One decision, one PR.** Never batch decisions, and never wait for a code PR'; `node .agents/skills/lead/scripts/records.ts resolve 0609` prints .decisions/0609-laws-wait-on-events-never-on-a-fixed-time-bound.md (PR 1635, merged 2026-11-18 19:17 UTC) while this branch holds .decisions/0609-agents-md-follows-memory-guide.md",
+  "cost": "a decision that is not on main is invisible to records.ts and to every other session, and a number picked before it lands can collide, as it did here",
+  "head": "1b75294dc0b6c45faa227dcd92fc0dd34e34d1c7",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1633"
+}

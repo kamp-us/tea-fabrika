@@ -7,11 +7,12 @@
 import { run } from "@demlik/tea/effect";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
+import type * as Types from "effect/Types";
 import * as Id from "../Id.ts";
+import { isJsonObject } from "../runtime/Patch.ts";
 import { ClientKey } from "../transport/ClientKey.ts";
 import { ErrorClass } from "../transport/ClientRows.ts";
 import { helloText } from "../transport/Hello.ts";
@@ -45,12 +46,12 @@ const Failure = Schema.TaggedUnion({
 const F = Failure.cases;
 
 /** The socket's Msgs the hands machine reads: a failure to open shows as its close. */
-const forHands = (m: DialMsg): m is Exclude<DialMsg, { readonly type: "socket_failure" }> =>
-  m.type !== "socket_failure";
+const forHands = (m: DialMsg): m is Exclude<DialMsg, Types.ExtractTag<DialMsg, "socket_failure">> =>
+  m._tag !== "socket_failure";
 
 /** A call that says what the client has `seen` also says when it was sent, on the client's own clock. */
-const stamped = (params: unknown, sentAt: string): unknown =>
-  Predicate.isObject(params) && "seen" in params ? { ...params, sentAt } : params;
+const stamped = (params: Schema.Json, sentAt: string): Schema.Json =>
+  isJsonObject(params) && "seen" in params ? { ...params, sentAt } : params;
 
 /**
  * Boots a hands client and runs every Cmd to hand-off; the door's answers arrive as Msgs.
@@ -75,8 +76,10 @@ export const start = Effect.fn("HandsStart.start")(function* (options: StartOpti
   const sentAt = DateTime.now.pipe(Effect.map(DateTime.formatIso));
   const handles = new Map<number, Handle>();
   const dial = dialer({ sockets, origin: options.origin, tab, handles });
+
   const frame = <E>(n: number, body: object, failure: E) =>
     send(handles, n, JSON.stringify({ jsonrpc: "2.0", ...body })).pipe(Effect.mapError(() => failure));
+
   // tea takes a Cmd's failure as a plain record named by its `_tag`: the journal's error, field for field.
   const plain = (error: JournalError) => ({ ...error });
 
@@ -85,10 +88,12 @@ export const start = Effect.fn("HandsStart.start")(function* (options: StartOpti
       write: Effect.fn("Hands.write")(function* (cmd) {
         const params = stamped(cmd.params, yield* sentAt);
         yield* frame(cmd.dial, { id: cmd.id, method: cmd.method, params }, F.unreachable.make({}));
+
         return null;
       }),
       ping: Effect.fn("Hands.ping")(function* (cmd) {
         yield* send(handles, cmd.dial, "ping").pipe(Effect.mapError(() => F.closed.make({})));
+
         return null;
       }),
       hello: Effect.fn("Hands.hello")(function* (cmd) {
@@ -98,6 +103,7 @@ export const start = Effect.fn("HandsStart.start")(function* (options: StartOpti
           line: key.line,
           sign: key.sign,
         }).pipe(Effect.mapError((error) => F.key.make({ error: error.error })));
+
         const params = {
           versions: [1],
           has: commands.has,
@@ -111,12 +117,15 @@ export const start = Effect.fn("HandsStart.start")(function* (options: StartOpti
           sentAt: yield* sentAt,
           signed,
         };
+
         yield* frame(cmd.dial, { id: cmd.id, method: "initialize", params }, F.closed.make({}));
+
         return null;
       }),
       knock: Effect.fn("Hands.knock")(function* (cmd) {
         const params = { label: options.label, as: "hands" };
         yield* frame(cmd.dial, { id: cmd.id, method: "gateway.knock", params }, F.closed.make({}));
+
         return null;
       }),
       journal_read: Effect.fn("Journal.read")(function* (cmd) {
@@ -124,6 +133,7 @@ export const start = Effect.fn("HandsStart.start")(function* (options: StartOpti
       }),
       journal_write: Effect.fn("Journal.write")(function* (cmd) {
         yield* journal.write(cmd.task, cmd.entry).pipe(Effect.mapError(plain));
+
         return null;
       }),
       execute: Effect.fn("Commands.execute")(function* (cmd) {

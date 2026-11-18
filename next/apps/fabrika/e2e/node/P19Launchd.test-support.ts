@@ -1,6 +1,8 @@
 import { createRequire } from "node:module"; // edge: Electron exports its executable through Node's require resolution
-// P19 next/. Host-only. The guard is a separate process, so worker SIGKILL cannot skip cleanup.
+// P19 next/. Host-only. The guard is a separate process, so worker SIGKILL cannot skip cleanup; its
+// own entry is P19Guard.test-support.ts, so the guard's bundle carries no compiler.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as Snapshot from "@kalfa/config/Snapshot";
 import { BrainControl } from "@kampus/libfabrika/desktop/BrainControl";
 import {
   BrainProbe,
@@ -14,217 +16,52 @@ import { BrainService } from "@kampus/libfabrika/desktop/BrainService";
 import { BrainSpec } from "@kampus/libfabrika/desktop/BrainSpec";
 import * as Native from "@kampus/libfabrika/node/launchd/BrainControlLaunchd";
 import * as ServiceLaunchd from "@kampus/libfabrika/node/launchd/BrainServiceLaunchd";
-import * as LaunchdStatus from "@kampus/libfabrika/node/launchd/LaunchdStatus";
 import * as ProcessGroups from "@kampus/libfabrika/node/launchd/ProcessGroups.test-support";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
-import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
-import * as Sources from "@kampus/libfabrika/settings/Sources";
+import * as Sources from "@kampus/libfabrika/settings/Fabrika";
 import { Written } from "@kampus/libfabrika/telemetry/Records";
 import {
+  Array as Arr,
   Clock,
+  Config as Env,
   Context,
   Effect,
-  Exit,
   FileSystem,
+  Formatter,
   Layer,
   Path,
   Redacted,
-  Result,
   Schedule,
   Schema,
-  Stream,
+  String as Str,
 } from "effect";
 import { Digest } from "effect/crypto";
-import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
+
 import { rolldown, type PreRenderedChunk } from "rolldown";
 import { build } from "../../src/build.ts";
 import { BrainInput } from "./P19Brain.test-support.ts";
-
-class HostError extends Schema.TaggedError<HostError>()("HostError", {
-  reason: Schema.String,
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+import {
+  alive,
+  checked,
+  command,
+  Config,
+  HostError,
+  listening,
+  processes,
+  ready as guardReady,
+  status,
+  wait,
+} from "./P19Guard.test-support.ts";
 
 const fail = (cause: unknown) => HostError.make({ reason: "host-check", cause: Redacted.make(cause) });
-const checked = (ok: boolean, reason: string) => (ok ? Effect.void : Effect.fail(HostError.make({ reason })));
-
-const command = Effect.fn("P19Host.command")(function* (executable: string, args: ReadonlyArray<string>) {
-  return yield* Effect.scoped(
-    Effect.gen(function* () {
-      const handle = yield* ChildProcess.make(executable, args, { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
-      const [code, stdout, stderr] = yield* Effect.all(
-        [
-          handle.exitCode,
-          Stream.mkString(Stream.decodeText(handle.stdout)),
-          Stream.mkString(Stream.decodeText(handle.stderr)),
-        ],
-        { concurrency: "unbounded" },
-      );
-      return { code: Number(code), stdout, stderr };
-    }),
-  );
-});
-
-const wait = Effect.fn("P19Host.wait")(function* <E, R>(condition: Effect.Effect<boolean, E, R>, duration: number) {
-  yield* condition.pipe(
-    Effect.repeat({ schedule: Schedule.spaced("100 millis"), until: (value) => value }),
-    Effect.timeout(`${duration} millis`),
-  );
-});
-
-const alive = (pid: number) =>
-  Effect.sync(() => {
-    // Effect has no non-owning probe for an OS process or process group.
-    const result = Result.try(() => process.kill(pid, 0));
-    return (
-      Result.isSuccess(result) ||
-      !(result.failure instanceof Error && "code" in result.failure && result.failure.code === "ESRCH")
-    );
-  });
-
-const processes = Effect.fn("P19Host.processes")(function* () {
-  const out = yield* command("ps", ["-axo", "pid=,ppid=,pgid="]);
-  yield* checked(out.code === 0, "cannot-observe-processes");
-  return yield* Schema.decodeUnknownEffect(Schema.Array(ProcessGroups.Row))(
-    out.stdout
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [pid, parent, group] = line.trim().split(/\s+/).map(Number);
-        return { pid, parent, group };
-      }),
-  );
-});
-
-/**
- * The one place a group is signaled. The group is decoded again here: a 0 or a 1 fails the test
- * and never reaches `kill`, where -1 means every process this user owns.
- */
-const signal = Effect.fn("P19Host.signal")(function* (name: "TERM" | "KILL", group: number) {
-  const owned = yield* Schema.decodeUnknownEffect(ProcessGroups.Owned)(group).pipe(
-    Effect.mapError((cause) => HostError.make({ reason: "refused-group", cause: Redacted.make(cause) })),
-  );
-  yield* command("kill", [`-${name}`, `-${owned}`]);
-});
-
-const Config = Schema.Struct({
-  home: Schema.String,
-  // One service, `gui/<uid>/<label>`. A bare domain would let `launchctl bootout` end the whole login.
-  target: Schema.String.check(Schema.isPattern(/^gui\/[1-9][0-9]*\/[A-Za-z0-9][A-Za-z0-9._-]+$/u)),
-  url: Schema.String,
-  owner: Schema.Int,
-  stopTimeout: Schema.Int,
-  poll: Schema.Int,
-});
-type Config = typeof Config.Type;
-
-const status = Effect.fn("P19Host.status")(function* (target: string) {
-  const out = yield* command("launchctl", ["print", target]);
-  return yield* LaunchdStatus.decode({
-    target,
-    code: out.code,
-    stdout: Redacted.make(out.stdout),
-    stderr: Redacted.make(out.stderr),
-  });
-});
-
-const listening = (url: string) =>
-  HttpClient.get(url).pipe(
-    Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
-    Effect.provide(FetchHttpClient.layer),
-  );
-
-/** Registered before bootstrap. The parent waits for this process's ready file first. */
-const guard = Effect.fn("P19Host.guard")(function* (file: string) {
-  const fs = yield* FileSystem.FileSystem,
-    path = yield* Path.Path;
-  const config = yield* fs
-    .readFileString(file)
-    .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Config))));
-  const groups = new Set<number>();
-  const acquireGroups = Effect.gen(function* () {
-    const loaded = yield* status(config.target);
-
-    if (loaded._tag === "loaded" && loaded.pid !== null) {
-      const rows = yield* processes();
-
-      for (const group of ProcessGroups.descendants(rows, loaded.pid)) {
-        groups.add(group);
-      }
-
-      yield* fs.writeFileString(`${config.home}/groups.json`, JSON.stringify([...groups]));
-    }
-  });
-  const cleanup = Effect.gen(function* () {
-    // An exact service target, then only groups observed as that service's descendants.
-    yield* command("launchctl", ["bootout", config.target]);
-    yield* wait(status(config.target).pipe(Effect.map((value) => value._tag === "absent")), config.stopTimeout);
-
-    for (const group of groups) {
-      if (yield* alive(-group)) {
-        yield* signal("TERM", group);
-      }
-    }
-
-    const gone = Effect.gen(function* () {
-      for (const group of groups) {
-        if (yield* alive(-group)) {
-          return false;
-        }
-      }
-
-      return !(yield* listening(config.url));
-    });
-    yield* wait(gone, config.stopTimeout).pipe(
-      Effect.catch(() =>
-        Effect.gen(function* () {
-          for (const group of groups) {
-            if (yield* alive(-group)) {
-              yield* signal("KILL", group);
-            }
-          }
-        }),
-      ),
-    );
-    yield* wait(gone, config.stopTimeout);
-    yield* fs.remove(`${config.home}/brain.plist`, { force: true });
-    yield* fs.writeFileString(`${config.home}/guard.result`, JSON.stringify({ leftovers: [] }));
-  });
-  yield* Effect.acquireRelease(Effect.void, () =>
-    cleanup.pipe(
-      Effect.onExit((exit) =>
-        Effect.gen(function* () {
-          const result = JSON.stringify({ leftovers: Exit.isSuccess(exit) ? [] : ["cleanup-unconfirmed"] });
-          yield* fs.writeFileString(`${config.home}/guard.result`, result);
-
-          if (!(yield* alive(config.owner))) {
-            const archive = path.resolve("runs/p19", `guard-${config.owner}.json`);
-            yield* fs.makeDirectory(path.dirname(archive), { recursive: true });
-            yield* fs.writeFileString(archive, result);
-
-            if (Exit.isSuccess(exit)) {
-              yield* fs.remove(config.home, { recursive: true });
-            }
-          }
-        }),
-      ),
-      Effect.orDie,
-    ),
-  );
-  yield* fs.writeFileString(`${config.home}/guard.ready`, "ready");
-  yield* Effect.gen(function* () {
-    yield* acquireGroups;
-    return !(yield* alive(config.owner)) || (yield* fs.exists(`${config.home}/guard.stop`));
-  }).pipe(Effect.repeat({ schedule: Schedule.spaced(`${config.poll} millis`), until: (done) => done }));
-});
 
 export const bundle = Effect.fn("P19Host.bundle")(function* (source: string, output: string, root: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const dependencies = new Map<string, string>();
+
   const compilation = yield* Effect.acquireRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown opens a build through a Promise
     Effect.tryPromise({
@@ -234,9 +71,11 @@ export const bundle = Effect.fn("P19Host.bundle")(function* (source: string, out
           cwd: root,
           platform: "node",
           external: [/^node:/],
-          // The app's package.json says "sideEffects": false, which drops this helper's guard and controller mains
-          // and the brain file's main.
-          treeshake: { moduleSideEffects: [{ test: /P19(?:Launchd|Brain)\.test-support\.ts$/, sideEffects: true }] },
+          // The app's package.json says "sideEffects": false, which drops the guard's, the controller's and the
+          // brain file's mains.
+          treeshake: {
+            moduleSideEffects: [{ test: /P19(?:Launchd|Brain|Guard)\.test-support\.ts$/, sideEffects: true }],
+          },
           plugins: [
             {
               name: "p19-entry",
@@ -249,6 +88,7 @@ export const bundle = Effect.fn("P19Host.bundle")(function* (source: string, out
                   importer !== undefined && path.isAbsolute(importer)
                     ? importer
                     : path.join(root, "next/apps/fabrika/package.json");
+
                 const outside = (resolved: string) => {
                   if (!dependencies.has(resolved)) {
                     dependencies.set(
@@ -321,13 +161,17 @@ export const bundle = Effect.fn("P19Host.bundle")(function* (source: string, out
 /** A child controller releases only its own handles. It must leave the launchd brain running. */
 const controller = Effect.fn("P19Host.controller")(function* (specFile: string, snapshotFile: string) {
   const fs = yield* FileSystem.FileSystem;
+
   const spec = yield* fs
     .readFileString(specFile)
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(BrainSpec))));
+
   const settings = yield* fs
     .readFileString(snapshotFile)
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Snapshot.Snapshot))));
+
   const native = Context.get(yield* Layer.build(Native.layer(spec, settings)), BrainControl);
+
   const probe = Layer.succeed(BrainProbe, {
     ready: Effect.gen(function* () {
       if (!(yield* fs.exists(`${spec.home}/ready.json`))) {
@@ -335,10 +179,13 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
       }
 
       const Ready = Schema.Struct({ pid: Schema.Int, build: Schema.String });
+
       const ready = yield* fs
         .readFileString(`${spec.home}/ready.json`)
         .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Ready))));
+
       const current = yield* native.inspect;
+
       return ready.build === spec.build &&
         current._tag === "loaded" &&
         ready.pid === current.pid &&
@@ -370,6 +217,7 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
       ),
     ),
   });
+
   const context = yield* Layer.build(
     ServiceLaunchd.layer(
       spec,
@@ -379,10 +227,12 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
         Effect.succeed(Written.cases.written.make({})),
     ),
   );
+
   const service = Context.get(context, BrainService);
 
   if (process.argv.includes("--stop")) {
     yield* service.stop;
+
     return;
   }
 
@@ -394,36 +244,111 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
   }
 });
 
+/** The phases of one check, in the order it runs them: the host record names the one in progress. */
+export const Phase = Schema.Literals([
+  "start 1",
+  "start 2",
+  "start 3",
+  "start 4",
+  "replacement",
+  "stop 1",
+  "stop 2",
+  "stop 3",
+  "stop 4",
+  "fixture",
+]);
+
+type Phase = typeof Phase.Type;
+
+/** What `runs/p19/host.json` holds from the first phase on: the final record adds its other fields. */
+export const Progress = Schema.Struct({
+  guardMs: Schema.Int,
+  phase: Schema.NullOr(Phase),
+  starts: Schema.Array(Schema.Int),
+  stops: Schema.Array(Schema.Int),
+  replacementMs: Schema.Int,
+});
+
+/**
+ * The record a check writes around each phase, so a run that stalls leaves the phase it stalled in.
+ * `begin` names the phase before it runs, `end` takes its time and names none, and `done` writes the
+ * final record with the rest of its fields. The fixture's time has no list of its own, so `end` drops it.
+ */
+export const phases = Effect.fn("P19Host.phases")(function* (file: string, guardMs: number) {
+  const fs = yield* FileSystem.FileSystem,
+    path = yield* Path.Path;
+
+  let record: typeof Progress.Type = { guardMs, phase: null, starts: [], stops: [], replacementMs: 0 };
+
+  const write = (rest: Record<string, unknown>) =>
+    fs
+      .makeDirectory(path.dirname(file), { recursive: true })
+      .pipe(Effect.andThen(fs.writeFileString(file, Formatter.formatJson({ ...record, ...rest }))));
+
+  return {
+    begin: Effect.fnUntraced(function* (phase: Phase) {
+      record = { ...record, phase };
+      yield* write({});
+    }),
+    end: Effect.fnUntraced(function* (ms: number) {
+      const phase = record.phase;
+      yield* checked(phase !== null, "phase-not-begun");
+
+      record = {
+        ...record,
+        phase: null,
+        ...(phase?.startsWith("start") === true ? { starts: [...record.starts, ms] } : {}),
+        ...(phase?.startsWith("stop") === true ? { stops: [...record.stops, ms] } : {}),
+        ...(phase === "replacement" ? { replacementMs: ms } : {}),
+      };
+      yield* write({});
+    }),
+    done: Effect.fnUntraced(function* (rest: Record<string, unknown>) {
+      record = { ...record, phase: null };
+      yield* write(rest);
+
+      return record;
+    }),
+  };
+});
+
 export const check = Effect.fn("P19Host.check")(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
-  yield* checked(process.platform === "darwin" && process.env.FABRIKA_P19_HOST === "1", "host-opt-in-required");
+
+  const optIn = yield* Env.String("FABRIKA_P19_HOST").pipe(Env.withDefault(""));
+  yield* checked(process.platform === "darwin" && optIn === "1", "host-opt-in-required");
   const app = path.resolve(import.meta.dirname, "../..");
   const root = path.resolve(app, "../../..");
   const temporary = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "p19-" });
   const home = yield* fs.realPath(temporary);
   const executable: string = createRequire(path.join(app, "package.json"))("electron");
   // The OS chooses a disposable listener only in this host check, never in BrainService policy.
-  const chosen = Number(process.env.FABRIKA_P19_PORT);
+  const chosen = Number(yield* Env.String("FABRIKA_P19_PORT").pipe(Env.withDefault("")));
   yield* checked(Number.isInteger(chosen) && chosen > 1024 && chosen < 65535, "supply-isolated-host-port");
   const url = `http://127.0.0.1:${chosen}`;
   yield* checked(!(yield* listening(url)), "host-port-is-already-owned");
+
   const resolved = yield* Sources.resolve(Declarations.all, {
     flags: Sources.flags({ "instance.port": String(chosen) }),
     env: Sources.env({}),
     repo: Sources.file("repo", { value: {}, spans: [] }),
     person: Sources.file("person", { value: {}, spans: [] }),
   });
+
   const settings = yield* Snapshot.make(Declarations.all, resolved).pipe(Effect.provide(Digest.layerWebCrypto));
   const built = yield* build({ out: `${home}/build` });
   const helper = path.resolve(import.meta.dirname, "P19Launchd.test-support.ts");
+  const guardEntry = path.resolve(import.meta.dirname, "P19Guard.test-support.ts");
+
   const runtime = `${home}/brain.mjs`,
     controllerFile = `${home}/controller.mjs`,
     guardFile = `${home}/guard.mjs`;
+
   const brainFile = `${home}/brain.json`;
   yield* fs.writeFileString(
     brainFile,
-    JSON.stringify(
+    Formatter.formatJson(
       yield* Schema.encodeEffect(BrainInput)({
         built: { build: built.build, brain: built.brain, programs: built.programs },
         options: {
@@ -437,13 +362,14 @@ export const check = Effect.fn("P19Host.check")(function* () {
     ),
   );
   yield* bundle(
-    `import ${JSON.stringify(path.resolve(import.meta.dirname, "P19Brain.test-support.ts"))};`,
+    `import ${Formatter.formatJson(path.resolve(import.meta.dirname, "P19Brain.test-support.ts"))};`,
     runtime,
     root,
   );
-  yield* bundle(`import ${JSON.stringify(helper)};`, controllerFile, root);
-  yield* bundle(`import ${JSON.stringify(helper)};`, guardFile, root);
-  const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
+  yield* bundle(`import ${Formatter.formatJson(helper)};`, controllerFile, root);
+  yield* bundle(`import ${Formatter.formatJson(guardEntry)};`, guardFile, root);
+
+  const spec = yield* Schema.decodeEffect(BrainSpec)({
     home,
     executable,
     // The brain's mode and input go first; the last argument checks that launchd keeps argv as given.
@@ -451,30 +377,39 @@ export const check = Effect.fn("P19Host.check")(function* () {
     url,
     build: built.build,
   });
-  yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(Schema.encodeSync(BrainSpec)(spec)));
-  yield* fs.writeFileString(`${home}/snapshot.json`, JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(settings)));
+
+  yield* fs.writeFileString(`${home}/spec.json`, yield* Schema.encodeEffect(Schema.fromJsonString(BrainSpec))(spec));
+  yield* fs.writeFileString(
+    `${home}/snapshot.json`,
+    yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(settings),
+  );
   const native = yield* Layer.build(Native.layer(spec, settings));
   yield* Context.get(native, BrainControl).install;
   // plutil, not a hand-written XML parser, verifies the native compiler preserves checked values.
   const plist = yield* command("plutil", ["-convert", "json", "-o", "-", `${home}/brain.plist`]);
   yield* checked(plist.code === 0, "plist-does-not-compile");
-  const job = yield* Schema.decodeUnknownEffect(
+
+  const job = yield* Schema.decodeEffect(
     Schema.fromJsonString(Schema.Struct({ Label: Schema.String, ProgramArguments: Schema.Array(Schema.String) })),
   )(plist.stdout);
+
   yield* checked(
-    JSON.stringify(job.ProgramArguments) === JSON.stringify([executable, ...spec.args]),
+    Formatter.formatJson(job.ProgramArguments) === Formatter.formatJson([executable, ...spec.args]),
     "plist-argv-changed",
   );
   const uid = yield* command("id", ["-u"]);
+
   const config = Config.make({
     home,
-    target: `gui/${uid.stdout.trim()}/${job.Label}`,
+    target: `gui/${Str.trim(uid.stdout)}/${job.Label}`,
     url,
     owner: process.pid,
     stopTimeout: Number(settings.values["desktop.brain-stop-timeout"]),
     poll: Number(settings.values["desktop.brain-poll"]),
   });
-  yield* fs.writeFileString(`${home}/guard.json`, JSON.stringify(config));
+
+  yield* fs.writeFileString(`${home}/guard.json`, Formatter.formatJson(config));
+
   const watcher = yield* ChildProcess.make(process.execPath, [guardFile, "p19:guard", `${home}/guard.json`], {
     cwd: root,
     detached: true,
@@ -482,17 +417,40 @@ export const check = Effect.fn("P19Host.check")(function* () {
     stdout: "ignore",
     stderr: "ignore",
   });
-  yield* wait(fs.exists(`${home}/guard.ready`), config.stopTimeout);
+
+  // The ready file or the guard's exit, whichever comes first: a guard that crashes fails at once with
+  // its exit code. How long the guard took is recorded even when it did not come, since that run's
+  // reading is the one that matters most.
+  const hostFile = path.join(root, "runs/p19/host.json");
+  const startedAt = yield* Clock.currentTimeMillis;
+  let guardMs = 0;
+  yield* guardReady(`${home}/guard.ready`, watcher.exitCode, config.stopTimeout).pipe(
+    Effect.onExit(() =>
+      Effect.gen(function* () {
+        guardMs = (yield* Clock.currentTimeMillis) - startedAt;
+        yield* fs.makeDirectory(path.dirname(hostFile), { recursive: true });
+        yield* fs.writeFileString(hostFile, Formatter.formatJson({ guardMs }));
+      }),
+    ),
+  );
   yield* Effect.addFinalizer(() =>
     fs
       .writeFileString(`${home}/guard.stop`, "stop")
       .pipe(Effect.andThen(wait(fs.exists(`${home}/guard.result`), config.stopTimeout * 3)), Effect.orDie),
   );
+
   const launch = Effect.fnUntraced(function* (mode?: string) {
     yield* fs.remove(`${home}/controller.ready`, { force: true });
+
     const child = yield* ChildProcess.make(
       process.execPath,
-      [controllerFile, "p19:controller", `${home}/spec.json`, `${home}/snapshot.json`, ...(mode ? [mode] : [])],
+      [
+        controllerFile,
+        "p19:controller",
+        `${home}/spec.json`,
+        `${home}/snapshot.json`,
+        ...(mode !== undefined && mode !== "" ? [mode] : []),
+      ],
       { stdin: "ignore", stdout: "ignore", stderr: "ignore" },
     );
 
@@ -508,6 +466,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
 
     return child;
   });
+
   const acknowledgedGroups = Effect.gen(function* () {
     const current = yield* status(config.target);
 
@@ -526,44 +485,55 @@ export const check = Effect.fn("P19Host.check")(function* () {
         const observed = yield* fs
           .readFileString(`${home}/groups.json`)
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProcessGroups.Saved))));
-        return expected.every((group) => observed.includes(group));
+
+        return Arr.every(expected, (group) => observed.includes(group));
       }),
       config.stopTimeout,
     );
   });
-  const starts: Array<number> = [],
-    stops: Array<number> = [];
-  let replacementMs = 0;
 
-  for (let n = 0; n < 4; n++) {
+  const progress = yield* phases(hostFile, guardMs);
+
+  const rounds = [
+    { start: "start 1", stop: "stop 1" },
+    { start: "start 2", stop: "stop 2" },
+    { start: "start 3", stop: "stop 3" },
+    { start: "start 4", stop: "stop 4" },
+  ] as const;
+
+  for (const [n, round] of rounds.entries()) {
+    yield* progress.begin(round.start);
     const at = yield* Clock.currentTimeMillis;
     const client = yield* launch();
-    starts.push((yield* Clock.currentTimeMillis) - at);
+    yield* progress.end((yield* Clock.currentTimeMillis) - at);
     yield* acknowledgedGroups;
     const first = yield* status(config.target);
     yield* checked(first._tag === "loaded" && first.pid !== null, "no-running-brain");
     yield* client.kill({ killSignal: "SIGKILL" });
     yield* checked(
-      JSON.stringify(yield* status(config.target)) === JSON.stringify(first) && (yield* listening(url)),
+      Formatter.formatJson(yield* status(config.target)) === Formatter.formatJson(first) && (yield* listening(url)),
       "controller-death-stopped-brain",
     );
     yield* launch("--release");
     yield* checked(
-      JSON.stringify(yield* status(config.target)) === JSON.stringify(first),
+      Formatter.formatJson(yield* status(config.target)) === Formatter.formatJson(first),
       "reuse-started-another-brain",
     );
 
     if (n === 0) {
+      yield* progress.begin("replacement");
       const crashed = yield* Clock.currentTimeMillis;
       yield* command("launchctl", ["kill", "SIGKILL", config.target]);
       yield* wait(
         Effect.gen(function* () {
           const next = yield* status(config.target);
+
           const ready = yield* fs
             .readFileString(`${home}/ready.json`)
             .pipe(
               Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ pid: Schema.Int })))),
             );
+
           return (
             next._tag === "loaded" &&
             next.pid !== null &&
@@ -575,13 +545,14 @@ export const check = Effect.fn("P19Host.check")(function* () {
         }),
         Number(settings.values["desktop.brain-start-timeout"]),
       );
-      replacementMs = (yield* Clock.currentTimeMillis) - crashed;
+      yield* progress.end((yield* Clock.currentTimeMillis) - crashed);
       yield* acknowledgedGroups;
     }
 
+    yield* progress.begin(round.stop);
     const stopAt = yield* Clock.currentTimeMillis;
     yield* launch("--stop");
-    stops.push((yield* Clock.currentTimeMillis) - stopAt);
+    yield* progress.end((yield* Clock.currentTimeMillis) - stopAt);
     yield* checked(
       (yield* status(config.target))._tag === "absent" &&
         !(yield* listening(url)) &&
@@ -591,10 +562,16 @@ export const check = Effect.fn("P19Host.check")(function* () {
   }
 
   // The small job proves a successful exit is not restarted. The four starts above used the real brain.
+  yield* progress.begin("fixture");
+  const fixtureAt = yield* Clock.currentTimeMillis;
   const fixture = `${home}/fixture.mjs`;
-  yield* bundle(`import ${JSON.stringify(path.join(root, "fixtures/next/p19-launchd/brain.ts"))};`, fixture, root);
-  const normal = yield* Schema.decodeUnknownEffect(BrainSpec)({ ...spec, args: [fixture] });
-  yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(Schema.encodeSync(BrainSpec)(normal)));
+  yield* bundle(
+    `import ${Formatter.formatJson(path.join(root, "fixtures/next/p19-launchd/brain.ts"))};`,
+    fixture,
+    root,
+  );
+  const normal = yield* Schema.decodeEffect(BrainSpec)({ ...spec, args: [fixture] });
+  yield* fs.writeFileString(`${home}/spec.json`, yield* Schema.encodeEffect(Schema.fromJsonString(BrainSpec))(normal));
   const normalContext = yield* Layer.build(Native.layer(normal, settings));
   const normalControl = Context.get(normalContext, BrainControl);
   yield* normalControl.install;
@@ -612,12 +589,16 @@ export const check = Effect.fn("P19Host.check")(function* () {
     yield* checked((yield* fs.readFileString(`${home}/fixture-ready.json`)) === normalReady, "normal-exit-restarted");
     const current = yield* status(config.target);
     yield* checked(current._tag === "loaded" && current.pid === null, "normal-exit-restarted");
+
     return (yield* Clock.currentTimeMillis) >= until;
   }).pipe(Effect.repeat({ schedule: Schedule.spaced(`${config.poll} millis`), until: (done) => done }));
+  yield* progress.end((yield* Clock.currentTimeMillis) - fixtureAt);
   yield* launch("--stop");
+
   const owned = yield* fs
     .readFileString(`${home}/groups.json`)
     .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProcessGroups.Saved))));
+
   yield* checked(owned.length > 0, "guard-observed-no-groups");
 
   for (const group of owned) {
@@ -628,30 +609,20 @@ export const check = Effect.fn("P19Host.check")(function* () {
   yield* wait(fs.exists(`${home}/guard.result`), config.stopTimeout * 3);
   yield* checked((yield* watcher.exitCode) === 0, "guard-reported-leftovers");
   const ready = yield* fs.readFileString(`${home}/ready.json`);
-  yield* fs.makeDirectory(path.join(root, "runs/p19"), { recursive: true });
-  yield* fs.writeFileString(
-    path.join(root, "runs/p19/host.json"),
-    JSON.stringify({
-      starts,
-      stops,
-      replacementMs,
-      // The groups the guard saved, each decoded as above 1, so a reader sees what a signal could reach.
-      groups: owned,
-      normalExitObservationMs: throttle * 3,
-      executable,
-      versions: yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(ready),
-      settings,
-    }),
-  );
-  const leftovers: ReadonlyArray<string> = [];
-  return { starts, replacement: true, controllerDeath: true, normalExit: true, leftovers };
-});
 
-if (process.argv[2] === "p19:guard") {
-  NodeRuntime.runMain(
-    Effect.scoped(guard(process.argv[3] ?? "")).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
-  );
-}
+  const record = yield* progress.done({
+    // The groups the guard saved, each decoded as above 1, so a reader sees what a signal could reach.
+    groups: owned,
+    normalExitObservationMs: throttle * 3,
+    executable,
+    versions: yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(ready),
+    settings,
+  });
+
+  const leftovers: ReadonlyArray<string> = [];
+
+  return { starts: record.starts, guardMs, replacement: true, controllerDeath: true, normalExit: true, leftovers };
+});
 
 if (process.argv[2] === "p19:controller") {
   NodeRuntime.runMain(

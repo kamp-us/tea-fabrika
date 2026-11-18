@@ -125,7 +125,8 @@ one line of checks.
   the head they were taken at. Say what looks broken, empty or wrong in each. The shots are attached
   with `gh`'s `--attach` and never committed
   ([0160](../../../.decisions/0160-pr-shots-are-never-committed.md), and "Show it running" and
-  "Shoot more than one layout" in [AGENTS.md](../../../AGENTS.md#changing-the-product)).
+  "Shoot more than one layout" in
+  [the changing-the-product reference](../guidelines/references/changing-the-product.md)).
 - **Steps.** Keep the table the tooling wrote: step, box, outcome, list dollars, total. One line
   above it says which parts were the pipeline's steps and which were the lead's. Work done by hand
   after the last step (a type fix, a merge of main) gets its own honest line there.

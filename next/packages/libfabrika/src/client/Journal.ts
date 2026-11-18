@@ -10,6 +10,7 @@ import { Rev } from "../Rev.ts";
 import { Result } from "../tasks/Task.ts";
 
 const Execution = Schema.NonEmptyString;
+
 /** When the command started, on the client's own clock: the `executing` entry's `at`, kept by each
  *  entry after it, since each entry replaces the one before. Absent when no `executing` entry was
  *  read, as after a journal that was lost. */
@@ -45,14 +46,17 @@ export type Entry = typeof Entry.Type;
 
 /**
  * A journal call failed. `storage`: the store could not read or write. `bad_entry`: a saved value
- * that is no entry. `cause` keeps the store's error underneath, when there is one.
+ * that is no entry. `cause` keeps the store's error underneath.
  *
  * @category errors
  */
-export class JournalError extends Schema.TaggedError<JournalError>()("JournalError", {
-  reason: Schema.Literals(["storage", "bad_entry"]),
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class JournalError extends Schema.TaggedError<JournalError, { readonly brand: unique symbol }>()(
+  "JournalError",
+  {
+    reason: Schema.Literals(["storage", "bad_entry"]),
+    cause: Schema.Defect(),
+  },
+) {}
 
 /**
  * Service that keeps the hands client's journal: `read` answers a task's last entry, or null before
@@ -68,7 +72,7 @@ export class JournalError extends Schema.TaggedError<JournalError>()("JournalErr
 export class Journal extends Context.Service<
   Journal,
   {
-    readonly read: (task: string) => Effect.Effect<typeof Entry.Type | null, JournalError>;
-    readonly write: (task: string, entry: typeof Entry.Type) => Effect.Effect<void, JournalError>;
+    readonly read: (task: string) => Effect.Effect<Entry | null, JournalError>;
+    readonly write: (task: string, entry: Entry) => Effect.Effect<void, JournalError>;
   }
 >()("@kampus/libfabrika/client/Journal") {}

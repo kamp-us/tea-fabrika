@@ -1,18 +1,40 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    // The window is React in a browser tab; its machines and their laws also run on Node.
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["node"],
-    "jsx": "react-jsx",
-    // A library imports each Effect module by its path (0577). All of tuval is at zero.
     "plugins": [
       {
         "name": "@effect/language-service",
+        // A library imports each Effect module by its path (0577). All of tuval is at zero.
         "namespaceImportPackages": ["effect"],
-        "diagnosticSeverity": { "preferNamespaceImport": "error", "preferSchemaTaggedError": "error" }
+        "diagnosticSeverity": { "preferNamespaceImport": "error" },
+        // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+        // The globs read from this folder. One entry per set of folders; its comment names its checks.
+        "overrides": [
+          // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5), unnecessaryArrowBlock
+          // (E8), unnecessaryFailYieldableError (E19), runOfExitToRunExit (E25).
+          {
+            "include": ["**/*.ts", "**/*.tsx"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaNumber": "error",
+                "preferTypedSchemaDecoder": "error",
+                "unnecessaryArrowBlock": "error",
+                "unnecessaryFailYieldableError": "error",
+                "runOfExitToRunExit": "error"
+              }
+            }
+          },
+          {
+            "include": ["src/**/*.ts", "src/**/*.tsx"],
+            "options": { "diagnosticSeverity": { "newPromise": "error" } }
+          }
+        ]
       }
-    ]
+    ],
+    // The window is React in a browser tab; its machines and their laws also run on Node.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "jsx": "react-jsx"
   },
   "include": ["src"]
 }

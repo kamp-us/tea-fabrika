@@ -3,21 +3,29 @@
 // `.integration.` and runs on main's full run only (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
 
 const files = ["a.txt", "dir/b.txt", "dir/sub/c.txt", "space name.txt", "link"] as const;
+
 const targets = ["a.txt", "dir", "../outside", "/absent/target"] as const;
+
 // Ops 17 to 20 write, add and commit in one cell, so most sessions hold a chain of commits.
 const cell = fc.record({ op: fc.nat({ max: 20 }), pick: fc.nat(), flag: fc.boolean() });
+
 const tape = fc.array(cell, { minLength: 1, maxLength: 24 });
+
 const decoder = new TextDecoder();
 
 /** Runs one session on `services` and answers its transcript: each command's exit code, and its
@@ -37,16 +45,22 @@ const session = (
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const root = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "git-contract-" }));
       yield* RepositoryOpenTest.isolateGit(root);
+
       const origin = path.join(root, "origin.git"),
         repo = path.join(root, "repo");
+
       const commits = new Map<string, string>();
+
       const named = (text: string) =>
         text.replace(/\b(?:[0-9a-f]{64}|[0-9a-f]{40})\b/g, (id) => {
           const known = commits.get(id) ?? `C${commits.size + 1}`;
           commits.set(id, known);
+
           return known;
         });
+
       const transcript: Array<string> = [];
+
       const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
         return yield* Effect.scoped(
           Effect.gen(function* () {
@@ -65,14 +79,17 @@ const session = (
                 },
               }),
             );
+
             const [out, , code] = yield* Effect.all(
               [Stream.mkString(Stream.decodeText(child.stdout)), Stream.runDrain(child.stderr), child.exitCode],
               { concurrency: "unbounded" },
             );
-            return { code, out: out.replaceAll(root, "<root>") };
+
+            return { code, out: Function.pipe(out, Str.replaceAll(root, "<root>")) };
           }),
         );
       });
+
       /** Records the exit code, and the output when `data` says how to read it. */
       const step = Effect.fnUntraced(function* (
         cwd: string,
@@ -81,8 +98,9 @@ const session = (
       ) {
         const { code, out } = yield* git(cwd, args);
         transcript.push(
-          `git ${args.join(" ").replaceAll(root, "<root>")} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
+          `git ${Function.pipe(Arr.join(args, " "), Str.replaceAll(root, "<root>"))} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
         );
+
         return out;
       });
 
@@ -194,6 +212,7 @@ const session = (
 
       yield* step(repo, ["rev-parse", "HEAD"], "commits");
       yield* step(root, ["ls-remote", "--symref", "--", origin, "HEAD"], "commits");
+
       return transcript;
     }),
   ).pipe(Effect.provide(services));
@@ -201,9 +220,10 @@ const session = (
 describe("0535 memory git contract", () => {
   it.runIf(GitLaws.realOnly)(
     "every generated session answers alike on memory git and real git: codes, ids, trees and the files on disk",
-    async () => {
+    () => {
       const [memory, real] = GitLaws.gits;
-      await fc.assert(
+
+      return fc.assert(
         fc.asyncProperty(
           fc.constantFrom("sha1" as const, "sha256" as const),
           fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/),

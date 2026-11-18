@@ -2,6 +2,7 @@
  * Checks that a key belongs, then writes, in one synchronous ledger transaction.
  */
 import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -12,7 +13,8 @@ import { admitted, MemberEvent } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
 import { NotGranted } from "./SessionManager.ts";
 
-const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
+const known: ReadonlySet<string> = new Set(Rec.keys(MemberEvent.cases));
+
 const decodeEventResult = Schema.decodeUnknownResult(MemberEvent);
 
 /**
@@ -40,6 +42,7 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
       short({ "fab.authorization.id": write.id, "fab.authorization.stream": write.stream }),
     );
     const transaction = yield* LedgerTransaction;
+
     const result = yield* transaction.transact((turn): Result.Result<Appended, LedgerError | NotGranted> => {
       const events: MemberEvent[] = [];
 
@@ -63,8 +66,10 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
 
       return Result.succeed(Appended.cases.placed.make(turn.append(write.stream, write.id, write.line)));
     });
+
     const appended = yield* Effect.fromResult(result);
     yield* Effect.annotateCurrentSpan("fab.authorization.outcome", "placed");
+
     return appended;
   },
   Effect.tapError((error) =>

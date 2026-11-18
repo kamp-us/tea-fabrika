@@ -18,7 +18,7 @@ gap becomes "one tracker ticket per file, at most three a day". The cap came in 
 was never a call the owner made. By 2026-11-11 it held 15 files of real gaps in a list outside the
 repo and outside the tracker, and at three a day some would still be held when the trial ends on
 2026-11-17. A gap that sits in a side list is knowledge in the wrong place: the tracker is what
-remembers work. This amends 0066 in part; the rest of 0066 stands.
+remembers work. This amends 0066 in part.
 
 ## Decision
 

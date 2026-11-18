@@ -1,7 +1,7 @@
+import { Array as Arr, String as Str, pipe, Effect, Layer, Option, Record as Rec, Stream } from "effect";
 // BoxGitProcess.layer: the BoxGit service on real git, run from MAIN. Git sees neither inherited
 // settings nor the box's own config, hooks, fsmonitor or attributes: the caller passes an
 // environment with every GIT_ variable gone, and each call turns the box's programs off.
-import { Effect, Layer, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { BoxGit, BoxGitError, type Inspection } from "./BoxGit.ts";
 
@@ -34,8 +34,8 @@ const PINNED = {
 const gitEnv = (inherited: Readonly<Record<string, string | undefined>>): Record<string, string> => {
   const env: Record<string, string> = {};
 
-  for (const [key, value] of Object.entries(inherited)) {
-    if (value !== undefined && !key.startsWith("GIT_")) {
+  for (const [key, value] of Rec.toEntries(inherited)) {
+    if (value !== undefined && !pipe(key, Str.startsWith("GIT_"))) {
       env[key] = value;
     }
   }
@@ -45,7 +45,7 @@ const gitEnv = (inherited: Readonly<Record<string, string | undefined>>): Record
 
 const text = new TextDecoder();
 
-const lines = (out: string) => out.split("\n").filter((line) => line !== "");
+const lines = (out: string) => Arr.filter(Str.split(out, "\n"), (line) => line !== "");
 
 export const layer = (
   main: string,
@@ -61,11 +61,13 @@ export const layer = (
       const git = Effect.fn("BoxGitProcess.git")(
         function* (at: Inspection | null, args: ReadonlyArray<string>) {
           const into = at === null ? [] : [`--git-dir=${at.gitDir}`, `--work-tree=${at.work}`];
+
           const handle = yield* ChildProcess.make("git", ["-C", main, ...into, ...OFF, ...args], {
             env,
             extendEnv: false,
             stdin: "ignore",
           });
+
           const [out, err, code] = yield* Effect.all(
             [Stream.mkUint8Array(handle.stdout), Stream.mkUint8Array(handle.stderr), handle.exitCode],
             { concurrency: 3 },
@@ -84,14 +86,15 @@ export const layer = (
       );
 
       return BoxGit.of({
-        indexEntries: (at) => Effect.map(git(at, ["ls-files", "--stage", "-v", "-z"]), (out) => out.split("\0")),
+        indexEntries: (at) => Effect.map(git(at, ["ls-files", "--stage", "-v", "-z"]), (out) => Str.split(out, "\0")),
         trackedChanges: (at) =>
           Effect.map(git(at, ["status", "--porcelain=v1", "-z", "--untracked-files=no"]), (out) => out !== ""),
         refs: (at) =>
           Effect.map(git(at, ["for-each-ref", "--format=%(refname) %(objectname)"]), (out) =>
-            lines(out).map((line) => {
-              const space = line.indexOf(" ");
-              return { ref: line.slice(0, space), oid: line.slice(space + 1) };
+            Arr.map(lines(out), (line) => {
+              const space = Option.getOrElse(pipe(line, Str.indexOf(" ")), () => -1);
+
+              return { ref: pipe(line, Str.slice(0, space)), oid: pipe(line, Str.slice(space + 1)) };
             }),
           ),
         objectsAt: (at, ref) => Effect.map(git(at, ["rev-parse", "--verify", `${ref}^{object}`]), lines),

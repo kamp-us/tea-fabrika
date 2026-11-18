@@ -5,33 +5,52 @@
 // the machine must now hold.
 import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Attached, Wait } from "../Wire.ts";
 import { connection } from "./connection.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  answered: {},
+  finished: {},
+  observed: {},
+  started: {},
+  waited: {},
+});
+
 const SEED = 119120;
+
 const RUNS = 100;
+
 const MAX_WAITS = 64;
+
 const MAX_BYTES = 16_384;
 
 type Model = ReturnType<typeof connection.init>[0];
+
 type Saved = typeof Attached.Type;
+
 type W = typeof Wait.Type;
 
 type Msg =
-  | { readonly type: "observed"; readonly attached: Saved }
-  | { readonly type: "started" }
-  | { readonly type: "finished" }
-  | { readonly type: "waited"; readonly wait: W }
-  | { readonly type: "answered"; readonly wait: W };
+  | { readonly _tag: "observed"; readonly attached: Saved }
+  | { readonly _tag: "started" }
+  | { readonly _tag: "finished" }
+  | { readonly _tag: "waited"; readonly wait: W }
+  | { readonly _tag: "answered"; readonly wait: W };
 
-const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const bytes = (value: Saved) => new TextEncoder().encode(JSON.stringify(value)).length;
+
 const same = (a: W, b: W) => a.id === b.id && a.stream === b.stream && a.after === b.after;
 
 /** The named state an attachment stands for: busy lives only in the tag. */
-const expected = (saved: Saved | null): unknown => {
+const expected = (saved: Saved | null): object => {
   if (saved === null) {
     return { _tag: "unloaded" };
   }
@@ -41,6 +60,7 @@ const expected = (saved: Saved | null): unknown => {
   }
 
   const { client, identity, version, watching, waits, busy, has, build } = saved;
+
   return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits, has, build };
 };
 
@@ -69,6 +89,7 @@ const metadata = (model: Model) => {
   }
 
   const { client, identity, version, watching, has, build } = model;
+
   return { client, identity, version, watching, has, build };
 };
 
@@ -76,7 +97,7 @@ const held = (model: Model): ReadonlyArray<W> => (model._tag === "idle" || model
 
 /** What the driver saved before this machine, for one Msg. `null` is an attachment never read. */
 const reference = (saved: Saved | null, msg: Msg): Saved | null => {
-  if (msg.type === "observed") {
+  if (msg._tag === "observed") {
     return msg.attached;
   }
 
@@ -84,25 +105,26 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
     return saved;
   }
 
-  if (msg.type === "started") {
+  if (msg._tag === "started") {
     return saved.busy ? saved : { ...saved, busy: true };
   }
 
-  if (msg.type === "finished") {
+  if (msg._tag === "finished") {
     return saved.busy ? { ...saved, busy: false } : saved;
   }
 
   const wait = msg.wait;
 
-  if (msg.type === "waited") {
+  if (msg._tag === "waited") {
     const next = { ...saved, waits: [...saved.waits, wait] };
-    return saved.waits.some((w) => w.id === wait.id) || next.waits.length > MAX_WAITS || bytes(next) > MAX_BYTES
+
+    return Arr.some(saved.waits, (w) => w.id === wait.id) || next.waits.length > MAX_WAITS || bytes(next) > MAX_BYTES
       ? saved
       : next;
   }
 
-  return saved.waits.some((w) => same(w, wait))
-    ? { ...saved, waits: saved.waits.filter((w) => w.id !== wait.id) }
+  return Arr.some(saved.waits, (w) => same(w, wait))
+    ? { ...saved, waits: Arr.filter(saved.waits, (w) => w.id !== wait.id) }
     : saved;
 };
 
@@ -110,10 +132,15 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
 // fast-check, not a Schema arbitrary: the walk aims text at the encoded limit and draws ids from
 // the folded state, which Wait's and Attached's own arbitraries cannot do.
 const units = ["a", "Z", "7", "é", "ß", "€", "流", "😀", "𝄞"];
-const text = fc.array(fc.constantFrom(...units), { maxLength: 6 }).map((s) => s.join(""));
+
+const text = fc.array(fc.constantFrom(...units), { maxLength: 6 }).map((s) => Arr.join(s, ""));
+
 const id = fc.oneof(text, fc.integer({ min: -3, max: 80 }));
+
 const streams = ["events", "counter:1/inbox", "ünï/流", "😀"];
+
 const stream = fc.constantFrom(...streams);
+
 const after = fc.nat({ max: 12 });
 
 const identity = fc.record({
@@ -163,26 +190,30 @@ const Choice = fc.record({
   shift: fc.integer({ min: -2, max: 2 }),
   unit: fc.constantFrom(...units),
 });
+
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
 
 /** Walk state: the reference attachment and every wait that was once saved. */
 type Fold = { readonly saved: Saved | null; readonly completed: ReadonlyArray<W> };
 
 const online = (fold: Fold) => (fold.saved?._tag === "online" ? fold.saved : null);
+
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
 
 /** A stream of exactly `size` UTF-8 bytes, built from `unit` and ASCII padding. */
 const sized = (size: number, unit: string) => {
   const width = new TextEncoder().encode(unit).length;
   const count = Math.max(0, Math.floor(size / width) - 1);
-  const head = unit.repeat(count);
-  return head + "x".repeat(Math.max(0, size - count * width));
+  const head = Str.repeat(count)(unit);
+
+  return head + Str.repeat(Math.max(0, size - count * width))("x");
 };
 
 /** A wait whose candidate attachment lands `shift` bytes off the encoded limit. */
 const boundary = (saved: Saved & { readonly _tag: "online" }, choice: Choice): W => {
   const probe = Wait.make({ id: choice.wait.id, stream: "", after: choice.wait.after });
   const space = MAX_BYTES - bytes({ ...saved, waits: [...saved.waits, probe] });
+
   return Wait.make({ ...probe, stream: sized(Math.max(0, space + choice.shift), choice.unit) });
 };
 
@@ -194,64 +225,65 @@ const next = (fold: Fold, choice: Choice): Msg => {
 
   if (saved !== null && saved.waits.length >= 6 && move >= 3) {
     // A crowded connection mostly keeps adding, so walks reach the 64-wait limit.
-    return { type: "waited", wait: fresh };
+    return { ...Tag.cases.waited.make({}), wait: fresh };
   }
 
   if (move < 8 || (fold.saved === null && move < 50)) {
-    return { type: "observed", attached: choice.observation };
+    return { ...Tag.cases.observed.make({}), attached: choice.observation };
   }
 
   if (fold.saved === null) {
     // Nothing read yet: every other Msg is stale.
     return at<Msg>(
       [
-        { type: "started" },
-        { type: "finished" },
-        { type: "waited", wait: choice.wait },
-        { type: "answered", wait: choice.wait },
+        Tag.cases.started.make({}),
+        Tag.cases.finished.make({}),
+        { ...Tag.cases.waited.make({}), wait: choice.wait },
+        { ...Tag.cases.answered.make({}), wait: choice.wait },
       ],
       move,
     );
   }
 
   if (move < 22) {
-    return { type: move % 2 === 0 ? "started" : "finished" };
+    return (move % 2 === 0 ? Tag.cases.started : Tag.cases.finished).make({});
   }
 
   if (move < 34 && saved !== null && saved.waits.length > 0) {
     // A wait the driver still holds.
-    return { type: "answered", wait: at(saved.waits, pick) };
+    return { ...Tag.cases.answered.make({}), wait: at(saved.waits, pick) };
   }
 
   if (move < 40 && fold.completed.length > 0) {
     // A late reply for a wait that may already be answered.
-    return { type: "answered", wait: at(fold.completed, pick) };
+    return { ...Tag.cases.answered.make({}), wait: at(fold.completed, pick) };
   }
 
   if (move < 46 && saved !== null && saved.waits.length > 0) {
     // A reused id on another stream or revision.
     const old = at(saved.waits, pick);
     const other = choice.wait.stream === old.stream && choice.wait.after === old.after;
+
     return {
-      type: move % 2 === 0 ? "answered" : "waited",
+      ...(move % 2 === 0 ? Tag.cases.answered : Tag.cases.waited).make({}),
       wait: { ...choice.wait, id: old.id, after: other ? old.after + 1 : choice.wait.after },
     };
   }
 
   if (move < 56 && saved !== null) {
-    return { type: "waited", wait: boundary(saved, choice) };
+    return { ...Tag.cases.waited.make({}), wait: boundary(saved, choice) };
   }
 
   if (move < 62 && saved !== null && saved.waits.length > 0) {
     // A duplicate of a saved wait.
-    return { type: "waited", wait: at(saved.waits, pick) };
+    return { ...Tag.cases.waited.make({}), wait: at(saved.waits, pick) };
   }
 
   if (move < 66) {
-    return { type: "answered", wait: choice.wait };
+    return { ...Tag.cases.answered.make({}), wait: choice.wait };
   }
 
-  return { type: "waited", wait: fresh };
+  return { ...Tag.cases.waited.make({}), wait: fresh };
 };
 
 /** Fold one walk through the machine, checking each step against the reference. */
@@ -277,15 +309,15 @@ const walk = (
     expect(cmds).toEqual([]);
     expect(after).toEqual(expected(to));
 
-    if (to === fold.saved && msg.type !== "observed") {
+    if (to === fold.saved && msg._tag !== "observed") {
       // A refused or stale Msg hands back the same Model, so the driver saves and answers nothing.
       expect(after).toBe(model);
     }
 
     each({ before: model, after, msg, from: fold.saved, to, fold });
     const kept = to?._tag === "online" ? to.waits : [];
-    const gone = fold.saved?._tag === "online" ? fold.saved.waits.filter((w) => !kept.includes(w)) : [];
-    fold = { saved: to, completed: [...fold.completed, ...gone, ...(msg.type === "waited" ? [msg.wait] : [])] };
+    const gone = fold.saved?._tag === "online" ? Arr.filter(fold.saved.waits, (w) => !kept.includes(w)) : [];
+    fold = { saved: to, completed: [...fold.completed, ...gone, ...(msg._tag === "waited" ? [msg.wait] : [])] };
     model = after;
   }
 
@@ -293,13 +325,16 @@ const walk = (
 };
 
 const Walk = fc.array(Choice, { minLength: 1, maxLength: 160, size: "max" });
+
 const options = { seed: SEED, numRuns: RUNS };
 
 describe("T703 connection machine laws", () => {
   it("type: busy comes only from the state tag, and unauthenticated states hold no waits", () => {
     expectTypeOf<Model["_tag"]>().toEqualTypeOf<"unloaded" | "new" | "waiting" | "idle" | "busy">();
     expectTypeOf<Extract<Model, { readonly busy: unknown }>>().toBeNever();
+
     type Unauthenticated = Extract<Model, { readonly _tag: "unloaded" | "new" | "waiting" }>;
+
     expectTypeOf<Extract<Unauthenticated, { readonly waits: unknown }>>().toBeNever();
     expectTypeOf<Extract<Model, { readonly _tag: "new" }>["attached"]>().toEqualTypeOf<
       typeof Attached.cases.new.Type
@@ -317,13 +352,13 @@ describe("T703 connection machine laws", () => {
     fc.assert(
       fc.property(Walk, (choices) => {
         walk(choices, ({ before, after, msg }) => {
-          seen.add(`${before._tag}:${msg.type}:${after === before ? "same" : after._tag}`);
+          seen.add(`${before._tag}:${msg._tag}:${after === before ? "same" : after._tag}`);
           // Only `observed` may replace the metadata, and a Msg about one wait leaves the others alone.
-          const moved = msg.type === "observed" ? before : after;
+          const moved = msg._tag === "observed" ? before : after;
           expect(metadata(moved)).toEqual(metadata(before));
           const wait = "wait" in msg ? msg.wait : undefined;
           const unrelated = (w: W) => wait === undefined || w.id !== wait.id;
-          expect(held(moved).filter(unrelated)).toEqual(held(before).filter(unrelated));
+          expect(Arr.filter(held(moved), unrelated)).toEqual(Arr.filter(held(before), unrelated));
         });
       }),
       options,
@@ -358,14 +393,14 @@ describe("T703 connection machine laws", () => {
     fc.assert(
       fc.property(Walk, (choices) => {
         walk(choices, ({ before, after, msg, from }) => {
-          if (msg.type !== "waited" || from?._tag !== "online") {
+          if (msg._tag !== "waited" || from?._tag !== "online") {
             return;
           }
 
           const candidate = { ...from, waits: [...from.waits, msg.wait] };
           const accepted = after !== before;
           const size = bytes(candidate);
-          const duplicate = from.waits.some((w) => w.id === msg.wait.id);
+          const duplicate = Arr.some(from.waits, (w) => w.id === msg.wait.id);
           expect(accepted).toBe(!duplicate && candidate.waits.length <= MAX_WAITS && size <= MAX_BYTES);
 
           if (!duplicate && candidate.waits.length <= MAX_WAITS) {
@@ -385,7 +420,7 @@ describe("T703 connection machine laws", () => {
           }
 
           if (duplicate) {
-            sides.add(`duplicate:${typeof msg.wait.id}`);
+            sides.add(`duplicate:${Predicate.isString(msg.wait.id) ? "string" : "number"}`);
           }
         });
       }),
@@ -414,16 +449,16 @@ describe("T703 connection machine laws", () => {
     fc.assert(
       fc.property(Walk, (choices) => {
         walk(choices, ({ before, after, msg, from, fold }) => {
-          if (msg.type !== "answered" || from?._tag !== "online") {
+          if (msg._tag !== "answered" || from?._tag !== "online") {
             return;
           }
 
-          const matching = from.waits.some((w) => same(w, msg.wait));
+          const matching = Arr.some(from.waits, (w) => same(w, msg.wait));
           const answered = after !== before;
           expect(answered).toBe(matching);
           const left = held(after);
-          expect(left.some((w) => w.id === msg.wait.id)).toBe(
-            !matching && from.waits.some((w) => w.id === msg.wait.id),
+          expect(Arr.some(left, (w) => w.id === msg.wait.id)).toBe(
+            !matching && Arr.some(from.waits, (w) => w.id === msg.wait.id),
           );
 
           if (answered) {
@@ -432,10 +467,10 @@ describe("T703 connection machine laws", () => {
             expect(again).toBe(after);
           }
 
-          const reused = from.waits.some((w) => w.id === msg.wait.id) && !matching;
-          const late = fold.completed.some((w) => same(w, msg.wait)) && !matching;
+          const reused = Arr.some(from.waits, (w) => w.id === msg.wait.id) && !matching;
+          const late = Arr.some(fold.completed, (w) => same(w, msg.wait)) && !matching;
           seen.add(matching ? "matching" : reused ? "reused" : late ? "late" : "absent");
-          seen.add(`id:${typeof msg.wait.id}:${answered}`);
+          seen.add(`id:${Predicate.isString(msg.wait.id) ? "string" : "number"}:${answered}`);
         });
       }),
       options,
@@ -468,7 +503,7 @@ describe("T703 connection machine laws", () => {
         // The attachment is the durable copy: JSON out, decoded back, observed by a fresh machine.
         const saved = Schema.decodeUnknownSync(Attached)(JSON.parse(JSON.stringify(projected(model))));
         const [fresh] = connection.init(null, {});
-        const [back] = applyCellChecked(connection, fresh, { type: "observed", attached: saved });
+        const [back] = applyCellChecked(connection, fresh, { ...Tag.cases.observed.make({}), attached: saved });
         expect(back).toEqual(model);
         restored.add(model._tag);
         let left = back;

@@ -10,9 +10,11 @@ import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Unwatch, Watch } from "@kampus/libfabrika/processes/Monitors";
 import type { Start } from "@kampus/libfabrika/processes/Process";
+import type { Published } from "@kampus/libfabrika/runtime/News";
 import { fetch } from "@kampus/libfabrika/workers";
 import type { ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import { control } from "@kampus/libfabrika/workers/control";
+import * as DispatcherLive from "@kampus/libfabrika/workers/DispatcherLive";
 import { ProjectService, signingReply, commitReply, settingsWire } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
 import { Effect, Redacted, Schema } from "effect";
@@ -63,14 +65,14 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
 
   initialize(
     client: ConnectionId,
-    input: unknown,
+    input: Schema.Json | undefined,
     trusted: { url: string; tab: string; name: string; session?: string },
   ) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.initialize(client, input, trusted)));
   }
 
-  route(client: ConnectionId, method: string, params: unknown, reader?: string) {
+  route(client: ConnectionId, method: string, params: Schema.Json | undefined, reader?: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.route(client, method, params, reader)));
   }
@@ -170,7 +172,7 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
     return this.runtime.runPromise(ProjectService.use((p) => p.inbox(pid, input)));
   }
 
-  publish(client: string, update: unknown) {
+  publish(client: string, update: Published) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.publish(client, update)));
   }
@@ -286,7 +288,7 @@ const deployment = Schema.decodeUnknownSync(
 )(env);
 
 const meta = {
-  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
   entrypoint: Objects as unknown as Effect.Effect<Record<string, unknown>>,
   // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
   stack: { name: deployment.ALCHEMY_STACK_NAME, stage: deployment.ALCHEMY_STAGE },
@@ -331,7 +333,11 @@ export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the private local control socket enters Effect
-    return Effect.runPromise(control(request, this.env, Redacted.make(this.ctx.props.token), programs));
+    return Effect.runPromise(
+      control(request, this.env, Redacted.make(this.ctx.props.token), programs).pipe(
+        Effect.provide(DispatcherLive.layer),
+      ),
+    );
   }
 }
 

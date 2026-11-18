@@ -25,48 +25,41 @@ import {
 import { makeRequestEffect } from "@alchemy.run/cloudflare/Workers/HttpServer";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
+import { Stub } from "@kampus/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
-import { HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+import * as Struct from "effect/Struct";
+
 import * as fc from "fast-check";
-import { vi } from "vitest";
+import { assert } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Activity } from "../processes/Process.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
-import { Failure } from "../settings/Start.ts";
+import { Failure, Reply } from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import type { ProjectBinding } from "./bindings.ts";
 import type { ProcessShape } from "./objects.ts";
 import * as ObjectService from "./ObjectService.ts";
 import * as ProcessObject from "./ProcessObject.ts";
-import { recordedLayer, settings, type Env } from "./runtime.ts";
-
-// The Process shell is Alchemy's Effect object: keep only what its Layer hands to Alchemy's `make`,
-// so law 3 can construct it and call it on Node, as law A2 in alarm.laws.test.ts does. Every other
-// name in objects.ts stays as it is.
-const made = vi.hoisted((): { value?: object } => ({}));
-
-vi.mock("./objects.ts", async (original) => {
-  const actual = await original<typeof import("./objects.ts")>();
-  const { Layer } = await import("effect");
-  return {
-    ...actual,
-    Process: {
-      make: (implementation: object) => {
-        made.value = implementation;
-        return Layer.empty;
-      },
-    },
-  };
-});
+import { recordedLayer, RunnerLayer, settings, SinkLayer, type Env } from "./runtime.ts";
 
 class Probe extends Context.Service<Probe, { readonly port: number }>()(
   "@kampus/libfabrika/cloudflare/ObjectService.test.Probe",
 ) {}
 
 /** A platform value built from plain parts: the layers read only the parts each law gives. */
+// SAFETY: each call gives `fake` what the code under its law reads: a real Request, the implementation `Process.make` was handed, or the id, storage, bindings and context members listed at the call.
 const fake = <A>(value: object): A => value as A;
 
 /** The instance setting as the stack hands it in, and a Project that records any start as `saved`. */
@@ -83,6 +76,7 @@ const routes = ["starts", "ledger"] as const;
 
 const shell = (env: Env, route: (typeof routes)[number]) => {
   let builds = 0;
+
   const recorded =
     route === "starts"
       ? recordedLayer(env)
@@ -90,15 +84,18 @@ const shell = (env: Env, route: (typeof routes)[number]) => {
           env,
           settings(env).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
         );
+
   const ready = Layer.unwrap(
     Effect.sync(() => {
       builds++;
+
       return Layer.effect(
         Probe,
         RecordedStart.useSync((start) => ({ port: start.values.port })),
       ).pipe(Layer.provide(recorded));
     }),
   );
+
   return { service: ObjectService.make(Probe, ready), builds: () => builds };
 };
 
@@ -116,12 +113,14 @@ const damaged = (
   if (recipe._tag === "broken") {
     // A proper prefix of a JSON object is never JSON: its closing brace is gone.
     const text = JSON.stringify(good);
-    return text.slice(0, 1 + Math.floor(recipe.at * (text.length - 2)));
+
+    return Str.slice(0, 1 + Math.floor(recipe.at * (text.length - 2)))(text);
   }
 
   if (recipe._tag === "missing") {
-    const keys = Object.keys(good);
+    const keys = Rec.keys(good);
     const { [keys[recipe.pick % keys.length]!]: _dropped, ...rest } = good;
+
     return JSON.stringify(rest);
   }
 
@@ -182,11 +181,13 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           revision: null,
           origin: "flag",
         });
+
         const good = {
           ...base,
           name: "p",
           founding: { person: "test-person", founder: "test-public-key", window: null },
         };
+
         const bad = damaged(good, recipe);
 
         // Calling `make` is the shell's construction: it may not throw, and it may not build.
@@ -205,14 +206,15 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           } else {
             expect(failure).toBeInstanceOf(LedgerError);
             expect(failure).toMatchObject({ reason: "bad_row" });
-            expect(Reflect.get(Object(failure), "cause"), "the cause stays inside the object").toBeUndefined();
+            assert(failure instanceof LedgerError);
+            expect(failure.cause, "the cause stays inside the object").toBeUndefined();
           }
 
           expect(broken.builds(), "a failed build is not kept: the next call builds again").toBe(call);
         }
 
         // The same shell on the good setting: one build, kept, and the setting's own value.
-        const kept = yield* Effect.sync(() => shell(bindings(JSON.stringify(good), good), route));
+        const kept = yield* Effect.sync(() => shell(bindings(Formatter.formatJson(good), good), route));
         const first = yield* kept.service;
         expect(first.port).toBe(port);
 
@@ -245,13 +247,16 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           revision: null,
           origin: "flag",
         });
+
         const good = {
           ...base,
           name: "p",
           founding: { person: "test-person", founder: "test-public-key", window: null },
         };
+
         let text = damaged(good, recipe);
         let reads = 0;
+
         // A build asks whether the object holds a checkpoint yet (none here), then sets up the
         // object's own accounting (P34c): its two tables and its fault slot, and the guard checks
         // that slot before a call. Each is asked for the object's own name; any other query throws.
@@ -264,12 +269,15 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
             ["SELECT value FROM quota_fault WHERE name=?", descriptor.name],
           ].map((call) => JSON.stringify(call)),
         );
+
         let lookups = 0;
         const values = new Map<string, unknown>([["descriptor", descriptor]]);
+
         const storage = {
           get: (key: string) => Promise.resolve(values.get(key)),
           put: (key: string, value: unknown) => {
             values.set(key, value);
+
             return Promise.resolve();
           },
           delete: unexpected,
@@ -282,70 +290,72 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
               }
 
               lookups++;
+
               return [];
             },
           },
           transactionSync: unexpected,
         };
-        yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            vi.spyOn(SpanSink, "layer").mockReturnValue(
-              Layer.succeed(SpanSink, {
-                batch: (work) => work,
-                flush: Effect.succeed({ sent: 0 }),
-                check: Effect.void,
-                summaries: unexpected,
-                sums: unexpected,
+
+        // The law hands in the Process object's two parts, through the References a live object
+        // leaves at their defaults: a sink that writes nothing, and a runner that only opens.
+        // Plant, run once (mock sweep slice 2): `recordingLayer` names `SpanSink.layer` again, past
+        // `SinkLayer`: the fake SQL refuses the sink's tables, and the good build fails, red.
+        const parts = Layer.merge(
+          Layer.succeed(SinkLayer, () =>
+            Layer.succeed(SpanSink, {
+              batch: (work) => work,
+              flush: Effect.succeed({ sent: 0 }),
+              check: Effect.void,
+              summaries: unexpected,
+              sums: unexpected,
+            }),
+          ),
+          Layer.succeed(RunnerLayer, () =>
+            Layer.succeed(
+              ProgramRunner,
+              ProgramRunner.of({
+                init: () => Effect.void,
+                msg: unexpected,
+                open: () => Effect.succeed({ rev: 0, view: {} }),
+                due: unexpected,
+                mailed: Effect.void,
+                restart: unexpected,
+                swap: unexpected,
               }),
             ),
           ),
-          (spy) => Effect.sync(() => spy.mockRestore()),
         );
-        yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            vi.spyOn(ProgramRunner, "withLoader").mockImplementation(() =>
-              Layer.succeed(
-                ProgramRunner,
-                ProgramRunner.of({
-                  init: () => Effect.void,
-                  msg: unexpected,
-                  open: () => Effect.succeed({ rev: 0, view: {} }),
-                  due: unexpected,
-                  mailed: Effect.void,
-                  restart: unexpected,
-                  swap: unexpected,
-                }),
-              ),
-            ),
-          ),
-          (spy) => Effect.sync(() => spy.mockRestore()),
-        );
-        const project = new Proxy(
-          {},
-          { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(good) : unexpected()) },
-        );
-        ProcessObject.layer({
+
+        const project = Stub.make<ProjectBinding>(unexpected, {
+          settingsStart: async () => Reply.cases.ok.make({ value: StartsTest.receipt(good) }),
+        });
+
+        const constructor: ProcessConstructor = ProcessObject.implementation({
           programs: {},
           // The app's checked read, as next/apps/fabrika/src/runtime.ts hands it in, of the law's text.
           input: () =>
             Effect.suspend(() => {
               reads++;
+
               return settings({ INSTANCE: text });
             }).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
         });
-        const constructor = fake<ProcessConstructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
+
         const state = fromDurableObjectState(
           fake<Parameters<typeof fromDurableObjectState>[0]>({
-            id: { name: JSON.stringify([good.name, descriptor.name]) },
+            id: { name: Formatter.formatJson([good.name, descriptor.name]) },
             storage,
             abort: unexpected,
           }),
         );
+
         const environment = fake<WorkerEnvironment["Service"]>({
           INSTANCE: text,
           PROJECT: { getByName: () => project },
-          MEASUREMENTS: new Proxy({}, { get: unexpected }),
+          MEASUREMENTS: Stub.make<R2Bucket>(unexpected),
         });
+
         const context = fake<RuntimeContext["Service"]>({});
 
         // The Layer's outer Effect is the instance's construction: it may not fail, die or build.
@@ -354,7 +364,9 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           Effect.provideService(WorkerEnvironment, environment),
           Effect.provideService(ObjectState, state),
           Effect.provideService(RuntimeContext, context),
+          Effect.provide(parts),
         );
+
         yield* Effect.yieldNow;
         expect(reads, "nothing is built before the first call").toBe(0);
         expect(lookups, "no storage is read before the first call").toBe(0);
@@ -367,13 +379,14 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           // the setting, so the call fails with the reason alone.
           expect(failure).toBeInstanceOf(LedgerError);
           expect(failure).toMatchObject({ reason: "bad_row" });
-          expect(Reflect.get(Object(failure), "cause"), "the cause stays inside the object").toBeUndefined();
+          assert(failure instanceof LedgerError);
+          expect(failure.cause, "the cause stays inside the object").toBeUndefined();
           expect(reads, "a failed build is not kept: the next call reads again").toBe(index + 1);
         }
 
         // The read turns good. The next call reads it, builds and reaches the service; later calls
         // reuse that build and read nothing more.
-        text = JSON.stringify(good);
+        text = Formatter.formatJson(good);
 
         for (const _call of calls) {
           expect(yield* object.open("law-3")).toStrictEqual({ rev: 0, view: {} });
@@ -403,12 +416,15 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         const request = new Request(url, { method, headers: upgrade ? { upgrade: "websocket" } : {} });
         const response = new Response(status === 204 ? null : text, { status });
         const given: Array<Request> = [];
+
         const slot = ObjectService.fromWebHandler((seen) =>
           Effect.sync(() => {
             given.push(seen);
+
             return response;
           }),
         );
+
         // `makeRequestEffect` is typed `any` in its source (Workers/HttpServer.ts). It provides the
         // request itself, and the error-free `toHandled` answers a web Response, so these slots
         // need nothing and cannot fail.
@@ -419,10 +435,12 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         expect(answered, "the answer is the handler's Response, not a copy").toBe(response);
 
         const failing = ObjectService.fromWebHandler(() => Effect.fail(new LedgerError({ reason, message: text })));
+
         const refusing: Effect.Effect<Response, never, never> = makeRequestEffect(
           fake(new Request(url, { method })),
           failing,
         );
+
         const refused: Response = yield* refusing;
         expect(refused.status).toBeGreaterThanOrEqual(500);
         expect(yield* HttpClientResponse.fromWeb(HttpClientRequest.get(url), refused).text).not.toContain(text);

@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-16-host-route-changed-run-stopped",
+  "date": "2026-11-16",
+  "quests": ["tea-fabrika#1128"],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "A local changed-test run for today's host workflow tooling was stopped after its selection was found to include the legacy box test file, which has real process-signal laws. The saved log contains only the Vitest run banner. It gives no test results and cannot establish which laws ran. The Vitest process and its worker were gone after cancellation.",
+  "cause": "The local host-law guard covers next/'s integration files, while today's legacy tooling test file also sends real signals. The agent trusted the changed selection without checking that dependency.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Run the exact host workflow lint tests locally. The existing macOS workflow gains a fixed box suite so the repaired helper can be proved remotely without another broad local selection.",
+  "test": ".github/ci/workflow-lint/host.test.ts checks the fixed box target, genuine CI, full depth, blocking failures and saved proof.",
+  "links": []
+}

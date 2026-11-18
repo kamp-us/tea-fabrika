@@ -4,12 +4,13 @@
 import type * as Cloudflare from "@alchemy.run/cloudflare";
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { connectionLayer, ConnectionService } from "./connection.ts";
 import { Connection, type ConnectionShape } from "./objects.ts";
 import * as ObjectService from "./ObjectService.ts";
 import type { Env, ProjectOptions } from "./runtime.ts";
+import * as WaitsLive from "./WaitsLive.ts";
 
 type Service = (typeof ConnectionService)["Service"];
 
@@ -52,6 +53,7 @@ export const layer = (options: {
     Effect.gen(function* () {
       const state = yield* ObjectState;
       const env = yield* WorkerEnvironment;
+
       const bindings: Env = {
         INSTANCE: env.INSTANCE,
         PROJECT: env.PROJECT,
@@ -61,12 +63,16 @@ export const layer = (options: {
         LOADER: env.LOADER,
         MEASUREMENTS: env.MEASUREMENTS,
       };
+
+      // SAFETY: Alchemy's `fromDurableObjectState` stores workerd's own state object as `raw`, typed through its import of the `@cloudflare/workers-types` module rather than the global `DurableObjectState` this file uses.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw state until S5 and S6; not reported, 0042 amendment 2026-11-09
       const raw = state.raw as unknown as DurableObjectState;
+
       const service = ObjectService.make(
         ConnectionService,
-        connectionLayer(raw, bindings, undefined, options.input(bindings)),
+        connectionLayer(raw, bindings, undefined, options.input(bindings)).pipe(Layer.provide(WaitsLive.layer)),
       );
+
       const event = (
         socket: Cloudflare.WebSocket,
         slot: (gateway: Service, ws: WebSocket) => Effect.Effect<void, unknown>,
@@ -76,7 +82,7 @@ export const layer = (options: {
           Effect.orDie,
         );
 
-      return Effect.succeed({
+      return {
         fetch: ObjectService.fromWebHandler((request) =>
           service.pipe(Effect.flatMap((gateway) => gateway.fetch(request))),
         ),
@@ -86,6 +92,6 @@ export const layer = (options: {
         ring: (stream, rev) => called(service.pipe(Effect.flatMap((gateway) => gateway.ring(stream, rev)))),
         notify: (client, news) => called(service.pipe(Effect.flatMap((gateway) => gateway.notify(client, news)))),
         probe: (session) => called(service.pipe(Effect.flatMap((gateway) => gateway.probe(session)))),
-      } satisfies ConnectionShape);
-    }),
+      } satisfies ConnectionShape;
+    }).pipe(Effect.map((shape) => Effect.succeed(shape))),
   );

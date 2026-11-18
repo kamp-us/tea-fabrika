@@ -1,14 +1,20 @@
 // L3, next/. launchctl print is deliberately decoded narrowly; unknown text never means absent.
 import { expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Function from "effect/Function";
+import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Status from "./LaunchdStatus.ts";
 
 const target = "gui/501/test.p19.brain";
+
 const Word = Schema.String.check(Schema.isPattern(/^[a-zA-Z][a-zA-Z0-9_雪 -]{0,18}[a-zA-Z0-9雪]$/));
 
 const print = (word: string, pid: number | null) =>
@@ -17,74 +23,77 @@ const print = (word: string, pid: number | null) =>
 // vector: the whole print of a job as a real Mac on macOS 14.3.1 gave it to the L13 host run on 2026-11-13,
 // with the test's paths and label in place of the host's.
 const real = (state: string, pid: number | null) =>
-  [
-    `${target} = {`,
-    `\tactive count = ${pid === null ? 0 : 1}`,
-    "\tpath = /test/brain-home/brain.plist",
-    "\ttype = LaunchAgent",
-    `\tstate = ${state}`,
-    "",
-    "\tprogram = /test/Electron",
-    "\targuments = {",
-    "\t\t/test/Electron",
-    "\t\t/test/brain-home/brain.mjs",
-    "\t\tspaces & <angles> 雪",
-    "\t}",
-    "",
-    "\tinherited environment = {",
-    "\t\tSSH_AUTH_SOCK => /test/Listeners",
-    "\t}",
-    "",
-    "\tdefault environment = {",
-    "\t\tPATH => /usr/bin:/bin:/usr/sbin:/sbin",
-    "\t}",
-    "",
-    "\tenvironment = {",
-    "\t\tFABRIKA_HOME => /test/brain-home",
-    "\t\tFABRIKA_BUILD => build-a",
-    "\t\tELECTRON_RUN_AS_NODE => 1",
-    "\t\tXPC_SERVICE_NAME => test.p19.brain",
-    "\t}",
-    "",
-    "\tdomain = gui/501 [100016]",
-    "\tasid = 100016",
-    "\tminimum runtime = 2",
-    "\texit timeout = 5",
-    "\truns = 1",
-    ...(pid === null
-      ? ["\tlast exit code = 0"]
-      : [
-          `\tpid = ${pid}`,
-          "\timmediate reason = speculative",
-          "\tforks = 0",
-          "\texecs = 1",
-          "\tinitialized = 1",
-          "\ttrampolined = 1",
-          "\tstarted suspended = 0",
-          "\tproxy started suspended = 0",
-          "\tlast exit code = (never exited)",
-        ]),
-    "",
-    "\tsemaphores = {",
-    "\t\tsuccessful exit => 0",
-    "\t}",
-    "",
-    "\tspawn type = daemon (3)",
-    "\tjetsam priority = 40",
-    "\tjetsam memory limit (active) = (unlimited)",
-    "\tjetsam memory limit (inactive) = (unlimited)",
-    "\tjetsamproperties category = daemon",
-    "\tjetsam thread limit = 32",
-    "\tcpumon = default",
-    "\tprobabilistic guard malloc policy = {",
-    "\t\tactivation rate = 1/1000",
-    "\t\tsample rate = 1/0",
-    "\t}",
-    "",
-    "\tproperties = runatload | inferred program | system service | tle system",
-    "}",
-    "",
-  ].join("\n");
+  Arr.join(
+    [
+      `${target} = {`,
+      `\tactive count = ${pid === null ? 0 : 1}`,
+      "\tpath = /test/brain-home/brain.plist",
+      "\ttype = LaunchAgent",
+      `\tstate = ${state}`,
+      "",
+      "\tprogram = /test/Electron",
+      "\targuments = {",
+      "\t\t/test/Electron",
+      "\t\t/test/brain-home/brain.mjs",
+      "\t\tspaces & <angles> 雪",
+      "\t}",
+      "",
+      "\tinherited environment = {",
+      "\t\tSSH_AUTH_SOCK => /test/Listeners",
+      "\t}",
+      "",
+      "\tdefault environment = {",
+      "\t\tPATH => /usr/bin:/bin:/usr/sbin:/sbin",
+      "\t}",
+      "",
+      "\tenvironment = {",
+      "\t\tFABRIKA_HOME => /test/brain-home",
+      "\t\tFABRIKA_BUILD => build-a",
+      "\t\tELECTRON_RUN_AS_NODE => 1",
+      "\t\tXPC_SERVICE_NAME => test.p19.brain",
+      "\t}",
+      "",
+      "\tdomain = gui/501 [100016]",
+      "\tasid = 100016",
+      "\tminimum runtime = 2",
+      "\texit timeout = 5",
+      "\truns = 1",
+      ...(pid === null
+        ? ["\tlast exit code = 0"]
+        : [
+            `\tpid = ${pid}`,
+            "\timmediate reason = speculative",
+            "\tforks = 0",
+            "\texecs = 1",
+            "\tinitialized = 1",
+            "\ttrampolined = 1",
+            "\tstarted suspended = 0",
+            "\tproxy started suspended = 0",
+            "\tlast exit code = (never exited)",
+          ]),
+      "",
+      "\tsemaphores = {",
+      "\t\tsuccessful exit => 0",
+      "\t}",
+      "",
+      "\tspawn type = daemon (3)",
+      "\tjetsam priority = 40",
+      "\tjetsam memory limit (active) = (unlimited)",
+      "\tjetsam memory limit (inactive) = (unlimited)",
+      "\tjetsamproperties category = daemon",
+      "\tjetsam thread limit = 32",
+      "\tcpumon = default",
+      "\tprobabilistic guard malloc policy = {",
+      "\t\tactivation rate = 1/1000",
+      "\t\tsample rate = 1/0",
+      "\t}",
+      "",
+      "\tproperties = runatload | inferred program | system service | tle system",
+      "}",
+      "",
+    ],
+    "\n",
+  );
 
 const decode = (code: number, stdout: string, stderr = "") =>
   Status.decode({ target, code, stdout: Redacted.make(stdout), stderr: Redacted.make(stderr) });
@@ -115,6 +124,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const missing = `Could not find service "test.p19.brain" in domain for user gui: 501\n`;
       expect(yield* decode(113, "", missing)).toEqual({ _tag: "absent" });
+
       const invalid = [
         [113, "", `Could not find service "other-${word}" in domain for user gui: 501\n`],
         [113, "", `Could not find service "test.p19.brain" in domain for user gui: 502\n`],
@@ -145,7 +155,7 @@ it.effect.each([
     // The first line is accepted only as that exact line, before the exact missing-service line.
     for (const err of [
       `${missing}Bad request.\n`,
-      `Bad request.\n${missing}`.replace("501", "502"),
+      Function.pipe(`Bad request.\n${missing}`, Str.replace("501", "502")),
       `Bad request\n${missing}`,
       "Bad request.\n",
     ]) {
@@ -194,20 +204,26 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
       }),
       ({ mutation, word }) => {
         const text = print(word, 81);
-        const broken =
-          mutation === "missing-program"
-            ? text.replace(/\tprogram = .*\n/, "")
-            : mutation === "duplicate-program"
-              ? text.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`)
-              : mutation === "nested-program"
-                ? text.replace(/\tprogram = .*\n/, `\tunrelated = {\n\t\tprogram = /test/${word}/Electron\n\t}\n`)
-                : mutation === "argument"
-                  ? text.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument')
-                  : mutation === "target"
-                    ? text.replace(target, "gui/502/foreign")
-                    : mutation === "duplicate-pid"
-                      ? text.replace("\tpid = 81", "\tpid = 82\n\tpid = 81")
-                      : text.slice(0, -3);
+
+        const broken = Match.value(mutation).pipe(
+          Match.when("missing-program", () => Function.pipe(text, Str.replace(/\tprogram = .*\n/, ""))),
+          Match.when("duplicate-program", () =>
+            Function.pipe(text, Str.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`)),
+          ),
+          Match.when("nested-program", () =>
+            Function.pipe(
+              text,
+              Str.replace(/\tprogram = .*\n/, `\tunrelated = {\n\t\tprogram = /test/${word}/Electron\n\t}\n`),
+            ),
+          ),
+          Match.when("argument", () =>
+            Function.pipe(text, Str.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument')),
+          ),
+          Match.when("target", () => Function.pipe(text, Str.replace(target, "gui/502/foreign"))),
+          Match.when("duplicate-pid", () => Function.pipe(text, Str.replace("\tpid = 81", "\tpid = 82\n\tpid = 81"))),
+          Match.orElse(() => Function.pipe(text, Str.slice(0, -3))),
+        );
+
         const exit = Effect.runSync(decode(0, broken).pipe(Effect.exit));
         expect(error(exit)).toMatchObject({
           _tag: "BrainControlError",

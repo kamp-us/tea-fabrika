@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-plans-amend",
+  "ticket": "1067",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1491",
+  "started": "2026-11-15T21:40:52-08:00",
+  "ended": "2026-11-15T22:01:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The lead step amended the mock sweep's plans with the merge session's rulings of 2026-11-15, in one commit, so all 12 can be signed together. The seven named plans were amended: cloudflare, lib-top, gateway-processes-telemetry, app-src, node-client, node-dev and pipeline. The five ready plans broke sweep-wide points too, so they were amended in the same commit: none named the fold branch (ruling 1); app-e2e, transport, node-repositories and oxlint-plugins had lock plants of their own in place of node's VI_METHODS (ruling 2); node and node-repositories listed no build step (ruling 5). Per plan: cloudflare's three Effect.result spies go through two typed services recorded with a Recorder (a relayed request from the merge session), its lock refuses all five methods, and M6 reads all five console methods; lib-top adds fn and plants vi.fn() as refused; gateway reads the WebCrypto reference with a typed error and no catchDefect, its 34 Digest provides go, and M3 uses lib-top's generatorWith; app-src's digests stay typed through WebCrypto, inputs.name goes through an InputNames service, and its four pull requests become four slices; node-client drops its own Console for TestConsole with warnLines and sets the tea warning hook; node-dev's watch.ts takes app-e2e's onLog through Console and its Q2 lean goes; pipeline's patch is a new @demlik__tea@0.27.0 file, read against demlik's decisions, and its build step is listed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Not applied, and asked of the merge session in the cloudflare (question 2), app-src (question 3) and node-dev (question 3) plans: ruling 2's five-method block, read as written, drops the lock on every file that still holds another sweep's vi.mock, vi.doMock or vi.stubEnv, which loosens cloudflare M11, app-src A6 and A8, and node-dev M1. Each plan keeps its narrower lock for those files until the ruling, with an 80% lean to keep it as an interim block. The fold branch is named fabrikalfa/mock-fold in every plan; no such branch exists yet, and the name follows fabrikalfa/reflect-fold. One call beyond the rulings' words, from ruling 4: TestConsole reads only log and error, and app-e2e's patch adds warn, so the five-method console spies in cloudflare, node-client, node-dev and pipeline also need infoLines and debugLines in the same Effect patch; the first of those slices adds them. kamp-us/demlik was read at e328d1e (its .decisions and .patterns) and the published @demlik/tea 0.27.0 dist: the same seven console.warn sites, and demlik 0031 rules out routing them through OnError. The cloudflare stdout and stderr half still waits on the owner. plancheck --draft passed on all 12 plans. No test ran: only plans and this row changed. The model is left out of this row on purpose.",
+  "step": "lead"
+}

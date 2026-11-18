@@ -54,26 +54,30 @@ describe("T695, C8: error types accept a diagnostic cause", () => {
 
     // The field never widens what a service may fail with.
     type Append = ReturnType<(typeof Ledger)["Service"]["append"]>;
+
     expectTypeOf<Effect.Error<Append>>().toEqualTypeOf<LedgerError>();
     expectTypeOf<Stream.Error<ReturnType<(typeof Ledger)["Service"]["read"]>>>().toEqualTypeOf<LedgerError>();
     expectTypeOf<Effect.Error<(typeof ProcessStore)["Service"]["load"]>>().toEqualTypeOf<LedgerError>();
+
     // Its own error since ticket 921 slice 1, read by tag: `runtime/Runtime.types.test.ts` holds the rest.
     type Load = Effect.Error<(typeof RecoveryStore)["Service"]["load"]>;
+
     expectTypeOf<Load["_tag"]>().toEqualTypeOf<"RecoveryStoreError">();
     expectTypeOf<Effect.Error<ReturnType<typeof decodeBuilt>>>().toEqualTypeOf<BuildError>();
     expectTypeOf<Effect.Error<ReturnType<(typeof SpanSink)["Service"]["summaries"]>>>().toEqualTypeOf<SinkError>();
+
     type Next = ReturnType<(typeof Id.Generator)["Service"]["next"]>;
+
     expectTypeOf<Effect.Error<Next>>().toEqualTypeOf<IdError>();
   });
 
-  it("each translating class keeps a generated cause as given", async () => {
-    await fc.assert(
+  it("each translating class keeps a generated cause as given", () =>
+    fc.assert(
       fc.property(causes, (cause) => {
         for (const error of made(cause)) {
           expect(Object.is(error.cause, cause), `${error._tag} keeps its cause`).toBe(true);
         }
       }),
       { seed: SEED, numRuns: 100 },
-    );
-  });
+    ));
 });

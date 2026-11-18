@@ -1,38 +1,59 @@
 /**
  * The brain lifecycle's saved control state and commands.
  */
+import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import type * as Snapshot from "@kalfa/config/Snapshot";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import type * as Types from "effect/Types";
 import * as Id from "../Id.ts";
-import type * as Snapshot from "../settings/Snapshot.ts";
 import { Status } from "./BrainControl.ts";
 import { Children, Readiness } from "./BrainProbe.ts";
 import { BrainSpec } from "./BrainSpec.ts";
 
 // tea checks a Cmd's input as the value update already holds, so the schema is its decoded side.
 const Input = Schema.toType(Schema.Struct({ id: Id.Cmd }));
+
 const Errors = ["Operation", "Conflict"] as const;
+
 const inspect = Cmd.make("inspect", { input: Input, ok: Status, err: Errors });
+
 const install = Cmd.make("install", { input: Input, ok: Schema.Null, err: Errors });
+
 const start = Cmd.make("start", { input: Input, ok: Schema.Null, err: Errors });
+
 const stop = Cmd.make("stop", { input: Input, ok: Schema.Null, err: Errors });
+
 const ready = Cmd.make("ready", { input: Input, ok: Readiness, err: Errors });
+
 const cleanup = Cmd.make("cleanup", { input: Input, ok: Children, err: Errors });
+
 const remove = Cmd.make("remove", { input: Input, ok: Schema.Null, err: Errors });
+
 const commands = { inspect, install, start, stop, ready, cleanup, remove };
+
 const Action = Schema.Literals(["up", "stop"]);
 
-const Command = Schema.Struct({
-  type: Schema.Literals(["inspect", "install", "start", "stop", "ready", "cleanup", "remove"]),
-  id: Id.Cmd,
+const Command = Schema.TaggedUnion({
+  inspect: { id: Id.Cmd },
+  install: { id: Id.Cmd },
+  start: { id: Id.Cmd },
+  stop: { id: Id.Cmd },
+  ready: { id: Id.Cmd },
+  cleanup: { id: Id.Cmd },
+  remove: { id: Id.Cmd },
 });
+
 /**
  * Commands emitted by the lifecycle.
  *
  * @category models
  */
 export type Command = ReturnType<(typeof commands)[keyof typeof commands]>;
+
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 const Sequence = { sequence: Count };
 
 const Flow = {
@@ -47,10 +68,11 @@ const Flow = {
 const Failure = {
   ...Sequence,
   reason: Schema.Literals(["Operation", "Conflict", "Timeout"]),
-  command: Command.fields.type,
+  command: Schema.Literals(["inspect", "install", "start", "stop", "ready", "cleanup", "remove"]),
 };
 
 const Up = { ...Flow, action: Schema.Literal("up") };
+
 const Down = { ...Flow, action: Schema.Literal("stop") };
 
 /**
@@ -73,47 +95,32 @@ export const Model = Schema.TaggedUnion({
   failed_up: Failure,
   failed_stop: Failure,
 });
+
 type Model = typeof Model.Type;
+
 type Active = Extract<Model, { deadline: number }>;
+
 type Cell = readonly [Model, ReadonlyArray<Command>];
-// tea adds malformed_result to every settled error: a reply whose value fails its own schema.
-const Error = Schema.TaggedUnion({ Operation: {}, Conflict: {}, malformed_result: {} });
+
 const Observation = { at: Schema.Finite, next: Schema.optionalKey(Id.Cmd) };
 
-const responses = <const T extends Command["type"], S extends Schema.Top>(type: T, value: S) =>
-  [
-    Schema.Struct({
-      type: Schema.Literal(`${type}_ok`),
-      cmd: Schema.Struct({ type: Schema.Literal(type), id: Id.Cmd }),
-      value,
-      ...Observation,
-    }),
-    Schema.Struct({
-      type: Schema.Literal(`${type}_err`),
-      cmd: Schema.Struct({ type: Schema.Literal(type), id: Id.Cmd }),
-      error: Error,
-      ...Observation,
-    }),
-  ] as const;
+/**
+ * Schema for a request or a clock observation the lifecycle takes, each made with
+ * `Observed.cases.<name>.make`.
+ *
+ * @category schemas
+ */
+export const Observed = Schema.TaggedUnion({ up: Observation, stop: Observation, tick: Observation });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("up"), ...Observation }),
-  Schema.Struct({ type: Schema.Literal("stop"), ...Observation }),
-  Schema.Struct({ type: Schema.Literal("tick"), ...Observation }),
-  ...responses("inspect", Status),
-  ...responses("install", Schema.Null),
-  ...responses("start", Schema.Null),
-  ...responses("stop", Schema.Null),
-  ...responses("ready", Readiness),
-  ...responses("cleanup", Children),
-  ...responses("remove", Schema.Null),
-]);
+/** tea's settled reply to each command, with the id of the command to issue after it. */
+type Replies = Settled<(typeof commands)[keyof typeof commands]> & { readonly next?: typeof Id.Cmd.Type };
+
 /**
  * Requests, clock observations and settled replies accepted by the lifecycle.
  *
  * @category models
  */
-export type Msg = typeof Msg.Type;
+export type Msg = typeof Observed.Type | Replies;
 
 const active = (m: Model): m is Active => "pending" in m;
 
@@ -127,37 +134,46 @@ const flow = (m: Active) => ({
 });
 
 const up = (m: Active) => ({ ...flow(m), action: "up" as const });
+
 const down = (m: Active) => ({ ...flow(m), action: "stop" as const });
 
 const matches = (m: Model, cmd: Command): m is Active =>
-  active(m) && m.pending?.id === cmd.id && m.pending.type === cmd.type;
+  active(m) && m.pending?.id === cmd.id && m.pending._tag === cmd._tag;
 
-const fail = (m: Active, reason: typeof Failure.reason.Type, command?: Command["type"]): Cell => [
+/** The command an active state waits on when no command is pending. */
+type Waits = Command["_tag"];
+
+const waitsOn = (m: Active): Waits =>
+  Model.matchOrElse(
+    m,
+    { waiting_ready: (): Waits => "ready", checking_children: (): Waits => "cleanup" },
+    (): Waits => "inspect",
+  );
+
+const fail = (m: Active, reason: typeof Failure.reason.Type, command?: Command["_tag"]): Cell => [
   Model.cases[m.action === "up" ? "failed_up" : "failed_stop"].make({
     sequence: m.sequence,
     reason,
-    command:
-      command ??
-      m.pending?.type ??
-      (m._tag === "waiting_ready" ? "ready" : m._tag === "checking_children" ? "cleanup" : "inspect"),
+    command: command ?? m.pending?._tag ?? waitsOn(m),
   }),
   [],
 ];
 
 // Pure walks omit the host's allocation and reproduce command identities across saved cuts.
-const issue = (m: Active, type: Command["type"], allocated?: typeof Id.Cmd.Type): Cell => {
+const issue = (m: Active, type: Command["_tag"], allocated?: typeof Id.Cmd.Type): Cell => {
   const sequence = m.sequence + 1;
-  const id = allocated ?? Id.Cmd.make(`cmd_0000000000e008${sequence.toString(16).padStart(12, "0")}`);
+  const id = allocated ?? Id.Cmd.make(`cmd_0000000000e008${Str.padStart(12, "0")(sequence.toString(16))}`);
   const pending = commands[type]({ id });
-  return [{ ...m, sequence, pending: { type: pending.type, id: pending.id } }, [pending]];
+
+  return [{ ...m, sequence, pending: Command.cases[pending._tag].make({ id: pending.id }) }, [pending]];
 };
 
 type Reply = Extract<Msg, { cmd: unknown }>;
 
 const reply =
-  <T extends Reply["type"]>(type: T, handle: (m: Active, msg: Extract<Reply, { type: T }>) => Cell) =>
-  (m: Model, msg: Extract<Reply, { type: T }>): Cell => {
-    if (msg.type !== type || !matches(m, msg.cmd)) {
+  <T extends Reply["_tag"]>(type: T, handle: (m: Active, msg: Types.ExtractTag<Reply, T>) => Cell) =>
+  (m: Model, msg: Types.ExtractTag<Reply, T>): Cell => {
+    if (msg._tag !== type || !matches(m, msg.cmd)) {
       return [m, []];
     }
 
@@ -174,6 +190,7 @@ const error = (m: Active, msg: Extract<Msg, { error: unknown }>): Cell =>
  */
 export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly settings: Snapshot.Snapshot }) => {
   const poll = Number(settings.values["desktop.brain-poll"]);
+
   const begin = (m: Model, action: typeof Action.Type, at: number, next?: typeof Id.Cmd.Type): Cell =>
     active(m)
       ? [m, []]
@@ -192,11 +209,13 @@ export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly
           "inspect",
           next,
         );
+
   const again = (m: Active, at: number): Cell => [{ ...m, pending: null, wake: at + poll }, []];
 
   return Machine.make({
     model: Model,
-    msg: Msg,
+    // tea mints each settled reply from the Cmd list; the machine decodes only what comes from outside.
+    msg: Observed,
     cmds: [inspect, install, start, stop, ready, cleanup, remove],
     init: (saved) => [saved ?? Model.cases.idle.make({ sequence: 0 }), []],
     update: {
@@ -215,11 +234,7 @@ export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly
           return [m, []];
         }
 
-        return issue(
-          m,
-          m._tag === "waiting_ready" ? "ready" : m._tag === "checking_children" ? "cleanup" : "inspect",
-          msg.next,
-        );
+        return issue(m, waitsOn(m), msg.next);
       },
       inspect_ok: reply("inspect_ok", (m, msg) => {
         if (msg.value._tag === "loaded" && !BrainSpec.matches(spec, msg.value)) {

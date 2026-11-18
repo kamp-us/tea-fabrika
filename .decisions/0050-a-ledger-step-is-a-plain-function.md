@@ -79,7 +79,7 @@ The owner decided on 2026-11-10.
 **How this fits older texts.** The sweep found no record that says the opposite.
 
 - **0041 and 0042 are amended in part.** Their PR 8 bullet said the services move to the Effect
-  `transaction`. That holds; this record adds what goes inside it. The rest of both stands.
+  `transaction`. That holds; this record adds what goes inside it.
 - [No Promises](../docs/direction/no-promises.md) stands. The step is plain code, not a Promise,
   and the Promise stays inside Alchemy's `transaction`.
 - [An object class stays thin](../docs/direction/object-classes-stay-thin.md) stands, and fits:

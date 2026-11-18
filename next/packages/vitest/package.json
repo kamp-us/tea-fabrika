@@ -3,23 +3,25 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The new fabrika's test primitives, as Effect keeps its own in @effect/vitest (decision 0538): so far the test depth, runsFor({ fast, full }), the only reader of FABRIKA_TEST_DEPTH, and the Recorder, the one typed way a law watches a service's calls (decision 0579).",
+  "description": "The new fabrika's test primitives, as Effect keeps its own in @effect/vitest (decision 0538): the test depth, runsFor({ fast, full }), the only reader of FABRIKA_TEST_DEPTH, the Recorder, the one typed way a law watches a service's calls (decision 0579), and on its own subpath @kampus/vitest/TestDatabase, the one way a test opens a SQLite file.",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./TestDatabase": "./src/TestDatabase.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "effect": "catalog:"
+    "@effect/vitest": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "vitest": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@types/node": "catalog:",
-    "fast-check": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   },
   "volta": {
     "extends": "../../../package.json"

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e41-review1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T21:23:56-08:00",
+  "ended": "2026-11-15T21:32:03-08:00",
+  "parent": "2026-11-15-t1075-e41-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of record for judgment slice E41 of the Effect-checker sweep (anyUnknownInErrorContext), in next/ and our tooling, at 73c538f5b: merge-ready, no finding. Every edit is a type that names the error the code really fails with, with no cast, no widening, no disable and no ignore line: the process-output helper in .agents mutbox.ts and sizecap.ts and in app:exam commits.ts and ratchet.ts takes Stream<Uint8Array, PlatformError.PlatformError>, which is what ChildProcessSpawner's stdout and stderr are in the installed effect 4.1.3; the build laws' stand-ins name BuildError | PlatformError for build, BuildError for inlineStylesheet and never for serveAsset, each proved equal to the real function's error type with a type probe (a false probe turned tsc red as a control); the counter law reads RunnerFailure from ProgramRunner's own type; OpenRepository.open is generic over confirm's error E, which open maps to its own failure, so its error and behavior do not change. No law is new or changed, no lock line, no file of pull request 1366 (63 files) and no file outside the slice's folders is touched. Recount at head with only the check at error: 224 hits left in the slice's folders, matching 231 after tests less the build's 7; .agents 5, prog:counter 0, prog:pipeline 138, app 123. The one product hit left, access/SessionSenders.ts 58, takes the type of cloudflare/bindings.ts 202 (lib:cloudflare, slice E82). Sampled left exam hits (transport/Connection.test.ts, which runs connection<unknown> on purpose per T737 D3; BoxTest.ts 268, 307, 359; e2e one-file.visual.test.ts 284; exam/runner-contract.test.ts 166) are the generic-over-error class 0565 names. The tests and build field rows match the commits' times and the recount.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Read-only apart from this row. Ran at 73c538f5b: pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) green; one pnpm typecheck green; one file at a time, green: mutbox.test.ts 28 and 1 skipped, sizecap.test.ts 17, exam/ratchet.test.ts 5, exam/commits.test.ts 39, exam/ratchet.integration.test.ts 5, OpenRepository.test.ts 4, OpenRepository.integration.test.ts 1, counter runner.laws.integration.test.ts 5, node/build css.integration.test.ts 30, build-one-file.integration.test.ts 12, build-assets.integration.test.ts 25. Not run: e2e/one-file.visual.test.ts (a visual test). loosening.sh: 7 hits, each an added type import line, no law loosened. governance.sh: word matches only, no decision walked back. git merge-tree with origin/main 9186e6c49: no conflict. leakgrep on the range: clean.",
+  "step": "review"
+}

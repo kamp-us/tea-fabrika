@@ -108,7 +108,7 @@ For a sent-back review:
   - the fix needs a new design call;
   - the fix loosens a law;
   - the same fault comes back a third time.
-- **0176 holds as written for every other quest.** When what is left is not named and located, or
+- **For every other quest, 0176's stop applies.** When what is left is not named and located, or
   not inside the plan, the quest stops. The lead lands what works and files the rest as a ticket,
   and it comes to the owner only when what is left breaks the slice's main job.
 - Each further fix round the lead decides gets one line on the lead's status page: the quest, which
@@ -151,8 +151,8 @@ back.
   can ask for any of it back.
 - The lead skill's "When a review sends back" says the new rule, and `AGENTS.md` names this file
   beside 0176.
-- 0176's own open points stay open: how the count is kept while quests run by hand, what "breaks
-  the slice's main job" means, and whether the number stays 2.
+- Three points 0176 left open are open here too: how the count is kept while quests run by hand,
+  what "breaks the slice's main job" means, and whether the number stays 2.
 - Not decided here:
   - whether there is a number of fix rounds after which a quest stops whatever its faults look
     like. The ruling names the same fault's third time, and no other number;

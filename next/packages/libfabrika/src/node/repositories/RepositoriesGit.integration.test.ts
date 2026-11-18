@@ -5,19 +5,25 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -26,19 +32,23 @@ import { fixture, git, gitCommandBudget, runs, withReader } from "./Repositories
 // Fixture (init, clone, add, commit, push, rev-parse), initial open, four moves
 // (at most checkout/add/commit/push plus ls-tree/cat-file), worktree add, alias open.
 const pinnedReadGitCommands = 6 + 12 + 4 * (4 + 2) + 1 + 12;
+
 // Fixture, remove/commit/push, absent open, revert/push, four faulted opens,
 // remove origin, then the final open's four metadata commands.
 const failedReadGitCommands = 6 + 3 + 12 + 2 + 4 * 11 + 1 + 4;
+
 // Fixture, then add/commit/push and at most twelve open commands for each move.
 const legacyGitCommands = 6 + 4 * (3 + 12);
+
 const text = (bytes: Uint8Array | null) => (bytes === null ? null : new TextDecoder().decode(bytes));
+
 const services = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
 
 describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) => {
   it(
     "L1: every prefix keeps the pinned tree after checkout edits, branch switches and origin moves",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(
           fc.constantFrom("sha1" as const, "sha256" as const),
           fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/).map((word) => `trunk-${word}`),
@@ -97,15 +107,14 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
             ),
         ),
         runs,
-      );
-    },
+      ),
     runs.numRuns * pinnedReadGitCommands * gitCommandBudget,
   );
 
   it(
     "L2: only an absent tree entry is an empty document; every requested Git failure refuses",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
           Effect.runPromise(
             Effect.scoped(
@@ -114,19 +123,22 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 yield* git(f.repo, ["rm", ".fabrika/fabrika.toml"]);
                 yield* git(f.repo, ["commit", "-m", "absent"]);
                 yield* git(f.repo, ["push", "origin", f.branch]);
+
                 const absent = yield* withReader(
                   f.person,
                   Effect.gen(function* () {
                     return yield* (yield* Repositories).open(f.repo);
                   }),
                 );
+
                 expect(absent.snapshot.text).toBeNull();
                 // Restore the committed document for blob/type failures, without touching this checkout's git.
                 yield* git(f.repo, ["revert", "--no-edit", "HEAD"]);
                 yield* git(f.repo, ["push", "origin", f.branch]);
                 const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-                const object = "a".repeat(40);
+                const object = Function.pipe("a", Str.repeat(40));
                 const validHead = `ref: refs/heads/release\tHEAD\n${object}\tHEAD\n`;
+
                 const faults = [
                   { operation: "fetch", flag: "--no-tags", output: "", code: 1 },
                   { operation: "ls-tree", flag: ".fabrika/fabrika.toml", output: "", code: 1 },
@@ -138,7 +150,12 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   { operation: "ls-remote", flag: "--symref", output: `${object}\tHEAD\n`, code: 0 },
                   { operation: "ls-remote", flag: "--symref", output: validHead + validHead, code: 0 },
                   { operation: "ls-remote", flag: "--symref", output: "ref: refs/heads/release\tHEAD\n", code: 0 },
-                  { operation: "ls-remote", flag: "--symref", output: validHead.replace(object, "invalid"), code: 0 },
+                  {
+                    operation: "ls-remote",
+                    flag: "--symref",
+                    output: Function.pipe(validHead, Str.replace(object, "invalid")),
+                    code: 0,
+                  },
                   {
                     operation: "ls-tree",
                     flag: ".fabrika/fabrika.toml",
@@ -175,6 +192,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 for (const cell of tape) {
                   const fault = faults[cell % faults.length]!;
                   let hits = 0;
+
                   const injected = ChildProcessSpawner.make((command) => {
                     if (
                       command._tag === "StandardCommand" &&
@@ -182,8 +200,11 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                       command.args.includes(fault.flag)
                     ) {
                       hits++;
-                      const bytes =
-                        typeof fault.output === "string" ? new TextEncoder().encode(fault.output) : fault.output;
+
+                      const bytes = Predicate.isString(fault.output)
+                        ? new TextEncoder().encode(fault.output)
+                        : fault.output;
+
                       return Effect.succeed(
                         ChildProcessSpawner.makeHandle({
                           pid: ChildProcessSpawner.ProcessId(1),
@@ -203,17 +224,19 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
 
                     return real.spawn(command);
                   });
+
                   const exit = yield* withReader(
                     f.person,
                     Effect.gen(function* () {
                       return yield* (yield* Repositories).open(f.repo);
                     }),
                   ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, injected), Effect.exit);
+
                   expect(hits).toBeGreaterThan(0);
                   expect(Exit.isFailure(exit)).toBe(true);
 
                   if (Exit.isFailure(exit)) {
-                    const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
+                    const fail = Option.getOrUndefined(Arr.findFirst(exit.cause.reasons, (r) => r._tag === "Fail"));
                     expect(fail?._tag === "Fail" && fail.error._tag).toBe("RepositoriesError");
                   }
                 }
@@ -221,27 +244,28 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 // Named replacement for Load's former repo disk-failure law.
                 const missingOrigin = yield* git(f.repo, ["remote", "remove", "origin"]);
                 void missingOrigin;
+
                 const refused = yield* withReader(
                   f.person,
                   Effect.gen(function* () {
                     return yield* (yield* Repositories).open(f.repo);
                   }),
                 ).pipe(Effect.exit);
+
                 expect(Exit.isFailure(refused)).toBe(true);
               }),
             ).pipe(Effect.provide(layer.services)),
           ),
         ),
         runs,
-      );
-    },
+      ),
     runs.numRuns * failedReadGitCommands * gitCommandBudget,
   );
 
   it(
     "L2: each committed legacy-file combination keeps its refusal rule despite opposite checkout files",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
           Effect.runPromise(
             Effect.scoped(
@@ -286,6 +310,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                       return yield* (yield* Repositories).open(f.repo);
                     }),
                   ).pipe(Effect.exit);
+
                   expect(Exit.isSuccess(result)).toBe(world === 3);
 
                   if (Exit.isSuccess(result)) {
@@ -297,13 +322,12 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
           ),
         ),
         runs,
-      );
-    },
+      ),
     runs.numRuns * legacyGitCommands * gitCommandBudget,
   );
 
-  it("L10: success, refusal and interruption release every acquired Git child and temporary directory", async () => {
-    await fc.assert(
+  it("L10: success, refusal and interruption release every acquired Git child and temporary directory", () =>
+    fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) => {
         await Effect.runPromise(
           Effect.gen(function* () {
@@ -320,6 +344,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   const children: Array<ChildProcessSpawner.ChildProcessHandle> = [];
                   const directories: Array<string> = [];
                   const entered = yield* Deferred.make<void>();
+
                   const trackedFs: FileSystem.FileSystem = {
                     ...f.fs,
                     makeTempDirectoryScoped: (options) =>
@@ -327,6 +352,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                         .makeTempDirectoryScoped(options)
                         .pipe(Effect.tap((directory) => Effect.sync(() => directories.push(directory)))),
                   };
+
                   const tracked = ChildProcessSpawner.make((command) =>
                     Effect.gen(function* () {
                       yield* Effect.acquireRelease(
@@ -338,13 +364,16 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                             held--;
                           }),
                       );
+
                       const child = yield* real.spawn(
                         cell % 3 === 2
                           ? ChildProcess.make(process.execPath, ["-e", "setInterval(() => {}, 1000)"])
                           : command,
                       );
+
                       children.push(child);
                       yield* Deferred.succeed(entered, undefined);
+
                       return child;
                     }),
                   );
@@ -365,6 +394,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                     Effect.provideService(FileSystem.FileSystem, trackedFs),
                     Effect.exit,
                   );
+
                   const fiber = yield* operation.pipe(Effect.forkScoped);
                   yield* Deferred.await(entered);
 
@@ -394,8 +424,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
         );
       }),
       { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) },
-    );
-  });
+    ));
 });
 
 // In-process Git replies exercise the adapter in a box. The real-Git laws above still run on the lead.
@@ -415,11 +444,14 @@ it.effect.prop(
         const common = path.join(root, "common");
         yield* fs.makeDirectory(common);
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
-        const first = "a".repeat(width),
-          second = "b".repeat(width);
-        const documentId = "c".repeat(width),
-          firstBlob = "d".repeat(width),
-          secondBlob = "e".repeat(width);
+
+        const first = Function.pipe("a", Str.repeat(width)),
+          second = Function.pipe("b", Str.repeat(width));
+
+        const documentId = Function.pipe("c", Str.repeat(width)),
+          firstBlob = Function.pipe("d", Str.repeat(width)),
+          secondBlob = Function.pipe("e", Str.repeat(width));
+
         let head = first;
         let fault: "fetch" | "tree" | "blob" | "type" | "absent" | null = null;
         let held = 0;
@@ -429,6 +461,7 @@ it.effect.prop(
         const temporary = new Set<string>();
         const isolatedBase = path.join(root, "isolated");
         let serial = 0;
+
         const trackedFs: FileSystem.FileSystem = {
           ...fs,
           // Git never runs here, so its private folders can be scoped handles instead of disk writes.
@@ -438,6 +471,7 @@ it.effect.prop(
                 const directory = path.join(isolatedBase, String(serial++));
                 directories.push(directory);
                 temporary.add(directory);
+
                 return directory;
               }),
               (directory) =>
@@ -446,11 +480,15 @@ it.effect.prop(
                 }),
             ),
           makeDirectory: (directory, options) =>
-            directory.startsWith(isolatedBase) ? Effect.void : fs.makeDirectory(directory, options),
+            Function.pipe(directory, Str.startsWith(isolatedBase)) ? Effect.void : fs.makeDirectory(directory, options),
           writeFileString: (file, value, options) =>
-            file.startsWith(isolatedBase) ? Effect.void : fs.writeFileString(file, value, options),
-          exists: (file) => (file.startsWith(isolatedBase) ? Effect.sync(() => temporary.has(file)) : fs.exists(file)),
+            Function.pipe(file, Str.startsWith(isolatedBase)) ? Effect.void : fs.writeFileString(file, value, options),
+          exists: (file) =>
+            Function.pipe(file, Str.startsWith(isolatedBase))
+              ? Effect.sync(() => temporary.has(file))
+              : fs.exists(file),
         };
+
         const spawner = ChildProcessSpawner.make((command) =>
           Effect.gen(function* () {
             expect(command._tag).toBe("StandardCommand");
@@ -471,10 +509,12 @@ it.effect.prop(
 
             if (stopped) {
               yield* Deferred.succeed(interrupted, undefined);
+
               return yield* Effect.never;
             }
 
             const args = command.args;
+
             let output = "",
               code = 0;
 
@@ -513,6 +553,7 @@ it.effect.prop(
             }
 
             const bytes = new TextEncoder().encode(output);
+
             return ChildProcessSpawner.makeHandle({
               pid: ChildProcessSpawner.ProcessId(1),
               exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(code)),
@@ -528,6 +569,7 @@ it.effect.prop(
             });
           }),
         );
+
         yield* withReader(
           root,
           Effect.gen(function* () {
@@ -551,7 +593,10 @@ it.effect.prop(
               if (Exit.isSuccess(result)) {
                 expect(result.value.snapshot.text).toBeNull();
               } else {
-                const reason = result.cause.reasons.find((reason) => reason._tag === "Fail");
+                const reason = Option.getOrUndefined(
+                  Arr.findFirst(result.cause.reasons, (reason) => reason._tag === "Fail"),
+                );
+
                 expect(reason?._tag === "Fail" && reason.error._tag).toBe("RepositoriesError");
               }
 

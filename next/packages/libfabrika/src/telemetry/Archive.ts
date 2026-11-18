@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 /**
  * Where an object's old measurements go: one R2 bucket behind our own small interface, so nothing
  * here imports Cloudflare. The object's wiring passes the bucket's calls in.
@@ -6,7 +7,12 @@
  * stored checksums. So `put` here answers the hash R2 says it stored, and the sink deletes its
  * local rows only when that equals the hash it worked out itself.
  */
-import { Context, Effect, Layer, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as WebCrypto from "effect/crypto/WebCrypto";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { SinkError } from "./Trace.ts";
 
 /**
@@ -20,7 +26,11 @@ export interface BucketCalls {
   readonly head: (key: string) => Promise<{ readonly sha256: string } | null>;
 }
 
-const hex = (bytes: Uint8Array): string => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array): string =>
+  Arr.join(
+    Array.from(bytes, (byte) => Str.padStart(2, "0")(byte.toString(16))),
+    "",
+  );
 
 /**
  * Computes a body's SHA-256, as lowercase hex.
@@ -35,13 +45,16 @@ const hex = (bytes: Uint8Array): string => Array.from(bytes, (byte) => byte.toSt
 export const sha256 = Effect.fn(function* (body: Uint8Array) {
   const bytes = new Uint8Array(body);
   const fail = (cause: unknown) => new SinkError({ reason: "storage", held: 0, cause });
+  const crypto = yield* WebCrypto.WebCrypto;
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const digest = yield* work;
+
   return hex(new Uint8Array(digest));
 });
 
 const Head = Schema.NullOr(Schema.Struct({ sha256: Schema.String }));
+
 const decodeHead = Schema.decodeUnknownEffect(Head);
 
 /**
@@ -66,10 +79,12 @@ export class Archive extends Context.Service<
   /** In memory, for tests: it holds what it was given, so its hash always matches. */
   static readonly memory: Layer.Layer<Archive> = Layer.sync(Archive)(() => {
     const files = new Map<string, Uint8Array>();
+
     return {
       put: Effect.fnUntraced(function* (key: string, body: Uint8Array) {
         const hash = yield* sha256(body);
         files.set(key, body.slice());
+
         return { sha256: hash };
       }),
     };
@@ -83,17 +98,21 @@ export class Archive extends Context.Service<
       ...args: Parameters<BucketCalls[M]>
     ): Effect.Effect<Awaited<ReturnType<BucketCalls[M]>>, SinkError> => {
       const fail = (cause: unknown) => new SinkError({ reason: "unreachable", held: 0, cause });
+
       // oxlint-disable-next-line fabrika/no-promises -- edge: an R2 binding answers with a Promise
       return Effect.tryPromise({ try: () => Reflect.apply(calls[method], calls, args), catch: fail });
     };
+
     return Layer.succeed(Archive, {
       put: Effect.fnUntraced(function* (key: string, body: Uint8Array) {
         const hash = yield* sha256(body);
         yield* call("put", key, body, hash);
         const raw = yield* call("head", key);
+
         const stored = yield* decodeHead(raw).pipe(
           Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
         );
+
         return { sha256: stored === null ? null : stored.sha256 };
       }),
     });

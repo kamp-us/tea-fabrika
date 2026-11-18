@@ -4,14 +4,22 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect } from "effect";
+import { it } from "@effect/vitest";
+import { String as Str, Array as Arr, Effect, Option, Schema } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { chromium, type Browser, type Page } from "playwright";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+});
 
 interface BrowserDriver {
   readonly frames: Array<any>;
-  readonly call: (method: string, params: unknown) => Promise<any>;
+  readonly call: (method: string, params: Schema.Json) => Promise<any>;
   readonly connections: () => number;
 }
 
@@ -28,7 +36,7 @@ const children: Array<ChildProcess> = [],
   ports: Array<Effect.Effect<void>> = [],
   browsers: Array<Browser> = [];
 
-const pause = () => new Promise<void>((done) => setTimeout(done, 25));
+const pause = () => Effect.runPromise(Effect.sleep("25 millis"));
 
 afterEach(async () => {
   for (const b of browsers.splice(0)) {
@@ -38,7 +46,11 @@ afterEach(async () => {
   for (const c of children.splice(0)) {
     if (c.exitCode === null && c.signalCode === null) {
       c.kill("SIGTERM");
-      await new Promise<void>((done) => c.once("exit", () => done()));
+      await Effect.runPromise(
+        Effect.callback<void>((resume) => {
+          c.once("exit", () => resume(Effect.void));
+        }),
+      );
     }
   }
 
@@ -59,7 +71,7 @@ const start = async () => {
   homes.push(home);
   const key = join(home, "person");
   execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);
-  const publicKey = readFileSync(`${key}.pub`, "utf8").trim();
+  const publicKey = Str.trim(readFileSync(`${key}.pub`, "utf8"));
   const at = await Effect.runPromise(heldPort());
   ports.push(at.release);
   const url = `http://127.0.0.1:${at.port}`;
@@ -67,6 +79,7 @@ const start = async () => {
   delete env.TYPESAFE_API_KEY;
   delete env.FABRIKA_FOREGROUND;
   delete env.CLOUDFLARE_API_TOKEN;
+
   const child = spawn(
     process.execPath,
     [
@@ -84,6 +97,7 @@ const start = async () => {
     ],
     { env, cwd: APP, stdio: ["ignore", "pipe", "pipe"] },
   );
+
   children.push(child);
   let output = "";
   child.stdout!.on("data", (b: Buffer) => {
@@ -98,12 +112,17 @@ const start = async () => {
       throw new Error(`P12 dev.ts did not start: ${output}`);
     }
 
-    try {
-      if ((await fetch(url)).ok) {
-        break;
-      }
-    } catch {
-      /* Not listening yet. */
+    // One HTTP request. A refused connection is "not listening yet", never a failure.
+    const ok = await Effect.runPromise(
+      HttpClient.get(url).pipe(
+        Effect.map((answer) => answer.status >= 200 && answer.status <= 299),
+        Effect.orElseSucceed(() => false),
+        Effect.provide(FetchHttpClient.layer),
+      ),
+    );
+
+    if (ok) {
+      break;
     }
 
     await pause();
@@ -112,6 +131,7 @@ const start = async () => {
   const browser = await chromium.launch({ headless: true });
   browsers.push(browser);
   const context = await browser.newContext();
+
   // P12 has no window yet. The driver loads the instance's own plain `/`, only for its real
   // origin: Chromium blocks a WebSocket from a page faked with route.fulfill.
   return { home, key, url, env, child, context, output: () => output };
@@ -119,9 +139,11 @@ const start = async () => {
 
 const driver = async (page: Page, url: string, tab: string) => {
   await page.goto(url);
+
   return page.evaluate(
     async ({ url, tab }) => {
       const bytes = (s: string) => new TextEncoder().encode(s);
+
       const concat = (...parts: Array<Uint8Array>) => {
         const result = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
         let at = 0;
@@ -133,27 +155,36 @@ const driver = async (page: Page, url: string, tab: string) => {
 
         return result;
       };
+
       const field = (data: string | Uint8Array) => {
         const body = typeof data === "string" ? bytes(data) : data,
           n = new Uint8Array(4);
+
         new DataView(n.buffer).setUint32(0, body.length);
+
         return concat(n, body);
       };
+
       const b64 = (data: Uint8Array) => btoa(String.fromCharCode(...data));
+
+      // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
       const db = await new Promise<IDBDatabase>((done, fail) => {
         const open = indexedDB.open("p12-client", 1);
         open.onupgradeneeded = () => open.result.createObjectStore("keys");
         open.onsuccess = () => done(open.result);
         open.onerror = () => fail(open.error);
       });
+
+      // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
       let pair = await new Promise<CryptoKeyPair | undefined>((done, fail) => {
         const get = db.transaction("keys").objectStore("keys").get("window");
         get.onsuccess = () => done(get.result);
         get.onerror = () => fail(get.error);
       });
 
-      if (!pair) {
+      if (pair === undefined) {
         pair = await crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]);
+        // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         await new Promise<void>((done, fail) => {
           const tx = db.transaction("keys", "readwrite");
           tx.objectStore("keys").put(pair, "window");
@@ -165,11 +196,14 @@ const driver = async (page: Page, url: string, tab: string) => {
       db.close();
       const publicBytes = new Uint8Array(await crypto.subtle.exportKey("raw", pair.publicKey));
       const raw = b64(publicBytes).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+
       const fingerprint = `SHA256:${b64(new Uint8Array(await crypto.subtle.digest("SHA-256", publicBytes))).replace(
         /=+$/,
         "",
       )}`;
+
       const key = pair.privateKey;
+
       const proof = async (text: string) => {
         const blob = concat(field("ssh-ed25519"), field(publicBytes));
         const digest = new Uint8Array(await crypto.subtle.digest("SHA-512", bytes(text)));
@@ -177,6 +211,7 @@ const driver = async (page: Page, url: string, tab: string) => {
         const signed = new Uint8Array(await crypto.subtle.sign("Ed25519", key, payload));
         const version = new Uint8Array(4);
         new DataView(version.buffer).setUint32(0, 1);
+
         const packet = concat(
           bytes("SSHSIG"),
           version,
@@ -186,21 +221,27 @@ const driver = async (page: Page, url: string, tab: string) => {
           field("sha512"),
           field(concat(field("ssh-ed25519"), field(signed))),
         );
+
         return `-----BEGIN SSH SIGNATURE-----\n${b64(packet)
           .match(/.{1,70}/g)!
           .join("\n")}\n-----END SSH SIGNATURE-----\n`;
       };
+
       let serial = 0,
         connections = 0;
+
       const frames: Array<any> = [];
       let socket: WebSocket;
       const pending = new Map<number, (frame: any) => void>();
-      const call = (method: string, params: unknown) =>
+
+      const call = (method: string, params: Schema.Json) =>
+        // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         new Promise<any>((done) => {
           const id = ++serial;
           pending.set(id, done);
           socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
         });
+
       const hello = async (nonce: string) =>
         call("initialize", {
           versions: [1],
@@ -214,7 +255,9 @@ const driver = async (page: Page, url: string, tab: string) => {
           sentAt: "2026-11-08T04:00:00.000Z",
           signed: await proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
         });
+
       const connect = () =>
+        // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         new Promise<any>((done, fail) => {
           socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(fingerprint)}/${tab}`);
           connections++;
@@ -226,9 +269,11 @@ const driver = async (page: Page, url: string, tab: string) => {
 
             pending.clear();
           };
+
           socket.onmessage = async ({ data }) => {
             if (data === "pong") {
               frames.push("pong");
+
               return;
             }
 
@@ -249,6 +294,7 @@ const driver = async (page: Page, url: string, tab: string) => {
             }
           };
         });
+
       const first = await connect();
       Object.assign(globalThis, {
         p12: {
@@ -261,6 +307,7 @@ const driver = async (page: Page, url: string, tab: string) => {
           close: () => socket.close(),
         },
       });
+
       return { first, fingerprint, raw, extractable: key.extractable };
     },
     { url, tab },
@@ -269,84 +316,118 @@ const driver = async (page: Page, url: string, tab: string) => {
 
 const state = (page: Page) => page.evaluate(() => window.p12.frames);
 
-const rpc = (page: Page, method: string, params: unknown) =>
+const rpc = (page: Page, method: string, params: Schema.Json) =>
   page.evaluate(async ({ method, params }) => window.p12.call(method, params), {
     method,
     params,
   });
 
 describe("P12 real browser protocol", () => {
-  it("scenario: p29 instance plant: notify the wrong key, issue one code per tab, or require reconnect after command grant", async () => {
-    const s = await start(),
-      a = await s.context.newPage(),
-      b = await s.context.newPage();
-    const first = await driver(a, s.url, "tab-a"),
-      second = await driver(b, s.url, "tab-b");
-    expect(first.extractable).toBe(false);
-    expect(first.fingerprint).toBe(second.fingerprint);
-    expect(first.first.error.data.reason).toBe("not_granted");
-    expect(second.first.error.data.reason).toBe("not_granted");
-    const firstKnock = await rpc(a, "gateway.knock", { label: "Chromium" });
-    const secondKnock = await rpc(b, "gateway.knock", { label: "Chromium" });
-    const code = firstKnock.result.code;
-    expect(secondKnock.result.code).toBe(code);
-    const output = execFileSync(
-      process.execPath,
-      [
-        join(APP, "grant.ts"),
-        "client",
-        s.url,
-        first.fingerprint,
-        `--code=${code}`,
-        "--label=Chromium",
-        `--key=${s.key}`,
-      ],
-      { env: s.env, cwd: APP, encoding: "utf8" },
-    );
-    expect(output).not.toContain("PRIVATE KEY");
+  it.live(
+    "scenario: p29 instance plant: notify the wrong key, issue one code per tab, or require reconnect after command grant",
+    () =>
+      Effect.gen(function* () {
+        const s = yield* Effect.promise(() => start()),
+          a = yield* Effect.promise(() => s.context.newPage()),
+          b = yield* Effect.promise(() => s.context.newPage());
 
-    for (const page of [a, b]) {
-      await page.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "reinitialized"));
-      const reinitialized = (await state(page)).find((f: any) => f.method === "reinitialized");
-      expect(reinitialized.result.error).toBeUndefined();
-      expect(await page.evaluate(() => window.p12.connections())).toBe(1);
-    }
+        const first = yield* Effect.promise(() => driver(a, s.url, "tab-a")),
+          second = yield* Effect.promise(() => driver(b, s.url, "tab-b"));
 
-    const processes = await rpc(a, "ledger.read", { stream: "processes/counter:1", after: 0 });
-    const started = processes.result.entries.find((r: any) => r._tag === "started" && r.body.name === "counter:1");
-    // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
-    expect(started.body.program).toBe("fabrika/counter");
-    const pid = started.body.process;
-    expect((await rpc(a, "view.open", { pid })).result).toEqual({ rev: 0, view: { count: 0 } });
-    // W8 scenario: only a real clock can let the local runtime evict an idle Process.
-    await a.waitForTimeout(15_000);
-    const waiting = rpc(b, "ledger.wait", { stream: "counter:1/inbox", after: 0 });
-    const accepted = await rpc(a, "process.send", {
-      pid,
-      letter: "browser-once",
-      m: { type: "inc" },
-      sentAt: "2026-11-08T04:00:00.000Z",
-      seen: 0,
-    });
-    expect(accepted.result).toMatchObject({ _tag: "accepted", pos: 1 });
-    expect((await waiting).result).toMatchObject({ rev: accepted.result.rev });
-    // The original connection must receive the patch before a reload or another view.open.
-    await a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "view.patch"));
-    const idlePatch = (await state(a)).find((f: any) => f.method === "view.patch");
-    expect(idlePatch.params).toMatchObject({ base: 0, rev: accepted.result.pos });
-    expect(await a.evaluate(() => window.p12.connections())).toBe(1);
-    const reloaded = await driver(a, s.url, "tab-a");
-    expect(reloaded.fingerprint).toBe(first.fingerprint);
-    expect(reloaded.first.error).toBeUndefined();
-    const retry = await rpc(a, "process.send", {
-      pid,
-      letter: "browser-once",
-      m: { type: "inc" },
-      sentAt: "2026-11-08T04:00:00.000Z",
-      seen: 0,
-    });
-    expect(retry.result).toEqual(accepted.result);
-    expect((await rpc(a, "view.open", { pid })).result.view).toEqual({ count: 1 });
-    expect(s.output()).not.toContain("PRIVATE KEY");
-  });
+        expect(first.extractable).toBe(false);
+        expect(first.fingerprint).toBe(second.fingerprint);
+        expect(first.first.error.data.reason).toBe("not_granted");
+        expect(second.first.error.data.reason).toBe("not_granted");
+        const firstKnock = yield* Effect.promise(() => rpc(a, "gateway.knock", { label: "Chromium" }));
+        const secondKnock = yield* Effect.promise(() => rpc(b, "gateway.knock", { label: "Chromium" }));
+        const code = firstKnock.result.code;
+        expect(secondKnock.result.code).toBe(code);
+
+        const output = execFileSync(
+          process.execPath,
+          [
+            join(APP, "grant.ts"),
+            "client",
+            s.url,
+            first.fingerprint,
+            `--code=${code}`,
+            "--label=Chromium",
+            `--key=${s.key}`,
+          ],
+          { env: s.env, cwd: APP, encoding: "utf8" },
+        );
+
+        expect(output).not.toContain("PRIVATE KEY");
+
+        for (const page of [a, b]) {
+          yield* Effect.promise(() =>
+            page.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "reinitialized")),
+          );
+
+          const reinitialized = Option.getOrUndefined(
+            Arr.findFirst(yield* Effect.promise(() => state(page)), (f: any) => f.method === "reinitialized"),
+          );
+
+          expect(reinitialized.result.error).toBeUndefined();
+          expect(yield* Effect.promise(() => page.evaluate(() => window.p12.connections()))).toBe(1);
+        }
+
+        const processes = yield* Effect.promise(() =>
+          rpc(a, "ledger.read", { stream: "processes/counter:1", after: 0 }),
+        );
+
+        const started = processes.result.entries.find((r: any) => r._tag === "started" && r.body.name === "counter:1");
+        // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
+        expect(started.body.program).toBe("fabrika/counter");
+        const pid = started.body.process;
+        expect((yield* Effect.promise(() => rpc(a, "view.open", { pid }))).result).toEqual({
+          rev: 0,
+          view: { count: 0 },
+        });
+        // W8 scenario: only a real clock can let the local runtime evict an idle Process.
+        yield* Effect.promise(() => a.waitForTimeout(15_000));
+        const waiting = rpc(b, "ledger.wait", { stream: "counter:1/inbox", after: 0 });
+
+        const accepted = yield* Effect.promise(() =>
+          rpc(a, "process.send", {
+            pid,
+            letter: "browser-once",
+            m: Tag.cases.inc.make({}),
+            sentAt: "2026-11-08T04:00:00.000Z",
+            seen: 0,
+          }),
+        );
+
+        expect(accepted.result).toMatchObject({ _tag: "accepted", pos: 1 });
+        expect((yield* Effect.promise(() => waiting)).result).toMatchObject({ rev: accepted.result.rev });
+        // The original connection must receive the patch before a reload or another view.open.
+        yield* Effect.promise(() =>
+          a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "view.patch")),
+        );
+
+        const idlePatch = Option.getOrUndefined(
+          Arr.findFirst(yield* Effect.promise(() => state(a)), (f: any) => f.method === "view.patch"),
+        );
+
+        expect(idlePatch.params).toMatchObject({ base: 0, rev: accepted.result.pos });
+        expect(yield* Effect.promise(() => a.evaluate(() => window.p12.connections()))).toBe(1);
+        const reloaded = yield* Effect.promise(() => driver(a, s.url, "tab-a"));
+        expect(reloaded.fingerprint).toBe(first.fingerprint);
+        expect(reloaded.first.error).toBeUndefined();
+
+        const retry = yield* Effect.promise(() =>
+          rpc(a, "process.send", {
+            pid,
+            letter: "browser-once",
+            m: Tag.cases.inc.make({}),
+            sentAt: "2026-11-08T04:00:00.000Z",
+            seen: 0,
+          }),
+        );
+
+        expect(retry.result).toEqual(accepted.result);
+        expect((yield* Effect.promise(() => rpc(a, "view.open", { pid }))).result.view).toEqual({ count: 1 });
+        expect(s.output()).not.toContain("PRIVATE KEY");
+      }),
+  );
 });

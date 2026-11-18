@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-checklist-l13-repair-tests1",
+  "ticket": "1126",
+  "pr": null,
+  "started": "2026-11-16T19:29:48-08:00",
+  "ended": "2026-11-16T19:38:33-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "parked",
+  "why": "next/ ticket 1126. Both existing L13 laws now await the scoped fixture's due and running alarm callbacks instead of three fixed 50 ms waits. Each callback completes its own Deferred from the real Process call, including awaited publication and notify. Canceled scheduled records cannot complete running calls. Completed failures remain observable until read. Every completed batch is followed by a fresh due-work read, excluding future wakes. Cleanup cancels pending timers and awaits started callbacks before disposing runtimes and in-memory databases. No product code changed. All existing generators, reach, seed 119120, case counts, pinned example, coverage checks and assertions remain. The approved untracked lead plan is preserved and is not part of this step's commit.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "note": "Final safe checks passed: pnpm format; pnpm lint, 18 of 18 parts in 55.9 seconds including the run row; list ratchet, all three ledgers; git diff --check; added-line and row leak checks. Both L13 laws remain unrun: \"successive sends land and a client joining after the first send opens the current checklist\" and \"each view.whole and view.patch for checklist:1 carries its pid and the update its Process published\". Neither has a red failure line because the guarded integration file was not executed. Starting head 940237726c75bd13b423f6949a98cea6bde403a8. Frozen install passed because this worktree had no dependencies. Formatting and list ratchet passed. Pinned check runtime verified as Node 26.13.0 through Volta. L13 and L21 were not run, and no red or green is claimed: the current integration filename requires eligible remote proof. No plant was run. Missing plants: remove pid at watcher-to-Project forwarding; alter update body; drop notify; report alarm completion before a Deferred-held real Process call; hold then release actual callback while checking settled; stop after only the first of two due callbacks. Run each once remotely and restore it. The existing L13 boundary checks still verify fresh item state, current list, independent notice count, pid, body, order and generated coverage. Both L13 properties now emit measured case/move/callback/cancellation/future-wake counts and duration when completed, with no generated content. No repaired durations or counts exist yet. Baseline timings in the approved plan were not replayed. Full-depth scheduled.yaml proof must include this file and L21 at the exact tested SHA and retain proof-set and raw results. No integration law, process signal, launchd, Electron, workerd or instance was started locally. Lead owns the one global typecheck and changed-set run. Fresh build read and review remain separate steps. Publication result and final checks are recorded in the private handoff because the commit SHA cannot be stored inside its own row. Publication attempted once through stepcommit.sh tests 1126 with only the two owned paths. It refused with not_formatted: staged files need formatting. No commit or push was made and the index is empty. The assigned helper repair is tracker ticket 1123; this step did not bypass or duplicate it."
+}

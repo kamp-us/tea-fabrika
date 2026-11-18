@@ -10,6 +10,7 @@ import { gatewayLimit, gatewayWindow } from "../settings/Declarations.ts";
  * @category models
  */
 export const Policy = Schema.Struct({ limit: gatewayLimit.schema, window: gatewayWindow.schema });
+
 /**
  * The instance operator's resolved gateway budget.
  *

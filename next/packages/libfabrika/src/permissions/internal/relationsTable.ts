@@ -7,9 +7,10 @@ import * as Schema from "effect/Schema";
 import { Row } from "../Relation.ts";
 
 const Model = Schema.Struct({ tuples: Schema.ReadonlySet(Schema.String) });
+
 type Model = typeof Model.Type;
 
-const Msg = Schema.Struct({ type: Schema.Literal("recorded"), row: Row });
+const Msg = Schema.TaggedStruct("recorded", { row: Row });
 
 /**
  * The brand of the live tuples: only this module reads or makes them.
@@ -57,7 +58,7 @@ export const fold = (rows: Iterable<typeof Row.Type>) => {
   let model: Model = relations.init(null, undefined)[0];
 
   for (const row of rows) {
-    model = applyCell(relations, model, { type: "recorded", row })[0];
+    model = applyCell(relations, model, Msg.make({ row }))[0];
   }
 
   return { [TuplesTypeId]: model.tuples } as const;

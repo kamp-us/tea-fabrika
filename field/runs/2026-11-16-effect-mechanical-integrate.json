@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-mechanical-integrate",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T20:57:13-08:00",
+  "ended": "2026-11-15T21:52:42-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Integrator for the mechanical slices E4 to E25 of the Effect-check sweep, in next/ and our tooling, on fabrikalfa/effect-mechanical. 22 slice branches merged with --no-ff in order, then origin/main. Seven merges had code conflicts (E6 ten Schema.TaggedError lines, E9 mutbox.ts, E11 two tests, E20 twin.ts, E21 records.ts and sizecap.ts, main's PullRequestsTest.ts); each kept both sides' changes. The slices' lock entries are folded into one overrides entry per distinct folder set in each package's own tsconfig, by a scratch script; nothing in tsconfig.base.json. The recount (effect-tsgo diagnostics with the 22 checks at error on all 13 projects, then pnpm typecheck as the proof) found 57 hits inside the locks that the slices had not met: 1 E18 left (ChildrenLedger.ts:405, a hand edit to Effect.filterMapOrFail), 50 in .agents files the project reaches only by import (37 by the checker's quick fix, 13 brand arguments by a scratch line edit), 2 in oxlint-plugins that main brought (quick fix), 1 in vitest outside E6's row (hand edit, and vitest now locks the check), plus the .github/ci and oxlint-plugins tsconfigs, whose merged plugin block had landed as a second compilerOptions key. One behavior bug from E4 was found by the laws: the telemetry sink's checked hour starts at -Infinity, which E4's Schema.Finite refused; it is now Schema.Finite or -Infinity, with no ignore line. 313 hits of the 22 checks stay outside the locks: 79 in files of pull request 1366, 234 in the after-1366 slices' folders (E61 to E74).",
+  "plants": [
+    {
+      "law": "L1: a hit in a locked folder fails the typecheck",
+      "plant": "a block-bodied arrow in stylelint.config.ts, which oxlint-plugins/tsconfig.json locks through the glob ../stylelint.config.ts",
+      "result": "red"
+    },
+    {
+      "law": "L1 by hand: the glob is what holds it",
+      "plant": "the same arrow with ../stylelint.config.ts dropped from the entry's include",
+      "result": "green"
+    },
+    {
+      "law": "L1: base overrides survive a package plugin block",
+      "plant": "crypto.randomUUID() and a block-bodied arrow in libfabrika src/processes/Mailbox.ts",
+      "result": "red"
+    },
+    {
+      "law": "L1: vitest's new schemaClassMissingBrand lock",
+      "plant": "a Schema.TaggedError with no brand in next/packages/vitest/src/Shelf.test-support.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 55,
+  "note": "Checks at the final head: pnpm lint 17 of 17 parts pass (NODE_OPTIONS=--max-old-space-size=6144), pnpm typecheck exit 0, ratchet.ts exit 0, loosening.sh 198 lines, of which 28 are removed-expect lines that are expect calls rewritten by the checks (decodeUnknownSync to decodeSync, instanceof to Schema.is), none dropped. Tests: 167 changed or sibling test files in 12 batches under nice -n 15 --maxWorkers=3, before the main merge; 17 files failed, 15 of them from the sink bug and green after its fix, 2 need ssh-keygen, which this box lacks (instance-wire.integration.test.ts, Sshsig.integration.test.ts). After the main merge: anti-slop.test.ts and the five .agents pr tests, 80 passed. E23's two failing lint parts did not reproduce: at E23's own head pnpm lint passes 17 of 17 with the heap flag.",
+  "step": "build"
+}

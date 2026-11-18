@@ -1,0 +1,15 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-tooling-signal-laws-pass-local-name-guard",
+  "date": "2026-11-16",
+  "by": "lead",
+  "model": null,
+  "rule": "bug",
+  "location": { "path": "vitest.config.ts", "line": 179 },
+  "says": "Today's tooling tests can reach process-signal laws through a local changed-test run because the host guard checks only integration and visual filenames.",
+  "proof": "At the recorded head, vitest run --maxWorkers=1 --changed origin/main for a stepcommit.sh change completed stepcommit.test.ts and then started box.test.ts. The running child used lead/scripts run one with a box fixture. The run was canceled after inspection. box.test.ts:433-481 implements signalRun with real process-group SIGTERM and SIGKILL, and line 1886 calls it from a test. HOST_ONLY at vitest.config.ts:179 matches neither box.test.ts nor other plain tooling test filenames.",
+  "cost": "A routine changed-test command can start process-signal checks on the laptop without reaching the guard for host-only tests.",
+  "head": "940237726c75bd13b423f6949a98cea6bde403a8",
+  "ticket": "kamp-us/tea-fabrika#1123",
+  "pr": null
+}

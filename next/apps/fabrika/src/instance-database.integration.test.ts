@@ -4,6 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Path, Stream } from "effect";
 import { ChildProcess } from "effect/process";
+
 import { instanceDatabase } from "./instance-database.test-support.ts";
 
 // Longer than a busy CI machine takes to see the holder's line, so the second client meets the lock,
@@ -32,7 +33,9 @@ db.close();
 const held = Effect.fnUntraced(function* (journal: "wal" | "delete") {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const file = path.join(yield* fs.makeTempDirectoryScoped({ prefix: "t962-lock-" }), "object.sqlite");
+
   const holder = yield* ChildProcess.make(process.execPath, [
     "--input-type=module",
     "-e",
@@ -41,8 +44,10 @@ const held = Effect.fnUntraced(function* (journal: "wal" | "delete") {
     journal,
     String(HOLD_MS),
   ]);
+
   const line = yield* holder.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.runHead);
   expect(line._tag === "Some" ? line.value : undefined).toBe("held");
+
   return { file, done: holder.exitCode };
 });
 

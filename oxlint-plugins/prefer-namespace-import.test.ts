@@ -6,15 +6,18 @@
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 import { preferNamespaceImport } from "./prefer-namespace-import.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
+
 const CODE = "fabrika(prefer-namespace-import)";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: import.meta.dirname });
 
 /** Modules of the installed package: the barrel they are named from, and the module name. */
@@ -78,6 +81,7 @@ const render = (
   whole: boolean,
 ) => {
   const code = `import ${whole ? "type " : ""}{ ${wanted.map((w) => specifierText(w, whole)).join(", ")} } from "${source}";\nexport const a = 1;\n`;
+
   const expected = `${wanted
     .map((w) => `import ${w.type || whole ? "type " : ""}* as ${w.local} from "${source}/${w.name}";`)
     .join("\n")}\nexport const a = 1;\n`;

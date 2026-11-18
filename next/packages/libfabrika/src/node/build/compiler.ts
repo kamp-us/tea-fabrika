@@ -17,7 +17,13 @@
  * The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
  */
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 
@@ -28,6 +34,7 @@ import { type OxcError, transformSync } from "oxc-transform-react";
  * @category schemas
  */
 export const Row = Schema.Struct({ file: Schema.String, fn: Schema.String, reason: Schema.String });
+
 /**
  * A row of `compiler-ledger.json`.
  *
@@ -84,7 +91,8 @@ interface Fn {
 type Tree = any;
 
 const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
-const lineAt = (text: string, at: number) => text.slice(0, at).split("\n").length;
+
+const lineAt = (text: string, at: number) => Function.pipe(text, Str.slice(0, at), Str.split("\n")).length;
 
 /** Whether a function body opens with `"use no memo"`, among its other directives. */
 const saysNoMemo = (body: Tree): boolean => {
@@ -93,7 +101,7 @@ const saysNoMemo = (body: Tree): boolean => {
   }
 
   for (const s of body.body) {
-    if (s.type !== "ExpressionStatement" || typeof s.directive !== "string") {
+    if (s.type !== "ExpressionStatement" || !Predicate.isString(s.directive)) {
       return false;
     }
 
@@ -109,6 +117,7 @@ const saysNoMemo = (body: Tree): boolean => {
 const opensWithCache = (body: Tree): boolean => {
   const first = body?.type === "BlockStatement" ? body.body[0] : null;
   const init = first?.type === "VariableDeclaration" ? first.declarations[0]?.init : null;
+
   return init?.type === "CallExpression" && init.callee?.name === "_c";
 };
 
@@ -118,12 +127,16 @@ const opensWithCache = (body: Tree): boolean => {
  */
 const functions = (file: string, text: string): readonly Fn[] => {
   const found: Fn[] = [];
-  const walk = (node: Tree, bound: string | null, depth: number, inJsx: { on: boolean }) => {
-    if (node === null || typeof node !== "object") {
+
+  const walk = (input: Tree, bound: string | null, depth: number, inJsx: { on: boolean }) => {
+    if (!Predicate.isObjectOrArray(input)) {
       return;
     }
 
-    if (Array.isArray(node)) {
+    // The guard only rules out a leaf: the walk goes on reading the node loosely, as `Tree` says.
+    const node: Tree = input;
+
+    if (Arr.isArray(node)) {
       for (const n of node) {
         walk(n, bound, depth, inJsx);
       }
@@ -138,7 +151,7 @@ const functions = (file: string, text: string): readonly Fn[] => {
     if (FUNCTIONS.has(node.type)) {
       const own = { on: false };
 
-      for (const [key, child] of Object.entries(node)) {
+      for (const [key, child] of Rec.toEntries(node)) {
         if (key !== "type") {
           walk(child, null, depth + 1, own);
         }
@@ -154,10 +167,11 @@ const functions = (file: string, text: string): readonly Fn[] => {
         top: depth === 0,
         cache: opensWithCache(node.body),
       });
+
       return;
     }
 
-    for (const [key, child] of Object.entries(node)) {
+    for (const [key, child] of Rec.toEntries(node)) {
       if (key === "type" || key === "start" || key === "end") {
         continue;
       }
@@ -179,7 +193,9 @@ const functions = (file: string, text: string): readonly Fn[] => {
       walk(child, name, depth, inJsx);
     }
   };
+
   walk(parseSync(file, text, {}).program, null, 0, { on: false });
+
   return found;
 };
 
@@ -188,20 +204,24 @@ const utf16 = (text: string, byte: number) => Buffer.from(text).subarray(0, byte
 
 /** The outermost function holding an offset: the Compiler compiles top-level components and hooks. */
 const outermost = (fns: readonly Fn[], at: number) =>
-  fns.filter((f) => f.start <= at && at < f.end).sort((a, b) => a.start - b.start)[0] ?? null;
+  Arr.filter(fns, (f) => f.start <= at && at < f.end).sort((a, b) => a.start - b.start)[0] ?? null;
 
 /** What the check refuses in one file, given the ledger's rows for it. */
 const checkFile = (file: string, text: string, rows: readonly Row[]): readonly Finding[] => {
   const findings: Finding[] = [];
   const out = compile(file, text);
   const source = functions(file, text);
+
   const compiled = new Set(
-    functions(file.replace(/\.tsx$/, ".js"), out.code)
-      .filter((f) => f.cache)
-      .map((f) => f.name),
+    Arr.map(
+      Arr.filter(functions(Function.pipe(file, Str.replace(/\.tsx$/, ".js")), out.code), (f) => f.cache),
+      (f) => f.name,
+    ),
   );
-  const named = (fn: string) => rows.some((r) => r.fn === fn);
+
+  const named = (fn: string) => Arr.some(rows, (r) => r.fn === fn);
   const said = new Set<string>();
+
   const diagnose = (e: OxcError) => {
     const label = e.labels[0];
     const at = label === undefined ? 0 : utf16(text, label.start);
@@ -244,7 +264,7 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
   }
 
   for (const row of rows) {
-    if (!source.some((fn) => fn.name === row.fn && fn.memoOff)) {
+    if (!Arr.some(source, (fn) => fn.name === row.fn && fn.memoOff)) {
       findings.push({
         file,
         fn: row.fn,
@@ -265,19 +285,20 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
  * @category checking
  */
 export const check = (files: ReadonlyMap<string, string>, ledger: readonly Row[]): readonly Finding[] => [
-  ...[...files].flatMap(([file, text]) =>
+  ...Arr.flatMap([...files], ([file, text]) =>
     checkFile(
       file,
       text,
-      ledger.filter((r) => r.file === file),
+      Arr.filter(ledger, (r) => r.file === file),
     ),
   ),
-  ...ledger
-    .filter((r) => !files.has(r.file))
-    .map((r) => ({
+  ...Arr.map(
+    Arr.filter(ledger, (r) => !files.has(r.file)),
+    (r) => ({
       file: r.file,
       fn: r.fn,
       line: 0,
       reason: "a stale row in compiler-ledger.json: its file is gone. Drop the row.",
-    })),
+    }),
+  ),
 ];

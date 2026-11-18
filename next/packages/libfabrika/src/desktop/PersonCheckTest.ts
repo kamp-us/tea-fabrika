@@ -14,6 +14,7 @@ export const layer = (
 ): Layer.Layer<PersonCheck> =>
   Layer.sync(PersonCheck, () => {
     let next = 0;
+
     return PersonCheck.of({
       ask: Effect.fn("PersonCheckTest.ask")(function* (_reason: string) {
         const answer = answers[next++];

@@ -70,11 +70,7 @@ subscription login, and fabrika builds around it.**
   unchanged.
 - Steering, stops, retries and budget checks happen at the edges the harness gives us (its
   session, its events, its process), not between model steps.
-- **Not decided here.** Three of clanka's borrows do not need our own loop and stay open leads for
-  the Tier 5 walk: history changes as events read from the harness's transcript, one named retry
-  `Schedule` with a typed out-of-tries error, and the box's state as a stored Schema value.
-
-## Amendments
-
-- 2026-11-09: the three borrows under "Not decided here" were decided in
-  [0030](0030-copy-clankas-shapes-where-better.md).
+- **Three of clanka's borrows do not need our own loop,** and
+  [0030](0030-copy-clankas-shapes-where-better.md) decides them: history changes as events read from
+  the harness's transcript, one named retry `Schedule` with a typed out-of-tries error, and the
+  box's state as a stored Schema value.

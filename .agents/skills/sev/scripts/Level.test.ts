@@ -3,10 +3,11 @@
 // Pure, apart from one law on the log file in a temporary folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Effect, FileSystem, Path, Result, Schema, Array as Arr, pipe } from "effect";
 import * as Level from "./Level.ts";
 
 const AT = "2026-11-14T19:00:00.000Z";
+
 const BRANCH = Schema.Literals(["fabrikalfa/ci-cache", "fabrikalfa/ci-legs", "fabrikalfa/ci-flake"]);
 
 /** One command a person can give, as the line it would write. */
@@ -51,6 +52,7 @@ describe("fold", () => {
           entry._tag === "opened"
             ? sev0._tag === "closed"
             : entry._tag === "looping" || entry._tag === "ended" || sev0._tag === "open";
+
         expect(Result.isSuccess(next)).toBe(fits);
 
         if (Result.isSuccess(next)) {
@@ -61,8 +63,8 @@ describe("fold", () => {
 
       const folded = Level.fold(written);
       expect(folded).toEqual(Result.succeed(sev0));
-      const opens = written.flatMap((e) => (e._tag === "opened" || e._tag === "closed" ? [e._tag] : []));
-      expect(opens.every((tag, i) => (i % 2 === 0 ? tag === "opened" : tag === "closed"))).toBe(true);
+      const opens = Arr.flatMap(written, (e) => (e._tag === "opened" || e._tag === "closed" ? [e._tag] : []));
+      expect(Arr.every(opens, (tag, i) => (i % 2 === 0 ? tag === "opened" : tag === "closed"))).toBe(true);
     },
   );
 
@@ -79,7 +81,12 @@ describe("fold", () => {
       }
 
       const folded = Level.fold(entries);
-      return Result.isSuccess(folded) && folded.success._tag === "open" && folded.success.allow.join() === model.join();
+
+      return (
+        Result.isSuccess(folded) &&
+        folded.success._tag === "open" &&
+        Arr.join(folded.success.allow, ",") === Arr.join(model, ",")
+      );
     },
   );
 
@@ -107,16 +114,21 @@ describe("level", () => {
     "property: an open sev0 wins whatever issues are open; with none open, any open issue is a sev1 holding exactly those, and no issue is none",
     { numbers: Schema.Array(Schema.Int), sev0: Schema.Boolean },
     ({ numbers, sev0 }) => {
-      const issues = numbers.map(issue);
+      const issues = Arr.map(numbers, issue);
       const level = Level.level(sev0 ? open : Level.Sev0.cases.closed.make({}), issues);
 
       if (sev0) {
-        return level._tag === "sev0" && level.allow.join() === "fabrikalfa/ci-cache";
+        return level._tag === "sev0" && Arr.join(level.allow, ",") === "fabrikalfa/ci-cache";
       }
 
       return issues.length === 0
         ? level._tag === "none"
-        : level._tag === "sev1" && level.issues.map((i) => i.number).join() === numbers.join();
+        : level._tag === "sev1" &&
+            pipe(
+              level.issues,
+              Arr.map((i) => String(i.number)),
+              Arr.join(","),
+            ) === Arr.join(Arr.map(numbers, String), ",");
     },
   );
 });

@@ -1,0 +1,17 @@
+{
+  "id": "2026-11-18-t1144-interruption-gap",
+  "date": "2026-11-18",
+  "quests": ["tea-fabrika#1144"],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "Today's scheduled CI, serving both versions: main run 44059387685's test step reached its 17-minute limit and Vitest wrote no final JSON, so its timing artifact could not say which tests had started and not ended. A bounded reconstruction found 63 selected files, 62 completed and one without a completion. That is a lead, not proof that the file hung.",
+  "cause": "Vitest's JSON reporter writes only at run end, and the time table read only that report. Nothing saved the lifecycle callbacks as they happened, so an interrupted run kept no record of its last activity.",
+  "person": false,
+  "primitive": null,
+  "fix": "PR 1567 adds a progress reporter beside the existing reporters on the four scheduled test commands. It appends one checked metadata line per callback, awaited before the callback returns, and the time table shows unmatched activity as last observed. It does not attribute the old timeout.",
+  "test": "P1 to P9 in .github/ci/progress.test.ts, progress-reporter.integration.test.ts, time-table.test.ts and workflow-lint/scheduled.test.ts. P8 kills a real Vitest child after a ready marker and finds the active test in the journal. Its buffer-until-end plant turned it red, and the restored source was green again (field/runs/2026-11-18-t1144-lead-p8-buffer-fault.json). On 658 real tooling tests the reporter added about 3% wall time (field/runs/2026-11-18-t1144-lead-overhead-real.json).",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44059387685/job/133960614165",
+    "https://github.com/kamp-us/tea-fabrika/pull/1567"
+  ]
+}

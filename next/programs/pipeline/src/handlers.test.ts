@@ -4,9 +4,30 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import * as CodeHost from "@kampus/libfabrika/codehost/CodeHost";
 import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
-import { Cause, Context, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import {
+  Record as Rec,
+  String as Str,
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Match,
+  Redacted,
+  Schema,
+} from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  update: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 
 describe("L12: handlers map faults", () => {
   it("keeps only the declared reason; defects and invalid inputs have one fixed failure; interrupts pass through", () => {
@@ -21,33 +42,44 @@ describe("L12: handlers map faults", () => {
         }),
         (cell) => {
           expect.hasAssertions();
-          const head = Schema.decodeUnknownSync(CodeHost.Commit)("a".repeat(40));
+          const head = Schema.decodeSync(CodeHost.Commit)(Str.repeat(40)("a"));
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
+
           const hostFault = CodeHost.CodeHostError.make({
-            reason:
-              reason === "refused"
-                ? CodeHost.Refused.make({ cause })
-                : reason === "rate_limited"
-                  ? CodeHost.RateLimited.make({ cause })
-                  : CodeHost.Unavailable.make({ cause }),
+            reason: Match.value(reason).pipe(
+              Match.when("refused", () => CodeHost.Refused.make({ cause })),
+              Match.when("rate_limited", () => CodeHost.RateLimited.make({ cause })),
+              Match.orElse(() => CodeHost.Unavailable.make({ cause })),
+            ),
           });
+
           const ciFault = Ci.CiError.make({
             reason: reason === "rate_limited" ? Ci.RateLimited.make({ cause }) : Ci.Unavailable.make({ cause }),
           });
+
           const fail = <E>(fault: E): Effect.Effect<never, E> =>
-            cell.kind === "interrupt"
-              ? Effect.interrupt
-              : cell.kind === "defect"
-                ? Effect.die(new Error(cell.cause ?? "defect"))
-                : Effect.fail(fault);
+            Match.value(cell.kind).pipe(
+              Match.when("interrupt", () => Effect.interrupt),
+              Match.when("defect", () => Effect.die(new Error(cell.cause ?? "defect"))),
+              Match.orElse(() => Effect.fail(fault)),
+            );
+
           const host = Layer.succeed(CodeHost.CodeHost, {
             change: () => fail(hostFault),
             update: () => fail(hostFault),
             merge: () => fail(hostFault),
           });
+
           const ci = Layer.succeed(Ci.Ci, { start: () => fail(ciFault), at: () => fail(ciFault) });
-          const cmd: Record<string, unknown> = { type: cell.method, attempt: 1, change: 1, head, start: cell.start };
+
+          const cmd: Record<string, unknown> = {
+            ...keyed(cell.method),
+            attempt: 1,
+            change: 1,
+            head,
+            start: cell.start,
+          };
 
           if (cell.kind === "bad_head") {
             if (cell.method === "change") {
@@ -68,7 +100,7 @@ describe("L12: handlers map faults", () => {
 
             if (Exit.isSuccess(exit)) {
               expect(exit.value).toEqual({ _tag: "Err", error: { _tag: reason } });
-              expect(exit.value._tag === "Err" && Object.keys(exit.value.error as object)).toEqual(["_tag"]);
+              expect(exit.value._tag === "Err" && Rec.keys(exit.value.error as object)).toEqual(["_tag"]);
             }
           } else {
             expect(Exit.isFailure(exit)).toBe(true);
@@ -84,7 +116,7 @@ describe("L12: handlers map faults", () => {
 
                 if (reason._tag === "Fail") {
                   expect(reason.error).toMatchObject({ _tag: "HandlerDefect", cmd: cell.method });
-                  expect(Object.hasOwn(Object(reason.error), "cause")).toBe(false);
+                  expect(Rec.has(Object(reason.error), "cause")).toBe(false);
                 }
               }
             }
@@ -105,14 +137,21 @@ it.effect.prop(
   ({ body, reason }) =>
     Effect.gen(function* () {
       const token = `ghp_${body}`;
+
       const services = yield* Layer.build(
         Layer.merge(CodeHostTest.layer({ token: Redacted.make(token) }), CiTest.layer({ token: Redacted.make(token) })),
       );
+
       yield* Context.get(services, CodeHostTest.Control).fail("update", { kind: "fault", reason });
-      const outcome = yield* handlers.update!({ type: "update", attempt: 1, change: 1, head: "a".repeat(40) }).pipe(
-        Effect.provide(services),
-      );
-      RepliesTest.unleaked([JSON.stringify(outcome)], [token]);
+
+      const outcome = yield* handlers.update!({
+        ...Tag.cases.update.make({}),
+        attempt: 1,
+        change: 1,
+        head: Str.repeat(40)("a"),
+      }).pipe(Effect.provide(services));
+
+      RepliesTest.unleaked([Formatter.formatJson(outcome)], [token]);
       expect(outcome).toEqual({ _tag: "Err", error: { _tag: reason } });
     }),
   { arbitrary: { seed: 119120, runs: 40 } },

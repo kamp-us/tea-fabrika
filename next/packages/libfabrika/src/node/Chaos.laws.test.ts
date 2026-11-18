@@ -6,6 +6,13 @@ import * as Schema from "effect/Schema";
 import { syncTest } from "../Testing.ts";
 import * as StepFaultTest from "./stepFault.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  arm: {},
+  before: {},
+});
+
 const moves = Arbitrary.array(
   Arbitrary.all({
     pick: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
@@ -26,28 +33,30 @@ it.prop(
       const msg: typeof StepFaultTest.Msg.Type =
         model._tag === "off" || model.attempts.length === model.errors.length
           ? {
-              type: "arm",
+              ...Tag.cases.arm.make({}),
               name: "checklist:1",
               letter: `letter-${pick}`,
               errors: Array.from({ length: pick % 2 === 0 ? 1 : 3 }, () => error),
             }
           : {
-              type: "before",
+              ...Tag.cases.before.make({}),
               name: pick % 7 === 0 ? "unrelated" : model.name,
               letter: pick % 5 === 0 ? "other-letter" : model.letter,
               process: `process-${pick}`,
               phase: pick % 3 === 0 ? "saved" : "fresh",
             };
+
       const previous = model;
       [model] = applyCell(StepFaultTest.controller, model, msg);
       msgs.push(msg);
 
-      if (previous._tag === "armed" && model._tag === "armed" && msg.type === "before") {
+      if (previous._tag === "armed" && model._tag === "armed" && msg._tag === "before") {
         const charge =
           msg.phase === "fresh" &&
           msg.name === previous.name &&
           msg.letter === previous.letter &&
           previous.attempts.length < previous.errors.length;
+
         expect(model.attempts.length).toBe(previous.attempts.length + (charge ? 1 : 0));
         expect(model.attempts.slice(0, previous.attempts.length)).toEqual(previous.attempts);
       }

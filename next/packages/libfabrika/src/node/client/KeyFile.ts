@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
@@ -28,6 +29,7 @@ const Stored = Schema.Struct({
     x: Schema.String,
   }),
 });
+
 type Stored = typeof Stored.Type;
 
 const StoredJson = Schema.fromJsonString(Stored);
@@ -47,8 +49,11 @@ const isErrorClass = Schema.is(ErrorClass);
 /** A failure's class from a fixed list: a file system reason, or a WebCrypto error's name. Never a message. */
 const errorClass = (cause: unknown): ErrorClass => {
   if (PlatformError.isPlatformError(cause)) {
-    const reason = cause.reason._tag;
-    return reason === "NotFound" ? "NotFoundError" : reason === "PermissionDenied" ? "NotAllowedError" : "other";
+    return Match.value(cause.reason).pipe(
+      Match.tag("NotFound", (): ErrorClass => "NotFoundError"),
+      Match.tag("PermissionDenied", (): ErrorClass => "NotAllowedError"),
+      Match.orElse((): ErrorClass => "other"),
+    );
   }
 
   return cause instanceof Error && isErrorClass(cause.name) ? cause.name : "other";
@@ -71,6 +76,7 @@ const load = Effect.fnUntraced(function* (stored: Stored, op: Op) {
   const [s, jwk, bad] = [crypto.subtle, { ...stored.jwk }, damaged(op)];
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto imports a key through a Promise
   const signer = yield* Effect.tryPromise({ try: () => s.importKey("jwk", jwk, ED, false, ["sign"]), catch: bad });
+
   return { fingerprint, raw: Base64Url.encode(bytes.success), line, signer } satisfies Loaded;
 });
 
@@ -87,9 +93,11 @@ const make = Effect.gen(function* () {
   const key = pair.privateKey;
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto exports a key through a Promise
   const jwk = yield* Effect.tryPromise({ try: () => s.exportKey("jwk", key), catch: bad });
+
   const stored = yield* Schema.decodeUnknownEffect(Stored)({
     jwk: { kty: jwk.kty, crv: jwk.crv, d: jwk.d, x: jwk.x },
   }).pipe(Effect.mapError(damaged("make")));
+
   return { stored, key: yield* load(stored, "make") };
 });
 
@@ -102,6 +110,7 @@ const identity = (key: Loaded, found: Identity["found"]): Identity => ({
     const [s, signer, data, bad] = [crypto.subtle, key.signer, new Uint8Array(bytes), failure("sign")];
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs through a Promise
     const signed = Effect.tryPromise({ try: () => s.sign(ED, signer, data), catch: bad });
+
     return Effect.map(signed, (signature) => new Uint8Array(signature));
   },
 });
@@ -152,7 +161,8 @@ export const layer = (options: { readonly file: string }) =>
         }
 
         const text = yield* fs.readFileString(file).pipe(Effect.mapError(failure("read")));
-        const stored = yield* Schema.decodeUnknownEffect(StoredJson)(text).pipe(Effect.mapError(damaged("read")));
+        const stored = yield* Schema.decodeEffect(StoredJson)(text).pipe(Effect.mapError(damaged("read")));
+
         return Option.some(yield* load(stored, "read"));
       });
 
@@ -170,6 +180,7 @@ export const layer = (options: { readonly file: string }) =>
                   yield* handle.sync;
                 }),
               ).pipe(Effect.mapError(failure("write")));
+
               return yield* place(temp);
             }),
           // The temporary name is gone once it was linked or renamed, or when the write failed.
@@ -191,6 +202,7 @@ export const layer = (options: { readonly file: string }) =>
         if (Option.isSome(known)) {
           // The door removed this key: a new one takes its place whole.
           yield* written(made.stored, (temp) => fs.rename(temp, file).pipe(Effect.mapError(failure("write"))));
+
           return identity(made.key, "replaced");
         }
 

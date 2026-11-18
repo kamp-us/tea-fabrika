@@ -1,27 +1,29 @@
 // PullRequests: what the lead tooling asks GitHub about pull requests, and the few writes it makes
 // (0134: a draft at a branch's first commit, marked ready when its steps passed; 0162: one pinned
 // squash that adds it to GitHub's merge queue; 0530: merge when ready, which pr/Arm.ts turns on;
-// 0183 and 0532: an admin merge, which pr/Merge.ts alone asks).
-// This file is the
-// contract only (0095): `PullRequestsGh.layer` asks GitHub through `gh`, `PullRequestsTest.layer`
+// 0183 and 0532: an admin merge, which pr/Merge.ts alone asks). This file is the contract only (0095): `PullRequestsGh.layer` asks GitHub through `gh`, `PullRequestsTest.layer`
 // answers from a list in memory. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect, Option } from "effect";
 
 /** GitHub could not be asked, refused, or answered in a shape we do not read. */
-export class PullRequestsError extends Schema.TaggedError<PullRequestsError>()("PullRequestsError", {
-  reason: Schema.String,
-}) {}
+export class PullRequestsError extends Schema.TaggedError<PullRequestsError, { readonly brand: unique symbol }>()(
+  "PullRequestsError",
+  {
+    reason: Schema.String,
+  },
+) {}
 
 /** One pull request as GitHub lists it: its branch, the head it holds, and how it stands. */
 export const PullRequest = Schema.Struct({
-  number: Schema.Number,
+  number: Schema.Finite,
   head: Schema.String,
   /** The commit the branch pointed at when GitHub last read it; for a merged one, the merged head. */
   oid: Schema.String,
   state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
   draft: Schema.Boolean,
 });
+
 export type PullRequest = typeof PullRequest.Type;
 
 /** One pull request read alone, with the words a squash puts on main and where it merged. */
@@ -34,6 +36,7 @@ export const Detail = Schema.Struct({
   /** The commit its base holds for it once merged; `null` until then. */
   mergeCommit: Schema.NullOr(Schema.String),
 });
+
 export type Detail = typeof Detail.Type;
 
 /**
@@ -41,6 +44,7 @@ export type Detail = typeof Detail.Type;
  * hunks, `null` where GitHub shows none (a binary file, or one too big to show).
  */
 export const Patch = Schema.Struct({ path: Schema.String, patch: Schema.NullOr(Schema.String) });
+
 export type Patch = typeof Patch.Type;
 
 /** What a new or edited pull request says: its title and its description. */
@@ -54,7 +58,7 @@ export class PullRequests extends Context.Service<
     /** Every pull request of the repo, open, closed and merged. Fails when one read cannot hold all. */
     readonly all: Effect.Effect<ReadonlyArray<PullRequest>, PullRequestsError>;
     /** Opens a draft pull request from `branch` into main, and answers its number. */
-    readonly draft: (branch: string, text: Text) => Effect.Effect<number, PullRequestsError>;
+    readonly draft: (branch: string, text: Text, head: string) => Effect.Effect<number, PullRequestsError>;
     /** Sets the title and description of pull request `number`. */
     readonly edit: (number: number, text: Text) => Effect.Effect<void, PullRequestsError>;
     /** Marks draft pull request `number` ready for review. */

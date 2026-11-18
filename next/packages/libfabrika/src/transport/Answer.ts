@@ -3,50 +3,33 @@
  */
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { REFUSED } from "../SpanTag.ts";
-import type { Admission, Who } from "./Wire.ts";
+import { Routes } from "./Routes.ts";
 import { Answer, Attached, RateCountFailure } from "./Wire.ts";
 
 const Request = Schema.fromJsonString(
   Schema.Struct({
     jsonrpc: Schema.Literal("2.0"),
-    id: Schema.Union([Schema.String, Schema.Number]),
+    id: Schema.Union([Schema.String, Schema.Finite]),
     method: Schema.String,
-    params: Schema.optional(Schema.Unknown),
+    params: Schema.optional(Schema.Json),
   }),
 );
 
-type Online = typeof Attached.cases.online.Type;
-
-type Frame<A extends typeof Attached.Type, E, R, E2, R2> = [
-  text: string,
-  attached: A,
-  _admit: (key: string) => Effect.Effect<typeof Admission.Type, E2, R2>,
-  route: (
-    method: string,
-    params: unknown,
-    ...identity: A extends Online ? [identity: typeof Who.Type] : []
-  ) => Effect.Effect<typeof Answer.Type, E, R>,
-];
-
-type Incoming<E, R, E2, R2> = Frame<Online, E, R, E2, R2> | Frame<Exclude<typeof Attached.Type, Online>, E, R, E2, R2>;
-
-const isOnline = <E, R, E2, R2>(frame: Incoming<E, R, E2, R2>): frame is Frame<Online, E, R, E2, R2> =>
-  frame[1]._tag === "online";
-
 /**
- * Answers one JSON-RPC 2.0 text frame by calling `route` and shaping its answer for the wire.
+ * Answers one JSON-RPC 2.0 text frame by asking the `Routes` service, and shapes its answer for
+ * the wire.
  *
  * **Details**
  *
- * Takes the frame as four arguments: the text, the connection's current `Attached` state, an
- * admit function, and the route. The result is `{ send, attached }`: `send` is the text to write
- * back, or `null` when nothing is written, and `attached` is the state to save. The admit
- * function is accepted but this function never calls it. Only an online connection passes its
- * identity to `route`.
+ * Takes the text and the connection's current `Attached` state. The result is `{ send, attached }`:
+ * `send` is the text to write back, or `null` when nothing is written, and `attached` is the state
+ * to save. `Routes` is the only service it asks for, so it cannot reach the hello's admission. An
+ * online connection passes its checked identity to `route`; any other connection passes `null`.
  *
  * - Text that is not a JSON-RPC 2.0 request sends nothing and keeps `attached`.
  * - A connection that is not online answers every request with a `no_hello` error, except that a
@@ -64,12 +47,12 @@ const isOnline = <E, R, E2, R2>(frame: Incoming<E, R, E2, R2>): frame is Frame<O
  *
  * @category combinators
  */
-export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E2, R2, A extends typeof Attached.Type>(
-  ...frame: Incoming<E, R, E2, R2> & { readonly 1: A }
+export const answerFrame = Effect.fn("transport.answerFrame")(function* <A extends typeof Attached.Type>(
+  text: string,
+  attached: A,
 ) {
-  const text = frame[0];
-  const attached: A = frame[1];
-  const request = Schema.decodeUnknownResult(Request)(text);
+  const routes = yield* Routes;
+  const request = Schema.decodeResult(Request)(text);
 
   if (Result.isFailure(request)) {
     return { send: null, attached };
@@ -79,7 +62,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
 
   if (attached._tag !== "online" && !(attached._tag === "waiting" && method === "gateway.knock")) {
     return {
-      send: JSON.stringify({
+      send: Formatter.formatJson({
         jsonrpc: "2.0",
         id,
         error: { code: -32000, message: "no_hello", data: { reason: "no_hello" } },
@@ -88,9 +71,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
     };
   }
 
-  const exit = yield* Effect.exit(
-    isOnline(frame) ? frame[3](method, params, frame[1].identity) : frame[3](method, params),
-  );
+  const exit = yield* Effect.exit(routes.route(method, params, attached._tag === "online" ? attached.identity : null));
 
   if (Exit.isFailure(exit)) {
     if (Option.exists(Exit.findErrorOption(exit), Schema.is(RateCountFailure))) {

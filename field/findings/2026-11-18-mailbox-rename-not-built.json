@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-mailbox-rename-not-built",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/settings/Declarations.ts",
+    "line": 228
+  },
+  "says": "Decision 0582 renames the settings mail.chunk and mail.unread to mailbox.chunk and mailbox.capacity (the [mailbox] section, FABRIKA_MAILBOX_CHUNK and FABRIKA_MAILBOX_CAPACITY, the flags --mailbox.chunk and --mailbox.capacity) and says no code reads the old keys once the build lands, but the code still declares and reads mail.unread and mail.chunk, so the code lags the decision. Ticket text (1072): rename the two settings and their env names and flags, regenerate the settings reference and the schemas, update the glossary rows that say mail, and pick names for types such as ProgramMailLedger from 0582's rule; 0547 is written to the new words.",
+  "proof": "`grep -n 'Setting.make(\"mail\\.' next/packages/libfabrika/src/settings/Declarations.ts` prints line 228 (`mail.unread`) and line 248 (`mail.chunk`); `rg -l 'mail\\.(chunk|unread)' --glob '!node_modules' next | wc -l` prints 22; `rg -l 'mailbox\\.(chunk|capacity)' next` prints nothing.",
+  "cost": "Anyone who sets the mailbox size from 0582 or 0547 gets an unknown key, and the docs, the settings reference and the glossary keep teaching mail as a noun that 0582 retired.",
+  "head": "4f653bcc061a9be59607c46fe68c3c8118ef6202",
+  "ticket": "kamp-us/tea-fabrika#1072",
+  "pr": null
+}

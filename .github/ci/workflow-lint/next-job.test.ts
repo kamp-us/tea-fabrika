@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Predicate } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -11,6 +12,7 @@ import {
   nextLegs,
   onE2e,
   options,
+  type Parsed,
   place,
   type Plant,
   rejects,
@@ -18,6 +20,7 @@ import {
   sizedLegs,
   step,
   visualLabel,
+  visualRoute,
   vitestShard,
   wiring,
   type Workflow,
@@ -52,6 +55,19 @@ it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run
 });
 
 const plants: Plant[] = [
+  [
+    "next requires full depth",
+    (w) => {
+      delete step(w, "next", "vitest").env!["FABRIKA_TEST_DEPTH"];
+    },
+  ],
+  [
+    "visual requires full depth",
+    (w) => {
+      step(w, "next", "end to end").env!["FABRIKA_TEST_DEPTH"] = "fast";
+    },
+  ],
+
   ...extraCommands.map((added): [string, (w: Workflow) => void] => [
     `review2 extra command: ${added.run}`,
     (w) => {
@@ -137,33 +153,31 @@ const plants: Plant[] = [
       w.jobs.next.strategy.matrix.shard = `\${{ fromJSON(needs.changes.outputs.shards || '${JSON.stringify(nextLegs(2))}') }}`;
     },
   ],
-  [
-    "E10: the full fallback runs on main too, as before the schedule",
+  // E10, the owner's ruling of 2026-11-18: the full fallback starts the visual legs on a push to main
+  // and on a pull request with the `visual` label, and on no other route.
+  ...(
+    [
+      [
+        "PR 1581's route back, so every pull request and group starts the visual legs",
+        "(github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')",
+      ],
+      [
+        "the merge queue beside the label, so a group starts the visual legs",
+        `(github.event_name == 'push' || github.event_name == 'merge_group' || ${visualLabel})`,
+      ],
+      [
+        "any pull request beside the label, so one without it starts the visual legs",
+        `(github.event_name == 'push' || github.event_name == 'pull_request' || ${visualLabel})`,
+      ],
+      ["the label dropped, so no pull request can ask for the visual legs", "github.event_name == 'push'"],
+      ["the push dropped, so main's check runs no visual file its change reaches", visualLabel],
+    ] as const
+  ).map(([fault, when]): [string, (w: Workflow) => void] => [
+    `E10: ${fault}`,
     (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualLabel,
-        `(github.event_name == 'push' || ${visualLabel})`,
-      );
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(visualRoute, when);
     },
-  ],
-  [
-    "E10: the full fallback runs in the merge queue",
-    (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualLabel,
-        `(github.event_name == 'merge_group' || ${visualLabel})`,
-      );
-    },
-  ],
-  [
-    "E10: the full fallback runs on any pull request",
-    (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualLabel,
-        "github.event_name == 'pull_request'",
-      );
-    },
-  ],
+  ]),
   [
     "E10: the plain fallback holds a visual leg",
     (w) => {
@@ -189,6 +203,7 @@ const plants: Plant[] = [
     (w) => {
       const found = step(w, "next", "vitest");
       found.run = String(found.run).replace("--project next ", "$PROJECTS ");
+      // SAFETY: `valid` writes the next job's vitest step with an `env` map of strings.
       (found["env"] as Record<string, string>)["PROJECTS"] =
         `\${{ github.event_name == 'push' && '--project next --project next-integration' || '--project next' }}`;
     },
@@ -227,7 +242,7 @@ const plants: Plant[] = [
     `next ${fault}`,
     (w) => {
       setLegs(w, legs);
-      const count = legs.filter((leg) => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg)).length;
+      const count = legs.filter((leg) => Predicate.isString(leg) && /^e2e-[1-9]\d*$/.test(leg)).length;
       step(w, "next", "end to end").env!.SHARD = e2eShard(count);
     },
   ]),
@@ -238,7 +253,7 @@ const plants: Plant[] = [
       setLegs(
         w,
         legsOf(w).filter(
-          (leg, _, all) => leg !== all.filter((l) => typeof l === "string" && l.startsWith("e2e-")).at(-1),
+          (leg, _, all) => leg !== all.filter((l) => Predicate.isString(l) && l.startsWith("e2e-")).at(-1),
         ),
       );
     },
@@ -247,7 +262,7 @@ const plants: Plant[] = [
     "next adds an e2e leg and keeps its /N",
     (w) => {
       const legs = legsOf(w);
-      const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
+      const count = legs.filter((leg) => Predicate.isString(leg) && leg.startsWith("e2e-")).length;
       legs.splice(count, 0, `e2e-${count + 1}`);
       setLegs(w, legs);
     },
@@ -261,6 +276,7 @@ const plants: Plant[] = [
       (w) => {
         const env = step(w, "next", "end to end").env!;
         const count = Number(/\|\| (\d+)\s*\}\}$/.exec(env.SHARD ?? "")?.[1]);
+
         const wrong: Record<string, string> = {
           "": `\${{ matrix.shard }}`,
           x: e2eShard("x"),
@@ -269,7 +285,8 @@ const plants: Plant[] = [
           "sized only": `\${{ matrix.shard }}/\${{ needs.legs.outputs.e2e }}`,
           "vitest's": `\${{ matrix.shard }}/\${{ needs.legs.outputs.vitest || ${count} }}`,
         };
-        env.SHARD = typeof fault === "number" ? e2eShard(count + fault) : wrong[fault]!;
+
+        env.SHARD = Predicate.isNumber(fault) ? e2eShard(count + fault) : wrong[fault]!;
       },
     ],
   ),
@@ -556,6 +573,7 @@ const plants: Plant[] = [
   [
     "next has no filter",
     (w) => {
+      // SAFETY: the vitest step from `valid` has an `env` map that holds FILTER.
       delete (step(w, "next", "vitest").env as Record<string, string>)["FILTER"];
     },
   ],
@@ -564,6 +582,7 @@ const plants: Plant[] = [
   [
     "next narrows the reader tests with --changed",
     (w) => {
+      // SAFETY: this plant sets CHANGED in the vitest step's `env`, which `valid` writes as a string map.
       (step(w, "next", "vitest").env as Record<string, string>)["CHANGED"] = changedOnPullRequests;
     },
   ],
@@ -588,12 +607,14 @@ const plants: Plant[] = [
     (w) => {
       const step = w.jobs.next.steps[0]!;
       step.run = step.run.replace("$FILTER ", "$FILTER $CHANGED ");
+      // SAFETY: the first next step in `valid` is vitest, whose `env` holds SHARD and FILTER as strings.
       (step.env as Record<string, string>)["CHANGED"] = changedUnlessReaders;
     },
   ],
   [
     "next's vitest step takes another env key",
     (w) => {
+      // SAFETY: next's first step is the vitest step, and `valid` gives it an `env` map of strings.
       (w.jobs.next.steps[0]!.env as Record<string, string>)["READERS"] = `\${{ needs.changes.outputs.readers }}`;
     },
   ],
@@ -614,6 +635,85 @@ const plants: Plant[] = [
     },
   ],
 ];
+
+// T1076 O4. Each new fault goes through the existing whole-workflow acceptance path alone, on the
+// generated valid workflow, whose fallback is the two roots of the `next` project.
+plants.push(
+  [
+    "O4 legacy next-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 fallback without the literal separator",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 Kalfa-only fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 quoted two-root fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || '"next/ kalfa/"' }}`,
+      });
+    },
+  ],
+  [
+    "O4 reversed two-root fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'kalfa/ next/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 extra project in the fallback",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/ kalfa/ --project tooling' }}`,
+      });
+    },
+  ],
+  [
+    "O4 wrong precedence, the classifier first",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, {
+        FILTER: `\${{ needs.changes.outputs.filter || needs.changes.outputs.files || 'next/ kalfa/' }}`,
+      });
+    },
+  ],
+  [
+    "O4 ordinary command receives another changed restriction",
+    (w) => {
+      step(w, "next", "vitest").run += " --changed=HEAD";
+    },
+  ],
+  [
+    "O4 ordinary command adds a project",
+    (w) => {
+      step(w, "next", "vitest").run += " --project tooling";
+    },
+  ],
+  [
+    "O4 ordinary step receives an extra env input",
+    (w) => {
+      Object.assign(step(w, "next", "vitest").env!, { CHANGED: "--changed=HEAD" });
+    },
+  ],
+);
 
 rejects(plants);
 
@@ -667,6 +767,16 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
     "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries",
   ],
   [
+    "the merge queue beside the visual label",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualRoute,
+        `(github.event_name == 'push' || github.event_name == 'merge_group' || ${visualLabel})`,
+      );
+    },
+    "E10: next's full fallback runs only on a push to main or with the visual label, else the vitest legs 1 to 5 alone",
+  ],
+  [
     "the end-to-end step back on leg 1",
     (w) => {
       step(w, "next", "end to end").if = step(w, "next", "end to end").if!.replace(onE2e, "matrix.shard == '1'");
@@ -686,7 +796,7 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
     "the e2e legs written out of order",
     (w) => {
       const legs = legsOf(w);
-      const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
+      const count = legs.filter((leg) => Predicate.isString(leg) && leg.startsWith("e2e-")).length;
       legs.splice(0, count, ...legs.slice(0, count).toReversed());
 
       // One e2e leg cannot be out of order, so a second one comes first.
@@ -730,4 +840,26 @@ it.each(faults)("LE2: names %s when it alone is planted", (_fault, mutate, error
     }),
     options,
   );
+});
+
+it("scenario: O4 the legacy filter is rejected by the next job's guard itself, whatever another guard says", () => {
+  // scenario: the real checked-in workflow with only the next job's fallback put back to next/. The
+  // next job's own filter rule must name it, so another rule's error cannot stand in for it.
+  const workflow: Parsed = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
+  expect(lint(JSON.stringify(workflow))).toEqual([]);
+
+  const found = workflow.jobs["next"]!.steps.find(
+    (candidate) =>
+      typeof candidate["run"] === "string" &&
+      candidate["run"].startsWith("pnpm exec vitest run --project next $FILTER "),
+  );
+
+  expect(found).toBeDefined();
+
+  Object.assign(found!["env"]!, {
+    FILTER: `\${{ needs.changes.outputs.files || needs.changes.outputs.filter || 'next/' }}`,
+  });
+  expect(
+    lint(JSON.stringify(workflow)).some((error) => error.includes("next's vitest step takes changes' files")),
+  ).toBe(true);
 });

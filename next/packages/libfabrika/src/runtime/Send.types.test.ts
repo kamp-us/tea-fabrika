@@ -13,9 +13,11 @@ import * as Chunk from "./Chunk.ts";
 import type { send, sendChunks } from "./Send.ts";
 
 const Row = Schema.Struct({ path: Schema.String, line: Schema.Int });
+
 const rows = Chunk.input("rows", Row);
 
 type SendTag = Parameters<typeof send.err>[1]["_tag"];
+
 type ChunksTag = Parameters<typeof sendChunks.err>[1]["_tag"];
 
 describe("T1041: what a program sees of a full inbox and a chunked send", () => {
@@ -25,7 +27,7 @@ describe("T1041: what a program sees of a full inbox and a chunked send", () => 
     expectTypeOf<"too_big">().toExtend<ChunksTag>();
     expectTypeOf<"forbidden" | "no_name" | "stale_sender" | "bad_message" | "id_reused">().toExtend<ChunksTag>();
     expectTypeOf<Extract<ChunksTag, "full">>().toBeNever();
-    expectTypeOf<(typeof rows.Type)["type"]>().toEqualTypeOf<"rows">();
+    expectTypeOf<(typeof rows.Type)["_tag"]>().toEqualTypeOf<"rows">();
     expectTypeOf<(typeof rows.Type)["items"]>().toEqualTypeOf<ReadonlyArray<typeof Row.Type>>();
     expectTypeOf<(typeof rows.Type)["part"]>().toEqualTypeOf<typeof Chunk.Part.Type>();
   });

@@ -4,7 +4,8 @@
  */
 import { BuildError, build as buildOne, type Selection } from "@kampus/libfabrika/build";
 import type { Row } from "@kampus/libfabrika/compiler";
-import { Effect, FileSystem, Path } from "effect";
+import { Array as Arr, String as Str, Effect, FileSystem, Path, Record as Rec } from "effect";
+
 import { programs as selected } from "./table.ts";
 
 export type {
@@ -44,23 +45,32 @@ type Options = {
 export const build = Effect.fn("build.app")(function* (options: Options) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const APP = path.resolve(import.meta.dirname, ".."),
     ROOT = path.resolve(APP, "../../..");
+
   const extra = options.programs ?? {};
+
   const programs: ReadonlyArray<Selection> = [
-    ...selected.filter((p) => !Object.hasOwn(extra, p.name)),
-    ...Object.entries(extra).map(([name, module]) => ({ name, package: module, export: "program" })),
+    ...Arr.filter(selected, (p) => !Rec.has(extra, p.name)),
+    ...Arr.map(Rec.toEntries(extra), ([name, module]) => ({ name, package: module, export: "program" })),
   ];
+
   const files =
     options.files ??
     (yield* fs.glob("next/**/*.tsx", { root: ROOT }).pipe(
-      Effect.map((found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test."))),
-      Effect.mapError((cause) => new BuildError({ reason: "read", cause })),
+      Effect.mapBoth({
+        onFailure: (cause) => new BuildError({ reason: "read", cause }),
+        onSuccess: (found) => Arr.filter(found, (p) => !Str.includes("node_modules")(p) && !Str.includes(".test.")(p)),
+      }),
     ));
+
   const styles = yield* Effect.forEach(STYLES, (module) => path.fromFileUrl(new URL(import.meta.resolve(module))), {
     concurrency: 1,
   }).pipe(Effect.mapError((cause) => new BuildError({ reason: "read", cause })));
+
   const entry = path.join(APP, "src/brain.ts");
+
   const built = yield* buildOne({
     out: options.out,
     root: ROOT,
@@ -71,5 +81,6 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
     chaos: options.chaos ?? false,
     tab: { entry: path.join(APP, "src/entry/browser.tsx"), styles },
   });
+
   return { ...built, watch: { root: ROOT, entry, programs } };
 });

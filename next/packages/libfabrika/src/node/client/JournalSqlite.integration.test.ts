@@ -20,11 +20,15 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Journal } from "../../client/Journal.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
@@ -45,17 +49,20 @@ const everyKeyWhole = (label: string) =>
 
     for (const [place, task] of TASKS.entries()) {
       const read = yield* journal.read(task).pipe(Effect.result);
-      const shown = JSON.stringify(read).slice(0, 200);
+      const shown = Function.pipe(Formatter.format(read), Str.slice(0, 200));
       expect(read._tag, `J2: ${task} ${label} reads without an error: ${shown}`).toBe("Success");
       const entry = read._tag === "Success" ? read.success : null;
       expect(entry, `J2: ${task} ${label} still holds the entry saved before ready`).not.toBeNull();
       expect(entry?._tag, `J2: ${task} ${label} holds a whole result entry`).toBe("result");
-      const n = entry?._tag === "result" ? Number(entry.execution.replace(/^execution-/, "")) : Number.NaN;
+
+      const n =
+        entry?._tag === "result" ? Number(Function.pipe(entry.execution, Str.replace(/^execution-/, ""))) : Number.NaN;
+
       expect(Number.isInteger(n) && n % TASKS.length === place, `J2: ${task} ${label} holds its own write`).toBe(true);
       const result = entry?._tag === "result" ? entry.result : null;
       const version = result?._tag === "exited" ? result.version : "";
       expect(
-        version.length === 64 * 1024 && version.startsWith(`${n}:`),
+        version.length === 64 * 1024 && Function.pipe(version, Str.startsWith(`${n}:`)),
         `J2: ${task} ${label} holds the whole value of write ${n}`,
       ).toBe(true);
     }
@@ -65,46 +72,47 @@ describe("P39 slice 4b: the journal file after a crash", () => {
   it.live(
     "J2: a hands-like child that saves all sixteen keys, then writes in a loop and is killed with SIGKILL at a generated moment, leaves every one of the sixteen keys holding one whole entry when the file is opened again",
     () =>
-      Effect.gen(function* () {
-        yield* property(
-          fc.integer({ min: 1, max: 200 }),
-          (delay) =>
-            Effect.gen(function* () {
-              const fs = yield* FileSystem.FileSystem,
-                path = yield* Path.Path;
-              const home = yield* fs.makeTempDirectoryScoped({ prefix: "p39-j2-" });
-              const file = path.join(home, "journal.sqlite");
-              const child = path.join(import.meta.dirname, "JournalSqlite.child.test-support.ts");
-              yield* Effect.scoped(
-                Effect.gen(function* () {
-                  const handle = yield* ChildProcess.make(process.execPath, [child, file], {
-                    cwd: import.meta.dirname,
-                    killSignal: "SIGKILL",
-                  });
-                  // The kill delay counts from the first full round, so every run kills a writer
-                  // whose sixteen keys are all saved.
-                  const ready = yield* handle.stdout.pipe(
-                    Stream.decodeText(),
-                    Stream.splitLines,
-                    Stream.filter((line) => line === "ready"),
-                    Stream.runHead,
-                    Effect.timeout("30 seconds"),
-                  );
-                  expect(Option.isSome(ready), "J2: the child saved all sixteen keys").toBe(true);
-                  yield* Effect.sleep(`${delay} millis`);
-                  yield* handle.kill({ killSignal: "SIGKILL" });
-                  yield* handle.exitCode.pipe(Effect.ignore);
-                }),
-              );
-              // Opened again, as the next hands start opens it. The reads run inside the provide: the
-              // layer closes the file when its scope closes, so a read after it would fail for that.
-              yield* everyKeyWhole(`after a SIGKILL at ${delay} ms`).pipe(
-                Effect.provide(JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file })))),
-              );
-            }).pipe(Effect.provide(NodeServices.layer)),
-          { numRuns: runsFor({ fast: 3, full: 20 }) },
-        );
-      }),
+      property(
+        fc.integer({ min: 1, max: 200 }),
+        (delay) =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem,
+              path = yield* Path.Path;
+
+            const home = yield* fs.makeTempDirectoryScoped({ prefix: "p39-j2-" });
+            const file = path.join(home, "journal.sqlite");
+            const child = path.join(import.meta.dirname, "JournalSqlite.child.test-support.ts");
+            yield* Effect.scoped(
+              Effect.gen(function* () {
+                const handle = yield* ChildProcess.make(process.execPath, [child, file], {
+                  cwd: import.meta.dirname,
+                  killSignal: "SIGKILL",
+                });
+
+                // The kill delay counts from the first full round, so every run kills a writer
+                // whose sixteen keys are all saved.
+                const ready = yield* handle.stdout.pipe(
+                  Stream.decodeText(),
+                  Stream.splitLines,
+                  Stream.filter((line) => line === "ready"),
+                  Stream.runHead,
+                  Effect.timeout("30 seconds"),
+                );
+
+                expect(Option.isSome(ready), "J2: the child saved all sixteen keys").toBe(true);
+                yield* Effect.sleep(`${delay} millis`);
+                yield* handle.kill({ killSignal: "SIGKILL" });
+                yield* handle.exitCode.pipe(Effect.ignore);
+              }),
+            );
+            // Opened again, as the next hands start opens it. The reads run inside the provide: the
+            // layer closes the file when its scope closes, so a read after it would fail for that.
+            yield* everyKeyWhole(`after a SIGKILL at ${delay} ms`).pipe(
+              Effect.provide(JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file })))),
+            );
+          }).pipe(Effect.provide(NodeServices.layer)),
+        { numRuns: runsFor({ fast: 3, full: 20 }) },
+      ),
     600_000,
   );
 });

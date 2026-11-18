@@ -23,7 +23,7 @@ type FromLedger<Service> = Extract<Failures<Service>, { readonly _tag: "LedgerEr
 /** A service that breaks the law in one method, so the helper is seen to find it. */
 type Leaky = {
   readonly load: Effect.Effect<void, { readonly _tag: "Own" }>;
-  readonly save: (value: unknown) => Effect.Effect<void, { readonly _tag: "Own" } | { readonly _tag: "LedgerError" }>;
+  readonly save: (value: string) => Effect.Effect<void, { readonly _tag: "Own" } | { readonly _tag: "LedgerError" }>;
 };
 
 it("type: no service of access/ fails with an error tagged LedgerError", () => {
@@ -33,6 +33,7 @@ it("type: no service of access/ fails with an error tagged LedgerError", () => {
 
   // SessionManager: its own error and its two refusals, and nothing of the ledger's.
   type Sessions = (typeof SessionManager)["Service"];
+
   expectTypeOf<Failures<Sessions>["_tag"]>().toEqualTypeOf<"SessionManagerError" | "SigningRefused" | "NotGranted">();
   expectTypeOf<FromLedger<Sessions>>().toBeNever();
 });

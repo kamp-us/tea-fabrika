@@ -25,6 +25,7 @@ export const rssLayer = (sample: () => number, onSpawn?: (command: string, args:
         }
 
         const stdout = Stream.make(new TextEncoder().encode(String(sample())));
+
         return ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(27000),
           exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),

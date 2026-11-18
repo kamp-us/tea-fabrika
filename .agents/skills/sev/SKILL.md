@@ -83,14 +83,29 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
 - **One fix at a time.** A fix makes CI land again, faster, cheaper or green; a feature that is
   "almost done" is not one. The allow list holds only the fix being landed now, in the order the
   owner gives; with none given, the one the others wait on goes first.
-- For that fix: merge main into its branch, let only its checks run, and admin-merge it once its
-  required checks are green, you read the whole diff, and the leak grep is clean on the change and
-  its words. Then `next` the following fix.
+- For that fix: let only its checks run, and admin-merge it once its required checks are green,
+  you read the whole diff, and the leak grep is clean on the change and its words. Then `next` the
+  following fix.
+- **Every ready pull request lands the same way,** not only the fixes ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)). The lead lands each
+  itself, one at a time, past the queue: `sev.ts allow <branch>`, then
+  `land.ts merge <pr> --admin`, once its steps passed, `ci-required` is green at its head and the
+  leak grep is clean. Read each merge's answer before the next.
+  - **The order:** the sev fixes, then the format and code-quality sweeps (format, lint, Effect,
+    mock and exam sweeps: they touch many files, so every pull request before them adds
+    conflicts), then the rest in the order they became ready, a child right after its parent.
+  - **No catch-up first.** A green pull request is not caught up with main. One that conflicts after
+    an earlier merge gets main merged in as the bot, and takes its place again once it is green.
+  - **Stacks:** remove an old native stack link with `gh stack unstack <number>` (`gh api
+    repos/<repo>/stacks` lists them). GitHub refuses `gh pr merge` on a stack member; each layer
+    lands on its own, bottom first.
+  - **A narrowed proof bar is the lead's to sign** when it keeps every law and files the dropped
+    cause as its own ticket, in the same read, by the lead session the quest reports to. A
+    loosened or removed law still goes to the owner.
 - **A red fix stops the line.** Fix it, or tell the owner what is red and ask what happens next.
 - **A check that is not required and already known red elsewhere** does not hold the admin merge
   (on 2026-11-14 that was `launchd`). Find its root cause and ticket it the same turn.
-- **Docs wait too.** They land by [0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)
-  once it ends.
+- **Decision and docs pull requests land at once,** by
+  [0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md), with no wait for the end (0603).
 - **Ending it:** when every fix has merged, or the owner calls it off; never when CI "looks
   better". `close` stops the loop and prints the walk and the level after.
 - **After close, rerun nothing.** A run the freeze canceled and a red run that stopped itself both
@@ -104,6 +119,37 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
   nothing starts it again until its next slot.
 - **Tell the owner:** one line at open (the fixes, in order), one at each fix that goes red, one at
   close (how many pull requests to walk, and the level now).
+
+## Many agents at once
+
+A sev often runs agents in several places at once: the lead's machine, cloud sessions, another
+tool's sessions. What kept the work moving on 2026-11-17, and what slowed it:
+
+- **The critical-path fix runs on the lead's machine,** with the lead's own step agents, and the lead
+  makes its judgment calls on the spot. On 2026-11-17 a cloud child spent an hour on one fix's
+  tests; a laptop agent finished the rest in 15 minutes.
+- **Owners stay fixed until their work lands.** Three handovers in one evening cost about an hour of
+  stopping, pushing, receipts and restarts. A new owner only takes work nobody holds.
+- **GitHub is the coordination layer.** A pull request is its own report: draft is working, ready
+  is reviewed, its checks are its progress. The lead watches pull request state, not messages; a
+  message is only for a decision, a conflict an agent cannot resolve, or the owner's yes. A
+  coordinator that relays status adds a wait to every question; it fills slots and keeps one
+  writer per file instead.
+- **No agent waits on CI or on a reply.** It keeps building, reviews, and arms its own pull request
+  when the checks are green and the leak grep is clean; in a sev0 it marks it ready instead, and the
+  lead admin-merges it in order. Only what needs the lead's machine waits.
+- **No native stacks** ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)). Each layer is a plain pull request and lands on its own, bottom
+  first: through the queue on a normal day, by admin merge in a sev0. On 2026-11-18 a three-layer
+  stack waited because `land.ts stack` needed every layer in one merge while the queue built two
+  entries at once. Children stay current by merging their parent's head in, never by a rebase.
+- **Lead tooling and CI fixes take the fast track:** no plan step, one builder, one review.
+- **Proof comes from the automatic changed and related CI.** A hand-started proof run that the
+  automatic CI already covers takes shared slots from every other pull request.
+- **The code-quality sweeps count as sev work:** lint rules, Effect checks, mock and exam sweeps. Bad
+  code on main poisons every later agent's context.
+- **A leak grep checks only a branch's own commits.** Only `base..head` and `--not --remotes=origin`
+  read just those; `base...head` also reads main's new commits. In a shallow clone the check
+  deepens until the range is whole or refuses; it never scans main's old history.
 
 ## The write-up
 
@@ -124,7 +170,7 @@ node $S status                                   # the level now: sev0, sev1 or 
 node $S open 0 --reason "..." --allow fabrikalfa/ci-cache   # in the background, on the owner's call
 node $S next fabrikalfa/ci-legs                  # that fix alone is allowed; the one before is canceled from now
 node $S allow fabrikalfa/ci-flake                # one more fix branch, without replacing the list
-git merge origin/main && git push                # in the fix's own worktree, so its checks run on main as it is
+git merge origin/main && git push                # on a conflict, in the PR's own worktree
 node .agents/skills/lead/scripts/land.ts merge <n> --admin  # leak-checks it; refuses unless the sev0 allows it and ci-required is green
 node $S close --by lead                          # every fix merged; --by owner when he called it off
 node $S loop                                     # only if the open 0 loop died with its shell

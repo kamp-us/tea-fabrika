@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-t1161-sc21-flags-prose-github",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "opus",
+  "rule": "bug",
+  "location": {
+    "path": ".github/ci/workflow-lint/scheduled.ts",
+    "line": 188
+  },
+  "says": "In today's CI, SC21's bare-github pattern matches the plain word GitHub in any text of the workflow, not only inside ${{ }} expressions, so a step name or run line such as 'Publish to GitHub' gets SC21's error that it reads the hand start's inputs.",
+  "proof": "A scratch node script ran lintScheduled at c83fe39bc on the real scheduled.yaml with the report step's env set to one value at a time. It printed `other true Publish to GitHub`, `other true see github docs` and `other true uses GitHub's runner` (named by SC21), and `real: []` for the unchanged file.",
+  "cost": "A misleading block the next time a step's name or script says GitHub. The fix is to scan only expressions (${{ }} and if values).",
+  "head": "c83fe39bc955f719297843d0cf36f643235f4065",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623"
+}

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-agents-md-sends-fixes-to-todays-version",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "AGENTS.md",
+    "line": 37
+  },
+  "says": "AGENTS.md's bullet 'In today's version' still sends fixes and picked UX work to today's version, against 0525 (which names this line) as 0533 cut it back; 0217 now says so. Ticket text: change the bullet to: no fixes and no picked UX work, all new work in next/, a small visual tryout allowed until next/'s Electron window is back. Slice 6 of the rules and records build owns the file.",
+  "proof": "AGENTS.md line 37 reads 'In today's version: fixes that daily use or CI needs, the UX work the owner picks, and ideas the owner wants to try out there first.' 0525 line 93 names that line as one to change.",
+  "cost": "An agent that reads the root map fixes or builds UX in today's version, which 0525 rules out.",
+  "head": "7b63f09b0a109363abe07f950ad7e02f6f5ce9e6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}

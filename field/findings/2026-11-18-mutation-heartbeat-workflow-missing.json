@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-mutation-heartbeat-workflow-missing",
+  "date": "2026-11-18",
+  "by": "tests",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".agents/skills/mutation/scripts/heartbeat.ts",
+    "line": 6
+  },
+  "says": "heartbeat.ts says `.github/workflows/mutation-heartbeat.yaml` runs it each hour, and decisions 0123 and 0535 say a schedule starts the mutation run, but no such workflow exists and mutation.yaml has only a workflow_dispatch trigger.",
+  "proof": "`ls .github/workflows` lists check.yaml, ci-speed.yaml, host.yaml, l11-exercise.yaml, mutation.yaml, plant.yaml, plants.yaml and scheduled.yaml and no mutation-heartbeat.yaml; `.github/workflows/mutation.yaml:14` is `workflow_dispatch:` with no `schedule:` and its comment at line 8 says no cron starts it; `.github/workflows/scheduled.yaml:93` is `cron: \"17 * * * *\"` and `rg -i mutation .github/workflows/scheduled.yaml` prints nothing.",
+  "cost": "Nothing starts the hourly mutation run or its heartbeat on a clock, while two accepted decisions say something does, so the records cannot be folded to match the workflow without a ruling.",
+  "head": "65edf5c27a8c2f5cc24cbded287695da91f57edd",
+  "ticket": null,
+  "pr": null
+}

@@ -15,7 +15,17 @@
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -33,16 +43,25 @@ import { ProcessManager } from "./ProcessManager.ts";
 import { type Grants, type MailRefusal, ProgramMail, ProgramMailError, type Receipt } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  land: {},
+  letter: {},
+  request: {},
+});
+
 /** One real store. `reopen` closes it and opens the same database again, keeping only its rows. */
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`,
 );
 
 const ids = (...values: ReadonlyArray<string>) => {
   let calls = 0;
+
   return {
     next: Effect.sync(() => {
       const value = values[calls++];
@@ -61,6 +80,7 @@ const BRAIN = "SHA256:brain";
 
 const brain = () => ({
   owner: Owner.cases.brain.make({}),
+  // SAFETY: PIDS holds 40 ids (Process.test-support.ts), so index 3 is present.
   recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[3] as string }),
   by: BRAIN,
 });
@@ -92,23 +112,33 @@ const data = (sql: Sql) =>
   );
 
 const SEED = 119120;
+
 /** T1041: `mail.unread`'s largest value, the cap for laws about anything but the cap. */
 const OPEN = 16_384;
+
 const REQUESTER = "requester:1";
+
 const RESPONDER = "responder:1";
+
 /** Granted to the requester, registered only by a move. */
 const HELPER = "helper:1";
+
 /** Registered at boot and granted to nobody. */
 const STRANGER = "stranger:1";
+
 /** Granted to the requester and never registered. */
 const GHOST = "ghost:1";
+
 const SOURCES = [REQUESTER, RESPONDER] as const;
+
 const NAMES = [REQUESTER, RESPONDER, HELPER, STRANGER, GHOST] as const;
+
 const CODE = { program: "mail", hash: "build-a" };
 
 /** The host's closed grant: each source reaches only the names listed for it. */
 const GRANTS: Grants = { [REQUESTER]: [RESPONDER, HELPER, GHOST], [RESPONDER]: [REQUESTER] };
-const granted = (source: string, to: string) => Object.hasOwn(GRANTS, source) && GRANTS[source]?.includes(to) === true;
+
+const granted = (source: string, to: string) => Rec.has(GRANTS, source) && GRANTS[source]?.includes(to) === true;
 
 type Delivery = Parameters<ProgramMail["Service"]["deliver"]>[0];
 
@@ -131,23 +161,25 @@ type World = {
 };
 
 /** Values Schema.Json refuses: a function, a bigint, a symbol, `undefined`. */
-const BAD: ReadonlyArray<() => unknown> = [
-  () => ({ type: "request", f: () => 1 }),
+const BAD: ReadonlyArray<() => object | undefined> = [
+  () => ({ ...Tag.cases.request.make({}), f: () => 1 }),
   () => [1n],
   () => undefined,
-  () => ({ type: "request", s: Symbol("x") }),
+  () => ({ ...Tag.cases.request.make({}), s: Symbol("x") }),
 ];
 
 const Cell = fc.record({
   move: fc.nat(),
   pick: fc.nat(),
   alt: fc.nat(),
-  m: fc.jsonValue({ maxDepth: 2 }).map((m) => copied({ type: "request", body: m })),
+  m: fc.jsonValue({ maxDepth: 2 }).map((m) => copied({ ...Tag.cases.request.make({}), body: m })),
   clock: fc.integer({ min: 0, max: 86_400_000 }),
   build: fc.constantFrom("build-a", "build-b", "build-c"),
   trace: fc.stringMatching(/^[0-9a-f]{32}$/),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
 const Tape = fc.array(Cell, { minLength: 8, maxLength: 32, size: "max" });
 
 type Move =
@@ -167,7 +199,7 @@ type Move =
 const said = (cell: Cell, over: Partial<From> = {}): From =>
   from({
     by: "SHA256:program-writer",
-    sentAt: new Date(Date.UTC(2026, 10, 11) + cell.clock).toISOString(),
+    sentAt: DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 11) + cell.clock)),
     build: cell.build,
     traceId: cell.trace,
     ...over,
@@ -175,7 +207,9 @@ const said = (cell: Cell, over: Partial<From> = {}): From =>
 
 /** The store's Sql, with a cut that throws on the `after`-th INSERT of the next call. */
 const cutting = (sql: Sql) => {
+  // SAFETY: widens `after` from `null` so the cut can hold a count; `null` means no cut is armed.
   const fault = { after: null as number | null, hit: false };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\b/i.test(query) && fault.after !== null) {
@@ -193,6 +227,7 @@ const cutting = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, fault };
 };
 
@@ -201,7 +236,8 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
   const tables = sql
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const layer = (sql: Sql, next: Effect.Effect<string>) =>
@@ -240,17 +276,21 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 const liveSources = (world: World) =>
   SOURCES.flatMap((name) => {
     const life = world.lives.get(name);
+
     return life?.live === true ? [{ name, process: life.process }] : [];
   });
 
 /** A target the source may reach and that is registered, live or not. */
 const reachable = (world: World, source: string) => NAMES.filter((to) => granted(source, to) && world.lives.has(to));
+
 const ended = (world: World) => [...world.lives].filter(([, life]) => !life.live).map(([name]) => name);
+
 const stoppable = (world: World) => [...world.lives].filter(([, life]) => life.live).map(([name]) => name);
 
 /** The moves possible in this world, each only when the world can take it. */
 const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
   const sources = liveSources(world);
+
   const can: Record<Move, boolean> = {
     send: sources.length > 0,
     bad: sources.some((s) => reachable(world, s.name).length > 0),
@@ -258,12 +298,14 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     retry_other: world.sent.size > 0,
     stop: stoppable(world).length > 0,
     restart: ended(world).length > 0 && world.pids < PIDS.length - 1,
+    // SAFETY: SOURCES is a tuple of names; widened only so `includes` can test any stale name.
     stale_send: world.stale.some((s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
     register: !world.lives.has(HELPER) && world.pids < PIDS.length - 1,
     cut: sources.some((s) => reachable(world, s.name).length > 0),
     retry_cut: world.cut.length > 0,
     reopen: true,
   };
+
   return moves.filter((move) => can[move]);
 };
 
@@ -319,6 +361,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
     const store = yield* open;
     const { sql, fault } = cutting(store.sql);
     const next = ids(...PIDS);
+
     const world: World = {
       lives: new Map(),
       stale: [],
@@ -329,11 +372,15 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       next: 0,
       pids: 0,
     };
+
     const run = <A, E>(effect: Effect.Effect<A, E, ProgramMail | ProcessManager | Mailbox>) =>
       effect.pipe(Effect.provide(layer(sql, next.next)), Effect.result);
+
     const deliver = (delivery: Delivery) => run(ProgramMail.use((mail) => mail.deliver(delivery)));
+
     const register = Effect.fnUntraced(function* (name: string) {
       const life = world.lives.get(name);
+
       const request =
         life === undefined
           ? Start.cases.first.make({ id: `start:${name}`, name, code: CODE })
@@ -344,10 +391,12 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
               reason: "shutdown",
               code: CODE,
             });
+
       const answer = yield* run(ProcessManager.use((p) => p.start(request, from())));
       expect(Result.isSuccess(answer), `${name} starts`).toBe(true);
       world.lives.set(name, { process: choose(PIDS, world.pids++), live: true });
     });
+
     /** Accepts `delivery` in the world, after checking the receipt it answered. */
     const accepted = (delivery: Delivery, answer: Result.Result<Receipt, ProgramMailError>) => {
       expect(Result.isSuccess(answer), `a permitted delivery to ${delivery.to} is accepted`).toBe(true);
@@ -364,7 +413,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       expect(receipt.to.state._tag, "the target's lifecycle state at acceptance").toBe(
         target?.live === true ? "live" : "ended",
       );
-      expect(typeof receipt.arrivedAt, "the referee's clock is kept").toBe("number");
+      expect(receipt.arrivedAt, "the referee's clock is kept").toBeTypeOf("number");
       world.sent.set(delivery.command, { delivery, receipt });
       world.targetState.set(delivery.command, target?.live === true ? "live" : "ended");
       const inbox = world.inbox.get(delivery.to) ?? [];
@@ -406,13 +455,16 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           break;
         }
+
         case "bad": {
           const source = choose(
             liveSources(world).filter((s) => reachable(world, s.name).length > 0),
             cell.pick,
           );
+
           const to = choose(reachable(world, source.name), cell.alt);
           const m = choose(BAD, cell.alt)();
+
           const answer = yield* deliver({
             command: `${source.process}/${++world.next}/0`,
             source,
@@ -420,10 +472,12 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             m,
             from: said(cell),
           });
+
           refused(answer, "bad_message", "a message that is not JSON is refused");
           unchanged("a malformed delivery writes nothing");
           break;
         }
+
         case "retry_same": {
           const [command, { delivery, receipt }] = choose([...world.sent], cell.pick);
           // Another attempt: later clocks, another build and trace, the same command and body.
@@ -434,18 +488,22 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           unchanged("a repeat delivery appends nothing");
           break;
         }
+
         case "retry_other": {
           const [command, { delivery }] = choose([...world.sent], cell.pick);
           const others = NAMES.filter((to) => to !== delivery.to && granted(delivery.source.name, to));
+
           const changed =
             cell.alt % 2 === 0 || others.length === 0
-              ? { ...delivery, m: { type: "request", body: ["changed", delivery.m] } }
+              ? { ...delivery, m: { ...Tag.cases.request.make({}), body: ["changed", delivery.m] } }
               : { ...delivery, to: choose(others, cell.alt) };
+
           const answer = yield* deliver(changed);
           refused(answer, "id_reused", `${command} reused with another destination or body`);
           unchanged("a conflicting reuse appends nothing");
           break;
         }
+
         case "stop": {
           const name = choose(stoppable(world), cell.pick);
           const life = world.lives.get(name);
@@ -460,19 +518,24 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           world.stale.push({ name, process: life.process });
           break;
         }
+
         case "restart": {
           yield* register(choose(ended(world), cell.pick));
           break;
         }
+
         case "stale_send": {
           const old = choose(
+            // SAFETY: SOURCES is widened to a string list only so `includes` can test each stale entry's name.
             world.stale.filter((s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
             cell.pick,
           );
+
           const to = choose(
             NAMES.filter((n) => granted(old.name, n)),
             cell.alt,
           );
+
           const answer = yield* deliver({
             command: `${old.process}/${++world.next}/0`,
             source: old,
@@ -480,19 +543,23 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             m: cell.m,
             from: said(cell),
           });
+
           refused(answer, "stale_sender", `${old.process} no longer acts for ${old.name}`);
           unchanged("a stale execution appends no new mail");
           break;
         }
+
         case "register": {
           yield* register(HELPER);
           break;
         }
+
         case "cut": {
           const source = choose(
             liveSources(world).filter((s) => reachable(world, s.name).length > 0),
             cell.pick,
           );
+
           const to = choose(reachable(world, source.name), cell.alt);
           const delivery = { command: `${source.process}/${++world.next}/0`, source, to, m: cell.m, from: said(cell) };
           fault.after = cell.alt % 2;
@@ -512,6 +579,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           break;
         }
+
         case "retry_cut": {
           const delivery = choose(world.cut, cell.pick);
           world.cut.splice(world.cut.indexOf(delivery), 1);
@@ -527,6 +595,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           break;
         }
+
         case "reopen":
           yield* store.reopen;
           break;
@@ -547,16 +616,19 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
+
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 40 }),
           includeErrorInReport: true,
           endOnFailure: true,
         };
+
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         // An empty flow cannot pass: every move the law is about ran at least once.
@@ -606,13 +678,13 @@ const pair = (a: string, b: string) => JSON.stringify([a, b].sort());
 
 /** The model's mail rule: the host grant lists the pair, or one is the other's first requester. */
 const mayMail = (family: Family, source: string, to: string) =>
-  (Object.hasOwn(HOST, source) && HOST[source]?.includes(to) === true) ||
+  (Rec.has(HOST, source) && HOST[source]?.includes(to) === true) ||
   family.first.get(to) === source ||
   family.first.get(source) === to;
 
 /** Why a pair may or may not mail, for the walk's tally of what it reached. */
 const relation = (family: Family, source: string, to: string): string => {
-  if (Object.hasOwn(HOST, source) && HOST[source]?.includes(to) === true) {
+  if (Rec.has(HOST, source) && HOST[source]?.includes(to) === true) {
     return "host";
   }
 
@@ -664,7 +736,9 @@ const FamilyCell = fc.record({
   alt: fc.nat(),
   clock: fc.integer({ min: 0, max: 86_400_000 }),
 });
+
 type FamilyCell = typeof FamilyCell extends fc.Arbitrary<infer A> ? A : never;
+
 type FamilyWalk = { readonly step: (cell: FamilyCell) => Effect.Effect<void, unknown> };
 
 const FamilyTape = fc
@@ -698,6 +772,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
   Effect.fnUntraced(function* (tape: Iterable<fc.AsyncCommand<object, FamilyWalk>>) {
     const store = yield* open;
     const next = ids(...PIDS);
+
     const world: Family = {
       names: new Map(),
       first: new Map(),
@@ -706,12 +781,13 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
       restarted: new Set(),
       n: 0,
     };
+
     const stack = ProgramMailLedger.layer({ grants: HOST, cap: OPEN }).pipe(
       Layer.provideMerge(
         ChildrenLedger.layer({ grants: STARTS, fabrika: Model.ref("fabrika", "p41") }).pipe(
           // T953: no start here has a member's input behind it, so `StartGrant` judges every one, as before.
           Layer.provide(RelationsMemory.layer([])),
-          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
         ),
       ),
       Layer.provideMerge(
@@ -720,13 +796,17 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         ),
       ),
     );
+
     const run = <A, E>(effect: Effect.Effect<A, E, ProgramMail | ProcessManager | Mailbox | Children>) =>
       effect.pipe(Effect.provide(stack), Effect.result);
+
     const must = <A, E>(effect: Effect.Effect<A, E, ProcessManager>, label: string) =>
       Effect.map(run(effect), (answer) => {
         expect(Result.isSuccess(answer), label).toBe(true);
+
         return Result.getOrThrow(answer);
       });
+
     const parent = () => `in-${PIDS[0]}-${++world.n}`;
 
     for (const [name, program] of FAMILY_BOOT) {
@@ -736,6 +816,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         ),
         `${name} boots`,
       );
+
       world.names.set(name, { program, process: placed.process, live: true });
     }
 
@@ -755,6 +836,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         restart: [...world.names.values()].some((n) => !n.live) && next.calls() < PIDS.length - 2,
         mail: live().length > 0,
       };
+
       const options = FAMILY_MOVES.filter((m) => can[m]);
 
       if (options.length === 0) {
@@ -767,9 +849,11 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
       switch (move) {
         case "start_child": {
           const starter = choose(starters(), cell.pick);
+          // SAFETY: `starter` comes from `starters()`, which lists only names the world holds.
           const self = world.names.get(starter) as { program: string; process: string };
           const program = choose(startsTo(self.program), cell.alt);
           const name = `${program}:${100 + ++world.n}`;
+
           const answer = yield* run(
             Children.use((c) =>
               c.start(
@@ -778,12 +862,13 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
                   name,
                   code: { program, hash: "build-a" },
                   requester: Recipient.cases.process.make({ process: self.process }),
-                  input: { type: "land", ref: `r${world.n}` },
+                  input: { ...Tag.cases.land.make({}), ref: `r${world.n}` },
                 },
                 from({ parent: parent() }),
               ),
             ),
           );
+
           expect(Result.isSuccess(answer) && Result.getOrThrow(answer)._tag, `${starter} starts ${name}`).toBe(
             "started",
           );
@@ -792,6 +877,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
           world.first.set(name, starter);
           break;
         }
+
         case "start_again": {
           const starter = choose(
             starters().filter((s) =>
@@ -801,11 +887,15 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
             ),
             cell.pick,
           );
+
+          // SAFETY: the starter picked above is one of `starters()`, each a name `world.names` holds.
           const self = world.names.get(starter) as { program: string; process: string };
+
           const [name, held] = choose(
             [...world.names.entries()].filter(([n, h]) => n !== starter && startsTo(self.program).includes(h.program)),
             cell.alt,
           );
+
           const answer = yield* run(
             Children.use((c) =>
               c.start(
@@ -819,6 +909,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
               ),
             ),
           );
+
           expect(Result.isSuccess(answer) && Result.getOrThrow(answer)._tag, `${starter} asks for ${name} again`).toBe(
             held.live ? "already_started" : "already_present",
           );
@@ -829,12 +920,16 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
 
           break;
         }
+
         case "start_forbidden": {
+          // SAFETY: rogue:1 is booted, and `world.names` never drops a name; this move is offered only while it is live.
           const self = world.names.get("rogue:1") as { program: string; process: string };
+
           const name = choose(
             [...world.names.keys()].filter((n) => n !== "rogue:1"),
             cell.pick,
           );
+
           const answer = yield* run(
             Children.use((c) =>
               c.start(
@@ -848,6 +943,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
               ),
             ),
           );
+
           expect(Result.isFailure(answer), "an ungranted program's start is refused").toBe(true);
 
           if (world.first.get(name) !== "rogue:1" && world.first.get("rogue:1") !== name) {
@@ -856,8 +952,10 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
 
           break;
         }
+
         case "exit": {
           const name = choose(live(), cell.pick);
+          // SAFETY: `name` is picked from `live()`, which lists only names in `world.names`.
           const held = world.names.get(name) as { process: string; live: boolean };
           yield* must(
             ProcessManager.use((p) => p.exit(held.process, SHUTDOWN, from())),
@@ -866,11 +964,13 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
           held.live = false;
           break;
         }
+
         case "restart": {
           const [name, held] = choose(
             [...world.names.entries()].filter(([, h]) => !h.live),
             cell.pick,
           );
+
           const placed = yield* must(
             ProcessManager.use((p) =>
               p.start(
@@ -886,29 +986,36 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
             ),
             `${name} restarts`,
           );
+
           held.process = placed.process;
           held.live = true;
           world.restarted.add(name);
           break;
         }
+
         case "mail": {
           const source = choose(live(), cell.pick);
+
           const to = choose(
             [...world.names.keys()].filter((n) => n !== source),
             cell.alt,
           );
+
+          // SAFETY: `source` is a name the world holds, as this move is only offered for one.
           const self = world.names.get(source) as { process: string };
+
           const answer = yield* run(
             ProgramMail.use((mail) =>
               mail.deliver({
                 command: `${self.process}/${++world.n}/0`,
                 source: { name: source, process: self.process },
                 to,
-                m: { type: "request", ref: `m${world.n}` },
+                m: { ...Tag.cases.request.make({}), ref: `m${world.n}` },
                 from: from({ by: "SHA256:program-writer", parent: parent() }),
               }),
             ),
           );
+
           const reason = relation(world, source, to);
 
           if (mayMail(world, source, to)) {
@@ -925,6 +1032,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
 
       done.add(move);
     });
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: world, real: { step } }), tape));
   });
@@ -940,16 +1048,20 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
 //     live process; a stale life's ack, or a pos at or behind the newest, changes nothing.
 
 const WRITER = "writer:1";
+
 const READER = "reader:1";
+
 /** The brain-only stream the plan names for a reader's acks. */
 const acked = (name: string) => `processes/${name}/acked`;
 
 const CapCell = fc.record({
   move: fc.nat(),
   pick: fc.nat(),
-  m: fc.jsonValue({ maxDepth: 1 }).map((m) => copied({ type: "letter", body: m })),
+  m: fc.jsonValue({ maxDepth: 1 }).map((m) => copied({ ...Tag.cases.letter.make({}), body: m })),
 });
+
 type CapCell = typeof CapCell extends fc.Arbitrary<infer A> ? A : never;
+
 type CapWalk = { readonly step: (cell: CapCell) => Effect.Effect<void, unknown> };
 
 const CapTape = fc
@@ -977,6 +1089,7 @@ const AckedPos = Schema.TaggedStruct("acked", { pos: Schema.Int });
 const ackedPos = (entries: ReadonlyArray<unknown>) =>
   entries.reduce<number>((top, entry) => {
     const pos = Schema.decodeUnknownOption(AckedPos)(entry);
+
     return Option.isSome(pos) ? Math.max(top, pos.value.pos) : top;
   }, 0);
 
@@ -989,6 +1102,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
   Effect.fnUntraced(function* (cap: number, tape: Iterable<fc.AsyncCommand<object, CapWalk>>) {
     const store = yield* open;
     const next = ids(...PIDS);
+
     const stack = ProgramMailLedger.layer({ grants: { [WRITER]: [READER] }, cap }).pipe(
       Layer.provideMerge(
         ProcessManager.layer({ ...brain(), by: BRAIN }, next.next).pipe(
@@ -996,8 +1110,10 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
         ),
       ),
     );
+
     const run = <A, E>(effect: Effect.Effect<A, E, ProgramMail | ProcessManager | Mailbox | Ledger>) =>
       effect.pipe(Effect.provide(stack), Effect.result);
+
     const lives = new Map<string, string>();
     const stale: Array<string> = [];
 
@@ -1005,6 +1121,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
       const placed = yield* run(
         ProcessManager.use((p) => p.start(Start.cases.first.make({ id: `start:${name}`, name, code: CODE }), from())),
       );
+
       expect(Result.isSuccess(placed), `${name} starts`).toBe(true);
       lives.set(name, Result.getOrThrow(placed).process);
     }
@@ -1012,6 +1129,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
     // The fold: the reader's inbox's newest pos, the newest acked pos, and each accepted send.
     const world = { newest: 0, acked: 0, n: 0 };
     const sent: Array<{ readonly delivery: Delivery; readonly receipt: Receipt }> = [];
+
     const acks = () =>
       run(
         Ledger.use((ledger) =>
@@ -1021,6 +1139,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
 
     const step = Effect.fnUntraced(function* (cell: CapCell) {
       const unread = world.newest - world.acked;
+
       const can: Record<CapMove, boolean> = {
         send: true,
         resend: sent.length > 0,
@@ -1030,6 +1149,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
         restart: next.calls() < PIDS.length - 1,
         forge: true,
       };
+
       const options = moves.filter((move) => can[move]);
 
       if (options.length === 0) {
@@ -1039,6 +1159,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
       const move = choose(options, cell.move);
       const before = snapshot(store.sql);
       const unchanged = (message: string) => expect(snapshot(store.sql), message).toEqual(before);
+      // SAFETY: the writer is started before the walk and kept live, so `lives` has its process.
       const writer = { name: WRITER, process: lives.get(WRITER) as string };
 
       switch (move) {
@@ -1050,6 +1171,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
             m: cell.m,
             from: from({ by: "SHA256:program-writer" }),
           };
+
           const answer = yield* run(ProgramMail.use((mail) => mail.deliver(delivery)));
 
           if (unread >= cap) {
@@ -1058,6 +1180,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
             done.add("full");
           } else {
             expect(Result.isSuccess(answer), `L6: ${unread} unread under cap ${cap} is saved`).toBe(true);
+            // SAFETY: the `isSuccess` check above proved the send saved, and a saved send answers a receipt.
             sent.push({ delivery, receipt: Result.getOrThrow(answer) as Receipt });
             world.newest++;
             done.add(unread === cap - 1 ? "fills" : "send");
@@ -1065,6 +1188,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
 
           break;
         }
+
         case "resend": {
           const { delivery, receipt } = choose(sent, cell.pick);
           const answer = yield* run(ProgramMail.use((mail) => mail.deliver(delivery)));
@@ -1074,12 +1198,15 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
           done.add(unread >= cap ? "resend_full" : "resend");
           break;
         }
+
         case "ack":
         case "ack_behind": {
           const pos =
             move === "ack"
               ? world.acked + 1 + (cell.pick % (world.newest - world.acked))
               : 1 + (cell.pick % world.acked);
+
+          // SAFETY: the reader is started before the walk, so `lives` holds its process.
           const answer = yield* run(ProcessManager.use((p) => p.ack(lives.get(READER) as string, pos, from())));
           expect(Result.isSuccess(answer), `L8: the live reader acks pos ${pos}`).toBe(true);
 
@@ -1092,6 +1219,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
           done.add(move);
           break;
         }
+
         case "ack_stale": {
           const old = choose(stale, cell.pick);
           yield* run(ProcessManager.use((p) => p.ack(old, world.newest + 1, from())));
@@ -1099,10 +1227,13 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
           done.add(move);
           break;
         }
+
         case "restart": {
+          // SAFETY: the reader is put in `lives` before the walk, and `lives` is only ever set, never cleared.
           const process = lives.get(READER) as string;
           const exited = yield* run(ProcessManager.use((p) => p.exit(process, SHUTDOWN, from())));
           expect(Result.isSuccess(exited), "the reader stops").toBe(true);
+
           const placed = yield* run(
             ProcessManager.use((p) =>
               p.start(
@@ -1117,21 +1248,25 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
               ),
             ),
           );
+
           expect(Result.isSuccess(placed), "the reader starts again").toBe(true);
           lives.set(READER, Result.getOrThrow(placed).process);
           stale.push(process);
           done.add(move);
           break;
         }
+
         case "forge": {
           // A program writes through the runner's checked write, which refuses every stream the
           // brain alone writes, and mail goes through Mailbox, which refuses the same.
           expect(brainOnly({ stream: acked(READER), id: `forged-${++world.n}`, tag: "acked" })).toBe(true);
+
           const answer = yield* run(
             Mailbox.use((mail) =>
               mail.send(`processes/${READER}`, `forged-${world.n}`, AckedPos.make({ pos: world.newest + 9 }), from()),
             ),
           );
+
           expect(Result.isSuccess(answer) && Result.getOrThrow(answer)._tag, "L8: a forged ack is refused").toBe(
             "refused",
           );
@@ -1144,6 +1279,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
       expect(world.newest - world.acked, "L6: unread never passes the cap").toBeLessThanOrEqual(cap);
       expect(ackedPos(yield* acks()), "L8: the acked pos is the newest forward ack").toBe(world.acked);
     });
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), tape));
   });
@@ -1158,17 +1294,21 @@ const capLaw = (
     name,
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const done = new Set<string>();
         const law = capWalk(open, moves, done);
         const scoped = (cap: number, tape: Iterable<fc.AsyncCommand<object, CapWalk>>) => Effect.scoped(law(cap, tape));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each walk
-        const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => Effect.runPromise(scoped(cap, tape)));
+        const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => runPromise(scoped(cap, tape)));
+
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 50 }),
           includeErrorInReport: true,
           endOnFailure: true,
         };
+
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         // An empty walk cannot pass: every case the law is about was reached.
@@ -1231,11 +1371,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "L14: a child and the program that started it mail each other with no grant, across restarts; nobody else gains a right",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const seen = new Set<string>();
           const done = new Set<FamilyMove>();
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-          const property = fc.asyncProperty(FamilyTape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+          const property = fc.asyncProperty(FamilyTape, (tape) => runPromise(Effect.scoped(law(tape))));
+
           const checks = {
             seed: SEED,
             // Every relation the law names must be mailed across: 60 walks miss some at this seed.
@@ -1243,6 +1386,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             includeErrorInReport: true,
             endOnFailure: true,
           };
+
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, checks));
           // An empty walk cannot pass: every move ran, and every relation the law names was mailed across.

@@ -48,6 +48,10 @@ use every part of a program without being a big one.**
   one an agent may, a wake for an item left too long, an output another program can take, a read
   port, a window with a list, and one command the hands run.
 - Docs, tutorials and a starter for authors use it. No new doc or tutorial teaches with a counter.
+- No new slice leans on the counter. A slice not yet built that would show or run the counter shows
+  the checklist. The first case is P14 slice 2, the browser tab (ticket 828): a person sees the
+  list, adds an item, checks one and reads a refusal in words. "The counter stays only where a test
+  still runs it" (below) covers tests that exist on main, never a new one.
 - The eight gaps with no home are fixed in two batches. Docs: a page for authors (state is saved
   for you, what `wake` and `refuse` mean), a line on each tutorial that teaches today's version
   saying so, and no plan codes in what an author reads. Code: a refusal reason of its own for an
@@ -67,10 +71,3 @@ use every part of a program without being a big one.**
   deletes the counter. Until then the counter stays only where a test still runs it.
 - The cost of that: about 16 test files change, and a richer test program makes a red test a
   little harder to read.
-
-## Amendments
-
-- 2026-11-11 (owner): no new slice leans on the counter. A slice not yet built that would show or
-  run the counter shows the checklist. The first case is P14 slice 2, the browser tab (ticket 828):
-  a person sees the list, adds an item, checks one and reads a refusal in words. "The counter stays
-  only where a test still runs it" covers tests that exist on main, never a new one.

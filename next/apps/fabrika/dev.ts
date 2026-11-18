@@ -1,4 +1,5 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { Id } from "@kampus/libfabrika";
 import type { LedgerCalls } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerRemote from "@kampus/libfabrika/ledger/LedgerRemote";
@@ -8,28 +9,44 @@ import * as Load from "@kampus/libfabrika/node/settings/Load";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
-import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  Record as Rec,
+  String as Str,
+  Config,
+  Effect,
+  FileSystem,
+  Layer,
+  Match,
+  Path,
+  Schema,
+  Stream,
+  Formatter,
+} from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
+
 import { build } from "./src/build.ts";
+import { environment, present } from "./src/environment.ts";
 import { localInstance } from "./src/local-instance.ts";
 import { Founding } from "./src/settings.ts";
 
-class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
+class InstanceError extends Schema.TaggedError<InstanceError, { readonly brand: unique symbol }>()("InstanceError", {
   reason: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
 const VERSION = "0.0.0";
+
 const declarations = Declarations.all.declarations;
 
 // Each declared setting is a flag at its own path, as --instance.port. --port stays the port's
 // alias, for the commands and instance tests written before the setting.
-const settings = Object.fromEntries(
-  declarations.map((d) => {
+const settings = Rec.fromEntries(
+  Arr.map(declarations, (d) => {
     const flag = Flag.String(d.path);
+
     return [d.path, (d === Declarations.port ? Flag.withAlias(flag, "port") : flag).pipe(Flag.withDefault(undefined))];
   }),
 );
@@ -37,10 +54,6 @@ const settings = Object.fromEntries(
 // The saved state of a home: its founding facts. A port saved there by an older start is read
 // only to say that it is no longer used.
 const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Declarations.port.schema) });
-
-/** The entries that hold a value, as one record. */
-const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
 
 // The settings flags are one nested record, so the start reads each by its declared path.
 const flags = {
@@ -60,10 +73,12 @@ const words: Array<string> = [];
 for (let n = 2; n < process.argv.length; n++) {
   const word = process.argv[n] ?? "",
     value = process.argv[n + 1];
+
   const flag =
     (/^--(repo|port|name|person|founder|window|parent)$/.test(word) ||
-      declarations.some((d) => word === `--${d.path}`)) &&
+      Arr.some(declarations, (d) => word === `--${d.path}`)) &&
     value !== undefined;
+
   words.push(flag ? `${word}=${value}` : word);
 
   if (flag) {
@@ -85,24 +100,30 @@ const command = Command.make("dev", flags, (options) => {
       yield* Effect.sleep("250 millis");
     }),
   );
+
   const child = Effect.scoped(
     Effect.raceFirst(
       guard,
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem,
           path = yield* Path.Path;
-        const home = process.env.FABRIKA_HOME ?? path.join(yield* Config.String("HOME"), ".fabrika");
+
+        const env = yield* environment;
+        const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
+
         // A person reads their file's name from ~ or FABRIKA_HOME, never as this machine's path.
         const person = {
           path: path.join(home, "fabrika.toml"),
-          name: `${process.env.FABRIKA_HOME === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
+          name: `${env.home === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
         };
+
         const loadOptions = {
           person,
-          flags: present(declarations.map((d) => [d.path, options.settings[d.path]])),
-          env: present(declarations.map((d) => [d.env, process.env[d.env]])),
+          flags: present(Arr.map(declarations, (d) => [d.path, options.settings[d.path]])),
+          env: present(Rec.toEntries(env.settings)),
           version: VERSION,
         };
+
         const prepared =
           options.repo === undefined
             ? undefined
@@ -110,6 +131,7 @@ const command = Command.make("dev", flags, (options) => {
                 Effect.provide(RepositoriesGit.layer({ person: home })),
                 Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
               );
+
         // Settings are read once, before anything starts: with the selected repo's file at one
         // commit, or with no repo file when the start selects none.
         const loaded =
@@ -119,9 +141,11 @@ const command = Command.make("dev", flags, (options) => {
                 Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })),
               )
             : { snapshot: prepared.settings, values: prepared.values };
+
         const { file, state } = yield* Effect.gen(function* () {
           yield* fs.makeDirectory(home, { recursive: true });
           const file = path.join(home, "instance.json");
+
           const saved = (yield* fs.exists(file))
             ? yield* fs
                 .readFileString(file)
@@ -142,12 +166,15 @@ const command = Command.make("dev", flags, (options) => {
             build: "pending",
             ...(saved?.limits === undefined ? {} : { limits: saved.limits }),
           });
+
           return { file, state };
         }).pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
+
         yield* fs
-          .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
+          .writeFileString(file, Formatter.formatJson(state), { mode: 0o600 })
           .pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
+
         const instance = yield* localInstance(built, {
           name: state.name,
           founding: { person: state.person, founder: state.founder, window: state.window },
@@ -168,10 +195,11 @@ const command = Command.make("dev", flags, (options) => {
           }
 
           const calls: LedgerCalls = { append, read, wait };
+
           const selected = yield* OpenRepository.open(prepared, {
             selection: yield* ids.next(Id.InputId),
             request: yield* ids.next(Id.InputId),
-            actor: yield* Schema.decodeUnknownEffect(Id.Person)(state.person),
+            actor: yield* Schema.decodeEffect(Id.Person)(state.person),
             by: "brain",
             build: built.build,
             interactive: process.stdin.isTTY === true,
@@ -185,7 +213,8 @@ const command = Command.make("dev", flags, (options) => {
               ),
             ),
           );
-          process.stdout.write(`${JSON.stringify(selected)}\n`);
+
+          process.stdout.write(`${Formatter.formatJson(selected)}\n`);
 
           if (selected._tag === "refused") {
             return yield* InstanceError.make({ reason: "repository_refused" });
@@ -204,21 +233,37 @@ const command = Command.make("dev", flags, (options) => {
                 }
 
                 if (answer._tag === "failed") {
-                  process.stdout.write(
-                    `${answer.program} did not load: ${answer.reason === "bundle" ? "syntax error" : answer.reason === "compiler" ? "compiler check failed" : answer.reason === "name" ? "the program name changed" : answer.reason === "too_large" ? "the bundle is too large" : "the module failed to load"}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
+                  const reason = Match.value(answer.reason).pipe(
+                    Match.when("bundle", () => "syntax error"),
+                    Match.when("compiler", () => "compiler check failed"),
+                    Match.when("name", () => "the program name changed"),
+                    Match.when("too_large", () => "the bundle is too large"),
+                    Match.orElse(() => "the module failed to load"),
                   );
+
+                  process.stdout.write(
+                    `${answer.program} did not load: ${reason}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
+                  );
+
                   return;
                 }
 
                 for (const { name, outcome } of answer.processes) {
-                  const text =
-                    outcome._tag === "swapped"
-                      ? `${name} runs ${answer.hash.slice(0, 8)} now`
-                      : outcome._tag === "refused"
-                        ? `${name} stays on ${outcome.was.slice(0, 8)}: ${outcome.reason === "shape" ? "the new code can't read its state" : outcome.reason === "newer" ? "its state has a newer version" : "the new code could not load"}`
-                        : outcome._tag === "not_now"
-                          ? `${name} will try the new code at the next brain start`
-                          : `${name} already runs this code`;
+                  const text = Match.valueTags(outcome, {
+                    swapped: () => `${name} runs ${Str.slice(0, 8)(answer.hash)} now`,
+                    refused: (outcome) => {
+                      const reason = Match.value(outcome.reason).pipe(
+                        Match.when("shape", () => "the new code can't read its state"),
+                        Match.when("newer", () => "its state has a newer version"),
+                        Match.orElse(() => "the new code could not load"),
+                      );
+
+                      return `${name} stays on ${Str.slice(0, 8)(outcome.was)}: ${reason}`;
+                    },
+                    not_now: () => `${name} will try the new code at the next brain start`,
+                    same: () => `${name} already runs this code`,
+                  });
+
                   process.stdout.write(`${text}\n`);
                 }
               }),
@@ -226,15 +271,18 @@ const command = Command.make("dev", flags, (options) => {
         );
 
         process.stdout.write(
-          `${JSON.stringify({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
+          `${Formatter.formatJson({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
         );
+
         return yield* Effect.never;
       }),
     ),
   );
+
   const parent = Effect.scoped(
     Effect.gen(function* () {
       const path = yield* Path.Path;
+
       // The installed Node spawner closes the detached group even after its leader exits.
       const childProcess = yield* ChildProcess.make(
         process.execPath,
@@ -253,6 +301,7 @@ const command = Command.make("dev", flags, (options) => {
       }
     }),
   );
+
   return options.child ? child : parent;
 });
 

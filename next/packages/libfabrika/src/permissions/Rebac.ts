@@ -14,9 +14,11 @@
  * are per permission, the store fails typed, `Denied` carries who, what and which object, and a
  * proof carries the object it checked.
  */
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
@@ -110,12 +112,12 @@ const build = <T extends Types>(name: string, declared: ReadonlyMap<string, Decl
     build<T & { readonly [K in N]: { readonly relations: keyof R & string; readonly permissions: P } }>(
       name,
       new Map(declared).set(type, {
-        relations: new Set(Object.keys(shape.relations ?? {})),
+        relations: new Set(Rec.keys(shape.relations ?? {})),
         permissions: new Map(
-          Object.entries<(p: Rewrites<string>) => Rewrite>(shape.permissions ?? {}).map(([permission, rewrite]) => [
-            permission,
-            rewrite(rewrites)[RewriteTypeId],
-          ]),
+          Arr.map(
+            Rec.toEntries<string, (p: Rewrites<string>) => Rewrite>(shape.permissions ?? {}),
+            ([permission, rewrite]) => [permission, rewrite(rewrites)[RewriteTypeId]],
+          ),
         ),
       }),
     ),
@@ -134,7 +136,7 @@ export const make = (name: string): Model<Record<never, never>> => build(name, n
  *
  * @category errors
  */
-export class Denied extends Schema.TaggedError<Denied>()("Denied", {
+export class Denied extends Schema.TaggedError<Denied, { readonly brand: unique symbol }>()("Denied", {
   /** The subject checked, as a ref: `person:<person>`. */
   subject: Schema.String,
   permission: Schema.String,
@@ -174,13 +176,16 @@ export const Permission =
     const { model, permission } = config;
     // oxlint-disable-next-line fabrika/service-id -- a right's id is its declarer's, as with Effect's own `Context.Service` caller; `Model.ts` names its rights by their path
     const key = Context.Service<Self, Proof<Self>>()(id);
+
     const within = (tuples: Tuples, sender: Sender, object: Ref<On>): Result.Result<Proof<Self>, Denied> => {
       const subject = `person:${sender.for}`;
       const holds = (rows: Tuples) => evaluate(model.declared, rows, subject, permission, object);
+
       return holds(tuples)
         ? Result.succeed(mint<Self>(sender, permission, object, key, holds))
         : Result.fail(Denied.make({ subject, permission, object }));
     };
+
     return Object.assign(key, { within });
   };
 

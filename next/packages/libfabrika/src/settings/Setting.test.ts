@@ -12,13 +12,31 @@
 // - T730, P38 slice 2, L10: `since`, the release that introduced the key, is a required string
 //   option of `Setting.make` and a field of `Setting`. It is a release fact, not a setting.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Config, ConfigProvider, Effect, Exit, Schema } from "effect";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
-import * as Setting from "./Setting.ts";
+import * as Setting from "./Fabrika.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
+
 const check = { seed: SEED, numRuns: RUNS };
 
 it.effect.prop(
@@ -61,6 +79,7 @@ it("T843 declaration schemas reject disabled, fractional, nonfinite and unsafe b
 });
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+
 const DEFAULT = 18787;
 
 const declare = (path: string) =>
@@ -76,12 +95,14 @@ const declare = (path: string) =>
 // A declaration path segment, as settings.md "Key spelling and paths" writes keys: short words,
 // kebab-case when one word does not fit. A segment never holds a dot.
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}(-[a-z0-9]{1,4})?$/);
+
 const segments = fc.array(segment, { minLength: 1, maxLength: 4 });
+
 const ports = fc.integer({ min: 1, max: 65535 });
 
 /** `value` placed at `path` in nested tables. */
-const nest = (path: ReadonlyArray<string>, value: unknown): unknown =>
-  path.reduceRight<unknown>((inner, key) => ({ [key]: inner }), value);
+const nest = <A>(path: ReadonlyArray<string>, value: A): A | Record<string, unknown> =>
+  path.reduceRight<A | Record<string, unknown>>((inner, key) => ({ [key]: inner }), value);
 
 /** What a provider holds at the setting's path: nothing, a valid port, or a value that must fail. */
 const supplied = fc.oneof(
@@ -112,18 +133,14 @@ describe("L1, a Setting remains a Config", () => {
     expect(Declarations.port.default).toBe(DEFAULT);
   });
 
-  it("yield* under a provided ConfigProvider and parse(provider) agree, for every path and source", async () => {
-    await fc.assert(
+  it("yield* under a provided ConfigProvider and parse(provider) agree, for every path and source", () =>
+    fc.assert(
       fc.asyncProperty(segments, supplied, async (path, value) => {
         const setting = declare(path.join("."));
         expect(Config.isConfig(setting)).toBe(true);
         const provider = ConfigProvider.fromUnknown(value._tag === "absent" ? {} : nest(path, value.value));
         const parsed = await run(setting.parse(provider));
-        const yielded = await run(
-          Effect.gen(function* () {
-            return yield* setting;
-          }).pipe(Effect.provide(ConfigProvider.layer(provider))),
-        );
+        const yielded = await run(setting.pipe(Effect.provide(ConfigProvider.layer(provider))));
         expect(Exit.isSuccess(yielded)).toBe(Exit.isSuccess(parsed));
 
         if (Exit.isSuccess(parsed) && Exit.isSuccess(yielded)) {
@@ -131,8 +148,7 @@ describe("L1, a Setting remains a Config", () => {
         }
       }),
       check,
-    );
-  });
+    ));
 });
 
 describe("L2, metadata is required, scope is nonempty, and the decoded type is kept", () => {
@@ -168,7 +184,8 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
       // @ts-expect-error since is a release, never a number (T730 L10).
       Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], reload: "restart", since: 1 }),
     ];
-    expect(typeof refused).toBe("function");
+
+    expect(refused).toBeTypeOf("function");
   });
 
   // oxlint-disable-next-line fabrika/law-shape -- a type law: its expectTypeOf lines are the check, so it is neither a property nor an example
@@ -177,6 +194,7 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
     expectTypeOf(Declarations.port.default).toEqualTypeOf<number>();
     expectTypeOf(Declarations.port.scope).toEqualTypeOf<readonly ["person"]>();
     expectTypeOf(Declarations.port).toExtend<Config.Config<number>>();
+
     const repo = Setting.make("a.b", {
       schema: Schema.String,
       default: "x",
@@ -185,6 +203,7 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
       reload: "live",
       since: "1.2.3",
     });
+
     expectTypeOf(repo.scope).toEqualTypeOf<readonly ["repo", "person"]>();
     // T730 L10: the release metadata is on the declaration, typed, and the value type stays inferred.
     expectTypeOf(repo.since).toEqualTypeOf<string>();
@@ -197,37 +216,43 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
 });
 
 describe("L3, absence gives the default, and an invalid present value never does", () => {
-  it("missing files and omitted keys give the declared default; a present invalid value fails", async () => {
-    await fc.assert(
+  it("missing files and omitted keys give the declared default; a present invalid value fails", () =>
+    fc.assert(
       fc.asyncProperty(segments, supplied, fc.boolean(), async (path, value, emptyFile) => {
         const setting = declare(path.join("."));
         const root = value._tag === "absent" ? (emptyFile ? {} : nest(path.slice(0, -1), {})) : nest(path, value.value);
         // An explicit empty string is supplied, not absent: it must fail, never become the default.
         const exit = await run(setting.parse(ConfigProvider.fromUnknown(root, { preserveEmptyStrings: true })));
 
-        const want = value._tag === "absent" ? DEFAULT : value._tag === "valid" ? value.expected : "a failure";
+        const want = Match.value(value).pipe(
+          Match.tag("absent", () => DEFAULT),
+          Match.tag("valid", (value) => value.expected),
+          Match.orElse(() => "a failure"),
+        );
+
         expect(Exit.isSuccess(exit) ? exit.value : "a failure").toBe(want);
       }),
       check,
-    );
-  });
+    ));
 
-  it("vector: an empty environment and no files give every declared default", async () => {
-    // vector: settings.md S3, "an empty file works": the empty provider decodes to every default.
-    const exit = await run(Declarations.all.parse(ConfigProvider.fromUnknown({})));
-    expect(Exit.isSuccess(exit)).toBe(true);
+  it.live("vector: an empty environment and no files give every declared default", () =>
+    Effect.gen(function* () {
+      // vector: settings.md S3, "an empty file works": the empty provider decodes to every default.
+      const exit = yield* promised(() => run(Declarations.all.parse(ConfigProvider.fromUnknown({}))));
+      expect(Exit.isSuccess(exit)).toBe(true);
 
-    if (Exit.isSuccess(exit)) {
-      expect(Object.values(exit.value)).toEqual(Declarations.all.declarations.map((d) => d.default));
-    }
+      if (Exit.isSuccess(exit)) {
+        expect(Rec.values(exit.value)).toEqual(Declarations.all.declarations.map((d) => d.default));
+      }
 
-    expect(Declarations.all.declarations.map((d) => d.path)).toContain("instance.port");
-  });
+      expect(Declarations.all.declarations.map((d) => d.path)).toContain("instance.port");
+    }),
+  );
 });
 
 describe("L4, a dotted declaration path reaches the nested value exactly once", () => {
-  it("the nested value is read, and a literal dotted key is never mistaken for it", async () => {
-    await fc.assert(
+  it("the nested value is read, and a literal dotted key is never mistaken for it", () =>
+    fc.assert(
       fc.asyncProperty(segments, ports, ports, async (path, nested, literal) => {
         fc.pre(nested !== literal && nested !== DEFAULT && literal !== DEFAULT);
         const dotted = path.join(".");
@@ -245,28 +270,24 @@ describe("L4, a dotted declaration path reaches the nested value exactly once", 
         }
       }),
       check,
-    );
-  });
+    ));
 
-  it("a group reads each declaration at its own path, once, and keeps the declarations", async () => {
-    await fc.assert(
+  it("a group reads each declaration at its own path, once, and keeps the declarations", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.uniqueArray(segments, { minLength: 1, maxLength: 4, selector: (p) => p[0] }),
         ports,
         async (paths, base) => {
-          const settings = Object.fromEntries(paths.map((p, n) => [`s${n}`, declare(p.join("."))]));
+          const settings = Rec.fromEntries(paths.map((p, n) => [`s${n}`, declare(p.join("."))]));
           const group = Setting.group(settings);
           expect(group.declarations.map((d) => d.path)).toEqual(paths.map((p) => p.join(".")));
           const root = Object.assign({}, ...paths.map((p, n) => nest(p, ((base + n) % 65535) + 1)));
           const exit = await run(group.parse(ConfigProvider.fromUnknown(root)));
-          expect(exit).toEqual(
-            Exit.succeed(Object.fromEntries(paths.map((_, n) => [`s${n}`, ((base + n) % 65535) + 1]))),
-          );
+          expect(exit).toEqual(Exit.succeed(Rec.fromEntries(paths.map((_, n) => [`s${n}`, ((base + n) % 65535) + 1]))));
         },
       ),
       check,
-    );
-  });
+    ));
 });
 
 it("scenario: T753 L1 a group's named declarations keep their decoded types", () => {
@@ -282,6 +303,7 @@ it("scenario: T753 L1 a group's named declarations keep their decoded types", ()
       since: "1.2.3",
     }),
   });
+
   expectTypeOf(group.settings.count.default).toEqualTypeOf<number>();
   expectTypeOf(group.settings.label.default).toEqualTypeOf<string>();
   expectTypeOf(group.settings.count.schema.Type).toEqualTypeOf<number>();

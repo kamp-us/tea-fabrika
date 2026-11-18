@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-pr1591-libfabrika-files-import-effect-barrel",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/telemetry/SinkBatchTest.ts",
+    "line": 1
+  },
+  "says": "In next/, PR 1591's new libfabrika files import Effect by name from the barrel, against 0577's namespace form for libraries: telemetry/SinkBatchTest.ts (Context, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Scope, Stream, Tracer), runtime/RunnerLifecycleTest.ts (Effect, Schema, Scope) and cloudflare/call-spans.laws.test.ts (Deferred, Effect, Option, Predicate, Schema).",
+  "proof": "A comparison of the named `from \"effect\"` imports in next/packages/{libfabrika,tuval,vitest} finds 19 new names against af16c8e8a3509429c397cdbddf3613f9134167ab and 0 against main 1f05acc6c2a893fe42468b36cd0346643c3404c5, all in these three files, which main added; .decisions/0577-libraries-namespace-programs-barrel-imports.md says next/packages/* use `import * as X from \"effect/X\"`. No preferNamespaceImport lock covers those folders, so pnpm typecheck passes.",
+  "cost": "The namespace locks still to come for telemetry, runtime and cloudflare (E61) get 19 more names to convert, and the new test kits teach the barrel form.",
+  "head": "e85cee196a3329cc7a7f079b11d7e24dbf048e1c",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1562"
+}

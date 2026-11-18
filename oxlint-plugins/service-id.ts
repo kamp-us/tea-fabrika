@@ -30,6 +30,7 @@
 // Both diagnostics block since ticket 909: the replay found 1 fire, 1 true and 0 false alarms
 // (README.md).
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { pathIn, type Node } from "./match.ts";
 
 type Made = "Service" | "Reference";
@@ -37,11 +38,11 @@ type Made = "Service" | "Reference";
 const settings = (options: ReadonlyArray<unknown>): { readonly package: string; readonly src: string } | null => {
   const [given] = options;
 
-  if (typeof given !== "object" || given === null || !("package" in given) || !("src" in given)) {
+  if (!Predicate.isObjectOrArray(given) || !("package" in given) || !("src" in given)) {
     return null;
   }
 
-  return typeof given.package === "string" && typeof given.src === "string"
+  return Predicate.isString(given.package) && Predicate.isString(given.src)
     ? { package: given.package, src: given.src.replace(/\/+$/, "") }
     : null;
 };
@@ -77,14 +78,14 @@ const memberName = (node: ESTree.MemberExpression): string | null => {
     return node.property.name;
   }
 
-  return node.computed && node.property.type === "Literal" && typeof node.property.value === "string"
+  return node.computed && node.property.type === "Literal" && Predicate.isString(node.property.value)
     ? node.property.value
     : null;
 };
 
 /** A template with no expressions, or a string literal: its text. */
 const literal = (node: Node | undefined): string | null => {
-  if (node?.type === "Literal" && typeof node.value === "string") {
+  if (node?.type === "Literal" && Predicate.isString(node.value)) {
     return node.value;
   }
 
@@ -143,6 +144,7 @@ export const serviceId: CreateRule = {
     const isContext = (node: Node): boolean => {
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return (
           at !== null &&
           ((at.from === "effect" && at.name === "Context") || (at.from === "effect/Context" && at.name === "*"))
@@ -151,6 +153,7 @@ export const serviceId: CreateRule = {
 
       if (node.type === "MemberExpression" && memberName(node) === "Context" && node.object.type === "Identifier") {
         const at = imported(resolve(node.object));
+
         return at !== null && at.from === "effect" && at.name === "*";
       }
 
@@ -163,11 +166,13 @@ export const serviceId: CreateRule = {
 
       if (node.type === "MemberExpression") {
         const name = memberName(node);
+
         return (name === "Service" || name === "Reference") && isContext(node.object) ? name : null;
       }
 
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return at !== null && at.from === "effect/Context" && (at.name === "Service" || at.name === "Reference")
           ? at.name
           : null;
@@ -178,9 +183,12 @@ export const serviceId: CreateRule = {
 
     const check = (call: ESTree.CallExpression, id: Node | undefined) => {
       // A class names its service; the rule trusts no other name.
+      // SAFETY: oxlint sets `parent` on each call node it hands a rule; it is missing only on the Program.
       const parent = (call as Node & { readonly parent?: Node }).parent;
+
       const named =
         parent?.type === "ClassDeclaration" || parent?.type === "ClassExpression" ? parent.id?.name : undefined;
+
       const text = literal(id);
       const at = id ?? call;
 
@@ -189,10 +197,12 @@ export const serviceId: CreateRule = {
           node: at,
           message: `This service ID is not a string the rule can read, so it cannot show the ID is ${base} or ${base}.Name (decision 0023, oxlint-plugins/service-id.ts).`,
         });
+
         return;
       }
 
       const expected = named === undefined ? null : named === stem ? base : `${base}.${named}`;
+
       const fits =
         expected === null
           ? text === base || (text.startsWith(`${base}.`) && /^[A-Za-z_$][\w$]*$/.test(text.slice(base.length + 1)))
@@ -215,6 +225,7 @@ export const serviceId: CreateRule = {
         }
 
         // The curried class form takes no arguments, and its result takes the ID.
+        // SAFETY: the visited node has its `parent` set by oxlint, and the code below reads it as optional.
         const parent = (node as Node & { readonly parent?: Node }).parent;
 
         if (kind === "Service" && node.arguments.length === 0) {

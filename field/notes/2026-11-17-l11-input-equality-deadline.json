@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-17",
+  "stage": "harness",
+  "kind": "failure",
+  "person": false,
+  "primitive": null,
+  "id": "2026-11-17-l11-input-equality-deadline",
+  "quests": [
+    "tea-fabrika#1135"
+  ],
+  "what": "Today's L11 tooling branch proof hit the existing pure input-equality property's 60,000 ms limit before the repaired executor could land.",
+  "cause": "The cloud timeout cause was not measured. A bounded local CPU profile showed repeated parsing and encoding when comparing identical raw text. The local duplicate work is proven separately from the cloud failure.",
+  "fix": "The comparator validates identical raw text once inside each call. Different raw text keeps its original parsing, completeness and canonical comparison. The existing law builds its unchanged before text once. New checks reject identical invalid input.",
+  "test": "The original 100-sample law passed locally in 25.32 s; the candidate passed in 19.08 s. All 24 final safe tooling checks passed, including the 20-test file in 29.41 s. Eight identical full-trace public comparisons took 748.073542 ms before and 314.388791 ms after, with 15,802 events each and matching input hashes, bytes and results. Fifteen bounded old/new semantic cases matched. A deliberate validation bypass failed and was restored.",
+  "limits": "The local measurements do not prove a cloud speed gain or the cloud timeout cause. All 100 samples, complete walks and siblings, mutation choices, assertions, seed and 60,000 ms deadline remain. No actual repaired L11 comparison, input equality, output fault or batch result is supplied. A new exact-head branch proof remains owed.",
+  "source": "7c47851c66e90671861470c046e16886d929338a",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44091042329",
+    "https://github.com/kamp-us/tea-fabrika/pull/1566"
+  ],
+  "failed": {
+    "head": "a09766f8123f81454ff68b9148a542dbe87d4ca2",
+    "duration": 86314.189708,
+    "limit": 60000,
+    "unit": "ms"
+  }
+}

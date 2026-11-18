@@ -1,8 +1,8 @@
 import { Machine } from "@demlik/tea/effect";
+import { Snapshot } from "@kalfa/config/Snapshot";
 import * as Schema from "effect/Schema";
 import * as Id from "../../Id.ts";
 import { Branch, Hash, ObjectId } from "../../repositories/Repositories.ts";
-import { Snapshot } from "../../settings/Snapshot.ts";
 import { Event, Receipt, RepositoryId, TrustDecision } from "../RepositoryTrust.ts";
 
 /** @internal */
@@ -20,11 +20,15 @@ export const CheckedSelection = Schema.Struct({
   settings: Snapshot,
   person: Id.Person,
 });
+
 /** @internal */
 export type CheckedSelection = typeof CheckedSelection.Type;
+
 /** @internal */
 export const Refusal = Schema.Literals(["denied", "storage", "invalid_document", "read_failed", "invalid_history"]);
+
 const checking = { selection: Id.InputId, snapshot: Schema.NullOr(CheckedSelection) };
+
 const selected = { selection: Id.InputId, snapshot: CheckedSelection };
 
 const State = Schema.TaggedUnion({
@@ -36,25 +40,24 @@ const State = Schema.TaggedUnion({
   refused: { selection: Id.InputId, reason: Refusal },
 });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("select"), selection: Id.InputId }),
-  Schema.Struct({ type: Schema.Literal("checked"), ...selected }),
-  Schema.Struct({ type: Schema.Literal("history"), selection: Id.InputId, events: Schema.Array(Event) }),
-  Schema.Struct({
-    type: Schema.Literal("answer"),
+/** @internal What one opening is told, step by step. */
+export const Msg = Schema.TaggedUnion({
+  select: { selection: Id.InputId },
+  checked: { ...selected },
+  history: { selection: Id.InputId, events: Schema.Array(Event) },
+  answer: {
     selection: Id.InputId,
     request: Id.InputId,
     decision: TrustDecision,
-  }),
-  Schema.Struct({ type: Schema.Literal("saved"), selection: Id.InputId, request: Id.InputId, receipt: Receipt }),
-  Schema.Struct({
-    type: Schema.Literal("failed"),
+  },
+  saved: { selection: Id.InputId, request: Id.InputId, receipt: Receipt },
+  failed: {
     selection: Id.InputId,
     request: Schema.optionalKey(Id.InputId),
     reason: Refusal,
-  }),
-  Schema.Struct({ type: Schema.Literal("close") }),
-]);
+  },
+  close: {},
+});
 
 /** @internal */
 export const machine = Machine.make({
@@ -74,7 +77,7 @@ export const machine = Machine.make({
       }
 
       const snapshot = s.snapshot;
-      let decision: typeof TrustDecision.Type | undefined;
+      let decision: TrustDecision | undefined;
       const selections = new Map<Id.InputId, typeof Event.cases.selected.Type>();
 
       for (const event of m.events) {

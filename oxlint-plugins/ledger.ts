@@ -11,6 +11,8 @@
 // An entry is keyed by file, rule and the finding's line of code with its spaces collapsed, never a
 // line number, so code moving up or down keeps its entry and a changed line loses it.
 
+import { Array as Arr } from "effect";
+
 /** One finding, or one ledger entry: the same three keys. */
 export interface Finding {
   readonly file: string;
@@ -34,7 +36,7 @@ export const fingerprint = (line: string): string => line.trim().replace(/\s+/g,
 
 /** The entries outside the ledger's folder: each one is refused, not read. */
 export const outside = (entries: readonly Finding[], root: string): readonly Finding[] =>
-  entries.filter((entry) => !entry.file.startsWith(root));
+  Arr.filter(entries, (entry) => !entry.file.startsWith(root));
 
 const key = ({ file, rule, code }: Finding) => JSON.stringify([file, rule, code]);
 
@@ -75,5 +77,5 @@ export const settle = (
     }
   }
 
-  return { waived, blocks, kept: entries.filter((_, i) => used.has(i)) };
+  return { waived, blocks, kept: Arr.filter(entries, (_, i) => used.has(i)) };
 };

@@ -16,9 +16,11 @@
 // tuples are the brain's rows folded in the referee's order, and a permission's holders are the least
 // fixed point of its unions, so a loop alone holds nothing.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -30,7 +32,9 @@ import * as RelationsLedger from "./RelationsLedger.ts";
 import { Sender } from "./Senders.ts";
 
 const SEED = 119120;
+
 const BRAIN = "SHA256:brain";
+
 const OTHER = "SHA256:program-writer";
 
 /** The test model: two object types, permissions over relations and over each other, and one loop. */
@@ -52,11 +56,17 @@ const Test = Rebac.make("t953-test")
   });
 
 class Start extends Rebac.Permission<Start>()("t953/Start", { model: Test, on: "fabrika", permission: "start" }) {}
+
 class Manage extends Rebac.Permission<Manage>()("t953/Manage", { model: Test, on: "fabrika", permission: "manage" }) {}
+
 class Enter extends Rebac.Permission<Enter>()("t953/Enter", { model: Test, on: "fabrika", permission: "enter" }) {}
+
 class LoopA extends Rebac.Permission<LoopA>()("t953/LoopA", { model: Test, on: "fabrika", permission: "a" }) {}
+
 class LoopB extends Rebac.Permission<LoopB>()("t953/LoopB", { model: Test, on: "fabrika", permission: "b" }) {}
+
 class Edit extends Rebac.Permission<Edit>()("t953/Edit", { model: Test, on: "board", permission: "edit" }) {}
+
 class View extends Rebac.Permission<View>()("t953/View", { model: Test, on: "board", permission: "view" }) {}
 
 type Type = "fabrika" | "board";
@@ -102,7 +112,9 @@ const RIGHTS = [
 type Right = (typeof RIGHTS)[number];
 
 const ref = (thing: Thing) => (thing.type === "fabrika" ? Test.ref("fabrika", thing.id) : Test.ref("board", thing.id));
+
 const subjectFor = (person: string) => `person:${person}`;
+
 const tupleKey = (subject: string, relation: string, object: string) => `${subject}#${relation}@${object}`;
 
 /** A person's window, or an agent let in for that person: both are checked as the person. */
@@ -125,6 +137,7 @@ const Cell = fc.record({
   relation: fc.nat(),
   pick: fc.nat(),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
@@ -143,8 +156,10 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
  */
 const walkHistory = (cells: ReadonlyArray<Cell>): ReadonlyArray<Written> => {
   const live: Array<{ subject: string; relation: string; object: string }> = [];
-  return cells.map((cell) => {
+
+  return Arr.map(cells, (cell) => {
     const thing = choose(OBJECTS, cell.thing);
+
     const fresh = {
       subject: subjectFor(choose(PERSONS, cell.person)),
       relation: choose(RELATIONS[thing.type], cell.relation),
@@ -153,16 +168,18 @@ const walkHistory = (cells: ReadonlyArray<Cell>): ReadonlyArray<Written> => {
 
     if (cell.move === "unrelated_live" && live.length > 0) {
       const [gone] = live.splice(cell.pick % live.length, 1);
+
       return { row: Relation.Row.cases.unrelated.make(gone ?? fresh), by: BRAIN };
     }
 
     if (cell.move === "unrelated_live" || cell.move === "unrelated_any") {
-      const at = live.findIndex(
+      const at = Arr.findFirstIndex(
+        live,
         (t) => t.subject === fresh.subject && t.relation === fresh.relation && t.object === fresh.object,
       );
 
-      if (at >= 0) {
-        live.splice(at, 1);
+      if (Option.isSome(at)) {
+        live.splice(at.value, 1);
       }
 
       return { row: Relation.Row.cases.unrelated.make(fresh), by: BRAIN };
@@ -174,6 +191,7 @@ const walkHistory = (cells: ReadonlyArray<Cell>): ReadonlyArray<Written> => {
     }
 
     live.push(fresh);
+
     return { row: Relation.Row.cases.related.make(fresh), by: BRAIN };
   });
 };
@@ -206,15 +224,17 @@ const holds = (tuples: ReadonlySet<string>, subject: string, permission: string,
   const rules = RULES[thing.type];
   const relations = new Set(RELATIONS[thing.type]);
   const held = new Set<string>();
+
   const has = (name: string) =>
     relations.has(name) ? tuples.has(tupleKey(subject, name, ref(thing))) : held.has(name);
+
   let changed = true;
 
   while (changed) {
     changed = false;
 
-    for (const [name, union] of Object.entries(rules)) {
-      if (!held.has(name) && union.some(has)) {
+    for (const [name, union] of Rec.toEntries(rules)) {
+      if (!held.has(name) && Arr.some(union, has)) {
         held.add(name);
         changed = true;
       }
@@ -226,7 +246,7 @@ const holds = (tuples: ReadonlySet<string>, subject: string, permission: string,
 
 /** The history as ledger entries of `STREAM`, in the referee's order. */
 const toEntries = (history: ReadonlyArray<Written>): ReadonlyArray<Entry> =>
-  history.map(({ row, by }, n) => ({
+  Arr.map(history, ({ row, by }, n) => ({
     ...lineFor(
       {
         by,
@@ -248,11 +268,11 @@ const toEntries = (history: ReadonlyArray<Written>): ReadonlyArray<Entry> =>
 
 /** A turn that holds only these entries; a check reads it and never appends. */
 const turnHolding = (entries: ReadonlyArray<Entry>): LedgerTurn => ({
-  read: (stream, after) => entries.filter((e) => e.stream === stream && e.rev > after),
-  get: (stream, id) => Option.fromNullishOr(entries.find((e) => e.stream === stream && e.id === id)),
-  head: (stream) => entries.reduce((rev, e) => (e.stream === stream ? Math.max(rev, e.rev) : rev), 0),
+  read: (stream, after) => Arr.filter(entries, (e) => e.stream === stream && e.rev > after),
+  get: (stream, id) => Arr.findFirst(entries, (e) => e.stream === stream && e.id === id),
+  head: (stream) => Arr.reduce(entries, 0, (rev, e) => (e.stream === stream ? Math.max(rev, e.rev) : rev)),
   // T1041: the newest entry's pos, or none, as the store's position-only read answers.
-  end: (stream) => Option.fromUndefinedOr(entries.filter((e) => e.stream === stream).at(-1)?.pos),
+  end: (stream) => Option.fromUndefinedOr(Arr.filter(entries, (e) => e.stream === stream).at(-1)?.pos),
   append: () => {
     throw new Error("a check never appends");
   },
@@ -266,10 +286,11 @@ const onLedger = RelationsLedger.layer({ by: BRAIN }).pipe(
 const tuplesIn = (relations: Relations["Service"], history: ReadonlyArray<Written>) => {
   const tuples = relations.within(turnHolding(toEntries(history)));
   expect(Result.isSuccess(tuples), "rows the brain wrote always fold").toBe(true);
+
   return Result.getOrThrow(tuples);
 };
 
-const rightsOn = (thing: Thing): ReadonlyArray<Right> => RIGHTS.filter((r) => r.on === thing.type);
+const rightsOn = (thing: Thing): ReadonlyArray<Right> => Arr.filter(RIGHTS, (r) => r.on === thing.type);
 
 /**
  * `within` of a right, on the object as `Ref` its type takes. Each right answers its own proof's
@@ -279,7 +300,7 @@ const rightsOn = (thing: Thing): ReadonlyArray<Right> => RIGHTS.filter((r) => r.
 const check = (
   right: Right,
   tuples: Relation.Tuples,
-  sender: typeof Sender.Type,
+  sender: Sender,
   thing: Thing,
 ): Result.Result<unknown, Rebac.Denied> =>
   right.on === "fabrika" && thing.type === "fabrika"
@@ -334,7 +355,7 @@ describe("T953 the permission core's check", () => {
           const oracle = liveTuples(history);
 
           for (const person of PERSONS) {
-            for (const thing of OBJECTS.filter((t) => t.type === "fabrika")) {
+            for (const thing of Arr.filter(OBJECTS, (t) => t.type === "fabrika")) {
               const looped =
                 oracle.has(tupleKey(subjectFor(person), "x", ref(thing))) ||
                 oracle.has(tupleKey(subjectFor(person), "y", ref(thing)));
@@ -408,22 +429,26 @@ describe("T953 the permission core's check", () => {
             const [one, two] = [OBJECTS[0], OBJECTS[1]];
             const [removed, kept] = removeFirst ? [one, two] : [two, one];
             const subject = subjectFor(person);
+
             // Both objects hold for the subject: its owner rows are the last the brain wrote before the checks.
             const before = [
               ...walkHistory(cells),
-              ...[one, two].map((thing) => ({
+              ...Arr.map([one, two], (thing) => ({
                 row: Relation.Row.cases.related.make({ subject, relation: "owner", object: ref(thing) }),
                 by: BRAIN,
               })),
             ];
+
             const sender = senderFor(person, as);
             const tuples = tuplesIn(relations, before);
             // The removed object's proof is made first or last, so a recheck that reads the last call's object fails either way.
             const order = lastIsRemoved ? [kept, removed] : [removed, kept];
+
             const proofs = new Map(
-              order.map((thing) => {
+              Arr.map(order, (thing) => {
                 const answer = Start.within(tuples, sender, Test.ref("fabrika", thing.id));
                 expect(Result.isSuccess(answer), `L4: ${ref(thing)} holds before the removal`).toBe(true);
+
                 return [thing.id, Result.getOrThrow(answer)] as const;
               }),
             );
@@ -437,11 +462,12 @@ describe("T953 the permission core's check", () => {
 
             const after = [
               ...before,
-              ...RELATIONS.fabrika.map((relation) => ({
+              ...Arr.map(RELATIONS.fabrika, (relation) => ({
                 row: Relation.Row.cases.unrelated.make({ subject, relation, object: ref(removed) }),
                 by: BRAIN,
               })),
             ];
+
             const newer = tuplesIn(relations, after);
             const proofFor = (thing: Thing) => proofs.get(thing.id) ?? expect.fail("a proof per object");
             expect(Rebac.recheck(proofFor(removed), newer), "L4: the removed object's proof fails its recheck").toBe(

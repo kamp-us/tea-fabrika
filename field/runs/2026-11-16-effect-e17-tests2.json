@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e17-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:26:21-08:00",
+  "ended": "2026-11-15T20:27:01-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round for slice E17 after a review: RecoveryStore.integration.test.ts keeps its void result with Effect.asVoid(S); Rebac.types.test.ts imports Effect and Result in one type import; the first row's start and end times were not real and are now null. Both fixes are hand edits.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 1,
+  "note": "Start time is from the system clock when the fix round began; end time from the system clock when the fix was committed.",
+  "plants": [],
+  "step": "tests"
+}

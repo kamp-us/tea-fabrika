@@ -8,19 +8,34 @@
 //   replay reads that saved value back, never the files as they are now.
 // - dev.ts takes the port as `--instance.port` (settings.md S5's words), keeps the founding flags
 //   it has, listens on that port, and stops naming `instance.port` when the port is taken.
-import { generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
-import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
-import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Effect,
+  Exit,
+  FileSystem,
+  Formatter,
+  Layer,
+  Match,
+  Path,
+  Ref,
+  Schedule,
+  Schema,
+  Stream,
+} from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
+
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { build } from "./build.ts";
@@ -28,10 +43,19 @@ import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killWorkerd } from "./workerd.test-support.ts";
 
+/** The proxy answered, but not yet with the reopened Worker: a reply that is retried. */
+class NotReopened extends Schema.TaggedError<NotReopened, { readonly brand: unique symbol }>()("NotReopened", {
+  status: Schema.Int,
+}) {}
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) };
+
 const DEFAULT = 18787;
+
 const PERSON = "~/.fabrika/fabrika.toml";
+
 const REPO = ".fabrika/fabrika.toml";
 
 const services = Layer.mergeAll(NodeServices.layer, TomlParser.layer, Digest.layerWebCrypto);
@@ -40,12 +64,15 @@ const services = Layer.mergeAll(NodeServices.layer, TomlParser.layer, Digest.lay
 const home = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "t664-start-" });
   const person = path.join(root, "fabrika.toml");
+
   const write = (port: number | undefined) =>
     port === undefined
       ? fs.remove(person, { force: true })
       : fs.writeFileString(person, `# the person's\n[instance]\nport = ${port}\n`);
+
   return { places: { person: { path: person, name: PERSON }, repo: { text: null, name: REPO } }, write };
 });
 
@@ -62,6 +89,7 @@ it.effect.prop(
       const fs = yield* FileSystem.FileSystem;
       const policy = `[gateway]\nlimit = ${limit}\nwindow = ${window}\n`;
       yield* fs.writeFileString(h.places.person.path, source === "file" ? policy : "");
+
       const result = yield* Effect.exit(
         Load.load({
           ...h.places,
@@ -71,6 +99,7 @@ it.effect.prop(
           version: "0.0.0",
         }),
       );
+
       expect(Exit.isFailure(result)).toBe(source === "repo");
 
       if (source === "repo") {
@@ -98,9 +127,11 @@ it.effect.prop(
   ({ bad }) =>
     Effect.gen(function* () {
       const h = yield* home;
+
       const result = yield* Effect.exit(
         Load.load({ ...h.places, env: {}, flags: { "gateway.limit": String(bad) }, version: "0.0.0" }),
       );
+
       expect(Exit.isFailure(result)).toBe(true);
     }).pipe(Effect.provide(services)),
   { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
@@ -128,11 +159,13 @@ describe("L13, each process start keeps the exact settings and hash it began wit
             Effect.gen(function* () {
               const h = yield* home;
               let file: number | undefined;
+
               const processes: Array<{
                 readonly port: number;
                 readonly held: Snapshot.Snapshot;
                 readonly saved: string;
               }> = [];
+
               const begin = (env: number | undefined) =>
                 Effect.gen(function* () {
                   const loaded = yield* Load.load({
@@ -141,13 +174,14 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                     env: env === undefined ? {} : { FABRIKA_INSTANCE_PORT: String(env) },
                     version: "0.0.0",
                   });
+
                   const port = env ?? file ?? DEFAULT;
                   expect(loaded.values.port).toBe(port);
                   expect(loaded.snapshot.values["instance.port"]).toBe(port);
                   processes.push({
                     port,
                     held: loaded.snapshot,
-                    saved: JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(loaded.snapshot)),
+                    saved: yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(loaded.snapshot),
                   });
                 });
 
@@ -161,7 +195,7 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                   yield* begin(a.env);
                 } else if (processes.length > 0) {
                   const p = processes[a.which % processes.length]!;
-                  const replayed = Schema.decodeUnknownSync(Snapshot.Snapshot)(JSON.parse(p.saved));
+                  const replayed = yield* Schema.decodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(p.saved);
                   expect(replayed.values["instance.port"]).toBe(p.port);
                   // The process's own value never moves, though files changed since it began.
                   expect(p.held.values["instance.port"]).toBe(p.port);
@@ -185,15 +219,16 @@ describe("L13, each process start keeps the exact settings and hash it began wit
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
 
 const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "&"))
-  .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
+  .map(([word, mark]) => `sk-${word}${mark}${Str.slice(0, 3)(word)}`);
 
 /** Where the files hold the secret: nowhere, at an unknown key, or nested under a declared key. */
 const placed = (port: number, word: string) => {
   const s = JSON.stringify(word);
+
   return fc.constantFrom(
     { person: `[instance]\nport = ${port}\n`, repo: "", refused: false },
     { person: `[instance]\nport = ${port}\nfounder = ${s}\n`, repo: "", refused: true },
@@ -220,6 +255,7 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
                 const h = yield* home;
                 const fs = yield* FileSystem.FileSystem;
                 yield* fs.writeFileString(h.places.person.path, place.person);
+
                 // The founding facts reach dev.ts as flags; none is a setting, so none is a source.
                 const loaded = yield* Load.load({
                   ...h.places,
@@ -228,10 +264,12 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
                   env: { [field]: word },
                   version: "0.0.0",
                 });
-                return JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(loaded.snapshot));
+
+                return yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(loaded.snapshot);
               }),
             ).pipe(Effect.provide(services)),
           );
+
           expect(Exit.isSuccess(exit)).toBe(!place.refused);
           const outputs = Exit.isSuccess(exit) ? [exit.value] : [String(exit.cause)];
 
@@ -251,14 +289,6 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
 // Each one, its home and its held port are acquired in the test's scope, which gives them back
 // (decision 0061).
 
-const founding = () => {
-  const { publicKey } = generateKeyPairSync("ed25519");
-  const der = publicKey.export({ format: "der", type: "spki" });
-  const raw = der.subarray(-32);
-  const blob = Buffer.concat([Buffer.from([0, 0, 0, 11]), Buffer.from("ssh-ed25519"), Buffer.from([0, 0, 0, 32]), raw]);
-  return { line: `ssh-ed25519 ${blob.toString("base64")}`, raw: raw.toString("base64url") };
-};
-
 /** A port nobody else is given while the scope is open. */
 const held = Effect.acquireRelease(heldPort(), (h) => h.release);
 
@@ -274,21 +304,26 @@ const instrumented = Effect.fnUntraced(function* (
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t753-worker-" });
   const port = yield* held;
-  const key = founding();
+  const key = yield* SshsigTest.identity;
   const built = yield* build({ out: path.join(home, "dist") });
+
   const input = {
     ...(yield* StartsTest.input({ port: port.port, start, build: built.build, revision: null, origin: "flag" })),
     founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key.line, window: key.raw },
   };
+
   yield* fs.copyFile(built.brain, path.join(home, "original.mjs"));
   const source = path.join(home, "entry.mjs");
   yield* fs.writeFileString(source, entry({ hash: input.settings.hash, build: built.build }));
+
   const bundle = yield* Effect.acquireRelease(
     Effect.promise(() => rolldown({ input: source, external: [/^cloudflare:/], platform: "neutral" })),
     (owned) => Effect.promise(() => owned.close()),
   );
+
   const brain = path.join(home, "instrumented.mjs");
   yield* Effect.promise(() => bundle.write({ file: brain, format: "esm" }));
+
   return yield* localInstance({ ...built, brain }, { ...input, home });
 });
 
@@ -349,9 +384,12 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
       } };
     `,
     );
+
     yield* HttpClient.get(`${instance.url}/__settings_arm`);
+
     const probe = Effect.gen(function* () {
       const response = yield* HttpClient.get(`${instance.url}/__settings_probe`);
+
       return yield* response.json.pipe(
         Effect.flatMap(
           Schema.decodeUnknownEffect(
@@ -372,6 +410,7 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
         ),
       );
     });
+
     const request = HttpClient.get(`${instance.url}/`);
     expect((yield* request).status).toBeGreaterThanOrEqual(500);
     expect((yield* probe).calls).toBe(1);
@@ -400,15 +439,14 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     const record = Effect.fnUntraced(function* (method: "write" | "read" | "content" | "deleteContent") {
       const chain = Chain.cases.spans.make({});
 
-      return yield* method === "write"
-        ? Effect.promise(() => write(chain, 57, []))
-        : method === "read"
-          ? Effect.promise(() => read(chain, 57, 0))
-          : method === "content"
-            ? Effect.promise(() => content(chain, 57, "absent"))
-            : Effect.promise(() =>
-                deleteContent(chain, 57, "absent", { by: "test-person", at: 0, reason: "requested" }),
-              );
+      return yield* Match.value(method).pipe(
+        Match.when("write", () => Effect.promise(() => write(chain, 57, []))),
+        Match.when("read", () => Effect.promise(() => read(chain, 57, 0))),
+        Match.when("content", () => Effect.promise(() => content(chain, 57, "absent"))),
+        Match.orElse(() =>
+          Effect.promise(() => deleteContent(chain, 57, "absent", { by: "test-person", at: 0, reason: "requested" })),
+        ),
+      );
     });
 
     for (const method of ["write", "read", "content", "deleteContent"] as const) {
@@ -428,8 +466,9 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     yield* killWorkerd(process.pid);
     // The proxy can reply 502 while workerd reopens, so retry non-200 replies too.
     yield* request.pipe(
-      Effect.flatMap((response) =>
-        response.status === 200 ? Effect.succeed(response) : Effect.fail(new Error("Worker has not reopened")),
+      Effect.filterOrFail(
+        (response) => response.status === 200,
+        (response) => NotReopened.make({ status: response.status }),
       ),
       Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
     );
@@ -461,9 +500,10 @@ it.live("scenario: requests that reach a fresh Worker while its first read of th
       export default worker;
     `,
     );
+
     const request = HttpClient.get(`${instance.url}/`);
     const answers = yield* Effect.forEach(Array.from({ length: 24 }), () => request, { concurrency: "unbounded" });
-    expect(answers.map((response) => response.status)).toEqual(answers.map(() => 200));
+    expect(Arr.map(answers, (response) => response.status)).toEqual(Arr.map(answers, () => 200));
     // A read has finished, so a later request answers from it.
     expect((yield* request).status).toBe(200);
   }).pipe(
@@ -475,9 +515,11 @@ it.live("scenario: requests that reach a fresh Worker while its first read of th
 const dev = Effect.fnUntraced(function* (port: number, extra: Readonly<Record<string, string>>) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t664-dev-" });
   const app = path.resolve(import.meta.dirname, "..");
-  const key = founding();
+  const key = yield* SshsigTest.identity;
+
   const child = yield* ChildProcess.make(
     process.execPath,
     [
@@ -508,12 +550,14 @@ const dev = Effect.fnUntraced(function* (port: number, extra: Readonly<Record<st
       forceKillAfter: "3 seconds",
     },
   );
+
   const output = yield* Ref.make("");
   yield* child.all.pipe(
     Stream.decodeText(),
     Stream.runForEach((text) => Ref.update(output, (o) => o + text)),
     Effect.forkScoped,
   );
+
   return { child, output: Ref.get(output) };
 });
 
@@ -526,9 +570,9 @@ describe("L12, startup uses the selected port, and a taken port stops naming ins
       const { port } = yield* held;
       const word = "sk-T664unrelated/+&secret";
       const first = yield* dev(port, { UNRELATED_TOKEN: word });
-      const ready = `{"ready":${JSON.stringify(`http://127.0.0.1:${port}`)},"build":`;
+      const ready = `{"ready":${Formatter.formatJson(`http://127.0.0.1:${port}`)},"build":`;
 
-      for (let n = 0; !(yield* first.output).includes(ready); n++) {
+      for (let n = 0; !Str.includes(ready)(yield* first.output); n++) {
         expect(yield* first.child.isRunning, `dev.ts stopped: ${yield* first.output}`).toBe(true);
         expect(n, `no ready line on port ${port}: ${yield* first.output}`).toBeLessThan(1200);
         yield* Effect.sleep("100 millis");

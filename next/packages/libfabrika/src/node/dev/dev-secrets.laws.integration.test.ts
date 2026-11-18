@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 // P12, next/. [secrets] Generated flows through the real instance, control route, Connection and sinks.
 // Only platform deployment, HTTP/RPC transport, child RSS and Cloudflare handles are supplied.
+
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,15 +9,24 @@ import { inspect } from "node:util";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Function from "effect/Function";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -33,12 +42,12 @@ import * as StartsTest from "../../settings/StartsTest.ts";
 import { recordPart } from "../../telemetry/Records.ts";
 import { Chain, SpanRow } from "../../telemetry/Trace.ts";
 import { Attached } from "../../transport/Wire.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
 
-class CallError extends Schema.TaggedError<CallError>()("CallError", {
+class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
   cause: Schema.Unknown,
 }) {}
 
@@ -52,12 +61,12 @@ const config = {
   rateLimit: { limit: 100_000, window: 60_000 },
 };
 
-const connectionInput = StartsTest.fixture(config, (algorithm, data) =>
-  createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-);
+const connectionInput = await Effect.runPromise(StartsTest.fixture(config));
 
 const destinations = ["spans", "logs", "journal", "measurements", "outbox"] as const;
+
 type Destination = (typeof destinations)[number];
+
 type Outputs = Record<Destination, Array<unknown>>;
 
 const forms = (text: string) => [
@@ -65,33 +74,31 @@ const forms = (text: string) => [
   Buffer.from(text).toString("base64"),
   Buffer.from(text).toString("base64url"),
   encodeURIComponent(text),
-  JSON.stringify(text).slice(1, -1),
+  Function.pipe(JSON.stringify(text), Str.slice(1, -1)),
 ];
 
 const strings = (value: unknown): Array<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return [value];
   }
 
-  if (Array.isArray(value)) {
-    return value.flatMap(strings);
+  if (Arr.isArray(value)) {
+    return Arr.flatMap(value, strings);
   }
 
-  return value !== null && typeof value === "object"
-    ? Object.entries(value).flatMap(([key, child]) => [key, ...strings(child)])
-    : [];
+  return Predicate.isObject(value) ? Arr.flatMap(Rec.toEntries(value), ([key, child]) => [key, ...strings(child)]) : [];
 };
 
 const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
-  const forbidden = words.flatMap(forms);
+  const forbidden = Arr.flatMap(words, forms);
   const leaks: Array<Destination> = [];
 
   for (const destination of destinations) {
     // JSON covers saved strings; inspect also sees Error messages and non-enumerable values.
     const json = JSON.stringify(outputs[destination]);
-    const text = json + inspect(outputs[destination], { depth: null }) + strings(JSON.parse(json)).join("\n");
+    const text = json + inspect(outputs[destination], { depth: null }) + Arr.join(strings(JSON.parse(json)), "\n");
 
-    if (forbidden.some((word) => text.includes(word))) {
+    if (Arr.some(forbidden, (word) => Function.pipe(text, Str.includes(word)))) {
       leaks.push(destination);
     }
   }
@@ -100,7 +107,7 @@ const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
 };
 
 const measurements = (db: DatabaseSync) =>
-  ["measurements", "summary", "aggregated", "sizes", "archived"].map((table) => ({
+  Arr.map(["measurements", "summary", "aggregated", "sizes", "archived"], (table) => ({
     table,
     rows: db.prepare(`SELECT * FROM ${table}`).all(),
   }));
@@ -119,44 +126,54 @@ type Flow = ReturnType<typeof generated.generate>["value"];
 const flow = async (sample: Flow) => {
   const home = mkdtempSync(join(tmpdir(), "p12-sec-"));
   vi.stubEnv("FABRIKA_HOME", home);
-  const material = `${sample.word}/"\\\n`.padEnd(32, "!");
+  const material = Function.pipe(`${sample.word}/"\\\n`, Str.padEnd(32, "!"));
+
   const random = Layer.succeed(
     SecureRandom.SecureRandom,
     SecureRandom.make((size) => {
       expect(size).toBe(32);
+
       return Buffer.from(material);
     }),
   );
+
   const bearer = Buffer.from(material).toString("base64url");
   const key = `fake private key/${sample.pass}"\\\n`;
   const body = `fake body/${sample.word}/${sample.pass}"\\\n`;
+
   const rawFrame = JSON.stringify({
     jsonrpc: "2.0",
     id: "send",
     method: "process.send",
     params: { body, key, pass: sample.pass, authorization: bearer },
   });
+
   const words = [material, bearer, key, body, sample.pass, rawFrame];
   const outputs: Outputs = { spans: [], logs: [], journal: [], measurements: [], outbox: [] };
   const journalDb = new DatabaseSync(":memory:");
+
   const journal = ManagedRuntime.make(
     LedgerSql.layer(nodeSql(journalDb), { reader: "secret-test" }).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     ),
   );
+
   const parts = new Map<string, DatabaseSync>();
+
   const part = (name: string) => {
     let db = parts.get(name);
 
-    if (!db) {
+    if (db === undefined) {
       db = new DatabaseSync(":memory:");
       parts.set(name, db);
     }
 
     return db;
   };
+
   let mode = "ok";
-  const delivered = async (name: string, args: ReadonlyArray<unknown>) => {
+
+  const delivered = (name: string, args: ReadonlyArray<unknown>) => {
     const [chain, at, rows] = Schema.decodeUnknownSync(
       Schema.Tuple([
         Chain,
@@ -164,11 +181,14 @@ const flow = async (sample: Flow) => {
         Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) })),
       ]),
     )(args);
+
     const store = recordPart(nodeSql(part(name)), chain, at, 1_000_000_000);
+
     return Effect.runPromise(store.write(rows));
   };
-  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-    const call = Schema.decodeUnknownSync(
+
+  const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
+    const call = Schema.decodeSync(
       Schema.fromJsonString(
         Schema.Struct({
           target: Schema.String,
@@ -178,9 +198,10 @@ const flow = async (sample: Flow) => {
         }),
       ),
     )(bodyText(options));
+
     // The platform send is allowed to hold the bearer; persistent outputs are checked below.
     // It holds no other header but the content type: no trace header rides along.
-    expect(Object.fromEntries(new Headers(options?.headers))).toEqual({
+    expect(Rec.fromEntries(new Headers(options?.headers))).toEqual({
       authorization: `Bearer ${bearer}`,
       "content-type": "application/json",
     });
@@ -215,6 +236,7 @@ const flow = async (sample: Flow) => {
           ),
         ),
       );
+
       return Response.json({ value: null });
     }
 
@@ -232,18 +254,22 @@ const flow = async (sample: Flow) => {
 
     return Response.json({ value: [] });
   });
-  const consoleSpies = (["log", "info", "warn", "error", "debug"] as const).map((name) =>
+
+  const consoleSpies = Arr.map(["log", "info", "warn", "error", "debug"] as const, (name) =>
     vi.spyOn(console, name).mockImplementation((...args) => {
       outputs.logs.push({ name, args });
     }),
   );
+
   const logger = Logger.layer([
     Logger.make((options) => {
       outputs.logs.push({ level: options.logLevel, message: options.message, cause: options.cause });
     }),
   ]);
+
   const gatewayDb = new DatabaseSync(":memory:"),
     sql = nodeSql(gatewayDb);
+
   let attached: unknown = Attached.cases.online.make({
     client: "client",
     identity: { key: "public", person: "person-test", as: "agent" },
@@ -252,6 +278,7 @@ const flow = async (sample: Flow) => {
     watching: false,
     busy: false,
   });
+
   const ws = {
     deserializeAttachment: () => attached,
     serializeAttachment: (value: unknown) => {
@@ -260,9 +287,11 @@ const flow = async (sample: Flow) => {
     send: () => {},
     close: () => {},
   };
-  // oxlint-disable-next-line fabrika/no-type-assertions -- the fixture supplies attachment, send and close; workerd owns the complete socket
+
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: the fixture supplies attachment, send and close; workerd owns the complete socket
   const socket = ws as unknown as WebSocket;
-  // oxlint-disable-next-line fabrika/no-type-assertions -- workerd owns the full handles; the fixture supplies every member these real services call
+
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: workerd owns the full handles; the fixture supplies every member these real services call
   const ctx = {
     id: { name: "gateway" },
     storage: {
@@ -278,12 +307,13 @@ const flow = async (sample: Flow) => {
     getTags: () => ["session", "tab", "public"],
     getWebSocketAutoResponseTimestamp: () => null,
   } as unknown as DurableObjectState;
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies RPC transport only; Connection and record processing remain product code
+
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies RPC transport only; Connection and record processing remain product code
   const env = {
     INSTANCE: JSON.stringify(connectionInput),
     PROJECT: {
       getByName: () => ({
-        settingsStart: async () => StartsTest.reply(connectionInput),
+        settingsStart: () => Promise.resolve(StartsTest.reply(connectionInput)),
         route: async () => {
           if (mode === "rpc") {
             throw new Error(`${bearer} ${rawFrame}`);
@@ -295,9 +325,9 @@ const flow = async (sample: Flow) => {
 
           return { _tag: "ok", result: { accepted: true } };
         },
-        info: async () => [],
-        leave: async () => {},
-        disconnect: async () => {},
+        info: () => Promise.resolve([]),
+        leave: () => Promise.resolve(),
+        disconnect: () => Promise.resolve(),
       }),
     },
     RECORD: {
@@ -306,6 +336,7 @@ const flow = async (sample: Flow) => {
       }),
     },
   } as unknown as Env;
+
   const runtime = connectionRuntime(ctx, env, connectionInput);
 
   try {
@@ -314,20 +345,28 @@ const flow = async (sample: Flow) => {
       Effect.scoped(
         Effect.gen(function* () {
           let observe: (event: RuntimeEvent) => void = () => {};
+
           let listen: Effect.Effect<unknown> = Effect.void;
+
           const instance = yield* startDev({ ...config, home, memory: 500_000_000, grace: 5000 }, (local) =>
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
-              const plugin = [...local.mapUnsafe.values()].find(
-                (value) => typeof value === "object" && value !== null && "sockets" in value,
+
+              // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
+              const plugin = Option.getOrUndefined(
+                Arr.findFirst(
+                  [...local.mapUnsafe.values()],
+                  (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
+                ),
               ) as {
                 sockets: ReadonlyArray<{ service: { props: { json: string } } }>;
                 start: (ports: Record<string, number>) => Effect.Effect<unknown>;
               };
+
               // Plugin props and HTTP headers are both platform sends. Each must receive
               // the bearer bytes; serializing a Redacted here would break the real instance.
               expect(
-                Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
+                Schema.decodeSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
                   plugin.sockets[0]!.service.props.json,
                 ),
               ).toEqual({ token: bearer });
@@ -337,13 +376,15 @@ const flow = async (sample: Flow) => {
               yield* listen;
             }),
           );
+
           const outbox = yield* brainOutbox(home);
+
           const awaitEvent = (ready: (row: Effect.Success<typeof outbox.pending>[number]) => boolean) =>
             Effect.gen(function* () {
               for (;;) {
                 const rows = yield* outbox.pending;
 
-                if (rows.some(ready)) {
+                if (Arr.some(rows, ready)) {
                   return;
                 }
 
@@ -384,7 +425,7 @@ const flow = async (sample: Flow) => {
               catch: (cause) => CallError.make({ cause }),
             });
             yield* Effect.tryPromise({
-              try: () => Reflect.get(instance.project(config.name), "info")(),
+              try: () => instance.project(config.name).info(),
               catch: (cause) => CallError.make({ cause }),
             }).pipe(Effect.ignore);
             outputs.outbox.push(yield* outbox.pending);
@@ -407,18 +448,23 @@ const flow = async (sample: Flow) => {
           outputs.outbox.push(yield* outbox.pending);
         }),
       ).pipe(
-        Effect.provide(fetchClient),
-        Effect.provide(ProcessIdGenerator.layer),
-        Effect.provide(random),
-        Effect.provide(rssLayer(() => 0)),
-        Effect.provide(NodeServices.layer),
-        Effect.provide(logger),
+        Effect.provide(
+          FetchHttpClient.layer.pipe(
+            Layer.provideMerge(ProcessIdGenerator.layer),
+            Layer.provideMerge(random),
+            Layer.provideMerge(rssLayer(() => 0)),
+            Layer.provideMerge(NodeServices.layer),
+            Layer.provideMerge(logger),
+          ),
+        ),
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
       ),
     );
     outputs.outbox.push(
       readFileSync(join(home, "brain.pending.jsonl"), "utf8"),
       readFileSync(join(home, "brain.last.json"), "utf8"),
     );
+
     // Control receives a Redacted at the service boundary. Reflect.apply keeps this runtime
     // law runnable on the old string signature; the type law below forbids that signature.
     const request = new Request("http://local/", {
@@ -432,20 +478,24 @@ const flow = async (sample: Flow) => {
         args: [],
       }),
     });
+
     const checked: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
       request,
       env,
       Redacted.make(bearer),
       {},
     ]);
+
     const forged = request.clone();
     forged.headers.set("authorization", `Bearer wrong-${sample.pass}`);
+
     const denied: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
       forged,
       env,
       Redacted.make(bearer),
       {},
     ]);
+
     expect((await Effect.runPromise(denied)).status).toBe(403);
     const answer = await Effect.runPromiseExit(checked.pipe(Effect.provide(logger)));
 
@@ -455,23 +505,26 @@ const flow = async (sample: Flow) => {
     }
 
     outputs.measurements.push(...measurements(gatewayDb));
-    const nodeDb = new DatabaseSync(join(home, "brain.records.sqlite"));
-
-    try {
-      outputs.measurements.push(...measurements(nodeDb));
-      outputs.spans.push(nodeDb.prepare("SELECT * FROM unsent").all());
-    } finally {
-      nodeDb.close();
-    }
+    // The brain's span queue is the product's file, so the test opens it as it is and closes it after.
+    await Effect.runPromise(
+      TestDatabase.open(join(home, "brain.records.sqlite")).pipe(
+        Effect.flatMap((nodeDb) =>
+          Effect.sync(() => {
+            outputs.measurements.push(...measurements(nodeDb));
+            outputs.spans.push(nodeDb.prepare("SELECT * FROM unsent").all());
+          }),
+        ),
+        Effect.scoped,
+      ),
+    );
 
     outputs.journal.push(journalDb.prepare("SELECT * FROM entries").all());
     expect(parts.size).toBeGreaterThan(0);
     expect(outputs.journal.length).toBeGreaterThan(0);
     expect(outputs.measurements.flat().length).toBeGreaterThan(0);
+
     return { outputs, words, answer };
   } finally {
-    fetch.mockRestore();
-
     for (const spy of consoleSpies) {
       spy.mockRestore();
     }
@@ -495,8 +548,8 @@ it("type: [secrets] P12 bearer-type gap, control services require a Redacted bea
   expectTypeOf<Parameters<typeof control>[2]>().toEqualTypeOf<Redacted.Redacted<string>>();
 });
 
-it("[secrets] generated flows keep bearer, private material, bodies and raw frames out of every named output", async () => {
-  await fc.assert(
+it("[secrets] generated flows keep bearer, private material, bodies and raw frames out of every named output", () =>
+  fc.assert(
     fc.asyncProperty(generated, async (sample) => {
       const { outputs, words } = await flow(sample);
       clean(outputs, words);
@@ -525,11 +578,10 @@ it("[secrets] generated flows keep bearer, private material, bodies and raw fram
         ],
       ],
     },
-  );
-});
+  ));
 
-it("[secrets] the Worker control edge accepts the generated Redacted bearer without returning it", async () => {
-  await fc.assert(
+it("[secrets] the Worker control edge accepts the generated Redacted bearer without returning it", () =>
+  fc.assert(
     fc.asyncProperty(generated, async (sample) => {
       const { answer, outputs, words } = await flow(sample);
       expect(Exit.isSuccess(answer)).toBe(true);
@@ -539,5 +591,4 @@ it("[secrets] the Worker control edge accepts the generated Redacted bearer with
       clean(outputs, words);
     }),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
-  );
-});
+  ));

@@ -1,35 +1,39 @@
-// T737 D7, next/. The app names a door input by its `type` with Predicate now. This law takes the
+// T737 D7, next/. The app names a door input by its `_tag` with Predicate now. This law takes the
 // callback the runtime really composes: `projectRuntime` builds its project layer, the layer's door
 // builds the Gateway layer, and both are captured here. An independent copy of the guard before that
-// change is the oracle: the same name, and the same reads of `type` in the same order.
+// change is the oracle: the same name, and the same reads of `_tag` in the same order.
 import { RecordedStart } from "@kampus/libfabrika";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Layer, Result } from "effect";
+import { Effect, Exit, Formatter, Layer, Predicate, Result } from "effect";
 import { Digest } from "effect/crypto";
+
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings as decodeSettings } from "./runtime.ts";
 
-const held = vi.hoisted(() => ({ project: [] as Array<unknown>, door: [] as Array<unknown> }));
+const held = vi.hoisted(() => ({ project: Array.of<unknown>(), door: Array.of<unknown>() }));
 
 vi.mock("virtual:fabrika-built", () => ({ programs: {}, assets: {} }));
+
 vi.mock("@kampus/libfabrika/workers/gateway", () => ({ connectionLayer: () => Layer.empty }));
 
 vi.mock("@kampus/libfabrika/workers/runtime", async (original) => ({
   ...(await original<typeof import("@kampus/libfabrika/workers/runtime")>()),
   projectRuntime: (_ctx: unknown, _env: unknown, options: unknown) => {
     held.project.push(options);
+
     return { runPromise: Effect.runPromise, dispose: async () => {} };
   },
 }));
 
 vi.mock("./door.ts", () => ({
   Gateway: {
-    pipe: (f: (self: Effect.Effect<void>) => unknown) => f(Effect.void),
+    pipe: <A>(f: (self: Effect.Effect<void>) => A) => f(Effect.void),
     layer: (options: unknown) => {
       held.door.push(options);
+
       return Layer.empty;
     },
   },
@@ -52,10 +56,10 @@ StartsTest.law(
   ([recipe]) =>
     Effect.gen(function* () {
       const input = yield* StartsTest.input(recipe);
-      const config = yield* decode({ INSTANCE: JSON.stringify(input) });
+      const config = yield* decode({ INSTANCE: Formatter.formatJson(input) });
       expect(config.port).toBe(recipe.port);
       expect(config.build).toBe(recipe.build);
-      const bad = yield* Effect.exit(decode({ INSTANCE: JSON.stringify(StartsTest.corrupt(input, 6)) }));
+      const bad = yield* Effect.exit(decode({ INSTANCE: Formatter.formatJson(StartsTest.corrupt(input, 6)) }));
       expect(Exit.isFailure(bad)).toBe(true);
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );
@@ -63,31 +67,36 @@ StartsTest.law(
 /** The `inputs.name` callback, as the runtime composes it. */
 const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const ctx: unknown = { id: { name: "project-a" } };
-  const input = RecordWireTest.settingsFixture(settings);
+  const input = await Effect.runPromise(RecordWireTest.settingsFixture(settings));
   const env = { INSTANCE: JSON.stringify(input) };
   const runtime: ReturnType<typeof projectRuntime> = Reflect.apply(projectRuntime, undefined, [ctx, env]);
   await runtime.runPromise(Effect.void);
   await runtime.dispose();
   const project = held.project.at(-1);
-  const door = typeof project === "object" && project !== null ? Reflect.get(project, "door") : undefined;
-  expect(typeof door).toBe("function");
+  const door = Predicate.hasProperty(project, "door") ? project.door : undefined;
+  expect(Predicate.isFunction(door)).toBe(true);
+  assert(Predicate.isFunction(door));
   const checked = await Effect.runPromise(readSettings(env));
+
   // The door is read off an untyped capture, so its Effect is named here, as `runtime` is above.
   const built: Effect.Effect<unknown, unknown, RecordedStart> = Reflect.apply(door, undefined, [
     { deliver: () => Effect.void },
   ]);
+
   await Effect.runPromise(
     built.pipe(Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) })),
   );
   const options = held.door.at(-1);
-  const inputs = typeof options === "object" && options !== null ? Reflect.get(options, "inputs") : undefined;
-  const name = typeof inputs === "object" && inputs !== null ? Reflect.get(inputs, "name") : undefined;
-  expect(typeof name).toBe("function");
+  const inputs = Predicate.hasProperty(options, "inputs") ? options.inputs : undefined;
+  const name = Predicate.hasProperty(inputs, "name") ? inputs.name : undefined;
+  expect(Predicate.isFunction(name)).toBe(true);
+  assert(Predicate.isFunction(name));
+
   return (m) => Reflect.apply(name, undefined, [m]);
 };
 
 const oldName = (m: unknown) =>
-  typeof m === "object" && m !== null && "type" in m && typeof m.type === "string" ? m.type : undefined;
+  Predicate.isObjectOrArray(m) && "_tag" in m && Predicate.isString(m._tag) ? m._tag : undefined;
 
 class Sent {
   readonly extra = 1;
@@ -107,7 +116,7 @@ const Message = fc.record({
     "number",
     "symbol",
   ),
-  type: fc.oneof(
+  tag: fc.oneof(
     { arbitrary: fc.string({ maxLength: 6 }), weight: 4 },
     { arbitrary: fc.constant(""), weight: 2 },
     { arbitrary: fc.constantFrom<unknown>(7, null, undefined, {}, "absent"), weight: 2 },
@@ -118,11 +127,13 @@ const Message = fc.record({
   proxy: fc.boolean(),
   throwOn: fc.constantFrom("none", "none", "has", "get"),
 });
+
 type Message = typeof Message extends fc.Arbitrary<infer A> ? A : never;
 
-/** A fresh message from its recipe; a proxy logs each read of `type` in `trace`. */
+/** A fresh message from its recipe; a proxy logs each read of `_tag` in `trace`. */
 const message = (r: Message, trace: Array<string>): unknown => {
-  const fields: Record<string, unknown> = r.type === "absent" ? {} : { type: r.type };
+  const fields: Record<string, unknown> = r.tag === "absent" ? {} : { _tag: r.tag };
+
   const target: unknown = (() => {
     switch (r.container) {
       case "plain":
@@ -140,21 +151,21 @@ const message = (r: Message, trace: Array<string>): unknown => {
       case "undefined":
         return undefined;
       case "string":
-        return String(r.type);
+        return String(r.tag);
       case "number":
         return 7;
       case "symbol":
-        return Symbol("type");
+        return Symbol("_tag");
     }
   })();
 
-  if (!r.proxy || (typeof target !== "object" && typeof target !== "function") || target === null) {
+  if (!r.proxy || !Predicate.isObjectKeyword(target)) {
     return target;
   }
 
   return new Proxy(target, {
     has: (t, key) => {
-      if (key === "type") {
+      if (key === "_tag") {
         trace.push("has");
 
         if (r.throwOn === "has") {
@@ -162,10 +173,11 @@ const message = (r: Message, trace: Array<string>): unknown => {
         }
       }
 
+      // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
       return Reflect.has(t, key);
     },
     get: (t, key, receiver) => {
-      if (key === "type") {
+      if (key === "_tag") {
         trace.push("get");
 
         if (r.throwOn === "get") {
@@ -173,6 +185,7 @@ const message = (r: Message, trace: Array<string>): unknown => {
         }
       }
 
+      // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
       return Reflect.get(t, key, receiver);
     },
   });
@@ -181,11 +194,12 @@ const message = (r: Message, trace: Array<string>): unknown => {
 const answer = (f: (m: unknown) => string | undefined, r: Message) => {
   const trace: Array<string> = [];
   const got = Result.try({ try: () => f(message(r, trace)), catch: () => "thrown" as const });
+
   return { name: Result.isSuccess(got) ? got.success : ("thrown" as const), trace };
 };
 
 describe("T737 D7 the app's message-name callback equals its old guard, next/", () => {
-  it("names generated messages as the old guard did, with the same reads of type", async () => {
+  it("names generated messages as the old guard did, with the same reads of _tag", async () => {
     const name = await composedName();
     const seen = new Set<string>();
     fc.assert(

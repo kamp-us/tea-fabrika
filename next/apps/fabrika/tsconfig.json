@@ -1,6 +1,88 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "namespaceImportPackages": [],
+        "barrelImportPackages": ["effect"],
+        "diagnosticSeverity": { "preferBarrelImport": "error" },
+        // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+        // The globs read from this folder. One entry per set of folders; its comment names its checks.
+        "overrides": [
+          // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5), unnecessaryArrowBlock
+          // (E8), preferUnsafeConstructor (E16), effectSucceedWithVoid (E20),
+          // catchConditionalRefailToCatchIf (E22), runOfExitToRunExit (E25).
+          {
+            "include": ["**/*.ts", "**/*.tsx", "../../../fixtures/next/p19-launchd/brain.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaNumber": "error",
+                "preferTypedSchemaDecoder": "error",
+                "unnecessaryArrowBlock": "error",
+                "preferUnsafeConstructor": "error",
+                "effectSucceedWithVoid": "error",
+                "catchConditionalRefailToCatchIf": "error",
+                "runOfExitToRunExit": "error"
+              }
+            }
+          },
+          // These folders: unnecessaryTypeofType (E7).
+          {
+            "include": ["e2e/**/*.ts", "src/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "unnecessaryTypeofType": "error"
+              }
+            }
+          },
+          // These folders: schemaClassMissingBrand (E6).
+          {
+            "include": ["*.ts", "e2e/**/*.ts", "src/exam/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaClassMissingBrand": "error"
+              }
+            }
+          },
+          // These folders: catchToOrElseSucceed (E9).
+          {
+            "include": ["e2e/**/*.ts", "src/exam/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "catchToOrElseSucceed": "error"
+              }
+            }
+          },
+          // These folders: instanceOfSchema (E10), mapMapErrorToMapBoth (E14), returnEffectInGen
+          // (E15), flatMapConditionalToFilterOrFail (E18).
+          {
+            "include": ["src/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "instanceOfSchema": "error",
+                "mapMapErrorToMapBoth": "error",
+                "returnEffectInGen": "error",
+                "flatMapConditionalToFilterOrFail": "error"
+              }
+            }
+          },
+          // These folders: schemaStructWithTag (E11).
+          {
+            "include": ["e2e/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaStructWithTag": "error"
+              }
+            }
+          },
+          {
+            "include": ["e2e/**/*.ts"],
+            "options": { "diagnosticSeverity": { "newPromise": "error" } }
+          }
+        ]
+      }
+    ],
     "types": ["node", "@cloudflare/workers-types"],
     // `src/entry/*.tsx` is React in a browser tab; the rest is the Worker and Node.
     "lib": ["ES2023", "DOM", "DOM.Iterable"],

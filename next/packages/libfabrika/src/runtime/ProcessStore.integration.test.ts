@@ -1,12 +1,19 @@
 // P11 SQL adapter contract. One object stores {saved, turn, cmds}; load is null before its first save.
 // layer(sql, {process}) needs Ledger only for record(id, RuntimeRecord, From).
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+
+import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -19,6 +26,13 @@ import { Activity } from "../processes/Process.ts";
 import type { QuotasError } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
 import { Checkpoint as CheckpointSchema, Placed, ProcessStore, RuntimeRecord } from "./ProcessStore.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  save: {},
+});
 
 // fast-check 4.10.2's default JSON has no hard depth bound. Effect 4.1.1's
 // recursive Schema.Json spends one shared size budget, so no finite size
@@ -33,26 +47,20 @@ const PROCESS = Effect.runSync(processId);
 
 // Every store is a fresh node:sqlite file in its own temp folder. The test's scope closes the
 // connection, then removes the folder (0061).
-const folder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p11-store-"))),
-  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-);
+const storeFile = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
 
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
+  return path.join(yield* fs.makeTempDirectoryScoped({ prefix: "p11-store-" }), "store.db");
+}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
+
+const openDb = (path: string) => TestDatabase.make(path);
 
 const handle = (path: string, first: DatabaseSync) => {
   let db = first;
   let backend = nodeSql(db);
   let fail = false;
+
   const sql: Sql = {
     exec: (q, ...values) => backend.exec(q, ...values),
     transaction: (f) =>
@@ -67,6 +75,7 @@ const handle = (path: string, first: DatabaseSync) => {
       }),
     size: () => backend.size(),
   };
+
   return {
     sql,
     db: () => db,
@@ -75,6 +84,7 @@ const handle = (path: string, first: DatabaseSync) => {
     },
     reopen: Effect.suspend(() => {
       db.close();
+
       return openDb(path);
     }).pipe(
       Effect.flatMap((again) =>
@@ -87,8 +97,7 @@ const handle = (path: string, first: DatabaseSync) => {
   };
 };
 
-const database = folder.pipe(
-  Effect.map((path) => join(path, "store.db")),
+const database = storeFile.pipe(
   Effect.flatMap((path) => openDb(path).pipe(Effect.map((first) => handle(path, first)))),
 );
 
@@ -184,7 +193,7 @@ describe("P11 process storage", () => {
           disk
             .db()
             .prepare("UPDATE process_state SET checkpoint=? WHERE process=?")
-            .run(JSON.stringify({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } }), PROCESS);
+            .run(Formatter.formatJson({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } }), PROCESS);
           expect(yield* Effect.flip(store.load)).toMatchObject({
             _tag: "LedgerError",
             reason: "bad_row",
@@ -199,6 +208,7 @@ describe("P11 process storage", () => {
     [Schema.NonEmptyString.check(Schema.isMaxLength(12))],
     examples([[PROCESS]], (process: string) => {
       let calls = 0;
+
       const sql: Sql = {
         exec: () => {
           calls++;
@@ -207,6 +217,7 @@ describe("P11 process storage", () => {
         transaction: (f) => f(),
         size: () => 0,
       };
+
       return Effect.gen(function* () {
         const store: Store = yield* ProcessStore;
         expect(calls).toBe(0);
@@ -231,12 +242,13 @@ describe("P11 process storage", () => {
     examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) =>
       Effect.gen(function* () {
         const disk = yield* database;
+
         const pending = {
           ...checkpoint,
           turn: {
             _tag: "prepared",
             id: "letter-a",
-            input: { type: "add", n: 3 },
+            input: { ...Tag.cases.add.make({}), n: 3 },
             parent: `in-${PROCESS}-2`,
             span: { traceId: from.traceId, spanId: "00f067aa0ba902b7" },
             sentAt: from.sentAt,
@@ -244,8 +256,11 @@ describe("P11 process storage", () => {
             next: { ...checkpoint.saved, model: { count: 5 } },
             cmds: [],
           },
-          cmds: [{ id: "stable-cmd", _tag: "dispatched", input: { type: "save", n: 2 }, build: "build-a" }],
+          cmds: [
+            { id: "stable-cmd", _tag: "dispatched", input: { ...Tag.cases.save.make({}), n: 2 }, build: "build-a" },
+          ],
         };
+
         yield* Effect.gen(function* () {
           const store: Store = yield* ProcessStore;
           expect(yield* store.load).toBeNull();
@@ -378,6 +393,7 @@ describe("P11 process storage", () => {
     ],
     ([value, placed, activity]) => {
       const values = new Map<string, unknown>();
+
       const storage = {
         get: (key: string) => Effect.sync(() => values.get(key)),
         put: (key: string, value: unknown) =>
@@ -386,6 +402,7 @@ describe("P11 process storage", () => {
           }),
         sync: () => Effect.void,
       };
+
       return Effect.gen(function* () {
         const disk = yield* database;
         yield* Effect.gen(function* () {

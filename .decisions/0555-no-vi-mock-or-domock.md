@@ -110,17 +110,19 @@ service with a test layer (owner, 2026-11-15).**
   provides it with `ConfigProvider.layer(ConfigProvider.fromUnknown({ ... }))` in place of
   `vi.stubEnv`.
 - **A call the law wants to watch goes through a service,** and the law's layer records it, in
-  place of `vi.spyOn`. For `fetch` that service exists: Effect's `FetchHttpClient.Fetch`. For the
-  others (`crypto`, `process.kill`, `console`) the way is not known yet. When a spy is needed, it
-  is built in the test package, never taken from the test framework.
+  place of `vi.spyOn`. The test package's `Recorder` is our one way to watch calls
+  ([0579](0579-property-laws-use-it-prop.md)): `Recorder.layer(Service, impl, { fails })` records
+  each call, and a law reads `Recorder.calls(Service)`. For `fetch` the service exists: Effect's
+  `FetchHttpClient.Fetch`. For the others (`crypto`, `process.kill`, `console`) the product code
+  first reaches them through a service. A spy is never taken from the test framework.
 - **One narrow exception: an outside package, inside the law of the one file that wraps it.** There
   is nothing below a wrapper to swap, since the wrapper is the thing under test. `rolldown` is the
   example. That line takes `// oxlint-disable-next-line <rule> -- <why>` with its reason in plain
   words, as [`AGENTS.md`](../AGENTS.md#checks) allows where the code is right and the rule does
   not fit. A law of any other file gets the wrapper as a service. The exception stands until the
   test package offers its own way for that case.
-- **Held at zero by a lint rule oxlint already has:** `vitest/no-restricted-vi-methods`. The
-  `vitest` plugin is on in `.oxlintrc.json`, and this rule is not set there yet.
+- **Held at zero by a lint rule oxlint already has:** `vitest/no-restricted-vi-methods`, set in
+  `.oxlintrc.json`, where the `vitest` plugin is on.
 
   ```jsonc
   // a sketch, not run
@@ -145,7 +147,7 @@ service with a test layer (owner, 2026-11-15).**
 ## Consequences
 
 - This file records the ban and how it is held. The cleanup and the lint change are later pull
-  requests. Until the lint change lands, nothing stops a new call.
+  requests.
 - **The cost is in product code.** 142 calls in `next/`: 48 mocks, 71 spies and 23 env stubs. Most
   go only after the product code changes. **Work the cleanup must do,** each its own pull request
   through the steps:
@@ -158,8 +160,8 @@ service with a test layer (owner, 2026-11-15).**
     its plan step reads them one by one. The 20 reads in test support move with the tests that use
     them. The one `vi.stubEnv` in `.agents/` is test data in a string, and stays.
   - **Spies (71):** the 12 on `fetch` move to the `Fetch` reference. The 13 on our own modules and
-    on Effect go by testing what the code does, or by a service. The rest wait for the way to spy
-    that the test package builds.
+    on Effect go by testing what the code does, or by a service. The rest move to the `Recorder`,
+    once the product code reaches them through a service.
 - **Stricter than the makers for spies and env stubs.** The Effect team keeps `vi.mock` only at the
   edge this decision also keeps, but it uses `vi.spyOn` and `vi.stubEnv` in its own tests. We do
   not.
@@ -173,24 +175,22 @@ service with a test layer (owner, 2026-11-15).**
   `vi.mock` in other files. They are not calls and they stay.
 - **What the lint rule may miss, untested:** a renamed import such as `import { vi as v }`. The
   lint pull request plants it to find out.
-- **The hold moves to the test package later.** `next/`'s test package (today `@kampus/vitest`,
-  [0538](0538-kampus-vitest-holds-the-test-primitives.md)) is to become `@kalfa/vitest`. The
-  decision on `@kalfa/vitest`, which is its own file, records the owner's rule: a mechanism that
-  package does not export is not used, and one we need is built in that package. The lead's
+- **The hold moves to the test package later.** `next/`'s test package is `@kalfa/quality/vitest`
+  ([0538](0538-kampus-vitest-holds-the-test-primitives.md),
+  [0557](0557-kalfa-vitest-is-the-test-toolbox.md),
+  [0600](0600-kalfa-quality-holds-test-lint-format.md)). 0557 records the owner's rule: a mechanism
+  that package does not export is not used, and one we need is built in that package. The lead's
   reading of what follows here: once tests get their tools only from that package, this ban is
   held by what the package does not export, plus one lint rule that no file outside it imports
-  `vitest` or `@effect/vitest` directly. Until the package is in place, the oxlint rule named above
-  holds the ban.
-- `next/packages/vitest/src/Depth.ts` reads `process.env` on purpose: 0538 makes it the one reader
-  of `FABRIKA_TEST_DEPTH`. Whether that read moves to `Config` is the product slice's plan to say.
+  `vitest` or `@effect/vitest` directly. Until tests get their tools only from that package, the
+  oxlint rule named above holds the ban.
+- The test package's `Depth.ts` reads `process.env` on purpose: 0538 makes it the one reader of
+  `FABRIKA_TEST_DEPTH`. Whether that read moves to `Config` is the product slice's plan to say.
 - **Not decided here:**
   - `vi.hoisted` and `vi.importActual`.
-  - The shape of the test package's own way to spy, and of its way for the wrapper exception.
+  - The shape of the `Recorder` (0579 gives it its own small plan first), and of the test package's
+    way for the wrapper exception.
   - Which of the four files that mock `rolldown` today count as a wrapper's own law. The plan of
     that cleanup says so per file.
 - [0563](0563-anti-slop-plugin-as-it-ships.md): the hold named above may move to the plugin's own
   `anti-slop/no-module-mocking` when the plugin is installed. The ban itself does not change.
-
-## Amendments
-
-- 2026-11-15: [0579](0579-property-laws-use-it-prop.md) answers the open way to spy: `@kalfa/vitest` gets a `Recorder`, our one way to watch calls.

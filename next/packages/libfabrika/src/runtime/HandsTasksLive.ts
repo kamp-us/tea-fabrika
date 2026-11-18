@@ -2,6 +2,8 @@
  * The `HandsTasks` layer over `Tasks`, run in the Project inside its shared write turn.
  */
 import { Effect, Layer } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import type { From } from "../processes/Mailbox.ts";
 import { needs } from "../tasks/Task.ts";
 import { Tasks, type TasksError } from "../tasks/Tasks.ts";
@@ -37,6 +39,7 @@ export const layer = (options: { readonly target: string | null; readonly settin
       const ask = Effect.fn("hands_tasks.ask")(
         function* (ask: typeof Ask.Type, from: From) {
           yield* Effect.annotateCurrentSpan({ "fab.hands.task": ask.id });
+
           const saved = yield* tasks.read(ask.id).pipe(
             Effect.catchIf(
               (error) => error.reason === "not_found",
@@ -50,6 +53,7 @@ export const layer = (options: { readonly target: string | null; readonly settin
             }
 
             const request = { ...ask, needs: needs(ask.command), target: options.target, settings: options.settings };
+
             return Reply.cases.waiting.make(yield* tasks.request(request, from));
           }
 
@@ -62,7 +66,9 @@ export const layer = (options: { readonly target: string | null; readonly settin
           }
 
           if (s._tag !== "finished" && s._tag !== "collected") {
-            const requested = saved.events.find((event) => event.event === "requested");
+            const requested = Option.getOrUndefined(
+              Arr.findFirst(saved.events, (event) => event.event === "requested"),
+            );
 
             if (requested === undefined) {
               return yield* new HandsTasksError({ reason: "storage" });
@@ -72,6 +78,7 @@ export const layer = (options: { readonly target: string | null; readonly settin
           }
 
           const receipt = yield* tasks.collected(ask.id, { process: ask.process, letter: `${ask.id}/answer` }, from);
+
           return Reply.cases.finished.make({ result: s.result, ...receipt });
         },
         Effect.catchTag("TasksError", translated),

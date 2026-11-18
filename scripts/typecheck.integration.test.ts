@@ -4,6 +4,7 @@
 // lock does not cover or a language server. Each law names a lock file and a compiler name of its
 // own, so a real typecheck on the same machine never holds up a law, and a law never holds up a real
 // one. These laws start processes, so under 0584 they are `.integration.` and run in the full run.
+// Ticket 766 ported the script to `scripts/typecheck.ts` (0113); these laws start it with node.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,7 +12,7 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
-const script = join(root, "scripts/typecheck.sh");
+const script = join(root, "scripts/typecheck.ts");
 
 /** One law's folder: stand-in commands on PATH, an events file the stand-in compiler writes, a lock. */
 type Rig = {
@@ -72,8 +73,10 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
   writeFileSync(
     join(dir, "named.mjs"),
     `import {existsSync, writeFileSync} from 'node:fs';
-import {basename} from 'node:path';
+import {basename, join} from 'node:path';
 if (existsSync('/proc/self/comm')) writeFileSync('/proc/self/comm', basename(process.argv0));
+process.stdout.write('ready\\n');
+
 setTimeout(() => {}, 60_000);
 `,
   );
@@ -84,7 +87,7 @@ setTimeout(() => {}, 60_000);
 
 /** One `pnpm typecheck`, with its stderr kept. */
 const typecheck = (r: Rig, id: string, env: Record<string, string | undefined> = {}) => {
-  const child = spawn("sh", [script], {
+  const child = spawn(process.execPath, [script], {
     cwd: root,
     detached: true,
     stdio: ["ignore", "ignore", "pipe"],
@@ -109,10 +112,12 @@ const typecheck = (r: Rig, id: string, env: Record<string, string | undefined> =
   return { child, stderr: () => err };
 };
 
+// The deadline reads the monotonic clock. A runner's wall clock can step forward, and a Date.now()
+// deadline then ends at once: CI run 43831921638 failed a 5 s wait in a test that took 37 ms.
 const until = async (test: () => boolean, what: string) => {
-  const end = Date.now() + 5_000;
+  const end = performance.now() + 5_000;
 
-  while (!test() && Date.now() < end) {
+  while (!test() && performance.now() < end) {
     await new Promise((r) => setTimeout(r, 20));
   }
 
@@ -121,15 +126,25 @@ const until = async (test: () => boolean, what: string) => {
 
 /**
  * A compiler the lock does not cover, or with `--lsp` a language server: node, linked under the rig's
- * compiler name. It returns once pgrep -x sees that name, so the typecheck after it finds it.
+ * compiler name. The stand-in prints `ready` once it runs under that name, and only then does pgrep -x
+ * look for it, once, so the typecheck after it finds it. The wait is on the child's own event, so no
+ * clock bounds it: a stand-in that errors or exits first fails the law at once.
  */
 const named = async (r: Rig, args: readonly string[] = []) => {
   const path = join(r.bin, r.compiler),
     standIn = join(r.dir, "named.mjs");
   symlinkSync(process.execPath, path);
-  const child = spawn(path, [standIn, ...args], { detached: true, stdio: "ignore" });
+  const child = spawn(path, [standIn, ...args], { detached: true, stdio: ["ignore", "pipe", "ignore"] });
   children.push(child);
-  await until(() => spawnSync("pgrep", ["-x", r.compiler]).status === 0, "the stand-in compiler never started");
+  await new Promise<void>((ready, failed) => {
+    child.stdout!.once("data", () => ready());
+    child.once("error", failed);
+    child.once("exit", (code, signal) =>
+      failed(new Error(`the stand-in compiler ended before it was ready: ${code ?? signal}`)),
+    );
+  });
+  expect(spawnSync("pgrep", ["-x", r.compiler]).status === 0, "the stand-in compiler never started").toBe(true);
+
   return { child, command: [path, standIn, ...args].join(" ") };
 };
 
@@ -230,5 +245,38 @@ describe("T1074 a local typecheck waits for the lock and any running compiler, t
       0,
       `typecheck: pgrep cannot list processes here, so the wait for a running ${r.compiler} is skipped\n`,
     ]);
+  });
+});
+
+describe("T766 CommandsProcess runs a command in our process group and reads how it ended, today's tooling", () => {
+  // N5. Two real `node -e` children, so this law is `.integration.` (0584): one writes its process
+  // group as ps reads it and exits 3, one stops itself with SIGTERM. A caps law (R4 "recovers a
+  // killed typecheck holder") kills the holder's group and expects its compiler gone with it, which
+  // holds only when the command shares our group. Plant: leave Effect's default `detached` (true on
+  // Linux and macOS), so the child's group differs from ours.
+  it("scenario: a command is heard by its pid first, runs in our process group, and comes back as an exit code or a signal", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tc-766-"));
+    dirs.push(dir);
+    const group = join(dir, "group");
+    const exits = {
+      cmd: process.execPath,
+      args: [
+        "-e",
+        `require("node:fs").writeFileSync(${JSON.stringify(group)}, require("node:child_process").execFileSync("ps", ["-o", "pgid=", "-p", String(process.pid)], { encoding: "utf8" }).trim()); process.exit(3);`,
+      ],
+    };
+    const stops = {
+      cmd: process.execPath,
+      args: ["-e", `process.kill(process.pid, "SIGTERM"); setTimeout(() => {}, 5000);`],
+    };
+    const { commandsOnNode } = await import("./typecheck/test-helper.ts");
+    const { ended, heard } = await commandsOnNode([exits, stops]);
+    const ours = spawnSync("ps", ["-o", "pgid=", "-p", String(process.pid)], { encoding: "utf8" }).stdout.trim();
+    expect(ended).toEqual([
+      { _tag: "exited", code: 3 },
+      { _tag: "signaled", signal: "SIGTERM" },
+    ]);
+    expect(readFileSync(group, "utf8"), "the command ran in a process group of its own").toBe(ours);
+    expect(heard, "each command's pid is heard first, and none once it has ended").toEqual([true, false, true, false]);
   });
 });

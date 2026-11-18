@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-stepcommit-temp-format-needs-package",
+  "date": "2026-11-16",
+  "by": "tests",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/step-commit/scripts/stepcommit.sh",
+    "line": 154
+  },
+  "says": "The step commit helper reports correctly formatted files as unformatted because pnpm refuses its temporary working folder.",
+  "proof": "At head 55ae19989916bacf063c1e418f72869fe1891957, stepcommit.sh --commit-only tests 1122 with the watcher integration test and tests run row exited with not_formatted. Direct pnpm exec oxfmt --check over those files passed. Repeating the helper's formatter command from an equivalent temporary folder with its copied config and named files returned ERR_PNPM_RECURSIVE_EXEC_NO_PACKAGE: No package found in this workspace. The installed package manager is pnpm 12.16.1. The helper invokes pnpm exec with cwd=tmp, which has no package manifest, and discards that diagnostic.",
+  "cost": "A tests worker cannot publish its reviewable work through the required commit workflow, even when all formatter checks pass.",
+  "head": "55ae19989916bacf063c1e418f72869fe1891957",
+  "ticket": "1122",
+  "pr": null
+}

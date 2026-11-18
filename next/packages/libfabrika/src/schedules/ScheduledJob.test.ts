@@ -7,8 +7,20 @@ import fc from "fast-check";
 import { expect, it } from "vitest";
 import * as ScheduledJob from "./ScheduledJob.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  write_err: {},
+  write_ok: {},
+});
+
+const Timer = Schema.TaggedStruct("timer", { at: Schema.Int });
+
+// fast-check: edge cases -- a timer at 0 is drawn as often as any other, as the draw before `_tag` was.
+const timerAt = fc.oneof(fc.constant(0), fc.nat()).map((at) => Timer.make({ at }));
+
 const write = Cmd.make("write", {
-  input: Schema.Struct({ due: Schema.Number, period: Schema.Int }),
+  input: Schema.Struct({ due: Schema.Finite, period: Schema.Int }),
   ok: Schema.Json,
   err: ["not_delivered", "ended", "spent"],
 });
@@ -17,24 +29,26 @@ const make = (period: number) =>
   ScheduledJob.make({ period, cmd: write, work: (due, ms) => write({ due, period: ms }) });
 
 const ctx = stubCtxThrowingProxy<unknown>();
+
 const period = fc.integer({ min: 1, max: 1_000_000_000 });
 
 // Fast-check supplies boundary times and invalid durations; there is no domain schema for them.
 // The plan gives no run count. Keep the shared seed and use 150 walks of up to 100 moves.
 const walks = period.chain((ms) => {
   const { machine } = Result.getOrThrow(make(ms));
+
   return arbGuidedSequence(
     machine,
     ctx,
     {
       outside: {
-        timer: fc.record({ type: fc.constant("timer" as const), at: fc.oneof(fc.constant(0), fc.nat()) }),
+        timer: timerAt,
         // A stale answer is an outside input, not the answer to a waiting Cmd.
         write_ok: fc
           .nat()
-          .map((at) => ({ type: "write_ok" as const, cmd: write({ due: 0, period: ms }), value: null, at })),
+          .map((at) => ({ ...Tag.cases.write_ok.make({}), cmd: write({ due: 0, period: ms }), value: null, at })),
         write_err: fc.nat().map((at) => ({
-          type: "write_err" as const,
+          ...Tag.cases.write_err.make({}),
           cmd: write({ due: 0, period: ms }),
           error: { _tag: "spent" as const },
           at,
@@ -45,8 +59,8 @@ const walks = period.chain((ms) => {
           draw: fc.record({ ok: fc.boolean(), at: fc.nat() }),
           make: (cmd, answer) =>
             answer.ok
-              ? { type: "write_ok" as const, cmd, value: null, at: answer.at }
-              : { type: "write_err" as const, cmd, error: { _tag: "spent" as const }, at: answer.at },
+              ? { ...Tag.cases.write_ok.make({}), cmd, value: null, at: answer.at }
+              : { ...Tag.cases.write_err.make({}), cmd, error: { _tag: "spent" as const }, at: answer.at },
         },
       },
     },
@@ -69,14 +83,14 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
           let outstanding = 0;
 
           for (const { prev, msg, next, cmds } of steps) {
-            if (msg.type !== "timer") {
+            if (msg._tag !== "timer") {
               outstanding = 0;
             }
 
             outstanding += cmds.length;
             expect(outstanding).toBeLessThanOrEqual(1);
 
-            if (msg.type === "timer" && prev._tag === "idle" && msg.at >= prev.next) {
+            if (msg._tag === "timer" && prev._tag === "idle" && msg.at >= prev.next) {
               expect(cmds).toEqual([write({ due: msg.at, period: prev.period })]);
               expect(next).toEqual({ _tag: "running", due: msg.at, period: prev.period });
             } else {
@@ -84,16 +98,17 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
             }
 
             if (prev._tag === "idle") {
-              const [due, jobs] = applyCell<ScheduledJob.Model, { type: "timer"; at: number }, CmdOf<typeof write>>(
+              const [due, jobs] = applyCell<ScheduledJob.Model, typeof Timer.Type, CmdOf<typeof write>>(
                 machine,
                 prev,
-                { type: "timer", at: prev.next },
+                Timer.make({ at: prev.next }),
               );
+
               expect(due).toEqual({ _tag: "running", due: prev.next, period: prev.period });
               expect(jobs).toEqual([write({ due: prev.next, period: prev.period })]);
             }
 
-            if (msg.type !== "timer" && prev._tag === "idle") {
+            if (msg._tag !== "timer" && prev._tag === "idle") {
               expect(next).toEqual(prev);
             }
           }
@@ -123,7 +138,7 @@ it("L2: wake is next while idle, null while running, and answers re-arm from the
             expect(ScheduledJob.wake(next)).toBe(next._tag === "idle" ? next.next : null);
             expect(next.period).toBe(ms);
 
-            if (prev._tag === "running" && msg.type !== "timer") {
+            if (prev._tag === "running" && msg._tag !== "timer") {
               expect(next).toEqual({ _tag: "idle", next: msg.at + prev.period, period: prev.period });
             }
           }
@@ -149,14 +164,16 @@ it("L3: early and repeated timers leave the model and commands unchanged", () =>
           for (const { prev, msg, next, cmds } of steps) {
             // Choose the refusal from the state reached by this generated walk.
             const at = prev._tag === "idle" ? prev.next - 1 : prev.due;
-            const [unchanged, sent] = applyCell<ScheduledJob.Model, { type: "timer"; at: number }, CmdOf<typeof write>>(
+
+            const [unchanged, sent] = applyCell<ScheduledJob.Model, typeof Timer.Type, CmdOf<typeof write>>(
               machine,
               prev,
-              { type: "timer", at },
+              Timer.make({ at }),
             );
+
             expect(unchanged).toEqual(prev);
             expect(sent).toEqual([]);
-            const ignored = msg.type === "timer" && (prev._tag === "running" || msg.at < prev.next);
+            const ignored = msg._tag === "timer" && (prev._tag === "running" || msg.at < prev.next);
             expect(ignored ? next : prev).toEqual(prev);
             expect(ignored ? cmds : []).toEqual([]);
           }

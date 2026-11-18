@@ -4,8 +4,17 @@
  * the RPC as checked data.
  */
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
-import { Cause, Effect, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 import { Admission, type Input, ProgramDown, stepper, Step, type Prepared, type Stepper } from "./Program.ts";
@@ -17,14 +26,14 @@ const Outcome = Schema.TaggedUnion({
   Ok: { value: Schema.Unknown, at: Schema.Number },
   Err: {
     error: Schema.declare<Tagged>(
-      (value): value is Tagged =>
-        typeof value === "object" && value !== null && "_tag" in value && typeof value._tag === "string",
+      (value): value is Tagged => Predicate.isObjectOrArray(value) && "_tag" in value && Predicate.isString(value._tag),
     ),
     at: Schema.Number,
   },
 });
 
-const Typed = Schema.Struct({ type: Schema.String });
+// oxlint-disable-next-line fabrika/no-hand-tag -- a reader that knows no cases: any program's Msg or Cmd, so its key is an open string (as for ledger/Log.ts)
+const Typed = Schema.Struct({ _tag: Schema.String });
 
 // Match the deletable failure-content ceiling, half a Durable Object row.
 const MOST_CONTENT = 1_000_000;
@@ -47,7 +56,7 @@ export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
 /** A program's own throw rides in deletable content; a cause the runtime kept for diagnosis,
  *  which may hold the input that failed, never leaves memory. */
 const shown = (error: ProgramDown): unknown =>
-  !Object.hasOwn(error, "cause")
+  !("cause" in error)
     ? error
     : error.error === "ProgramDown"
       ? new ProgramDown({ reason: error.reason, error: error.error })
@@ -67,13 +76,14 @@ export const executionFailure = (error: ProgramDown) =>
   ExecutionFailure.make({
     reason: error.reason,
     error: error.errorClass,
-    content: Cause.pretty(Cause.fail(shown(error))).slice(0, MOST_CONTENT),
+    content: Str.slice(0, MOST_CONTENT)(Cause.pretty(Cause.fail(shown(error)))),
   });
 
 const programFailure = (failure: typeof ExecutionFailure.Type) => {
   // Restore only checked text, never an arbitrary remote object or prototype.
   const cause = new Error(failure.content);
   cause.stack = failure.content;
+
   return new ProgramDown({ reason: failure.reason, error: failure.error, cause });
 };
 
@@ -105,6 +115,7 @@ export const Declaration = Schema.Struct({
   inputs: Schema.Record(Schema.String, Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean })),
   cmds: Schema.Array(Schema.String),
 });
+
 /**
  * A loaded program's checked declaration, as `Declaration` decodes it.
  *
@@ -181,21 +192,26 @@ const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
   return Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value));
 };
 
-/** True when `m` names a write port and decodes against that port's schema. */
+/** True when `m` names a write port and that port schema's JSON codec decodes it. */
 const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean => {
   const typed = Schema.decodeUnknownOption(Typed)(m);
 
-  if (Option.isNone(typed) || !Object.hasOwn(inputs, typed.value.type)) {
+  if (Option.isNone(typed) || !Rec.has(inputs, typed.value._tag)) {
     return false;
   }
 
-  const port = inputs[typed.value.type];
-  return port !== undefined && port._tag === "write" && Result.isSuccess(Schema.decodeUnknownResult(port.schema)(m));
+  const port = inputs[typed.value._tag];
+
+  return (
+    port !== undefined &&
+    port._tag === "write" &&
+    Result.isSuccess(Schema.decodeUnknownResult(Schema.toCodecJson(port.schema))(m))
+  );
 };
 
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
-  const type = Schema.decodeUnknownSync(Typed)(cmd).type;
-  const def = defs.find((d) => d.cmdType === type);
+  const type = Schema.decodeUnknownSync(Typed)(cmd)._tag;
+  const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.cmdType === type));
 
   if (def === undefined) {
     throw new ProgramDown({ reason: "step" });
@@ -205,7 +221,8 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
 
   if (outcome._tag === "Ok") {
     return Schema.decodeUnknownSync(Schema.Json)({
-      type: def.okType,
+      // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's answer, keyed `_tag` as tea's own: tea's `AnyCmdDef` carries no `ok` or `err` maker yet (demlik 951)
+      _tag: def.okType,
       cmd,
       value: encodeAnswer(def.schema.ok, outcome.value),
       at: outcome.at,
@@ -219,7 +236,8 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
   }
 
   return Schema.decodeUnknownSync(Schema.Json)({
-    type: def.errType,
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's answer, keyed `_tag` as tea's own: tea's `AnyCmdDef` carries no `ok` or `err` maker yet (demlik 951)
+    _tag: def.errType,
     cmd,
     error: encodeAnswer(Schema.TaggedStruct(tag, {}), outcome.error),
     at: outcome.at,
@@ -242,8 +260,10 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
   const pure = Effect.fromResult(stepper(declared)).pipe(
     Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
   );
+
   const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
     pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
+
   return {
     init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
     step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => pure.step(model, msg))),
@@ -270,6 +290,7 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
     check: Effect.fn("execution.check")((kind, event) =>
       run("step", (pure) => {
         const policy = pure.program.writes[kind];
+
         return policy !== undefined && Result.isSuccess(Schema.decodeUnknownResult(policy.schema)(event));
       }),
     ),
@@ -289,6 +310,7 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
   }
 
   const rejected = (cause: unknown) => new RpcError({ method: key, cause });
+
   // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader RPC enters Effect
   return Effect.tryPromise({ try: () => Reflect.apply(method, binding, args), catch: rejected });
 };
@@ -311,6 +333,7 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
 export const workerExecution = (binding: ExecutionCalls): Execution => {
   const call = (method: keyof ExecutionCalls, args: ReadonlyArray<unknown>, reason: ProgramDown["reason"]) =>
     invoke(binding, method, args).pipe(Effect.mapError((cause) => new ProgramDown({ reason, source: "rpc", cause })));
+
   const ask = <A>(
     schema: Schema.Decoder<A>,
     work: Effect.Effect<unknown, ProgramDown>,
@@ -325,11 +348,13 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
         }
 
         const decoded = Schema.decodeUnknownResult(schema)(raw);
+
         return Result.isSuccess(decoded)
           ? Effect.succeed(decoded.success)
           : Effect.fail(new ProgramDown({ reason, source: "decode", cause: decoded.failure }));
       }),
     );
+
   return {
     fresh: Effect.fn("execution.fresh")((model, msg) => ask(Admission, call("fresh", [model, msg], "step"), "step")),
     update: Effect.fn("execution.update")((model, msg) =>

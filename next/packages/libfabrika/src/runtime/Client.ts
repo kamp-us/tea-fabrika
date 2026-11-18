@@ -16,6 +16,7 @@
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { apply } from "./Patch.ts";
 import { Sent } from "./Runner.ts";
@@ -48,6 +49,7 @@ export const Pending = Schema.TaggedUnion({
     traceId: Schema.optionalKey(Schema.String),
   },
 });
+
 export type Pending = typeof Pending.Type;
 
 /**
@@ -56,6 +58,7 @@ export type Pending = typeof Pending.Type;
  * @category schemas
  */
 export const Shown = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
+
 export type Shown = typeof Shown.Type;
 
 /**
@@ -72,6 +75,7 @@ export const Client = Schema.Struct({
   pending: Schema.Array(Pending),
   views: Schema.Record(Schema.String, Shown),
 });
+
 export type Client = typeof Client.Type;
 
 const emptyClient: Client = Client.make({ written: 0, seen: 0, pending: [], views: {} });
@@ -87,31 +91,35 @@ const Reply = Schema.TaggedUnion({
   unknown: {},
 });
 
-const Msg = Schema.Union([
+/**
+ * Schema for what the client machine takes, each Msg made with its case's maker.
+ *
+ * @category schemas
+ */
+export const ClientMsg = Schema.TaggedUnion({
   /** A person pressed `m`, one of the program's Msgs, on the tile of `pid`. */
-  Schema.Struct({ type: Schema.Literal("press"), pid: Schema.String, m: Schema.Unknown }),
+  press: { pid: Schema.String, m: Schema.Unknown },
   /** Slot `n`'s letter id and time, from the Cmd the window ran. */
-  Schema.Struct({
-    type: Schema.Literal("dated"),
+  dated: {
     n: Schema.Int,
     letter: Schema.String,
     sentAt: Schema.String,
     traceId: Schema.optionalKey(Schema.String),
-  }),
+  },
   /** What came back for `letter`. */
-  Schema.Struct({ type: Schema.Literal("reply"), letter: Schema.String, answer: Reply }),
+  reply: { letter: Schema.String, answer: Reply },
   /** This client has read the ledger up to revision `rev`. */
-  Schema.Struct({ type: Schema.Literal("read"), rev: Schema.Int }),
+  read: { rev: Schema.Int },
   /** One view notification for `pid`, as it arrived: a whole view, a patch, or junk. */
-  Schema.Struct({ type: Schema.Literal("notice"), pid: Schema.String, note: Schema.Unknown }),
-]);
+  notice: { pid: Schema.String, note: Schema.Unknown },
+});
 
 /**
  * A Msg the client machine takes: `press`, `dated`, `reply`, `read` or `notice`.
  *
  * @category models
  */
-export type ClientMsg = typeof Msg.Type;
+export type ClientMsg = typeof ClientMsg.Type;
 
 /** Ask for a whole view of `pid`: the last good one stays shown until it comes. The window turns
  *  it into its own move. */
@@ -132,6 +140,7 @@ type Step = readonly [Client, ReadonlyArray<ReturnType<typeof ask>>];
 /** Reserves the next slot for a press on `pid`, with what this client showed and had read. */
 const press = (c: Client, input: { readonly pid: string; readonly m: unknown }): Client => {
   const m = Schema.decodeUnknownResult(Schema.Json)(input.m);
+
   const slot = Pending.cases.dating.make({
     n: c.written,
     pid: input.pid,
@@ -139,6 +148,7 @@ const press = (c: Client, input: { readonly pid: string; readonly m: unknown }):
     seen: c.seen,
     viewRev: c.views[input.pid]?.rev ?? 0,
   });
+
   return { ...c, written: c.written + 1, pending: [...c.pending, slot] };
 };
 
@@ -149,7 +159,11 @@ const dated = (
   n: number,
   stamp: { readonly letter: string; readonly sentAt: string; readonly traceId?: string },
 ): Client => {
-  const at = c.pending.findIndex((p) => p.n === n);
+  const at = Option.getOrElse(
+    Arr.findFirstIndex(c.pending, (p) => p.n === n),
+    () => -1,
+  );
+
   const slot = c.pending[at];
 
   if (slot === undefined || slot._tag !== "dating") {
@@ -166,7 +180,8 @@ const dated = (
     sentAt: stamp.sentAt,
     ...(stamp.traceId === undefined ? {} : { traceId: stamp.traceId }),
   });
-  return { ...c, pending: c.pending.map((p, i) => (i === at ? ready : p)) };
+
+  return { ...c, pending: Arr.map(c.pending, (p, i) => (i === at ? ready : p)) };
 };
 
 /** Settles `letter` only on its own terminal answer. Every other answer keeps it for a resend. */
@@ -175,7 +190,8 @@ const reply = (c: Client, letter: string, answer: Pick<typeof Reply.Type, "_tag"
     return c;
   }
 
-  const kept = c.pending.filter((p) => p._tag !== "ready" || p.letter !== letter);
+  const kept = Arr.filter(c.pending, (p) => p._tag !== "ready" || p.letter !== letter);
+
   return kept.length === c.pending.length ? c : { ...c, pending: kept };
 };
 
@@ -223,6 +239,7 @@ const noticed = (c: Client, pid: string, note: unknown, decode: (u: unknown) => 
 
   if (n.type === "whole") {
     const view = check(decode, n.view);
+
     return Result.isSuccess(view) ? [install(c, pid, { rev: n.rev, view: view.success }), []] : asked;
   }
 
@@ -241,6 +258,7 @@ const noticed = (c: Client, pid: string, note: unknown, decode: (u: unknown) => 
   }
 
   const next = Result.flatMap(apply(shown.view, n.patch), (candidate) => check(decode, candidate));
+
   return Result.isSuccess(next) ? [install(c, pid, { rev: n.rev, view: next.success }), []] : asked;
 };
 
@@ -257,7 +275,7 @@ const anyView = (view: unknown): unknown => view;
 export const clientMachineFor = (checks: ClientChecks) =>
   Machine.make({
     model: Client,
-    msg: Msg,
+    msg: ClientMsg,
     cmds: [ask],
     init: (loaded: Client | null) => [loaded ?? emptyClient, []],
     update: {
@@ -275,6 +293,7 @@ export const clientMachineFor = (checks: ClientChecks) =>
 // --- Reads of the Model -------------------------------------------------------------------------
 
 type Ready = typeof Pending.cases.ready.Type;
+
 const isReady = (p: Pending): p is Ready => p._tag === "ready";
 
 /**
@@ -328,6 +347,7 @@ export const NameFold = Schema.Struct({
   live: Schema.NullOr(Schema.String),
   ended: Schema.NullOr(Schema.Struct({ pid: Schema.String, reason: ExitReason })),
 });
+
 export type NameFold = typeof NameFold.Type;
 
 /**
@@ -349,10 +369,12 @@ const foldEntry = (fold: NameFold, raw: unknown, name: string, by: (writer: stri
 
   if (entry._tag !== "exited") {
     const named = life.name === undefined || life.name === name;
+
     return { ...fold, after, live: named ? life.process : fold.live };
   }
 
   const reason = Schema.decodeUnknownOption(ExitReason)(life.reason);
+
   return {
     after,
     live: life.process === fold.live ? null : fold.live,
@@ -372,7 +394,7 @@ export const foldName = (
   entries: ReadonlyArray<unknown>,
   name: string,
   by: (writer: string) => boolean,
-): NameFold => entries.reduce<NameFold>((acc, raw) => foldEntry(acc, raw, name, by), fold);
+): NameFold => Arr.reduce(entries, fold, (acc, raw) => foldEntry(acc, raw, name, by));
 
 /**
  * Returns the live process a registered name points at, from its `processes/<name>` entries as read:

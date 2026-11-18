@@ -73,7 +73,20 @@
 //   - A plan with no "Product lines expected" column and no slices says so: it records no size.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, FileSystem, Predicate, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  Console,
+  Effect,
+  Exit,
+  FileSystem,
+  Option,
+  Predicate,
+  Schema,
+  Stream,
+} from "effect";
+import type { PlatformError } from "effect";
 import { Argument, Command } from "effect/cli";
 import { ChildProcess } from "effect/process";
 
@@ -85,9 +98,11 @@ export const ADVICE_LINES = 600;
 
 /** Where a changed line belongs: only `product` counts as product lines. */
 export const Kind = Schema.Literals(["product", "test", "docs", "lock", "generated", "other"]);
+
 export type Kind = typeof Kind.Type;
 
 const PRODUCT = ["next/", "apps/", "programs/", "packages/"];
+
 const LOCKS = new Set(["pnpm-lock.yaml", "package-lock.json", "yarn.lock"]);
 
 /** A file name that ends in `Test.ts` or `Test.tsx`, with a capital T and at least one character before it. */
@@ -95,18 +110,18 @@ const SUITE = /.Test\.tsx?$/;
 
 /** Whether `path` is one of `next/`'s shared suites, read as `SinkTest.suite(nodeSql)` (0029, 0062). */
 export const isSharedSuite = (path: string): boolean =>
-  path.startsWith("next/") && SUITE.test(path.split("/").at(-1) ?? "");
+  pipe(path, Str.startsWith("next/")) && SUITE.test(Str.split(path, "/").at(-1) ?? "");
 
 /** The kind of one changed file, from its path and whether the head marks it generated. */
 export const classify = (path: string, generated: boolean): Kind => {
-  const parts = path.split("/");
+  const parts = Str.split(path, "/");
   const name = parts.at(-1) ?? path;
 
   if (generated) {
     return "generated";
   }
 
-  if (LOCKS.has(name) || name.endsWith(".lock")) {
+  if (LOCKS.has(name) || pipe(name, Str.endsWith(".lock"))) {
     return "lock";
   }
 
@@ -124,7 +139,7 @@ export const classify = (path: string, generated: boolean): Kind => {
     return "docs";
   }
 
-  return PRODUCT.some((root) => path.startsWith(root)) ? "product" : "other";
+  return Arr.some(PRODUCT, (root) => pipe(path, Str.startsWith(root))) ? "product" : "other";
 };
 
 /** One file of `git diff --numstat -z`: its changed lines, or none when git sees it as binary. */
@@ -132,15 +147,16 @@ export const Row = Schema.TaggedUnion({
   text: { path: Schema.String, lines: Schema.Int },
   binary: { path: Schema.String },
 });
+
 export type Row = typeof Row.Type;
 
 /** `git diff --numstat -z -M`: `added\tdeleted\tpath\0`, or `added\tdeleted\t\0from\0to\0` after a rename. */
 export const parseNumstat = (out: string): ReadonlyArray<Row> => {
-  const fields = out.split("\0");
+  const fields = Str.split(out, "\0");
   const rows: Array<Row> = [];
 
   for (let at = 0; at < fields.length && fields[at] !== "";) {
-    const [added = "", deleted = "", path = ""] = (fields[at] ?? "").split("\t");
+    const [added = "", deleted = "", path = ""] = Str.split(fields[at] ?? "", "\t");
     const renamed = path === "";
     const to = renamed ? (fields[at + 2] ?? "") : path;
     at += renamed ? 3 : 1;
@@ -175,6 +191,7 @@ export const countLines = (rows: ReadonlyArray<Row>, generated: ReadonlySet<stri
 export const diffLine = (tally: Tally, advice: number): string => {
   const warning =
     tally.product > advice ? `, more than ${advice}: should it have been sliced? (advice only, 0099)` : "";
+
   const apart = `${tally.test} test, ${tally.docs} docs, ${tally.lock} lock, ${tally.generated} generated, ${tally.other} other lines, ${tally.binary} binary files`;
 
   return `size: ${tally.product} product lines${warning}; not counted: ${apart}`;
@@ -199,11 +216,16 @@ export interface PlanSize {
 const unfenced = (text: string): ReadonlyArray<string> => {
   let fence: string | null = null;
 
-  return text.split("\n").map((line) => {
+  return Arr.map(Str.split(text, "\n"), (line) => {
     const mark = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(line);
 
     if (fence !== null) {
-      if (mark?.[1] !== undefined && mark[1][0] === fence[0] && mark[1].length >= fence.length && !mark[2]?.trim()) {
+      if (
+        mark?.[1] !== undefined &&
+        mark[1][0] === fence[0] &&
+        mark[1].length >= fence.length &&
+        Str.trim(mark[2] ?? "") === ""
+      ) {
         fence = null;
       }
 
@@ -212,6 +234,7 @@ const unfenced = (text: string): ReadonlyArray<string> => {
 
     if (mark?.[1] !== undefined) {
       fence = mark[1];
+
       return "";
     }
 
@@ -227,25 +250,27 @@ const splitRow = (row: string): ReadonlyArray<string> => {
 
   for (let j = 0; j < row.length; j += 1) {
     if (row[j] === "|" && slashes % 2 === 0) {
-      cells.push(row.slice(start, j).trim());
+      cells.push(pipe(row, Str.slice(start, j), Str.trim));
       start = j + 1;
     }
 
     slashes = row[j] === "\\" ? slashes + 1 : 0;
   }
 
-  cells.push(row.slice(start).trim());
-  return cells.slice(row.startsWith("|") ? 1 : 0, start === row.length ? -1 : undefined);
+  cells.push(pipe(row, Str.slice(start), Str.trim));
+
+  return cells.slice(pipe(row, Str.startsWith("|")) ? 1 : 0, start === row.length ? -1 : undefined);
 };
 
-const plain = (text: string): string => text.replaceAll(/[*_`]/g, "").trim();
+const plain = (text: string): string => pipe(text, Str.replaceAll(/[*_`]/g, ""), Str.trim);
 
 const NUMBER = /^~?\s*(\d{1,3}(?:,\d{3})+|\d+)(?!\d)/;
 
 /** The whole number a cell starts with, or null when it starts with a word. */
 export const numberIn = (cell: string): number | null => {
   const found = NUMBER.exec(plain(cell));
-  return found?.[1] === undefined ? null : Number(found[1].replaceAll(",", ""));
+
+  return found?.[1] === undefined ? null : Number(pipe(found[1], Str.replaceAll(",", "")));
 };
 
 const LINES = /(\d{1,3}(?:,\d{3})+|\d+)\s+(?:product\s+)?lines?\b/i;
@@ -262,23 +287,26 @@ export const readPlan = (text: string): PlanSize => {
     const heading = /^##\s+(.+)$/.exec(line);
 
     if (heading?.[1] !== undefined) {
-      section = heading[1].trim().toLowerCase();
+      section = pipe(heading[1], Str.trim, Str.toLowerCase);
     }
 
-    const trimmed = line.trim();
+    const trimmed = Str.trim(line);
 
-    if (!trimmed.startsWith("|")) {
+    if (!pipe(trimmed, Str.startsWith("|"))) {
       inTable = false;
       column = null;
     } else if (!inTable) {
       inTable = true;
-      const at = splitRow(trimmed).findIndex((cell) => plain(cell).toLowerCase().startsWith("product lines"));
-      column = at < 0 ? null : at;
+      column = Option.getOrNull(
+        Arr.findFirstIndex(splitRow(trimmed), (cell) =>
+          pipe(plain(cell), Str.toLowerCase, Str.startsWith("product lines")),
+        ),
+      );
       table = column === null ? table : (table ?? 0);
     } else if (column !== null) {
       const cells = splitRow(trimmed);
 
-      if (!cells.every((cell) => /^:?-+:?$/.test(cell))) {
+      if (!Arr.every(cells, (cell) => /^:?-+:?$/.test(cell))) {
         table = (table ?? 0) + (numberIn(cells[column] ?? "") ?? 0);
       }
     }
@@ -297,10 +325,11 @@ export const readPlan = (text: string): PlanSize => {
 
   return {
     table,
-    slices: slices.map(({ order, text }) => {
+    slices: Arr.map(slices, ({ order, text }) => {
       const estimate = LINES.exec(text)?.[1];
-      const name = plain(text).split(/[:.]/)[0]?.trim() ?? "";
-      return { order, name, lines: estimate === undefined ? null : Number(estimate.replaceAll(",", "")) };
+      const name = Str.trim(Str.split(plain(text), /[:.]/)[0]);
+
+      return { order, name, lines: estimate === undefined ? null : Number(pipe(estimate, Str.replaceAll(",", ""))) };
     }),
   };
 };
@@ -310,12 +339,13 @@ export const Advice = Schema.TaggedUnion({
   unsized: { order: Schema.Int, name: Schema.String },
   unknown: {},
 });
+
 export type Advice = typeof Advice.Type;
 
 export const advise = (size: PlanSize): ReadonlyArray<Advice> =>
   size.table === null && size.slices.length === 0
     ? [Advice.cases.unknown.make({})]
-    : size.slices.flatMap((slice): ReadonlyArray<Advice> =>
+    : Arr.flatMap(size.slices, (slice): ReadonlyArray<Advice> =>
         slice.lines === null ? [Advice.cases.unsized.make({ order: slice.order, name: slice.name })] : [],
       );
 
@@ -332,7 +362,7 @@ export const adviceLine = (advice: Advice): string => {
 
 /** The line `plan` prints first, before any advice. */
 export const planLine = (size: PlanSize): string => {
-  const largest = Math.max(0, ...size.slices.map((slice) => slice.lines ?? 0));
+  const largest = Math.max(0, ...Arr.map(size.slices, (slice) => slice.lines ?? 0));
   const table = size.table === null ? "no product lines column" : `${size.table} product lines in the files table`;
   const slices = size.slices.length === 0 ? "no slices" : `${size.slices.length} slices, the largest ${largest}`;
 
@@ -340,34 +370,36 @@ export const planLine = (size: PlanSize): string => {
 };
 
 /** The run could not finish: git or the plan file failed it. */
-export class Failed extends Schema.TaggedError<Failed>()("Failed", {
+export class Failed extends Schema.TaggedError<Failed, { readonly brand: unique symbol }>()("Failed", {
   reason: Schema.Literals(["git", "file"]),
   message: Schema.String,
 }) {}
 
 // The edge: git through effect/process, the plan through FileSystem, the arguments through effect/cli.
 
-const text = (bytes: Stream.Stream<Uint8Array, unknown>) => bytes.pipe(Stream.decodeText(), Stream.mkString);
+const text = (bytes: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
+  bytes.pipe(Stream.decodeText(), Stream.mkString);
 
 /** One git command's output and exit code. Nothing it prints is run. */
 const git = Effect.fn("sizecap.git")(function* (args: ReadonlyArray<string>) {
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const proc = yield* ChildProcess.make("git", [...args], { stdin: "ignore" });
+
       const [out, , code] = yield* Effect.all([text(proc.stdout), text(proc.stderr), proc.exitCode], {
         concurrency: 3,
       });
 
       return { out, code: Number(code) };
     }),
-  ).pipe(Effect.mapError(() => Failed.make({ reason: "git", message: `git ${args.join(" ")} could not run` })));
+  ).pipe(Effect.mapError(() => Failed.make({ reason: "git", message: `git ${Arr.join(args, " ")} could not run` })));
 });
 
 const gitOk = Effect.fn("sizecap.gitOk")(function* (args: ReadonlyArray<string>) {
   const ran = yield* git(args);
 
   if (ran.code !== 0) {
-    return yield* Failed.make({ reason: "git", message: `git ${args.join(" ")} failed` });
+    return yield* Failed.make({ reason: "git", message: `git ${Arr.join(args, " ")} failed` });
   }
 
   return ran.out;
@@ -380,7 +412,7 @@ const generatedAt = Effect.fn("sizecap.generatedAt")(function* (rev: string, pat
   }
 
   const out = yield* gitOk(["check-attr", `--source=${rev}`, "-z", "linguist-generated", "--", ...paths]);
-  const fields = out.split("\0");
+  const fields = Str.split(out, "\0");
   const marked = new Set<string>();
 
   for (let at = 0; at + 2 < fields.length; at += 3) {
@@ -398,11 +430,12 @@ const diff = Command.make(
   "diff",
   { base: Argument.String("base"), head: Argument.String("head") },
   Effect.fn("sizecap.diff")(function* ({ base, head }) {
-    const from = (yield* gitOk(["merge-base", base, head])).trim();
+    const from = Str.trim(yield* gitOk(["merge-base", base, head]));
     const rows = parseNumstat(yield* gitOk(["diff", "--numstat", "-z", "-M", from, head]));
+
     const generated = yield* generatedAt(
       head,
-      rows.map((row) => row.path),
+      Arr.map(rows, (row) => row.path),
     );
 
     yield* Console.log(diffLine(countLines(rows, generated), ADVICE_LINES));
@@ -414,9 +447,11 @@ const plan = Command.make(
   { file: Argument.String("plan") },
   Effect.fn("sizecap.plan")(function* ({ file }) {
     const fs = yield* FileSystem.FileSystem;
+
     const text = yield* fs
       .readFileString(file)
       .pipe(Effect.mapError(() => Failed.make({ reason: "file", message: `cannot read ${file}` })));
+
     const size = readPlan(text);
 
     yield* Console.log(planLine(size));
@@ -433,9 +468,11 @@ if (import.meta.main) {
   NodeRuntime.runMain(
     Command.run({ version: "0.0.0" })(sizecap).pipe(
       Effect.as(0),
-      Effect.catchTag("Failed", (failed) => Console.error(`sizecap: ${failed.message}`).pipe(Effect.as(2))),
-      Effect.catchTag("ShowHelp", (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2)),
-      Effect.catch(() => Effect.succeed(2)),
+      Effect.catchTags({
+        Failed: (failed) => Console.error(`sizecap: ${failed.message}`).pipe(Effect.as(2)),
+        ShowHelp: (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2),
+      }),
+      Effect.orElseSucceed(() => 2),
       Effect.provide(NodeServices.layer),
     ),
     {

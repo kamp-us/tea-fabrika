@@ -3,22 +3,25 @@
 // `senderTest` is law p69: every write matches an expected table built from the inputs, never from
 // the parents the program returned. Both throw a diagnostic on a difference. Remove `syncTest`
 // when tea ships the matching helper.
-import { applyCell, type Cmd, type Machine, type Sub } from "@demlik/tea";
+import { applyCell, type Cmd, type Machine, type Sub, type Tagged } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
+import type * as Schema from "effect/Schema";
 
-type Options<S, M> = {
+/** `E` is the model as `encode` writes it, which goes through JSON text. */
+type Options<S, M, E> = {
   readonly msgs: ReadonlyArray<M>;
-  readonly encode: (model: S) => unknown;
-  readonly decode: (raw: unknown) => S;
-  readonly equals: (a: unknown, b: unknown) => boolean;
+  readonly encode: (model: S) => E;
+  readonly decode: (raw: Schema.Json) => S;
+  readonly equals: <A>(a: A, b: A) => boolean;
   readonly seed: number;
 };
 
 /** Checks every cut, the first and the last included. Never runs a Cmd. */
-export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, U extends Sub, Ctx>(
+export const syncTest = <S, M extends Tagged, C extends Cmd, U extends Sub, Ctx, E>(
   machine: Machine<S, M, C, U, Ctx>,
   ctx: Ctx,
-  { msgs, encode, decode, equals, seed }: Options<S, M>,
+  { msgs, encode, decode, equals, seed }: Options<S, M, E>,
 ): void => {
   const [first] = machine.init(null, ctx);
   const models: Array<S> = [first];
@@ -33,6 +36,7 @@ export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, 
   const fail = (cut: number, message: string): never => {
     throw new Error(`syncTest (seed ${seed}): after a save at cut ${cut}, ${message}`);
   };
+
   /** Boots from the model saved at `cut` and replays the rest against the unbroken run. */
   const resume = (cut: number, model: S, loaded: S): void => {
     let [state] = machine.init(loaded, ctx);
@@ -100,8 +104,9 @@ export const senderTest = ({ inputs, expected, writes, owner, seed }: SenderOpti
   const fail = (message: string): never => {
     throw new Error(`senderTest (seed ${seed}): ${message}`);
   };
-  const senders = new Map(inputs.map((input) => [input.parent, input.by]));
-  const ids = new Set(expected.map((e) => e.id));
+
+  const senders = new Map(Arr.map(inputs, (input) => [input.parent, input.by]));
+  const ids = new Set(Arr.map(expected, (e) => e.id));
 
   for (const write of writes) {
     if (!ids.has(write.id)) {
@@ -110,7 +115,7 @@ export const senderTest = ({ inputs, expected, writes, owner, seed }: SenderOpti
   }
 
   for (const want of expected) {
-    const found = writes.filter((write) => write.id === want.id);
+    const found = Arr.filter(writes, (write) => write.id === want.id);
 
     if (found.length !== 1) {
       fail(`write ${want.id} landed ${found.length} times`);

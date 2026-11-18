@@ -1,11 +1,14 @@
 import { Outcome } from "@demlik/tea";
 import { Ci, CodeHost, type Handler } from "@kampus/libfabrika";
-import { Cause, Effect, Schema } from "effect";
+import { Array as Arr, Cause, Effect, Schema } from "effect";
 import { Inputs } from "./Merger.ts";
 
-export class HandlerDefect extends Schema.TaggedError<HandlerDefect>()("HandlerDefect", {
-  cmd: Schema.Literals(["change", "update", "checks", "merge"]),
-}) {}
+export class HandlerDefect extends Schema.TaggedError<HandlerDefect, { readonly brand: unique symbol }>()(
+  "HandlerDefect",
+  {
+    cmd: Schema.Literals(["change", "update", "checks", "merge"]),
+  },
+) {}
 
 const Fault = Schema.TaggedUnion({ unavailable: {}, rate_limited: {}, refused: {} });
 
@@ -57,7 +60,7 @@ export const handlers: Readonly<Record<string, Handler<CodeHost.CodeHost | Ci.Ci
       Effect.tap((runs) =>
         Effect.annotateCurrentSpan(
           "fab.checks",
-          runs.map((r) => r.name),
+          Arr.map(runs, (r) => r.name),
         ),
       ),
       outcome("checks"),

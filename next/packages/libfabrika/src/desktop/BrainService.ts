@@ -10,7 +10,7 @@ import * as Schema from "effect/Schema";
  *
  * @category errors
  */
-export class Operation extends Schema.TaggedError<Operation>()("Operation", {
+export class Operation extends Schema.TaggedError<Operation, { readonly brand: unique symbol }>()("Operation", {
   action: Schema.Literals(["inspect", "install", "start", "stop", "cleanup"]),
   cause: Schema.Defect(),
 }) {}
@@ -20,7 +20,7 @@ export class Operation extends Schema.TaggedError<Operation>()("Operation", {
  *
  * @category errors
  */
-export class Timeout extends Schema.TaggedError<Timeout>()("Timeout", {
+export class Timeout extends Schema.TaggedError<Timeout, { readonly brand: unique symbol }>()("Timeout", {
   action: Schema.Literals(["up", "start", "stop"]),
   cause: Schema.Defect(),
 }) {}
@@ -30,16 +30,21 @@ export class Timeout extends Schema.TaggedError<Timeout>()("Timeout", {
  *
  * @category errors
  */
-export class Conflict extends Schema.TaggedError<Conflict>()("Conflict", { cause: Schema.Defect() }) {}
+export class Conflict extends Schema.TaggedError<Conflict, { readonly brand: unique symbol }>()("Conflict", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Lifecycle failure with a checked reason.
  *
  * @category errors
  */
-export class BrainServiceError extends Schema.TaggedError<BrainServiceError>()("BrainServiceError", {
-  reason: Schema.Union([Operation, Timeout, Conflict]),
-}) {}
+export class BrainServiceError extends Schema.TaggedError<BrainServiceError, { readonly brand: unique symbol }>()(
+  "BrainServiceError",
+  {
+    reason: Schema.Union([Operation, Timeout, Conflict]),
+  },
+) {}
 
 /**
  * Starts or reuses a brain, or awaits its confirmed shutdown.

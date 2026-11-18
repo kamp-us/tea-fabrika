@@ -3,6 +3,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Ledger, type LedgerError } from "../ledger/Ledger.ts";
@@ -12,17 +13,18 @@ import { ProcessEvent, ProcessTable } from "./Process.ts";
 import { BadRow, ProcessHistory, ProcessHistoryError, Storage, Unreachable } from "./ProcessHistory.ts";
 
 const Send = Schema.Struct({ m: Schema.Json });
+
 const Position = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }));
+
 const badRow = (cause: unknown) => new ProcessHistoryError({ reason: new BadRow({ cause }) });
 
 const translate = (cause: LedgerError): ProcessHistoryError =>
   new ProcessHistoryError({
-    reason:
-      cause.reason === "unreachable"
-        ? new Unreachable({ cause })
-        : cause.reason === "bad_row"
-          ? new BadRow({ cause })
-          : new Storage({ cause }),
+    reason: Match.value(cause.reason).pipe(
+      Match.when("unreachable", () => new Unreachable({ cause })),
+      Match.when("bad_row", () => new BadRow({ cause })),
+      Match.orElse(() => new Storage({ cause })),
+    ),
   });
 
 const validate = Effect.fnUntraced(function* (entry: Entry) {
@@ -49,10 +51,13 @@ export const layer: Layer.Layer<ProcessHistory, never, Ledger> = Layer.effect(
   ProcessHistory,
   Effect.gen(function* () {
     const ledger = yield* Ledger;
+
     const head = Effect.fnUntraced(function* (stream: string) {
       const waited = yield* ledger.wait(stream, 0).pipe(Effect.mapError(translate));
+
       return waited._tag === "ready" ? waited.rev : 0;
     });
+
     const read = Effect.fnUntraced(function* (stream: string, boundary: number) {
       if (boundary === 0) {
         return [];

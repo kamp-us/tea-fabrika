@@ -21,7 +21,9 @@ Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is
 The prototype copies the mockup rounds instead (the tile, the pipe marker finalists, the chat
 window, the outline round): there the screen is the point, and the words sit beside it.
 
-Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply.
+Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply. Read
+[the rules for changing the product](references/changing-the-product.md) too: the daily moment, the
+look step, shots at five layouts, and the other rules a screen follows, moved there from `AGENTS.md`.
 
 ## The steps
 
@@ -71,7 +73,7 @@ Read `AGENTS.md` first. Its rules on names, writing, version and the public repo
 
 ### 4. Test every guideline three ways
 
-- **Linear as the builder** ([`AGENTS.md`, "Changing the product"](../../../AGENTS.md#changing-the-product)),
+- **Linear as the builder** ([changing the product](references/changing-the-product.md)),
   asked of every principle and every rule, not only screens. Write it as a row, or "No Linear
   answer: <why>". Where we differ, say why. Ask it again for each design in step 5: which program
   owns each part of it?
@@ -99,10 +101,10 @@ request opens, even when no study is running (owner, 2026-11-08).
   pipe: a sidebar that opens a detail, a list another program owns, a mode that swaps the whole
   view. The yardstick is [program guidelines](../../../docs/direction/program-guidelines.md): G1,
   one job per program, and G6, programs meet on typed pipes.
-- Fewer boxes (`AGENTS.md`, "No extra containers"). A selected row is a full-row fill and stronger
+- Fewer boxes ([changing the product](references/changing-the-product.md), "No extra containers"). A selected row is a full-row fill and stronger
   text, never a colored bar on one side.
-- Shoot each design as `AGENTS.md`'s "Show it running" says, at the five layouts of its "Shoot more
-  than one layout". Put each shot beside today's app and beside the closest Linear screen, from
+- Shoot each design as [changing the product](references/changing-the-product.md)'s "Show it running"
+  says, at the five layouts of its "Shoot more than one layout". Put each shot beside today's app and beside the closest Linear screen, from
   Linear's public docs or changelog.
 - Show the owner the designs on the canvas (step 9), one slide each with its pipe line on top and
   its prototype beside it. **The owner picks one.** Each design that lost gets one or two plain

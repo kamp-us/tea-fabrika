@@ -22,11 +22,20 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
-import { TestClock } from "effect/testing";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
@@ -34,6 +43,11 @@ import type { Sql } from "../../Sql.ts";
 import { Archive, type BucketCalls } from "../Archive.ts";
 import { RecordManager } from "../Records.ts";
 import { SinkError, SpanSink } from "../Sink.ts";
+
+/** The failure a span made by `span` below ends with, when it is not `ok`. */
+class SpanFault extends Schema.TaggedError<SpanFault, { readonly brand: unique symbol }>()("SpanFault", {
+  message: Schema.String,
+}) {}
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -44,30 +58,26 @@ const folder = Effect.acquireRelease(
   (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
 );
 
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
-
 const fresh = folder.pipe(
-  Effect.flatMap((path) => openDb(join(path, "object.db"))),
+  Effect.flatMap((path) => TestDatabase.make(join(path, "object.db"))),
   Effect.map((db) => ({ db, sql: nodeSql(db) })),
 );
 
 const OBJECT = Effect.runSync(processId);
+
 const H = 3_600_000;
+
 const DAY = 24 * H;
+
 const KEEP = 336 * H;
+
 /** 2026-10-23 00:00 UTC, the plan's traced day. */
 const D = Date.UTC(2026, 9, 23);
+
 const hourStart = (at: number) => Math.floor(at / H) * H;
-const utcDay = (at: number) => new Date(at).toISOString().slice(0, 10);
+
+const utcDay = (at: number) => Str.slice(0, 10)(DateTime.formatIso(DateTime.makeUnsafe(at)));
+
 const fileKey = (day: string) => `measurements/${OBJECT}/${day}.jsonl`;
 
 const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
@@ -77,6 +87,7 @@ const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex"
 const bucket = (lie = false) => {
   const stored = new Map<string, Uint8Array>();
   const puts: Array<string> = [];
+
   const calls: BucketCalls = {
     put: (key, body, sha256) => {
       puts.push(key);
@@ -86,19 +97,22 @@ const bucket = (lie = false) => {
       }
 
       stored.set(key, body.slice());
+
       return Promise.resolve();
     },
     head: (key) => {
       const body = stored.get(key);
-      return Promise.resolve(body === undefined ? null : { sha256: lie ? "0".repeat(64) : hex(body) });
+
+      return Promise.resolve(body === undefined ? null : { sha256: lie ? Str.repeat(64)("0") : hex(body) });
     },
   };
+
   const lines = (key: string): Array<Record<string, unknown>> =>
-    new TextDecoder()
-      .decode(stored.get(key))
-      .split("\n")
-      .filter((line) => line.trim() !== "")
-      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    Arr.map(
+      Arr.filter(Str.split(new TextDecoder().decode(stored.get(key)), "\n"), (line) => Str.trim(line) !== ""),
+      (line) => JSON.parse(line) as Record<string, unknown>,
+    );
+
   return { calls, stored, puts, lines };
 };
 
@@ -106,6 +120,7 @@ const world = (sql: Sql, archive: Layer.Layer<Archive> = Archive.memory) =>
   Layer.mergeAll(SpanSink.layer(sql, { object: OBJECT }), RecordManager.memory(1024 * 1024 * 1024), archive);
 
 const flush = SpanSink.use((sink) => sink.flush);
+
 const summaries = SpanSink.use((sink) => sink.summaries(0, Number.MAX_SAFE_INTEGER));
 
 /** One span named `piece` that starts at `at`, lasts `ms` on the TestClock, and fails unless `ok`. */
@@ -114,7 +129,7 @@ const span = (piece: string, at: number, ms = 1, ok = true, attributes: Record<s
     yield* TestClock.setTime(at);
     yield* Effect.exit(
       TestClock.adjust(ms).pipe(
-        Effect.andThen(ok ? Effect.void : Effect.fail(new Error("p101"))),
+        Effect.andThen(ok ? Effect.void : Effect.fail(SpanFault.make({ message: "p101" }))),
         Effect.withSpan(piece, { attributes }),
       ),
     );
@@ -149,45 +164,47 @@ const rollup = (spans: ReadonlyArray<Raw & { readonly lag: number | null }>) => 
     groups.set(`${s.piece} ${s.hour}`, [...(groups.get(`${s.piece} ${s.hour}`) ?? []), s]);
   }
 
-  return [...groups.values()]
-    .map((group) => {
-      const ms = group.map((s) => s.ms).sort((x, y) => x - y);
-      const n = ms.length;
-      const lags = group.flatMap((s) => (s.lag === null ? [] : [s.lag]));
-      return {
-        _tag: "metric",
-        piece: group[0]?.piece,
-        hour: group[0]?.hour,
-        count: n,
-        errors: group.filter((s) => !s.ok).length,
-        // Nearest rank, in integers so no float rounding moves a rank.
-        ms: { p50: ms[Math.ceil(n / 2) - 1], p95: ms[Math.ceil((95 * n) / 100) - 1], max: ms[n - 1] },
-        lag: lags.length === 0 ? null : Math.max(...lags),
-      };
-    })
-    .sort(bySummary);
+  return Arr.map([...groups.values()], (group) => {
+    const ms = Arr.map(group, (s) => s.ms).sort((x, y) => x - y);
+    const n = ms.length;
+    const lags = Arr.flatMap(group, (s) => (s.lag === null ? [] : [s.lag]));
+
+    return {
+      _tag: "metric",
+      piece: group[0]?.piece,
+      hour: group[0]?.hour,
+      count: n,
+      errors: Arr.filter(group, (s) => !s.ok).length,
+      // Nearest rank, in integers so no float rounding moves a rank.
+      ms: { p50: ms[Math.ceil(n / 2) - 1], p95: ms[Math.ceil((95 * n) / 100) - 1], max: ms[n - 1] },
+      lag: lags.length === 0 ? null : Math.max(...lags),
+    };
+  }).sort(bySummary);
 };
 
 type Placed = { readonly piece: string | undefined; readonly hour: number | undefined };
 
 const bySummary = (x: Placed, y: Placed) =>
-  `${x.piece} ${String(x.hour).padStart(16, "0")}`.localeCompare(`${y.piece} ${String(y.hour).padStart(16, "0")}`);
+  Str.localeCompare(`${y.piece} ${Str.padStart(16, "0")(String(y.hour))}`)(
+    `${x.piece} ${Str.padStart(16, "0")(String(x.hour))}`,
+  );
 
 const PIECES = ["runner.step", "ledger.call", "gateway.envelope"] as const;
 
 /** The piece of the measurements row each archive try writes, good or failed. */
 const ARCHIVE = "sink.archive";
+
 const ARCHIVED_OK = { piece: ARCHIVE, ok: 1, error: null };
 
 /** The `sink.archive` measurements rows, oldest first. */
 const archiveRows = (db: DatabaseSync) =>
-  db
-    .prepare(`SELECT piece, ok, error FROM measurements WHERE piece = '${ARCHIVE}' ORDER BY rowid`)
-    .all()
-    .map((row) => ({ ...row }));
+  Arr.map(
+    db.prepare(`SELECT piece, ok, error FROM measurements WHERE piece = '${ARCHIVE}' ORDER BY rowid`).all(),
+    (row) => ({ ...row }),
+  );
 
 describe("p101, measurements in two levels", () => {
-  it("each summary's count, errors, p50, p95, max and lag match the raw rows", async () => {
+  it("each summary's count, errors, p50, p95, max and lag match the raw rows", () => {
     const one = fc.record({
       piece: fc.constantFrom(...PIECES),
       gap: fc.integer({ min: 0, max: 5 * H }),
@@ -197,9 +214,10 @@ describe("p101, measurements in two levels", () => {
       doorLag: fc.option(fc.integer({ min: 0, max: 500 }), { nil: undefined }),
       decoy: fc.boolean(),
     });
-    await fc.assert(
-      fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) => {
-        return Effect.runPromise(
+
+    return fc.assert(
+      fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) =>
+        Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* fresh;
             yield* Effect.gen(function* () {
@@ -220,14 +238,15 @@ describe("p101, measurements in two levels", () => {
                   // Keys that are not `.lag`, or `.lag` with no number: never the lag.
                   ...(s.decoy ? { "fab.ledger.flag": 9_999, "fab.lagging": 8_888, "fab.text.lag": "7777" } : {}),
                 };
+
                 yield* span(s.piece, start, s.ms, s.ok, attributes);
-                const lags = [s.lag, s.doorLag].filter((x) => x !== undefined);
+                const lags = Arr.filter([s.lag, s.doorLag], (x) => x !== undefined);
                 spans.push({
                   piece: s.piece,
                   hour: hourStart(start),
                   ms: s.ms,
                   ok: s.ok,
-                  lag: lags.length ? Math.max(...lags) : null,
+                  lag: lags.length > 0 ? Math.max(...lags) : null,
                 });
                 t = start + s.ms;
               }
@@ -235,10 +254,10 @@ describe("p101, measurements in two levels", () => {
               // A span in a later hour; its own hour stays open, so no summary has it.
               yield* span("closing", hourStart(t) + 2 * H + 1);
               expect([...(yield* summaries)].sort(bySummary)).toEqual(rollup(spans));
-            }).pipe(Effect.provide(world(sql)), Effect.provide(TestClock.layer()));
+            }).pipe(Effect.provide(world(sql).pipe(Layer.provideMerge(TestClock.layer()))));
           }).pipe(Effect.scoped),
-        );
-      }),
+        ),
+      ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 30 }) },
     );
   });
@@ -262,7 +281,7 @@ describe("p101, measurements in two levels", () => {
           // No span in hour 9: summaries rolls up hour 5, now closed, before it answers.
           yield* TestClock.setTime(at(9, 10));
           const answered = yield* summaries;
-          expect(answered.map((s) => [s.piece, s.hour, s.count]).sort()).toEqual(
+          expect(Arr.map(answered, (s) => [s.piece, s.hour, s.count]).sort()).toEqual(
             [
               ["ledger.call", at(5, 0), 1],
               ["runner.step", at(0, 0), 2],
@@ -271,12 +290,12 @@ describe("p101, measurements in two levels", () => {
           );
           yield* span("runner.step", at(9, 11), 1);
           expect(
-            (yield* summaries).some((s) => s.hour === at(9, 0)),
+            Arr.some(yield* summaries, (s) => s.hour === at(9, 0)),
             "the open hour is never rolled up",
           ).toBe(false);
           yield* span("runner.step", at(9, 40), 1);
           yield* span("runner.step", at(10, 1), 1);
-          const nine = (yield* summaries).find((s) => s.hour === at(9, 0));
+          const nine = Option.getOrUndefined(Arr.findFirst(yield* summaries, (s) => s.hour === at(9, 0)));
           expect(nine?.count, "hour 9 rolled up once it closed, with both its spans").toBe(2);
         }).pipe(Effect.provide(world(sql)));
       }),
@@ -286,14 +305,17 @@ describe("p101, measurements in two levels", () => {
     Effect.gen(function* () {
       const { db, sql: real } = yield* fresh;
       const read: Array<number> = [];
+
       const sql: Sql = {
         ...real,
         size: () => {
           const bytes = real.size();
           read.push(bytes);
+
           return bytes;
         },
       };
+
       yield* Effect.gen(function* () {
         for (let hour = 0; hour < 3; hour++) {
           for (let n = 0; n < 20; n++) {
@@ -309,7 +331,7 @@ describe("p101, measurements in two levels", () => {
         }
 
         expect(
-          [...perHour.values()].every((n) => n === 1),
+          Arr.every([...perHour.values()], (n) => n === 1),
           "never two in one hour",
         ).toBe(true);
         expect(perHour.get(D + H)).toBe(1);
@@ -335,15 +357,17 @@ describe("p101, a size row per hour across processes", () => {
       const { db, sql } = yield* fresh;
       // The first span ends exactly on the hour's first ms, the edge of the hour's range.
       const first = span("runner.step", D + H - 1, 1).pipe(Effect.provide(world(sql)));
+
       const later = Effect.gen(function* () {
         yield* span("runner.step", D + H + 50 * 60_000, 1);
         yield* span("runner.step", D + 2 * H + 30 * 60_000, 1);
       }).pipe(Effect.provide(world(sql)));
+
       yield* first;
       expect(count(db, "sizes")).toBe(1);
       yield* later;
       const rows = db.prepare(`SELECT at FROM sizes ORDER BY at`).all();
-      expect(rows.map((row) => Number(row["at"]))).toEqual([D + H, D + 2 * H + 30 * 60_000 + 1]);
+      expect(Arr.map(rows, (row) => Number(row["at"]))).toEqual([D + H, D + 2 * H + 30 * 60_000 + 1]);
     }),
   );
 });
@@ -382,10 +406,10 @@ describe("p101, no raw row is ever lost", () => {
           expect(lines).toHaveLength(8);
 
           for (const line of lines) {
-            expect(Object.keys(line).sort()).toEqual(["at", "error", "lag", "ms", "ok", "piece", "spanId"]);
+            expect(Rec.keys(line).sort()).toEqual(["at", "error", "lag", "ms", "ok", "piece", "spanId"]);
           }
 
-          expect(lines.map((line) => [line["piece"], line["ms"], line["ok"]]).sort()).toEqual(
+          expect(Arr.map(lines, (line) => [line["piece"], line["ms"], line["ok"]]).sort()).toEqual(
             [
               ["ledger.call", 1, true],
               ["ledger.call", 1, true],
@@ -411,7 +435,7 @@ describe("p101, no raw row is ever lost", () => {
           yield* span("runner.step", D + DAY + KEEP + 2 * H, 1);
           yield* flush;
           expect(
-            r2.puts.filter((k) => k === key),
+            Arr.filter(r2.puts, (k) => k === key),
             "a day is archived once",
           ).toHaveLength(1);
         }).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))));
@@ -465,14 +489,16 @@ describe("p101, no raw row is ever lost", () => {
     { generated: Schema.String },
     ({ generated }) =>
       Effect.forEach(
-        ["0".repeat(64), generated],
+        [Str.repeat(64)("0"), generated],
         (value) =>
           Effect.gen(function* () {
             const { db, sql } = yield* fresh;
             const r2 = bucket();
+
             const failing = {
               put: () => Effect.fail(new SinkError({ reason: "unreachable", held: 0 })),
             };
+
             const wrong = { put: () => Effect.succeed({ sha256: value }) };
             const liar = bucket(true);
             yield* Effect.gen(function* () {
@@ -494,7 +520,7 @@ describe("p101, no raw row is ever lost", () => {
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
-  it("local rows plus every archived file's rows are every measurements row ever written, at every point", async () => {
+  it("local rows plus every archived file's rows are every measurements row ever written, at every point", () => {
     const one = fc.record({
       piece: fc.constantFrom(...PIECES),
       gap: fc.integer({ min: 0, max: 30 * H }),
@@ -502,28 +528,41 @@ describe("p101, no raw row is ever lost", () => {
       ok: fc.boolean(),
       flush: fc.boolean(),
     });
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) => {
         const r2 = bucket();
+
         return Effect.runPromise(
           Effect.gen(function* () {
             const { db, sql } = yield* fresh;
             yield* Effect.gen(function* () {
               const written: Array<Raw> = [];
               let kept = { summary: 0, sizes: 0, archived: 0 };
+
               const check = (now: number) => {
                 // The sink's own `sink.archive` rows are measurements too, but no span wrote them.
                 const spanRows = (r: Raw) => r.piece !== ARCHIVE;
-                const local = db.prepare(`SELECT piece, at, ms, ok FROM measurements`).all().map(raw).filter(spanRows);
-                const archived = [...r2.stored.keys()].flatMap((k) => r2.lines(k).map(raw)).filter(spanRows);
-                expect([...local, ...archived].map(key).sort(), "none missing, none twice").toEqual(
-                  written.map(key).sort(),
+
+                const local = Arr.filter(
+                  Arr.map(db.prepare(`SELECT piece, at, ms, ok FROM measurements`).all(), raw),
+                  spanRows,
                 );
+
+                const archived = Arr.filter(
+                  Arr.flatMap([...r2.stored.keys()], (k) => Arr.map(r2.lines(k), raw)),
+                  spanRows,
+                );
+
+                expect(Arr.map([...local, ...archived], key).sort(), "none missing, none twice").toEqual(
+                  Arr.map(written, key).sort(),
+                );
+
                 const pairs = new Set(
-                  db
-                    .prepare(`SELECT piece, hour FROM summary`)
-                    .all()
-                    .map((row) => `${row["piece"]} ${row["hour"]}`),
+                  Arr.map(
+                    db.prepare(`SELECT piece, hour FROM summary`).all(),
+                    (row) => `${row["piece"]} ${row["hour"]}`,
+                  ),
                 );
 
                 for (const r of archived) {
@@ -531,22 +570,26 @@ describe("p101, no raw row is ever lost", () => {
                 }
 
                 for (const k of r2.stored.keys()) {
-                  const day = Date.parse(`${k.slice(-16, -6)}T00:00:00Z`);
+                  const day = Date.parse(`${Str.slice(-16, -6)(k)}T00:00:00Z`);
                   expect(now - day, `${k} left before it was 336 hours old`).toBeGreaterThanOrEqual(KEEP);
                 }
 
                 expect(new Set(r2.puts).size, "a day is archived once").toBe(r2.puts.length);
+
                 const counts = {
                   summary: count(db, "summary"),
                   sizes: count(db, "sizes"),
                   archived: count(db, "archived"),
                 };
+
                 expect(counts.summary).toBeGreaterThanOrEqual(kept.summary);
                 expect(counts.sizes).toBeGreaterThanOrEqual(kept.sizes);
                 expect(counts.archived).toBeGreaterThanOrEqual(kept.archived);
                 kept = counts;
               };
+
               let t = D;
+
               const end = (piece: string, start: number, ms: number, ok: boolean) =>
                 Effect.gen(function* () {
                   yield* span(piece, start, ms, ok);
@@ -576,8 +619,8 @@ describe("p101, no raw row is ever lost", () => {
               yield* flush;
               check(t);
               const local = db.prepare(`SELECT at FROM measurements WHERE piece != '${ARCHIVE}'`).all();
-              expect(local.every((row) => utcDay(Number(row["at"])) === utcDay(last))).toBe(true);
-            }).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))), Effect.provide(TestClock.layer()));
+              expect(Arr.every(local, (row) => utcDay(Number(row["at"])) === utcDay(last))).toBe(true);
+            }).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls)).pipe(Layer.provideMerge(TestClock.layer()))));
           }).pipe(Effect.scoped),
         );
       }),
@@ -597,23 +640,29 @@ describe("p101, an archive that fails is never silent", () => {
           Effect.gen(function* () {
             const { db, sql } = yield* fresh;
             const r2 = bucket();
+
             const failing = {
               put: () => Effect.fail(new SinkError({ reason: "unreachable", held: 0 })),
             };
-            const wrong = { put: () => Effect.succeed({ sha256: "0".repeat(64) }) };
+
+            const wrong = { put: () => Effect.succeed({ sha256: Str.repeat(64)("0") }) };
             const liar = bucket(true);
+
             const down: BucketCalls = {
               put: () => Promise.reject(value),
               head: () => Promise.reject(value),
             };
+
             // R2's `head` finds no file: nothing proves the copy is there, so it counts as a mismatch.
             const blind: BucketCalls = {
               put: () => Promise.resolve(),
               head: () => Promise.resolve(null),
             };
+
             const failed = (error: string) => ({ piece: ARCHIVE, ok: 0, error });
             yield* Effect.gen(function* () {
               yield* oldDay;
+
               const tries = [
                 [Layer.succeed(Archive, failing), "unreachable"],
                 [Archive.bucket(down), "unreachable"],
@@ -621,6 +670,7 @@ describe("p101, an archive that fails is never silent", () => {
                 [Archive.bucket(liar.calls), "mismatch"],
                 [Archive.bucket(blind), "mismatch"],
               ] as const;
+
               const seen: Array<Record<string, unknown>> = [];
 
               for (const [archive, error] of tries) {
@@ -637,11 +687,13 @@ describe("p101, an archive that fails is never silent", () => {
               expect(count(db, "measurements", inDay(D))).toBe(0);
               expect(r2.lines(fileKey("2026-10-23"))).toHaveLength(8);
               expect(archiveRows(db), "the good archive writes its own row").toEqual([...seen, ARCHIVED_OK]);
-              const joins = db
-                .prepare(`SELECT "spanId" FROM measurements WHERE piece = '${ARCHIVE}'`)
-                .all()
-                .map((row) => row["spanId"]);
-              expect(joins, "a flush outside any span joins none").toEqual(seen.map(() => null).concat(null));
+
+              const joins = Arr.map(
+                db.prepare(`SELECT "spanId" FROM measurements WHERE piece = '${ARCHIVE}'`).all(),
+                (row) => row["spanId"],
+              );
+
+              expect(joins, "a flush outside any span joins none").toEqual(Arr.map(seen, () => null).concat(null));
             }).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))));
           }),
         { concurrency: 1, discard: true },
@@ -662,16 +714,21 @@ describe("p101, a measurements row joins its span", () => {
         );
         yield* Effect.void.pipe(Effect.withSpan("gateway.envelope"));
         const unsent = db.prepare(`SELECT "spanId", row FROM unsent`).all();
+
         const byName = new Map(
-          unsent.map((u) => [String((JSON.parse(String(u["row"])) as { name: string }).name), String(u["spanId"])]),
+          Arr.map(unsent, (u) => [
+            String((JSON.parse(String(u["row"])) as { name: string }).name),
+            String(u["spanId"]),
+          ]),
         );
+
         const measurements = db.prepare(`SELECT piece, "spanId" FROM measurements ORDER BY piece`).all();
-        expect(measurements.map((h) => [h["piece"], h["spanId"]])).toEqual([
+        expect(Arr.map(measurements, (h) => [h["piece"], h["spanId"]])).toEqual([
           ["gateway.envelope", byName.get("gateway.envelope")],
           ["ledger.call", byName.get("ledger.call")],
           ["runner.step", byName.get("runner.step")],
         ]);
-        expect(new Set(measurements.map((h) => h["spanId"])).size).toBe(3);
+        expect(new Set(Arr.map(measurements, (h) => h["spanId"])).size).toBe(3);
       }).pipe(Effect.provide(world(sql)));
     }),
   );
@@ -686,6 +743,7 @@ describe("p101, archiving deletes only what it archived", () => {
       yield* Effect.gen(function* () {
         yield* oldDay;
         const real = yield* Archive;
+
         // A span of the same day ends while the put is on the wire, as a skewed clock would end it.
         const slow = {
           put: (key: string, body: Uint8Array) =>
@@ -694,9 +752,11 @@ describe("p101, archiving deletes only what it archived", () => {
               yield* TestClock.setTime(late);
               yield* Effect.void.pipe(Effect.withSpan("late.write"));
               yield* TestClock.setTime(now);
+
               return yield* real.put(key, body);
             }),
         };
+
         expect(count(db, "measurements", inDay(D))).toBe(8);
         yield* flush.pipe(Effect.provideService(Archive, slow));
         const archived = db.prepare(`SELECT rows FROM archived`).all();
@@ -704,12 +764,14 @@ describe("p101, archiving deletes only what it archived", () => {
         const lines = r2.lines(fileKey("2026-10-23"));
         expect(lines, "the file holds the rows that were read").toHaveLength(8);
         const local = db.prepare(`SELECT piece, at FROM measurements WHERE ${inDay(D)}`).all();
+
         const kept = [
-          ...local.map((row) => [row["piece"], row["at"]]),
-          ...lines.map((line) => [line["piece"], line["at"]]),
+          ...Arr.map(local, (row) => [row["piece"], row["at"]]),
+          ...Arr.map(lines, (line) => [line["piece"], line["at"]]),
         ];
+
         expect(
-          kept.filter(([piece]) => piece === "late.write"),
+          Arr.filter(kept, ([piece]) => piece === "late.write"),
           "the late row is local or in a file, never gone",
         ).toEqual([["late.write", late]]);
         expect(count(db, "measurements", inDay(D)), "only the late row is left of the day").toBe(1);
@@ -752,6 +814,7 @@ describe("p101, a sink.archive row's time, duration and span", () => {
             yield* Effect.gen(function* () {
               yield* oldDay;
               const real = yield* Archive;
+
               const slow = (ms: number, fail: boolean) => ({
                 put: (key: string, body: Uint8Array) =>
                   TestClock.adjust(ms).pipe(
@@ -760,14 +823,18 @@ describe("p101, a sink.archive row's time, duration and span", () => {
                     ),
                   ),
               });
+
               const now = () => Effect.clockWith((clock) => Effect.succeed(clock.currentTimeMillisUnsafe()));
+
               const rows = () =>
-                db
-                  .prepare(
-                    `SELECT ok, error, at, ms, "spanId" FROM measurements WHERE piece = '${ARCHIVE}' ORDER BY rowid`,
-                  )
-                  .all()
-                  .map((row) => ({ ...row }));
+                Arr.map(
+                  db
+                    .prepare(
+                      `SELECT ok, error, at, ms, "spanId" FROM measurements WHERE piece = '${ARCHIVE}' ORDER BY rowid`,
+                    )
+                    .all(),
+                  (row) => ({ ...row }),
+                );
 
               // A failed put that takes 40 ms, in a flush outside any span.
               const first = yield* now();
@@ -776,11 +843,14 @@ describe("p101, a sink.archive row's time, duration and span", () => {
 
               // A good put that takes 250 ms, in a flush the runner's step span wraps.
               const second = yield* now();
+
               const step = yield* Effect.gen(function* () {
                 const current = yield* Effect.currentSpan;
                 yield* flush.pipe(Effect.provideService(Archive, slow(250, false)));
+
                 return current.spanId;
               }).pipe(Effect.withSpan("runner.step"));
+
               expect(rows()[1]).toEqual({
                 ok: 1,
                 error: null,
@@ -806,6 +876,7 @@ describe("p101, late rows of an archived day leave as a further part", () => {
       yield* Effect.gen(function* () {
         yield* oldDay;
         const real = yield* Archive;
+
         const slow = {
           put: (key: string, body: Uint8Array) =>
             Effect.gen(function* () {
@@ -813,9 +884,11 @@ describe("p101, late rows of an archived day leave as a further part", () => {
               yield* TestClock.setTime(late);
               yield* Effect.void.pipe(Effect.withSpan("late.write"));
               yield* TestClock.setTime(now);
+
               return yield* real.put(key, body);
             }),
         };
+
         yield* flush.pipe(Effect.provideService(Archive, slow));
         expect(count(db, "measurements", inDay(D)), "the late row waits for the next flush").toBe(1);
         yield* flush;
@@ -823,9 +896,9 @@ describe("p101, late rows of an archived day leave as a further part", () => {
         const second = `measurements/${OBJECT}/2026-10-23.2.jsonl`;
         expect([...r2.stored.keys()].sort()).toEqual([first, second].sort());
         expect(r2.lines(first)).toHaveLength(8);
-        expect(r2.lines(second).map((line) => [line["piece"], line["at"]])).toEqual([["late.write", late]]);
+        expect(Arr.map(r2.lines(second), (line) => [line["piece"], line["at"]])).toEqual([["late.write", late]]);
         const archived = db.prepare(`SELECT day, key, sha256, rows FROM archived ORDER BY key`).all();
-        expect(archived.map((row) => ({ ...row }))).toEqual(
+        expect(Arr.map(archived, (row) => ({ ...row }))).toEqual(
           [
             {
               day: "2026-10-23",
@@ -839,12 +912,12 @@ describe("p101, late rows of an archived day leave as a further part", () => {
               sha256: hex(r2.stored.get(second) ?? new Uint8Array()),
               rows: 1,
             },
-          ].sort((x, y) => x.key.localeCompare(y.key)),
+          ].sort((x, y) => Str.localeCompare(y.key)(x.key)),
         );
         expect(count(db, "measurements", inDay(D)), "nothing of the day stays local").toBe(0);
         yield* flush;
         expect(
-          r2.puts.filter((k) => k === second),
+          Arr.filter(r2.puts, (k) => k === second),
           "part 2 is put once",
         ).toHaveLength(1);
       }).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))));
@@ -888,6 +961,7 @@ describe("p101, archiving checks the count before it deletes", () => {
       yield* Effect.gen(function* () {
         yield* oldDay;
         const real = yield* Archive;
+
         // Something else takes one of the read rows while the put is on the wire.
         const racing = {
           put: (key: string, body: Uint8Array) =>
@@ -895,6 +969,7 @@ describe("p101, archiving checks the count before it deletes", () => {
               db.exec(`DELETE FROM measurements WHERE rowid = (SELECT min(rowid) FROM measurements WHERE ${inDay(D)})`),
             ).pipe(Effect.andThen(real.put(key, body))),
         };
+
         expect(count(db, "measurements", inDay(D))).toBe(8);
         yield* flush.pipe(Effect.provideService(Archive, racing));
         expect(count(db, "archived"), "no archived row when the count changed").toBe(0);

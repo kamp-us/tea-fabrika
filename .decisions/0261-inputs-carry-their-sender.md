@@ -1,7 +1,7 @@
 ---
 id: 0261
 title: Every input carries its sender, stamped at the door, and every write carries the input that caused it in the data, so an agent signs its own writes and never the person's
-status: amended-in-part by [0140](0140-gateway-refuses-client-id-and-by.md)
+status: accepted
 date: 2026-11-04
 tags: [inputs, sender, envelope, cause, signing, delegation, gateway, both-versions]
 ---
@@ -50,12 +50,13 @@ the data, never in the call stack.**
 - A person's press in an agent's job is never run as the person's own one-shot job.
 - Record first: who sent each input is recorded in the log before any write uses it, never what a
   raw key said.
+- The gateway refuses whole a write whose client sent its own `id` or `by`, and counts it without
+  keeping it; a write with no cause is a `root` write, the process owner's own
+  ([0140](0140-gateway-refuses-client-id-and-by.md),
+  [0173](0173-child-root-and-requester.md)).
 
 ## Consequences
 
 - One owner per job, one signer per write.
 - A program that forgets the cause gets a wrong signer, not an error; the test-kit law in
   [0263](0263-a-writes-signer-is-its-causes-sender.md) holds that.
-- Not decided here: a client-sent `id` or `by` being refused and recorded, and a write with no cause
-  being `own`. Both are still proposed in the note.
-  Decided in [0140](0140-gateway-refuses-client-id-and-by.md): refused and counted, never kept, and `own`.

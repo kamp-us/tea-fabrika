@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e49-tests2",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T23:48:33-08:00",
+  "ended": "2026-11-16T00:00:16-08:00",
+  "parent": "2026-11-15-t1075-e49-build3",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E49 of the Effect-checker sweep (processEnv and processEnvInEffect, in next/ and our tooling) after pull request 1366 merged, sent back by build3 for the exam hits. Recount at c9dae74 with only the two checks at error through --lspconfig over .agents, .github/ci, next/apps/fabrika, next/packages/libfabrika and next/packages/vitest: 147 hits, 144 in exam paths and 3 in product files (local-instance.ts:36, :37 and Depth.ts:30, the build's). 19 exam hits fixed by hand with Effect's Config, each read through ConfigProvider.fromEnv({ preserveEmptyStrings: true }) made when the read runs, so unset and empty keep their old meaning: .github/ci/proof.ts 5 (MOST, LIMIT, RECORD, GITHUB_OUTPUT, GITHUB_STEP_SUMMARY in one Config.all, as legs.ts does; an empty MOST or LIMIT is still refused by whole), .github/ci/field-check.ts 4 (BASE, HEAD, EVENT, GITHUB_ACTIONS; importing effect turns on no-raw-try-catch, so its two try/catch blocks became Result.try with the same answers, as the owner's Q5 ruling says), hands-launcher.integration 1 and repository-open.integration 2 (PATH for a child, read when the child starts), instance-one-file.integration 3 (P16_LOCAL_BAR, P16_BRAIN, CI, read when the T10 scenario runs), port-home.laws.integration 4 (T502_PORT_HOME, read once at collection for the three skipIf and the one runIf). 125 exam hits left: changes.mjs 5, gate.mjs 4, required.mjs 1, scheduled.mjs 1 run before install in plain node (0175), so effect cannot be imported; mutbox.test.ts:1095 and p14.test-support.ts:40, 42, 44 are read at collection or load in files where fabrika/no-effect-run-outside-edge stays on, so a run needs an edge comment; sibling-objects.test-support.ts:54 is read at load in the Worker's config, also under that rule, and its T502_PORT is written by sibling.laws' set-and-restore; 109 are set-and-restore laws that write a variable for the code under test or its child process (chaos-revoke 8, one-file.visual 5, hands-launcher 3, input-recording 7, instance-records 5, memory-replace.laws 5, port-home.laws 3, record-wire.test-support 3, scheduled-job-alarm 7, sibling.laws 4, start-child.test-support 4, tasks-wire 3, tezgah-runner.laws 4, worker-mail 14, worker-monitor 5, worker-quotas 8, worker-supervision 10, worker-usage 7, BrainControlLaunchd.laws 4), which Config cannot do. No disable line, lock line or list entry added; no assertion loosened or removed; no product file touched.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Recount after the fixes: 128 hits (125 exam, 3 product), the 19 fixed gone and no new hit. Ran at the fixes on c9dae74, one file at a time with TYPESAFE_API_KEY unset and CLAUDE_CODE_REMOTE=true: field-check.test.ts 22, proof.test.ts 8, hands-launcher.integration 2, repository-open.integration 1, port-home.laws.integration 3 passed and 1 skipped (the writer, as before with T502_PORT_HOME unset), instance-one-file.integration 7, all passed. By hand: field-check.ts --local with GITHUB_ACTIONS=true prints the CI line and with it empty checks the rows; with a bad BASE and HEAD it prints the could-not-read line and exits 2. Not run: proof.ts's main (it runs vitest list over every project; no law reaches it), the .visual. files. pnpm format, pnpm lint with the heap setting (all 18 parts) and the list ratchet pass; tsc on .github/ci exits 0; next/apps/fabrika's typecheck fails only on dev.ts(86,4) TS377000, expected until the integrator's lock. The checker sees only files its five tsconfigs include: .agents files outside .agents/tsconfig.json (skillscheck.test.ts, loosening.test.ts, the leakgrep tests, gcloop.ts, botpush.mjs and others) read process.env too and are not counted here.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "field-check.ts --local skips on a CI runner (the field job checks the rows there)",
+      "plant": "field-check.ts reads GITHUB_ACTIONS_PLANT in place of GITHUB_ACTIONS, run with GITHUB_ACTIONS=true --local: it checked 5 rows in place of printing the CI line",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

@@ -25,7 +25,7 @@ and nothing is dropped silently.**
 - This is "let it crash", as in OTP.
 - It is the second net, for a bug. The daily path never meets it, because a record rolls to a new
   part with room left before its disk fills ([0204](0204-process-record-rolls-in-parts.md)).
-- So OpenTelemetry's rule that a span processor should not block still holds: a span write never
+- So OpenTelemetry's rule that a span processor should not block is met: a span write never
   meets a full disk on the daily path.
 
 ## Consequences

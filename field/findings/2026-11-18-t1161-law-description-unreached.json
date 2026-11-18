@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-t1161-law-description-unreached",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "opus",
+  "rule": "missing_test",
+  "location": {
+    "path": ".github/ci/workflow-lint/scheduled.ts",
+    "line": 403
+  },
+  "says": "In today's CI, SC21 requires the law input to have a description, but no plant in scheduled.test.ts takes it away, so the clause has no law.",
+  "proof": "In a scratch copy, `described(law)` in dispatchInputs was replaced with `true`. `CI=1 nice -n 19 pnpm exec vitest run --maxWorkers=1 .github/ci/workflow-lint/scheduled.test.ts` printed `Tests 302 passed (302)`. The plants list has `SC21: the scope has no description` (scheduled.test.ts:1217) and no law counterpart.",
+  "cost": "The check can be dropped without a red test.",
+  "head": "a2217352223acf0e6754240e1dd2a07dfbdd0e3f",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623"
+}

@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1603"
+  ],
+  "id": "2026-11-18-lead-brief-contradicted-its-own-fence",
+  "stage": "driver",
+  "kind": "friction",
+  "person": false,
+  "what": "The lead's tests brief for PR 1603 kept .github/workflows/check.yaml off limits. When the kalfa/* workspace line turned workflow-lint red on check.yaml's tsc cache list, the lead sent the same agent a message to add that cache line. The session's permission check refused the edit, since the brief had fenced the file, and the agent did not route around it. The lead withdrew the ask and instead put the workspace line where PR 1583 puts it, so check.yaml keeps one writer (1583) and workflow-lint stays red here until 1583 lands.",
+  "cause": "The lead did not check, before fencing check.yaml, that the workflow guard ties check.yaml's tsc cache list to every pnpm-workspace.yaml glob (.github/ci/workflow-lint/caches.ts:168-172).",
+  "primitive": "Gather",
+  "fix": "A plan that adds a workspace glob lists check.yaml's tsc cache path in its files table, read from the workflow-lint cache rule, so the brief's fence and the guard agree before the tests step starts.",
+  "test": "The next plan that adds a workspace glob names check.yaml in its files table, and no tests step is refused for it."
+}

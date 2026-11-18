@@ -2,7 +2,13 @@
 // in the schema, small enough that no brain line can reach the ledger's per-line limit. The cap is
 // the lead's lean, 256 characters, counted as `string.length`, as Schema's max length counts.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Exit, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import {
   A,
@@ -26,13 +32,19 @@ import { Dead, Down, Owner, ProcessEvent, Recipient, Start } from "./Process.ts"
 import { ProcessManager } from "./ProcessManager.ts";
 
 const CAP = 256;
-const at = (length: number, unit = "a") => unit.repeat(length);
+
+const at = (length: number, unit = "a") => Str.repeat(length)(unit);
+
 const over = at(CAP + 1);
+
 const acceptedText = Down.fields.ref;
+
 const overText = Schema.String.check(Schema.isMinLength(CAP + 1), Schema.isMaxLength(CAP * 4));
+
 // Size applies to the complete string. 1024 retains every old accepted and
 // refused length, including 258..1024, rather than only the 257 minimum.
 const options = { arbitrary: { seed: 119120, runs: 20, size: CAP * 4 } };
+
 const schemaOptions = { arbitrary: { seed: 119120, runs: 100, size: CAP * 4 } };
 
 // The installed Effect runner has no examples option; keep old inputs in the callback.
@@ -67,10 +79,12 @@ const fresh = (store: Storage) => receive(W).pipe(Effect.provide(manager(store, 
 const downs = (letters: ReadonlyArray<{ readonly m: unknown }>) =>
   letters.flatMap((letter) => {
     const down = Schema.decodeUnknownOption(Down)(letter.m);
+
     return down._tag === "Some" ? [down.value] : [];
   });
 
 /** A request as a client sends it: raw, never passed through a schema's `make`. */
+// SAFETY: the law builds raw requests on purpose, with fields past the schema's caps, as a client may send them.
 const raw = (request: object) => request as Start;
 
 /** The call fails with a ProcessError and the ledger holds exactly what it held before. */
@@ -81,7 +95,7 @@ const refusedWritingNothing = <A, E>(store: Storage, call: Effect.Effect<A, E>) 
     expect(Exit.isFailure(answer)).toBe(true);
 
     if (Exit.isFailure(answer)) {
-      expect(JSON.stringify(answer.cause)).toContain('"_tag":"ProcessError"');
+      expect(Formatter.formatJson(answer.cause)).toContain('"_tag":"ProcessError"');
     }
 
     expect(store.rows()).toEqual(before);
@@ -89,10 +103,11 @@ const refusedWritingNothing = <A, E>(store: Storage, call: Effect.Effect<A, E>) 
 
 describe("P33 rule 1, the text caps live in the schema", () => {
   const code = { program: "counter", hash: "build-a" };
+
   const cases: ReadonlyArray<{
     readonly name: string;
     readonly schema: Schema.Top;
-    readonly value: (text: string) => unknown;
+    readonly value: (text: string) => object;
   }> = [
     {
       name: "Start first id",
@@ -198,6 +213,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
     build: "build-a",
     errors,
   });
+
   const classes = (count: number) => Array.from({ length: count }, () => "TypeError");
   it.prop(
     "a dead letter's errors: 32 entries decode, 33 do not",
@@ -242,7 +258,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
       fc.assert(
         fc.property(fc.stringMatching(/^[a-z0-9]{256}$/), fc.integer({ min: 1, max: CAP }), (text, extra) => {
           expect(Schema.is(Dead)({ ...dead(classes(1)), [key]: text })).toBe(true);
-          expect(Schema.is(Dead)({ ...dead(classes(1)), [key]: text + "a".repeat(extra) })).toBe(false);
+          expect(Schema.is(Dead)({ ...dead(classes(1)), [key]: text + Str.repeat(extra)("a") })).toBe(false);
         }),
         { seed: 119120 },
       );
@@ -256,6 +272,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     [overText],
     examples([[over]], (over: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* seed(store);
         yield* refusedWritingNothing(store, monitor(store, over));
@@ -268,6 +285,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     [acceptedText],
     examples([[at(CAP)]], (ref: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* seed(store);
         yield* monitor(store, ref);
@@ -282,12 +300,16 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     [overText],
     examples([[over]], (over: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* seed(store);
+
         const client = {
           owner: Owner.cases.brain.make({}),
+          // SAFETY: the client name `over` is past the cap on purpose, so this recipient skips `make` to reach the refusal.
           recipient: { _tag: "client", client: over, session: X } as typeof Recipient.Type,
         };
+
         yield* refusedWritingNothing(
           store,
           ProcessManager.use((p) => p.monitor("watch:1", A, from())).pipe(Effect.provide(manager(store, client))),
@@ -301,6 +323,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     [overText],
     examples([[over]], (over: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* seed(store);
         yield* monitor(store, "watch:1");
@@ -315,6 +338,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     [overText],
     examples([[over]], (over: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* seed(store);
         yield* exit(store);
@@ -328,6 +352,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     }),
     options,
   );
+
   const starts: ReadonlyArray<readonly [string, Start]> = [
     ["id", raw({ _tag: "first", id: over, name: "counter:2", code: CODE })],
     ["name", raw({ _tag: "first", id: "start:long", name: over, code: CODE })],
@@ -345,7 +370,9 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
             ? { ...original, code: { ...original.code, [field]: over } }
             : { ...original, [field]: over },
         );
+
         const store = storage();
+
         return Effect.gen(function* () {
           yield* seed(store);
           yield* refusedWritingNothing(
@@ -365,9 +392,11 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     [overText],
     examples([[over]], (over: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* seed(store);
         yield* exit(store);
+
         const request = raw({
           _tag: "again",
           id: "restart:long",
@@ -376,6 +405,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
           after: A,
           reason: over,
         });
+
         yield* refusedWritingNothing(
           store,
           ProcessManager.use((p) => p.start(request, from())).pipe(
@@ -394,8 +424,10 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
     Effect.gen(function* () {
       const store = storage();
       yield* seed(store);
+
       return Exit.isSuccess(yield* Effect.exit(monitor(store, ref)));
     });
+
   const delivered = (ref: string, reason: ExitReason) =>
     Effect.gen(function* () {
       const store = storage();
@@ -404,6 +436,7 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
       yield* exit(store, reason);
       expect(downs(yield* fresh(store))).toEqual([Down.make({ ref, process: A, reason, to: toW })]);
     });
+
   it.effect.prop(
     "the longest ref a monitor accepts still lets the target's exit land",
     [Schema.NonEmptyString.check(Schema.isMaxLength(CAP)), ProcessEvent.cases.exited.fields.reason],
@@ -435,29 +468,34 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
       }),
     options,
   );
+
   // Effect has no grapheme or grapheme-composite generator. Only those two inputs use fast-check.
   const generatorSeed = Arbitrary.schema(
     Schema.Int.check(Schema.isBetween({ minimum: -2_147_483_648, maximum: 2_147_483_647 })),
   );
+
   const graphemes = (unit: "grapheme" | "grapheme-composite", minLength: number, maxLength: number) =>
     generatorSeed.pipe(
       Arbitrary.map((seed) => fc.sample(fc.string({ unit, minLength, maxLength }), { seed, numRuns: 1 })[0]!),
     );
+
   const repeated = Arbitrary.schema(
     Schema.Tuple([
       Schema.Literals(["a", '"', "\\", "é", "\u{1f600}"]),
       Schema.Int.check(Schema.isBetween({ minimum: 200, maximum: 2_100_000 })),
     ]),
-  ).pipe(Arbitrary.map(([unit, length]) => unit.repeat(Math.ceil(length / unit.length))));
+  ).pipe(Arbitrary.map(([unit, length]) => Str.repeat(Math.ceil(length / unit.length))(unit)));
+
   const unicodeRef = Arbitrary.schema(Schema.Literals([0, 1, 2])).pipe(
     Arbitrary.flatMap((kind) =>
-      kind === 0
-        ? graphemes("grapheme", 1, 40)
-        : kind === 1
-          ? graphemes("grapheme-composite", CAP - 4, CAP + 4)
-          : repeated,
+      Match.value(kind).pipe(
+        Match.when(0, () => graphemes("grapheme", 1, 40)),
+        Match.when(1, () => graphemes("grapheme-composite", CAP - 4, CAP + 4)),
+        Match.orElse(() => repeated),
+      ),
     ),
   );
+
   it.effect.prop(
     "for any ref: refused over the cap with no write, else the exit lands and DOWN arrives",
     [unicodeRef],
@@ -468,6 +506,7 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
 
         if (text.length > CAP) {
           yield* refusedWritingNothing(store, monitor(store, text));
+
           return;
         }
 

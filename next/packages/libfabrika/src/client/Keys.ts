@@ -12,8 +12,12 @@
  * row writes `mod` for the backend's command key (Cmd on a Mac, Ctrl elsewhere) and `<prefix>` for
  * a key pressed after the prefix.
  */
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";
@@ -86,13 +90,15 @@ export type Routed = typeof Routed.Type;
 
 /** The prefix key, from the glossary's `prefix` row; a person's file may change it later (K2). */
 const PREFIX = "ctrl+b";
+
 const AFTER = "<prefix>";
 
 /** What a browser keeps for itself (0278: a tab cannot have Mod-W, Mod-T, Mod-N or Mod-Q). */
 const BROWSER = ["w", "t", "n", "q"] as const;
 
 /** The press a row's key means on a backend: `mod` becomes the backend's command key. */
-const resolved = (key: string, mod: Backend["mod"]): string => key.replace(/(^|\+)mod\+/, `$1${mod}+`);
+const resolved = (key: string, mod: Backend["mod"]): string =>
+  Function.pipe(key, Str.replace(/(^|\+)mod\+/, `$1${mod}+`));
 
 /**
  * Returns the backend a window runs on. A browser tab keeps Mod-W, Mod-T, Mod-N and Mod-Q, and on
@@ -104,15 +110,17 @@ const resolved = (key: string, mod: Backend["mod"]): string => key.replace(/(^|\
 export const backend = (platform: Backend["platform"], os: Backend["os"]): Backend => {
   const mod = os === "macos" || os === "ios" ? "meta" : "ctrl";
   const mods = os === "unknown" ? (["ctrl", "meta"] as const) : [mod];
+
   const cannot =
     platform === "browser"
       ? [
-          ...mods.flatMap((m) => BROWSER.map((k) => `${m}+${k}`)),
+          ...Arr.flatMap(mods, (m) => Arr.map(BROWSER, (k) => `${m}+${k}`)),
           ...(os === "windows" || os === "linux" || os === "unknown" ? ["f6"] : []),
         ]
       : platform === "electron" && os === "macos"
         ? ["meta+q", "meta+h"]
         : [];
+
   return { platform, os, mod, cannot };
 };
 
@@ -123,7 +131,7 @@ export const backend = (platform: Backend["platform"], os: Backend["os"]): Backe
  * @category constructors
  */
 export const ship = <B extends Binding>(defaults: ReadonlyArray<B>, on: Backend): ReadonlyArray<B> =>
-  defaults.map((row) => ({ ...row, keys: row.keys.filter((k) => !on.cannot.includes(resolved(k, on.mod))) }));
+  Arr.map(defaults, (row) => ({ ...row, keys: Arr.filter(row.keys, (k) => !on.cannot.includes(resolved(k, on.mod))) }));
 
 /**
  * Loads rows into a window's table, or fails on the first row bound to a key its backend can never
@@ -143,8 +151,8 @@ export const load = (bindings: ReadonlyArray<Binding>, on: Backend): Result.Resu
         return Result.fail(LoadError.cases.cannot.make({ does: row.does, key }));
       }
 
-      if (press.startsWith(AFTER)) {
-        after.set(press.slice(AFTER.length), row.does);
+      if (Function.pipe(press, Str.startsWith(AFTER))) {
+        after.set(Function.pipe(press, Str.slice(AFTER.length)), row.does);
       } else {
         alone.set(press, row.does);
       }
@@ -178,6 +186,7 @@ export const route = (table: Table, prefix: Prefix, _mode: null, press: { readon
 
   if (prefix._tag === "armed") {
     const does = table.after.get(key);
+
     return key === table.prefix
       ? R.tile.make({ key })
       : does === undefined
@@ -186,6 +195,7 @@ export const route = (table: Table, prefix: Prefix, _mode: null, press: { readon
   }
 
   const does = table.alone.get(key);
+
   return key === table.prefix
     ? R.prefix.make({})
     : does === undefined
@@ -213,11 +223,12 @@ export const spell = (e: {
     return null;
   }
 
-  const named = NAMED[e.key] ?? (e.key.length === 1 ? null : e.key.toLowerCase());
-  const mods = [e.ctrlKey ? "ctrl" : "", e.altKey ? "alt" : "", e.metaKey ? "meta" : ""].filter((m) => m !== "");
+  const named = NAMED[e.key] ?? (e.key.length === 1 ? null : Str.toLowerCase(e.key));
+  const mods = Arr.filter([e.ctrlKey ? "ctrl" : "", e.altKey ? "alt" : "", e.metaKey ? "meta" : ""], (m) => m !== "");
   // A printable key carries Shift in its own character; with Ctrl, Alt or Meta it is the letter
   // itself, lower case, and Shift is said.
   const shift = e.shiftKey && (named !== null || mods.length > 0) ? ["shift"] : [];
-  const base = named ?? (mods.length > 0 ? e.key.toLowerCase() : e.key);
-  return [...mods, ...shift, base].join("+");
+  const base = named ?? (mods.length > 0 ? Str.toLowerCase(e.key) : e.key);
+
+  return Arr.join([...mods, ...shift, base], "+");
 };

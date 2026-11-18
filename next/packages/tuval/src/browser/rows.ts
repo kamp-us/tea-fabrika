@@ -26,6 +26,7 @@ export const browserRows = Layer.succeed(ClientRows, {
           }),
           (db) => Effect.sync(() => db.close()),
         );
+
         yield* Effect.callback<void, ClientRowsError>((resume) => {
           try {
             const tx = db.transaction("rows", "readwrite");
@@ -33,6 +34,7 @@ export const browserRows = Layer.succeed(ClientRows, {
             tx.oncomplete = () => resume(Effect.void);
             tx.onerror = tx.onabort = () =>
               resume(Effect.fail(ClientRowsError.make({ op: "write", error: errorClass(tx.error) })));
+
             return Effect.sync(() => {
               try {
                 tx.abort();

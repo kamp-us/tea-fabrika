@@ -9,11 +9,11 @@ export const Model = Schema.TaggedUnion({
   released: { process: Schema.String },
 });
 
-export const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("arm"), process: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("arrive"), process: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("release") }),
-]);
+export const Msg = Schema.TaggedUnion({
+  arm: { process: Schema.String },
+  arrive: { process: Schema.String },
+  release: {},
+});
 
 export const controller = Machine.make({
   model: Model,

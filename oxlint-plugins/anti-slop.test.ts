@@ -15,17 +15,20 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { Predicate, Schema } from "effect";
+import { it as effectIt } from "@effect/vitest";
+import { Array as Arr, Effect, pipe, Option, Order, Predicate, Record as Rec, Schema } from "effect";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { folders, lock, strays, TAKEN, WHOLE } from "./anti-slop.ts";
+import { countFile, folders, lock, strays, TAKEN, WHOLE } from "./anti-slop.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
 
 /** A rule's setting as `oxlint --print-config` prints it: a level, or a level and the list of its options. */
 const Setting = Schema.Union([Schema.String, Schema.Tuple([Schema.String, Schema.Array(Schema.Unknown)])]);
+
 const Rules = Schema.Record(Schema.String, Setting);
 
 /** The part of oxlint's own reading of the config these laws read: its blocks. */
@@ -43,12 +46,16 @@ const rootRules = (): ReadonlyArray<string> => {
   const top = statement?.type === "ExpressionStatement" ? statement.expression : undefined;
   const config = top?.type === "ParenthesizedExpression" ? top.expression : top;
   const properties = config?.type === "ObjectExpression" ? config.properties : [];
-  const rules = properties.find(
+
+  const rules = Arr.findFirst(
+    properties,
     (property) => property.type === "Property" && property.key.type === "Literal" && property.key.value === "rules",
   );
-  const value = rules?.type === "Property" ? rules.value : undefined;
+
+  const value = Option.isSome(rules) && rules.value.type === "Property" ? rules.value.value : undefined;
   const named = value?.type === "ObjectExpression" ? value.properties : [];
-  return named.flatMap((property) =>
+
+  return Arr.flatMap(named, (property) =>
     property.type === "Property" && property.key.type === "Literal" ? [String(property.key.value)] : [],
   );
 };
@@ -60,7 +67,7 @@ const Report = Schema.fromJsonString(
       Schema.Struct({
         code: Schema.String,
         filename: Schema.String,
-        labels: Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Number }) })),
+        labels: Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Finite }) })),
       }),
     ),
   }),
@@ -76,12 +83,14 @@ const printout = spawnSync(OXLINT, [`--config=${join(ROOT, ".oxlintrc.json")}`, 
 const printed = Schema.decodeUnknownSync(Printed)(printout);
 
 const levelOf = (setting: typeof Setting.Type): string => (Predicate.isString(setting) ? setting : setting[0]);
+
 const ofThePlugins = (rule: string): boolean => rule.startsWith("anti-slop/") || rule.startsWith("anti-slop-effect/");
 
 /** The folders a rule's blocks list, as the config holds them: each override that names it at error. */
 const listed = (rule: string): ReadonlyArray<string> =>
-  printed.overrides.flatMap((block) => {
+  Arr.flatMap(printed.overrides, (block) => {
     const setting = block.rules[rule];
+
     return setting !== undefined && levelOf(setting) === "deny" ? block.files : [];
   });
 
@@ -164,7 +173,10 @@ const PLANTS: Readonly<Record<string, ReadonlyArray<string>>> = {
 
 /** The 1-based line of the plant that ends in `mark`. */
 const lineOf = (lines: ReadonlyArray<string>, mark: string): number =>
-  lines.findIndex((line) => line.endsWith(mark)) + 1;
+  Option.match(
+    Arr.findFirstIndex(lines, (line) => line.endsWith(mark)),
+    { onNone: () => 0, onSome: (index) => index + 1 },
+  );
 
 /** A folder's glob of the whole tree under it, as plants are written into, never a whole-scope glob. */
 const tree = (glob: string): boolean => glob.endsWith("/**");
@@ -173,11 +185,14 @@ const tree = (glob: string): boolean => glob.endsWith("/**");
  * A folder of the scope that a rule's list does not cover, where its plant must stay silent: this
  * test's own folder while it is not listed, as plants.test.ts plants beside itself, else the first.
  */
-const unlisted = (rule: string): string | undefined => {
+const unlisted = (rule: string): Option.Option<string> => {
   const on = listed(rule);
+
   const covered = (folder: string) =>
-    on.includes(folder) || on.some((glob) => WHOLE.includes(glob) && folder.startsWith(glob.slice(0, -"**".length)));
-  return ["oxlint-plugins/**", ...folders(ROOT)].find((folder) => tree(folder) && !covered(folder));
+    on.includes(folder) ||
+    Arr.some(on, (glob) => glob.endsWith("/**") && folder.startsWith(glob.slice(0, -"**".length)));
+
+  return Arr.findFirst(["oxlint-plugins/**", ...folders(ROOT)], (folder) => tree(folder) && !covered(folder));
 };
 
 /** Where a rule's plant goes: a folder of the scope, as its glob. */
@@ -187,18 +202,14 @@ interface Site {
 }
 
 /** Each taken rule in the first folder its block lists. A rule whose list is still empty gets one with its first sweep. */
-const ON: ReadonlyArray<Site> = TAKEN.flatMap((rule) =>
-  listed(rule)
-    .filter(tree)
-    .slice(0, 1)
-    .map((glob) => ({ rule, glob })),
+const ON: ReadonlyArray<Site> = Arr.flatMap(TAKEN, (rule) =>
+  Arr.map(Arr.filter(listed(rule), tree).slice(0, 1), (glob) => ({ rule, glob })),
 );
 
 /** Each taken rule in the first folder its block does not list. A rule on in the whole scope has none left. */
-const OFF: ReadonlyArray<Site> = TAKEN.flatMap((rule) => {
-  const glob = unlisted(rule);
-  return glob === undefined ? [] : [{ rule, glob }];
-});
+const OFF: ReadonlyArray<Site> = Arr.flatMap(TAKEN, (rule) =>
+  Option.match(unlisted(rule), { onNone: () => [], onSome: (glob) => [{ rule, glob }] }),
+);
 
 const made: Array<string> = [];
 
@@ -213,7 +224,8 @@ const plant = ({ rule, glob }: Site): string => {
   const folder = mkdtempSync(join(ROOT, glob.slice(0, -"/**".length), "anti-slop-plant-"));
   made.push(folder);
   const file = join(folder, `${rule.replace("/", "-")}.ts`);
-  writeFileSync(file, `${(PLANTS[rule] ?? []).join("\n")}\n`);
+  writeFileSync(file, `${Arr.join(PLANTS[rule] ?? [], "\n")}\n`);
+
   return relative(ROOT, file);
 };
 
@@ -221,27 +233,31 @@ let fires: ReadonlyMap<Site, ReadonlyArray<number>> = new Map();
 
 beforeAll(() => {
   const sites = [...ON, ...OFF];
-  const files = sites.map(plant);
+  const files = Arr.map(sites, plant);
+
   // One oxlint run for every plant, through the repository's own config.
   const ran = spawnSync(OXLINT, ["--disable-nested-config", "--format=json", ...files], {
     cwd: ROOT,
     encoding: "utf8",
     maxBuffer: 2 ** 28,
   });
+
   const { diagnostics } = Schema.decodeUnknownSync(Report)(ran.stdout);
   fires = new Map(
-    sites.map((site, i) => [
+    Arr.map(sites, (site, i) => [
       site,
-      diagnostics
-        .filter(({ code, filename }) => filename === files[i] && code === codeOf(site.rule))
-        .flatMap(({ labels }) => labels.slice(0, 1).map(({ span }) => span.line)),
+      pipe(
+        diagnostics,
+        Arr.filter(({ code, filename }) => filename === files[i] && code === codeOf(site.rule)),
+        Arr.flatMap(({ labels }) => Arr.map(labels.slice(0, 1), ({ span }) => span.line)),
+      ),
     ]),
   );
 });
 
 describe("L2 each taken rule fires through the repository's own config, in a folder on its list", () => {
   it("scenario: every taken rule has its plant, refused and taken", () => {
-    expect(Object.keys(PLANTS).toSorted()).toEqual([...TAKEN].toSorted());
+    expect(Arr.sort(Rec.keys(PLANTS), Order.String)).toEqual(Arr.sort(TAKEN, Order.String));
     expect(ON.length).toBeGreaterThan(0);
   });
 
@@ -264,9 +280,15 @@ describe("L3 a taken rule holds only where its block lists the folder", () => {
     const root = rootRules();
     // The root holds many rules: none read means the text was not read, never that it is clean.
     expect(root.length).toBeGreaterThan(0);
-    expect(root.filter(ofThePlugins)).toEqual([]);
-    const named = printed.overrides.flatMap((block) => Object.keys(block.rules)).filter(ofThePlugins);
-    expect(named.filter((rule) => !TAKEN.includes(rule))).toEqual([]);
+    expect(Arr.filter(root, ofThePlugins)).toEqual([]);
+
+    const named = pipe(
+      printed.overrides,
+      Arr.flatMap((block) => Rec.keys(block.rules)),
+      Arr.filter(ofThePlugins),
+    );
+
+    expect(Arr.filter(named, (rule) => !TAKEN.includes(rule))).toEqual([]);
   });
 });
 
@@ -287,16 +309,25 @@ describe("L4 the zero lock names exactly the folders with no hit that are not li
           }),
         ),
         ({ names, onList, hits, strays, whole }) => {
-          const scope = names.map(glob);
-          const counted = names.map((name, i) => ({ folder: glob(name), name, hits: hits[i] ?? 0 }));
+          const scope = Arr.map(names, glob);
+          const counted = Arr.map(names, (name, i) => ({ folder: glob(name), name, hits: hits[i] ?? 0 }));
+
           // A folder with no hit is often left out of the map, as a real run leaves it.
-          const map = new Map(counted.flatMap(({ folder, hits }) => (hits === 0 ? [] : [[folder, hits] as const])));
-          const gone = strays.map((name) => `next/gone/${name}/**`);
-          const result = lock(scope, [...onList.map(glob), ...gone, ...whole], map);
+          const map = new Map(
+            Arr.flatMap(counted, ({ folder, hits }) => (hits === 0 ? [] : [[folder, hits] as const])),
+          );
+
+          const gone = Arr.map(strays, (name) => `next/gone/${name}/**`);
+          const result = lock(scope, [...Arr.map(onList, glob), ...gone, ...whole], map);
           const everything = whole.includes("next/**");
+
           const expected = everything
             ? []
-            : counted.filter(({ name, hits }) => hits === 0 && !onList.includes(name)).map(({ folder }) => folder);
+            : pipe(
+                counted,
+                Arr.filter(({ name, hits }) => hits === 0 && !onList.includes(name)),
+                Arr.map(({ folder }) => folder),
+              );
 
           expect(result.add).toEqual(expected);
           expect(result.refused).toEqual(gone);
@@ -315,11 +346,33 @@ describe("L4 the zero lock names exactly the folders with no hit that are not li
 
 describe("L5 no block for a taken rule says off or warn", () => {
   it("scenario: every setting of a rule of the two plugins, in every block, is error", () => {
-    const settings = printed.overrides.flatMap((block) =>
-      Object.entries(block.rules).filter(([rule]) => ofThePlugins(rule)),
+    const settings = Arr.flatMap(printed.overrides, (block) =>
+      Arr.filter(Rec.toEntries(block.rules), ([rule]) => ofThePlugins(rule)),
     );
+
     expect(settings.length).toBeGreaterThan(0);
-    expect(settings.filter(([, setting]) => levelOf(setting) !== "deny")).toEqual([]);
+    expect(Arr.filter(settings, ([, setting]) => levelOf(setting) !== "deny")).toEqual([]);
+  });
+});
+
+// The approved typecheck-port amendment adds these four globs, rather than all of scripts/.
+// Plant: drop the port from folders(); its listed globs are then refused.
+describe("L8 the zero lock covers the typecheck port, today's tooling", () => {
+  it("scenario: the port's four globs are in scope and no taken rule lists a refused glob", () => {
+    const scope = folders(ROOT);
+
+    expect(scope).toEqual(
+      expect.arrayContaining([
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts",
+      ]),
+    );
+
+    for (const rule of TAKEN) {
+      expect(lock(scope, listed(rule), new Map()).refused, rule).toEqual([]);
+    }
   });
 });
 
@@ -328,6 +381,7 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
     "anti-slop": "vendor/anti-slop/src/index.ts",
     "anti-slop-effect": "vendor/anti-slop/src/effect/index.ts",
   };
+
   /** One `jsPlugins` entry, and whether `strays` must name it. */
   const entry = fc.oneof(
     fc.constantFrom("./oxlint-plugins/index.ts", "./other/plugin.ts").map((plugin) => ({ plugin, stray: false })),
@@ -339,6 +393,7 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
       })
       .map(({ name, dot, elsewhere }) => {
         const path = elsewhere === "" ? VENDORED[name] : `${elsewhere}${VENDORED[name].split("/").pop()}`;
+
         return { plugin: { name, specifier: `${dot ? "./" : ""}${path}` }, stray: elsewhere !== "" };
       }),
     fc
@@ -355,16 +410,17 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
         }
 
         const config = JSON.stringify({
-          jsPlugins: entries.map(({ plugin }) => plugin),
+          jsPlugins: Arr.map(entries, ({ plugin }) => plugin),
           ignorePatterns: [],
           overrides: [],
         });
-        expect(strays(ROOT, config).length).toBe(entries.filter(({ stray }) => stray).length);
+
+        expect(strays(ROOT, config).length).toBe(Arr.filter(entries, ({ stray }) => stray).length);
       }),
       { seed: 119120, numRuns: 100 },
     );
     // Coverage: both a stray entry and an entry that holds were drawn.
-    expect([...seen].toSorted()).toEqual(["false", "true"]);
+    expect(Arr.sort(seen, Order.String)).toEqual(["false", "true"]);
   });
 
   it("scenario: the repository's own config loads both plugins from their vendored path", () => {
@@ -372,3 +428,53 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
     expect(printout).toContain("anti-slop-effect");
   });
 });
+
+const KalfaScope = Schema.Struct({
+  name: Schema.String.check(Schema.isPattern(/^[a-z]{1,6}$/)),
+  hits: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3 })),
+});
+
+effectIt.effect.prop(
+  "T1076 Kalfa package and source folders retain the same zero lock as next folders",
+  { input: KalfaScope },
+  ({ input }) =>
+    Effect.sync(() => {
+      // Plants unrun locally: omit Kalfa from WHOLE/folders, or ignore its zero-hit folders.
+      expect(WHOLE).toContain("kalfa/**");
+      const actual = folders(ROOT);
+      expect(actual).toContain("kalfa/config/**");
+      expect(actual).toContain("kalfa/config/src/**");
+      const scope = [`kalfa/${input.name}/**`, `kalfa/${input.name}/src/**`, `next/programs/${input.name}/**`];
+      expect(lock(scope, [], new Map()).add).toEqual(scope);
+      expect(lock(scope, [], new Map(scope.map((folder) => [folder, input.hits]))).add).toEqual([]);
+      expect(lock(scope, ["kalfa/**"], new Map()).add).toEqual([scope[2]]);
+      expect(lock(scope, ["kalfa/**"], new Map()).refused).toEqual([]);
+      const gone = `kalfa/${input.name}/absent/**`;
+      expect(lock(scope, [gone], new Map()).refused).toEqual([gone]);
+      // The actual fold used by count must account for every overlapping scope.
+
+      for (const mode of ["source", "package", "mixed"]) {
+        const hits = new Map<string, number>();
+        const source = mode !== "package" ? input.hits : 0;
+        const other = mode !== "source" ? input.hits : 0;
+        const containing = [scope[1]!, scope[0]!, scope[2]!];
+
+        for (let hit = 0; hit < source; hit++) {
+          countFile(containing, hits, `kalfa/${input.name}/src/value.ts`);
+        }
+
+        for (let hit = 0; hit < other; hit++) {
+          countFile(containing, hits, `kalfa/${input.name}/Pnpm.ts`);
+        }
+
+        expect(hits.get(scope[0]!)).toBe(source + other);
+        expect(hits.get(scope[1]!) ?? 0).toBe(source);
+        expect(hits.has(scope[2]!)).toBe(false);
+        expect(lock(scope, [], hits).add).toEqual(source === 0 ? [scope[1], scope[2]] : [scope[2]]);
+        expect(lock(scope, [scope[0]!], hits).add).toEqual([scope[2]]);
+        expect(lock(scope, [scope[0]!], hits).refused).toEqual([]);
+        expect(lock(scope, [scope[1]!], hits).add).toEqual([scope[2]]);
+      }
+    }),
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);

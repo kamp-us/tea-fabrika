@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-parallel-lint-oom-kills-promise-types",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": "oxlint-plugins/parallel.ts",
+    "line": 1
+  },
+  "says": "pnpm lint starts all 18 parts at once, and on a 4-CPU, 16 GB Linux cloud box the kernel's memory limit kills one of them, lint:promise-types, so pnpm lint fails while every part passes when run alone.",
+  "proof": "At head f8aa94c5653e2024f14c258db2cd0e53b60dd052 on an idle box (15 GB free before the run), nice -n 10 pnpm lint ended 'parallel: 1 of 18 parts failed in 147.4 s: pnpm -s lint:promise-types (failed, exit 1)' and the session reported a kernel out-of-memory kill during the run; it failed the same way twice in a row. pnpm -s lint:promise-types alone then printed 'lint:promise-types: 0 findings' and exited 0. Earlier the same day the same part was killed the same way in another worktree's pnpm lint at merge 47b4d13409ffe6187624942dc5fc849d8057200a, and pnpm lint passed on the box three times before origin/main 279f97ee was merged.",
+  "cost": "An agent on a 16 GB cloud box sees a red pnpm lint it did not cause, and a concurrent test on the same box can be killed with it, as one watcher repeat run was.",
+  "head": "f8aa94c5653e2024f14c258db2cd0e53b60dd052",
+  "ticket": "kamp-us/tea-fabrika#1122",
+  "pr": "kamp-us/tea-fabrika#1542"
+}

@@ -4,6 +4,7 @@ import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime
 import { describe, expect } from "@effect/vitest";
 import { ByteSize, Effect, Exit, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -17,6 +18,7 @@ describe("shared Worker settings reader, next/", () => {
     (port) =>
       Effect.gen(function* () {
         const valid = Number.isInteger(port) && port >= 1 && port <= 65535;
+
         const input = yield* StartsTest.input({
           port: valid ? port : 18787,
           start: "port-boundary",
@@ -24,12 +26,15 @@ describe("shared Worker settings reader, next/", () => {
           revision: null,
           origin: "flag",
         });
+
         const raw = valid
           ? input
           : { ...input, settings: { ...input.settings, values: { ...input.settings.values, "instance.port": port } } };
+
         const exit = yield* Effect.exit(
-          SettingsInput.read.pipe(Effect.provideService(WorkerEnvironment, { INSTANCE: JSON.stringify(raw) })),
+          SettingsInput.read.pipe(Effect.provideService(WorkerEnvironment, { INSTANCE: Formatter.formatJson(raw) })),
         );
+
         expect(Exit.isSuccess(exit)).toBe(valid);
 
         if (Exit.isSuccess(exit)) {
@@ -37,7 +42,7 @@ describe("shared Worker settings reader, next/", () => {
         }
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
     // vector: the port protocol's inclusive endpoints and their immediate neighbours.
-    [[1], [65535], [0], [65536]],
+    { examples: [[1], [65535], [0], [65536]] },
   );
 
   StartsTest.law(
@@ -62,14 +67,16 @@ describe("shared Worker settings reader, next/", () => {
 
           const raw =
             move === "corrupt" ? StartsTest.corrupt(current, Math.floor(choice / moves.length), secret) : current;
+
           const exit = yield* Effect.exit(
             SettingsInput.read.pipe(
               Effect.provideService(WorkerEnvironment, {
-                INSTANCE: JSON.stringify(raw),
+                INSTANCE: Formatter.formatJson(raw),
                 UNRELATED_PASSWORD: secret,
               }),
             ),
           );
+
           expect(Exit.isSuccess(exit)).toBe(move !== "corrupt");
 
           if (Exit.isSuccess(exit)) {
@@ -84,7 +91,7 @@ describe("shared Worker settings reader, next/", () => {
               brainStartTimeout: current.settings.values["desktop.brain-start-timeout"],
               brainStopTimeout: current.settings.values["desktop.brain-stop-timeout"],
               // A byte size is saved as its JSON spelling and read back as a byte count.
-              brainMemory: Schema.decodeUnknownSync(Schema.toCodecJson(Schema.ByteSize))(
+              brainMemory: yield* Schema.decodeUnknownEffect(Schema.toCodecJson(Schema.ByteSize))(
                 current.settings.values["desktop.brain-memory"],
               ),
               brainGrace: current.settings.values["desktop.brain-grace"],
@@ -97,8 +104,10 @@ describe("shared Worker settings reader, next/", () => {
               // P34c: the three quota settings. A byte size inside them is saved as its text and
               // read back with its declaration's schema.
               writes: current.settings.values["limits.writes"],
-              storage: Schema.decodeUnknownSync(Declarations.storage.schema)(current.settings.values["limits.storage"]),
-              recovery: Schema.decodeUnknownSync(Declarations.recovery.schema)(
+              storage: yield* Schema.decodeUnknownEffect(Declarations.storage.schema)(
+                current.settings.values["limits.storage"],
+              ),
+              recovery: yield* Schema.decodeUnknownEffect(Declarations.recovery.schema)(
                 current.settings.values["limits.recovery"],
               ),
             });

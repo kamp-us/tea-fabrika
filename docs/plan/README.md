@@ -55,6 +55,169 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-18:* [The rules and records build](./quests/rules-and-records-build-PLAN.md), in today's
+tooling and the records both versions read, cleans the records up and then turns on its checks in
+`pnpm lint` (0605 to 0607). Slices 1 to 3 folded decisions 0001 to 0199 into their own text
+([PR 1628](https://github.com/kamp-us/tea-fabrika/pull/1628),
+[PR 1629](https://github.com/kamp-us/tea-fabrika/pull/1629),
+[PR 1627](https://github.com/kamp-us/tea-fabrika/pull/1627)). Slice 6 could not fit 0608's
+32,768 bytes by 0129's moves without dropping a rule, so the lead replaced both with
+[0610](../../.decisions/0610-agents-md-follows-memory-guide.md): the root `AGENTS.md` stays under
+200 lines, and procedures move to the skill read for that job. Slice 6 makes that cut, and slice
+8's size check counts lines, as advice. The other slices remain.
+
+*2026-11-18:* [The leaf-script ports](https://github.com/kamp-us/tea-fabrika/pull/1517), ticket 766
+slices S1 to S4, in today's lead tooling: `governance.sh`, `fieldrow.py` and `keepruns.sh` become
+`governance.ts`, `fieldrow.ts` and `box/RunsFs.ts`, and `pnpm lint` refuses a new tracked shell or
+Python file outside a list that only shrinks (0113). The list now holds 16 scripts. S5 to S8, the
+commit-path ports, the box-runner port and the typecheck-wrapper port remain, so ticket 766 stays
+open. The review left three findings: the hold passes other shell extensions such as `.bash`, its
+"only shrinks" law lets a ported script come back, and `fieldrow.ts` differs from the old script
+on inputs `box.sh` never sends.
+
+*2026-11-18:* [The watcher save-law repair](https://github.com/kamp-us/tea-fabrika/pull/1542), ticket
+1122, in `next/`, fixes the L17/L18 flake. The save-driven law now checks every reply in order,
+accepts a `same` only for a hash that was already loaded, and finishes a save only on its own
+changed reply. No product code changed. Its proof ran on a Linux cloud box at full depth, because
+integration laws no longer run on pull requests: 10 of 10 repeats were green, and planted breaks in
+the law and in `watch.ts` turned it red. L10 shows the same "one install per event" assumption at
+boot, under load. That flake is a [finding](../../field/findings/2026-11-18-watch-l10-boot-drain-saw-repeated-installs.json)
+and needs its own ticket and fix.
+
+*2026-11-18:* The L10 repair, ticket 1172, in `next/`, fixes that flake by the owner's two rulings.
+L10 now checks every install by program and hash: each boot or save owes one change, and any other
+install must be an unchanged repeat inside its own program's rebuild. It waits on events with no
+clock, and only the test's own time limit backs a silent watcher. No product code changed. On the
+Linux cloud box at full depth, L10 passed 10 of 10 idle and 3 of 3 beside a `pnpm lint`, the load
+that failed it before, and it now takes about 40 s instead of 260 s. Left as findings: the law file's
+heap near its 2 GB limit, the waits that miss a dead product stream, and the other clocks in the file.
+
+*2026-11-17:* [Settings slice 1](https://github.com/kamp-us/tea-fabrika/pull/1427), ticket 1076,
+generalizes the engine in `next/`. One `App` value supplies the settings file names, environment
+prefix, home variable, version key and list command. Fabrika keeps its existing names through its
+own binding. The engine stays inside libfabrika; moving it to `@kalfa/config` and adding
+`kalfa config get|set` remain later slices. The dependent
+[readable-spacing child](https://github.com/kamp-us/tea-fabrika/pull/1525), ticket 1057, applies the
+agreed rule scopes while keeping program code, comments and literal contents. The pair lands
+layer by layer, bottom first, with no native stack link (0603). The PRs link their independent reviews and CI evidence. This slice supplies
+neither the later package move nor the CLI.
+
+*2026-11-17, extraction source:* ticket 1076 slice 2 moves the engine into
+`kalfa/config/` as private `@kalfa/config`, used by `next/`. Source at
+`85919fe41730cdc48ba3fbe4bfa53e93e1ba9fbf` passed its independent source recheck.
+The existing tests moved unchanged. The package consumer law is authored, but has not run.
+The independent cache entry is applied. CI discovery and archive delivery remain private
+while the shared CI repair finishes. The approved ordinary-test routing has not run.
+[The extraction draft](https://github.com/kamp-us/tea-fabrika/pull/1583) keeps merge automation off.
+Ordinary draft checks supply no consumer or archive proof.
+No tested archive is available yet. Its
+[approved amendment](./quests/kalfa-config-package-amendment-PLAN.md) keeps the CLI in slice 3.
+After successful CI and landing, another project installs the tested archive with
+`npm install ./kalfa-config-0.0.0.tgz effect@4.1.3`.
+The prerequisite settings and spacing pair lands first.
+
+Today's CI, serving both versions, adds automatic related tooling checks for ready pull requests
+and queue groups, ticket 1155. Since [decision 0602](../../.decisions/0602-integration-laws-leave-merge-line.md)
+those checks run only the plain tooling laws a change reaches: no `.integration.` law, of next/
+or of tooling, runs on a pull request, a queue group or a branch's proof run, and main's full run
+runs them all ([PR 1613](https://github.com/kamp-us/tea-fabrika/pull/1613) and the follow-up on
+branch `fabrikalfa/integration-off-proof-arm`). Related visual tests run in the existing next
+matrix on a push to main, and on a pull request only with the `visual` label; a queue group never
+runs them (0536, the owner's ruling of 2026-11-18, [PR 1615](https://github.com/kamp-us/tea-fabrika/pull/1615)). Global triggers select every file, and selected laws run at
+full depth. All test jobs share the existing nine groups and one control group. The original
+regression suite remains intact. The [automatic checklist fault runner](../../field/notes/2026-11-17-automatic-checklist-faults.json)
+assigns the ten existing cases once across the existing integration legs, after each leg's ordinary files. The fixture's full100 suite stays in its one owning leg. It binds the catalog
+source and actual tested merge separately while preserving exact image and dependency checks.
+Actual runtime, fault evidence and final review remain due.
+
+Today's scheduled CI, serving both versions, keeps the last observed test activity when a test
+step is cut off before Vitest writes its final JSON, ticket 1144
+([PR 1567](https://github.com/kamp-us/tea-fabrika/pull/1567)). A progress reporter appends one
+metadata line per lifecycle callback to `RUNNER_TEMP/vitest-progress.ndjson`, and the time table
+shows the unmatched modules, tests and hooks as last observed, never as hung. Each leg's timing
+artifact also records its job queue wait. The P8 kill proof and its buffer-until-end plant ran on
+a cloud box; on real tests the reporter cost about 3% of wall time. A faster append is a
+follow-up. The first full run after merge settles that cost on `next/` legs.
+
+In `next/`, ticket 1153 reuses the Node quota fixture's admission services within one World
+and one limits generation. Every input still sends; each limits setter creates a fresh cache key,
+and failed setup remains retryable. Existing laws, workloads, SQL operations, seeds and timeouts
+stay in place. Temporary proof passed 82 cases with three caught faults, scoped lint and the
+narrow libfabrika compiler passed, and an independent build read passed without changes.
+The whole unchanged quota suite on eligible Linux and final review remain due. The proof uses
+no real SQL, and no speedup is claimed.
+
+In `next/`, ticket 1151 changes Q18's final entry check to collect stepped IDs once per entries
+snapshot, then check every expected message against that set. Its exact existence rule, all
+40 generated histories, seed, calls, limits and timeout stay unchanged. Temporary proof from the
+actual source passed 40 generated inputs, 11 fixed cases and three deliberate faults. A separate
+build check verified the actual source and proof. Initial Linux Q18 passed; the final review then
+required the existing Effect tag guard under decision 0567. That correction preserves the same
+predicate and workload. Corrected-head Linux proof and the same review remain due. Earlier timing
+observations remain tied to their original source; no controlled speedup is claimed.
+
+Today's scheduled CI, serving both versions, swaps the shared groups of full-run browser leg 2
+and core leg 4. A [branch proof's second leg waited 705 seconds](../../field/notes/2026-11-17-shared-test-slot-wait.json),
+with another group empty for the last 286 seconds. This changes which full leg a small proof waits
+behind, within the same nine test groups and one control group. Fixed groups can still leave other
+groups unused. Actual CI comparison remains due; this change has no measured speedup yet.
+
+Today's changed-proof selector [rotates its shared groups by workflow run number](../../field/notes/2026-11-17-changed-proof-slot-rotation.json).
+Logical leg names and test files stay put; retries keep their assignment. The
+[guard-first slice](../../field/notes/2026-11-17-rotation-guard-rollout.json) checks the closed
+nine-group form and its input/output wiring. Invalid run numbers stop selection before any output
+or record write. An unknown map value falls back to group 1 and serializes conservatively;
+malformed JSON may fail evaluation. Runs can still collide. Live matrix proof and the actual
+after-landing wait comparison remain due; no speedup is claimed.
+
+Today's lead tooling adds a separate manual [L11 exercise](../../.github/workflows/l11-exercise.yaml), ticket 1135,
+for `next/` ticket 1129. It fixes one source pair, compares ordinary whole-file runs and private generated inputs,
+and declares ten serial clean jobs. Fixed output faults restore every edited file and publish only decoded facts.
+The actual adapters remain unexercised until the workflow runs on disposable CI after landing. Row, initialization,
+Runner and the original L11 product-workload CPU-profile gaps stay open.
+A [local CPU profile of the pure equality test](../../field/notes/2026-11-17-l11-equality-runtime.json)
+found repeated strict line decoding dominated its time. Reusing successful decodes within one comparison reduced the
+unchanged 100-run test from 19.0 s to 7.0 s locally. It does not attribute CPU time in the Runner or L11 product workload.
+CI's CPU cause remains unproved. These measurements supply no
+branch proof or reliability claim.
+In `next/`, [pull request 1616](https://github.com/kamp-us/tea-fabrika/pull/1616) gives each cut of
+the L11 storage law a copy of one booted Project in place of a cold boot of its own, and splits the
+law into 16 parts, one per flow, that together cut exactly the old law's 1,369 cuts. The copy alone
+took the law to 52.1 s on CI, still near its 60 s bound, so the split is what gives each part room.
+
+Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
+It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.
+Its real Git and Vitest adapters ran on trusted main for [checklist notice PIDs](../../field/notes/2026-11-17-checklist-pid-fault-exercise.json)
+in `next/`, and [host pinning and discovery](../../field/notes/2026-11-17-host-runtime-fault-exercises.json) in today's lead tooling.
+The [three remaining host faults](../../field/notes/2026-11-17-host-remaining-fault-exercises.json) now have the same actual observations:
+ignoring the requested pin, omitting the native pnpm directory and reversing prepared-environment precedence.
+Each accepted exercise passed before the deliberate break, failed at its intended assertion, then passed after restoration.
+Each product change records its own source-bound fault evidence separately from these tooling fixtures.
+These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
+
+The plant runner moves onto Stryker, in [`@kalfa/quality/stryker`](../../kalfa/quality/README.md)
+([0600](../../.decisions/0600-kalfa-quality-holds-test-lint-format.md)). A plant names a product file, a Stryker
+mutator, the node's text and Stryker's replacement, and the law that must kill it; the runner finds that one place by
+shape, runs Stryker against the law's file alone, and answers `killed` only when the law is among the tests that
+failed. No byte offset or commit is pinned, so a squash merge or a blank line leaves a plant as it was. The catalog is
+[`.github/ci/plants.ts`](../../.github/ci/plants.ts), five plants (`checklist-pid`, `host-pin`, `host-requested-pin`,
+`host-pnpm-path`, `host-env-order`), and the [`plants.yaml`](../../.github/workflows/plants.yaml) workflow runs one on
+disposable CI by hand. The old runner above stays until a run of the new one on main is its proof, then it goes.
+The ten old cases that edited a test file's own fake are dropped, and `host-discovery-timeout` moves code, which no
+Stryker mutator does, so it keeps its recorded one-time plant.
+
+The hourly mutation run reaches libfabrika's laws: it picks a changed file's `name.<kind>.test.ts` siblings, such as
+`name.laws.test.ts` and `name.integration.test.ts`, not only `name.test.ts`, and passes CI's own `CI` marker into its
+container, so `.integration.` laws pass the host guard on GitHub's disposable runner and never on the laptop. A law in
+another folder, a `.visual.` law and a `.types.` law still stay out.
+
+[Checklist L13's fixture repair](https://github.com/kamp-us/tea-fabrika/pull/1543), ticket 1126,
+replaces fixed waits in `next/` with completion of the real Process alarm call, publication and
+notification. It includes newly due work, leaves future alarms pending and waits for started calls
+before cleanup. The existing cases, seed, generator limits and test deadline stay the same.
+It changes test support, not product behavior. The PR records source-bound CI, fault checks and
+independent review; a passing ordinary run does not stand in for those separate checks.
+
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
 keys, the link to the agent harnesses, rooms), so fabrika is built inside
@@ -100,6 +263,18 @@ between 0279 and 0274 before the desk is built, then S1 of the
 before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
 the first cloud deploy. The other open calls are listed in
 [the section](./tier-1.md#the-owners-walks-and-decisions-by-step), each tied to its step.
+
+*2026-11-17:* P25 slice 1's library code half in `next/` is proved at code head
+`0e2bd3a9708a8f2e9746f9933646fcb865262c88` in [PR1099](https://github.com/kamp-us/tea-fabrika/pull/1099).
+[Ordinary CI](https://github.com/kamp-us/tea-fabrika/actions/runs/44154987776) passed compiler,
+lint and selected tests. [Full GitHub proof](https://github.com/kamp-us/tea-fabrika/actions/runs/44155042561)
+matched all 544 source files: 6,014 ordinary passes, one expected failure and nine documented skips.
+All 19 layer checks passed; the actual T5 import faults and restoration are recorded. Fresh
+independent review returned merge-ready for this code half, with two nonblocking findings.
+The lead records those findings and updates these docs without changing code. Normal CI and the
+same reviewer's documentation recheck govern this follow-up. The existing gateway audit decoder
+needs follow-through before later gateway integration. Ticket 905's schema gaps, the real agent
+experiment and slices 2 to 4 remain open. Tickets 888 and 328 stay open; no Tier 1 row is finished.
 
 *2026-11-15:* P39's slice 4a, the hands client, is built in `next/` as draft
 [PR 1315](https://github.com/kamp-us/tea-fabrika/pull/1315), waiting for the owner's look: the
@@ -150,7 +325,8 @@ and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea
 as [PR 1031](https://github.com/usirin/tea-fabrika/pull/1031); its fourth, quotas per program, has an approved plan. Main was red for 47
 minutes between the two: each pull request passed alone and they broke together, which is why a
 pull request now lands only when its checks ran on a head that holds main
-([0146](../../.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md)).
+(GitHub's merge queue, [0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md);
+[0162](../../.decisions/0162-no-friction-before-a-merge.md)).
 
 *2026-11-12, P40 slice 2, ticket 878, merged as [PR 1072](https://github.com/usirin/tea-fabrika/pull/1072):* `next/` has an explicit `dev --repo` route that checks one
 default-branch commit through P38 before building the shipped programs. Repository selections,
@@ -467,7 +643,7 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 - **CI wastes no time** (owner, 2026-11-09). A pull request that changes only field rows runs a seconds-long row schema check instead of the full check job, and each quest carries its own field rows. Then every CI job's time is audited for more cuts. The build is in progress (tracker ticket 342). Ticket 375 (PR A) makes skill prose skip the heavy jobs and runs only the tests a skill script reaches; ticket 376 (PR B) puts next on six machines, built 2026-11-10 as [PR 653](https://github.com/usirin/tea-fabrika/pull/653). *It said: three machines. The approved plan chose six, as the `test` job has, and split the one 248 s test file in four so no machine is held by it.*
 - **Direction notes and plans:** a note that records an owner's decision, or a plan that only builds decided notes, merges as above. A new design call still gets the owner's yes ([the steps](../direction/next-is-a-pipeline-pre-run.md)). *It said: they still get the owner's yes.*
 - **A pull request that changes only Markdown or images:** no CI wait when no check reads them. Shared skill instructions are read by `skillscheck.sh`, so wait for that check. A broken relative link can slip through.
-- **To bring a branch up to date:** merge `main` in (`git merge origin/main`), never a rebase, a force-push or `gh pr update-branch` (GitHub makes that merge commit, so no step key signs it). In `next/`, the merge is a `lead` commit, signed like any step's ([P32](./tier-1.md#the-pull-requests-one-at-a-time)). A stacked child is the one exception: [0004](../../.decisions/0004-squash-merges-and-native-stacks.md). The commit check's up-to-date rule stays. One command merges `main` in as the bot, signs it as `lead`, and pushes the commit and its notes together, so CI starts on its own; a person's pull request gets its `lead` merge from the same command (owner, 2026-11-08). Checks still rerun on the final commit. *Changed 2026-11-07: it said "rebase and force-push with a lease, never a merge commit or `gh pr update-branch`", and that the diff's `git patch-id --stable` stays the same, so a review holds. That was wrong: it clashed with [done is per criterion](../direction/done-is-per-criterion.md) and [read fresh, run alone](../direction/read-fresh-run-alone.md), a rebase changes every tree a step signed, and a review binds to the diff by replay, not by patch-id ([a yes binds to the diff](../direction/a-yes-binds-to-the-diff.md)).*
+- **To bring a branch up to date:** merge `main` in (`git merge origin/main`), never a rebase, a force-push or `gh pr update-branch` (GitHub makes that merge commit, so no step key signs it). In `next/`, the merge is a `lead` commit, signed like any step's ([P32](./tier-1.md#the-pull-requests-one-at-a-time)). For a stacked child, [0004](../../.decisions/0004-squash-merges-and-native-stacks.md), as amended by [0599](../../.decisions/0599-native-stack-upkeep.md), allows `gh pr update-branch <child>` after the parent head and source, queue and writer agree; the child's own step owner signs again only if its tree links changed. The commit check's up-to-date rule stays. One command merges `main` in as the bot, signs it as `lead`, and pushes the commit and its notes together, so CI starts on its own; a person's pull request gets its `lead` merge from the same command (owner, 2026-11-08). Checks still rerun on the final commit. *Changed 2026-11-07: it said "rebase and force-push with a lease, never a merge commit or `gh pr update-branch`", and that the diff's `git patch-id --stable` stays the same, so a review holds. That was wrong: it clashed with [done is per criterion](../direction/done-is-per-criterion.md) and [read fresh, run alone](../direction/read-fresh-run-alone.md), a rebase changes every tree a step signed, and a review binds to the diff by replay, not by patch-id ([a yes binds to the diff](../direction/a-yes-binds-to-the-diff.md)).*
 - **Stacked work:** see [0004](../../.decisions/0004-squash-merges-and-native-stacks.md) and
   [lead](../../.agents/skills/lead/SKILL.md).
 - **After every merge:** fast-forward the main checkout (`git pull --ff-only origin main`). Never reset or stash there; your own work stays in worktrees.

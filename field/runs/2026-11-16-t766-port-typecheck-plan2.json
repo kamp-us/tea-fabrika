@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-plan2",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": null,
+  "ended": "2026-11-16T00:21:38-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "A plan amendment for porting scripts/typecheck.sh to scripts/typecheck.ts, in today's tooling (docs/plan/quests/port-typecheck-PLAN.md, section 'Amendment, 2026-11-16'). It writes the lead's ruling after the build found law T1 cannot pass: the 18 scripts/typecheck* files leave the .agents program, whose two @demlik/tea versions give TS377051 on every scripts/ file, and get a program of their own as the workspace package @tea-fabrika/scripts, shaped as .agents is (a pnpm-workspace.yaml glob, a package.json whose typecheck script is tsc --noEmit -p ., a tsconfig.json that extends the base, reached from the root's devDependencies). E3 of the tea-msg-tag plan and the base allowance stay as they are. T1 now names the new program. A new lint law, L2, bans @demlik/tea imports from those files: a scratch run showed a tea import alone does not turn a one-tea program's type check red, so the ruling's plant is held by oxlint's no-restricted-imports. The files and callers tables are amended to agree, and the four ../scripts include lines in .agents/tsconfig.json come back out.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "The start time was not recorded, so it stays unknown. plancheck --draft passed on an unsigned copy in the scratchpad; the signed file's body digest is now 828a36a9ee43. One scratch tsc --noEmit ran over a tsconfig outside the repo that extends tsconfig.base.json and includes the 18 files plus one tea import: exit 0 with only @demlik/tea@0.27.0 in its file list, and TS377001 on a planted floating Effect, so Effect's checks ran. No test, install or pnpm typecheck ran.",
+  "step": "plan"
+}

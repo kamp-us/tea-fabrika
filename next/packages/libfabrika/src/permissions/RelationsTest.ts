@@ -11,6 +11,7 @@
 // The two layers are compared through the check, the only way to read `Tuples`: a test right per
 // relation makes every tuple visible.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -34,6 +35,7 @@ import { Sender } from "./Senders.ts";
 export type Store = { readonly sql: Sql };
 
 const BRAIN = "SHA256:brain";
+
 const OTHER = "SHA256:program-writer";
 
 /** A model whose every relation is also a permission of the same name, so every tuple is a check. */
@@ -69,6 +71,7 @@ const RIGHTS = [
 ] as const;
 
 const PERSONS = ["person_a", "person_b", "person_c"] as const;
+
 const FABRIKAS = ["one", "two"] as const;
 
 /** The writer fields every batch is written with: the referee keeps a resend as one line only when they match. */
@@ -100,10 +103,12 @@ const Cell = fc.record({
   pick: fc.nat(),
   cut: fc.boolean(),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 /** What the walk wrote: the brain's batches, each change with its id, and the other key's rows. */
 type Batch = { readonly changes: ReadonlyArray<Relation.Change>; readonly foreign: ReadonlyArray<Foreign> };
+
 type Foreign = { readonly id: string; readonly row: typeof Relation.Row.Type };
 
 /**
@@ -118,7 +123,7 @@ const toBatches = (cells: ReadonlyArray<Cell>): ReadonlyArray<Batch> => {
   let changes: Array<Relation.Change> = [];
   let foreign: Array<Foreign> = [];
 
-  cells.forEach((cell, n) => {
+  Arr.forEach(cells, (cell, n) => {
     const fresh = {
       subject: `person:${choose(PERSONS, cell.person)}`,
       relation: choose(RIGHTS, cell.relation).relation,
@@ -155,13 +160,14 @@ const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** Every (person, relation, fabrika) and whether the store's tuples hold it, read through the check. */
 const view = (tuples: Relation.Tuples) =>
-  PERSONS.flatMap((person) =>
-    FABRIKAS.flatMap((id) =>
-      RIGHTS.map(({ relation, right }) => {
+  Arr.flatMap(PERSONS, (person) =>
+    Arr.flatMap(FABRIKAS, (id) =>
+      Arr.map(RIGHTS, ({ relation, right }) => {
         const sender = Sender.cases.person.make({ key: `SHA256:window-${person}`, for: person });
         // Each right answers its own proof's type; only whether one was given is read here.
         const answer: Result.Result<unknown, Rebac.Denied> = right.within(tuples, sender, Mirror.ref("fabrika", id));
         const held = Result.isSuccess(answer);
+
         return `${person}#${relation}@${id}=${held}`;
       }),
     ),
@@ -169,6 +175,7 @@ const view = (tuples: Relation.Tuples) =>
 
 const ok = <A, E>(result: Result.Result<A, E>, label: string): A => {
   expect(Result.isSuccess(result), label).toBe(true);
+
   return Result.getOrThrow(result);
 };
 
@@ -178,18 +185,22 @@ const agree = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const { sql } = yield* open;
     const batches = toBatches(cells);
     const [first, ...rest] = batches;
+
     const tx = Context.get(
       yield* Layer.build(LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet))),
       LedgerTransaction,
     );
+
     const onLedger = Context.get(
       yield* Layer.build(
         RelationsLedger.layer({ by: BRAIN }).pipe(Layer.provide(Layer.succeed(LedgerTransaction, tx))),
       ),
       Relations,
     );
+
     // The memory layer starts from the first batch; the ledger gets the same batch written.
     const inMemory = Context.get(yield* Layer.build(RelationsMemory.layer(first?.changes ?? [])), Relations);
+
     const apply = Effect.fnUntraced(function* (batch: Batch, memory: boolean) {
       yield* tx.transact((turn) => {
         for (const { id, row } of batch.foreign) {
@@ -202,6 +213,7 @@ const agree = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         yield* inMemory.write(batch.changes, WRITER);
       }
     });
+
     const compare = Effect.fnUntraced(function* (label: string) {
       const [ledger, memory] = yield* tx.transact((turn) => [onLedger.within(turn), inMemory.within(turn)] as const);
       expect(view(ok(ledger, `${label}: the ledger's rows fold`)), `L8: ${label}`).toEqual(

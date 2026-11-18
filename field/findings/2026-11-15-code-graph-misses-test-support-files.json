@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-code-graph-misses-test-support-files",
+  "date": "2026-11-15",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/Id.test-support.ts",
+    "line": 59
+  },
+  "says": "pnpm lint:dead (code-graph 0.15.0) flags a helper in a *.test-support.ts file that only tests call as only-called-from-tests, because its default testSupportFilePatterns do not list *.test-support.ts, the repo's place for test helpers (0538); helpers already there pass only when their name also appears in some product file.",
+  "proof": "On fabrikalfa/mock-lib-top-s1 at 8d92196df, pnpm -s lint:dead prints 'only-called-from-tests next/packages/libfabrika/src/Id.test-support.ts:generatorWith'. code-graph dist/index.js:2095 sets the default patterns, and node-kinds.json, which lint:dead passes, sets none.",
+  "cost": "A new test-support helper with an uncommon name fails pnpm lint, and 0524 allows no ledger row, so generatorWith blocks lint until this is decided.",
+  "head": "8d92196dfcc4c9ec5d18bcbfc1a5fc02cb49ab8e",
+  "ticket": null,
+  "pr": null
+}

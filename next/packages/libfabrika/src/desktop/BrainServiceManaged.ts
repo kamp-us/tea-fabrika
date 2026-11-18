@@ -2,10 +2,12 @@
  * Effect driver for the single brain lifecycle machine.
  */
 import { applyCell } from "@demlik/tea";
+import type * as Snapshot from "@kalfa/config/Snapshot";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -13,7 +15,6 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Id from "../Id.ts";
 import * as Declarations from "../settings/Declarations.ts";
-import type * as Snapshot from "../settings/Snapshot.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
@@ -37,6 +38,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const records = yield* RecordManager;
   const archive = yield* Archive;
   const ids = yield* Id.Generator;
+
   const timings = yield* Schema.decodeUnknownEffect(
     Schema.Struct({
       "desktop.brain-poll": Declarations.brainPoll.schema,
@@ -45,21 +47,29 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       "desktop.brain-throttle": Declarations.brainThrottle.schema,
     }),
   )(settings.values).pipe(Effect.mapError((cause) => operation("inspect", cause)));
+
   const semaphore = yield* Semaphore.make(1);
   const life = BrainLife.machine({ spec, settings });
   let [model] = life.init(null, {});
+
   const settle = (msg: BrainLife.Msg) => {
     const [next, cmds] = applyCell<typeof model, BrainLife.Msg, BrainLife.Command>(life, model, msg);
     model = next;
+
     return cmds;
   };
+
   const send = Effect.fnUntraced(function* (msg: BrainLife.Msg) {
     const next = yield* ids.next(Id.Cmd).pipe(Effect.mapError((cause) => operation("inspect", cause)));
+
     return settle({ ...msg, next });
   });
+
   const translate = (cause: BrainControlError | BrainProbeError) =>
     cause.reason._tag === "Conflict" || cause.reason._tag === "Foreign" ? "Conflict" : "Operation";
+
   const Failed = Schema.TaggedUnion({ Conflict: {}, Operation: {} });
+
   const command = Effect.fnUntraced(
     function* (cmd: BrainLife.Command, action: "up" | "stop") {
       const began = yield* Clock.currentTimeMillis;
@@ -68,14 +78,19 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         "fab.build": spec.build,
         "fab.settings": settings.hash,
         "fab.cmd": cmd.id,
-        "fab.command": cmd.type,
+        "fab.command": cmd._tag,
         "fab.sentAt": String(began),
       });
+
       const work: Effect.Effect<
         void | typeof Status.Type | typeof Readiness.Type | typeof Children.Type,
         BrainControlError | BrainProbeError,
         Scope.Scope
-      > = cmd.type === "ready" ? probe.ready : cmd.type === "cleanup" ? probe.cleanup : control[cmd.type];
+      > = Match.value(cmd).pipe(
+        Match.discriminators("_tag")({ ready: () => probe.ready, cleanup: () => probe.cleanup }),
+        Match.orElse((cmd) => control[cmd._tag]),
+      );
+
       const answer = yield* work.pipe(Effect.result);
       const at = yield* Clock.currentTimeMillis;
       yield* Effect.annotateCurrentSpan({
@@ -93,15 +108,28 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         }
 
         const error = translate(answer.failure);
+
         return {
           cause: Redacted.make(answer.failure),
-          cmds: yield* send({ type: `${cmd.type}_err`, cmd, error: Failed.cases[error].make({}), at } as BrainLife.Msg),
+          cmds: yield* send({
+            // oxlint-disable-next-line fabrika/no-hand-tag -- the host answers a Cmd by hand: its key is the Cmd name plus `_ok` or `_err`, a template string, so the tag is an open string until the cast to `BrainLife.Msg`
+            _tag: `${cmd._tag}_err`,
+            cmd,
+            error: Failed.cases[error].make({}),
+            at,
+          } as BrainLife.Msg),
         };
       }
 
-      const cmds = yield* send({ type: `${cmd.type}_ok`, cmd, value: answer.success ?? null, at } as BrainLife.Msg);
+      const cmds = yield* send({
+        // oxlint-disable-next-line fabrika/no-hand-tag -- the host answers a Cmd by hand: its key is the Cmd name plus `_ok` or `_err`, a template string, so the tag is an open string until the cast to `BrainLife.Msg`
+        _tag: `${cmd._tag}_ok`,
+        cmd,
+        value: answer.success ?? null,
+        at,
+      } as BrainLife.Msg);
 
-      if (cmd.type === "remove" && model._tag === "failed_stop") {
+      if (cmd._tag === "remove" && model._tag === "failed_stop") {
         return yield* BrainServiceError.make({
           reason: Timeout.make({ action: "stop", cause: Redacted.make("deadline") }),
         });
@@ -115,19 +143,23 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
     Effect.scoped,
     Effect.withSpan("BrainService.command"),
   );
+
   const flush = sink.flush.pipe(
     Effect.provideService(RecordManager, records),
     Effect.provideService(Archive, archive),
     Effect.mapError((cause) => operation("cleanup", cause)),
   );
+
   const perform = (action: "up" | "stop") =>
     semaphore.withPermits(1)(
       Effect.gen(function* () {
         const began = yield* Clock.currentTimeMillis;
-        let cmds = yield* send({ type: action, at: began });
+        let cmds = yield* send(BrainLife.Observed.cases[action].make({ at: began }));
         const first = cmds[0];
+
         const deadline =
           began + timings[action === "up" ? "desktop.brain-start-timeout" : "desktop.brain-stop-timeout"];
+
         const drive = Effect.gen(function* () {
           let cause: unknown = Redacted.make("lifecycle refused");
 
@@ -136,7 +168,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
             if (next === undefined) {
               yield* Effect.sleep(timings["desktop.brain-poll"]);
-              cmds = yield* send({ type: "tick", at: yield* Clock.currentTimeMillis });
+              cmds = yield* send(BrainLife.Observed.cases.tick.make({ at: yield* Clock.currentTimeMillis }));
             } else {
               const answer = yield* command(next, action);
               cause = answer.cause ?? cause;
@@ -147,16 +179,23 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           }
 
           if (model._tag === "failed_up" || model._tag === "failed_stop") {
-            const reason =
-              model.reason === "Timeout"
-                ? Timeout.make({ action, cause })
-                : model.reason === "Conflict"
-                  ? Conflict.make({ cause })
-                  : Operation.make({
-                      action:
-                        model.command === "ready" ? "start" : model.command === "remove" ? "cleanup" : model.command,
-                      cause,
-                    });
+            const failed = model;
+
+            const reason = Match.value(failed.reason).pipe(
+              Match.when("Timeout", () => Timeout.make({ action, cause })),
+              Match.when("Conflict", () => Conflict.make({ cause })),
+              Match.orElse(() =>
+                Operation.make({
+                  action: Match.value(failed.command).pipe(
+                    Match.when("ready", (): "start" => "start"),
+                    Match.when("remove", (): "cleanup" => "cleanup"),
+                    Match.orElse((command) => command),
+                  ),
+                  cause,
+                }),
+              ),
+            );
+
             return yield* BrainServiceError.make({ reason });
           }
         }).pipe(
@@ -166,12 +205,14 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
               return Effect.void;
             }
 
-            settle({ type: "tick", at: deadline });
+            settle(BrainLife.Observed.cases.tick.make({ at: deadline }));
+
             return Effect.fail(
               BrainServiceError.make({ reason: Timeout.make({ action, cause: Redacted.make("deadline") }) }),
             );
           }),
         );
+
         const observed = Effect.gen(function* () {
           yield* Effect.annotateCurrentSpan({
             "fab.action": action,
@@ -191,16 +232,19 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
                 ? model.reason
                 : "interrupted",
           });
+
           return yield* exit;
         }).pipe(Effect.withSpan(`BrainService.${action}`));
+
         const exit = yield* sink.batch(observed).pipe(
           Effect.ensuring(
             Effect.sync(() => {
-              settle({ type: "tick", at: deadline });
+              settle(BrainLife.Observed.cases.tick.make({ at: deadline }));
             }),
           ),
           Effect.exit,
         );
+
         const delivery = yield* flush.pipe(
           Effect.timeoutOrElse({
             duration: Math.max(0, deadline - (yield* Clock.currentTimeMillis)),
@@ -209,6 +253,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           Effect.catch((error) =>
             Effect.gen(function* () {
               const at = yield* Clock.currentTimeMillis;
+
               return yield* sink.batch(
                 Effect.fail(error).pipe(
                   Effect.withSpan("BrainService.delivery", {
@@ -235,9 +280,11 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         }
 
         yield* delivery;
+
         return yield* exit;
       }),
     );
+
   return BrainService.of({ up: perform("up").pipe(Effect.as({ url: spec.url })), stop: perform("stop") });
 });
 

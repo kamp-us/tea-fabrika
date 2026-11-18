@@ -1,7 +1,7 @@
 ---
 id: 0071
 title: fabrika gives each change a risk tier, set from what the change touches and never from who wrote it, that decides how many people must look at it, with its shape left open
-status: amended-in-part by [0079](0079-size-counts-governed-paths-name-who.md)
+status: accepted
 date: 2026-11-10
 tags: [risk-tier, review, attention, person, merge, next, pipeline, settings]
 ---
@@ -34,9 +34,10 @@ A study of public write-ups by the teams that build coding agents (reading, not 
 lands as an experiment) found that the scarce thing is a person's attention, not the review
 itself. One such team places people by risk with a classifier: nobody for low risk, one person for
 medium, two for high. Others review every change, review after the merge, or forbid human review.
-These are the companies' own claims about their own work, not checked by us. An experiment is
-running that tags a public repo's merged pull requests by risk tier from their paths and counts
-the reverts and fixes that came later. Its result shapes the open points below.
+These are the companies' own claims about their own work, not checked by us. An experiment
+([experiment 252](../experiments/252-risk-tiers-on-phoenix.md)) tagged a public repo's merged pull
+requests by risk tier from their paths and counted the fixes that came later. Its result shaped the
+answer to what sets the risk tier.
 
 The industry's words are "risk tier" and "risk-based review". Here "tier" alone already means a
 slice of the plan ([the tiers](../docs/plan/tiers.md)), so this record always writes "risk tier"
@@ -69,6 +70,10 @@ Related, and not changed by this record:
 decides how many people must look at it (owner, 2026-11-10).**
 
 - The risk tier comes from the change: what it touches. It never comes from who or what wrote it.
+- What sets the risk tier: the change's size sets how many people must look, and the governed paths
+  it touches set who, both read from fabrika's own settings and no classifier
+  ([0079](0079-size-counts-governed-paths-name-who.md), a trial: nothing blocks on it until a replay
+  on this repo measures its false alarms).
 - The risk tier decides how many people must look: none, one or more. It is how fabrika decides
   whom to ask for attention, so a person looks only where their look changes the outcome.
 - An agent's approval never counts as a person's look. This is already a rule:
@@ -81,8 +86,6 @@ decides how many people must look at it (owner, 2026-11-10).**
 Not decided here:
 
 - How many risk tiers there are, and their names.
-- What sets the risk tier: paths, a classifier, or both.
-  *2026-11-10: answered by [0079](0079-size-counts-governed-paths-name-who.md): size sets how many, governed paths set who.*
 - The count of people for each risk tier, and whether the top one may be zero.
 - Whether a look comes before the merge or after it.
 - Which risk tier a repo's settings may change. 0069 says a choice that makes sense as a
@@ -101,8 +104,8 @@ Not decided here:
 
 ## Consequences
 
-- This commits to the idea before we have a measurement of our own. The running experiment may
-  change the shape; it does not reopen the rules above.
+- This commits to the idea before we have a measurement of our own. The experiment changed the
+  shape only where 0079 says; it does not reopen the rules above.
 - The shape gets its own plan and its own walk with the owner.
 - What must be recorded from day one, so nothing is lost
   ([the data shape comes first](../AGENTS.md#before-you-design-anything)):

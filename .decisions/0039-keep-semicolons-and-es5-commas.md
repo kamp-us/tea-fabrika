@@ -1,7 +1,7 @@
 ---
 id: 0039
 title: The repo keeps semicolons and trailing commas, function parameters and call arguments included
-status: amended-in-part by [0094](0094-lines-are-100-columns.md)
+status: accepted
 date: 2026-11-09
 tags: [style, format, oxfmt, semicolons, trailing-commas, effect]
 ---
@@ -47,14 +47,18 @@ const made = make(
 
 ## Context
 
-0029 set the whole format to Effect's `dprint.json`: 2 spaces, 120 columns, no semicolons, no
+0029 set the whole format to Effect's `dprint.json`: its indent, its width, no semicolons, no
 trailing commas, spaces inside braces. Ticket 466's sweep, which applies those settings to every
 file, had not landed yet. Later on 2026-11-09 the owner picked these two settings back. The reason
-is the owner's reading taste.
+is the owner's reading taste. On 2026-11-11, [0094](0094-lines-are-100-columns.md) then set the
+line width narrower than Effect's.
 
 This amends 0029 in part, and with it the semicolon and trailing comma rows of
 [0023](0023-next-follows-effects-code-style.md)'s table. Ticket 498 is this record, and ticket 503
-its amendment. Ticket 466's sweep takes the settings.
+the change of `trailingComma` from `"es5"` to `"all"` the same day. This record first said
+`"es5"`: a comma in objects and arrays, none in function parameters or call arguments
+([PR 704](https://github.com/usirin/tea-fabrika/pull/704)). The owner changed that part after
+reading that pull request. Ticket 466's sweep takes the settings.
 
 ## Decision
 
@@ -63,11 +67,13 @@ list, function parameters and call arguments included.**
 
 - In oxfmt's settings: `semi` is `true`, its default, so the key is left out, and `trailingComma`
   is `"all"`. These are the two values the repo had before 0029.
-- The installed oxfmt, 0.75.0, says in its `configuration_schema.json` that `trailingComma` prints
+- oxfmt's `configuration_schema.json`, read at 0.75.0, says that `trailingComma` prints
   "trailing commas wherever possible in multi-line comma-separated syntactic structures", and that
   a single-line array never gets one. `"all"` is its default.
-- Everything else in 0029's format stays: 2 spaces, 120 columns, spaces inside braces, and JSON
-  keeps its own settings, with no trailing comma.
+- Everything else in 0029's format stays: the indent and the spaces inside braces
+  (`.oxfmtrc.json`'s `useTabs`, `tabWidth` and `bracketSpacing`), and the line width, which
+  [0094](0094-lines-are-100-columns.md) sets (`printWidth`). JSON keeps its own settings, with no
+  trailing comma.
 
 Binding constraints:
 
@@ -81,13 +87,4 @@ Binding constraints:
 - `.oxfmtrc.json` does not change in this record's pull requests. Ticket 466's sweep changes it
   and reformats every file once, with these settings.
 - 0023's table gets two kept differences: semicolons, and trailing commas.
-- Not decided here: any other format setting, and anything 0023 still marks open.
-
-## Amendments
-
-- 2026-11-09: trailing commas stay everywhere, function parameters and call arguments included, so
-  `trailingComma` is `"all"`. This record first said `"es5"`: a comma in objects and arrays, none
-  in function parameters or call arguments
-  ([PR 704](https://github.com/usirin/tea-fabrika/pull/704)). The owner changed that part the same
-  day, after reading that pull request. The title and the text above now say the new rule (ticket
-  503).
+- Not decided here: any other format setting.

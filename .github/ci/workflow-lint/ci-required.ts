@@ -1,10 +1,12 @@
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's ci-required job, the one required check.
 import { compact, map, type Rule, steps } from "./shared.ts";
 
 export const ciRequired: Rule = ({ jobs }, require) => {
   // The one required check: it waits on every other job, never skips, and judges them all.
   const summary = map(jobs["ci-required"]),
-    others = Object.keys(jobs).filter((name) => name !== "ci-required");
+    others = Rec.keys(jobs).filter((name) => name !== "ci-required");
+
   const needed = Array.isArray(summary["needs"]) ? summary["needs"] : [];
   require(needed.length === others.length &&
     others.every((name) => needed.includes(name)), "ci-required needs every other job");

@@ -1,19 +1,16 @@
 ---
 id: 0062
-title: Test files keep to the floors too, and a lower room tests against a real database through a suite that a higher room runs
-status: amended-in-part by [0091](0091-modules-and-layers.md), [0536](0536-real-resource-tests-run-only-on-the-schedule.md)
+title: Test files keep to the layers too, and a lower module tests against a real database through a suite that a higher module runs
+status: accepted
 date: 2026-11-10
-tags: [tests, floors, rooms, layers, suites, sqlite, node, cloudflare, libfabrika, next]
+tags: [tests, modules, layers, suites, sqlite, node, cloudflare, libfabrika, next]
 ---
 
-# 0062: Test files keep to the floors too, and a lower room tests against a real database through a suite that a higher room runs
+# 0062: Test files keep to the layers too, and a lower module tests against a real database through a suite that a higher module runs
 
-**What this decides:** in `next/`'s libfabrika, a test file imports only from lower floors, as
-product code does, and a room whose laws need a real database writes them as a suite that the room
-holding the driver runs.
-
-A room is now a module and a floor a layer, names only; every rule here holds
-([0091](0091-modules-and-layers.md)).
+**What this decides:** in `next/`'s libfabrika, a test file imports only from lower layers, as
+product code does, and a module whose laws need a real database writes them as a suite that the
+module holding the driver runs.
 
 ```mermaid
 flowchart TD
@@ -23,23 +20,23 @@ flowchart TD
   nodeRunner --> driver["nodeSql, the Node driver"]
 ```
 
-Every arrow points down a floor. `telemetry/` holds the laws and names only the `Sql` type; the
-room that owns a driver runs them. The dotted runner is not built and not decided here.
+Every arrow points down a layer. `telemetry/` holds the laws and names only the `Sql` type; the
+module that owns a driver runs them. The dotted runner is not built and not decided here.
 
 ## Context
 
-The folder move (ticket 477, PR 2) put the rooms on their floors and found six test sites that
-break the floor rule, all in `next/packages/libfabrika/src`, read on the move's branch at
+The folder move (ticket 477, PR 2) put the modules on their layers and found six test sites
+that break the layer rule, all in `next/packages/libfabrika/src`, read on the move's branch at
 `d8ffd5496`:
 
-- Five telemetry tests import `nodeSql` from `ledger/NodeSqlite.ts`, one floor up:
+- Five telemetry tests import `nodeSql` from `ledger/NodeSqlite.ts`, one layer up:
   `telemetry/P12Readers.laws.test.ts`, `RecordPart.test.ts`, `Records.test.ts`, `Sink.test.ts`
   and `internal/measurements.test.ts`.
-- `presence/Connections.test.ts` imports `processes/Process.test-support.ts`, on its own floor.
+- `presence/Connections.test.ts` imports `processes/Process.test-support.ts`, on its own layer.
 
 `NodeSqlite.ts` imports only `../Sql.ts` and a type from `node:sqlite`. It sits in `ledger/` only
 because it lived in `data/`. [0051](0051-gateway-connection-and-node-by-job.md) sends platform code
-to `node/`, the top floor and later its own package. Then 25 test files below `node/` that import
+to `node/`, the top layer and later its own package. Then 25 test files below `node/` that import
 it today would import upward, plus `Process.test-support.ts`, which about 18 more use (grep).
 
 What the industry does, each read for this record:
@@ -75,23 +72,28 @@ Node's SQLite misses real differences from the Durable Object's. The object's `s
 its transactions go through `transactionSync`, while `nodeSql` sends `BEGIN IMMEDIATE`, `COMMIT`
 and `ROLLBACK`. A suite that takes the driver is the shape that can later run on both.
 
-**How this fits older records.** It applies [0043](0043-rooms-on-floors.md)'s rule 3 ("a room
-imports only from lower floors") to test files, a case 0043 did not name, and keeps the "no
-exemption" of its amendments and of [0055](0055-errors-named-by-their-service.md). Neither changes,
-so neither status line does; 0043 gets a one-line pointer under rule 3.
-[0032](0032-libraries-take-effects-file-layout.md)'s "the test sits beside it" still holds for the
-laws: the suite sits beside its module, and only the runner lives in the driver's room. Tracker
-ticket 642 is this record; ticket 641 builds the first part.
+**How this fits older records.** It applies [0043](0043-rooms-on-floors.md)'s rule 3 (a module
+imports only from lower layers) to test files, a case 0043 did not name, and keeps the "no
+exemption" of 0043 and of [0055](0055-errors-named-by-their-service.md). As in
+[0032](0032-libraries-take-effects-file-layout.md)'s "the test sits beside it", the suite sits
+beside the file it tests, and only the runner lives in the driver's module. Tracker ticket 642 is this
+record; ticket 641 builds the first part.
+
+**Where the real-driver run happens.** A suite that needs a real database, run by the module that
+owns the driver, runs on the full run on main, never on a pull request or in the merge queue
+([0536](0536-real-resource-tests-run-only-on-the-schedule.md); the full run starts on the `push`
+trigger on main and the `cron` key of `.github/workflows/scheduled.yaml`,
+[0581](0581-main-full-run-starts-on-push-and-hourly.md)).
 
 ## Decision
 
-**Test files keep to the floors, with no exemption, and a lower room's database laws are a suite
-that the room owning the driver runs.**
+**Test files keep to the layers, with no exemption, and a lower module's database laws are a suite
+that the module owning the driver runs.**
 
 **Before** (on the move's branch):
 
 ```ts
-// telemetry/Sink.test.ts: imports a floor up
+// telemetry/Sink.test.ts: imports a layer up
 import { DatabaseSync } from "node:sqlite";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 
@@ -119,17 +121,17 @@ SinkTest.suite(nodeSql);
 What moved: the import of the driver left `telemetry/`, and the laws stayed beside `Sink.ts`.
 
 - **No exemption for tests.** A test file, a `*.test-support.ts` and a suite import only from lower
-  floors, exactly as product code does (0043, 0055). This is the layer tools' default and what
+  layers, exactly as product code does (0043, 0055). This is the layer tools' default and what
   Effect and phoenix do.
-- **A room whose laws need a real database writes them as a suite:** a function that takes a `Sql`
-  maker and registers the laws. The file is `<Module>Test.ts` beside its module, so vitest does not
-  run it alone, and it exports `suite`, read through its module per
+- **A module whose laws need a real database writes them as a suite:** a function that takes a `Sql`
+  maker and registers the laws. The file is `<Module>Test.ts` beside the file it tests, so vitest
+  does not run it alone, and it exports `suite`, read through its module per
   [0029](0029-format-and-names-follow-effect.md): `SinkTest.suite(nodeSql)`.
-- **The room that owns the driver runs the suite,** in a `*.test.ts` of its own. The same suite can
-  later run on the Durable Object's SQLite, the "one set of laws with a driver per runtime" that
+- **The module that owns the driver runs the suite,** in a `*.test.ts` of its own. The same suite
+  can later run on the Durable Object's SQLite, the "one set of laws with a driver per runtime" that
   [an object class stays thin](../docs/direction/object-classes-stay-thin.md) asks for.
-- **A test helper two rooms share lives on a floor both may import.** For presence, the part of
-  `Process.test-support.ts` it uses moves down to a floor below both rooms.
+- **A test helper two modules share lives on a layer both may import.** For presence, the part of
+  `Process.test-support.ts` it uses moves down to a layer below both modules.
 - **Sequencing.** The five telemetry tests and presence's helper are fixed in their own pull
   request right after the move's PR 2 (ticket 641). Until then the six sites are six `allowed`
   entries in `layer-rules.json`, each dated, with a guard that fails if that pull request lands
@@ -139,7 +141,7 @@ What moved: the import of the driver left `telemetry/`, and the laws stayed besi
 
 **Binding constraints:**
 
-- No rule, glob or `allowed` entry exempts test files from the floors, except the six dated entries
+- No rule, glob or `allowed` entry exempts test files from the layers, except the six dated entries
   above, which leave with ticket 641.
 - A suite that no runner calls is a failure: the plan that adds the first suites adds a check that
   each one is run.
@@ -151,7 +153,7 @@ What moved: the import of the driver left `telemetry/`, and the laws stayed besi
   StrykerJS still kills mutants through a suite.
 - Ticket 644 moves `nodeSql` to `node/`; the test files below it become suites.
 - Ticket 643, apart from this rule: SQLite tests that never reopen use an in-memory database.
-- The cost: a room's database laws now span two files, the suite and its runner, and runners
+- The cost: a module's database laws now span two files, the suite and its runner, and runners
   gather in `node/`. A wrong import fails lint early; a suite nobody runs is the risk the check
   above closes.
 - Not decided here: whether tests also run inside the real runtime as a second runner, and when.
@@ -159,7 +161,6 @@ What moved: the import of the driver left `telemetry/`, and the laws stayed besi
 ## Records
 
 - No glossary row: "suite" keeps its everyday testing meaning.
-- [0043](0043-rooms-on-floors.md): one pointer under rule 3, no status change.
-- AGENTS.md: one clause in the rooms-on-floors bullet.
+- AGENTS.md: one clause in the library-layout bullet.
 - [`docs/direction/follows/`](../docs/direction/follows/README.md) has no Effect table, so no row
   is added.

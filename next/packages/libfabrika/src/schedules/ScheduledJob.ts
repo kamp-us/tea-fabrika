@@ -5,6 +5,7 @@ import type { AnyCmdDef, CmdOf, Reducer, Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import * as Duration from "effect/Duration";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
@@ -15,9 +16,10 @@ import * as Schema from "effect/Schema";
  * @category models
  */
 export const Model = Schema.TaggedUnion({
-  idle: { next: Schema.Number, period: Schema.Int },
-  running: { due: Schema.Number, period: Schema.Int },
+  idle: { next: Schema.Finite, period: Schema.Int },
+  running: { due: Schema.Finite, period: Schema.Int },
 });
+
 /**
  * The job's state: `idle` with the next due time, or `running` with the time of the timer message
  * that started it.
@@ -26,16 +28,19 @@ export const Model = Schema.TaggedUnion({
  */
 export type Model = typeof Model.Type;
 
-const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
+const Timer = Schema.TaggedStruct("timer", { at: Schema.Finite });
 
 /**
  * The period given to `make` is not a whole, positive number of milliseconds.
  *
  * @category errors
  */
-export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError>()("ScheduledJobError", {
-  reason: Schema.Literals(["bad_period"]),
-}) {}
+export class ScheduledJobError extends Schema.TaggedError<ScheduledJobError, { readonly brand: unique symbol }>()(
+  "ScheduledJobError",
+  {
+    reason: Schema.Literals(["bad_period"]),
+  },
+) {}
 
 /**
  * Returns the time the runner should wake the job next, or null while the job is running.
@@ -67,7 +72,7 @@ export const make = <C extends AnyCmdDef>(config: {
   readonly cmd: C;
   readonly work: (due: number, period: number) => CmdOf<C>;
 }) => {
-  if (typeof config.period === "number" && !Number.isSafeInteger(config.period)) {
+  if (Predicate.isNumber(config.period) && !Number.isSafeInteger(config.period)) {
     return Result.fail(ScheduledJobError.make({ reason: "bad_period" }));
   }
 

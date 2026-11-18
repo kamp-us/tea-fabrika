@@ -1,7 +1,7 @@
 ---
 id: 0573
 title: In next/ and our tooling, a trusted lint rule replaces ours wherever it catches the same or more, and ours stays wherever it catches more
-status: amended-in-part by [0575](0575-deterministic-keys-is-the-service-id-form.md)
+status: accepted
 date: 2026-11-15
 tags: [lint, oxlint, oxlint-plugins, anti-slop, tsgo, existing-tools, sev0, next, tooling]
 ---
@@ -63,30 +63,51 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
     [0562](0562-nothing-teaches-the-wrong-shape.md). That file leaves open which rule holds the ban;
     this one says theirs.
   - `no-redacted-value`, to oxlint's `no-restricted-properties` on `Redacted.value`.
-  - `no-secret-env`, to the checker's `processEnv` and `processEnvInEffect`, folder by folder as each
-    reaches zero. Tests and tooling are not left out.
+  - `service-id`, to the checker's `deterministicKeys`, which is an error and sets the service ID
+    form ([0575](0575-deterministic-keys-is-the-service-id-form.md)). `service-id` and its test are
+    deleted in the pull request that turns `deterministicKeys` on where `service-id` ran, at zero
+    hits.
   - `no-expect-in-if`, to oxlint's `vitest/no-conditional-expect`, folder by folder.
 - **Also go, where theirs is the same or wider:**
   - `no-implicit-effect-concurrency`, to the checker's `missingConcurrencyOption`, after
     `@effect/tsgo` moves to 0.69.0.
-  - `no-wall-clock` and `no-clock-in-view`, to the checker's `globalDate`, `globalDateInEffect`,
-    `globalRandom` and UUID checks.
   - `no-node-imports`, to oxlint's `import/no-nodejs-modules`.
   - `no-cause-squash` and `no-effect-run-outside-edge`, to oxlint's `no-restricted-properties` and
     `no-restricted-imports`.
-  - `padding-line-between-statements`, to anti-slop's `require-readable-spacing`, only once that rule
-    is on and a check on main shows it flags every line ours does.
 - **Stay, because theirs is narrower:** `no-raw-try-catch`, `effect-functions`, `no-effect-promise`,
   `no-bare-disable`, `use-import-extensions`, `no-promises`, `no-type-assertions`,
-  `no-question-word-key`, `one-store-hook`, `no-bare-tell`, `service-id`.
+  `no-question-word-key`, `one-store-hook`, `no-bare-tell`, `padding-line-between-statements`,
+  `no-wall-clock`, `no-clock-in-view` and `no-secret-env`. The last four were first listed under
+  "go", and each was found narrower by a probe:
+  - **`padding-line-between-statements`** stays beside anti-slop's `require-readable-spacing`. The
+    check this file asked for found that theirs misses class-member lines (a method after a field,
+    a method after a method), so it does not flag every line ours does. Upstream issue
+    <https://github.com/dmmulroy/anti-slop/issues/78>, filed 2026-11-15.
+  - **`no-wall-clock` and `no-clock-in-view`** stay beside the checker's clock checks. A probe in
+    `libfabrika/src/gateway`, run once on 2026-11-16 with `globalDate`, `globalDateInEffect`,
+    `globalRandom` and `globalTimers` at error, flagged `Date.now()`, `new Date()`,
+    `Math.random()` and `crypto.randomUUID()`, but not `Date()`, `globalThis.Date()`,
+    `performance.now()` or `window.performance.now()`. Ours refuse all four
+    (`oxlint-plugins/no-clock-in-view.ts`, its `Date` call check and its `performance.now` set),
+    and `next/apps/fabrika/src/worker-mail.integration.test.ts` keeps a `performance.now()` that
+    the checker's zero recount passes. The proof is the Effect sweep's E89 review row,
+    `field/runs/2026-11-16-effect-e89-review1.json` on `fabrikalfa/effect-e89`. Ruled by the merge
+    session's coordinator for E89, as an application of the owner's principle here, not a new
+    call.
+  - **`no-secret-env`** stays beside the checker's `processEnv` and `processEnvInEffect`. A probe
+    on 2026-11-16 with both checks at error flagged `process.env.GITHUB_TOKEN`,
+    `process.env["GITHUB_TOKEN"]` and `process?.env.GITHUB_TOKEN`, but not
+    `const { GITHUB_TOKEN } = process.env`, nor the same inside `Effect.sync`. Ours refuses the
+    destructured form (`oxlint-plugins/no-secret-env.ts`, its `VariableDeclarator` handler), and it
+    also runs on today's version, outside the checker. The proof is the Effect sweep's E86 review
+    row, `field/runs/2026-11-16-effect-e86-review.json` on `fabrikalfa/effect-e86`. It applies the
+    owner's principle the same way and is not a new call.
 - **Stay, as the audit marked them:** `door-is-library`, `edge-comment`, `integration-test-name`,
   `law-shape`, `isolate-boundary`, `modules`, `no-ledger-sql`, `no-of`, `no-project-settings`,
   `no-stage-word`, `no-static-layer`, `one-machine-per-file`, `program-package-layout`,
   `outside-input-constructor`, `package-imports`, `runs-from-depth`, `service-contract`,
   `written-service-type`, `jsdocs`, `no-numeric-duration`, `no-throw-in-effect-gen`,
   `prefer-schema-arbitrary`.
-- **`service-id` stays for now.** The checker's `deterministicKeys` stays one of
-  [0565](0565-effects-own-checks-block.md)'s unruled clashes. It is not decided here.
 
 **Binding constraints**
 
@@ -99,24 +120,20 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
 ## Consequences
 
 - Each swap is its own later pull request, in the audit's order. Nothing is deleted by this file.
-- **The cost is cleanups.** `no-secret-env` and `no-expect-in-if` widen a lot (the audit counted 159
-  and 947 new hits). `no-hand-tag`'s are in 0562's cleanup.
+- **The cost is cleanups.** The checker's `processEnv` checks, on beside `no-secret-env`, and
+  `no-expect-in-if` widen a lot (the audit counted 159 and 947 new hits). `no-hand-tag`'s are in
+  0562's cleanup.
 - The anti-slop rules are brought in whole at one commit
   ([0563](0563-anti-slop-plugin-as-it-ships.md)), so a swap changes who wrote the file, not whether
   we hold one.
 - A swap changes the name in every disable line for the rule it replaces, and in
   [`oxlint-plugins/README.md`](../oxlint-plugins/README.md), `edge-comment` and CI's `edges` step
   where they read the old name.
-- Not decided here: the `@effect/tsgo` bump itself, `service-id`, and the five rules in the "stay"
-  list whose trusted rule may later catch more.
+- Not decided here: the `@effect/tsgo` bump itself, and the rules in the "stay, because theirs is
+  narrower" list whose trusted rule may later catch more.
 
 ## Records
 
 - Findings from the audit, written as rows in `field/findings/`: the stale `effectFnOpportunity`
   line in `oxlint-plugins/README.md`, and the two files `outside-input-constructor` names that no
   longer exist.
-
-## Amendments
-
-- 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) overrides "`service-id` stays for now". The checker's `deterministicKeys` is an error and `service-id` is deleted.
-- 2026-11-15: `padding-line-between-statements` stays. The check this file asks for found that anti-slop's `require-readable-spacing` misses class-member lines (a method after a field, a method after a method), so it does not flag every line ours does. Upstream issue https://github.com/dmmulroy/anti-slop/issues/78, filed 2026-11-15.

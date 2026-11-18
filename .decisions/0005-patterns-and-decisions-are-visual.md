@@ -1,7 +1,7 @@
 ---
 id: 0005
 title: Code shapes are written to .patterns/ with the write-pattern skill, and every pattern doc and every decision with a shape opens with a Mermaid diagram, then code, then words
-status: amended-in-part by [0585](0585-kalfa-is-six-domain-packages.md)
+status: accepted
 date: 2026-11-09
 tags: [patterns, decisions, diagrams, mermaid, docs, skills]
 ---
@@ -59,6 +59,8 @@ words.**
 - The write-pattern skill keeps fabrika's judgment (when a shape earns a doc, re-grounding a doc
   against the source when it drifts, pointing at real files with `path:line`), with every fabrika
   command replaced by plain file and git steps.
+- The folder is `.patterns/` today. [0585](0585-kalfa-is-six-domain-packages.md) moves it under
+  `.kalfa/` when its records plan builds the move.
 - Diagrams are Mermaid wherever possible. Only when Mermaid really cannot express the thing may a
   doc use ASCII art or another form, and then it says in one line why Mermaid could not.
 - A diagram shows the real mechanism, with real names from the code. No decorative boxes. No

@@ -5,7 +5,7 @@
 // - `Link`: the Schema.TaggedUnion of dialing{dial, tries?}, waiting_grant{dial, fingerprint, code,
 //   until, knocks?}, online{dial, ping, pings?}, retrying{dial, tries >= 1}, removed{fingerprint},
 //   blocked{reason}.
-// - `LinkMsg` and `linkMachine`, one tea machine whose init is `dialing` at dial 1. Msgs by `type`:
+// - `LinkMsg` and `linkMachine`, one tea machine whose init is `dialing` at dial 1. Msgs by `_tag`:
 //   admitted{dial, ping, ms}, not_granted{dial, fingerprint, code, until, ms}, granted{dial},
 //   closed{dial, code, fingerprint, ms}, retry{dial, tries}, beat{dial}, pong{dial}, stalled{dial, ms},
 //   renew{dial, knocks?}, blocked{reason}, ask_again{dial}. Cmds: `ping` and `knock`, each {dial}.
@@ -18,23 +18,42 @@
 // close or block from outside, or a stale copy of a Msg this walk already delivered on an older dial.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { backoff, CAP, Link, linkMachine, type LinkMsg, linkTimer } from "./Link.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  admitted: {},
+  ask_again: {},
+  blocked: {},
+  closed: {},
+  granted: {},
+  not_granted: {},
+  pong: {},
+  retry: {},
+});
+
 const SEED = 119120;
+
 const BEAT_BOUND = 10_000; // L1: an unanswered beat leaves online within 10 s
+
 const REMOVED = 4003;
 
 // L20: every Link Msg about a dial must carry it; blocked is the one profile-wide failure.
-expectTypeOf<Exclude<LinkMsg, { readonly type: "blocked" }>>().toMatchTypeOf<{ readonly dial: number }>();
+expectTypeOf<Exclude<LinkMsg, { readonly _tag: "blocked" }>>().toMatchTypeOf<{ readonly dial: number }>();
 
-type Step = readonly [Link, ReadonlyArray<{ readonly type: string; readonly dial?: number }>];
+type Step = readonly [Link, ReadonlyArray<{ readonly _tag: string; readonly dial?: number }>];
+
 const step = (s: Link, m: LinkMsg): Step => applyCell(linkMachine, s, m);
 
 const currentDial = (s: Link): number | null => ("dial" in s ? s.dial : null);
+
 const live = (s: Link): boolean => s._tag !== "removed" && s._tag !== "blocked";
-const roundTrip = (s: Link): Link => Schema.decodeUnknownSync(Link)(Schema.encodeSync(Link)(s));
+
+const roundTrip = (s: Link): Link => Schema.decodeSync(Link)(Schema.encodeSync(Link)(s));
 
 /** One generated step: choice numbers and words the walk turns into a move against its state. */
 const choice = fc.record({
@@ -47,6 +66,7 @@ const choice = fc.record({
 });
 
 type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
+
 const walks = fc.array(choice, { minLength: 1, maxLength: 60 });
 
 /** A close code from outside: a normal close, an abnormal one, an unknown one, or the removal. */
@@ -62,8 +82,8 @@ const moves = (w: Walk, c: Choice): ReadonlyArray<LinkMsg> => {
   const fingerprint = `SHA256:${c.word}`;
   const timer = linkTimer(s);
   const out: Array<LinkMsg> = timer === null ? [] : [timer.msg];
-  const blocked: LinkMsg = { type: "blocked", reason: `store ${c.word}` };
-  const stale = w.delivered.filter((m) => "dial" in m && m.dial !== currentDial(s));
+  const blocked: LinkMsg = { ...Tag.cases.blocked.make({}), reason: `store ${c.word}` };
+  const stale = Arr.filter(w.delivered, (m) => "dial" in m && m.dial !== currentDial(s));
 
   if (stale.length > 0) {
     out.push(stale[c.pick % stale.length]!);
@@ -71,33 +91,44 @@ const moves = (w: Walk, c: Choice): ReadonlyArray<LinkMsg> => {
 
   if (s._tag === "dialing") {
     out.push(
-      { type: "admitted", dial: s.dial, ping: c.ping, ms: c.ms },
-      { type: "not_granted", dial: s.dial, fingerprint, code: c.word, until: c.ping, ms: c.ms },
-      { type: "closed", dial: s.dial, code: closeCode(c), fingerprint, ms: c.ms },
+      { ...Tag.cases.admitted.make({}), dial: s.dial, ping: c.ping, ms: c.ms },
+      { ...Tag.cases.not_granted.make({}), dial: s.dial, fingerprint, code: c.word, until: c.ping, ms: c.ms },
+      { ...Tag.cases.closed.make({}), dial: s.dial, code: closeCode(c), fingerprint, ms: c.ms },
       blocked,
     );
   } else if (s._tag === "waiting_grant") {
     out.push(
-      { type: "granted", dial: s.dial },
+      { ...Tag.cases.granted.make({}), dial: s.dial },
       // The door renews the code on the same socket, or a confused peer admits without a grant.
-      { type: "not_granted", dial: s.dial, fingerprint: s.fingerprint, code: c.word, until: c.ping, ms: c.ms },
-      { type: "admitted", dial: s.dial, ping: c.ping, ms: c.ms },
-      { type: "closed", dial: s.dial, code: closeCode(c), fingerprint: s.fingerprint, ms: c.ms },
+      {
+        ...Tag.cases.not_granted.make({}),
+        dial: s.dial,
+        fingerprint: s.fingerprint,
+        code: c.word,
+        until: c.ping,
+        ms: c.ms,
+      },
+      { ...Tag.cases.admitted.make({}), dial: s.dial, ping: c.ping, ms: c.ms },
+      { ...Tag.cases.closed.make({}), dial: s.dial, code: closeCode(c), fingerprint: s.fingerprint, ms: c.ms },
       blocked,
     );
   } else if (s._tag === "online") {
     out.push(
-      { type: "pong", dial: s.dial },
-      { type: "closed", dial: s.dial, code: closeCode(c), fingerprint, ms: c.ms },
+      { ...Tag.cases.pong.make({}), dial: s.dial },
+      { ...Tag.cases.closed.make({}), dial: s.dial, code: closeCode(c), fingerprint, ms: c.ms },
       blocked,
     );
   } else if (s._tag === "retrying") {
     out.push(blocked);
   } else if (s._tag === "removed") {
-    out.push({ type: "ask_again", dial: w.dials + 1 }, { type: "granted", dial: w.dials }, blocked);
+    out.push(
+      { ...Tag.cases.ask_again.make({}), dial: w.dials + 1 },
+      { ...Tag.cases.granted.make({}), dial: w.dials },
+      blocked,
+    );
   } else {
     // Blocked: nothing the outside sends moves it, Ask again included.
-    out.push({ type: "ask_again", dial: w.dials + 1 }, blocked);
+    out.push({ ...Tag.cases.ask_again.make({}), dial: w.dials + 1 }, blocked);
   }
 
   return out;
@@ -135,12 +166,12 @@ describe("L1: the link machine", () => {
     fc.assert(
       fc.property(walks, (list) => {
         fold(list, (prev, m, next, cmds) => {
-          if (m.type === "ask_again" || !("dial" in m) || !live(prev.s) || m.dial === currentDial(prev.s)) {
+          if (m._tag === "ask_again" || !("dial" in m) || !live(prev.s) || m.dial === currentDial(prev.s)) {
             return;
           }
 
           stale++;
-          expect(next, `${m.type} for dial ${m.dial} moved ${prev.s._tag} on dial ${currentDial(prev.s)}`).toEqual(
+          expect(next, `${m._tag} for dial ${m.dial} moved ${prev.s._tag} on dial ${currentDial(prev.s)}`).toEqual(
             prev.s,
           );
           expect(cmds).toEqual([]);
@@ -161,15 +192,17 @@ describe("L1: the link machine", () => {
           }
 
           left++;
+
           const allowed =
-            (m.type === "granted" && m.dial === prev.s.dial) ||
-            (m.type === "closed" && m.dial === prev.s.dial) ||
-            m.type === "blocked";
-          expect(allowed, `${m.type} took a grant wait to ${next._tag}`).toBe(true);
-          expect(m.type !== "granted" || next._tag === "dialing", "granted signs a fresh hello on the same dial").toBe(
+            (m._tag === "granted" && m.dial === prev.s.dial) ||
+            (m._tag === "closed" && m.dial === prev.s.dial) ||
+            m._tag === "blocked";
+
+          expect(allowed, `${m._tag} took a grant wait to ${next._tag}`).toBe(true);
+          expect(m._tag !== "granted" || next._tag === "dialing", "granted signs a fresh hello on the same dial").toBe(
             true,
           );
-          expect(m.type !== "granted" || currentDial(next) === prev.s.dial).toBe(true);
+          expect(m._tag !== "granted" || currentDial(next) === prev.s.dial).toBe(true);
         });
       }),
       opts,
@@ -180,10 +213,11 @@ describe("L1: the link machine", () => {
   it("a 4003 close on the current dial is removed, and only ask_again dials, past every old dial", () => {
     let removed = 0,
       asked = 0;
+
     fc.assert(
       fc.property(walks, (list) => {
         fold(list, (prev, m, next, cmds) => {
-          if (m.type === "closed" && m.code === REMOVED && live(prev.s) && m.dial === currentDial(prev.s)) {
+          if (m._tag === "closed" && m.code === REMOVED && live(prev.s) && m.dial === currentDial(prev.s)) {
             if (prev.s._tag !== "retrying") {
               removed++;
               expect(next).toEqual(Link.cases.removed.make({ fingerprint: m.fingerprint }));
@@ -194,15 +228,16 @@ describe("L1: the link machine", () => {
             return;
           }
 
-          if (m.type === "ask_again") {
+          if (m._tag === "ask_again") {
             asked++;
             expect(next._tag).toBe("dialing");
             expect(currentDial(next)).toBe(m.dial);
-            expect(m.dial).toBeGreaterThan(Math.max(0, ...prev.delivered.map((d) => ("dial" in d ? d.dial : 0))));
+            expect(m.dial).toBeGreaterThan(Math.max(0, ...Arr.map(prev.delivered, (d) => ("dial" in d ? d.dial : 0))));
+
             return;
           }
 
-          expect(next, `${m.type} moved a removed key`).toEqual(prev.s);
+          expect(next, `${m._tag} moved a removed key`).toEqual(prev.s);
           expect(cmds).toEqual([]);
         });
       }),
@@ -220,6 +255,7 @@ describe("L1: the link machine", () => {
 
           if (!live(s)) {
             expect(timer, `${s._tag} has a timer`).toBeNull();
+
             return;
           }
 
@@ -231,7 +267,7 @@ describe("L1: the link machine", () => {
           expect(s._tag !== "waiting_grant" || after._tag === "waiting_grant", "a timer admitted a grant wait").toBe(
             true,
           );
-          expect(s._tag !== "waiting_grant" || cmds.some((c) => c.type === "knock"), "renew knocks").toBe(true);
+          expect(s._tag !== "waiting_grant" || Arr.some(cmds, (c) => c._tag === "knock"), "renew knocks").toBe(true);
         });
       }),
       opts,
@@ -249,7 +285,10 @@ describe("L1: the link machine", () => {
           expect(retry === null ? null : linkTimer(retry)).toEqual(
             retry === null
               ? null
-              : { after: backoff(retry.tries), msg: { type: "retry", dial: retry.dial, tries: retry.tries } },
+              : {
+                  after: backoff(retry.tries),
+                  msg: { ...Tag.cases.retry.make({}), dial: retry.dial, tries: retry.tries },
+                },
           );
         });
       }),
@@ -268,6 +307,7 @@ describe("L1: the link machine", () => {
           }
 
           online++;
+
           let s: Link = start,
             waited = 0;
 

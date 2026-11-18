@@ -8,17 +8,29 @@
 // driver and no ledger file (0043 rule 11, 0062).
 import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Brand from "effect/Brand";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
-import { Writer, Session, SessionManager, NotGranted, SignRequest } from "./SessionManager.ts";
+import {
+  Writer,
+  Session,
+  SessionManager,
+  NotGranted,
+  SignRequest,
+  type SessionManagerError,
+  type SigningRefused,
+} from "./SessionManager.ts";
 
 // Match fc.jsonValue({maxDepth: depth}): finite numbers, strings/keys of
 // length 0..10, and arrays/objects of width 0..10. No required object keys.
@@ -36,10 +48,15 @@ const json = (depth: number): Schema.Codec<Schema.Json> =>
 
 // Three valid process ids for the fixed example. The generated cases cover the id space.
 const OTHER_PROCESS = "process_0000000000e008000000000001";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const PROCESS = "process_0000000000e008000000000000";
+
 const SPAN = "00f067aa0ba902b7";
+
 const START = "process_0000000000e008000000000002";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const sample = {
@@ -58,6 +75,7 @@ const sample = {
 // T540 regression: write-b collided with the refusal law's fixed second id.
 // The retry/wake law also checks that two write-b calls return the same receipt.
 const sessionExamples = [sample, { ...sample, id: "write-b" }];
+
 // Size covers the whole pattern: 14 characters of SHA256:person- plus
 // the old 1..40 suffix, not just one suffix character at the default size.
 // It also covers write- plus every 1..20-character suffix in the id tuple.
@@ -116,15 +134,18 @@ const setup = ({
   kinds,
 }: typeof sessionSchema.Encoded) => {
   const parent = inputId(`in-${START}-1`);
+
   const policy = {
     input: (name: string) => name === "approve",
     event: (name: string) => name === "answered",
   };
+
   const writer = (as: "person" | "agent") =>
     Writer.cases[as].make({
       key: as === "person" ? key : agentKey,
       for: PERSON,
     });
+
   const saved = (as: "person" | "agent" = "person", personOnly: boolean = true) => ({
     id: parent,
     by: writer(as),
@@ -137,6 +158,7 @@ const setup = ({
     span: { traceId: TRACE, spanId: SPAN },
     arrivedAt: 100,
   });
+
   const authority = (sql: Sql, live: () => boolean = () => true) =>
     SessionManager.layer(
       sql,
@@ -144,8 +166,10 @@ const setup = ({
         live() ? Effect.succeed(writer(key === "agent" ? "agent" : "person")) : Effect.fail(NotGranted.make({})),
       policy,
     );
+
   const signer = (writeId: string = id, kind: string = "answered", process = PROCESS, p: string = parent) =>
     SessionManager.use((s) => s.signer(p, process, kind)).pipe(Effect.provideService(SignRequest, { id: writeId }));
+
   return {
     PROCESS,
     OTHER_PROCESS,
@@ -180,12 +204,9 @@ const authorityProperty = (
 
 const snapshot = (sql: Sql) =>
   JSON.stringify(
-    sql.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map(({ name }) => [
+    Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"), ({ name }) => [
       name,
-      sql
-        .exec(`SELECT * FROM "${String(name)}"`)
-        .map((row) => JSON.stringify(row))
-        .sort(),
+      Arr.map(sql.exec(`SELECT * FROM "${String(name)}"`), (row) => JSON.stringify(row)).sort(),
     ]),
   );
 
@@ -193,6 +214,7 @@ const snapshot = (sql: Sql) =>
 const commitFault = (inner: Sql) => {
   let armed = false;
   const fault = new Error("SQLITE_FULL");
+
   const sql: Sql = {
     ...inner,
     transaction: (step) =>
@@ -207,6 +229,7 @@ const commitFault = (inner: Sql) => {
         return answer;
       }),
   };
+
   return {
     sql,
     fault,
@@ -217,7 +240,7 @@ const commitFault = (inner: Sql) => {
 };
 
 /** Holds that `error` is the signer's own refusal, for that reason. */
-const refusedFor = (error: unknown, reason: string) => {
+const refusedFor = (error: SigningRefused | NotGranted | SessionManagerError | null, reason: string) => {
   expect(error).toHaveProperty("_tag", "SigningRefused");
   expect(error).toHaveProperty("reason", reason);
 };
@@ -232,13 +255,15 @@ const signingLaws = (open: Open) => {
     ([generated]) => {
       for (const value of [sample, generated]) {
         const { writer, parent, TRACE, SPAN } = setup(value);
+
         const session = {
           by: writer("person"),
           parent,
           traceId: TRACE,
           span: { traceId: TRACE, spanId: SPAN },
         };
-        expect(Schema.decodeUnknownSync(Session)(session)).toEqual(session);
+
+        expect(Schema.decodeSync(Session)(session)).toEqual(session);
 
         for (const span of [{}, { traceId: TRACE }, { spanId: SPAN }]) {
           expect(Schema.is(Session)({ ...session, span })).toBe(false);
@@ -358,6 +383,7 @@ const signingLaws = (open: Open) => {
         [...sessionExamples, value],
         (example) => {
           const { saved, parent, signer, authority, PROCESS } = setup(example);
+
           return Effect.forEach(
             [
               ["write-a", "write-b"], // T540: comparing ids without their last character.
@@ -431,12 +457,15 @@ const signingLaws = (open: Open) => {
     ({ saved, parent, signer, authority, PROCESS }) =>
       Effect.gen(function* () {
         const first = yield* open;
+
         const session = yield* Effect.gen(function* () {
           const s = yield* SessionManager;
           yield* s.record(saved());
           yield* s.delivered(parent, PROCESS);
+
           return yield* signer();
         }).pipe(Effect.provide(authority(first.sql)));
+
         yield* first.reopen;
         yield* Effect.gen(function* () {
           expect(yield* signer()).toEqual(session);
@@ -544,8 +573,8 @@ const signalLaws = (open: Open) => {
           const before = snapshot(sql);
 
           for (const id of [
-            JSON.stringify(["notice", key]),
-            `${space}[${space}"notice",${JSON.stringify(key)}]${space}`,
+            Formatter.formatJson(["notice", key]),
+            `${space}[${space}"notice",${Formatter.formatJson(key)}]${space}`,
             '["notice"',
           ]) {
             refusedFor(yield* Effect.flip(signer(id, "saved")), "signal");
@@ -559,6 +588,7 @@ const signalLaws = (open: Open) => {
   );
 
   const toW = Recipient.cases.process.make({ process: OTHER_PROCESS });
+
   const ids = [
     signalId(toW, "watch:1", 1),
     signalId(Recipient.cases.client.make({ client: "window-a", session: START }), "w", 3),
@@ -566,6 +596,7 @@ const signalLaws = (open: Open) => {
     ' [ "DOWN" , 1 ]',
     '["DOWN", not json',
   ];
+
   const refusedThenFree = (id: string) =>
     Effect.gen(function* () {
       const { sql } = yield* open;
@@ -580,6 +611,7 @@ const signalLaws = (open: Open) => {
         expect((yield* signer("write-after")).parent).toBe(parent);
       }).pipe(Effect.provide(authority(sql)));
     });
+
   const id = Arbitrary.schema(
     Schema.Tuple([
       Schema.Literals([0, 1, 2]),
@@ -589,14 +621,15 @@ const signalLaws = (open: Open) => {
     ]),
   ).pipe(
     Arbitrary.map(([kind, space, rest, tail]) =>
-      kind === 0
-        ? JSON.stringify(["DOWN", ...rest])
-        : kind === 1
-          ? `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`
-          : `["DOWN"${tail}`,
+      Match.value(kind).pipe(
+        Match.when(0, () => JSON.stringify(["DOWN", ...rest])),
+        Match.when(1, () => `[${space}${Str.slice(1)(JSON.stringify(["DOWN", ...rest]))}`),
+        Match.orElse(() => `["DOWN"${tail}`),
+      ),
     ),
     Arbitrary.filter(inSignalSpace),
   );
+
   it.effect.prop(
     "for any id the signal id space holds, the signer answers SigningRefused",
     [id],

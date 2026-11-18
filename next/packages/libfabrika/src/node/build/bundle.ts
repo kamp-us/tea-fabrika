@@ -1,12 +1,21 @@
 /**
  * One Rolldown bundle as an Effect, and the program bundles built on it.
  */
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import effectPackage from "effect/package.json" with { type: "json" };
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
+
+import effectPackage from "effect/package.json" with { type: "json" };
+
 import {
   rolldown,
   VERSION,
@@ -57,15 +66,16 @@ const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 /** The bytes a bundle emitted, chunks and assets alike. */
 const emitted = (output: RolldownOutput) =>
-  output.output.reduce(
+  Arr.reduce(
+    output.output,
+    0,
     (total, item) =>
       total +
       (item.type === "chunk"
         ? bytes(item.code)
-        : typeof item.source === "string"
+        : Predicate.isString(item.source)
           ? bytes(item.source)
           : item.source.byteLength),
-    0,
   );
 
 /**
@@ -87,25 +97,30 @@ export const bundle = Effect.fn("build.bundle")(function* (
   options: Options = {},
 ) {
   const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
+  // The services Rolldown's synchronous onLog callback runs on.
+  const context = yield* Effect.context<never>();
   const root = options.cwd ?? path.resolve();
+
   const relative = (file: string) => {
     const url = URL.parse(file);
     let local = file;
 
     if (url?.protocol === "file:") {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown's onLog callback is synchronous
-      local = Effect.runSync(path.fromFileUrl(url).pipe(Effect.catch(() => Effect.succeed(url.pathname))));
+      local = Effect.runSyncWith(context)(path.fromFileUrl(url).pipe(Effect.orElseSucceed(() => url.pathname)));
     }
 
     return path.isAbsolute(local) ? path.relative(root, local) : local;
   };
+
   // The installed tools' own versions, so a build report says what really ran.
   yield* Effect.annotateCurrentSpan({
     phase: options.phase ?? "bundle",
     "rolldown.version": VERSION,
     "effect.version": effectPackage.version,
   });
-  const fail = (error: unknown) => BuildError.make({ reason: "bundle", message: String(error), cause: error });
+  const fail = (cause: unknown) => BuildError.make({ reason: "bundle", message: String(cause), cause });
+
   // The console a person sees, or a law's TestConsole. Its members are plain functions, so the
   // synchronous onLog calls them with no run of an Effect.
   const out = yield* Console.Console;
@@ -130,7 +145,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
       // Rolldown has already embedded file names in the message before calling onLog.
       for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
         if (file !== undefined) {
-          message = message.replaceAll(file, relative(file));
+          message = Function.pipe(message, Str.replaceAll(file, relative(file)));
         }
       }
 
@@ -140,16 +155,17 @@ export const bundle = Effect.fn("build.bundle")(function* (
     },
     platform: "browser" as const,
     // A tab names no platform module, so nothing is external there: its build refuses one.
-    external:
-      options.phase === "brain"
-        ? ["cloudflare:workers", /^node:/]
-        : options.phase === "tab"
-          ? []
-          : ["cloudflare:workers"],
+    external: Match.value(options.phase).pipe(
+      Match.when("brain", () => ["cloudflare:workers", /^node:/]),
+      Match.when("tab", () => []),
+      Match.orElse(() => ["cloudflare:workers"]),
+    ),
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.define === undefined ? {} : { transform: { define: { ...options.define } } }),
   };
+
   const output = { format: "esm" as const, codeSplitting: options.split === true, minify: options.minify === true };
+
   const generate = Effect.acquireUseRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's build API returns a Promise
     Effect.tryPromise({ try: () => rolldown(config), catch: fail }),
@@ -158,6 +174,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown closes through a Promise
     (b) => Effect.promise(() => b.close()),
   );
+
   return yield* generate.pipe(
     Effect.onExit((exit) =>
       Effect.annotateCurrentSpan(
@@ -194,8 +211,9 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
   const generated = path.join(options.root, "program.generated.ts");
   const programs: Record<string, ProgramSource> = {};
 
-  for (const [name, entry] of Object.entries(options.programs)) {
-    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
+  for (const [name, entry] of Rec.toEntries(options.programs)) {
+    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${Formatter.formatJson(entry.module)}; export default programBox(program, ${Formatter.formatJson(name)});`;
+
     const output = yield* bundle(
       "fabrika:program",
       [
@@ -216,10 +234,15 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
       ],
       { phase: "program", ...(options.cwd === undefined ? {} : { cwd: options.cwd }) },
     );
-    const source = output.output
-      .filter((o) => o.type === "chunk")
-      .map((o) => o.code)
-      .join("\n");
+
+    const source = Arr.join(
+      Arr.map(
+        Arr.filter(output.output, (o) => o.type === "chunk"),
+        (o) => o.code,
+      ),
+      "\n",
+    );
+
     programs[name] = { hash: yield* hash(source), source };
   }
 

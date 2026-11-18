@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-16-host-suites-shared-cancellation-group",
+  "date": "2026-11-16",
+  "quests": ["tea-fabrika#1128"],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "The new fixed E88 and box dispatches initially reused the host workflow's cancellation group without a suite. Reading that group showed that two proofs of the same commit would cancel each other, despite using separate disposable runners. No remote suite was dispatched to discover this.",
+  "cause": "The existing cancellation group was preserved without checking how it would treat the added manual suites.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "The group includes the fixed suite with an L13 fallback. Different suites keep independent groups, while newer pushes to the same PR and suite still replace the older run. The H8 lint rule and four fault plants hold both behaviors.",
+  "test": "scenario: different suites keep separate groups and newer pushes retain their own PR group",
+  "links": ["https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency"]
+}

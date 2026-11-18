@@ -5,6 +5,7 @@
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { field, join, subtle } from "./internal/binary.ts";
 import { KeyLine } from "./Sshsig.ts";
 
@@ -16,7 +17,8 @@ import { KeyLine } from "./Sshsig.ts";
  */
 export const fingerprint = Effect.fnUntraced(function* (raw: Uint8Array) {
   const hash = yield* subtle("digest", "SHA-256", new Uint8Array(raw));
-  return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+
+  return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
 });
 
 /**
@@ -30,4 +32,4 @@ export const fingerprint = Effect.fnUntraced(function* (raw: Uint8Array) {
  * @category constructors
  */
 export const line = (raw: Uint8Array) =>
-  Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(join(field("ssh-ed25519"), field(raw)))}`);
+  Schema.decodeEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(join(field("ssh-ed25519"), field(raw)))}`);

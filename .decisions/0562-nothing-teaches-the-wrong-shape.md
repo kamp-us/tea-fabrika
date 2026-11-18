@@ -23,8 +23,12 @@ tags: [lint, oxlint, tests, laws, tooling, tag, schema, agents, copy, next]
 **After (a sketch, not run):**
 
 ```jsonc
-// One rule at "error" for all four folders, tests included. Which rule is not decided here.
-{ "files": ["next/**", ".agents/**", ".github/ci/**", "oxlint-plugins/**"], "rules": { "<the rule>": "error" } }
+// The two trusted rules at "error" for all four folders, tests included (0573 names them).
+{ "files": ["next/**", ".agents/**", ".github/ci/**", "oxlint-plugins/**"],
+  "rules": {
+    "anti-slop-effect/no-manual-tagged-construction": "error",
+    "anti-slop-effect/no-manual-tagged-type": "error"
+  } }
 // no "off" line is left
 ```
 
@@ -49,8 +53,8 @@ and what happens to the hand-written `_tag` first.
   left in the tests beside it is still in the tree, and it is copied into new code from there.
 - [0214](0214-unions-are-tagged-with-tag.md) says every union we define gets its `_tag` from
   Effect Schema, never by hand. The lint rule `fabrika/no-hand-tag`
-  (`oxlint-plugins/no-hand-tag.ts`) holds it: it fires on an object key, a class field or a type
-  member named `_tag`, and a read passes.
+  (`oxlint-plugins/no-hand-tag.ts`) holds it until the swap below: it fires on an object key, a
+  class field or a type member named `_tag`, and a read passes.
 - Where the rule is set today, in `.oxlintrc.json` on `origin/main` at `98bcdfa22`:
   - on, at line 648 for `next/**` and at line 965 for `.agents/**/*.ts` and `.agents/**/*.mjs`;
   - off, at line 1141 for `next/`'s `*.test.ts` and `*.test.tsx` files, at line 1160 for the two
@@ -84,9 +88,10 @@ and what happens to the hand-written `_tag` first.
   0135 in part.
 - **What the Effect team's own tests do.** The order for Effect code
   ([pull request 1359](https://github.com/kamp-us/tea-fabrika/pull/1359), not on main yet) puts
-  what the Effect team does first. The installed Effect is 4.1.2, and its `package.json` names
-  <https://github.com/Effect-TS/effect> as its repository. Four of its test files were read at
-  the tag `effect@4.1.2`, under `packages/effect/test/`:
+  what the Effect team does first. The installed Effect is the one `pnpm-workspace.yaml`'s catalog
+  entry for `effect` names, and its `package.json` names <https://github.com/Effect-TS/effect> as
+  its repository. Four of its test files were read on 2026-11-15 at the tag `effect@4.1.2`, under
+  `packages/effect/test/`:
   - **A tagged value is made by its maker or its class.**
     `cluster/MessageStorage.test.ts:377-392` builds a request with `Envelope.makeRequest(...)`
     inside `new Message.OutgoingRequest(...)`, and `:419-421` builds a reply with
@@ -102,8 +107,8 @@ and what happens to the hand-written `_tag` first.
     and casts it, `{ _tag: "Request", ... } as Envelope.PartialRequest`. So their tests are not at
     zero either.
 - [0524](0524-no-list-lets-broken-code-pass.md) keeps an override for a class of files where a
-  rule does not apply, and names tests. That line stands. What this file settles is that "it is a
-  test" is not, by itself, a reason a rule about code shape does not apply.
+  rule does not apply, and names tests. What this file settles is that "it is a test" is not, by
+  itself, a reason a rule about code shape does not apply.
 
 ## Decision
 
@@ -123,9 +128,13 @@ shape of code covers test files and tooling too (owner, 2026-11-15).**
 - **Scope:** `next/`, and our tooling: the lead and step scripts under `.agents/`,
   `oxlint-plugins/` and `.github/ci/`. Today's app (`packages/`, `programs/`, `apps/`) is not
   covered.
-- **How it is held.** By one lint rule, at `error`, in every folder of the scope. This rule does
-  not depend on which lint rule that is. The cleanup goes folder by folder, and the lint rule
-  turns on for each folder when it reaches zero ([0168](0168-old-lint-breaks-are-fixed.md)).
+- **How it is held.** By two trusted lint rules, at `error`, in every folder of the scope:
+  `anti-slop-effect/no-manual-tagged-construction` for a `_tag` written into a value, and
+  `anti-slop-effect/no-manual-tagged-type` for a `_tag` declared in a type or interface
+  ([0573](0573-trusted-lint-rule-replaces-ours.md); the plugin is used as it ships,
+  [0563](0563-anti-slop-plugin-as-it-ships.md)). They are turned on in this cleanup, folder by
+  folder when each reaches zero ([0168](0168-old-lint-breaks-are-fixed.md)), and `fabrika/no-hand-tag`
+  and its test are deleted in the pull request that turns them on where it ran.
 
 **Binding constraints**
 
@@ -154,18 +163,8 @@ shape of code covers test files and tooling too (owner, 2026-11-15).**
   `.oxlintrc.json`, and the `no-hand-tag` row and the `.agents/` paragraph in
   `oxlint-plugins/README.md`.
 - **Not decided here:**
-  - **Which lint rule holds this.** The fork among the trusted repos,
-    <https://github.com/K-Mistele/anti-slop>, has two rules for it:
-    `no-manual-tagged-construction`, for a `_tag` written into a value, and
-    `no-manual-tagged-type`, for a `_tag` declared in a type or interface. Its parent,
-    <https://github.com/dmmulroy/anti-slop>, has the first only. The owner ruled on 2026-11-15
-    that we do not write or copy our own version of a rule those authors already wrote: their
-    plugin is used as it ships, through oxlint's `jsPlugins`, as `anti-slop/<rule>`. That ruling
-    is recorded in the decision that takes the plugin, which is not on main yet. So whether
-    `anti-slop/no-manual-tagged-construction` and `anti-slop/no-manual-tagged-type` hold this, or
-    our `fabrika/no-hand-tag`, is for the plan that turns the plugin on, by the order for Effect
-    code ([pull request 1359](https://github.com/kamp-us/tea-fabrika/pull/1359)). The counts
-    above are `fabrika/no-hand-tag`'s; their rules may count differently.
+  - **The counts above are `fabrika/no-hand-tag`'s.** The two trusted rules may count
+    differently, and the cleanup's plan reads their own counts.
   - **Which hand-written `_tag` in a test is a wire frame and stays.** The cleanup's plan decides,
     by what the Effect team's own tests do for each of the two cases above. A case where a
     hand-written `_tag` is a test's whole point goes to the owner with the code.
@@ -176,7 +175,3 @@ shape of code covers test files and tooling too (owner, 2026-11-15).**
     that is about code shape. Each needs its own count and its own plan, and none changes with
     this file.
   - Today's app.
-
-## Amendments
-
-- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) says `fabrika/no-hand-tag` is replaced by `anti-slop-effect/no-manual-tagged-construction` and `anti-slop-effect/no-manual-tagged-type`, turned on in this cleanup before ours is deleted.

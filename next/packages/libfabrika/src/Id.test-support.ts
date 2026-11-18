@@ -1,6 +1,11 @@
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 
@@ -14,13 +19,27 @@ export const processClocks = Arbitrary.schema(
 const encodeProcess = (at: number, random: ReadonlyArray<number>): string => {
   const bytes = Uint8Array.from([
     ...Array.from({ length: 6 }, (_, i) => Number((BigInt(at) >> BigInt((5 - i) * 8)) & 255n)),
-    ...random.map((byte, i) => (i === 0 ? (byte & 15) | 0x70 : i === 2 ? (byte & 63) | 0x80 : byte)),
+    ...Arr.map(random, (byte, i) =>
+      Match.value(i).pipe(
+        Match.when(0, () => (byte & 15) | 0x70),
+        Match.when(2, () => (byte & 63) | 0x80),
+        Match.orElse(() => byte),
+      ),
+    ),
   ]);
+
   const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
-  const bits = `00${[...bytes].map((byte) => byte.toString(2).padStart(8, "0")).join("")}`;
-  const suffix = Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)]).join(
+
+  const bits = `00${Arr.join(
+    Arr.map([...bytes], (byte) => Str.padStart(8, "0")(byte.toString(2))),
+    "",
+  )}`;
+
+  const suffix = Arr.join(
+    Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(Str.slice(i * 5, i * 5 + 5)(bits), 2)] ?? ""),
     "",
   );
+
   return `process_${suffix}`;
 };
 
@@ -51,3 +70,37 @@ export const processId: Effect.Effect<string> = Id.Generator.use((ids) => ids.ne
   Effect.orDie,
   Effect.provide(Id.Generator.layer),
 );
+
+/**
+ * Id.Generator over random bytes the law writes, through `Id.makeGenerator` (0555: the bytes come
+ * from a SecureRandom service, never a spy on the global). A throw in `fill` is a defect of
+ * SecureRandom, as WebCrypto's is.
+ */
+export const generatorWith = (fill: (size: number) => Uint8Array): Layer.Layer<Id.Generator> =>
+  Layer.effect(Id.Generator, Id.makeGenerator).pipe(
+    Layer.provide(Layer.succeed(SecureRandom.SecureRandom, SecureRandom.make(fill))),
+  );
+
+/** Id.Generator over a SecureRandom source whose draw may yield or fail as an Effect. */
+export const generatorWithEffect = (
+  randomBytes: (size: number) => Effect.Effect<Uint8Array>,
+): Layer.Layer<Id.Generator> =>
+  Layer.effect(Id.Generator, Id.makeGenerator).pipe(
+    Layer.provide(
+      Layer.succeed(SecureRandom.SecureRandom, {
+        ...SecureRandom.make((size) => new Uint8Array(size)),
+        randomBytes,
+      }),
+    ),
+  );
+
+/** A random source whose every byte is `byte`. */
+export const bytes =
+  (byte: number) =>
+  (size: number): Uint8Array =>
+    new Uint8Array(size).fill(byte);
+
+/** A random source that throws `failure`, as a platform with no entropy left does. */
+export const throws = (failure: unknown) => (): never => {
+  throw failure;
+};

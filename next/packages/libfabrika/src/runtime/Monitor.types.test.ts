@@ -31,7 +31,7 @@ it("type: M12 monitor takes only a name, demonitor only a ref, and ProcessCalls 
   // A Cmd a program builds takes only its operands: `to`, `process` or `as` is a type error.
   expectTypeOf<Parameters<typeof Monitor.monitor>[0]>().toEqualTypeOf<typeof Monitor.MonitorInput.Type>();
   expectTypeOf<Parameters<typeof Monitor.demonitor>[0]>().toEqualTypeOf<typeof Monitor.DemonitorInput.Type>();
-  expectTypeOf<ReturnType<typeof Monitor.monitor>["type"]>().toEqualTypeOf<"monitor">();
+  expectTypeOf<ReturnType<typeof Monitor.monitor>["_tag"]>().toEqualTypeOf<"monitor">();
   // Across an RPC, a watch keeps the three-argument forms: no object can name another recipient.
   expectTypeOf<Parameters<ProcessCalls["monitor"]>>().toEqualTypeOf<[ref: string, process: string, from: From]>();
   expectTypeOf<Parameters<ProcessCalls["demonitor"]>>().toEqualTypeOf<[ref: string, from: From]>();

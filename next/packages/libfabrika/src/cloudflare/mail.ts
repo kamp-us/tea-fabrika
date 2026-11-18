@@ -19,6 +19,7 @@ const fromMailReply = Effect.fnUntraced(function* (reply: unknown) {
 
   if (checked._tag === "full") {
     yield* Effect.annotateCurrentSpan({ "fab.mail.unread": checked.unread, "fab.mail.cap": checked.cap });
+
     return yield* ProgramMailError.full(checked.unread);
   }
 
@@ -33,6 +34,7 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
         Layer.succeed(ProgramMail, {
           deliver: Effect.fn("process.mail")(function* (delivery) {
             const span = yield* Effect.currentSpan.pipe(Effect.orDie);
+
             // RPC failures can echo mail; keep only the reason before the RPC span records them.
             const reply = yield* rpc(
               ProjectClient.make(projectStub(env, project))
@@ -42,6 +44,7 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
                 })
                 .pipe(Effect.mapError(() => ProgramMailError.storage())),
             );
+
             return yield* fromMailReply(reply);
           }),
         }),

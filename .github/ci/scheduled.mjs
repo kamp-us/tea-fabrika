@@ -115,8 +115,10 @@ export const suiteOf = (name) => (/\(tooling-[^)]*\)$/.test(name) ? "tooling" : 
  */
 export const ending = (job, limits) => {
   const limit = limits[suiteOf(job.name)];
+
   const ranOut = (/** @type {string | null} */ start, /** @type {string | null} */ end) =>
     limit !== undefined && start !== null && end !== null && Date.parse(end) - Date.parse(start) >= limit * 60_000;
+
   const failed = job.steps.filter((step) => step.conclusion === "failure");
 
   if (failed.some((step) => ranOut(step.start, step.end))) {
@@ -162,6 +164,7 @@ export const ending = (job, limits) => {
 export const causes = (jobs, limits) => {
   const finished = jobs.filter((job) => job.status === "completed");
   const of = (/** @type {Ending} */ end) => finished.filter((job) => ending(job, limits) === end);
+
   // An ISO time sorts as text; a leg with no time sorts last.
   const failedAt = (/** @type {Job} */ job) =>
     job.steps.find((step) => step.conclusion === "failure")?.end ?? job.end ?? "~";
@@ -187,6 +190,7 @@ export const limits = (env) =>
   Object.fromEntries(
     Object.entries(env).flatMap(([key, value]) => {
       const minutes = Number(value ?? "");
+
       return key.startsWith("LIMIT_") && value !== "" && minutes > 0
         ? [[key.slice("LIMIT_".length).toLowerCase(), minutes]]
         : [];
@@ -218,10 +222,13 @@ export const verdict = ({ needs, jobs, failed, limits: limit }) => {
   }
 
   const skipped = skippable(needs);
+
   const passed = entries.every(
     ([name, job]) => isMap(job) && (job["result"] === "success" || (job["result"] === "skipped" && skipped.has(name))),
   );
+
   const canceled = jobs.some((job) => job.status === "completed" && ending(job, limit) === "canceled");
+
   return !canceled && entries.length > 0 && passed ? "green" : "stopped";
 };
 
@@ -362,6 +369,7 @@ const line = (cause) => {
 
   if (cause._tag === "timed out") {
     const limit = cause.minutes === null ? "its time limit" : `its ${cause.minutes}-minute limit`;
+
     return `- \`${cause.leg}\` timed out: it ran into ${limit} and GitHub stopped it. A stopped test run writes no report, so none names the test file that was running; the leg's log on the run's page does.`;
   }
 
@@ -394,6 +402,7 @@ const range = (run) => {
 export const body = (run) => {
   const listed = run.failed.slice(0, SHOWN).map((test) => `- \`${test}\``);
   const more = run.failed.length - listed.length;
+
   const tests =
     run.failed.length === 0
       ? [
@@ -405,6 +414,7 @@ export const body = (run) => {
           ...listed,
           ...(more > 0 ? [`- and ${more} more`] : []),
         ];
+
   const legs =
     run.causes.length === 0
       ? []
@@ -414,6 +424,7 @@ export const body = (run) => {
           ...run.causes.map(line),
           "",
         ];
+
   return [
     `The scheduled run of every next/ and tooling test is red on main at ${run.sha} ([run](${run.run})).`,
     "",
@@ -487,11 +498,20 @@ export const github = (env, send = globalThis.fetch) => {
   // `owner/repo/.github/workflows/scheduled.yaml@refs/heads/main`: the file this run started from.
   const workflow = /\/\.github\/workflows\/([^/@]+)@/.exec(env["GITHUB_WORKFLOW_REF"] ?? "")?.[1];
 
-  if (!token || !repository || !id || workflow === undefined) {
+  if (
+    token === undefined ||
+    token === "" ||
+    repository === undefined ||
+    repository === "" ||
+    id === undefined ||
+    id === "" ||
+    workflow === undefined
+  ) {
     return null;
   }
 
   const api = env["GITHUB_API_URL"] || "https://api.github.com";
+
   /**
    * @param {string} method
    * @param {string} path
@@ -537,12 +557,14 @@ export const github = (env, send = globalThis.fetch) => {
     },
     open: async () => {
       const issues = await call("GET", `issues?labels=${LABEL}&state=open&sort=created&direction=asc&per_page=20`);
+
       // The issues list holds pull requests too; one with the label is not this report's. The daily
       // speed check keeps an issue with the same label (0541), so the report's own is the one with
       // its own title: taking the first put a red main's report on the speed issue (2026-11-15).
       const issue = (Array.isArray(issues) ? issues : [])
         .filter(isMap)
         .find((item) => !("pull_request" in item) && item["title"] === TITLE);
+
       return typeof issue?.["number"] === "number" ? issue["number"] : null;
     },
     // 422: the label is there already.
@@ -606,6 +628,7 @@ export const report = async ({ needs, reports, env, api }) => {
 
   const server = env["GITHUB_SERVER_URL"] || "https://github.com";
   const repository = env["GITHUB_REPOSITORY"] ?? "";
+
   const run = {
     sha: env["GITHUB_SHA"] ?? "",
     last: result === "red" ? await api.lastGreen() : null,
@@ -615,6 +638,7 @@ export const report = async ({ needs, reports, env, api }) => {
     failed,
     causes: causes(jobs, limit),
   };
+
   const action = decide(result, open, run);
 
   if (action._tag === "open") {
@@ -679,6 +703,7 @@ export const main = async (env, reports, send) => {
 
   const { result, action } = await report({ needs, reports, env, api });
   const done = action._tag === "none" ? "nothing to report" : action._tag;
+
   return { line: `scheduled: ${result}, ${done}`, code: exitCode(result) };
 };
 

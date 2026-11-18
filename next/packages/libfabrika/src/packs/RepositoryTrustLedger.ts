@@ -2,6 +2,7 @@
  * `RepositoryTrust` on the ledger: one stream per person and clone.
  */
 
+import * as Snapshot from "@kalfa/config/Snapshot";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -12,7 +13,6 @@ import * as Stream from "effect/Stream";
 import { Ledger } from "../ledger/Ledger.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
 import * as Declarations from "../settings/Declarations.ts";
-import * as Snapshot from "../settings/Snapshot.ts";
 import {
   Event,
   InvalidHistory,
@@ -24,6 +24,7 @@ import {
 
 // A bounded read fails closed instead of trusting a truncated history. Never discard old decisions.
 const LIMIT = 4096;
+
 const stream = (key: string, person: string) => `repository/${person}/${key}`;
 
 const storage = (cause: unknown) =>
@@ -56,11 +57,13 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const ledger = yield* Ledger;
     const digest = yield* Digest.Digest;
+
     const checkSettings = (saved: Snapshot.Snapshot) =>
       Snapshot.read(Declarations.all, saved).pipe(
         Effect.provideService(Digest.Digest, digest),
         Effect.mapError(invalid),
       );
+
     return RepositoryTrust.of({
       history: Effect.fn("repositoryTrust.history")(function* (key: string, person: string) {
         const rows = yield* ledger
@@ -74,7 +77,7 @@ export const layer = Layer.effect(
         const events: Array<Event> = [];
         const selections = new Map<string, typeof Event.cases.selected.Type>();
         const traces = new Map<string, string>();
-        let repository: (typeof Event.Type)["repository"] | undefined;
+        let repository: Event["repository"] | undefined;
 
         for (const row of rows) {
           const event = yield* Schema.decodeUnknownEffect(Event)(valueFor(row), { onExcessProperty: "error" }).pipe(
@@ -149,6 +152,7 @@ export const layer = Layer.effect(
           }
 
           const parent = stored.value;
+
           const selected = yield* Schema.decodeUnknownEffect(Event.cases.selected)(valueFor(parent), {
             onExcessProperty: "error",
           }).pipe(Effect.mapError(invalid));

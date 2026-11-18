@@ -6,7 +6,13 @@
  * rewrite. A tag holds a name, an id, a number or a boolean. A failed span's message is never a
  * tag, only its record part's `content`, the one thing a person may delete.
  */
-import { Cause, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { ProcessId } from "../ProcessId.ts";
 
 /**
@@ -19,6 +25,7 @@ export const Chain = Schema.TaggedUnion({
   job: { process: ProcessId },
   spans: {},
 });
+
 /**
  * Where a span's record lives: a process's JobRecord, or the span record.
  *
@@ -57,13 +64,15 @@ export const PROCESS = "fab.process";
  *
  * @category schemas
  */
-export const Tag = Schema.Union([Schema.String, Schema.Number, Schema.Boolean]);
+export const Tag = Schema.Union([Schema.String, Schema.Finite, Schema.Boolean]);
+
 /**
  * One span tag's value.
  *
  * @category models
  */
 export type Tag = typeof Tag.Type;
+
 const Tags = Schema.Record(Schema.String, Tag);
 
 /**
@@ -105,6 +114,7 @@ export const SpanRow = Schema.Struct({
   /** The exit. A failure's class is `attributes["error.type"]`; its message is content. */
   ok: Schema.Boolean,
 });
+
 /**
  * One ended span as its row keeps it.
  *
@@ -123,6 +133,7 @@ export const Content = Schema.TaggedUnion({
   kept: { spanId: Schema.String, message: Schema.String },
   deleted: { spanId: Schema.String, by: Schema.String, at: Schema.Int, reason: Schema.String },
 });
+
 /**
  * A failed span's content: `kept` or `deleted`.
  *
@@ -141,6 +152,7 @@ export const Rolled = Schema.TaggedStruct("rolled", {
   next: Schema.String,
   bytes: Schema.Int,
 });
+
 /**
  * A full part's last fact, which names the next part.
  *
@@ -162,14 +174,15 @@ export const Measurements = Schema.Struct({
   piece: Schema.String,
   /** When the span ended, in ms on the object's clock. */
   at: Schema.Int,
-  ms: Schema.Number,
+  ms: Schema.Finite,
   ok: Schema.Boolean,
   /** The error's class, never its message. */
   error: Schema.NullOr(Schema.String),
-  lag: Schema.NullOr(Schema.Number),
+  lag: Schema.NullOr(Schema.Finite),
   /** The span this row measured, so it joins its span row. Null when no span was current. */
   spanId: Schema.NullOr(Schema.String),
 });
+
 /**
  * One measurement: the raw row of one ended span.
  *
@@ -189,9 +202,10 @@ export const MetricPoint = Schema.TaggedStruct("metric", {
   hour: Schema.Int,
   count: Schema.Int,
   errors: Schema.Int,
-  ms: Schema.Struct({ p50: Schema.Number, p95: Schema.Number, max: Schema.Number }),
-  lag: Schema.NullOr(Schema.Number),
+  ms: Schema.Struct({ p50: Schema.Finite, p95: Schema.Finite, max: Schema.Finite }),
+  lag: Schema.NullOr(Schema.Finite),
 });
+
 /**
  * One piece's closed hour.
  *
@@ -216,6 +230,7 @@ export {
  * @category schemas
  */
 export const Refused = Schema.Literals(["reserved", "rate_limited", "other"]);
+
 /**
  * The closed value a counted refusal is split by.
  *
@@ -235,6 +250,7 @@ export const SumPoint = Schema.TaggedStruct("sum", {
   refused: Refused,
   count: Schema.Int,
 });
+
 /**
  * One piece's hourly count of refusals of one kind.
  *
@@ -271,7 +287,7 @@ export const Archived = Schema.TaggedStruct("archived", {
  *
  * @category errors
  */
-export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
+export class SinkError extends Schema.TaggedError<SinkError, { readonly brand: unique symbol }>()("SinkError", {
   /** `unreachable`: a record or archive call that never answered. `bad_row`: an answer or a row
    *  that does not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. */
   reason: Schema.Literals(["unreachable", "bad_row", "storage"]),
@@ -309,8 +325,9 @@ const MOST_CHARS = 128;
 
 /** The first `MOST_CHARS` characters, one fewer when the cut would split a surrogate pair. */
 const cut = (text: string): string => {
-  const last = text.charCodeAt(MOST_CHARS - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? MOST_CHARS - 1 : MOST_CHARS);
+  const highSurrogate = Option.exists(Str.charCodeAt(text, MOST_CHARS - 1), (code) => code >= 0xd800 && code <= 0xdbff);
+
+  return Str.slice(0, highSurrogate ? MOST_CHARS - 1 : MOST_CHARS)(text);
 };
 
 /**
@@ -326,8 +343,8 @@ const cut = (text: string): string => {
  * @category constructors
  */
 export const short = (texts: Readonly<Record<string, string>>): Record<string, string | number> =>
-  Object.fromEntries(
-    Object.entries(texts).flatMap(([key, text]) =>
+  Rec.fromEntries(
+    Arr.flatMap(Rec.toEntries(texts), ([key, text]) =>
       text.length <= MOST_CHARS
         ? [[key, text]]
         : [

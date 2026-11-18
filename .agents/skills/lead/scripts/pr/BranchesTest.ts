@@ -20,17 +20,20 @@ export const layer = (model: Model): Layer.Layer<Branches> =>
     Branches,
     Branches.of({
       refresh: Effect.void,
-      list: model.broken
-        ? Effect.fail(BranchesError.make({ command: "for-each-ref", reason: "broken" }))
-        : Effect.succeed(model.branches),
+      list:
+        model.broken === true
+          ? Effect.fail(BranchesError.make({ command: "for-each-ref", reason: "broken" }))
+          : Effect.succeed(model.branches),
       ahead: (tip) => {
         const n = model.ahead[tip];
+
         return n === undefined
           ? Effect.fail(BranchesError.make({ command: "rev-list", reason: `unknown ${tip}` }))
           : Effect.succeed(n);
       },
       behind: (tip) => {
         const n = model.behind?.[tip];
+
         return n === undefined
           ? Effect.fail(BranchesError.make({ command: "rev-list", reason: `unknown ${tip}` }))
           : Effect.succeed(n);

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-plan",
+  "ticket": 766,
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-15T22:07:24-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for porting scripts/typecheck.sh to TypeScript and Effect, in today's tooling (docs/plan/quests/port-typecheck-PLAN.md). It picks Mercurial's pid lock (a label file made with link(), broken under a .break lock when its holder is gone, with the running command's pid in .child), after reading proper-lockfile 4.1.2 and Mercurial 7.2.4 from their published tarballs; proper-lockfile would turn three laws red. It keeps every law of caps.test.ts and pull request 1419's six, sixteen of them changing only how they start the script, and lists every text caller of typecheck.sh. Two questions go to the owner: whether the lock may stop being an OS lock (decision 0410's line), and what a worktree with a broken node_modules link gets now that the script needs node_modules to load.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Pull request 1419 merged while the plan was being written, so the branch was fast-forwarded to origin/main at 59910b0a4 and the plan reads the merged script. The start time was not recorded, so it stays unknown. No test, install or typecheck ran.",
+  "step": "plan"
+}

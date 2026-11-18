@@ -26,6 +26,7 @@ export const Founder = Schema.Struct({
   keys: Schema.Array(Schema.String),
   window: Schema.NullOr(Schema.String),
 });
+
 /**
  * The decoded type of `Founder`.
  *
@@ -52,6 +53,7 @@ export const Written = Schema.TaggedUnion({
   /** Nothing written: the rule's reason, or the ledger's own. */
   refused: { reason: Schema.Union([Reason, Appended.cases.refused.fields.reason]) },
 });
+
 /**
  * The decoded type of `Written`.
  *

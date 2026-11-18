@@ -28,6 +28,7 @@
 //
 // `.oxlintrc.json` turns it on for `next/` and off for tests: a test's stand-in is not a contract.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { Array as Arr, Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 /** The import an identifier is bound to: its source and the name it imports (`*` for a namespace). */
@@ -61,7 +62,7 @@ const memberName = (node: ESTree.MemberExpression): string | null => {
     return node.property.name;
   }
 
-  return node.computed && node.property.type === "Literal" && typeof node.property.value === "string"
+  return node.computed && node.property.type === "Literal" && Predicate.isString(node.property.value)
     ? node.property.value
     : null;
 };
@@ -69,18 +70,20 @@ const memberName = (node: ESTree.MemberExpression): string | null => {
 /** A type the file declares itself, an alias or an interface, or `null` for any other name. */
 const declared = (variable: Variable | undefined): Node | null => {
   const node: Node | undefined = variable?.defs[0]?.node;
+
   return node?.type === "TSTypeAliasDeclaration" || node?.type === "TSInterfaceDeclaration" ? node : null;
 };
 
 /** The nodes directly under one. */
 function* parts(node: Node): Generator<Node> {
   for (const [key, value] of Object.entries(node)) {
-    if (key === "parent" || value === null || typeof value !== "object") {
+    if (key === "parent") {
       continue;
     }
 
-    for (const part of Array.isArray(value) ? value : [value]) {
-      if (part !== null && typeof part === "object" && typeof part.type === "string") {
+    // Only a node has a string `type`: a primitive, null or a plain list of numbers has none.
+    for (const part of Arr.isArray(value) ? value : [value]) {
+      if (Predicate.isString(part?.type)) {
         yield part;
       }
     }
@@ -113,6 +116,7 @@ export const writtenServiceType: CreateRule = {
     /** Whether a node is the `effect` barrel, imported as a namespace. */
     const isBarrel = (node: Node): boolean => {
       const at = imported(resolve(node));
+
       return at !== null && at.from === "effect" && at.name === "*";
     };
 
@@ -120,6 +124,7 @@ export const writtenServiceType: CreateRule = {
     const isModule = (node: Node, name: string): boolean => {
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return (
           at !== null &&
           ((at.from === "effect" && at.name === name) || (at.from === `effect/${name}` && at.name === "*"))
@@ -143,6 +148,7 @@ export const writtenServiceType: CreateRule = {
       }
 
       const at = imported(resolve(node));
+
       return at !== null && at.from === "effect/Context" && at.name === "Service";
     };
 
@@ -157,6 +163,7 @@ export const writtenServiceType: CreateRule = {
       }
 
       const at = imported(resolve(name));
+
       return at !== null && at.from === "effect/Effect" && at.name === "Success";
     };
 
@@ -200,6 +207,7 @@ export const writtenServiceType: CreateRule = {
       }
 
       seen.delete(declaration);
+
       return found;
     };
 

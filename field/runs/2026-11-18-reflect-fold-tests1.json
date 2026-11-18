@@ -1,0 +1,140 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-reflect-fold-tests1",
+  "ticket": "1056",
+  "pr": "kamp-us/tea-fabrika#1609",
+  "started": null,
+  "ended": "2026-11-17T22:53:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Tests step for slice 15 of the Reflect ban (0554, ticket 1056) in next/ and our tooling, the fold, rebuilt from main at f79fc38db on fabrikalfa/reflect-fold, on docs/plan/quests/reflect-ban-PLAN.md amendment points 9 and 10. .oxlintrc.json: the four Reflect entries are added after the own entries of the three base blocks that set eslint/no-restricted-properties for next/ (next/**/*, the JSON.parse warn block, client/**), the three next/ Reflect list blocks are deleted, the tooling block stays, and the client/** block now comes after the warn block, so a glob added to the warn block cannot strip client/'s retry entries or turn its JSON.parse into advice (a file takes the last override that matches). L10 (plants.test.ts, REFLECT_NEW_FOLDERS in builtin-plants.ts) holds the ban in folders no block names and the block order next/**/*, the list, client/. L4 (advice.test.ts) is rebuilt: in a temp copy of the repo it writes one sample (JSON.parse, the four Reflect forms, Effect.retry, Stream.retry) at the own path of every tracked next/ code file (808 files, .ts, .tsx and .d.ts included), at the stem folder of each folder glob of the rule's blocks and in one new folder, lints them with the real config and reads each file's final severity per fire from oxlint's output. Every file ends with JSON.parse and the four at one level; the new folder and every client/ file end at error, client/ with both retry entries; a file that ends at warn sits in a folder with a real JSON.parse fire at the grain of the glob (topOf and directOnly of 4dc340aab on fabrikalfa/reflect-rest). Non-Reflect entries: a sample at each of 2083 tracked code files outside vendor/ and oxlint-plugins/, linted with main's .oxlintrc.json and with this one, gave the same severity for every non-Reflect member of every file (0 differences); the only files that gained the ban are the 3 in next/packages/libfabrika/src/mcp/. The L4 plants are red, including the three review globs and the fix rounds' plants; one is green by design, see its row.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "note": "Start time was not captured. Files changed: .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts, oxlint-plugins/advice.test.ts, oxlint-plugins/README.md. next/AGENTS.md's row is the build's. Node 22 box, CI=1, nice -n 15, --maxWorkers=2, TYPESAFE_API_KEY unset: advice.test.ts, plants.test.ts and reflect-disables.test.ts 275 passed in 100 s. L4 alone takes about 18 s (17.8 s verbose), under the 60 s line, with a 180 s timeout. pnpm format; pnpm lint exit 0 (18 parts, 0 blocking); ratchet.ts exit 0. Both laws are green on the config as it stands (the config is this step's file); on main's .oxlintrc.json (git show HEAD:.oxlintrc.json put back, restored by copy) L4 is red (next/packages/libfabrika/src/mcp/Tools.test.ts ends with Reflect.get restricted at JSON.parse's level: expected undefined to be 'error') and L10 is red (next/planted-yffmx/planted.ts: expected [] to deeply equal [ 2, 3, 4, 5, 6, 7, 8, 9, 10 ]). Every plant is a scratch edit of .oxlintrc.json, run once against the one law, restored by copy and checked with cmp (all restored). A glob for a kind of file no tracked file has, and for a folder with no tracked file, is met only by the stem sample, so a glob for a file kind with no tracked file stays the stated limit. A scratch script of this round, writing samples at every tracked code file, followed the vendor symlink of its temp copy and wrote into the real vendor/ files once; git checkout -- vendor restored them and git status showed only the five owned files after. Not run: no pnpm typecheck, no --changed.",
+  "laws": [
+    {
+      "law": "oxlint-plugins/advice.test.ts: Reflect ban L4 each tracked code file of next/ ends with the setting the rule held there before, pinned: every tracked code file of next/ ends with JSON.parse and the ban at one level, a new folder and client/ at error with both retry entries, and a file that advises sits in a folder with a JSON.parse fire",
+      "red": "on main's .oxlintrc.json (before the fold): next/packages/libfabrika/src/mcp/Tools.test.ts ends with Reflect.get restricted at JSON.parse's level: expected undefined to be 'error'. On the branch's config it is green, and red on each plant below."
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts: L10 of the Reflect ban: after the fold the base blocks hold it for all of next/, and no list block is left, scenario: REFLECT's lines are refused in a folder no block names, and the only blocks that hold the ban for next/ are the three base blocks, in the order oxlint applies them",
+      "red": "on main's .oxlintrc.json (before the fold): next/planted-yffmx/planted.ts: expected [] to deeply equal [ 2, 3, 4, 5, 6, 7, 8, 9, 10 ]"
+    }
+  ],
+  "plants": [
+    {
+      "law": "L4",
+      "plant": "the review 1 glob: next/packages/libfabrika/** added to the JSON.parse warn block's files; red: next/packages/libfabrika/src/access advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the review 2 glob: next/apps/fabrika/e2e/** added to the warn block's files; red: next/apps/fabrika/e2e/node advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the review 3 glob: next/packages/libfabrika/src/**/*.test.ts added to the warn block's files; red: next/packages/libfabrika/src/access advises for JSON.parse and has no JSON.parse fire left (the access/ and other test files meet the sample at their own names)",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/src/access/** added to the warn block's files (tests2); red: next/packages/libfabrika/src/access advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/programs/inbox/src/** added to the warn block's files (tests2); red: next/programs/inbox/src advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/src/access/inner/** added to the warn block's files (tests2, a folder with no tracked file, met by the stem sample); red: next/packages/libfabrika/src/access advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/* added to the warn block's files (tests3, above the first level); red: next/packages/libfabrika advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/apps/fabrika/** added to the warn block's files (tests3); red: next/apps/fabrika advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/programs/pipeline/** added to the warn block's files (tests3); red: next/programs/pipeline/src advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/apps/fabrika/src/** added to the warn block's files (tests3); red: next/apps/fabrika/src/entry advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/src/client/** added to the warn block's files (tests2 b2). Green on purpose: client/'s block now comes after the warn block, so every client/ file still ends at error with both retry entries and there is no fault left to catch; the same glob with client/'s block put back before the warn block is red in the two plants below",
+      "result": "green"
+    },
+    {
+      "law": "L10",
+      "plant": "client/'s block moved back to before the warn block, no other change; red: the blocks that hold the ban for next/ are in the order next/**/*, client/, the list, not next/**/*, the list, client/",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "client/'s block moved back before the warn block and next/packages/libfabrika/src/**/*.test.ts added to the warn block; red: next/packages/libfabrika/src/client/Hands.types.test.ts starts at zero and blocks: expected 'warning' to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "client/'s block moved back before the warn block and next/packages/libfabrika/** added to the warn block; red: next/packages/libfabrika/src/client/Commands.test-support.ts starts at zero and blocks: expected 'warning' to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the Effect.retry entry dropped from client/'s block; red: client/Commands.test-support.ts keeps Effect.retry: expected undefined to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the Stream.retry entry dropped from client/'s block; red: client/Commands.test-support.ts keeps Stream.retry: expected undefined to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "client/'s block set to warn; red: client/Commands.test-support.ts starts at zero and blocks: expected 'warning' to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the JSON.parse entry dropped from the next/**/* block; red: next/apps/fabrika/alchemy.run.ts ends with JSON.parse restricted: expected undefined to be defined",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the four Reflect entries dropped from the next/**/* block; red: next/apps/fabrika/alchemy.run.ts ends with Reflect.get restricted at JSON.parse's level: expected undefined to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L10",
+      "plant": "the four Reflect entries dropped from the next/**/* block; red: next/planted-yffmx/planted.ts: expected [] to deeply equal [ 2, 3, 4, 5, 6, 7, 8, 9, 10 ]",
+      "result": "red"
+    },
+    {
+      "law": "L10",
+      "plant": "a list block put back after the warn block (files next/packages/vitest/**, JSON.parse and the four); red: the blocks that hold the ban for next/ are four, not three",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

@@ -2,8 +2,8 @@
  * The shapes of one instance start: what a host hands in, what the ledger keeps of it, and what
  * comes back as its receipt.
  */
+import * as Snapshot from "@kalfa/config/Snapshot";
 import { Schema } from "effect";
-import * as Snapshot from "./Snapshot.ts";
 
 const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
 
@@ -54,6 +54,7 @@ export const Input = Schema.Struct({
   /** Which program may start which: a right the host hands in, never a declared setting or a recorded fact. */
   starts: Schema.optionalKey(Schema.Array(Schema.Struct({ source: Text, to: Text }))),
 });
+
 /**
  * The decoded Input value.
  *
@@ -95,6 +96,7 @@ export const Receipt = Schema.Struct({
     ...Origin.fields,
   }),
 });
+
 /**
  * The decoded Receipt value.
  *

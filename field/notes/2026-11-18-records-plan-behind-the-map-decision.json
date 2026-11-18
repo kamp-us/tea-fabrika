@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1633"
+  ],
+  "id": "2026-11-18-records-plan-behind-the-map-decision",
+  "stage": "plan",
+  "kind": "friction",
+  "person": false,
+  "what": "The rules and records build plan is behind the lead's map decision 0610, which slice 6 records: the plan still sizes the map in bytes against records.map.max-bytes (its Doubts at lines 39-41, the map finding's bytes and max at line 150, the setting at lines 171-190, laws L6 and L7 at lines 267-268) and lists slice 6's homes without the plan and guidelines skills' reference files and the build, guidelines and pr skills the slice edits (lines 285 and 287). Slice 6's brief forbade editing the plan, so its pull request lists the corrections instead.",
+  "cause": "The target changed mid-slice, after the plan was approved: 0608's byte limit could not be met by 0129's moves, and the lead replaced both with a 200-line limit that follows Claude Code's memory guide.",
+  "primitive": "Draft",
+  "fix": "The lead amends the plan's slice 6 and slice 8 rows to 0610 before slice 8's tests step: the setting goes, the map finding counts lines with 200 as advice, and L6 and L7 test lines, not bytes.",
+  "test": "Slice 8's tests step builds a line-count map check with no records.map.max-bytes setting."
+}

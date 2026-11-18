@@ -1,14 +1,14 @@
 ---
 id: 0579
-title: "In next/ and our tooling, @kalfa/vitest gives a law one import: property laws are it.prop or it.effect.prop with Schemas, calls are watched with a Recorder, and hooks, skipIf, runIf and a raw fc.assert are not exported"
+title: "In next/ and our tooling, @kalfa/quality/vitest gives a law one import: property laws are it.prop or it.effect.prop with Schemas, calls are watched with a Recorder, and hooks, skipIf, runIf and a raw fc.assert are not exported"
 status: accepted
 date: 2026-11-15
 tags: [tests, recorder, spy, hooks, property, effect-vitest, fast-check, schema, arbitrary, seed, next, tooling]
 ---
 
-# 0579: In next/ and our tooling, @kalfa/vitest gives a law one import: property laws are it.prop or it.effect.prop with Schemas, calls are watched with a Recorder, and hooks, skipIf, runIf and a raw fc.assert are not exported
+# 0579: In next/ and our tooling, @kalfa/quality/vitest gives a law one import: property laws are it.prop or it.effect.prop with Schemas, calls are watched with a Recorder, and hooks, skipIf, runIf and a raw fc.assert are not exported
 
-**What this decides:** what `@kalfa/vitest` gives a law: how a property law is written, how calls are watched, what is re-exported, and what is not exported.
+**What this decides:** what `@kalfa/quality/vitest` gives a law: how a property law is written, how calls are watched, what is re-exported, and what is not exported.
 
 ```ts
 // Before: a hand runner, fast-check inputs, a seed in each call.
@@ -20,7 +20,7 @@ it.effect.prop("a trace id round-trips", { id: TraceId }, ({ id }) => Effect.gen
 
 ## Context
 
-On 2026-11-15 the owner made several rulings on `@kalfa/vitest` in one walk. This file holds all of them.
+On 2026-11-15 the owner made several rulings on the test package in one walk, when it was named `@kalfa/vitest`. [0600](0600-kalfa-quality-holds-test-lint-format.md) moved it to the `/vitest` subpath of `@kalfa/quality`. This file holds all of the rulings.
 
 [0411](0411-property-data-comes-from-schemas.md) already says a new property draws its data from a
 Schema. [0093](0093-laws-walk-plants-run-once.md) lists `it.prop` and `it.effect.prop` as one way to
@@ -28,7 +28,7 @@ write a law, beside `fc.assert(fc.property(...))`. Both shapes grew. Many files 
 runner that runs an Effect inside fast-check, and on 2026-11-14 (ticket 936) one shared runner,
 `property` in `next/packages/libfabrika/src/Testing.test-support.ts`, was added to replace them.
 
-[0557](0557-kalfa-vitest-is-the-test-toolbox.md) makes `@kalfa/vitest` the one source of test tools,
+[0557](0557-kalfa-vitest-is-the-test-toolbox.md) makes the test package, then named `@kalfa/vitest`, the one source of test tools,
 and it exports no raw `fc.assert`. On 2026-11-15 the owner ruled that property laws use
 `@effect/vitest`'s own runner.
 
@@ -63,7 +63,7 @@ Effect-in-fast-check runners go.**
   options. A law carries no `seed`. The sweep checks that each law draws the same first failing case
   before and after the move.
 - **`fc.assert(fc.property(...))` and `fc.asyncProperty` with a hand seed are not the way.**
-  `@kalfa/vitest` exports no raw `fc.assert` (0557), so a hand runner cannot come back.
+  `@kalfa/quality/vitest` exports no raw `fc.assert` (0557), so a hand runner cannot come back.
 - **What goes:** `property` in libfabrika's `Testing.test-support.ts`, and the roughly 107
   hand-written Effect-in-fast-check runners.
 - **tea's machine-law tools stay** (0411).
@@ -100,6 +100,9 @@ Effect-in-fast-check runners go.**
 - **Hooks are not exported:** `afterAll` and the rest. A resource is acquired in a scope
   ([0061](0061-resources-are-acquired-in-a-scope.md)).
 - **`it.skipIf` and `it.runIf` are not exported.** `lawsOn` and `depth` cover them.
+- **A law's plant and label are options of its declaration,** on `it.prop` and `it.effect.prop` as on
+  `it` and `it.effect`, never a comment or a title prefix
+  ([0580](0580-law-options-carry-plant-and-label.md)).
 
 ## Consequences
 
@@ -112,10 +115,6 @@ Effect-in-fast-check runners go.**
   different seed or run count passes Arbitrary check options, not a seed in the body.
 - Not decided here: the order the folders move in, how the sweep is split into pull requests, and
   where in the package setup `fc.configureGlobal` lives.
-
-## Amendments
-
-- 2026-11-15: [0580](0580-law-options-carry-plant-and-label.md) moves the plant out of a comment into a `plant` option of the law's declaration, and the label out of the title into an option with a required reason; a title prefix becomes an error, and a CI check holds each plant against the ticket's run row. The rules above on what a plant is and that it is run once and not kept hold.
 
 ## Records
 

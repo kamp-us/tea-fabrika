@@ -3,6 +3,7 @@
 // the uncalled cases below. The real-store halves of L1 and L7 are in ExitReasonTest.ts.
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { ExitReason } from "./ExitReason.ts";
 import {
@@ -16,6 +17,7 @@ import {
 import type { ProcessCalls, ProcessManager } from "./ProcessManager.ts";
 
 const decode = Schema.decodeUnknownResult(ExitReason);
+
 const fixture = Schema.is(Fixture);
 
 describe("P34c slice 1: the exit reason schema", () => {
@@ -43,7 +45,7 @@ describe("P34c slice 1: the exit reason schema", () => {
         fc.integer({ min: 0, max: ERROR_CLASS_MAX + 64 }),
         fc.string({ minLength: 1, maxLength: 20 }),
         (phase, length, word) => {
-          const error = "E".repeat(length);
+          const error = Str.repeat(length)("E");
           const answer = decode({ _tag: "crashed", phase, error });
 
           if (length >= 1 && length <= ERROR_CLASS_MAX) {
@@ -61,6 +63,7 @@ describe("P34c slice 1: the exit reason schema", () => {
             phase,
           });
           expect(Result.isFailure(decode({ _tag: "crashed", error: "Error" })), "the phase is required").toBe(true);
+          // SAFETY: PHASES is a tuple of strings; widening it only lets `includes` test any generated word.
           const unknown = (PHASES as ReadonlyArray<string>).includes(word) ? `${word}_` : word;
           expect(Result.isFailure(decode({ _tag: "crashed", phase: unknown })), "an unknown phase").toBe(true);
           expect(Result.isFailure(decode({ _tag: "noproc" })), "noproc is a monitor result, never an exit").toBe(true);
@@ -90,6 +93,7 @@ function exitTypeErrors(
     { _tag: "crashed", phase: "step", error: "TypeError" },
     from,
   );
+
   // @ts-expect-error An exit reason is the closed union, not text.
   const crashText = manager.exit("process_0000000000e008000000000000", "crashed", from);
   const shutdown = calls.exit("process_0000000000e008000000000000", { _tag: "shutdown" }, from);
@@ -99,9 +103,10 @@ function exitTypeErrors(
   const noPhase = manager.exit("process_0000000000e008000000000000", { _tag: "crashed" }, from);
   // @ts-expect-error noproc is a monitor result, not an exit reason.
   const noproc = manager.exit("process_0000000000e008000000000000", { _tag: "noproc" }, from);
-  const reason: typeof ExitReason.Type = { _tag: "normal" };
+  const reason: ExitReason = { _tag: "normal" };
   // @ts-expect-error The exported type is the union too.
-  const text: typeof ExitReason.Type = "normal";
+  const text: ExitReason = "normal";
+
   return [crash, crashText, shutdown, shutdownText, noPhase, noproc, reason, text];
 }
 

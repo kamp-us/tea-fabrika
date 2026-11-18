@@ -1,14 +1,29 @@
-import type { Context, ESTree } from "@oxlint/plugins";
+import { it } from "@effect/vitest";
+import type { Context, Diagnostic, ESTree } from "@oxlint/plugins";
+import { Array as Arr, Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it, vi } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { expect } from "vitest";
 import { noQuestionWordKey } from "./no-question-word-key.ts";
+import { plant } from "./plant.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // oxlint's own rule holds a name written as an identifier; ours holds a literal key (0081).
 const NATIVE = "eslint(id-denylist)";
+
 const CUSTOM = "fabrika(no-question-word-key)";
+
 const PATH = "next/packages/libfabrika/src/keys.ts";
+
 const WORDS = ["where", "why", "what", "who", "how"];
+
 const runs = { seed: 119120, numRuns: 12 };
 
 const isIdentifier = (name: string) => /^[$_\p{ID_Start}][$_‌‍\p{ID_Continue}]*$/u.test(name);
@@ -20,7 +35,7 @@ const unicodeKey = fc
 
 const identifier = fc
   .array(fc.constantFrom("a", "Z", "_", "$", "0", "é", "λ", "中"), { maxLength: 12 })
-  .map((letters) => `key${letters.join("")}`);
+  .map((letters) => `key${Arr.join(letters, "")}`);
 
 // A name one step from a question word: a Unicode letter before or after it, or another case.
 const neighbor = fc.oneof(
@@ -29,19 +44,22 @@ const neighbor = fc.oneof(
       fc.constantFrom(...WORDS),
       fc.array(fc.constantFrom("s", "Not", "é", "λ", "中", "_", "$", "0", "‍"), { minLength: 1, maxLength: 3 }),
     )
-    .map(([word, affix]) => `${word}${affix.join("")}`),
+    .map(([word, affix]) => `${word}${Arr.join(affix, "")}`),
   fc
     .tuple(
       fc.constantFrom(...WORDS),
       fc.array(fc.constantFrom("a", "é", "λ", "中", "_", "$"), { minLength: 1, maxLength: 3 }),
     )
-    .map(([word, affix]) => `${affix.join("")}${word}`),
+    .map(([word, affix]) => `${Arr.join(affix, "")}${word}`),
   fc.constantFrom(...WORDS).map((word) => `${word[0]?.toUpperCase()}${word.slice(1)}`),
   fc.constantFrom(...WORDS).map((word) => word.toUpperCase()),
 );
 
 const escaped = (key: string) =>
-  `"${Array.from({ length: key.length }, (_, i) => `\\u${key.charCodeAt(i).toString(16).padStart(4, "0")}`).join("")}"`;
+  `"${Arr.join(
+    Array.from({ length: key.length }, (_, i) => `\\u${key.charCodeAt(i).toString(16).padStart(4, "0")}`),
+    "",
+  )}"`;
 
 const parameterModifiers = [
   "public",
@@ -82,7 +100,7 @@ const declarations = (key: string, i: number) => [
 // Every form that binds a name, which only an identifier spelling can write. Each sits in its own
 // function, so the generated file declares a name at most once per scope.
 const bindings = (name: string, i: number) => [
-  ...parameterModifiers.flatMap((modifier, n) => [
+  ...Arr.flatMap(parameterModifiers, (modifier, n) => [
     `class P${i}_${n} {constructor(${modifier} ${name}: number) {}}`,
     `class D${i}_${n} {constructor(${modifier} ${name}: number = 1) {}}`,
   ]),
@@ -104,8 +122,8 @@ const bindings = (name: string, i: number) => [
   `function z${i}(target: {${name}: number}) {target.${name} = 1;}`,
 ];
 
-it("refuses all five words in every declaration and binding form, each by exactly one rule", async () => {
-  await fc.assert(
+it("refuses all five words in every declaration and binding form, each by exactly one rule", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.oneof(fc.constantFrom(...WORDS), unicodeKey),
       identifier,
@@ -116,6 +134,7 @@ it("refuses all five words in every declaration and binding form, each by exactl
         const lines: string[] = [];
         const native: number[] = [];
         const custom: number[] = [];
+
         const add = (source: string, by: number[] | null) => {
           lines.push(source);
           by?.push(lines.length);
@@ -123,6 +142,7 @@ it("refuses all five words in every declaration and binding form, each by exactl
 
         for (const [i, name] of names.entries()) {
           const refused = WORDS.includes(name);
+
           const literal = [
             JSON.stringify(name),
             escaped(name),
@@ -145,17 +165,16 @@ it("refuses all five words in every declaration and binding form, each by exactl
           }
         }
 
-        const result = await plant({ [PATH]: lines.join("\n") });
+        const result = await plant({ [PATH]: Arr.join(lines, "\n") });
         expect([...new Set(result(NATIVE, PATH))]).toEqual(native);
         expect([...new Set(result(CUSTOM, PATH))]).toEqual(custom);
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("real config holds generated next/, exam, test and skill paths, and leaves today's paths off", async () => {
-  await fc.assert(
+it("real config holds generated next/, exam, test and skill paths, and leaves today's paths off", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.tuple(
         identifier,
@@ -164,7 +183,8 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
         fc.constantFrom("lead", "tests", "plan", "step-commit"),
       ),
       async ([name, extension, word, skill]) => {
-        const source = (spelling: string) => declarations(spelling, 0).join("\n");
+        const source = (spelling: string) => Arr.join(declarations(spelling, 0), "\n");
+
         const held = [
           `next/${name}.${extension}`,
           `next/${name}.test.${extension}`,
@@ -173,11 +193,13 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
           `.agents/skills/${skill}/scripts/${name}.ts`,
           `.agents/skills/lead/scripts/${name}.test.ts`,
         ];
+
         const today = [
           `packages/fabrika/src/${name}.${extension}`,
           `apps/fabrika/src/${name}.test.${extension}`,
           `programs/tracker/src/${name}.${extension}`,
         ];
+
         const files: Record<string, string> = {};
 
         for (const path of [...held, ...today]) {
@@ -186,7 +208,7 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
         }
 
         const result = await plant(files);
-        const every = declarations(word, 0).map((_, n) => n + 1);
+        const every = Arr.map(declarations(word, 0), (_, n) => n + 1);
 
         for (const path of [...held, ...today]) {
           const quoted = path.replace(/(\.[a-z-]+)?\.tsx?$/, (end) => `-quoted${end}`);
@@ -199,71 +221,85 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("generated values, dynamic keys, external reads, comments, SQL and neighboring names pass", async () => {
-  await fc.assert(
+it("generated values, dynamic keys, external reads, comments, SQL and neighboring names pass", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({ value: unicodeKey, dynamic: identifier, near: neighbor, word: fc.constantFrom(...WORDS) }),
       async ({ value, dynamic, near, word }) => {
         const text = JSON.stringify(value);
-        const source = [
-          `import { ${word} as imported } from "./outside.ts";`,
-          `const text = ${text} + imported;`,
-          `const ${dynamic} = text;`,
-          `const a = {[${dynamic}]: text, [text]: text, [${JSON.stringify(word.slice(0, 2))} + ${JSON.stringify(word.slice(2))}]: text};`,
-          `const b = {[\`${word.slice(0, 2)}\${text}\`]: text};`,
-          `const c = {reason: text, ${near}: ${JSON.stringify(word)}, ${JSON.stringify(near)}: text};`,
-          `const d = a.${word}; const e = a[${JSON.stringify(word)}]; const f = ${JSON.stringify(word)} in a;`,
-          // An outside key read into a good local name is the edge 0081 allows.
-          `const {${word}: borrowed} = a; const {${word}: renamed = text} = a;`,
-          `function read({${word}: kept}: {readonly ${near}: string}) {return kept;}`,
-          `const g: A[${JSON.stringify(word)}] = borrowed; const h: ${near} = renamed;`,
-          `const sql = "select * from rows ${word} id = ?";`,
-          `// ${word} is an ordinary English word here`,
-          `type ${near[0]?.toUpperCase()}${near.slice(1)}Type = {${near}: string};`,
-        ].join("\n");
+
+        const source = Arr.join(
+          [
+            `import { ${word} as imported } from "./outside.ts";`,
+            `const text = ${text} + imported;`,
+            `const ${dynamic} = text;`,
+            `const a = {[${dynamic}]: text, [text]: text, [${JSON.stringify(word.slice(0, 2))} + ${JSON.stringify(word.slice(2))}]: text};`,
+            `const b = {[\`${word.slice(0, 2)}\${text}\`]: text};`,
+            `const c = {reason: text, ${near}: ${JSON.stringify(word)}, ${JSON.stringify(near)}: text};`,
+            `const d = a.${word}; const e = a[${JSON.stringify(word)}]; const f = ${JSON.stringify(word)} in a;`,
+            // An outside key read into a good local name is the edge 0081 allows.
+            `const {${word}: borrowed} = a; const {${word}: renamed = text} = a;`,
+            `function read({${word}: kept}: {readonly ${near}: string}) {return kept;}`,
+            `const g: A[${JSON.stringify(word)}] = borrowed; const h: ${near} = renamed;`,
+            `const sql = "select * from rows ${word} id = ?";`,
+            `// ${word} is an ordinary English word here`,
+            `type ${near[0]?.toUpperCase()}${near.slice(1)}Type = {${near}: string};`,
+          ],
+          "\n",
+        );
+
         const result = await plant({ [PATH]: source });
         expect(result(NATIVE, PATH)).toEqual([]);
         expect(result(CUSTOM, PATH)).toEqual([]);
       },
     ),
     runs,
-  );
-});
+  ));
 
 // format: these exact TypeScript spellings pin decoded names, shorthand and computed identifiers.
-it("format: quoted, escaped, shorthand and computed spellings", async () => {
-  const result = await plant({
-    [PATH]: [
-      "const why = 1;",
-      "const a = {why};",
-      'const b = {"where": 1};',
-      'const c = {"\\u0077hat": 1};',
-      'const d = {["who"]: 1};',
-      "const e = {[`how`]: 1};",
-      "const f = {[why]: 1};",
-      'interface G {readonly "\\u0077here": string}',
-      'type H = {["who"](): void};',
-      "class I {readonly [`what`] = 1;}",
-      "const j = {\\u0077ho: 1};",
-    ].join("\n"),
-  });
-  expect([...new Set(result(NATIVE, PATH))]).toEqual([1, 2, 7, 11]);
-  expect(result(CUSTOM, PATH)).toEqual([3, 4, 5, 6, 8, 9, 10]);
-});
+it.live("format: quoted, escaped, shorthand and computed spellings", () =>
+  Effect.gen(function* () {
+    const result = yield* promised(() =>
+      plant({
+        [PATH]: Arr.join(
+          [
+            "const why = 1;",
+            "const a = {why};",
+            'const b = {"where": 1};',
+            'const c = {"\\u0077hat": 1};',
+            'const d = {["who"]: 1};',
+            "const e = {[`how`]: 1};",
+            "const f = {[why]: 1};",
+            'interface G {readonly "\\u0077here": string}',
+            'type H = {["who"](): void};',
+            "class I {readonly [`what`] = 1;}",
+            "const j = {\\u0077ho: 1};",
+          ],
+          "\n",
+        ),
+      }),
+    );
+
+    expect([...new Set(result(NATIVE, PATH))]).toEqual([1, 2, 7, 11]);
+    expect(result(CUSTOM, PATH)).toEqual([3, 4, 5, 6, 8, 9, 10]);
+  }),
+);
 
 // format: the user-facing diagnostic names all five words, asks for the value's noun, assumes no
 // replacement and offers no autofix.
 it("format: diagnostic names the five words and offers no autofix", () => {
-  const report = vi.fn();
+  // The test owns a plain list of what the rule reported (0579); `report` takes one diagnostic.
+  const reports: Array<Diagnostic> = [];
   // This diagnostic check supplies only the Context method this rule calls.
-  const context: Pick<Context, "report"> = { report };
+  const context: Pick<Context, "report"> = { report: (diagnostic) => void reports.push(diagnostic) };
+  // SAFETY: the rule calls only `context.report`, which this stand-in has, so the rest of Context is never read.
   const visitor = noQuestionWordKey.create(context as Context);
-  const keys = WORDS.map((word) => ({ type: "Literal", value: word, raw: JSON.stringify(word) }));
+  const keys = Arr.map(WORDS, (word) => ({ type: "Literal", value: word, raw: JSON.stringify(word) }));
 
   for (const key of [...keys, { type: "Identifier", name: "why" }]) {
+    // SAFETY: the rule's Property visitor reads only `key`, `computed` and `parent.type`, all set here.
     visitor.Property?.({
       key,
       computed: false,
@@ -271,13 +307,11 @@ it("format: diagnostic names the five words and offers no autofix", () => {
     } as ESTree.ObjectProperty);
   }
 
-  expect(report.mock.calls).toEqual(
-    keys.map((key) => [
-      {
-        node: key,
-        message:
-          "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names (0081).",
-      },
-    ]),
+  expect(reports).toEqual(
+    Arr.map(keys, (key) => ({
+      node: key,
+      message:
+        "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names (0081).",
+    })),
   );
 });

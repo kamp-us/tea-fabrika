@@ -56,8 +56,8 @@ the same write turn; the letter points at the fact and is the only thing the not
 
 ## Consequences
 
-- 0151 is amended in part; its other rules hold. The recovery note and the glossary's inbox rows
-  change their wording in the pull request that builds the letter.
+- The recovery note and the glossary's inbox rows change their wording in the pull request that
+  builds the letter.
 - P45 slice 1, already in its lane on this shape, is no longer built on a lean.
 - Cost: one more write per email recovery, in the brain's write turn. A recovery is rare.
 - When Topic exists, the inbox may read the fact's stream instead. That is Tier 2's call and

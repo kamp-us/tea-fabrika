@@ -1,11 +1,13 @@
 // P15 slice 1, next/. Runtime's reload suite on scoped node:sqlite stores (0062).
-import { DatabaseSync } from "node:sqlite"; // edge: the runtime store requires a synchronous SQLite handle
 import { NodeServices } from "@effect/platform-node";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as ScopedRef from "effect/ScopedRef";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -22,24 +24,17 @@ const open = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p15-reload-" });
   const file = path.join(folder, "store.db");
-  const held = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const db = new DatabaseSync(file);
-      return { db, sql: nodeSql(db) };
-    }),
-    (handle) => Effect.sync(() => handle.db.isOpen && handle.db.close()),
-  );
+  const connect = TestDatabase.make(file).pipe(Effect.map(nodeSql));
+  const held = yield* ScopedRef.fromAcquire(connect);
+
+  // One Sql across reopens: each call goes to the connection open now.
   const sql: Sql = {
-    exec: (query, ...params) => held.sql.exec(query, ...params),
-    transaction: (work) => held.sql.transaction(work),
-    size: () => held.sql.size(),
+    exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
+    transaction: (work) => ScopedRef.getUnsafe(held).transaction(work),
+    size: () => ScopedRef.getUnsafe(held).size(),
   };
-  const reopen = Effect.sync(() => {
-    held.db.close();
-    held.db = new DatabaseSync(file);
-    held.sql = nodeSql(held.db);
-  });
-  return { sql, reopen } satisfies ReloadTest.Store;
+
+  return { sql, reopen: ScopedRef.set(held, connect) } satisfies ReloadTest.Store;
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
@@ -66,8 +61,9 @@ const decode = Schema.decodeUnknownSync(Row);
 const rows: ReloadTest.Rig["rows"] = (sql) =>
   sql.exec("SELECT name FROM sqlite_master WHERE name='entries'").length === 0
     ? []
-    : sql.exec("SELECT * FROM entries ORDER BY rev").map((raw) => {
+    : Arr.map(sql.exec("SELECT * FROM entries ORDER BY rev"), (raw) => {
         const row = decode(raw);
+
         return { stream: row.stream, id: row.id, event: row._tag, body: row.body, build: row.build };
       });
 

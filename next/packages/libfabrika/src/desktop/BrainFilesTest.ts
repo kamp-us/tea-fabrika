@@ -1,12 +1,15 @@
 // L6, next/. The driver owner supplies real files and the adapter; desktop imports no platform.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Equivalence from "effect/Equivalence";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import type { BrainControl, BrainControlError } from "./BrainControl.ts";
 import type { BrainSpec } from "./BrainSpec.ts";
 
@@ -25,6 +28,7 @@ export const Competing = Schema.TaggedUnion({
   // A directory with one file inside.
   directory: { bytes: Schema.String },
 });
+
 export type Competing = typeof Competing.Type;
 
 /** A directory entry as it is on disk. A symlink is its own target text, never what it points at. */
@@ -33,12 +37,14 @@ export const Dirent = Schema.TaggedUnion({
   symlink: { target: Schema.String },
   directory: { files: Schema.Record(Schema.String, Schema.String) },
 });
+
 export type Dirent = typeof Dirent.Type;
 
 const Byte = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 255 }));
 
 /** A symlink whose target is not valid UTF-8. Text cannot carry it, so it is held as bytes. */
 export const Opaque = Schema.TaggedStruct("opaque", { target: Schema.Array(Byte) });
+
 export type Opaque = typeof Opaque.Type;
 
 // A target of any bytes but NUL around one byte that no valid UTF-8 text holds, wherever it sits.
@@ -53,6 +59,7 @@ export const Replacement = Schema.Struct({
   checkpoint: Schema.Literals(["before-capture", "after-capture"]),
   competing: Schema.Union([Competing, Opaque]),
 });
+
 export type Replacement = typeof Replacement.Type;
 
 // A file holds UTF-8, so a lone surrogate is compared as the text the disk gives back.
@@ -116,7 +123,7 @@ export const suite = (open: Open) =>
           const disk = yield* open(fault);
           expect(Exit.isFailure(yield* disk.control.install.pipe(Effect.exit))).toBe(true);
           expect(yield* disk.read).toBeNull();
-          expect((yield* disk.entries).filter((name) => name !== "records")).toEqual([]);
+          expect(Arr.filter(yield* disk.entries, (name) => name !== "records")).toEqual([]);
         }),
       { arbitrary: { seed: 119120, runs: 100 } },
     );
@@ -139,10 +146,13 @@ export const suite = (open: Open) =>
             expect(ours).not.toBeNull();
 
             const exit = yield* Effect.scoped(disk.control.remove).pipe(Effect.exit);
-            expect(disk.events.filter((event) => event === `replace:${checkpoint}`)).toHaveLength(1);
+            expect(Arr.filter(disk.events, (event) => event === `replace:${checkpoint}`)).toHaveLength(1);
             const swapped = yield* disk.swapped;
             const typed = { defect: false, error: "BrainControlError" };
-            const held = Effect.map(disk.entries, (names) => names.filter((name) => name.startsWith(".brain-")));
+
+            const held = Effect.map(disk.entries, (names) =>
+              Arr.filter(names, (name) => Str.startsWith(".brain-")(name)),
+            );
 
             if (competing._tag === "copy") {
               // A 0600 file with our exact bytes is our plist: an existing matching file is reusable.
@@ -161,14 +171,15 @@ export const suite = (open: Open) =>
                 dirent: yield* disk.dirent,
               }).toEqual({ refusal: null, dirent: null });
               expect(yield* held).toEqual([]);
-              expect(disk.events.filter((event) => event === `replace:${checkpoint}`)).toHaveLength(1);
+              expect(Arr.filter(disk.events, (event) => event === `replace:${checkpoint}`)).toHaveLength(1);
+
               return;
             }
 
             // The swap really put the generated kind at the path.
             if (competing._tag === "symlink") {
               expect(
-                swapped?._tag === "symlink" && swapped.target.startsWith("/") === (competing.path === "absolute"),
+                swapped?._tag === "symlink" && Str.startsWith("/")(swapped.target) === (competing.path === "absolute"),
               ).toBe(true);
             } else {
               expect(swapped).toEqual(
@@ -206,27 +217,33 @@ export const suite = (open: Open) =>
       ([{ before, never, after }]) =>
         Effect.gen(function* () {
           const target = [...before, never, ...after];
+
           const disk = yield* open("none", {
             checkpoint: "before-capture",
             competing: Opaque.make({ target }),
           });
+
           yield* disk.control.install;
+
           // Where the competing link is now. Text cannot carry its target, so a restore that reads
           // the target as text can only put a different link back: the link then stays where the
           // capture put it. `changed` is another entry at the path, `lost` is the link nowhere.
+          const sameBytes = Arr.makeEquivalence(Equivalence.Number);
+
           const place = Effect.gen(function* () {
             const links = yield* disk.links;
 
             if ((yield* disk.dirent) === null) {
-              return links.held.some((bytes) => bytes.join() === target.join()) ? "held" : "lost";
+              return Arr.some(links.held, (bytes) => sameBytes(bytes, target)) ? "held" : "lost";
             }
 
-            return links.path?.join() === target.join() ? "path" : "changed";
+            return links.path !== null && sameBytes(links.path, target) ? "path" : "changed";
           });
+
           const typed = { defect: false, error: "BrainControlError" };
 
           const first = refusal(yield* Effect.scoped(disk.control.remove).pipe(Effect.exit));
-          expect(disk.events.filter((event) => event === "replace:before-capture")).toHaveLength(1);
+          expect(Arr.filter(disk.events, (event) => event === "replace:before-capture")).toHaveLength(1);
           const kept = yield* place;
           expect(first).toEqual(typed);
           expect(["path", "held"]).toContain(kept);
@@ -286,24 +303,28 @@ export const suite = (open: Open) =>
       ([count]) =>
         Effect.gen(function* () {
           const disk = yield* open("none");
+
           const exits = yield* Effect.forEach(
             Array.from({ length: count }),
             () => disk.control.install.pipe(Effect.exit),
             { concurrency: "unbounded" },
           );
-          expect(exits.every(Exit.isSuccess)).toBe(true);
+
+          expect(Arr.every(exits, Exit.isSuccess)).toBe(true);
           const original = yield* disk.read;
           expect(original).not.toBeNull();
           yield* disk.control.install;
           expect(yield* disk.read).toBe(original);
+
           const sync = disk.events.indexOf("sync"),
             publish = disk.events.indexOf("publish");
+
           expect(sync).toBeGreaterThanOrEqual(0);
           expect(publish).toBeGreaterThan(sync);
 
           for (const [at, event] of disk.events.entries()) {
-            if (event.startsWith("publish:")) {
-              const synced = disk.events.indexOf(`sync:${event.slice("publish:".length)}`);
+            if (Str.startsWith("publish:")(event)) {
+              const synced = disk.events.indexOf(`sync:${Str.slice("publish:".length)(event)}`);
               expect(synced >= 0 && synced < at).toBe(true);
             }
           }

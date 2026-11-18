@@ -1,33 +1,67 @@
-import { applyCell } from "@demlik/tea";
+import { applyCell, type Machine } from "@demlik/tea";
 // next/, P21 slice 1. The factory takes checked settings at start; no provider is read by update.
 import { arbGuidedSequence, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Access from "../access/Access.ts";
 import * as Id from "../Id.ts";
 import * as Menu from "./Menu.ts";
 
 export const seed = 119120;
+
 export const ttl = 137;
+
 export const ctx = stubCtxThrowingProxy<unknown>();
+
 export const machine = Menu.machine({ linkTtl: ttl, browserLink: true });
+
 export type Model = ReturnType<typeof machine.init>[0];
-export type Msg = Parameters<(typeof machine.update)[keyof typeof machine.update]>[1];
+
+export type Msg = typeof machine extends Machine<infer _Model, infer M, infer _Cmd, infer _Sub, infer _Ctx> ? M : never;
+
 export type Command = ReturnType<typeof machine.init>[1][number];
+
 export type Row = typeof Menu.Row.Type;
+
 type Client = typeof Menu.Client.Type;
 
-export const same = (a: unknown, b: unknown) => Equal.equals(a, b);
-export const cmdId = (n: number) => Id.Cmd.make(`cmd_0000000000e008${n.toString(16).padStart(12, "0")}`);
+export const same = <A>(a: A, b: A) => Equal.equals(a, b);
+
+export const cmdId = (n: number) => Id.Cmd.make(`cmd_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
+
 export const command = fc.nat({ max: 0xfffffff }).map(cmdId);
+
 const stale = cmdId(0xffffffffff);
+
 const kind = fc.constantFrom(...Access.Grant.fields.as.literals);
+
 const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
+
 const Link = Schema.TaggedUnion({ connecting: {}, online: {}, lost: {} });
+
+// Machine.make exposes its plain Msg as Schema.Schema, so these test makers keep each case's fields.
+export const Messages = Schema.TaggedUnion({
+  link: { link: Link },
+  rows: { rows: Schema.Array(Menu.Row), at: Schema.Finite },
+  clients: { clients: Schema.Array(Menu.Client) },
+  approve: { key: Schema.String, cmd: Id.Cmd },
+  deny: { key: Schema.String, cmd: Id.Cmd },
+  remove: { key: Schema.String, cmd: Id.Cmd },
+  enter: {},
+  checked: { cmd: Id.Cmd, check: Schema.Literals(["touch", "click"]) },
+  not_checked: { cmd: Id.Cmd, reason: Schema.Literals(["declined", "unavailable"]) },
+  open_browser: { cmd: Id.Cmd },
+  opened: { cmd: Id.Cmd, digest: Schema.String, at: Schema.Finite },
+});
+
 export const label = fc.stringMatching(/^[A-Za-z][A-Za-z0-9 ]{0,23}$/);
-const code = fc.integer({ min: 0, max: 999999 }).map((n) => String(n).padStart(6, "0"));
+
+const code = fc.integer({ min: 0, max: 999999 }).map((n) => Str.padStart(6, "0")(String(n)));
+
 const digest = fc.constantFrom("digest-a", "digest-b", "digest-c");
+
 // Waiting and admitted snapshots arrive independently, so either can still hold the same key.
 const key = fc.constantFrom("waiting-a", "waiting-b", "waiting-c", "client-a", "client-b", "client-c");
 
@@ -55,11 +89,15 @@ const client: fc.Arbitrary<Client> = fc.record({
 });
 
 const rows = fc.uniqueArray(row, { selector: (r) => r.key, maxLength: 3 });
+
 const clients = fc.uniqueArray(client, { selector: (c) => c.key, maxLength: 3 });
+
 const at = fc.constantFrom(0, 1, ttl - 1, ttl, ttl + 1, ttl * 2);
 
-const click = <const T extends "approve" | "deny" | "remove">(type: T, keys: ReadonlyArray<string>) =>
-  fc.record({ type: fc.constant(type), key: fc.constantFrom(...keys), cmd: command });
+const click = <A>(
+  keys: ReadonlyArray<string>,
+  make: (fields: { readonly key: string; readonly cmd: ReturnType<typeof cmdId> }) => A,
+) => fc.record({ key: fc.constantFrom(...keys), cmd: command }).map(make);
 
 // tea draws the operation order and answers commands actually sent. The second fold below
 // chooses click targets from the reached lists, retaining deliberately stale replies.
@@ -68,40 +106,33 @@ const proposals = arbGuidedSequence(
   ctx,
   {
     outside: {
-      rows: fc.record({ type: fc.constant("rows"), rows, at }),
-      clients: fc.record({ type: fc.constant("clients"), clients }),
-      link: fc.record({
-        type: fc.constant("link"),
-        link: fc.constantFrom(Link.cases.connecting.make({}), Link.cases.online.make({}), Link.cases.lost.make({})),
-      }),
-      approve: click("approve", ["waiting-a", "waiting-b", "waiting-c"]),
-      deny: click("deny", ["waiting-a", "waiting-b", "waiting-c"]),
-      remove: click("remove", ["client-a", "client-b", "client-c"]),
-      enter: fc.constant({ type: "enter" }),
-      checked: fc.record({
-        type: fc.constant("checked"),
-        cmd: fc.constant(stale),
-        check: fc.constantFrom("touch", "click"),
-      }),
-      not_checked: fc.record({
-        type: fc.constant("not_checked"),
-        cmd: fc.constant(stale),
-        reason: fc.constantFrom("declined", "unavailable"),
-      }),
-      open_browser: fc.record({ type: fc.constant("open_browser"), cmd: command }),
-      opened: fc.record({ type: fc.constant("opened"), cmd: fc.constant(stale), digest, at: fc.constant(0) }),
+      rows: fc.record({ rows, at }).map((fields) => Messages.cases.rows.make(fields)),
+      clients: fc.record({ clients }).map((fields) => Messages.cases.clients.make(fields)),
+      link: fc
+        .constantFrom(Link.cases.connecting.make({}), Link.cases.online.make({}), Link.cases.lost.make({}))
+        .map((link) => Messages.cases.link.make({ link })),
+      approve: click(["waiting-a", "waiting-b", "waiting-c"], Messages.cases.approve.make),
+      deny: click(["waiting-a", "waiting-b", "waiting-c"], Messages.cases.deny.make),
+      remove: click(["client-a", "client-b", "client-c"], Messages.cases.remove.make),
+      enter: fc.constant(Messages.cases.enter.make({})),
+      checked: fc.constantFrom("touch", "click").map((check) => Messages.cases.checked.make({ cmd: stale, check })),
+      not_checked: fc
+        .constantFrom("declined", "unavailable")
+        .map((reason) => Messages.cases.not_checked.make({ cmd: stale, reason })),
+      open_browser: command.map((cmd) => Messages.cases.open_browser.make({ cmd })),
+      opened: digest.map((d) => Messages.cases.opened.make({ cmd: stale, digest: d, at: 0 })),
     },
     answers: {
       check: {
         draw: fc.constantFrom("touch", "click", "declined", "unavailable"),
         make: (pending, answer): Msg =>
           answer === "touch" || answer === "click"
-            ? { type: "checked", cmd: pending.cmd, check: answer }
-            : { type: "not_checked", cmd: pending.cmd, reason: answer },
+            ? Messages.cases.checked.make({ cmd: pending.cmd, check: answer })
+            : Messages.cases.not_checked.make({ cmd: pending.cmd, reason: answer }),
       },
       open: {
         draw: digest,
-        make: (pending, digest): Msg => ({ type: "opened", cmd: pending.cmd, digest, at: 0 }),
+        make: (pending, digest): Msg => Messages.cases.opened.make({ cmd: pending.cmd, digest, at: 0 }),
       },
     },
   },
@@ -115,15 +146,15 @@ export const walks = proposals.map((messages): ReadonlyArray<Msg> => {
   for (const proposal of messages) {
     let msg = proposal;
 
-    if (proposal.type === "approve" || proposal.type === "deny" || proposal.type === "remove") {
-      const targets = proposal.type === "remove" ? model.clients : model.rows;
-      const index = proposal.key.endsWith("a") ? 0 : proposal.key.endsWith("b") ? 1 : 2;
+    if (proposal._tag === "approve" || proposal._tag === "deny" || proposal._tag === "remove") {
+      const targets = proposal._tag === "remove" ? model.clients : model.rows;
+      const index = Str.endsWith("a")(proposal.key) ? 0 : Str.endsWith("b")(proposal.key) ? 1 : 2;
       const target = targets[index % Math.max(1, targets.length)];
       msg = target === undefined ? proposal : { ...proposal, key: target.key };
     }
 
     if (
-      (proposal.type === "checked" || proposal.type === "not_checked") &&
+      (proposal._tag === "checked" || proposal._tag === "not_checked") &&
       proposal.cmd !== stale &&
       model._tag === "checking"
     ) {
@@ -138,4 +169,5 @@ export const walks = proposals.map((messages): ReadonlyArray<Msg> => {
 });
 
 export const modelJson = Schema.fromJsonString(Schema.toType(machine.model));
+
 export const encoded = (model: Model) => Schema.encodeSync(modelJson)(model);

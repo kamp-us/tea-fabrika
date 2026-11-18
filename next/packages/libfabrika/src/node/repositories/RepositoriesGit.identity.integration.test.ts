@@ -14,14 +14,15 @@ import * as GitLaws from "./GitLaws.test-support.ts";
 import { fixture, git, gitCommandBudget, runs, withReader } from "./RepositoriesGit.test-support.ts";
 
 const identityRuns = { ...runs, numRuns: runsFor({ fast: 30, full: 300 }) };
+
 // Fixture, clone, worktree, initial open, then four opens for each move.
 const identityGitCommands = 6 + 1 + 1 + 11 + 4 * 4 * 11;
 
 describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) => {
   it(
     "L5: real clone/common-directory identity separates same basenames and destinations but keeps aliases and credential changes",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(
           fc.stringMatching(/^[a-z][a-z0-9]{5,15}$/),
           fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
@@ -37,6 +38,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   const alias = f.path.join(f.root, "alias");
                   yield* git(f.repo, ["worktree", "add", "--detach", alias, f.commit]);
                   const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+
                   const key = (location: string, destination: string) => {
                     const spawner = ChildProcessSpawner.make((command) => {
                       if (command._tag !== "StandardCommand" || !command.args.includes("--get-url")) {
@@ -45,6 +47,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
 
                       // Model a host URL rewrite while keeping every transport on the local bare origin.
                       const bytes = new TextEncoder().encode(destination);
+
                       return Effect.succeed(
                         ChildProcessSpawner.makeHandle({
                           pid: ChildProcessSpawner.ProcessId(1),
@@ -61,6 +64,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                         }),
                       );
                     });
+
                     return withReader(
                       f.person,
                       Repositories.use((service) => service.open(location)),
@@ -69,6 +73,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
                     );
                   };
+
                   const destination = "https://example.invalid/repo.git";
                   const initial = yield* key(f.repo, destination);
 
@@ -84,8 +89,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
             ),
         ),
         identityRuns,
-      );
-    },
+      ),
     identityRuns.numRuns * identityGitCommands * gitCommandBudget,
   );
 });

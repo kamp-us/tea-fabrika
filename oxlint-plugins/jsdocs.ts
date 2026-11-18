@@ -46,6 +46,7 @@
 // whether an example compiles, and a name sent on under a new binding (`const b = a; export { b }`),
 // which is asked for its block at `b`.
 import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
+import { Array as Arr, pipe, Match, Option, Predicate } from "effect";
 import {
   buildTags,
   type DocScope,
@@ -72,9 +73,8 @@ const isDoc = (comment: Comment): boolean => comment.type === "Block" && comment
 
 const sinceOf = (options: ReadonlyArray<unknown>): Since => {
   const [given] = options;
-  return typeof given === "object" && given !== null && "since" in given && given.since === "required"
-    ? "required"
-    : "absent";
+
+  return Predicate.isObjectOrArray(given) && "since" in given && given.since === "required" ? "required" : "absent";
 };
 
 /**
@@ -103,10 +103,14 @@ const withSince = (found: ReadonlyArray<JSDocDiagnostic>, block: JSDocBlock, sin
   const kept =
     since === "required"
       ? found
-      : found.filter((d) => d.code !== "invalid-since" && !(d.code === "missing-tag" && d.message.endsWith("@since")));
-  const messages = kept.map((d) => d.message);
+      : Arr.filter(
+          found,
+          (d) => d.code !== "invalid-since" && !(d.code === "missing-tag" && d.message.endsWith("@since")),
+        );
 
-  if (since === "absent" && block.tags.some((tag) => tag.name === "since")) {
+  const messages = Arr.map(kept, (d) => d.message);
+
+  if (since === "absent" && Arr.some(block.tags, (tag) => tag.name === "since")) {
     messages.push("@since is not written until libfabrika's first release (0118)");
   }
 
@@ -143,7 +147,11 @@ const bindingName = (id: Node, source: Context["sourceCode"]): string =>
   id.type === "Identifier" ? id.name : source.getText(id);
 
 const exportedName = (name: Node): string =>
-  name.type === "Identifier" ? name.name : name.type === "Literal" ? String(name.value) : "";
+  Match.value(name).pipe(
+    Match.discriminator("type")("Identifier", (id) => id.name),
+    Match.discriminator("type")("Literal", (literal) => String(literal.value)),
+    Match.orElse(() => ""),
+  );
 
 /** The type literals a type reaches, as Effect's `parseMembersFromTsType` walks them. */
 const literalsIn = (type: Node | null | undefined): ReadonlyArray<ReadonlyArray<Node>> => {
@@ -158,16 +166,16 @@ const literalsIn = (type: Node | null | undefined): ReadonlyArray<ReadonlyArray<
       return [type.members];
     case "TSUnionType":
     case "TSIntersectionType":
-      return type.types.flatMap(literalsIn);
+      return Arr.flatMap(type.types, literalsIn);
     case "TSParenthesizedType":
     case "TSTypeOperator":
       return literalsIn(type.typeAnnotation);
     case "TSArrayType":
       return literalsIn(type.elementType);
     case "TSConditionalType":
-      return [type.checkType, type.extendsType, type.trueType, type.falseType].flatMap(literalsIn);
+      return Arr.flatMap([type.checkType, type.extendsType, type.trueType, type.falseType], literalsIn);
     case "TSTypeReference":
-      return type.typeArguments?.params.flatMap(literalsIn) ?? [];
+      return type.typeArguments == null ? [] : Arr.flatMap(type.typeArguments.params, literalsIn);
     case "TSMappedType":
       return literalsIn(type.typeAnnotation);
     default:
@@ -204,7 +212,7 @@ const membersOf = (declaration: Node): ReadonlyArray<ReadonlyArray<Node>> => {
     case "TSTypeAliasDeclaration":
       return literalsIn(declaration.typeAnnotation);
     case "VariableDeclaration":
-      return declaration.declarations.flatMap((d) => literalsIn(d.id.typeAnnotation));
+      return Arr.flatMap(declaration.declarations, (d) => literalsIn(d.id.typeAnnotation));
     case "FunctionDeclaration":
     case "TSDeclareFunction":
       return literalsIn(declaration.returnType);
@@ -232,15 +240,17 @@ const isReadMember = (member: Node): boolean => {
 };
 
 const nameOfMember = (member: Node, source: Context["sourceCode"]): string =>
-  "key" in member && member.key != null && typeof member.key === "object" && "type" in member.key
-    ? keyName(member.key, source)
-    : "";
+  "key" in member && Predicate.isObjectOrArray(member.key) && "type" in member.key ? keyName(member.key, source) : "";
 
 /** The name a top-level declaration exports, as a reader would say it. */
 const declarationName = (declaration: Node, source: Context["sourceCode"]): string => {
   switch (declaration.type) {
     case "VariableDeclaration":
-      return declaration.declarations.map((d) => bindingName(d.id, source)).join(", ");
+      return pipe(
+        declaration.declarations,
+        Arr.map((d) => bindingName(d.id, source)),
+        Arr.join(", "),
+      );
     case "FunctionDeclaration":
     case "TSDeclareFunction":
     case "ClassDeclaration":
@@ -259,7 +269,7 @@ const consts = (statement: Node | undefined): ReadonlySet<string> =>
   statement?.type === "ExportNamedDeclaration" &&
   statement.declaration?.type === "VariableDeclaration" &&
   statement.declaration.kind === "const"
-    ? new Set(statement.declaration.declarations.flatMap((d) => (d.id.type === "Identifier" ? [d.id.name] : [])))
+    ? new Set(Arr.flatMap(statement.declaration.declarations, (d) => (d.id.type === "Identifier" ? [d.id.name] : [])))
     : new Set();
 
 export const jsdocs: CreateRule = {
@@ -279,12 +289,13 @@ export const jsdocs: CreateRule = {
     const since = sinceOf(context.options);
 
     /** The last `/** *\/` right before a node, the block Effect's checker reads for it. */
-    const docBefore = (node: Node): Comment | undefined => source.getCommentsBefore(node).findLast(isDoc);
+    const docBefore = (node: Node): Comment | undefined =>
+      Option.getOrUndefined(Arr.findLast(source.getCommentsBefore(node), isDoc));
 
     /** Every problem of these members, depth first, named. A member whose block fails is not entered. */
     const memberProblems = (lists: ReadonlyArray<ReadonlyArray<Node>>): ReadonlyArray<string> =>
-      lists.flatMap((members) =>
-        members.flatMap((member) => {
+      Arr.flatMap(lists, (members) =>
+        Arr.flatMap(members, (member) => {
           if (!isReadMember(member)) {
             return [];
           }
@@ -302,7 +313,7 @@ export const jsdocs: CreateRule = {
           }
 
           const name = nameOfMember(member, source);
-          const own = problems.map((p) => `member \`${name}\`: ${p}`);
+          const own = Arr.map(problems, (p) => `member \`${name}\`: ${p}`);
 
           return problems.length > 0 ? own : memberProblems(literalsIn(memberType(member)));
         }),
@@ -325,6 +336,7 @@ export const jsdocs: CreateRule = {
           node,
           message: `\`${name}\` has no doc block. A public export of a next/ library takes one, in Effect's shape: one description paragraph, then @category (E6, 0023).`,
         });
+
         return "reported";
       }
 
@@ -342,8 +354,9 @@ export const jsdocs: CreateRule = {
       if (all.length > 0) {
         context.report({
           node,
-          message: `\`${name}\`'s doc block is out of Effect's shape (E6, 0023): ${all.join("; ")}.`,
+          message: `\`${name}\`'s doc block is out of Effect's shape (E6, 0023): ${Arr.join(all, "; ")}.`,
         });
+
         return "reported";
       }
 
@@ -387,12 +400,13 @@ export const jsdocs: CreateRule = {
         const overloads = new Set<string>();
         let checked = 0;
 
-        program.body.forEach((statement, index) => {
+        Arr.forEach(program.body, (statement, index) => {
           if (statement.type === "ExportAllDeclaration") {
             if (statement.exported !== null) {
               const named = check(statement, exportedName(statement.exported), "namespace", {
                 tagsAlone: true,
               });
+
               checked += named === "internal" ? 0 : 1;
             }
 
@@ -410,6 +424,7 @@ export const jsdocs: CreateRule = {
               const named = check(specifier, exportedName(specifier.exported), "declaration", {
                 tagsAlone: true,
               });
+
               checked += named === "internal" ? 0 : 1;
             }
 
@@ -444,6 +459,7 @@ export const jsdocs: CreateRule = {
             consts(program.body[index - 1]).has(name)
           ) {
             checked++;
+
             return;
           }
 
@@ -461,10 +477,10 @@ export const jsdocs: CreateRule = {
     function checkModule(program: ESTree.Program) {
       const [first] = program.body;
       const leading = first === undefined ? program.comments : source.getCommentsBefore(first);
-      const head = leading.find((comment) => comment.type !== "Line");
-      const docs = leading.filter(isDoc);
+      const head = Arr.findFirst(leading, (comment) => comment.type !== "Line");
+      const docs = Arr.filter(leading, isDoc);
       const own = first !== undefined && first.type !== "ImportDeclaration" && docs.length === 1;
-      const block = head !== undefined && isDoc(head) && !own ? head : undefined;
+      const block = Option.isSome(head) && isDoc(head.value) && !own ? head.value : undefined;
 
       if (block === undefined) {
         context.report({
@@ -472,6 +488,7 @@ export const jsdocs: CreateRule = {
           message:
             "This file has no module block. A public file of a next/ library opens with one: a `/** */` with a description, above the imports (E6, 0023).",
         });
+
         return;
       }
 
@@ -482,16 +499,18 @@ export const jsdocs: CreateRule = {
       }
 
       const tags = buildTags("module", loose.tags);
+
       const found = [
         ...(tags._tag === "Failure" ? tags.error.diagnostics : []),
         ...parseModuleExamples(loose).diagnostics,
       ];
+
       const problems = withSince(found, loose, since);
 
       if (problems.length > 0) {
         context.report({
           node: block,
-          message: `The module block is out of Effect's shape (E6, 0023): ${problems.join("; ")}.`,
+          message: `The module block is out of Effect's shape (E6, 0023): ${Arr.join(problems, "; ")}.`,
         });
       }
     }

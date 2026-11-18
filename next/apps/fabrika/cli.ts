@@ -1,8 +1,8 @@
 // The `fabrika` command and its subcommands, composed with the platform Layers. This start file
 // chooses the TOML adapter, as dev.ts does; the commands themselves live in libfabrika.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import * as Settings from "@kampus/libfabrika/node/settings/Command";
-import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { Digest } from "effect/crypto";

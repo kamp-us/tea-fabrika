@@ -1,0 +1,77 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1136-l5-diagnostic",
+  "ticket": "1136",
+  "pr": null,
+  "started": "2026-11-16T21:46:49-08:00",
+  "ended": "2026-11-16T21:54:34-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead-tooling ticket1136 adds a bounded sanitized child-failure message to L5. The lint command, rule, fixture exemptions, scanned directories, deadline, exit-status requirement and zero-hit requirement remain unchanged.",
+  "note": "Run44021359528 on E88 dd8e97 retained only a child-status assertion. Its actual child error is unknown. This change records future failure details; it proves no cause for that run and repairs no directory scan or product code. Raw text and unknown error reasons remain redacted.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7.76,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "branch": "fabrikalfa/l5-diagnostic",
+  "base": "c433a7e995b3bb3ef5afe3adbee1d961f5758015",
+  "checkedHead": null,
+  "checkedFiles": {
+    "oxlint-plugins/one-machine-per-file.test.ts": "68c5741114204c371bf88d2a541d03aef07ea26a100767eb522dc3daa79e30d2"
+  },
+  "checks": [
+    {
+      "command": "Tracker CLI post list",
+      "result": "Independently verified ticket1136 open before source edits."
+    },
+    {
+      "command": "pnpm install --offline --frozen-lockfile",
+      "result": "Passed in this worktree with its own dependencies."
+    },
+    {
+      "command": "pnpm format",
+      "result": "Passed. Only the assigned test file changed; no ledger changed."
+    },
+    {
+      "command": "node oxlint-plugins/lint.ts oxlint-plugins/one-machine-per-file.test.ts",
+      "result": "Passed with zero blocking findings and zero advice."
+    },
+    {
+      "command": "Source-extracted synthetic diagnostic checks",
+      "result": "20 cases passed, plus original/new assertion truth compared over8 status/error combinations. Covers JSON diagnostics and positions, malformed reports, non-JSON output, stdout/stderr, spawn and signal fields, error.code absent from message, arbitrary source/secrets, Unix/Windows/private/temp paths and large output. Largest fully populated message5244characters, below the8192-character check. A code-only spawn error first failed, then passed after its code field was included."
+    },
+    {
+      "command": "Source-extracted existing standalone L5 oxlint command",
+      "result": "Passed at this source hash on pinned Node26.13.0: status0,954files,0diagnostics,empty stderr. No Vitest suite or other law ran."
+    },
+    {
+      "command": "Source comparison with the base L5 body",
+      "result": "Replacing only the added assertion message with the original assertions gives the original body byte for byte. Command, config, fixture exemptions, scopes, timeout, buffer, cleanup and remaining assertions are unchanged."
+    }
+  ],
+  "diagnostics": {
+    "textSampleCharacters": 4096,
+    "sample": "First2048 and last2048characters, with an omission marker when cut.",
+    "shownDiagnostics": 4,
+    "fileCharacters": 160,
+    "policy": "Only recognized error codes and fixed reason phrases leave free text. JSON output retains diagnostic count, known rule, safe relative source path, position and severity. Absolute, traversal, hidden and temporary paths are redacted. No raw source excerpts, unknown text, environment or config contents are printed."
+  },
+  "pending": [
+    "Lead final read and compiler checks when its reserved compiler slot is available",
+    "Eligible CI proof for the changed tooling law"
+  ],
+  "notRun": [
+    "Whole compiler and full typed lint API, reserved for another proof task",
+    "Whole or guarded Vitest law/suite, process signals, Electron, launchd",
+    "CI dispatch or wait"
+  ],
+  "originalFailure": "https://github.com/kamp-us/tea-fabrika/actions/runs/44021359528",
+  "modelUsage": "Exact model variant, token counts and billing are unavailable."
+}

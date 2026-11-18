@@ -1,7 +1,7 @@
 ---
 id: 0151
 title: A thin inbox is a Tier 1 row, and the email recovery notice is its first row, never a toast
-status: amended-in-part by [0154](0154-the-brain-mails-the-inbox-one-letter-per-notice.md)
+status: accepted
 date: 2026-11-12
 tags: [tiers, plan, inbox, recovery, notice, next]
 ---
@@ -37,8 +37,9 @@ person is what the inbox is for ([0480](0480-the-inbox-is-one-program-two-views.
 - P45 is an `inbox` program in `next/`. It shows notices from the brain and nothing else.
 - Its first row is 0138's notice. No toast is built for it.
 - A row is read from a fact already in the ledger, here the email-signed `added`. The notice
-  adds no write and still carries no action: the list of let-in devices is where a person removes
-  a device.
+  adds no fact and still carries no action: the list of let-in devices is where a person removes
+  a device. The brain mails the inbox one letter per notice, and the letter points at the `added`
+  fact ([0154](0154-the-brain-mails-the-inbox-one-letter-per-notice.md)).
 - A person dismisses a row on the device in front of them, and that dismissal is kept on that
   device only. Every other device keeps showing the row until its own person dismisses it there.
   So a device that got in by email cannot clear the warning for the person's real devices.
