@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-decision-0098-names-the-true-merge-lint",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0098-the-signed-chain-covers-the-branch-not-main.md",
+    "line": 92
+  },
+  "says": "Decision 0098's Consequences say the lint on the true merge is the check on a squash and that a finished pull request stays green on `commits`, but 0162 says the lint on the true merge does not come back, and 0098's own new bullet says the `commits` check no longer gates a merge.",
+  "proof": ".decisions/0098-the-signed-chain-covers-the-branch-not-main.md:92 reads \"the lint on the true merge is the check on it\" and :89 reads \"stays green on `commits` while main moves\"; .decisions/0162-no-friction-before-a-merge.md:95 reads \"The lint on the true merge that 0049 asked for does\" and the next line \"not come back\"; 0098:73 reads \"the `commits` check no longer gates a merge\".",
+  "cost": "A reader of 0098 is told a check guards the squash's tree that no longer runs.",
+  "head": "8e3ee0e254f26d63937cf8838fea2bd1782ca87f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1629"
+}

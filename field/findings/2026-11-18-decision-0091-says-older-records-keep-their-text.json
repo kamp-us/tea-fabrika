@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-decision-0091-says-older-records-keep-their-text",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0091-modules-and-layers.md",
+    "line": 80
+  },
+  "says": "Decision 0091's binding line says older records keep their text and their status lines point to it, but 0605 edits a rule in its own record, and after records cleanup slice 2 the two records 0091 names, 0055 and 0062, say module and layer in their own text with status accepted; changing 0091's line is a rule change the cleanup plan leaves to the lead.",
+  "proof": ".decisions/0091-modules-and-layers.md:80 reads \"Older records keep their text. Their status lines point here.\"; .decisions/0605-no-record-patches-another.md:43 reads \"A rule with no other home yet stays in its own record, which is edited in place.\"; at 8e3ee0e25, .decisions/0055-errors-named-by-their-service.md:3-4 and .decisions/0062-test-files-keep-the-floors.md:3-4 say module and layer with `status: accepted`.",
+  "cost": "A reader of 0091 is told that 0055 and 0062 keep room and floor and point to 0091, which neither does, and a later writer may follow 0091's line against 0605.",
+  "head": "8e3ee0e254f26d63937cf8838fea2bd1782ca87f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1629"
+}

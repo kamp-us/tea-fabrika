@@ -21,13 +21,11 @@ skips the plan, tests and review steps ([AGENTS.md](../AGENTS.md#how-a-change-la
 rules. [0007](0007-drive-is-the-pipeline-lab.md) makes `drive.ts` the lab that `next/`'s pipeline
 is rethought from.
 
-Today the run's file pick has no path rule. `sample.ts`'s `PRODUCT` list and the `range` step in
-`.github/workflows/mutation.yaml` take every changed `.ts` or `.js` file with a test beside it,
-so any lead script can be mutated, and nothing says which ones should be.
+When this was written, the run's file pick had no path rule. `sample.ts`'s `PRODUCT` list and the
+`range` step in `.github/workflows/mutation.yaml` took every changed `.ts` or `.js` file with a test
+beside it, so any lead script could be mutated, and nothing said which ones should be.
 
-This amends 0066 in part: what "what merged" covers under `.agents/`. The rest of 0066 holds, as
-amended by 0067 and [0077](0077-mutation-gaps-carry-a-category.md). 0067 and 0077 are unchanged.
-0007 and 0033 are unchanged: lane code stays fast-tracked.
+This amends 0066 in part: what "what merged" covers under `.agents/`. Lane code stays fast-tracked.
 
 ## Decision
 
@@ -59,13 +57,11 @@ lead tooling.**
 
 - More gap tickets from the hourly run, on code that changes fast. Its tests may be too thin to give
   useful gaps at first; the trial's read around 2026-11-17 counts them apart from product gaps.
-- The run's file pick must change to match: today it takes any changed lead script that has a test
-  beside it. That change to `sample.ts` and `mutation.yaml` is a follow-up ticket; this file
-  changes no code or config.
-- The flow runner was not on main when this was written (it landed in
-  [PR 814](https://github.com/usirin/tea-fabrika/pull/814), under `.agents/skills/lead/scripts/flow/`). It joins the scope when it lands. On main, vitest's
-  include for lead tests is `.agents/skills/*/scripts/*.test.ts`, one folder deep, so its tests must
-  be in the include before the run can use them.
+- The run's file pick follows this scope. `.agents/skills/mutation/scripts/scope.ts` holds the
+  rule, and `sample.ts` and the `range` step of `.github/workflows/mutation.yaml` both read it.
+- The flow runner landed in [PR 814](https://github.com/usirin/tea-fabrika/pull/814), under
+  `.agents/skills/lead/scripts/flow/`, and is in the scope. Its tests are in the `TOOLING` include
+  of `vitest.config.ts`, which reads `.agents/skills/*/scripts/**/*.test.ts`.
 - Not decided here: whether lane code leaves the fast track (it does not), lint or types for shell
   helpers, and whether `lane.ts` and `agents.ts`, which `chain.ts` and `drive.ts` import, join
   later.
