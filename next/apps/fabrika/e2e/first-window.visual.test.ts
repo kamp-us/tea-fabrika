@@ -449,7 +449,23 @@ describe("L15: use in two tabs (W2)", () => {
               yield* online(h, tabs[0]!.page);
               yield* Effect.forEach(
                 tabs,
-                (t) => Effect.promise(() => tile(t.page, REGION).field.waitFor({ timeout: 30_000 })),
+                // A red here says which tab waited and what it showed, so a tab stuck on its code
+                // (a grant that never woke it) reads differently from a field that never drew.
+                (t, index) =>
+                  Effect.promise(() => tile(t.page, REGION).field.waitFor({ timeout: 30_000 })).pipe(
+                    Effect.catchDefect((defect) =>
+                      Effect.tryPromise({ try: () => t.page.locator("body").innerText(), catch: String }).pipe(
+                        Effect.orElseSucceed(() => "(its text could not be read)"),
+                        Effect.flatMap((shown) =>
+                          Effect.die(
+                            new Error(`tab ${index} never showed the checklist field; its page shows: ${shown}`, {
+                              cause: defect,
+                            }),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 { concurrency: 1 },
               );
               const settled = Arr.map(tabs, () => 0);

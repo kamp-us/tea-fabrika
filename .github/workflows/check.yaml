@@ -29,9 +29,10 @@ on:
   # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
   # (see BASE below). Neither runs the whole of next/ (0534): next/ runs the tests the change
   # reaches, and the full run (scheduled.yaml) runs everything, on a push to main or the hourly
-  # catch-up, at most once an hour (0581). A ready pull request and a group add the tooling tests
-  # their change reaches (the related job), and neither runs a `next-integration` law: main's full
-  # run and a branch's proof run (0590) carry those (related.ts's `projectsOf`). A group whose tree
+  # catch-up, at most once an hour (0581). A ready pull request and a group add the plain tooling
+  # tests their change reaches (the related job), and neither runs an `.integration.` law, of
+  # next/ or of tooling: only main's full run carries those (0602, related.ts's `onMergeLine`), and
+  # a branch's proof run runs none either (proof.ts). A group whose tree
   # and base tree a ready pull request run already tested green runs no tests (the changes job
   # below).
   merge_group:
@@ -416,11 +417,12 @@ jobs:
   # The in-memory tests a change reaches run on every event. The visual tests a change reaches run
   # on a push to main, and on a pull request only with the `visual` label; a merge queue group
   # never runs them (0536). Main's full run (scheduled.yaml) runs every visual file. The related
-  # job below adds the tooling project. `next-integration` runs on main's full run and a branch's
-  # proof run, never on a pull request or a group (related.ts's `projectsOf`). Global triggers
-  # select all files at full depth. The full next matrix has two visual legs and five in-memory
-  # legs; its fallback starts the visual legs only where they may run. Sized runs use fewer legs
-  # when fewer files are affected. No test job takes a job group (0598).
+  # job below adds the tooling project's plain laws. Every `.integration.` law runs only on main's
+  # full run, never on a pull request, a group or a branch's proof run (0602, related.ts's
+  # `onMergeLine`). Global triggers select all files at full depth. The full next matrix has two
+  # visual legs and five in-memory legs; its fallback starts the visual legs only where they may
+  # run. Sized runs use fewer legs when fewer files are affected. No test job takes a job group
+  # (0598).
   next:
     needs: changes
     if: >-
@@ -528,9 +530,10 @@ jobs:
       - *stop
 
   # Only the projects missing from next's existing matrix, on ready PRs and queue groups. There it
-  # is tooling alone: related.ts's `projectsOf` leaves `next-integration` to main's full run
-  # (scheduled.yaml), so the related job's integration step runs only when another event's select
-  # ran, a push to main whose changes job failed. An error fails the required check.
+  # is tooling's plain laws alone: related.ts's `onMergeLine` leaves every `.integration.` law, of
+  # next/ and of tooling, to main's full run (scheduled.yaml, 0602), so the related job's
+  # integration step runs only when another event's select ran, a push to main whose changes job
+  # failed. An error fails the required check.
   select:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.related != 'false') }}

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-l15-two-tabs-checklist-field-times-out",
+  "date": "2026-11-18",
+  "by": "plan",
+  "model": null,
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/e2e/first-window.visual.test.ts",
+    "line": 441
+  },
+  "says": "In next/, L15 (use in two tabs, W2) waited 30 s for tab t1's checklist 'Add an item' textbox on its first property case (seed 119120, path 0), with no code change behind it. The likely cause is a lost wakeup in next/packages/libfabrika/src/gateway/Gateway.ts: a knock that lands after a grant's drain is never woken; L15 grants as soon as tab 0 waits, while tab 1 may not have knocked yet.",
+  "proof": "Run https://github.com/kamp-us/tea-fabrika/actions/runs/44216670632 job 134508456856, PR 1588 at 0d5efd6d: 'locator.waitFor: Timeout 30000ms exceeded ... checklist, t1 ... Add an item' at first-window.visual.test.ts:441:72. Gateway.ts on main: knock adds a waiting row without checking membership; the grant path drains waiting rows once, after the grant applies.",
+  "cost": "Any pull request whose e2e legs run first-window can go red at random, and a person who opens a second tab while granting the first can see it stuck waiting.",
+  "head": "84f51f8017e1d1a00b36f85dd1856f11b661da9b",
+  "ticket": "kamp-us/tea-fabrika#1163",
+  "pr": "kamp-us/tea-fabrika#1588"
+}

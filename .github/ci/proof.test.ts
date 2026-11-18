@@ -5,11 +5,13 @@ import { Schema } from "effect";
 import * as fc from "fast-check";
 import { parse } from "yaml";
 import { rowsAt } from "../../vitest.shards.ts";
+import { readers } from "./changes.mjs";
 import { E2E_SETUP, room } from "./legs.ts";
 import {
   choose,
   isTrigger,
   legsOf,
+  listings,
   outputs,
   PROJECTS,
   type Proof,
@@ -353,3 +355,90 @@ it("pinned: the changed legs run every project proof.ts lists, and no other, and
     ["_tag", "at", "base", "changed", "head", "legs", "seconds", "vitest"].toSorted(),
   );
 });
+
+/** The `--project` values of one `vitest list` call, in their order. */
+const projectsIn = (args: readonly string[]) =>
+  args.flatMap((arg, i) => (args[i - 1] === "--project" ? [arg] : arg.startsWith("--project=") ? [arg.slice(10)] : []));
+
+const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
+
+// Changed paths in and out of next/, so a run reaches both kinds of change.
+const Touched = Schema.Array(
+  Schema.String.check(
+    Schema.isPattern(
+      /^(?:next|docs|\.github\/ci|oxlint-plugins)\/[a-z]{1,8}(?:\/[a-z]{1,8})?\.(?:integration\.)?(?:test\.)?(?:ts|md|mjs)$/,
+    ),
+  ),
+).check(Schema.isMaxLength(12));
+
+// scenario: the owner's call of 2026-11-18 (0602): a branch's proof run lists no integration
+// project, even for a change that reaches one of its laws, and main's full run carries them. Plants,
+// each run once on proof.ts and restored: `PROJECTS` keeps next-integration (red: the reached call
+// names it, and the pinned test above with it); the readers call names next-integration again, as
+// it did before (red: the readers call names it).
+it.prop(
+  "property: a proof run's vitest list calls name no integration project, for any change",
+  { base: Sha, changed: Touched },
+  ({ base, changed }) => {
+    const { reached, readers: asked } = listings(base, changed);
+
+    expect(projectsIn(reached)).toEqual([...PROJECTS]);
+    expect(reached.at(-1)).toBe(`--changed=${base}`);
+
+    // The reader tests are asked for only on a next/ change, and only their in-memory ones.
+    const reaches = changed.some((path) => path.startsWith("next/"));
+    expect(asked === null).toBe(!reaches);
+    expect(asked === null ? [] : projectsIn(asked)).toEqual(reaches ? ["next"] : []);
+    expect(asked?.slice(2) ?? []).toEqual(reaches ? readers : []);
+
+    for (const call of [reached, asked ?? []]) {
+      expect(projectsIn(call).filter((project) => project.endsWith("-integration"))).toEqual([]);
+    }
+  },
+  propertyOptions,
+);
+
+// The tooling laws that start a process, by their real names (0584): the four tooling
+// `.integration.` files today.
+const TOOLING_REAL = [
+  ".agents/skills/lead/scripts/records-readonly.integration.test.ts",
+  ".github/ci/progress-reporter.integration.test.ts",
+  ".github/ci/workflow-lint/scheduled.integration.test.ts",
+  "scripts/typecheck.integration.test.ts",
+];
+
+// Test files of every kind a list could give: next/'s plain, visual and real-resource laws, and
+// tooling's plain and real-resource ones, in names no fixed one above takes.
+const Listed = Schema.Array(
+  Schema.String.check(
+    Schema.isPattern(
+      /^(?:next\/[a-z]{1,8}\/[a-z]{1,8}\.(?:visual\.|integration\.)?test\.tsx?|(?:\.github\/ci|scripts|\.agents\/skills\/lead\/scripts)\/[a-z]{1,8}\.(?:integration\.)?test\.ts)$/,
+    ),
+  ),
+).check(Schema.isMaxLength(30), Schema.isUnique());
+
+// scenario: the review of this build: a branch's proof run ran tooling's three `.integration.` laws,
+// which its changed set reached through the `tooling` project. 0602 keeps every `.integration.` law,
+// of next/ or of tooling, off a proof run; the `tooling-integration` project keeps them out of
+// tooling's list, and `choose` holds them out by name whatever a list gives. Plant, run once on
+// proof.ts and restored: `choose` keeps every listed file (red: the real-resource names land on legs).
+it.prop(
+  "property: a changed set runs no .integration. law, of next/ or of tooling, whatever its lists hold",
+  { listed: Listed },
+  ({ listed }) => {
+    const files = [...listed, ...TOOLING_REAL];
+
+    const proof = choose(seen(["next/a.ts", ".github/ci/proof.ts"]), [], files, real);
+
+    const ran = proof._tag === "changed" ? Object.values(proof.legs).flat() : [];
+
+    expect(proof._tag).toBe("changed");
+    expect(ran.toSorted()).toEqual(files.filter((path) => !/\.integration\./.test(path)).toSorted());
+    expect(ran.some((path) => TOOLING_REAL.includes(path))).toBe(false);
+
+    // The step's printed lists, which the legs run, hold none either.
+    const printed = outputs(proof, 1, real.most).find((line) => line.startsWith("files="))!;
+    expect(TOOLING_REAL.some((path) => printed.includes(path))).toBe(false);
+  },
+  propertyOptions,
+);
