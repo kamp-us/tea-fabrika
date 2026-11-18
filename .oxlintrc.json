@@ -2362,6 +2362,26 @@
       }
     },
     {
+      // L5 of the Reflect ban (0554): no ignore comment lets a Reflect call through
+      // no-restricted-properties outside the plan's 6 named lines, a has and a get in each of the
+      // three hostile Proxies: runtime's, transport's (slice 4) and the app's (slice 14). Every other folder, cloudflare/ and e2e/ included, may
+      // hold none. The JSON.parse oracles' ignore comments cover no Reflect line, so they are not
+      // counted (reflect-disables.ts says how).
+      "files": ["next/**", ".agents/**", ".github/**", "oxlint-plugins/**"],
+      "rules": {
+        "fabrika/reflect-disables": [
+          "error",
+          {
+            "allow": {
+              "next/apps/fabrika/src/runtime.decode.test.ts": 2,
+              "next/packages/libfabrika/src/runtime/Program.test.ts": 2,
+              "next/packages/libfabrika/src/transport/Connection.test.ts": 2
+            }
+          }
+        ]
+      }
+    },
+    {
       // Decision 0554: no Reflect.get, Reflect.set or Reflect.has, and no globalThis.Reflect, which
       // would hide the call from this rule. Each of the next three blocks lists the folders where the
       // ban is on: every folder at zero. A folder is listed whole and joins the day its own slice
@@ -2448,12 +2468,17 @@
       // `pnpm lint`, though a plain oxlint run in an editor shows it as a warning. A folder leaves
       // this list for the one above when its JSON.parse line goes.
       "files": [
+        "next/apps/fabrika/e2e/*",
+        "next/apps/fabrika/src/*",
         "next/apps/fabrika/src/exam/**",
         "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/telemetry/**",
         "next/packages/libfabrika/src/transport/**"
@@ -2470,6 +2495,44 @@
             "object": "JSON",
             "property": "parse",
             "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
+      // The Reflect ban in client/, which has its own entries for the rule: JSON.parse and the two P18
+      // retry entries are written out again, since an override replaces a rule's options.
+      "files": ["next/packages/libfabrika/src/client/**"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          {
+            "object": "Effect",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
+          },
+          {
+            "object": "Stream",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
           },
           { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
           { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },

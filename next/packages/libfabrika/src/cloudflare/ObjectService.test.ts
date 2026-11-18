@@ -25,19 +25,21 @@ import {
 import { makeRequestEffect } from "@alchemy.run/cloudflare/Workers/HttpServer";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
+import { Stub } from "@kampus/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as fc from "fast-check";
-import { vi } from "vitest";
+import { assert, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Activity } from "../processes/Process.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
-import { Failure } from "../settings/Start.ts";
+import { Failure, Reply } from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import type { ProjectBinding } from "./bindings.ts";
 import type { ProcessShape } from "./objects.ts";
 import * as ObjectService from "./ObjectService.ts";
 import * as ProcessObject from "./ProcessObject.ts";
@@ -206,7 +208,8 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           } else {
             expect(failure).toBeInstanceOf(LedgerError);
             expect(failure).toMatchObject({ reason: "bad_row" });
-            expect(Reflect.get(Object(failure), "cause"), "the cause stays inside the object").toBeUndefined();
+            assert(failure instanceof LedgerError);
+            expect(failure.cause, "the cause stays inside the object").toBeUndefined();
           }
 
           expect(broken.builds(), "a failed build is not kept: the next call builds again").toBe(call);
@@ -321,10 +324,9 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           ),
           (spy) => Effect.sync(() => spy.mockRestore()),
         );
-        const project = new Proxy(
-          {},
-          { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(good) : unexpected()) },
-        );
+        const project = Stub.make<ProjectBinding>(unexpected, {
+          settingsStart: async () => Reply.cases.ok.make({ value: StartsTest.receipt(good) }),
+        });
         ProcessObject.layer({
           programs: {},
           // The app's checked read, as next/apps/fabrika/src/runtime.ts hands it in, of the law's text.
@@ -345,7 +347,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         const environment = fake<WorkerEnvironment["Service"]>({
           INSTANCE: text,
           PROJECT: { getByName: () => project },
-          MEASUREMENTS: new Proxy({}, { get: unexpected }),
+          MEASUREMENTS: Stub.make<R2Bucket>(unexpected),
         });
         const context = fake<RuntimeContext["Service"]>({});
 
@@ -368,7 +370,8 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           // the setting, so the call fails with the reason alone.
           expect(failure).toBeInstanceOf(LedgerError);
           expect(failure).toMatchObject({ reason: "bad_row" });
-          expect(Reflect.get(Object(failure), "cause"), "the cause stays inside the object").toBeUndefined();
+          assert(failure instanceof LedgerError);
+          expect(failure.cause, "the cause stays inside the object").toBeUndefined();
           expect(reads, "a failed build is not kept: the next call reads again").toBe(index + 1);
         }
 

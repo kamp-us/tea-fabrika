@@ -24,6 +24,7 @@ import { send } from "@kampus/libfabrika/runtime/Send";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { targetStream } from "@kampus/libfabrika/tasks/Tasks";
+import type { ProcessBinding, ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import {
   commitReply,
   configureProcess,
@@ -33,7 +34,7 @@ import {
   ProjectService,
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
-import { runsFor } from "@kampus/vitest";
+import { runsFor, Stub } from "@kampus/vitest";
 import { ByteSize, Clock, Effect, Match, Option, Predicate, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { programs } from "virtual:fabrika-built";
@@ -212,6 +213,17 @@ type Store = {
   alarm: number | null;
 };
 
+/** The two fields of a saved descriptor a store is found by, each as loose as the old read. */
+const Saved = Schema.Struct({ name: Schema.optionalKey(Schema.Unknown), id: Schema.optionalKey(Schema.Unknown) });
+
+/** The descriptor a store's Process saved, decoded once, or undefined where it saved none. */
+const saved = (store: Store) =>
+  Option.getOrUndefined(Schema.decodeUnknownOption(Saved)(store.values.get("descriptor")));
+
+/** The member a name picks on a service, own or inherited, as the platform's RPC reaches it. */
+const picked = (service: object, method: string): unknown =>
+  Predicate.hasProperty(service, method) ? service[method] : undefined;
+
 /** The platform's storage handles over one SQLite database. The alarm is a saved time, fired by `settle`. */
 const storage = (db: DatabaseSync, alarm: (at: number | null) => void) => {
   const sql = nodeSql(db);
@@ -304,41 +316,40 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         values: { ...declared(values), handsTarget: handsKey.fingerprint },
       }),
     );
+  // The start's input the platform hands the next boot; a widen replaces it, and `env` reads it.
+  let instanceInput = instance(limits);
 
   // SAFETY: the runtime reaches each Durable Object namespace only through `getByName` and the
   // loader through `get`, which these doubles answer; DurableObjectNamespace is workerd's abstract
   // class with RPC brand types, which no plain Node object can carry.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
   const env = {
-    INSTANCE: instance(limits),
+    get INSTANCE() {
+      return instanceInput;
+    },
     // Every Project RPC a Process makes reaches the real service, with the two typed replies the class adds.
     PROJECT: {
       getByName: () =>
-        new Proxy(
-          {},
-          {
-            get: (_target, method) =>
-              !Predicate.isString(method) || method === "then"
-                ? undefined
-                : // A Process records its start on the Project's own small runtime, beside its service.
-                  method === "settingsStart"
-                  ? (input: Parameters<ReturnType<typeof projectRuntime>["settingsStart"]>[0]) =>
-                      Effect.runPromise(required(projectHeld).settingsStart(input))
-                  : method === "settingsRead"
-                    ? (start: string) => Effect.runPromise(required(projectHeld).settingsRead(start))
-                    : (...args: ReadonlyArray<unknown>) =>
-                        Effect.runPromise(
-                          project((p) => {
-                            const member = Reflect.get(p, method);
-                            const work = Predicate.isFunction(member) ? Reflect.apply(member, p, args) : member;
+        Stub.make<ProjectBinding>(
+          (method) =>
+            (...args: ReadonlyArray<unknown>) =>
+              Effect.runPromise(
+                project((p) => {
+                  const member = picked(p, method);
+                  const work = Predicate.isFunction(member) ? Reflect.apply(member, p, args) : member;
 
-                            return Match.value(method).pipe(
-                              Match.when("sign", () => signingReply(work)),
-                              Match.when("commit", () => commitReply(work)),
-                              Match.orElse(() => work),
-                            );
-                          }),
-                        ),
+                  return Match.value(method).pipe(
+                    Match.when("sign", () => signingReply(work)),
+                    Match.when("commit", () => commitReply(work)),
+                    Match.orElse(() => work),
+                  );
+                }),
+              ),
+          {
+            // A Process records its start on the Project's own small runtime, beside its service.
+            settingsStart: (input: Parameters<ReturnType<typeof projectRuntime>["settingsStart"]>[0]) =>
+              Effect.runPromise(required(projectHeld).settingsStart(input)),
+            settingsRead: (start: string) => Effect.runPromise(required(projectHeld).settingsRead(start)),
           },
         ),
     },
@@ -367,36 +378,31 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         }
 
         const current = store;
-        return new Proxy(
-          {},
-          {
-            get: (_target, method) =>
-              !Predicate.isString(method) || method === "then"
-                ? undefined
-                : (...args: ReadonlyArray<unknown>) =>
-                    Effect.runPromise(
-                      Match.value(method).pipe(
-                        Match.when("configure", () =>
-                          configureProcess(
-                            current.ctx,
-                            // SAFETY: the Project's deliver in cloudflare/runtime.ts sends
-                            // `configure(descriptor, drain)` through ProcessClient, whose binding types
-                            // that first argument as a Descriptor; this proxy hands it on unchanged.
-                            args[0] as Descriptor,
-                            required(runtimes.get(current)),
-                            args[1] === true,
-                          ),
-                        ),
-                        Match.when("descriptor", () => processDescriptor(current.ctx)),
-                        Match.orElse(() =>
-                          process(current, (p): Effect.Effect<unknown, unknown> => {
-                            const member = Reflect.get(p, method);
-                            return Predicate.isFunction(member) ? Reflect.apply(member, p, args) : Effect.void;
-                          }),
-                        ),
-                      ),
+        return Stub.make<ProcessBinding>(
+          (method) =>
+            (...args: ReadonlyArray<unknown>) =>
+              Effect.runPromise(
+                Match.value(method).pipe(
+                  Match.when("configure", () =>
+                    configureProcess(
+                      current.ctx,
+                      // SAFETY: the Project's deliver in cloudflare/runtime.ts sends
+                      // `configure(descriptor, drain)` through ProcessClient, whose binding types
+                      // that first argument as a Descriptor; this stub hands it on unchanged.
+                      args[0] as Descriptor,
+                      required(runtimes.get(current)),
+                      args[1] === true,
                     ),
-          },
+                  ),
+                  Match.when("descriptor", () => processDescriptor(current.ctx)),
+                  Match.orElse(() =>
+                    process(current, (p): Effect.Effect<unknown, unknown> => {
+                      const member = picked(p, method);
+                      return Predicate.isFunction(member) ? Reflect.apply(member, p, args) : Effect.void;
+                    }),
+                  ),
+                ),
+              ),
         );
       },
     },
@@ -508,12 +514,8 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   /** The store of a registered name, found by the descriptor its Process saved. */
   const storeFor = Effect.fnUntraced(function* (name: string) {
     const current = yield* pid(name);
-    const named = [...stores.values()].filter(
-      (store) => Reflect.get(Object(store.values.get("descriptor")), "name") === name,
-    );
-    return required(
-      named.find((store) => Reflect.get(Object(store.values.get("descriptor")), "id") === current) ?? named[0],
-    );
+    const named = [...stores.values()].filter((store) => saved(store)?.name === name);
+    return required(named.find((store) => saved(store)?.id === current) ?? named[0]);
   });
 
   for (const name of NAMES) {
@@ -681,7 +683,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     /** A platform restart into a new start whose program storage wall is the decided ceiling. */
     widen: Effect.gen(function* () {
       yield* halt;
-      Reflect.set(env, "INSTANCE", instance({ ...limits, storage: 1_000_000_000 }, "quota-laws-widened"));
+      instanceInput = instance({ ...limits, storage: 1_000_000_000 }, "quota-laws-widened");
       yield* boot;
       yield* project((p) => p.info);
     }),

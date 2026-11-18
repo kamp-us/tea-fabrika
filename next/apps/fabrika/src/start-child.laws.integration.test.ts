@@ -215,22 +215,9 @@ const world = (
 const helpers = ({ instance, hashes, from }: Fixture) => {
   // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
   const project = () => (instance as Instance).project(PROJECT);
-
-  const call = (method: string, ...args: ReadonlyArray<unknown>) => {
-    const target = project();
-    const invoke = target[method];
-
-    if (invoke === undefined) {
-      throw new Error(`Project has no ${method} method`);
-    }
-
-    return invoke.apply(target, [...args]);
-  };
-
   return {
     start: async (name: string, program: "starter" | "child") => {
-      const started = await call(
-        "start",
+      const started = await project().start(
         { _tag: "first", id: `start-${name}`, name, code: { program: `p42/${program}`, hash: hashes[program] } },
         from,
       );
@@ -239,10 +226,10 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
     },
     facts: async (stream: string) =>
       // SAFETY: the audit read answers the stream's rows as an array.
-      ((await call("read", stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+      ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
     live: async (name: string): Promise<string | undefined> =>
       // SAFETY: info answers the project's process rows as an array.
-      ((await call("info")) as Array<any>).find((row) => row.name === name)?.process,
+      ((await project().info()) as Array<any>).find((row) => row.name === name)?.process,
   };
 };
 

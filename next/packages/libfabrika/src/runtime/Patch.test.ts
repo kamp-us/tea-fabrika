@@ -29,7 +29,7 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
     let object = root;
 
     for (const key of keys.slice(0, -1)) {
-      object = Reflect.get(Object(object), key);
+      object = Predicate.hasProperty(object, key) ? object[key] : undefined;
     }
 
     const last = keys.at(-1)!;
@@ -46,8 +46,8 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
       }
     } else if (patch.op === "remove") {
       Reflect.deleteProperty(Object(object), last);
-    } else {
-      Reflect.set(Object(object), last, structuredClone(patch.value));
+    } else if (Predicate.isObjectKeyword(object)) {
+      Object.assign(object, { [last]: structuredClone(patch.value) });
     }
   }
 
@@ -119,7 +119,7 @@ const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyAr
 };
 
 const read = (value: unknown, at: ReadonlyArray<string>): unknown =>
-  at.reduce<unknown>((v, key) => (Predicate.isObjectOrArray(v) ? Reflect.get(v, key) : undefined), value);
+  at.reduce<unknown>((v, key) => (Predicate.hasProperty(v, key) ? v[key] : undefined), value);
 
 /** `value` with `f` done to the container at `at`, copied on the way down. */
 const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => unknown): unknown => {
@@ -137,7 +137,10 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
   }
 
   // SAFETY: change walks only paths that `paths` listed, which step only into arrays and non-null objects, and the array case returned above.
-  return { ...(value as Record<string, unknown>), [key]: change(Reflect.get(Object(value), key), rest, f) };
+  return {
+    ...(value as Record<string, unknown>),
+    [key]: change(Predicate.hasProperty(value, key) ? value[key] : undefined, rest, f),
+  };
 };
 
 /** One generated edit: which path the value holds now, and what to do there. */
@@ -249,7 +252,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
           const got = apply(before, [op === "remove" ? { op, path } : { op, path, value }]);
           expect(Result.isFailure(got), `${op} ${path}`).toBe(true);
           expect(before).toEqual(copy);
-          expect(Reflect.get({}, "polluted"), "Object.prototype was written").toBeUndefined();
+          expect(Object.hasOwn(Object.prototype, "polluted"), "Object.prototype was written").toBe(false);
         },
       ),
       { seed: 119120, numRuns: 500 },

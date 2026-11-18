@@ -618,7 +618,7 @@ describe("L5: client views (p3)", () => {
             return;
           }
 
-          const view = Reflect.get(Object(notice.note), "view");
+          const view = Predicate.hasProperty(notice.note, "view") ? notice.note.view : undefined;
           const ok = decodes(notice.pid, view);
           seen[ok ? "installed" : "refused"]++;
           expect(next.views).toEqual(

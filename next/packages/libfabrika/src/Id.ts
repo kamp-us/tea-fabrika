@@ -63,11 +63,20 @@ export const Schema = S.String.check(S.makeFilter(valid, { expected: "a UUIDv7 T
 
 export type Schema = typeof Schema.Type;
 
-const specific = <const P extends string>(prefix: P) => {
+/**
+ * Returns the pattern of one prefix's ids: the prefix, `_`, and a suffix whose bits are a UUIDv7.
+ *
+ * @category getters
+ */
+export const pattern = (prefix: string): RegExp => {
   const a = "[0-9a-hjkmnp-tv-z]";
 
+  return new RegExp(`^${prefix}_[0-7]${a}{9}[ef]${a}{2}[89abrstv]${a}{12}$`);
+};
+
+const specific = <const P extends string>(prefix: P) => {
   const schema = Object.assign(
-    S.String.check(S.isPattern(new RegExp(`^${prefix}_[0-7]${a}{9}[ef]${a}{2}[89abrstv]${a}{12}$`))).pipe(
+    S.String.check(S.isPattern(pattern(prefix))).pipe(
       // SAFETY: brand's type takes only one literal key, but at run time any string is a key. Prefixes may
       // come from runtime input; make and makeEffect validate them first.
       S.brand<P>(prefix as Parameters<typeof S.brand<P>>[0]),

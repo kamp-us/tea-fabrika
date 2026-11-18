@@ -419,7 +419,7 @@ const flow = async (sample: Flow) => {
               catch: (cause) => CallError.make({ cause }),
             });
             yield* Effect.tryPromise({
-              try: () => Reflect.get(instance.project(config.name), "info")(),
+              try: () => instance.project(config.name).info(),
               catch: (cause) => CallError.make({ cause }),
             }).pipe(Effect.ignore);
             outputs.outbox.push(yield* outbox.pending);

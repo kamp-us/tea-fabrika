@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-reflect-ban-s15-tests1",
+  "ticket": "1056",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-17T17:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Tests step for slice 15 of the Reflect ban (0554, ticket 1056) in next/ and our tooling, the fold, on docs/plan/quests/reflect-ban-PLAN.md amendment point 8, on fabrikalfa/reflect-rest from 6cbd89720. .oxlintrc.json: the four Reflect entries are added to the three base blocks that set eslint/no-restricted-properties (next/**/* at error, client/** at error, and the JSON.parse warn block), each keeping its entries first and in order, and the three next/ Reflect list blocks (blocking, warn, client) are deleted; the tooling block stays and its comment now says why. Checked on every tracked ts, tsx, mjs and js file under next/, .agents/, .github/ and oxlint-plugins/ (1183 files), reading oxlint --print-config before and after and resolving each file's last matching override: every file keeps its level and its non-Reflect entries in the same order, every file that already had the four keeps them unchanged, and the only files that change are the 3 in libfabrika's src/mcp/ (Tools.ts, Tools.test.ts, Tools.types.test.ts), a folder no block named, which now get the four at error. L10 is new (builtin-plants.ts REFLECT_NEW_FOLDERS, run by plants.test.ts), L4 in advice.test.ts is reshaped to the folded blocks, and plants.test.ts's coverage floor for the blocks that set the rule goes from 7 to 5 because three blocks were deleted by plan. README section for the ban says the base blocks hold it for all of next/.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "note": "Files changed: .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/README.md as the plan's slice 15 line says, plus two test files the plan's line does not name: oxlint-plugins/plants.test.ts (L10 has no other runner; the L2 coverage floor 7 to 5) and oxlint-plugins/advice.test.ts (L4 read the deleted list blocks and the old warn block with no Reflect entry as its source of 'the level the folder had'; that source is gone, so L4 now holds that every next/ block that sets the rule keeps JSON.parse and the four, next/** and client/ are at error, client/ keeps both retries; the deny-versus-warn comparison against an old block is no longer possible and stale warn lines are held by T930 L3). A leftover not changed: next/AGENTS.md's row still says the ban is on for every folder at zero, each folder joining when its slice reaches zero (a build-owned docs row, outside the three files). Vitest under CI=1, nice -n 15, maxWorkers 2, TYPESAFE_API_KEY unset, on Node 22: plants.test.ts, advice.test.ts, reflect-disables.test.ts, decode-guards.test.ts, jsdocs.test.ts and anti-slop.test.ts all green (322 tests). pnpm format; pnpm lint exit 0 (18 parts); ratchet exit 0. Run start time was not captured. Usage and cost are unknown.",
+  "laws": [
+    {
+      "law": "oxlint-plugins/plants.test.ts: L10 of the Reflect ban: after the fold the base blocks hold it for all of next/, and no list block is left, scenario: REFLECT's lines are refused in a folder no block names, and the only blocks that hold the ban for next/ are the three base blocks",
+      "red": "on the config before the fold (6cbd89720's .oxlintrc.json put back): next/planted-yffmx/planted.ts, a folder no block names: expected [] to deeply equal [ 2, 3, 4, 5, 6, 7, 8, 9, 10 ]"
+    },
+    {
+      "law": "oxlint-plugins/advice.test.ts: Reflect ban L4 each block that sets the rule for next/ keeps what the rule held there before, pinned: every block that sets the rule for next/ keeps the JSON.parse entry and the ban, next/ whole and client/ block, and client/ keeps both retry entries",
+      "red": "on the config before the fold: next/**/*: expected [ 'Data.TaggedError', 'JSON.parse' ] to contain the four Reflect entries"
+    }
+  ],
+  "plants": [
+    {
+      "law": "L10",
+      "plant": "the four Reflect entries left out of the next/**/* block in .oxlintrc.json; plants.test.ts L10 fails on next/planted-yffmx/planted.ts with expected [] to deeply equal [ 2, 3, 4, 5, 6, 7, 8, 9, 10 ]; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L10",
+      "plant": "a list block put back after the JSON.parse warn block (files next/packages/vitest/**, JSON.parse and the four); the blocks that hold the ban for next/ read next/**/*, client/**, a list of folders, next/packages/vitest/** instead of the three; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the Stream.retry entry dropped from the client/** block; advice.test.ts L4 fails with Stream.retry missing from the client/** block's entries; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the four Reflect entries left out of the next/**/* block; advice.test.ts L4 fails with next/**/* holding only Data.TaggedError and JSON.parse; restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

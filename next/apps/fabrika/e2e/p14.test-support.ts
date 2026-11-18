@@ -17,7 +17,7 @@ import { revokeText } from "@kampus/libfabrika/access/Text";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Option, Schema, Stream } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
@@ -670,6 +670,16 @@ const Frame = Schema.Struct({
 
 type Frame = typeof Frame.Type;
 
+/** What the reader reads of a challenge's `params`, and of a knock's `result`: every field optional
+ *  and as loose as it was read, so a frame that lacks one reads it as `undefined`. */
+const Said = Schema.Struct({
+  nonce: Schema.optionalKey(Schema.Unknown),
+  code: Schema.optionalKey(Schema.Unknown),
+});
+
+const said = (value: unknown): typeof Said.Type =>
+  Option.getOrElse(Schema.decodeUnknownOption(Said)(value), (): typeof Said.Type => ({}));
+
 const Entries = Schema.Struct({
   entries: Schema.Array(Entry),
 });
@@ -765,11 +775,11 @@ export const reader = (h: Home, dev: Dev) =>
         signed: key.proof(`fabrika-hello\n${dev.url}\n${tab}\n${nonce}`),
       });
 
-    const nonceIn = (f: Frame) => String(Reflect.get(Object(f.params), "nonce"));
+    const nonceIn = (f: Frame) => String(said(f.params).nonce);
     const first = yield* hello(nonceIn(yield* next((f) => f.method === "challenge")));
     expectWaiting(first);
     const knocked = yield* call("gateway.knock", { label: "p14 reader" });
-    const code = String(Reflect.get(Object(knocked.result), "code"));
+    const code = String(said(knocked.result).code);
     const granted = yield* grant(h, { line: "", url: dev.url, fingerprint: key.fingerprint, code });
 
     if (!granted.ok) {

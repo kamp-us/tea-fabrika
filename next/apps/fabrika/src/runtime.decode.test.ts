@@ -8,7 +8,7 @@ import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Exit, Layer, Predicate, Result } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings as decodeSettings } from "./runtime.ts";
 
@@ -72,8 +72,9 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   await runtime.runPromise(Effect.void);
   await runtime.dispose();
   const project = held.project.at(-1);
-  const door = Predicate.isObjectOrArray(project) ? Reflect.get(project, "door") : undefined;
+  const door = Predicate.hasProperty(project, "door") ? project.door : undefined;
   expect(Predicate.isFunction(door)).toBe(true);
+  assert(Predicate.isFunction(door));
   const checked = await Effect.runPromise(readSettings(env));
 
   // The door is read off an untyped capture, so its Effect is named here, as `runtime` is above.
@@ -85,10 +86,10 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
     built.pipe(Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) })),
   );
   const options = held.door.at(-1);
-  const inputs = Predicate.isObjectOrArray(options) ? Reflect.get(options, "inputs") : undefined;
-  const name = Predicate.isObjectOrArray(inputs) ? Reflect.get(inputs, "name") : undefined;
+  const inputs = Predicate.hasProperty(options, "inputs") ? options.inputs : undefined;
+  const name = Predicate.hasProperty(inputs, "name") ? inputs.name : undefined;
   expect(Predicate.isFunction(name)).toBe(true);
-
+  assert(Predicate.isFunction(name));
   return (m) => Reflect.apply(name, undefined, [m]);
 };
 
@@ -170,6 +171,7 @@ const message = (r: Message, trace: Array<string>): unknown => {
         }
       }
 
+      // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
       return Reflect.has(t, key);
     },
     get: (t, key, receiver) => {
@@ -181,6 +183,7 @@ const message = (r: Message, trace: Array<string>): unknown => {
         }
       }
 
+      // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
       return Reflect.get(t, key, receiver);
     },
   });
