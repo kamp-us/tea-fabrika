@@ -12,19 +12,8 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import {
-  String as Str,
-  pipe,
-  Array as Arr,
-  DateTime,
-  Effect,
-  Formatter,
-  Option,
-  Predicate,
-  Schema,
-  Config,
-} from "effect";
-import type { Page } from "playwright";
+import { String as Str, Array as Arr, DateTime, Effect, Formatter, Option, Predicate, Schema, Config } from "effect";
+import type { Locator, Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
 
@@ -150,33 +139,42 @@ type Drawn = {
   readonly status: string;
 };
 
-/** format: Playwright's ARIA snapshot line for a region, `- region "<name>"`. */
-const REGION = /^\s*- region "((?:[^"\\]|\\.)*)"/;
-
 // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright's queries are Promises
 const promised = <A>(f: () => Promise<A>) => Effect.promise(f);
 
-/** Reads what the tab draws now, by role and accessible name. */
+/** Every part `match` finds, each with its accessible name and its box, read in one page task.
+ *  Nothing in it waits: `evaluateAll` resolves the locator once and hands the callback what matched
+ *  now, an empty list when nothing does. A part that has left the page is not in the read, so a
+ *  name is never left without its box, and a poll's next read tells the truth (the flake of tickets
+ *  1166 and L33: a snapshot, then Playwright's `boundingBox` per name, which waits 30 s for a region
+ *  that left in between). A part with no layout has `box: null`. */
+const parts = (match: Locator): Effect.Effect<ReadonlyArray<{ readonly name: string; readonly box: Box | null }>> =>
+  promised(() =>
+    match.evaluateAll((els) =>
+      els.map((el) => {
+        const labelled = el.getAttribute("aria-labelledby");
+        const rect = el.getBoundingClientRect();
+
+        return {
+          name:
+            labelled !== null
+              ? labelled
+                  .split(/\s+/)
+                  .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
+                  .join(" ")
+              : (el.getAttribute("aria-label") ?? el.textContent?.trim() ?? ""),
+          box:
+            el.getClientRects().length === 0 ? null : { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        };
+      }),
+    ),
+  );
+
+/** Reads what the tab draws now, by role and accessible name. No read in it waits (see `parts`). */
 export const drawn = (page: Page): Effect.Effect<Drawn> =>
   Effect.gen(function* () {
-    const mains = yield* promised(() => page.getByRole("main").count());
-    const main = page.getByRole("main").first();
-    const snapshot = mains === 0 ? "" : yield* promised(() => main.ariaSnapshot());
-    const names = Arr.flatMap(Str.split(snapshot, "\n"), (line) => {
-      const m = REGION.exec(line);
-      return m?.[1] === undefined ? [] : [pipe(m[1], Str.replace(/\\(.)/g, "$1"))];
-    });
-
-    const regions = yield* Effect.forEach(
-      names,
-      (name) =>
-        promised(() => page.getByRole("region", { name, exact: true }).first().boundingBox()).pipe(
-          Effect.map((box) => ({ name, box })),
-        ),
-      { concurrency: 1 },
-    );
-
-    const mainBox = mains === 0 ? null : yield* promised(() => main.boundingBox());
+    const mains = yield* parts(page.getByRole("main"));
+    const regions = yield* parts(page.getByRole("main").first().getByRole("region"));
 
     const facts = yield* promised(() =>
       page.evaluate(() => {
@@ -204,7 +202,7 @@ export const drawn = (page: Page): Effect.Effect<Drawn> =>
       }),
     );
 
-    return { mains, regions, main: mainBox, ...facts };
+    return { mains: mains.length, regions, main: mains[0]?.box ?? null, ...facts };
   });
 
 /** Every way the tab's drawing differs from workspace 1 of tezgah's `view`: the regions in reading
@@ -398,30 +396,19 @@ const SMALLEST = { width: 220, height: 120 } as const;
 /** format: a strip's accessible name, `open ` and then `tileName`'s words (the plan's L31). */
 export const stripName = (tile: Pick<Tile, "program" | "n">): string => `open ${regionName(tile)}`;
 
-/** format: Playwright's ARIA snapshot line for a strip, `- button "open <name>"`. */
-const STRIP = /^\s*- button "(open (?:[^"\\]|\\.)*)"/;
-
 /** What the tab draws, with each strip in document order: its name and box. */
 export type FoldDrawn = Drawn & { readonly strips: ReadonlyArray<{ readonly name: string; readonly box: Box | null }> };
 
-/** Reads what the tab draws now, strips included, by role and accessible name. */
+/** Reads what the tab draws now, strips included, by role and accessible name. No read in it waits
+ *  (see `parts`): the strips are the main's buttons named `open <tile>`, read in one page task. */
 export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
   Effect.gen(function* () {
     const d = yield* drawn(page);
-    const main = page.getByRole("main").first();
-    const snapshot = d.mains === 0 ? "" : yield* promised(() => main.ariaSnapshot());
-    const names = Arr.flatMap(Str.split(snapshot, "\n"), (line) => {
-      const m = STRIP.exec(line);
-      return m?.[1] === undefined ? [] : [pipe(m[1], Str.replace(/\\(.)/g, "$1"))];
-    });
-
-    const strips = yield* Effect.forEach(
-      names,
-      (name) =>
-        promised(() => main.getByRole("button", { name, exact: true }).first().boundingBox()).pipe(
-          Effect.map((box) => ({ name, box })),
-        ),
-      { concurrency: 1 },
+    const strips = yield* parts(
+      page
+        .getByRole("main")
+        .first()
+        .getByRole("button", { name: /^open / }),
     );
 
     return { ...d, strips };

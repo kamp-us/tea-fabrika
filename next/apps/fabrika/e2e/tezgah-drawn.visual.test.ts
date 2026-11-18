@@ -119,7 +119,7 @@ describe("T1: the tezgah helpers' reads never wait", () => {
           const b = yield* browser;
           const profiled = yield* profile(b);
           // The removals that happened during a read, by what was read and what left.
-          const fired = { "drawn region": 0, "foldDrawn region": 0, "foldDrawn strip": 0 };
+          const fired = new Map<string, number>();
 
           yield* Effect.promise(() =>
             fc.assert(
@@ -158,7 +158,7 @@ describe("T1: the tezgah helpers' reads never wait", () => {
                                   remove(page, l.name).then((went) => {
                                     if (went) {
                                       gone.add(l.name);
-                                      fired[l.part === "region" ? `${read} region` : `${read} strip`] += 1;
+                                      fired.set(`${read} ${l.part}`, (fired.get(`${read} ${l.part}`) ?? 0) + 1);
                                     }
                                   }),
                               ),
@@ -210,8 +210,8 @@ describe("T1: the tezgah helpers' reads never wait", () => {
           );
 
           // The law reached what it is about: parts that left in the middle of each read.
-          for (const [part, count] of Object.entries(fired)) {
-            expect(count, `a ${part} left during a read in some run`).toBeGreaterThan(0);
+          for (const part of ["drawn region", "foldDrawn region", "foldDrawn strip"]) {
+            expect(fired.get(part) ?? 0, `a ${part} left during a read in some run`).toBeGreaterThan(0);
           }
         }),
         context,
