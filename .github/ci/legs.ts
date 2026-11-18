@@ -29,7 +29,6 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Predicate } from "effect";
 import { testConfig } from "../../vitest.config.ts";
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, readPaths, validSha } from "./changes.mjs";
@@ -229,7 +228,7 @@ export const list = (root: string, args: readonly string[]): string[] => {
 
   return (Array.isArray(files) ? files : [])
     .flatMap((entry: unknown) =>
-      Predicate.isObjectOrArray(entry) && "file" in entry && Predicate.isString(entry.file)
+      typeof entry === "object" && entry !== null && "file" in entry && typeof entry.file === "string"
         ? [relative(root, entry.file)]
         : [],
     )
