@@ -59,7 +59,7 @@ const RECORD = /^[0-9]{4}-.*\.md$/s;
 // Each reads the first line that starts with its key, as Python's `re.M` with `^` and `$` did.
 const TITLE = /(?:^|\n)title:\s*([^\n]*)/;
 
-const TAGS = /(?:^|\n)tags:\s*\[([^\n]*)\](?=\n|$)/;
+const TAGS = /(?:^|\r?\n)tags:\s*\[([^\r\n]*)\](?=\r?\n|$)/;
 
 /** The words of a text that count. */
 const words = (text: string): ReadonlySet<string> =>

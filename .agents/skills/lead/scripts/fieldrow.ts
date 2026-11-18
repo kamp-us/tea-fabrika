@@ -5,9 +5,9 @@
 //
 //   node fieldrow.ts --model gpt-6.1-sol out/events.jsonl t766-build 766 done built it
 //
-// The model and effort default to CODEX_MODEL and CODEX_EFFORT (env.sh). Codex reports the tokens
-// billed over the run, not the size of its conversation at the last turn, so they go in `billed`
-// and `tokens` stays null (field/README.md).
+// The first requested profile in the events file supplies model and effort; flags win, and older
+// event files use CODEX_MODEL and CODEX_EFFORT. Codex reports billed tokens, not the size of its
+// conversation at the last turn, so they go in `billed` and `tokens` stays null (field/README.md).
 //
 // Rules the row keeps from fieldrow.py, so a row made again from an old events file holds the same
 // numbers:
@@ -57,6 +57,37 @@ const Turn = Schema.Struct({
 });
 
 const decodeTurn = Schema.decodeUnknownResult(Schema.fromJsonString(Turn));
+
+const RequestedProfile = Schema.Struct({
+  type: Schema.Literal("fabrika.requested_profile"),
+  model: Schema.optionalKey(Schema.Unknown),
+  effort: Schema.optionalKey(Schema.Unknown),
+});
+
+const decodeRequestedProfile = Schema.decodeUnknownResult(Schema.fromJsonString(RequestedProfile));
+
+const profileValue = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
+
+interface Profile {
+  readonly model: string | null;
+  readonly effort: string | null;
+}
+
+/** The first requested profile recorded in an events file, if it has one. */
+const profileIn = (text: string): Profile | null => {
+  for (const line of text.split(/\r\n?|\n/)) {
+    const profile = decodeRequestedProfile(line);
+
+    if (Result.isSuccess(profile)) {
+      return {
+        model: profileValue(profile.success.model),
+        effort: profileValue(profile.success.effort),
+      };
+    }
+  }
+
+  return null;
+};
 
 const decodeCount = Schema.decodeUnknownResult(Schema.NumberFromString.check(Schema.isInt()));
 
@@ -117,7 +148,7 @@ const Row = Schema.Struct({
   active: Schema.Null,
   role: Schema.Literal("hand"),
   model: Schema.String,
-  effort: Schema.String,
+  effort: Schema.NullOr(Schema.String),
   outcome: Schema.String,
   reason: Schema.String,
   tokens: Schema.Null,
@@ -147,8 +178,8 @@ interface Ask {
   readonly outcome: string;
   readonly reason: string;
   readonly parent: string | null;
-  readonly model: string;
-  readonly effort: string;
+  readonly model: { readonly flag: string | null; readonly env: string | null };
+  readonly effort: { readonly flag: string | null; readonly env: string | null };
   readonly step: string | null;
   readonly started: string | null;
   readonly ended: string | null;
@@ -194,8 +225,23 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
   const begun = yield* bound("started", ask.started, birth);
   const ended = yield* bound("ended", ask.ended, changed);
 
-  const usage = Option.getOrNull(Option.flatMap(text, (held) => summed(held)));
-  const rate = Option.getOrUndefined(R.get(LIST, ask.model));
+  const held = Option.getOrNull(text);
+  const profile = held === null ? null : profileIn(held);
+  const modelValue = ask.model.flag ?? (profile === null ? ask.model.env : profile.model);
+  const effortValue = ask.effort.flag ?? (profile === null ? ask.effort.env : profile.effort);
+  const model = modelValue || "unknown";
+  const effort = effortValue || null;
+  const requested =
+    profile !== null ||
+    ask.model.flag !== null ||
+    ask.effort.flag !== null ||
+    modelValue !== null ||
+    effortValue !== null;
+  const profileNote = requested
+    ? ` Requested profile: model ${model}, effort ${effort ?? "unknown"}; effective API context unknown.`
+    : "";
+  const usage = Option.getOrNull(Option.flatMap(text, (events) => summed(events)));
+  const rate = Option.getOrUndefined(R.get(LIST, model));
 
   const usd =
     rate === undefined || usage === null
@@ -205,7 +251,7 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
   const priced =
     rate === undefined
       ? ""
-      : ` Dollars are ${ask.model}'s standard list price (packages/pipeline/src/stages/price.ts); runs use the standard tier.`;
+      : ` Dollars are ${model}'s standard list price (packages/pipeline/src/stages/price.ts); runs use the standard tier.`;
 
   const receipt = `${ask.events}.redacted`;
   const redacted = yield* read(receipt);
@@ -230,10 +276,10 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
     parent: ask.parent,
     active: null,
     role: "hand",
-    model: ask.model,
-    effort: ask.effort,
+    model,
+    effort,
     outcome: ask.outcome,
-    reason: `${ask.reason}${priced}`,
+    reason: `${ask.reason}${profileNote}${priced}`,
     tokens: null,
     tools: null,
     // Seconds first, then minutes, as fieldrow.py divided.
@@ -261,15 +307,19 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
 const said = (name: string, description: string) =>
   Flag.String(name).pipe(Flag.withDescription(description), Flag.optional, Flag.map(Option.getOrNull));
 
-/** A setting the flag names, else the environment's, else fieldrow.py's default. */
-const setting = (name: string, env: string, fallback: string, description: string) =>
+/** A profile flag or the environment fallback used by older event files. */
+const setting = (name: string, env: string, description: string) =>
   Flag.String(name).pipe(
-    Flag.withDescription(`${description}; defaults to ${env}, then ${fallback}`),
+    Flag.withDescription(`${description}; overrides the event profile; older files use ${env}`),
     Flag.optional,
     Flag.map((flag) =>
       Option.match(flag, {
-        onSome: Effect.succeed,
-        onNone: () => Config.String(env).pipe(Config.withDefault(fallback)),
+        onSome: (value) => Effect.succeed({ flag: value, env: null }),
+        onNone: () =>
+          Config.String(env).pipe(
+            Config.withDefault(""),
+            Effect.map((value) => ({ flag: null, env: value || null })),
+          ),
       }),
     ),
   );
@@ -278,8 +328,8 @@ export const fieldrow = Command.make(
   "fieldrow",
   {
     parent: said("parent", "The run that started this one"),
-    model: setting("model", "CODEX_MODEL", "gpt-6-astra", "The Codex model the run used"),
-    effort: setting("effort", "CODEX_EFFORT", "medium", "The effort the run used"),
+    model: setting("model", "CODEX_MODEL", "The requested Codex model"),
+    effort: setting("effort", "CODEX_EFFORT", "The requested effort"),
     step: said("step", "The pipeline step the run did; writes step, start, end and status"),
     started: said("started", "When the run started, with its offset; else the events file's birth"),
     ended: said("ended", "When the run ended, with its offset; else the events file's change time"),
