@@ -17,6 +17,8 @@ packages:
   - next/packages/*
   - next/programs/*
   - next/apps/*
+  # kalfa/: our tooling as packages (decision 0585, 0600). @kalfa/quality so far.
+  - kalfa/*
 
 catalog:
   '@agentclientprotocol/sdk': 2.2.0

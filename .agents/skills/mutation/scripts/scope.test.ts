@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import { inScope, pick, PRODUCT, related } from "./scope.ts";
 
 const options = { seed: 119120, numRuns: 200 };
@@ -195,5 +198,161 @@ describe("the mutation run's file pick (0089)", () => {
       ":!*.d.mts",
       ":!*.d.cts",
     ]);
+  });
+});
+
+// Slice 2 of docs/plan/quests/kalfa-quality-stryker-PLAN.md (decision 0600): the hourly run reaches libfabrika's
+// laws. A changed product file `d/s.ts` also picks each tracked `d/s.<kind>.test.ts(x)`, its kind
+// siblings, since 61 of libfabrika's product files have only those. The run hands `related` the head's
+// file list as `tracked`; with none, the pick is exactly today's.
+
+/** A word of a kind sibling's name: letters, digits and dashes. */
+const kindWord = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
+
+/** The kinds that name a test no hourly run can use: a type law kills no mutant, a window needs a display. */
+const OUT = ["types", "visual"] as const;
+
+const kinds = fc.array(
+  fc.oneof({ weight: 4, arbitrary: kindWord }, { weight: 1, arbitrary: fc.constantFrom(...OUT) }),
+  {
+    minLength: 1,
+    maxLength: 3,
+  },
+);
+
+const code = fc.constantFrom(".ts", ".tsx", ".mjs", ".cjs");
+
+const testEnd = fc.constantFrom(".test.ts", ".test.tsx");
+
+/** Whether a path is a product file by the pick's own rule (a code extension, no `.test.`, no declaration). */
+const isProduct = (path: string) =>
+  /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(path) && !path.includes(".test.") && !/\.d\.[mc]?ts$/.test(path);
+
+/** A changed product file: a code folder, any depth, and a plain name with a code extension. */
+const productFile = fc
+  .tuple(
+    fc.constantFrom("apps", "packages", "programs", "next", "scripts", "oxlint-plugins", ".github"),
+    fc.array(segment, { maxLength: 3 }),
+    segment,
+    code,
+  )
+  .map(([top, folders, name, ext]) => [top, ...folders, `${name}${ext}`].join("/"));
+
+/** The sibling rule, said again from the plan: the stem, a dot, one or more kind words with dots, then `.test.ts(x)`. */
+const isSibling = (changed: string, tracked: string) => {
+  const stem = changed.slice(0, changed.lastIndexOf("."));
+  const rest = tracked.startsWith(`${stem}.`) ? tracked.slice(stem.length + 1) : "";
+  const match = /^((?:[A-Za-z0-9-]+\.)+)test\.tsx?$/.exec(rest);
+
+  return (
+    match !== null &&
+    !(match[1] ?? "")
+      .slice(0, -1)
+      .split(".")
+      .some((word) => (OUT as ReadonlyArray<string>).includes(word))
+  );
+};
+
+describe("kind siblings join the hourly pick (decision 0600, slice 2)", () => {
+  // Plant: match the stem as a prefix without its dot, so `runtime-recovery.laws.integration.test.ts` is picked for `runtime.ts`.
+  it("property: Q16 a changed product file picks its tracked kind siblings, and nothing that only starts like it", () => {
+    fc.assert(
+      fc.property(
+        fc.array(productFile, { minLength: 1, maxLength: 4 }),
+        fc.array(fc.tuple(kinds, testEnd), { minLength: 1, maxLength: 4 }),
+        fc.array(fc.boolean(), { minLength: 40, maxLength: 40 }),
+        fc.array(otherLead, { maxLength: 2 }),
+        (files, endings, tracks, lead) => {
+          const changed = [...files, ...lead];
+          const candidates: Array<string> = [];
+
+          for (const path of changed) {
+            const stem = path.slice(0, path.lastIndexOf("."));
+            const folder = stem.slice(0, stem.lastIndexOf("/") + 1);
+            const name = stem.slice(stem.lastIndexOf("/") + 1);
+
+            for (const [list, end] of endings) {
+              candidates.push(
+                // A sibling, in every kind.
+                `${stem}.${list.join(".")}${end}`,
+                // Decoys: the stem only as a prefix, another folder, no `.test`, another extension, a kind that is no word.
+                `${stem}-x.${list.join(".")}${end}`,
+                `${folder}${name}x.${list.join(".")}${end}`,
+                `other/${stem}.${list.join(".")}${end}`,
+                `${stem}.${list.join(".")}.ts`,
+                `${stem}.${list.join(".")}${end.replace(".ts", ".js")}`,
+                `${stem}.a b.laws${end}`,
+              );
+            }
+
+            candidates.push(`${stem}.test.ts`, `${stem}.test.tsx`);
+          }
+
+          // Some are tracked and some are not; a changed test file stays itself.
+          const tracked = candidates.filter((_, i) => tracks[i % tracks.length]);
+          const picked = related(changed, tracked);
+
+          const siblings = tracked.filter((t) =>
+            // lead tooling out of scope has no siblings picked (0089: a test of an out-of-scope file is out).
+            pick(changed).some((c) => isProduct(c) && isSibling(c, t)),
+          );
+
+          expect(picked).toEqual(
+            [...new Set([...before(pick(changed)), ...siblings])].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+          );
+          // With no list, or an empty one, the pick is exactly what it was.
+          expect(related(changed)).toEqual(before(pick(changed)));
+          expect(related(changed, [])).toEqual(before(pick(changed)));
+        },
+      ),
+      options,
+    );
+  });
+
+  // vector: real names of libfabrika's tests (next/packages/libfabrika/src/cloudflare and runtime).
+  it("vector: runtime.ts picks runtime.laws.test.ts and its integration sibling, not runtime-recovery's, a type law or a window", () => {
+    const dir = "next/packages/libfabrika/src/cloudflare";
+
+    const tracked = [
+      `${dir}/runtime.test.ts`,
+      `${dir}/runtime.laws.test.ts`,
+      `${dir}/runtime.laws.integration.test.ts`,
+      `${dir}/runtime.integration.test.ts`,
+      `${dir}/runtime-recovery.laws.integration.test.ts`,
+      `${dir}/runtime.types.test.ts`,
+      `${dir}/runtime.visual.test.tsx`,
+      `${dir}/runtimes.laws.test.ts`,
+      `${dir}/runtime.ts`,
+    ];
+
+    expect(related([`${dir}/runtime.ts`], tracked)).toEqual([
+      `${dir}/runtime.integration.test.ts`,
+      `${dir}/runtime.laws.integration.test.ts`,
+      `${dir}/runtime.laws.test.ts`,
+      // Today's pick, tracked or not: whether each exists at head is the workflow's check.
+      `${dir}/runtime.test.ts`,
+      `${dir}/runtime.test.tsx`,
+    ]);
+  });
+
+  // Plant: drop `--tracked` from the step, or write the list after the pick.
+  it("scenario: Q17 the workflow's range step lists the head's files and hands them to the pick, before the existence check", () => {
+    const workflow = parse(
+      readFileSync(join(import.meta.dirname, "../../../../.github/workflows/mutation.yaml"), "utf8"),
+    );
+
+    const steps: ReadonlyArray<{ id?: string; run?: string }> = workflow.jobs.mutation.steps;
+    const lines = (steps.find((step) => step.id === "range")?.run ?? "").split("\n");
+    const at = (pattern: RegExp) => lines.findIndex((line) => pattern.test(line));
+
+    const list = at(/^\s*git ls-tree -r --name-only "\$head" > (\S+)\s*$/);
+    const scope = at(/^\s*node \.agents\/skills\/mutation\/scripts\/scope\.ts --tracked (\S+) </);
+    const exists = at(/git cat-file -e/);
+
+    expect([list >= 0, scope >= 0, exists >= 0]).toEqual([true, true, true]);
+    expect(list).toBeLessThan(scope);
+    expect(scope).toBeLessThan(exists);
+    // The file the list is written to is the file the pick reads.
+    expect(/> (\S+)\s*$/.exec(lines[list] ?? "")?.[1]).toBe(/--tracked (\S+)/.exec(lines[scope] ?? "")?.[1]);
   });
 });
