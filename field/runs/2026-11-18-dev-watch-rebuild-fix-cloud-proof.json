@@ -4,7 +4,7 @@
   "ticket": "kamp-us/tea-fabrika#1122",
   "pr": "kamp-us/tea-fabrika#1542",
   "started": "2026-11-18T11:30:07Z",
-  "ended": "2026-11-18T14:21:26Z",
+  "ended": "2026-11-18T14:39:56Z",
   "parent": null,
   "active": null,
   "role": "hand",
@@ -12,11 +12,11 @@
   "model": null,
   "effort": null,
   "outcome": "pass",
-  "why": "next/ watcher laws, cloud-box proof for PR 1542 (ticket 1122). On the merged head 47b4d134 (PR head 85246a12 plus origin/main e693fe82): all five laws of watch.laws.integration.test.ts passed at full depth in the baseline and in 10 of 10 repeats on an idle box, the slowest law L10 at 259.7 to 264.1 s and each run 424 to 440 s, and in two more whole-file restore runs. Every plant the plan lists was run once and removed: the R1 plant (original next-answer assertion) turned the save-driven law and R1 scenario red with expected same to match loaded or failed, the CI failure's shape; product plants in watch.ts for R2 (stale build, dropped reply, changed load as same), R3 (no span, duplicated changed outcome, previous span's bytes), R4 (suppression off, distinct broken input suppressed), R5 (root in reply, span attribute and failure path) and R6 (result and watcher close omitted) each turned at least one law red. One R5 plant stayed green because the code.failed schema drops an unknown key, so it never reached the fact; its replacement through the path went red. The same baseline, plants and repeats also ran at 85246a12 before the merge; that series' repeats 2 and 3 overlapped a concurrent pnpm lint and failed in L10 (finding 2026-11-18-watch-l10-boot-drain-saw-repeated-installs).",
+  "why": "next/ watcher laws, cloud-box proof for PR 1542 (ticket 1122). On the merged head 47b4d134 (PR head 85246a12 plus origin/main e693fe82): all five laws of watch.laws.integration.test.ts passed at full depth in the baseline and in 10 of 10 repeats on an idle box, the slowest law L10 at 259.7 to 264.1 s and each run 424 to 440 s, and in two more whole-file restore runs. Every plant the plan lists was run once and removed: the R1 plant (original next-answer assertion) turned the save-driven law and R1 scenario red with expected same to match loaded or failed, the CI failure's shape; product plants in watch.ts for R2 (stale build, dropped reply, changed load as same), R3 (no span, duplicated changed outcome, previous span's bytes), R4 (suppression off, distinct broken input suppressed), R5 (root in reply, span attribute and failure path) and R6 (result and watcher close omitted) each turned at least one law red. One R5 plant stayed green because the code.failed schema drops an unknown key, so it never reached the fact; its replacement through the path went red. The same baseline, plants and repeats also ran at 85246a12 before the merge; that series' repeats 2 and 3 overlapped a concurrent pnpm lint and failed in L10 (finding 2026-11-18-watch-l10-boot-drain-saw-repeated-installs). After a last merge of origin/main 279f97ee (merge 024c5434), the whole file passed once more at that head in 425 s.",
   "note": "Command: FABRIKA_TEST_DEPTH=full nice -n 15 pnpm exec vitest run --project next-integration --maxWorkers=1 next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts, with -t 'save-driven rebuilds|scenario: R1' for the R1 plant and its restore run. Linux cloud box (CLAUDE_CODE_REMOTE guard), 4 CPUs, 16 GB, Node 26.13.0 from nodejs.org checked against its SHASUMS256, pnpm 12.16.1, TYPESAFE_API_KEY unset, seed 119120. Plants lived only on a local scratch worktree and branch, never committed or pushed. pnpm typecheck passed at 47b4d134. CI run https://github.com/kamp-us/tea-fabrika/actions/runs/44229079899 at 85246a12 passed the watcher file (5 tests, 457.6 s) in job related (1). Raw logs stay off git.",
   "tokens": null,
   "tools": null,
-  "minutes": 171.3,
+  "minutes": 189.8,
   "costUsd": null,
   "listUsd": null,
   "billed": null,
@@ -1158,6 +1158,35 @@
           "ms": null
         }
       }
+    },
+    {
+      "label": "f-final",
+      "head": "024c5434f98c3cc860e692247c913fb24467f95e",
+      "exit": 0,
+      "seconds": 425,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22214
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 72459
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 7524
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 258601
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 60345
+        }
+      },
+      "note": "after merging origin/main 279f97ee, whose 8 commits change no file the watcher laws or watch.ts import"
     }
   ],
   "plants": [
