@@ -19,7 +19,7 @@ import { MemberEvent } from "@kampus/libfabrika/access/Access";
 import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, Fiber, Schema } from "effect";
+import { Effect, Fiber, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -114,6 +114,21 @@ const blockKeyStore = () => {
   };
 };
 
+/** What `loseFirstAnswers` collects in the page: one group for each press it let the brain settle. */
+type Observed = {
+  groups: Array<{
+    attempts: Array<{ dial: number; params: unknown }>;
+    firstAnswer: unknown;
+    result: unknown;
+    closed: { code: number; clean: boolean; ms: number } | null;
+  }>;
+};
+
+declare global {
+  // What `loseFirstAnswers` puts on the page, for `resends` to read back.
+  var __p14Resends: Observed | undefined;
+}
+
 /** Let the brain settle each press to `pid`, the checklist's process, then lose its first answer
  *  and the socket. The next dial must resend that press before the page can see its terminal
  *  answer. Each close the page starts is kept as the page is told of it: its code, whether it was
@@ -122,18 +137,11 @@ const blockKeyStore = () => {
 const loseFirstAnswers = (pid: string) => {
   const NativeSocket = WebSocket;
 
-  const observed: {
-    groups: Array<{
-      attempts: Array<{ dial: number; params: unknown }>;
-      firstAnswer: unknown;
-      result: unknown;
-      closed: { code: number; clean: boolean; ms: number } | null;
-    }>;
-  } = {
+  const observed: Observed = {
     groups: [],
   };
 
-  Reflect.set(globalThis, "__p14Resends", observed);
+  globalThis.__p14Resends = observed;
   let active: (typeof observed.groups)[number] | undefined;
   let dials = 0;
   globalThis.WebSocket = class extends NativeSocket {
@@ -238,7 +246,7 @@ const Resends = Schema.Struct({
 });
 
 const resends = (page: import("playwright").Page) =>
-  Effect.promise(() => page.evaluate(() => Reflect.get(globalThis, "__p14Resends"))).pipe(
+  Effect.promise(() => page.evaluate(() => globalThis.__p14Resends)).pipe(
     Effect.map(Schema.decodeUnknownSync(Resends)),
   );
 
@@ -330,7 +338,8 @@ describe("L11: boot", () => {
 
           const leaves = Effect.map(
             audit.spans(),
-            (spans) => spans.filter((span) => Reflect.get(Object(span), "name") === "connections.leave").length,
+            (spans) =>
+              spans.filter((span) => Predicate.hasProperty(span, "name") && span.name === "connections.leave").length,
           );
 
           const before = yield* leaves;

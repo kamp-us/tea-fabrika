@@ -187,8 +187,9 @@ export const program = Program.make({name: ${JSON.stringify(name)}, maxDeliverie
   inputs: {inc: "Count", throw: "Fail"}, outputs: {}, writes: {}, wake: () => null});
 `;
 
-const rpc = Effect.fnUntraced(function* (binding: object, method: string, ...args: ReadonlyArray<unknown>) {
-  return yield* Effect.promise(() => Reflect.apply(Reflect.get(binding, method), binding, args) as Promise<unknown>);
+/** One typed call on the local instance's client. */
+const rpc = Effect.fnUntraced(function* <A>(call: () => Promise<A>) {
+  return yield* Effect.promise(call);
 });
 
 const Rows = Schema.Array(Schema.Struct({ _tag: Schema.String, body: Schema.Json }));
@@ -262,16 +263,13 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const start = Effect.fnUntraced(function* (name: string, program: string) {
     const code = built.programs[program]!;
     return Schema.decodeUnknownSync(started)(
-      yield* rpc(
-        project,
-        "start",
-        { _tag: "first", id: `start:${name}`, name, code: { program, hash: code.hash } },
-        from,
+      yield* rpc(() =>
+        project.start({ _tag: "first", id: `start:${name}`, name, code: { program, hash: code.hash } }, from),
       ),
     ).process;
   });
   const facts = Effect.fnUntraced(function* (stream: string) {
-    return Schema.decodeUnknownSync(Rows)(yield* rpc(project, "read", stream, 0, "audit"));
+    return Schema.decodeUnknownSync(Rows)(yield* rpc(() => project.read(stream, 0, "audit")));
   });
   // A restart names the build of the program it reloads: that program's code hash, never the brain file's.
   const hash = (program: string) => built.programs[program]!.hash;
@@ -387,7 +385,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
               "reserve exhaustion must save the named fault",
             );
             // Checked reads remain available and object eviction must not clear the saved fault.
-            yield* rpc(w.instance.process(alpha), "abort");
+            yield* rpc(() => w.instance.process(alpha).abort());
             const stopped = yield* accounting(w.home, "alpha:1", alpha);
             expect(stopped.process).toHaveProperty("fault._tag", "RecoveryReserveExhausted");
           } else {
@@ -401,15 +399,17 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
             if (mode === "writes") {
               const info = Schema.decodeUnknownSync(
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
-              )(yield* rpc(w.project, "info"));
+              )(yield* rpc(() => w.project.info()));
               const successor = info.find((r) => r.name === "alpha:1")!.process;
               expect(yield* w.send(successor, "fill-cap", { type: "inc", text: "" })).toMatchObject({
                 result: { _tag: "accepted" },
               });
-              yield* rpc(w.instance.process(successor), "restart", {
-                id: "person-at-cap",
-                build: w.hash("quota/alpha"),
-              });
+              yield* rpc(() =>
+                w.instance.process(successor).restart({
+                  id: "person-at-cap",
+                  build: w.hash("quota/alpha"),
+                }),
+              );
               const restarted = yield* until(
                 w.facts("processes/alpha:1"),
                 (rows) => rows.filter((r) => r._tag === "restarted").length === 2,
@@ -418,7 +418,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
               expect(restarted.filter((r) => r._tag === "restarted")).toHaveLength(2);
               const current = Schema.decodeUnknownSync(
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
-              )(yield* rpc(w.project, "info")).find((r) => r.name === "alpha:1")!.process;
+              )(yield* rpc(() => w.project.info())).find((r) => r.name === "alpha:1")!.process;
               // Plant: a restart that loses the program's quota state answers this input accepted.
               expect(yield* w.send(current, "excess", { type: "inc", text: "" })).toMatchObject({
                 error: { data: { reason: "quota" } },

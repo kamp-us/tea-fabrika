@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-reflect-ban-s10-tests2",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-16T00:38:37-08:00",
+  "ended": "2026-11-16T00:50:34-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step, fix round 1, for slice 10 of the Reflect ban (0554, ticket 1056) in next/, libfabrika's cloudflare/ folder, after the review sent it back (field/runs/2026-11-16-reflect-ban-s10-review1.json, at cc7bd5ca5), on docs/plan/quests/reflect-ban-PLAN.md signed at 4e9601147 (kind 5, kind 10, amendment point 7, L8's row). (1) L8 in cloudflare/control.laws.test.ts is rewritten for the plan's kind 5, a door that decodes each method's own arguments: it reads the door's table of argument schemas, Payloads in control.ts, under the names the law calls (one tuple schema per method, the payload of Effect's Rpc.make), draws a valid request from that schema's Effect Arbitrary, encoded and sent as JSON, and mixes in noise (JSON values for the whole list or one argument, one argument dropped, one too many). Its oracle decodes what the door received with the same schema: a valid request reaches its object exactly once with the decoded values, an invalid one is refused with bad_row before any call, an unknown name answers unknown_method, and a Project commit naming its own process answers reserved, calling nothing. It is an it.effect.prop over a Schema walk (seed, free picks, project, name) that asks each run for every case it has not reached yet, and fails loudly when one is never reached: each method called, and for each target a refused argument list and a refused name, and the reserved commit. No per-method argument schema is exported today: none of the 31 methods has a tuple schema of its parameters, and the door's table holds only names (control.ts:33-74). The build must add and export Payloads from control.ts. (2) The six settingsStart @ts-expect-error lines are gone; each stub answers Start.Reply.cases.ok.make({ value: StartsTest.receipt(x) }), typed as the member's answer (ObjectService.test.ts, alarm.laws.test.ts twice, error-cause.test.ts, index.test.ts, p14.test.ts). The two kind 10 lines stay: platform.test.ts:167 and p14.test.ts's Connection stub. (3) L8 drops vi.mock of cloudflare:workers (0555) and decodes inside Effect.gen with Schema.decodeUnknownEffect (0576), and is written as it.effect.prop with Schema inputs (0579), so no finding row is saved for the third review finding.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Laws: L8 'each allowed name reaches its own object once with the arguments its schema decoded; refused arguments, other names and a reserved commit call nothing', runsFor fast 30 and full 200 (each run at least 38 requests, so a pull request run sends about as many as the old 200 runs of up to 12), seed 119120. Red now at the tests head on today's control.ts, for one reason: control.ts exports no Payloads, so vitest fails with 'TypeError: Cannot read properties of undefined (reading 'project')' at payloadFor, and pnpm typecheck fails with exactly one error, control.laws.test.ts(28,19) TS2305 Module './control.ts' has no exported member 'Payloads'. Proved reachable: with a scratch door in control.ts (Payloads of plain tuple schemas, each branch decoding with Schema.decodeUnknownEffect mapped to LedgerError bad_row before the call), L8 is green at fast (30 runs) and full (200 runs, FABRIKA_TEST_DEPTH=full). The build must add, in control.ts: export const Payloads = { project: {...}, process: {...}, record: {...} }, one Schema tuple per method of the door's three sets, each a Codec with no services whose Type is the method's parameters and whose Encoded is JSON, every one with an Arbitrary (no Declaration without one), the takes-nothing methods (clientConnect, info, abort, recover, savedAlarm) as Schema.Tuple([]); and the door decodes each request's args with its method's payload, failing LedgerError bad_row before any call, keeps the reserved check on the raw args before decoding, and drops the call helper (control.ts:78-82). The schemas to build each tuple from, where one exists: runtime/Code.ts Install and CodeEvent, runtime/BrainEvent.ts BrainEvent, processes/internal/processTable.ts Start, processes/Mailbox.ts From, telemetry/Trace.ts Chain, runtime/Runner.ts Sent, runtime/ObjectCalls.ts's Activity; the plain TS parameter types with no schema (LedgerCalls read, append and wait; GatewayCalls challenge, initialize, route and grant; Connections join, leave and online; ProcessCalls exit; sign and commit's inputs; RecordCalls's Deletion; the runner's msg, open, due and restart) need a schema written for them. Ran at the tests tree (base cc7bd5ca5), one file at a time under nice -n 15 --maxWorkers=3: control.laws red as above; ObjectService 3, alarm.laws 2, error-cause 12, index 3, p14 1 all green. pnpm format; pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) exit 0, 18 parts; the ratchet exit 0; one pnpm typecheck exit 1 with only the TS2305 above. No 0178 refusal; no .integration. law reached.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "L8",
+      "plant": "scratch decoding door in control.ts, then the Project branch calls the method on the raw args without decoding; vitest control.laws.test.ts fails with 'project.wait: expected { refused: null, ... } to deeply equal { refused: 'bad_row', ... }'; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L8",
+      "plant": "scratch decoding door in control.ts, then the Process branch calls anyway when its decoder refuses (Effect.catch back to the raw args); vitest fails with 'process.abort: expected { refused: null, ... } to deeply equal { refused: 'bad_row', ... }'; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L8",
+      "plant": "scratch decoding door in control.ts, then content dropped from methods.record; vitest fails with 'record.content: expected { refused: 'unknown_method', ... } to deeply equal { refused: null, ... }'; restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
