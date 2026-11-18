@@ -39,6 +39,10 @@
     "kalfa-quality": {
       "imports": [],
       "pure": false
+    },
+    "kalfa-records": {
+      "imports": ["kalfa-config"],
+      "pure": false
     }
   },
   "libraries": {
@@ -56,7 +60,8 @@
     "next/programs/pipeline": "next-program",
     "next/programs/tezgah": "next-program",
     "kalfa/config": "kalfa-config",
-    "kalfa/quality": "kalfa-quality"
+    "kalfa/quality": "kalfa-quality",
+    "kalfa/records": "kalfa-records"
   },
   "libraryRoots": ["next", "kalfa"],
   "acrossDeployables": ["relative-import-crosses-workspace"]
