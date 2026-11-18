@@ -23,12 +23,6 @@ import {
 } from "./shared.ts";
 import { TIME_TABLE, timed } from "./time-tables.ts";
 
-// Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
-// `tooling` project alone: next/ and the three trees of today's tests are projects of their own, and
-// a project ignores `--exclude` (vitest.config.ts; merge-line.test.ts holds the tooling project's
-// globs). No call in check.yaml runs it (0539).
-const TOOLING_PROJECT = "--project tooling";
-
 // The full run (0534, 0581): scheduled.yaml runs all of next/ and every tooling test on main, and a
 // red run opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull
 // requests keep theirs (0595). The ten jobs are MAIN_SLOTS groups for main's full run, PROOF_SLOTS for
@@ -216,16 +210,29 @@ const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions 
 
 // Every layer of next/ (0536): the vitest legs run the in-memory and the real-resource projects, and
 // the e2e legs the visual one. A project, not a path, picks the files: `next/` as a path would start
-// `next-visual` on legs with no Chromium, and a project ignores `--exclude`.
-const WHOLE_NEXT = `pnpm exec vitest run --project next --project next-integration --shard "$SHARD" ${REPORTERS}`;
+// `next-visual` on legs with no Chromium, and a project ignores `--exclude`. The vitest legs read
+// their projects from the ref (NEXT_PROJECTS): main's full run never drops a real-resource law, and
+// a branch's full set, a proof run, starts none (0602).
+const WHOLE_NEXT = `pnpm exec vitest run $PROJECTS --shard "$SHARD" ${REPORTERS}`;
+
+const NEXT_PROJECTS = `\${{ ${ON_MAIN} && '--project next --project next-integration' || '--project next' }}`;
 
 const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
 
-const WHOLE_TOOLING = `pnpm exec vitest run ${TOOLING_PROJECT} --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+// Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
+// tooling projects alone: next/ and the three trees of today's tests are projects of their own, and
+// a project ignores `--exclude` (vitest.config.ts; merge-line.test.ts holds the tooling projects'
+// globs). The tooling legs read their projects from the ref (TOOLING_PROJECTS), as the vitest legs
+// do: main's full run runs `tooling` and `tooling-integration`, the tooling laws that start a
+// process (0584), and a branch's full set, a proof run, runs `tooling` alone (0602).
+const WHOLE_TOOLING = `pnpm exec vitest run $PROJECTS --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
 
-// A changed leg's one command: its own list, `$FILES` from `select`, over every project CI runs and
-// proof.ts lists, today's left out (0533). No `--changed` and no `--shard`: the list is the leg.
-const CHANGED_RUN = `pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling $FILES ${REPORTERS}`;
+const TOOLING_PROJECTS = `\${{ ${ON_MAIN} && '--project tooling --project tooling-integration' || '--project tooling' }}`;
+
+// A changed leg's one command: its own list, `$FILES` from `select`, over every project proof.ts
+// lists: today's left out (0533), and `next-integration`, which only main's full run runs (0602). No
+// `--changed` and no `--shard`: the list is the leg.
+const CHANGED_RUN = `pnpm exec vitest run --project next --project next-visual --project tooling $FILES ${REPORTERS}`;
 
 // The schedule's test depth (pull request 1274): its laws run their full case count.
 const DEPTH = "full";
@@ -666,9 +673,9 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ), `SC17: ${SELECT_JOB} runs ${SELECT} once, only on a hand start on a branch other than main, after the gate said start=true, with the whole history, and keeps its record as proof-set`);
 
   // SC18. `changed` runs a changed set's legs (0590): only when `select` said `changed` with a leg,
-  // so it and `tests` never run in one run, each leg exactly its own list over every project CI
-  // runs, at next's test step limit with the same backstop, chromium first when its list holds a
-  // visual file, and nothing else.
+  // so it and `tests` never run in one run, each leg exactly its own list over every project
+  // proof.ts lists, `next-integration` not among them (0602), at next's test step limit with the
+  // same backstop, chromium first when its list holds a visual file, and nothing else.
   const changed = map(jobs[CHANGED_JOB]);
   const changedSteps = steps(changed);
   const changedRuns = changedSteps.filter((s) => s["run"] === CHANGED_RUN);
@@ -692,7 +699,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(commandsOf(changed).toSorted()) ===
       JSON.stringify(
         ["pnpm install --frozen-lockfile", chromium, CHANGED_RUN, TIME_TABLE].toSorted(),
-      ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over every project at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
+      ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (0602), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
 
   const changedKept = changedSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
@@ -813,7 +820,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
   require(vitest.length === 1 &&
     compact(vitest[0]?.["if"]) === compact(`!${ON_E2E} && !${ON_TOOLING}`) &&
     map(vitest[0]?.["env"])["SHARD"] ===
-      `\${{ matrix.shard }}/${vitestCount}`, "SC7: next runs vitest over the next and next-integration projects once, on the numbered legs, each its share of them");
+      `\${{ matrix.shard }}/${vitestCount}`, "SC7: next runs vitest once, on the numbered legs, each its share of them");
+  require(compact(map(vitest[0]?.["env"])["PROJECTS"]) ===
+    compact(
+      NEXT_PROJECTS,
+    ), "SC7: next's vitest legs run the next and next-integration projects on main, and next alone on a branch's full set, which runs no real-resource law (0602)");
   require(e2e.length === 1 &&
     compact(e2e[0]?.["if"]) === ON_E2E &&
     map(e2e[0]?.["env"])["SHARD"] ===
@@ -832,6 +843,10 @@ export const lintScheduled = (text: string, check: string): string[] => {
       JSON.stringify(
         Array.from({ length: toolingLegs.length }, (_, i) => `${TOOLING_LEG}${i + 1}`),
       ), "SC8: the tooling legs run every tooling test once, legs tooling-1 to tooling-N, each its share of them");
+  require(compact(map(toolingRuns[0]?.["env"])["PROJECTS"]) ===
+    compact(
+      TOOLING_PROJECTS,
+    ), "SC8: the tooling legs run the tooling and tooling-integration projects on main, and tooling alone on a branch's full set, which runs no tooling law that starts a process (0602)");
 
   // SC9. The commands are only these: no step runs another test command or narrows one.
   require(JSON.stringify(commandsOf(tests).toSorted()) ===
@@ -855,12 +870,16 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC11. Every test leg runs at full depth: a law that reads FABRIKA_TEST_DEPTH runs its full case
   // count here, and unset means `fast`, as on the merge line (pull request 1274).
-  for (const command of [WHOLE_NEXT, WHOLE_E2E, WHOLE_TOOLING]) {
+  for (const [legs, command] of [
+    ["next's vitest legs", WHOLE_NEXT],
+    ["the e2e legs", WHOLE_E2E],
+    ["the tooling legs", WHOLE_TOOLING],
+  ] as const) {
     const found = Rec.values(jobs).flatMap((job) => steps(map(job)).filter((s) => s["run"] === command));
     require(found.length > 0 &&
       found.every(
         (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,
-      ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
+      ), `SC11: every step of ${legs} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }
 
   // SC12. SC2's group holds every run on the same ref, so a waiting run is

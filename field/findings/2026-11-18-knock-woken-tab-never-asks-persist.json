@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-knock-woken-tab-never-asks-persist",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/client/WindowMachine.ts",
+    "line": 1246
+  },
+  "says": "In next/, a tab whose own knock now wakes it (granted news sent inside gateway.knock, before the knock's answer) is in the handshake's knocking state with the Link still dialing, so the window never marks persist due and never calls navigator.storage.persist() after that grant, the step tier-1 P14 built after every grant.",
+  "proof": "next/packages/libfabrika/src/gateway/Gateway.ts:783 calls release inside knock, so granted news reaches the client before the knock's answer (Handshake knocking). Handshake.ts:200-201 moves knocking to initializing on granted. WindowMachine.ts:1392 emits the Link's granted only when was._tag === 'waiting', and WindowMachine.ts:1246 sets persist due only when s.link._tag === 'waiting_grant'; Link.ts:169-185 enters waiting_grant only on not_granted, which a knocking tab never sent.",
+  "cost": "A browser whose only tab was granted before its knock landed keeps its client key in storage that is not marked persistent, so the browser may evict it and the person must grant that device again; no persist record is written for it.",
+  "head": "efdf0286ec76346a883ba5f1334eb56751fda6b7",
+  "ticket": "kamp-us/tea-fabrika#1163",
+  "pr": "kamp-us/tea-fabrika#1620"
+}

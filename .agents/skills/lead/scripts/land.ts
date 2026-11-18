@@ -63,10 +63,10 @@
 //     unless the top is in an open stack whose layers from the bottom up to it are open and ready;
 //     runs `arm`'s gates on each layer, the leak gate on its change, commits and words and the
 //     `## New names` check; refuses unless `ci-required` is a success at each layer's head
-//     (ticket 1119); then refuses when more layers are open than the base branch's merge
-//     queue builds at once (`max_entries_to_build`, read from its rules), naming both numbers, since
-//     the queue splits a larger stack and drops its upper layers. Then one stack merge, squashes,
-//     pinned to the heads the gates read.
+//     (ticket 1119); rereads the selected ordered prefix, its base, branch links and heads; then asks
+//     GitHub's async merge API with the selected top head SHA. A SQUASH merge queue keeps its own
+//     merge method; without a queue, the request is an explicit squash. The result says merged,
+//     enqueued or pending, and never reports a queued or pending request as merged.
 //
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes

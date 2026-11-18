@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
-import { outputs, select, type Sizing, wantsChecklistLaw } from "./related.ts";
+import { outputs, run, select, type Sizing, wantsChecklistLaw } from "./related.ts";
 
 const options = { arbitrary: { seed: 119120, runs: 100, size: 100 } };
 
@@ -117,6 +117,134 @@ it.prop(
 
     // With no tooling file the related job skips: `run=false`, no legs.
     expect(emittedBy(result)["run"]).toBe(String(tooling > 0));
+  },
+  options,
+);
+
+/** Tooling files as `vitest list` gives them: `plain` plain laws and `real` that start a process. */
+const toolingOf = (plain: number, real: number) => [
+  ...Array.from({ length: plain }, (_, index) => `.github/ci/p-${index}.test.ts`),
+  ...Array.from(
+    { length: real },
+    (_, index) => `.github/ci/workflow-lint/r-${index}.integration.test.${index % 2 === 0 ? "ts" : "tsx"}`,
+  ),
+];
+
+// scenario: by the same call (0602), a tooling law that starts a process is an `.integration.` law
+// and stays on the full run (0584). Run 44278795643 put
+// `.github/ci/workflow-lint/scheduled.integration.test.ts`, which spawns a process, on a pull
+// request's tooling leg. The `tooling-integration` project now keeps such a file out of tooling's
+// list; this holds the merge line to the name whatever a list gives. Plants, each run once on
+// related.ts and restored: the merge line keeps tooling's `.integration.` files (red, they land on
+// legs); every event drops them (red, a push keeps them no more).
+it.prop(
+  "a pull request or queue group drops every .integration. name from tooling's list, and any other event keeps the list whole",
+  {
+    event: Schema.Literals(["pull_request", "merge_group", "push"]),
+    plain: count,
+    real: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10 })),
+  },
+  ({ event, plain, real }) => {
+    const tooling = [...toolingOf(plain, real), ".github/ci/workflow-lint/scheduled.integration.test.ts"];
+
+    const result = select(event, { "next-integration": () => [], tooling: () => tooling }, sizing);
+
+    const ran = Object.values(result.legs).flat().toSorted();
+
+    const merging = event !== "push";
+
+    expect(ran).toEqual(tooling.filter((path) => !merging || !/\.integration\./.test(path)).toSorted());
+
+    expect(ran.includes(".github/ci/workflow-lint/scheduled.integration.test.ts")).toBe(!merging);
+
+    // Only plain files left: the related job skips when none is reached.
+    expect(emittedBy(result)["run"]).toBe(String(merging ? plain > 0 : true));
+  },
+  options,
+);
+
+const HEAD = "a".repeat(40);
+
+const BASE = "b".repeat(40);
+
+/** The select step's variables as check.yaml's set step gives them, with `event` as the runner's. */
+const envOf = (event: string, decoy: string) => ({
+  GITHUB_EVENT_NAME: event,
+  // A name a careless read could take for the event: the step must read the runner's own.
+  EVENT: decoy,
+  HEAD,
+  BASE,
+  MOST_INTEGRATION: "5",
+  MOST_TOOLING: "2",
+  LIMIT_INTEGRATION: "17",
+  LIMIT_TOOLING: "30",
+});
+
+/** git as the select step asks it: the tested commit, the merge base and the change. */
+const gitOf =
+  (changed: readonly string[]) =>
+  (args: readonly string[]): string => {
+    const [command] = args;
+
+    if (command === "rev-parse") {
+      return HEAD;
+    }
+
+    if (command === "merge-base") {
+      return BASE;
+    }
+
+    if (command === "diff") {
+      return changed.join("\0");
+    }
+
+    throw new Error(`related test: git ${args.join(" ")} was not expected`);
+  };
+
+const Event = Schema.Literals(["pull_request", "merge_group", "push"]);
+
+// scenario: the review of the build of 0602's merge line: a plant at related.ts's read of the event,
+// `process.env["EVENT"]`, left every law green, since no law ran the step itself. This one runs it
+// on its own env, git and list, with a decoy variable beside the runner's. Plants, each run once on
+// related.ts and restored: `run` reads `env["EVENT"]` (red); reads `process.env["EVENT"]` (red);
+// reads `process.env["GITHUB_EVENT_NAME"]` (red: the property's own event differs from the test
+// process's).
+it.prop(
+  "the select step picks by the event the runner set in GITHUB_EVENT_NAME, and lists next-integration only off the merge line",
+  { event: Event, decoy: Event, next: Schema.Boolean },
+  ({ event, decoy, next }) => {
+    const changed = [next ? "next/packages/a/src/b.ts" : ".github/ci/proof.ts", ".github/ci/related.ts"];
+
+    const asked: string[][] = [];
+
+    const integration = "next/packages/a/src/b.integration.test.ts";
+
+    const tooling = [".github/ci/related-selection.test.ts", ".github/ci/workflow-lint/scheduled.integration.test.ts"];
+
+    const { record, lines } = run({
+      env: envOf(event, decoy),
+      git: gitOf(changed),
+      list: (args) => {
+        asked.push([...args]);
+
+        return args.includes("next-integration") ? [integration] : tooling;
+      },
+    });
+
+    const merging = event !== "push";
+
+    expect(record.event).toBe(event);
+
+    expect(record.changed).toEqual(changed);
+
+    // Off the merge line the next-integration list is asked for, the readers' too on a next/ change.
+    expect(asked.filter((args) => args.includes("next-integration")).length).toBe(merging ? 0 : next ? 2 : 1);
+
+    const ran = Object.values(record.legs).flat().toSorted();
+
+    expect(ran).toEqual(merging ? [".github/ci/related-selection.test.ts"] : [...tooling, integration].toSorted());
+
+    expect(lines[0]).toBe("run=true");
   },
   options,
 );

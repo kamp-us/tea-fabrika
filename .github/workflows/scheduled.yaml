@@ -1,10 +1,12 @@
 name: scheduled
 
 # The full run, the whole suite (0534). The merge line runs only the tests a change reaches: a pull
-# request, a merge queue group and a push to main each run the next/ tests their diff reaches, and
-# none of them runs a tooling test (0539, check.yaml). This runs all of next/, every layer of it
-# (0536): the in-memory tests, the real-resource ones (`*.integration.test.ts`) and the visual ones
-# (`*.visual.test.ts`), which the merge line never runs, and every tooling test, on main's head. A
+# request and a merge queue group each run the in-memory next/ tests and the plain tooling tests
+# their diff reaches (check.yaml's next and related jobs, 0584), a pull request with the `visual`
+# label its visual tests too (0536), and never an `.integration.` law, of next/ or of tooling
+# (0602). This runs all of next/, every layer of it
+# (0536): the in-memory tests, the real-resource ones (`*.integration.test.ts`), which only this
+# run runs, and the visual ones (`*.visual.test.ts`), and every tooling test, on main's head. A
 # push to main starts it when no full run on main started in the last hour, and an hourly catch-up
 # starts it on a head that has had none (0581): the `gate` job decides (gate.mjs), so a break no
 # diff reached shows within about an hour of its push, two at most when the next push is long in
@@ -38,21 +40,24 @@ name: scheduled
 #   gate            1      first; says start=true or start=false (gate.mjs), with the run list read
 #                          by the workflow's own token
 #   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
-#                          projects, every file, no `--changed`
+#                          projects, every file, no `--changed`; a branch's full set runs `next`
+#                          alone (0602)
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
-#   tooling tests   2      legs tooling-1 and tooling-2, the `tooling` project, every file, no
-#                          `--changed`; the 9 legs above are one matrix, the `tests` job
+#   tooling tests   2      legs tooling-1 and tooling-2, the `tooling` and `tooling-integration`
+#                          projects, every file, no `--changed`; a branch's full set runs
+#                          `tooling` alone (0602); the 9 legs above are one matrix, the `tests` job
 #   report          1      after the others, on any result but the gate's `false`; it fails unless
 #                          the run is green, so a run whose red leg left no failed job still ends
 #                          `failure`
 #
 # A branch's proof run (0590) is this workflow started by hand on a branch other than main. Its
 # `select` job runs proof.ts, which lists the tests the branch's change reaches against origin/main
-# with Vitest's own `--changed`, `.integration.` and `.visual.` laws included. A change to a file in
-# vitest.config.ts's `forceRerunTriggers` (a config, .oxlintrc.json, a tsconfig, the lockfile, a
-# package.json) runs the full set, on the `tests` legs above, and so does a hand start that asks
-# `scope: full` for the test file that needs it (`law`). Any other change runs its set on the
-# `changed` legs, as many as the set needs and one when it is small, each its own list; a set of
+# with Vitest's own `--changed`, `.visual.` laws included. It runs no `.integration.` law, even one
+# its change reaches, on a changed set or a full set: only main's full run does (0602). A change to a
+# file in vitest.config.ts's `forceRerunTriggers` (a config, .oxlintrc.json, a tsconfig, the
+# lockfile, a package.json) runs the full set, on the `tests` legs above, and so does a hand start
+# that asks `scope: full` for the test file that needs it (`law`). Any other change runs its set on
+# the `changed` legs, as many as the set needs and one when it is small, each its own list; a set of
 # zero files starts no leg and the run is green. `scope` is `changed` unless a person says `full`
 # (0590). The run keeps what it tested, and the law of a `full` ask, as its `proof-set` artifact and
 # in its summary. On main `select` never runs, so `tests` runs every test there whatever `scope` says:
@@ -62,7 +67,8 @@ name: scheduled
 #   select          1      after the gate, on a branch's hand start alone; says `full` or
 #                          `changed`, and each changed leg's files
 #   changed         0-9    after select, on a changed set alone; leg `k` runs its own list over
-#                          every project CI runs, chromium first when the list holds a visual file
+#                          every project proof.ts lists, chromium first when the list holds a
+#                          visual file
 #
 # Every test leg sets `FABRIKA_TEST_DEPTH: full`, so a law with a depth runs its full case count
 # here; the merge line leaves it unset, which reads as `fast` (pull request 1274).
@@ -180,15 +186,18 @@ jobs:
   # minutes per red run (the review of pull request 1383, at green run 43775455200's leg times).
   #
   # All of next/, on check.yaml's full matrix of legs: `1` to `5` run vitest over the `next` and
-  # `next-integration` projects, each a fifth of the files by measured seconds; `e2e-1` and `e2e-2`
-  # fetch chromium and run the `next-visual` project on their half of the visual files. A project,
-  # not a path, picks the files: `next/` as a path would start `next-visual` on legs with no
-  # Chromium. Then every tooling test, on `tooling-1` and `tooling-2`: the tests of neither
-  # version's product code (CI's own, the lint plugins, the root scripts and the skill scripts),
-  # the `tooling` project, since a project ignores `--exclude` (0536). The only CI job that runs
-  # them: the merge line runs none, and a tooling change's author runs its narrow tests on the
-  # laptop (0539). Today's tests run in no CI job (0533). Nothing is narrowed: no `--changed`, no
-  # list.
+  # `next-integration` projects on main, and over `next` alone on a branch's full set, since only
+  # main's full run runs the real-resource laws (0602; `PROJECTS` reads the ref), each a fifth of
+  # the files by measured seconds; `e2e-1` and `e2e-2` fetch chromium and run the `next-visual`
+  # project on their half of the visual files. A project, not a path, picks the files: `next/` as
+  # a path would start `next-visual` on legs with no Chromium. Then every tooling test, on
+  # `tooling-1` and `tooling-2`: the tests of neither version's product code (CI's own, the lint
+  # plugins, the root scripts and the skill scripts), the `tooling` project and, on main alone, the
+  # `tooling-integration` one, its laws that start a process (0584, 0602), since a project ignores
+  # `--exclude` (0536). `PROJECTS` reads the ref, as on the vitest legs. The merge line runs only
+  # the plain tooling laws a change reaches (check.yaml's related job), so this is the only CI job
+  # that runs them all. Today's tests run in no CI job (0533). Nothing is narrowed: no `--changed`,
+  # no list.
   #
   # The full set, wherever it runs: on main, where `select` never runs, and on a branch whose
   # `select` said `full`. A run starts this job or `changed`, never both, so each red leg still stops
@@ -245,7 +254,8 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}/5
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project next --project next-integration --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
+          PROJECTS: ${{ github.ref == 'refs/heads/main' && '--project next --project next-integration' || '--project next' }}
+        run: pnpm exec vitest run $PROJECTS --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       # `--with-deps` runs apt itself, with no limit. apt.sh refreshes the lists first, on a mirror
       # that answers, as in check.yaml.
       - name: chromium
@@ -269,7 +279,8 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}/2
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project tooling --shard "${SHARD#tooling-}" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
+          PROJECTS: ${{ github.ref == 'refs/heads/main' && '--project tooling --project tooling-integration' || '--project tooling' }}
+        run: pnpm exec vitest run $PROJECTS --shard "${SHARD#tooling-}" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       # The leg's Vitest report, for the report job to name each failing test. After a red step too,
       # so the leg that failed is the one whose report is kept. Named `results-next-<leg>` and
       # `results-tooling-<k>`, as before the two jobs became one: vitest.shards.ts's rows are
@@ -364,12 +375,14 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
-  # A changed set's legs (0590): leg `k` runs exactly its list from `select`, over every project CI
-  # runs, so a list may hold next/'s in-memory, real-resource and visual laws and tooling tests
-  # together, at full depth, as the `tests` legs do. Chromium comes first on a leg whose list holds a
-  # visual file. Its own matrix, which a run starts only when `select` said `changed` with a leg, so
-  # it and `tests` never run in one run, and its own fail-fast stops each leg of it. Its legs are
-  # next legs for the report (`changed (k)`), with next's test step limit and the same backstop.
+  # A changed set's legs (0590): leg `k` runs exactly its list from `select`, over every project
+  # proof.ts lists, so a list may hold next/'s in-memory and visual laws and tooling tests together,
+  # at full depth, as the `tests` legs do. No real-resource law: only main's full run runs those
+  # (0602), so a leg names no `next-integration` project either. Chromium comes first on a leg
+  # whose list holds a visual file. Its own matrix, which a run starts only when `select` said
+  # `changed` with a leg, so it and `tests` never run in one run, and its own fail-fast stops each
+  # leg of it. Its legs are next legs for the report (`changed (k)`), with next's test step limit
+  # and the same backstop.
   changed:
     concurrency:
       group: scheduled-proof-${{ fromJSON('{"1":"1","2":"2","3":"3","4":"4"}')[fromJSON(needs.select.outputs.slots)[matrix.shard]] || '1' }}
@@ -404,7 +417,7 @@ jobs:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           LEG: ${{ matrix.shard }}
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling $FILES --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
+        run: pnpm exec vitest run --project next --project next-visual --project tooling $FILES --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       - name: results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
