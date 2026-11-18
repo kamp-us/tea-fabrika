@@ -71,17 +71,13 @@ commit.**
 
 - The list of open pull requests becomes the full list of work in flight. Drafts will outnumber
   ready pull requests.
-- CI runs on every push of a draft. Whether a draft runs fewer jobs than a ready pull request is
-  not decided here.
+- A draft pull request runs only the fast jobs, and marking it ready starts the full set on the
+  same head. The jobs, their names and which set each belongs to are in
+  `.github/workflows/check.yaml` (a draft's lint job is named `lint`, and its `ci-required` job
+  `ci-required (draft)`), and `changes.mjs` picks them. The ready run is the one the ruleset waits
+  for. Nothing merges as a draft, so nothing gets weaker (owner, 2026-11-11).
 - The lane's order changes: the pull request opens first, as a draft
   ([0133](0133-no-push-waits-on-a-local-typecheck.md) already moved it before the typecheck).
 - The branches found on 2026-11-11 are sorted once: a draft pull request for each that holds work
   not on main, and deletion for each whose work has merged.
 - Not decided: how long an unmerged draft may stay open before someone closes it.
-
-## Amendments
-
-- 2026-11-11 (owner): a draft pull request runs only the fast jobs, `changes`, `field`, `typecheck`
-  and `check`'s lint, under the names `lint` and `ci-required (draft)`; marking it ready starts the
-  full set (`check`, `test`, `next`, `e2e`, as changes.mjs picks them) on the same head, which is
-  the run catchup.sh and the ruleset wait for. Nothing merges as a draft, so nothing gets weaker.

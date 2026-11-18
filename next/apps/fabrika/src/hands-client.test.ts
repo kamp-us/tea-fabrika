@@ -36,6 +36,26 @@ import { ClientKey, ClientKeyError } from "@kampus/libfabrika/transport/ClientKe
 import { connection } from "@kampus/libfabrika/transport/Connection";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
+import {
+  Array as Arr,
+  String as Str,
+  Effect,
+  Exit,
+  Layer,
+  Predicate,
+  Queue,
+  Record as Rec,
+  Schema,
+  Scope,
+  Semaphore,
+  Tracer,
+  Formatter,
+} from "effect";
+import { Base64, Base64Url } from "effect/encoding";
+import { KeyValueStore, RateLimiter } from "effect/persistence";
+import { Socket } from "effect/socket";
+import { TestClock } from "effect/testing";
+
 // P39 slice 4a, next/: E1 and S1, the hands client end to end in one process. The real hands start
 // (`client/HandsStart.ts`) dials over the in-memory socket the window laws use
 // (`client/WindowStart.test-support.ts`) into the real transport driver (`transport/Connection.ts`)
@@ -58,19 +78,18 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
-import { Effect, Exit, Layer, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
-import * as KeyValueStore from "effect/persistence/KeyValueStore";
-import * as RateLimiter from "effect/persistence/RateLimiter";
-import { Socket } from "effect/socket";
-import { TestClock } from "effect/testing";
+
 import * as fc from "fast-check";
 import { type ConnectionId, Gateway } from "./door.ts";
 
 const SEED = 119120;
+
 const ORIGIN = "http://127.0.0.1:18787";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-15T10:00:00.000Z";
+
 /** The one connection object every socket of the door lives on, and the name its rings reach. */
 const READER = "hands-e1";
 
@@ -80,11 +99,12 @@ const field = (bytes: Uint8Array) => {
   const out = new Uint8Array(4 + bytes.length);
   new DataView(out.buffer).setUint32(0, bytes.length);
   out.set(bytes, 4);
+
   return out;
 };
 
 const join = (...parts: ReadonlyArray<Uint8Array>) => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  const out = new Uint8Array(Arr.reduce(parts, 0, (n, p) => n + p.length));
   let at = 0;
 
   for (const p of parts) {
@@ -95,7 +115,11 @@ const join = (...parts: ReadonlyArray<Uint8Array>) => {
   return out;
 };
 
-const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array) =>
+  Arr.join(
+    Arr.map([...bytes], (b) => Str.padStart(2, "0")(b.toString(16))),
+    "",
+  );
 
 // A shared test's failures are tagged like product code's, never thrown.
 class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
@@ -113,31 +137,37 @@ const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
   const s = crypto.subtle;
   const pkcs8 = join(PKCS8, seed);
   const fail = (cause: unknown) => new CryptoFailed({ cause });
+
   const signer = yield* Effect.tryPromise({
     try: () => s.importKey("pkcs8", pkcs8, "Ed25519", true, ["sign"]),
     catch: fail,
   });
+
   const jwk = yield* Effect.tryPromise({ try: () => s.exportKey("jwk", signer), catch: fail });
   const raw = yield* Effect.fromResult(Base64Url.decode(jwk.x ?? "")).pipe(Effect.mapError(fail));
   // The public half only: WebCrypto exports the private half to no one here but the sentinels below.
   const blob = join(field(text("ssh-ed25519")), field(raw));
+
   const fingerprint = Effect.fnUntraced(function* (bytes: Uint8Array) {
     const hash = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", new Uint8Array(bytes)), catch: fail });
-    return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+
+    return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
   });
+
   const sign = (bytes: Uint8Array) =>
     Effect.tryPromise({ try: () => s.sign("Ed25519", signer, new Uint8Array(bytes)), catch: fail }).pipe(
       Effect.map((b) => new Uint8Array(b)),
     );
+
   return {
     raw: Base64Url.encode(raw),
-    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`),
+    line: yield* Schema.decodeEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`),
     fingerprint: yield* fingerprint(raw),
     sshFingerprint: yield* fingerprint(blob),
     sign,
     /** Every form the private half could leak in: the seed and PKCS#8 bytes as base64, base64url and
      *  hex. An armored key's body is the PKCS#8 base64, one 64-column line for Ed25519, so it is here too. */
-    secrets: [seed, pkcs8].flatMap((b) => [Base64.encode(b), Base64Url.encode(b), hex(b)]),
+    secrets: Arr.flatMap([seed, pkcs8], (b) => [Base64.encode(b), Base64Url.encode(b), hex(b)]),
   };
 });
 
@@ -154,6 +184,7 @@ const Flow = fc.record({
     size: "max",
   }),
 });
+
 type Flow = typeof Flow extends fc.Arbitrary<infer A> ? A : never;
 
 /** The brain: the real gateway and tasks on one in-memory database, its rings queued for the door. */
@@ -162,21 +193,27 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
     Effect.sync(() => new DatabaseSync(":memory:")),
     (held) => Effect.sync(() => held.isOpen && held.close()),
   );
+
   const sql = nodeSql(db);
   const rings = yield* Queue.unbounded<{ readonly to: string; readonly stream: string; readonly rev: number }>();
+
   const bell = Layer.succeed(Doorbell, {
     ring: (to: string, stream: string, rev: number) =>
       Effect.sync(() => void Queue.offerUnsafe(rings, { to, stream, rev })),
   });
+
   // The referee the Worker's Project gives the gateway as its `wait`, so a parked wait is rung at
   // the reader the call names, as on the Worker (runtime.ts), never at this object by default.
   const referee = yield* Referee.pipe(Effect.provide(RefereeSql.layer(sql).pipe(Layer.provide(bell))));
+
   const data = Layer.mergeAll(
     LedgerSql.layer(sql, { reader: "hands-e1" }),
     LedgerTransactionSql.layer(sql),
     LedgerStreamsSql.layer(sql),
   ).pipe(Layer.provide(bell));
+
   const turn = yield* Semaphore.make(1);
+
   const founder = {
     name: "hands-e1",
     person: PERSON,
@@ -185,6 +222,7 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
     by: root.sshFingerprint,
     build: "brain-build",
   };
+
   const services = Layer.mergeAll(
     data,
     TasksLedger.layer.pipe(Layer.provide(data), Layer.provide(Id.Generator.layer)),
@@ -198,6 +236,7 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
     ),
     Layer.succeed(MailWakeups, { wake: () => Effect.void }),
   );
+
   const gateway = Gateway.layer({
     sql,
     founder,
@@ -222,8 +261,10 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
     inputs: { schema: Schema.Json, personOnly: [], raw: [] },
     events: { personOnly: [] },
   }).pipe(Layer.provideMerge(services), Layer.orDie);
+
   const life = yield* Layer.build(gateway);
   const d = yield* Gateway.pipe(Effect.provide(life));
+
   const value = grantText({
     id: "grant-hands",
     key: hands.raw,
@@ -233,8 +274,10 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
     sentAt: SENT,
     saw: { label: "hands", location: "test", code: "1234", method: "command", check: "touch", has: ["git"] },
   });
+
   const armored = yield* writeSshsig({ text: value, space: "fabrika-client", line: root.line, sign: root.sign });
   expect((yield* d.grant({ text: value, armored }))._tag, "the founder grants the hands key").toBe("applied");
+
   return {
     sql,
     d,
@@ -260,6 +303,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         // Worker: every socket here lives on the one object named `READER`.
         Effect.flatMap(({ to, stream, rev }) => {
           rung.push({ to, stream });
+
           return to === READER
             ? Effect.forEach([...drivers], (c) => Effect.ignore(c.ring(stream, rev)), { discard: true, concurrency: 1 })
             : Effect.void;
@@ -267,20 +311,29 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
       ),
     ),
   );
+
   const make = (url: string): MemorySocket => {
     // The client dials `<origin>/client/<fingerprint>/<tab>`, as the Worker's door reads it.
-    const [name = "", tab = ""] = (new URL(url).pathname.split("/client/")[1] ?? "").split("/").map(decodeURIComponent);
+    const [name = "", tab = ""] = Arr.map(
+      Str.split(Str.split(new URL(url).pathname, "/client/")[1] ?? "", "/"),
+      decodeURIComponent,
+    );
+
     // The gateway's own connection id, once its `connect` has made one; nothing reaches the gateway before.
     const client: { id: ConnectionId | null } = { id: null };
+
     const connected = Effect.suspend(() =>
       client.id === null ? Effect.fail(Answer.cases.refused.make({ reason: "no_session" })) : Effect.succeed(client.id),
     );
+
     const made: MemorySocket = new MemorySocket(url, {
       send: (frame) => Queue.offerUnsafe(work, Effect.ignore(Effect.suspend(() => c.frame(frame)))),
       closed: () => Queue.offerUnsafe(work, Effect.ignore(Effect.flatMap(connected, (id) => b.d.disconnect(id)))),
     });
+
     sockets.push(made);
     let attached: typeof Attached.Type = Attached.cases.new.make({ client: "", nonce: "" });
+
     const c = connection({
       reader: READER,
       session: url,
@@ -290,8 +343,9 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         attached = a;
       },
       send: (body) => {
-        if (lose.next > 0 && body.startsWith("{") && body.includes('"id"')) {
+        if (lose.next > 0 && Str.startsWith("{")(body) && Str.includes('"id"')(body)) {
           lose.next--;
+
           return;
         }
 
@@ -301,7 +355,8 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
       wait: (stream, after, reader) =>
         Effect.gen(function* () {
           const id = yield* connected;
-          const answer = stream.startsWith("target:")
+
+          const answer = Str.startsWith("target:")(stream)
             ? yield* b.d.route(id, "tasks.wait", { after }, reader)
             : yield* b.d.route(id, "ledger.wait", { stream, after }, reader);
 
@@ -311,6 +366,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
 
           if (answer._tag === "ok") {
             const { rev } = yield* Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(answer.result);
+
             return Waited.cases.ready.make({ rev });
           }
 
@@ -336,6 +392,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
                   has: checked.hello.has,
                   ...(checked.hello.build === undefined ? {} : { build: checked.hello.build }),
                 });
+
                 return Answer.cases.ok.make({
                   result: { identity: checked.identity, version: checked.version, ping: checked.ping },
                 });
@@ -346,6 +403,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
               Effect.catchCause(() => Effect.succeed(Answer.cases.refused.make({ reason: "unreachable" }))),
             ),
     });
+
     made.open();
     Queue.offerUnsafe(
       work,
@@ -355,11 +413,13 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         const nonce = yield* b.d.challenge(id);
         attached = Attached.cases.new.make({ client: id, nonce });
         drivers.add(c);
-        made.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
+        made.receive(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
       }).pipe(Effect.ignore),
     );
+
     return made;
   };
+
   return {
     socket: Layer.succeed(Socket.WebSocketConstructor, make),
     sockets,
@@ -373,6 +433,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
 /** A string store the journal writes through, kept across restarts, whose every value a law can read. */
 const strings = () => {
   const values = new Map<string, string>();
+
   const store = KeyValueStore.makeStringOnly({
     get: (key) => Effect.sync(() => values.get(key)),
     set: (key, value) => Effect.sync(() => void values.set(key, value)),
@@ -381,6 +442,7 @@ const strings = () => {
     size: Effect.sync(() => values.size),
     keys: Effect.sync(() => [...values.keys()]),
   });
+
   return { values, layer: Layer.succeed(KeyValueStore.KeyValueStore, store) };
 };
 
@@ -402,13 +464,16 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     // Every span the client makes, kept as the tracer under it makes it.
     const spans: Array<Tracer.Span> = [];
     const delegate = yield* Effect.tracer;
+
     const tracer = Tracer.make({
       span: (init) => {
         const span = delegate.span(init);
         spans.push(span);
+
         return span;
       },
     });
+
     const keys = Layer.succeed(ClientKey, {
       current: () =>
         Effect.succeed({
@@ -422,6 +487,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       claimPersist: Effect.succeed(false),
       persist: Effect.succeed(true),
     });
+
     const layers = Layer.mergeAll(
       d.socket,
       keys,
@@ -429,35 +495,43 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       cutJournal(s).pipe(Layer.provide(JournalStore.layer), Layer.provide(kept.layer)),
       Id.Generator.layer,
     );
+
     const boot = Effect.gen(function* () {
       const scope = yield* Scope.make();
+
       const booting = yield* start({ origin: ORIGIN, build: "hands-build", label: "hands" }).pipe(
         Effect.provide(layers),
         Effect.withTracer(tracer),
         Scope.provide(scope),
       );
+
       yield* booting.ready;
+
       return scope;
     });
+
     let scope = yield* boot;
     const requested: Array<string> = [];
     let n = 0;
 
     for (const cell of f.cells) {
       yield* pass(0);
+
       // A new task is asked for a process only when that process has no open task (0093): two open
       // tasks of one process wedge `tasks.take` (finding 2026-11-15-jobs-take-ambiguous-wedges).
       const tasks = yield* Effect.forEach(requested, (id) => b.tasks((j) => j.read(id)).pipe(Effect.orDie), {
         concurrency: 1,
       });
+
       const busy = new Set(
-        tasks.flatMap((task) =>
+        Arr.flatMap(tasks, (task) =>
           task.state._tag === "absent" || task.state._tag === "finished" || task.state._tag === "collected"
             ? []
             : [task.state.request.process],
         ),
       );
-      const free = f.processes.filter((p) => !busy.has(p));
+
+      const free = Arr.filter(f.processes, (p) => !busy.has(p));
       const moves = [...(free.length > 0 ? ["request"] : []), "run", "run", "drop", "lose", "restart"];
       const move = moves[cell.move % moves.length] ?? "run";
       done.add(move);
@@ -507,9 +581,10 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
 
     // Quiet now: nothing lost, nothing dropped, until every task the brain was asked for is finished.
     d.lose.next = 0;
+
     const finished = () =>
       Effect.forEach(requested, (id) => b.tasks((j) => j.read(id)).pipe(Effect.orDie), { concurrency: 1 }).pipe(
-        Effect.map((tasks) => tasks.every((task) => task.state._tag === "finished")),
+        Effect.map((tasks) => Arr.every(tasks, (task) => task.state._tag === "finished")),
       );
 
     for (let i = 0; i < 300 && !(yield* finished()); i++) {
@@ -530,37 +605,42 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     // E1: every parked wait was rung at the object its socket lives on. A wait that names another
     // reader is never answered on the Worker, so the hands would sleep through new work.
     expect(
-      d.rung.filter((r) => r.to !== READER),
+      Arr.filter(d.rung, (r) => r.to !== READER),
       "E1: every ring names the object the sockets live on",
     ).toEqual([]);
 
-    if (d.rung.some((r) => r.stream.startsWith("target:"))) {
+    if (Arr.some(d.rung, (r) => Str.startsWith("target:")(r.stream))) {
       done.add("ring:target");
     }
 
     // S1: every output a leak could reach, read whole, and every encoding of the private key.
     done.add(requested.length > 0 && (yield* finished()) ? "finished" : "unfinished");
     // The secrets law reads every stored row, as A12 does.
-    const tables = b.sql.exec("SELECT name FROM sqlite_master WHERE type='table'").map((row) => String(row.name));
+    const tables = Arr.map(b.sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (row) => String(row.name));
+
     const outputs: Record<string, unknown> = {
-      frames: d.sockets.map((socket) => socket.sent),
+      frames: Arr.map(d.sockets, (socket) => socket.sent),
       journal: [...kept.values.entries()],
-      ledger: tables.map((table) => b.sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)),
-      spans: spans.map((span) => ({ name: span.name, attributes: [...span.attributes] })),
+      ledger: Arr.map(tables, (table) => b.sql.exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`)),
+      spans: Arr.map(spans, (span) => ({ name: span.name, attributes: [...span.attributes] })),
     };
 
-    for (const [name, value] of focus === "S1" ? Object.entries(outputs) : []) {
-      const encoded = JSON.stringify(value, (_key, item: unknown) => (typeof item === "bigint" ? String(item) : item));
+    for (const [name, value] of focus === "S1" ? Rec.toEntries(outputs) : []) {
+      const encoded = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.Unknown, {
+          replacer: (_key, item: unknown) => (Predicate.isBigInt(item) ? String(item) : item),
+        }),
+      )(value);
 
       for (const secret of hands.secrets) {
         for (const form of [secret, encodeURIComponent(secret), Base64.encode(text(secret))]) {
-          expect(encoded.includes(form), `S1: the hands key's private half is not in ${name}`).toBe(false);
+          expect(Str.includes(form)(encoded), `S1: the hands key's private half is not in ${name}`).toBe(false);
         }
       }
     }
 
     expect(
-      d.sockets.some((socket) => socket.sent.length > 0),
+      Arr.some(d.sockets, (socket) => socket.sent.length > 0),
       "S1 read frames the client really wrote",
     ).toBe(true);
     yield* Scope.close(scope, Exit.void);
@@ -572,8 +652,12 @@ const law = (name: string, focus: "E1" | "S1", required: ReadonlyArray<string>, 
     () =>
       Effect.gen(function* () {
         const done = new Set<string>();
+        const context = yield* Effect.context();
+
+        // Each flow still gets its own fresh test clock.
         const check = (f: Flow) =>
-          Effect.runPromise(flow(f, focus, done).pipe(Effect.scoped, Effect.provide(TestClock.layer())));
+          Effect.runPromiseWith(context)(flow(f, focus, done).pipe(Effect.scoped, Effect.provide(TestClock.layer())));
+
         yield* Effect.tryPromise({
           try: () =>
             fc.assert(fc.asyncProperty(Flow, check), { seed: SEED, numRuns: runs, includeErrorInReport: true }),

@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e58-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:46:33-08:00",
+  "ended": "2026-11-15T20:52:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for judgment slice E58 of the Effect-check sweep (strictEffectProvide in oxlint-plugins/), our tooling, no pull request (owner ruling: the integrator folds this branch into fabrikalfa/effect-judgment). Counted 2 hits on origin/main at 37db01a, as the plan says, both in exam paths (oxlint-plugins/**), none in product files or PR 1366's files. Fixed 1 by hand: oxlint-plugins/script-reads.test.ts:38, a helper that ran the load scenario through Effect.runPromise with Effect.provide(NodeServices.layer), is now @effect/vitest's layer(NodeServices.layer)(\"load\", ...) with it.effect, the shape .patterns/effect-tests-run-in-it-effect.md names for a layer a block shares; the platform layer holds no state, so sharing it changes no law, and it.effect still gives the test a scope that removes its temp folder. The law asserts exactly what it did. Left 1: oxlint-plugins/parallel.ts:163, NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer))) under import.meta.main, the script's own entry point, where the code is right and the checker's message itself says to disable it. It is the same class E30's tests step stopped for the owner (8 runMain entry points in exam scripts), so it waits on that ruling and on E0 (no-bare-disable learning the reasoned @effect-diagnostics line, law L4), not a fix here. Probe, run once and undone: the line '// @effect-diagnostics-next-line strictEffectProvide:off -- the script's own entry point' above it took the count to 0, so the checker's parser does accept the ' -- reason' tail.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Count and recount: effect-tsgo diagnostics --format json --project oxlint-plugins/tsconfig.json with an --lspconfig setting only strictEffectProvide to error and includeSuggestionsInTsc true; nothing written to a tsconfig; after the fix 1 hit left and no other check at error in the folder. Tests at the commit's parent tree plus the change: vitest oxlint-plugins/script-reads.test.ts, 12 passed. --changed origin/main was refused by the config as a broad run, so the one narrow path stands for it. oxlint-plugins' own typecheck (tsc --noEmit -p oxlint-plugins) passed. pnpm format, pnpm lint (17 parts passed) and the list ratchet passed. @effect/vitest is imported from the root package's devDependencies, as .github/ci/shard-rows.test.ts already does; oxlint-plugins/package.json is unchanged, so the lockfile is too.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/script-reads.test.ts: load > scenario: a folder on disk, since nothing else checks what load reads and the lint and the Vitest plugin both trust it",
+      "plant": "oxlint-plugins/script-reads.mjs:159, exists answers isDirectory() in place of isFile(); expected [ false, true, false, true ] to deeply equal [ true, false, false, false ]",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-start-law-count-hides-from-runs-from-depth",
+  "date": "2026-11-16",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/apps/fabrika/src/runtime.laws.integration.test.ts",
+    "line": 435
+  },
+  "says": "In next/, a law written with StartsTest.law runs a fixed 100 cases that sit inside next/packages/libfabrika/src/settings/StartsTest.ts, so the lint rule fabrika/runs-from-depth cannot see the count, and a law over real IO that calls it breaks decision 0535: 'L4 child grants pass through the recorded start to ChildrenLedger without entering ledger entries or receipts' still runs 100 cases at every depth.",
+  "proof": "At origin/main, StartsTest.ts line 21 built its parameters as { numRuns: 100, ...examples }, and runtime.laws.integration.test.ts line 435 calls StartsTest.law over a world that opens node:sqlite, which the rule counts as real IO (oxlint-plugins/runs-from-depth.test.ts, OPENS). pnpm lint passes on both files. T753 L16 in runtime-recovery.laws.integration.test.ts had the same gap and took 58.8 s of its 60 s limit on scheduled run 43823291196, leg tests (4); the pull request for that finding fixes only L16.",
+  "cost": "A heavy law over real IO runs its full count in a cloud box or a branch proof run, where fast depth should cut it, and can time out on a slow machine as T753 L16 did.",
+  "head": "5c94f12f4cb9fdea56da49bfbfafded95afa12bd",
+  "ticket": null,
+  "pr": null
+}

@@ -7,15 +7,20 @@
  * The key type is `sk-ecdsa-sha2-nistp256@openssh.com`, a P-256 key tied to a relying party (rp).
  * The signature type is `webauthn-sk-ecdsa-sha2-nistp256@openssh.com`. Only WebCrypto is used, so
  * a browser tab runs it as Node does.
- *
- * @stability unstable
  */
-import { Effect, Option, Schema } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 
 const KEY = "sk-ecdsa-sha2-nistp256@openssh.com";
+
 const SIG = "webauthn-sk-ecdsa-sha2-nistp256@openssh.com";
+
 const text = (bytes: Uint8Array) => new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 
 const keyParts = (blob: Uint8Array) =>
@@ -26,6 +31,7 @@ const keyParts = (blob: Uint8Array) =>
     const point = yield* r.string();
     const rp = yield* r.string();
     yield* holds(point.length === 65 && point[0] === 4 && rp.length > 0 && r.rest() === 0);
+
     return { point, rp };
   });
 
@@ -38,11 +44,10 @@ const keyParts = (blob: Uint8Array) =>
  * `nistp256`, hold a 65-byte uncompressed point, a non-empty rp and nothing after. Any other line
  * gives `none`.
  *
- * @stability unstable
  * @category getters
  */
 export const passkeyBlob = (line: string): Option.Option<Bytes> => {
-  const [kind, base64] = line.split(/\s+/);
+  const [kind, base64] = Str.split(/\s+/)(line);
 
   if (kind !== KEY || base64 === undefined) {
     return Option.none();
@@ -61,7 +66,6 @@ export const passkeyBlob = (line: string): Option.Option<Bytes> => {
  *
  * Gives `none` when the line is not a well-formed passkey line, or when its rp is not valid UTF-8.
  *
- * @stability unstable
  * @category getters
  */
 export const passkeyRp = (line: string): Option.Option<string> =>
@@ -78,7 +82,6 @@ export const passkeyRp = (line: string): Option.Option<string> =>
  * Use to check a line once, where it comes in. A line that `passkeyBlob` cannot read fails with
  * "an OpenSSH P-256 passkey line".
  *
- * @stability unstable
  * @category models
  */
 export const PasskeyLine = Schema.String.check(
@@ -99,6 +102,7 @@ const fixed = (n: Bytes): Option.Option<Bytes> => {
 
   const out = new Uint8Array(32);
   out.set(value, 32 - value.length);
+
   return Option.some(out);
 };
 
@@ -108,6 +112,7 @@ const pair = (bytes: Bytes) =>
     const a = yield* fixed(yield* r.string());
     const b = yield* fixed(yield* r.string());
     yield* holds(r.rest() === 0);
+
     return join(a, b);
   });
 
@@ -140,7 +145,6 @@ const Client = Schema.fromJsonString(
  * - The ECDSA P-256 signature verifies over the authenticator data and the SHA-256 of the client
  *   data.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
@@ -163,6 +167,7 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
       r.rest() === 0 && (flags & 5) === 5 && (flags & 0x62) === 0 && !((flags & 16) !== 0 && (flags & 8) === 0),
     );
     yield* holds(((flags & 128) !== 0) === extensions.length > 0);
+
     return { ...key, raw, flags, counter, origin, client, extensions };
   });
 
@@ -171,10 +176,11 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
   }
 
   const p = parsed.value;
+
   return yield* Effect.try(() => ({
     rp: text(p.rp),
     origin: text(p.origin),
-    client: Schema.decodeUnknownSync(Client)(text(p.client)),
+    client: Schema.decodeSync(Client)(text(p.client)),
   })).pipe(
     Effect.flatMap(
       Effect.fnUntraced(function* ({ rp, origin, client }) {
@@ -191,18 +197,21 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
         const hash = new Uint8Array(yield* subtle("digest", "SHA-256", p.rp));
         const clientHash = new Uint8Array(yield* subtle("digest", "SHA-256", p.client));
         const auth = join(hash, new Uint8Array([p.flags]), u32(p.counter), p.extensions);
+
         const key = yield* subtle("importKey", "raw", p.point, { name: "ECDSA", namedCurve: "P-256" }, false, [
           "verify",
         ]);
+
         const ok = yield* subtle("verify", { name: "ECDSA", hash: "SHA-256" }, key, p.raw, join(auth, clientHash));
+
         return ok ? { origin, rp, be: (p.flags & 8) !== 0, bs: (p.flags & 16) !== 0, counter: p.counter } : null;
       }),
     ),
-    Effect.catch(() => Effect.succeed(null)),
+    Effect.orElseSucceed(() => null),
   );
 });
 
-class BadAssertion extends Schema.TaggedError<BadAssertion>()("BadAssertion", {
+class BadAssertion extends Schema.TaggedError<BadAssertion, { readonly brand: unique symbol }>()("BadAssertion", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
@@ -222,7 +231,6 @@ class BadAssertion extends Schema.TaggedError<BadAssertion>()("BadAssertion", {
  * match the key's rp, or the built signature does not pass `checkPasskey`. A WebCrypto error also
  * fails the effect.
  *
- * @stability unstable
  * @category constructors
  */
 export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(function* (a: {
@@ -235,6 +243,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
   };
 }) {
   const { authenticatorData: auth, clientDataJSON: client, signature: der } = a.assertion;
+
   const parsed = Option.gen(function* () {
     const blob = yield* passkeyBlob(a.line);
     const key = yield* keyParts(blob);
@@ -252,41 +261,46 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
     }
 
     yield* holds(r.rest() === 0 && auth.length >= 37);
+
     return { blob, key, ints };
   });
 
   if (Option.isNone(parsed)) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   const { blob, key, ints } = parsed.value;
+
   const decoded = yield* Effect.try({
-    try: () => Schema.decodeUnknownSync(Client)(text(client)),
-    catch: (cause) => new BadAssertion({ cause }),
+    try: () => Schema.decodeSync(Client)(text(client)),
+    catch: (cause) => BadAssertion.make({ cause }),
   });
+
   const rpHash = new Uint8Array(yield* subtle("digest", "SHA-256", key.rp));
 
   if (!same(rpHash, auth.slice(0, 32))) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   const signature = join(
     field(SIG),
-    field(join(...ints.map(field))),
+    field(join(...Arr.map(ints, field))),
     auth.slice(32, 37),
     field(decoded.origin),
     field(client),
     field(auth.slice(37)),
   );
+
   const digest = new Uint8Array(yield* subtle("digest", "SHA-512", utf8(a.text)));
   const challenge = join(utf8("SSHSIG"), field("fabrika-client"), field(""), field("sha512"), field(digest));
+
   const checked = yield* checkPasskey(blob, signature, challenge, {
     rp: text(key.rp),
     origins: [decoded.origin],
   });
 
   if (checked === null) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   return armor(

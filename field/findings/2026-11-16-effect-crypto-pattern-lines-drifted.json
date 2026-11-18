@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-effect-crypto-pattern-lines-drifted",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": null,
+  "rule": "doc_drift",
+  "location": {
+    "path": ".patterns/effect-crypto-through-services.md",
+    "line": 75
+  },
+  "says": "Line references drifted after the merge of main: crypto.test-support.ts:27 and :56 (now :29 and :59), Archive.ts:40-48 and :42-45 (now :36-44 and :38-41), oxlint-plugins/plants.test.ts:634 (the M1 describe is now at :669).",
+  "proof": "On fabrikalfa/mock-gateway-processes-telemetry-s1 at ee70b0ccf the doc cites crypto.test-support.ts:27 and :56, Archive.ts:40-48 and :42-45, and plants.test.ts:634; at that head paused and rejecting start at crypto.test-support.ts:29 and :59, sha256 is Archive.ts:36-44 with the quoted lines at :38-41, and the M1 describe is at plants.test.ts:669.",
+  "cost": "Re-ground the cited lines with the write-pattern skill when the doc names the second rule. Left, a reader who follows the doc's line numbers lands on the wrong code.",
+  "head": "ee70b0ccf68b0e81a0d99a969699be8a232dcb52",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null
+}

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-layers-test-rej-left-unapplied",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/apps/fabrika/src/exam/layers.integration.test.ts.rej",
+    "line": 1
+  },
+  "says": "Main's PR 1032 (f3d9d8f6) committed a patch's rejected hunks as layers.integration.test.ts.rej and left the layers test without them, so the 'module put beside the runtime' law no longer expects the next-email row it added to layer-rules.json and is red.",
+  "proof": "git show f3d9d8f6 --stat lists next/apps/fabrika/src/exam/layers.integration.test.ts.rej (45 lines) beside a 1-line change to the test. On PR 1504's moved copy, oxlint-plugins/layers.test.ts, the law receives 'next-access -> next-email [sideways]' and 'next-email -> next-access [sideways]' beyond its 3 expected edges, exactly the edges the .rej's third hunk adds. Main runs the old copy only in its full run (0602), so no pull request run saw it.",
+  "cost": "Main's full run is red on this law, and any pull request whose run reaches the law inherits the red; a stray .rej file sits in the exam folder.",
+  "head": "4909b55df880ce09d9667a0e1cd3d782e5bb354d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1032"
+}

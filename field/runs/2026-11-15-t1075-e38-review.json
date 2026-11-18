@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e38-review",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T21:50:13-08:00",
+  "ended": "2026-11-15T22:32:23-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of 51d034f, judgment slice E38 of the Effect-checker sweep (preferSchemaOverJson, ticket 1075, plan row E38 in docs/plan/quests/effect-sweep-PLAN.md), in next/ and our tooling: merge-ready. The diff removes exactly 379 JSON.parse or JSON.stringify calls (341 in exam paths at ee56fee, 38 in product files at 51d034f), the plan's count, and adds none. A recount with effect-tsgo diagnostics at preferSchemaOverJson error on the ten tsconfigs E38 reaches gives 141 hits, 0 in E38's folders: 140 in lib:cloudflare, lib:gateway and lib:runtime (row E84) and 1 at next/packages/vitest/src/Recorder.test.ts:168, added by pull request 1401 after the plan's count and in no row. The Formatter.formatJson swaps write the same bytes as JSON.stringify for plain data, read from effect 4.1.3's source (it calls JSON.stringify with a replacer that only changes Error, bigint, cycles and Redactable values) and probed at the branch: nested objects, shared references, tab indent and strings match. Snapshot.ts's hash keeps its key-sorting replacer through Schema.fromJsonString, whose encoder is JSON.stringify(input, replacer, space), so saved hashes do not change; Effect.orDie keeps the old throw-as-defect. dev.ts keeps a ControlError on an encode failure. chain.ts's SavedQuest decode matches drive.ts's Quest fields, ignores the other keys, and on a bad file prints the path and reason and exits 2 (decision 0215). host.test.ts's readState keeps every key (probed: lane and unknown keys survive), so no assertion was narrowed; matcher counts are unchanged in every changed file. No disable or ignore comment, no comment line lost, no lock line (as the sibling judgment slices), no file of pull request 1366's 65.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 42,
+  "note": "Read-only apart from this row. Ran on Node 26.13.0 at 51d034f: 120 test files one at a time under nice -n 15 --maxWorkers=3 (every changed non-visual test and every test that imports a changed file, integration laws included, with ssh-keygen present): 1520 passed, 1 skipped by design (T502 home writer). loosening.sh f7169af HEAD lists 142 hits, 99 unrecognized import-line changes and 43 removed expects, each an expect line whose message argument or JSON read changed: matcher counts per file are equal before and after, so no law is loosened; loosening.sh 104c44a HEAD has 0 hits. One pnpm typecheck and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passed. The ten .visual. tests and the P19 host check were judged by reading only. No plant was committed; the slice adds no law. Merge with origin/main at bcad008 is clean.",
+  "plants": [],
+  "step": "review"
+}

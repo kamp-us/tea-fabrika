@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1151-plan-q18-scan",
+  "ticket": "kamp-us/tea-fabrika#1151",
+  "pr": null,
+  "started": null,
+  "ended": null,
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "step": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Approved bounded next/ Q18 assertion repair. One local set preserves the same exact stepped-ID existence rule; no product quota change. Actual Linux Q18 and final review remain required.",
+  "note": null,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

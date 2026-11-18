@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-next-email-row-has-no-imports",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "layer-rules.json",
+    "line": 256
+  },
+  "says": "The next-email row main's PR 1032 added to layer-rules.json has no imports list, which the layers law 'every library row names the rows it may import' refuses for a libfabrika row, so email's files may import every lower row.",
+  "proof": "In layer-rules.json at main, the row named next-email holds only name, layer 6 and paths next/packages/libfabrika/src/email. oxlint-plugins/layers.test.ts's pinned law fails on it: expected [ { name: 'next-email', ... } ] to deeply equal []. The .rej beside the old test says what was meant: email reads access and the ledger, uses transport's SSHSIG code, and may not import the runtime.",
+  "cost": "The law stays red until P36's owner names email's imports; the list is a design call of that plan, not of the pull request that found it.",
+  "head": "4909b55df880ce09d9667a0e1cd3d782e5bb354d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1032"
+}

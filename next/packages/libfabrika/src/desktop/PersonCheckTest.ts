@@ -1,12 +1,12 @@
 // Test-owned sibling Layer. Exhaustion fails closed instead of inventing another checked person.
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { Answer, PersonCheck, PersonCheckError, Unavailable } from "./PersonCheck.ts";
 
 /**
  * Creates a `PersonCheck` layer that gives one scripted answer per ask, in order. An `unavailable` entry, or an
  * ask past the end of the list, fails with `PersonCheckError`.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (
@@ -14,6 +14,7 @@ export const layer = (
 ): Layer.Layer<PersonCheck> =>
   Layer.sync(PersonCheck, () => {
     let next = 0;
+
     return PersonCheck.of({
       ask: Effect.fn("PersonCheckTest.ask")(function* (_reason: string) {
         const answer = answers[next++];
@@ -26,8 +27,8 @@ export const layer = (
           return Answer.cases.declined.make({});
         }
 
-        return yield* new PersonCheckError({
-          reason: new Unavailable({ cause: new Error("No test check available") }),
+        return yield* PersonCheckError.make({
+          reason: Unavailable.make({ cause: new Error("No test check available") }),
         });
       }),
     });

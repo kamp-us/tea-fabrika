@@ -1,7 +1,15 @@
 // P33 review round 2, one rule instead of single guarded ids: every event the brain writes about a
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Result, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
 import { Mailbox } from "./Mailbox.ts";
@@ -56,17 +64,20 @@ const examples =
 const nameInput = Start.cases.first.fields.name.check(Schema.isPattern(/^[a-z][a-z0-9._:-]{0,30}$/));
 
 const validName = Arbitrary.schema(nameInput).pipe(
-  Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !name.startsWith("client:")),
+  Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !Str.startsWith("client:")(name)),
 );
 
 const textInput = Schema.NonEmptyString.check(Schema.isMaxLength(40));
+
 // Cover complete names 1..31, processes/ plus 0..50 characters, refs and
 // caller keys 1..40. Fixed-depth JSON below keeps width/string length 10.
 const options = { arbitrary: { seed: 119120, runs: 20, size: 60 } };
 
 const POLICY = { reason: "crashed", crashes: 1, until: 0 };
+
 const toW = Recipient.cases.process.make({ process: W });
-const brainSide = (process: string) => process === "processes" || process.startsWith("processes/");
+
+const brainSide = (process: string) => process === "processes" || Str.startsWith("processes/")(process);
 
 const seed = (store: Storage, name = "counter:1") =>
   Effect.gen(function* () {
@@ -95,6 +106,7 @@ const plant = (store: Storage, stream: string, id: string, event: { readonly _ta
 const downs = (letters: ReadonlyArray<{ readonly m: unknown; readonly by: string }>) =>
   letters.flatMap((letter) => {
     const down = Schema.decodeUnknownOption(Down)(letter.m);
+
     return letter.by === BRAIN && down._tag === "Some" ? [down.value] : [];
   });
 
@@ -104,12 +116,13 @@ describe("P33, every process event lives on a stream only the brain may write", 
     [
       Arbitrary.schema(nameInput).pipe(
         Arbitrary.filter(
-          (name) => !["processes", "gateway", "watcher:1"].includes(name) && !name.startsWith("client:"),
+          (name) => !["processes", "gateway", "watcher:1"].includes(name) && !Str.startsWith("client:")(name),
         ),
       ),
     ],
     examples([["counter:1"]], (name: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* seed(store, name);
         yield* monitor(store);
@@ -123,8 +136,8 @@ describe("P33, every process event lives on a stream only the brain may write", 
           }),
         ).pipe(Effect.provide(manager(store, brain(), ids(B).next)));
         const rows = store.rows();
-        const events = rows.filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));
-        expect(new Set(events.map((row) => row._tag))).toEqual(new Set(Object.keys(ProcessEvent.cases)));
+        const events = rows.filter((row) => Rec.has<string, unknown>(ProcessEvent.cases, row._tag));
+        expect(new Set(events.map((row) => row._tag))).toEqual(new Set(Rec.keys(ProcessEvent.cases)));
         expect(events.filter((row) => !brainSide(row.stream))).toEqual([]);
         // The start request's own id is a lifecycle line too.
         expect(rows.find((row) => row.id === "start:counter:1")?.stream).toSatisfy(brainSide);
@@ -138,6 +151,7 @@ describe("P33, every process event lives on a stream only the brain may write", 
     const brainIds = [pid("exited", A), pid("down", A, POLICY), pid("restarted", B)];
     const writable = ["counter:1", "counter:1/inbox", "watcher:1", "watcher:1/inbox", "client:window-a/inbox", "notes"];
     const spots = writable.flatMap((stream) => brainIds.map((id) => ({ stream, id })));
+
     // Boolean selection keeps every nonempty subset without replacement, like the old subarray.
     const planted = Arbitrary.schema(
       Schema.Array(Schema.Boolean).check(Schema.isMinLength(spots.length), Schema.isMaxLength(spots.length)),
@@ -145,6 +159,7 @@ describe("P33, every process event lives on a stream only the brain may write", 
       Arbitrary.map((chosen) => spots.filter((_, n) => chosen[n])),
       Arbitrary.filter((chosen) => chosen.length > 0),
     );
+
     it.effect.prop(
       "an exit completes and its DOWN arrives whatever a client pre-wrote under the brain's ids",
       [planted],
@@ -162,22 +177,27 @@ describe("P33, every process event lives on a stream only the brain may write", 
           expect(downs(yield* fresh(store))).toEqual([
             Down.make({ ref: "watch:1", process: A, reason: CRASHED, to: toW }),
           ]);
+
           const next = yield* ProcessManager.use((p) =>
             Effect.gen(function* () {
               yield* p.down(A, POLICY, from());
+
               return yield* p.start(again(A), from());
             }),
           ).pipe(Effect.provide(manager(store, brain(), ids(B).next)));
+
           expect(next.process).toBe(B);
         }),
       { arbitrary: { seed: 119120, runs: 25 } },
     );
   }
+
   it.effect.prop(
     "Mailbox.send refuses any letter whose inbox is under processes/",
     [Schema.String.check(Schema.isPattern(/^processes(?:\/[\s\S]{0,50})?$/))],
     examples([["processes"], ["processes/counter:1"], ["processes/a"]], (to: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         const answer = yield* Mailbox.use((mailbox) => mailbox.send(to, "letter:1", 1, from()));
         expect(answer._tag).toBe("refused");
@@ -200,6 +220,7 @@ describe("P33, every process event lives on a stream only the brain may write", 
     ([tail]) => {
       const store = storage();
       const next = ids(A, B);
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(first("first", tail), from());
@@ -223,13 +244,16 @@ describe("P33, every process event lives on a stream only the brain may write", 
     ([name]) => {
       const store = storage();
       let winner: ReadonlyArray<Entry> = [];
+
       const next = Effect.gen(function* () {
         yield* ProcessManager.use((p) => p.start(first("winner", name), from())).pipe(
           Effect.provide(manager(store, brain(), ids(A).next)),
         );
         winner = store.rows();
+
         return B;
       }).pipe(Effect.orDie);
+
       return Effect.gen(function* () {
         const answer = yield* ProcessManager.use((p) => Effect.result(p.start(first("loser", name), from())));
         expect(Result.isFailure(answer)).toBe(true);
@@ -252,6 +276,7 @@ describe("P33, signal ids belong to the brain alone", () => {
     JSON.stringify(["DOWN", "any", "spelling"]),
     JSON.stringify(["DOWN"]),
   ];
+
   it.effect.prop(
     "Mailbox.send refuses signal ids, as the gateway does",
     [
@@ -263,6 +288,7 @@ describe("P33, signal ids belong to the brain alone", () => {
       space.map((id): [string] => [id]),
       (id: string) => {
         const store = storage();
+
         return Effect.gen(function* () {
           yield* seed(store);
           const before = store.rows();
@@ -312,6 +338,7 @@ describe("P33, signal ids belong to the brain alone", () => {
     [Down.fields.ref.check(Schema.isMaxLength(40))],
     examples([["watch:1"]], (ref: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* seed(store);
         yield* monitor(store, ref);
@@ -340,10 +367,11 @@ describe("P33, an inbox read is total", () => {
       ref: Schema.optionalKey(json(2)),
       to: Schema.optionalKey(json(2)),
     }),
-    Schema.Struct({ m: Schema.Struct({ _tag: Schema.Literal("DOWN"), ref: json(1) }) }),
+    Schema.Struct({ m: Schema.TaggedStruct("DOWN", { ref: json(1) }) }),
   ]);
-  const hasM = (body: unknown): body is { readonly m: unknown } =>
-    typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");
+
+  const hasM = (body: unknown): body is { readonly m: unknown } => Predicate.isObject(body) && Rec.has(body, "m");
+
   // Plant: drop nested mail in envelopes with 2 to 4 keys. Shrinks to {ref: 0, m: []}.
   it.effect.prop(
     "junk send bodies never fail a receive, and later receives on that inbox still work",
@@ -359,12 +387,13 @@ describe("P33, an inbox read is total", () => {
             ledger.append("watcher:1/inbox", `junk:${n}`, {
               ...from({ by: CLIENT }),
               _tag: "send",
+              // SAFETY: `body` is a junk letter drawn as JSON on purpose, to see the inbox take it as data.
               body: body as Schema.Json,
             }),
           ).pipe(Effect.provide(manager(store)));
 
           if (placed._tag === "placed" && hasM(body)) {
-            want.push(JSON.stringify(body.m));
+            want.push(Formatter.formatJson(body.m));
           }
         }
 
@@ -383,19 +412,23 @@ describe("P33, an inbox read is total", () => {
 describe("P33, every brain-written line records who asked", () => {
   const added = (store: Storage, before: ReadonlyArray<Entry>) =>
     store.rows().filter((row) => !before.some((old) => old.rev === row.rev));
+
   const asks = (rows: ReadonlyArray<Entry>, key: string) => {
     expect(rows.length).toBeGreaterThan(0);
 
     for (const row of rows) {
       expect(row.by).toBe(BRAIN);
+      // SAFETY: each brain row here answers an `asked` call and keeps the key in its body.
       expect((row.body as { readonly asked?: unknown }).asked).toBe(key);
     }
   };
+
   it.effect.prop(
     "start, exit, monitor and demonitor keep the caller's own key as asked",
     [textInput, textInput],
     examples([[CLIENT, "SHA256:watcher-key"]], (clientKey: string, watcherKey: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         let before = store.rows();
         yield* ProcessManager.use((p) => p.start(first(), from({ by: clientKey }))).pipe(
@@ -425,11 +458,12 @@ describe("P33, every brain-written line records who asked", () => {
     "asked is kept out of the trust check: another writer's line naming the brain counts for nothing",
     [
       Arbitrary.schema(nameInput).pipe(
-        Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !name.startsWith("client:")),
+        Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !Str.startsWith("client:")(name)),
       ),
     ],
     examples([["counter:1"]], (name: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* plant(store, "processes", "forged:registered", {
           _tag: "registered",
@@ -438,11 +472,13 @@ describe("P33, every brain-written line records who asked", () => {
           owner: { _tag: "brain" },
           asked: BRAIN,
         });
+
         const started = yield* Effect.result(
           ProcessManager.use((p) => p.start(first("start:counter:1", name), from())).pipe(
             Effect.provide(manager(store, brain(), ids(A).next)),
           ),
         );
+
         expect(Result.isSuccess(started)).toBe(true);
 
         if (Result.isSuccess(started)) {
@@ -460,6 +496,7 @@ describe("P33, a process name never meets a gateway stream", () => {
     [Schema.Literals(["gateway", "processes"])],
     examples([["gateway"]], (name: string) => {
       const store = storage();
+
       return Effect.gen(function* () {
         const answer = yield* Effect.result(ProcessManager.use((p) => p.start(first("start:gateway", name), from())));
         expect(Result.isFailure(answer)).toBe(true);

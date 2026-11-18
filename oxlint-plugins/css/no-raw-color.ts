@@ -63,6 +63,7 @@ export default plugin("no-raw-color", (root, fire) => {
     const named = decl.prop.startsWith("--") || colorProperty.test(decl.prop.replace(/^-(?:webkit|moz|ms|o)-/i, ""));
     const forced = media(decl, "forced-colors", "active");
     let raw = false;
+
     const check = (nodes: valueParser.Node[], names: boolean) =>
       valueParser.walk(nodes, (node) => {
         if (node.type === "function") {
@@ -76,6 +77,7 @@ export default plugin("no-raw-color", (root, fire) => {
           }
 
           check(node.nodes, names || colorFunction.test(node.value));
+
           return false;
         }
 
@@ -92,6 +94,7 @@ export default plugin("no-raw-color", (root, fire) => {
           raw = true;
         }
       });
+
     check(valueParser(decl.value).nodes, named);
 
     if (raw) {

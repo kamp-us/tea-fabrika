@@ -1,7 +1,5 @@
 /**
  * The SQL layer for `CodeStore`: one `code` table of hash and source, made on first use.
- *
- * @stability unstable
  */
 import { Effect, Layer, Option, Schema } from "effect";
 import type { Sql } from "../Sql.ts";
@@ -19,7 +17,6 @@ const stored = <A>(step: () => A) =>
  * A failed statement fails with the `Storage` reason; a row that does not decode as a `BuiltProgram`,
  * its hash checked, fails with the `BadRow` reason.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (sql: Sql): Layer.Layer<CodeStore> =>
@@ -33,6 +30,7 @@ export const layer = (sql: Sql): Layer.Layer<CodeStore> =>
     get: Effect.fn("code.get")(function* (hash: string) {
       const row = yield* stored(() => {
         sql.exec("CREATE TABLE IF NOT EXISTS code (hash TEXT PRIMARY KEY, source TEXT NOT NULL)");
+
         return sql.exec("SELECT hash,source FROM code WHERE hash=?", hash)[0];
       });
 
@@ -43,6 +41,7 @@ export const layer = (sql: Sql): Layer.Layer<CodeStore> =>
       const code = yield* Schema.decodeUnknownEffect(BuiltProgram)(row).pipe(
         Effect.mapError((cause) => new CodeStoreError({ reason: new BadRow({ cause }) })),
       );
+
       return Option.some(code);
     }),
   });

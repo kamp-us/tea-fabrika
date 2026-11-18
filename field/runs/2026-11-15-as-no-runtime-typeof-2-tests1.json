@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-as-no-runtime-typeof-2-tests1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T21:48:11-08:00",
+  "ended": "2026-11-15T22:14:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step of anti-slop judgment slice AS-no-runtime-typeof-2 (decision 0563 and its amendment), in next/ and our tooling. Rule anti-slop/no-runtime-typeof forced to error in a scratch config outside the repo over the slice's 18 folders, on origin/main at bcad0080d. Hits met: 288 in all; 39 in pull request 1366's files (never touched, waiting on 1366); 249 net, of which 184 in exam paths (exam-paths.json) and 65 in product files. Fixed in exam paths: 171. By tool: a scratch codemod outside the repo fixed 155 (typeof x === \"string\" and its kin to Effect's Predicate guards, typeof x === \"object\" && x !== null to Predicate.isObjectOrArray, the same with !Array.isArray to Predicate.isObject, expect(typeof x).toBe(t) to expect(x).toBeTypeOf(t)); hand edits fixed 16 (three typeof reads in one toEqual split into three toBeTypeOf, a mapped typeof into expect.any(Number), assert.equal(typeof f, \"function\") into assert.ok(Predicate.isFunction(f)), the string-or-number id label in two coverage keys, a typeof list in toContain into one Predicate check with a message, object-or-function into Predicate.isObjectKeyword, and the string-or-path segment label in two Settings.test.ts lines; two codemod narrowings that lost their type, in compiler.ts and RunnerAdmissionTest.ts, were then reshaped by hand). Effect's own node_modules/effect/AGENTS.md names the Predicate module as the runtime guard to use. Left in exam paths: 13, listed in note, none fixed because the right line is the old code itself or a type label, whose exception is a 0563 ignore line, and such a line fails lint (reportUnusedDisableDirectives) until the folder's block names the rule, which the owner ruled comes later with the locks. No disable line was added. No assertion was deleted or narrowed, no law loosened, no .oxlintrc.json change. Product hits left for the build: 65.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/ledger/Ledger.types.test.ts: the remote layer's append, read and wait are functions (rewritten from one typeof list into three toBeTypeOf)",
+      "plant": "next/packages/libfabrika/src/ledger/LedgerRemote.ts: wait set to the number 7",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 26,
+  "note": "Left in exam paths (13): next/packages/libfabrika/src/runtime/Program.test.ts:993, 996, 999, 1002 (2), 1004, 1359, 1368 (2) and next/packages/libfabrika/src/transport/Connection.test.ts:576 (2) are the T737 oracles, independent copies of the guards before Program and Connection moved to Predicate. Law D4 checks that the product makes the same reads in order as the old guard, and the old guard read u.update twice; a Predicate rewrite read it once and D4 went red, so these stay verbatim. next/packages/libfabrika/src/cloudflare/supervision.laws.integration.test.ts:53 and next/packages/libfabrika/src/node/dev/supervision-spans.integration.test.ts:346 compute the thrown value's JS type as the label ProgramDown.errorClass writes (the same expression as product next/packages/libfabrika/src/runtime/Program.ts:574); nothing is narrowed. The fit for all 13 is the 0563 ignore line with its reason, as the JSON.parse oracle beside them already has, once the lock turns the rule on there. A whole pnpm lint fails only on oxlint-plugins/anti-slop.ts's audit asking to add next/packages/libfabrika/src/*, src/access/**, next/programs/checklist/**, counter/** and pipeline/** to the rule's block: those folders are now at zero, and the lock is ruled for a later pull request. Every other lint step passed. One pnpm typecheck ran twice (the first showed two narrowings that lost their type; fixed): exit 0 in all 30 projects. Tests run at the working tree on bcad0080d: 60 plain test files that are touched or import a touched suite, 553 tests, all green after the oracle fix (the two files rerun after it, 50 tests, green). The .integration. and .visual. files touched (17) and the suites only they run were not run here: the vitest config refuses them locally (decision 0178); a scheduled.yaml run on the branch proves them.",
+  "step": "tests"
+}

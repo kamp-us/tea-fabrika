@@ -47,9 +47,10 @@ location; the kept total is recorded and has no limit (owner, 2026-11-12).**
 
 - The window is the same rolling minute the recovery write allowance uses. The account keeps bytes
   beside write counts in its timestamp groups.
-- The settings are `limits.recovery.process.bytes` and `limits.recovery.project.bytes`, in bytes
-  per minute. Their defaults come from slice 4's measurement by the plan's formula: 207,410 and
-  74,080.
+- The setting is `limits.recovery`, declared in
+  `next/packages/libfabrika/src/settings/Declarations.ts`; its fields `process.bytes` and
+  `project.bytes` are in bytes per minute. Their defaults come from slice 4's measurement by the
+  plan's formula, and are the file's, not restated here.
 - The kept total per name and location is written on every recovery write, so a slow leak can be
   seen and asked about later. Nothing reads it to refuse a write.
 - A fault from the rate is cleared as slice 4's plan says, by a checked person restart, never by
@@ -63,7 +64,7 @@ location; the kept total is recorded and has no limit (owner, 2026-11-12).**
 ## Consequences
 
 - 0147's sketch showed the reserved room as one total (`reserved: 64`). For bytes that is now a
-  rate. The rest of 0147 holds.
+  rate.
 - How the object that holds these rows stays bounded is 0200's answer, a roll or a seal at its
   cap. This decision only says the kept total never refuses a recovery write.
 - Cost: a slow leak in recovery writes is not stopped, only recorded. Whole-object storage is the

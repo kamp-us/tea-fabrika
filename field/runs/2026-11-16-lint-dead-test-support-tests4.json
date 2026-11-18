@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-lint-dead-test-support-tests4",
+  "ticket": "lint-dead-test-support",
+  "pr": null,
+  "started": "2026-11-16T00:35:35-08:00",
+  "ended": "2026-11-16T00:44:14-08:00",
+  "parent": "2026-11-16-lint-dead-test-support-review3",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests round 4 for lead tooling slice lint-dead-test-support, branch fabrikalfa/lint-dead-test-support, from 9c8dd2d, after the owner ruled that code-graph is patched locally and 0006 stays whole: an export of a .test-support.ts file that nothing uses must be reported. New law 4 in next/apps/fabrika/src/exam/unreachable.integration.test.ts, 'an export of a .test-support.ts file that nothing uses is flagged', in the file's it.effect.prop shape (Folder, Names and the Segment filter with NEVER_JUDGED, runsFor, no seed). Each case plants a helper file at next/'s top and one in a generated nested folder; each holds one helper its test calls, generated unused functions and generated unused constants. The law asserts each unused function is in unreachable with category dead, each unused constant is in unusedExports, and no report names a used helper. Coverage checks fail loudly if a nested file, a used helper, an unused function or an unused constant is missing. The flagged helper now reads a shared reported helper so law 4 can see categories; laws 1 to 3 are unchanged. Red on the installed package (code-graph 0.15.0 with the repo's existing local patch, which touches neither place below). Where code-graph skips test-support files before counting uses, in node_modules/@demlik/code-graph/dist/index.js as installed (published line in brackets, the existing patch adds 65 lines above them; source module in the bundle's comments): (1) judge, line 8515 [8450], src/query/unreachable.ts: its first statement, 'if (isTestLike(fn.file)) return { withheld: { id: fn.id, reason: \"test-support-surface\" } }' at 8516-8518 [8451-8453], runs before otherOccurrences reads refs.identifierFiles, so an unused function is never dead or only-called-from-tests. isTestLike is testLikeFiles(testSupport) at 8474 [8409], isTestFile(file) or a testSupportFilePatterns match; findUnreachable at 8543 [8478] builds it at 8547 and calls judge at 8554. (2) isCandidate, line 8618 [8553], src/query/unused-exports.ts: its last clause '!scope.isTestLike(symbol.file)' at 8619 drops every symbol of a test-like file before findUnusedExports (8621, check at 8624) calls usedElsewhere (8611), so an unused constant or type is never an unused export. scope.isTestLike is set in buildReachability at 9028 [8963]. Fix sketch for the build (the plant): in judge, withhold only when 'isTestLike(fn.file) && (isTestFile(fn.file) || (refs.identifierFiles.get(fn.name) ?? []).some((f) => f !== fn.file))'; in isCandidate, replace '!scope.isTestLike(symbol.file)' with '!isTestFile(symbol.file)' (isTestFile is at 1252), so a test-support file's symbols reach usedElsewhere and a used one is skipped there. Keep the isTestFile guard in both: without it a test file's own exports (such as a test's exported constant) would be reported, which the over-wide plant below shows.",
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export of a .test-support.ts file that nothing uses is flagged",
+      "plant": "none: code-graph 0.15.0 as installed, without the build's patch",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export of a .test-support.ts file that nothing uses is flagged",
+      "plant": "fix sketch on a scratch copy of dist/index.js: judge withholds a test-like file's function only when isTestFile or another file names it, isCandidate drops only isTestFile",
+      "result": "green"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export of a .test-support.ts file that only tests use is not flagged",
+      "plant": "fix sketch on a scratch copy of dist/index.js, as above",
+      "result": "green"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export of a .test-support.ts file that nothing uses is flagged",
+      "plant": "half fix: the judge change alone, isCandidate as published",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export of a .test-support.ts file that nothing uses is flagged",
+      "plant": "half fix: the isCandidate change alone, judge as published",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/unreachable.integration.test.ts: an export of a .test-support.ts file that only tests use is not flagged",
+      "plant": "over-wide fix: judge withholds only isTestFile files and isCandidate drops only isTestFile, so no test-support export is withheld",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Red line on the installed package: 'Property falsified after 1 run(s) and 3 shrink(s)', shrunk input folder [\"a\"], unused [\"a0\"], base \"a\": 'AssertionError: expected [] to deeply equal ArrayContaining{...}' at the dead check. Plant results: fix sketch, 2 files 5 tests passed at the fast depth and 4 tests passed with FABRIKA_TEST_DEPTH=full (laws 1 to 4 green). Judge change alone: law 4 red, 'next/a.test-support.ts: c0a0 is not reported as an unused export'. isCandidate change alone: law 4 red, 'expected [] to deeply equal ArrayContaining'. Over-wide fix: laws 1, 3 and 4 red, law 1 'expected [ next/a.test-support.ts:ta0, ...(2) ] to deeply equal []', law 4 'the used helper s0 in next is flagged'. Each plant ran on the installed dist/index.js after saving a copy to the scratchpad and replacing the file with an unlinked copy (the store's file has a second hard link); the original file was moved back and cmp with the saved copy matched, with its link count 2 again. The plant is never committed. Upstream repro, one bug, for the repository named in the installed package.json, git+https://github.com/kamp-us/demlik.git (issues at https://github.com/kamp-us/demlik/issues), @demlik/code-graph 0.15.0. Title: '--unreachable withholds every export of a test-support file, even one nothing uses'. Tree: package.json {\"name\":\"repro\",\"private\":true}; tsconfig.json {\"compilerOptions\":{\"strict\":true,\"module\":\"nodenext\",\"noEmit\":true},\"include\":[\"src/**/*.ts\"]}; src/fixtures/helpers.ts 'export const unusedHelper = (n: number) => n + 1;' and 'export const unusedValue = 1;'; src/product.ts 'export const unusedProduct = (n: number) => n + 1;'. Config: none, the default testSupportFilePatterns (src/fixtures/ matches test-helper-module's (^|/)fixtures?/). Command, from the tree's root: code-graph . --unreachable --json. Expected: unreachable holds src/product.ts:unusedProduct and src/fixtures/helpers.ts:unusedHelper, both category dead (no file names either), and unusedExports holds src/fixtures/helpers.ts:constant:unusedValue. Actual: unreachable holds only src/product.ts:unusedProduct (dead); withheld holds src/fixtures/helpers.ts:unusedHelper with reason test-support-surface; unusedExports is empty, so unusedValue is not reported at all. Cause: judge (src/query/unreachable.ts) and isCandidate (src/query/unused-exports.ts) both skip a test-like file before any use is counted. The issue is not filed from this box (its GitHub access is for search only); the build files it the same day as the patch. Checks at the law commit's tree: nice -n 15 pnpm exec vitest run --maxWorkers=3 on unreachable.integration.test.ts and node-kinds.test.ts, 2 files, 1 failed and 4 passed (law 4 red, the rest green). pnpm format: one file reformatted, the law file. NODE_OPTIONS=--max-old-space-size=6144 nice -n 19 pnpm lint: exit 0, 'unreachable ledger: PASS, 3 recorded finding(s), none new'. ratchet.ts --base 701a651: exit 0. No pnpm typecheck in this step. The named local branch was held by another checkout, so this worktree worked on a local branch at the same head and pushed to fabrikalfa/lint-dead-test-support.",
+  "step": "tests"
+}

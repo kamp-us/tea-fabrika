@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e99-build1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:18:03-08:00",
+  "ended": "2026-11-16T00:53:03-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Build step for Effect sweep slice E99, a judgment slice, in next/: the checker's lazyEffect over next/packages/libfabrika/src/{cloudflare, gateway, runtime}. Hits met 11, the 3 the tests step left for the build fixed by hand edits, 8 left, none waiting on 1366. Fixed: StorageClient.sync and StorageClient.deleteAlarm (cloudflare/platform.ts:350 and 352) are now Effect values, since Effect.tryPromise runs its try afresh each time the Effect runs; the caller at cloudflare/runtime.ts:2410 yields storage.deleteAlarm as a value; ProcessStore.layer keeps its sync option as a call (runtime/ProcessStore.ts:164, whose lib:runtime tests pass their own sync), so cloudflare/runtime.ts:2295 hands it put, get and a sync call that answers the Effect value. fromLedger (cloudflare/SettingsStartsLedger.ts:66) is now one value, Layer.fresh around its Layer.effect, so each use still builds Starts of its own (law L18); callers cloudflare/runtime.ts:871 and SettingsStartsLedger.ts:161 use the value. Left, because each fix reaches callers outside this slice's folders: GatewayCalls.connect (cloudflare/bindings.ts:155), ProjectService.connect (cloudflare/runtime.ts:2016) and Gateway.connect (gateway/Gateway.ts:1997), which move together; ProjectDoorOptions.nextProcess (cloudflare/runtime.ts:347); ProcessService.init, alarm and recover (cloudflare/runtime.ts:2511); ProgramRunner.init (runtime/Runner.ts:471). Recount with only lazyEffect at error through --lspconfig on next/packages/libfabrika/tsconfig.json: exactly those 8. Sent back to tests: pnpm typecheck fails on the tests step's own helper `run` in cloudflare/error-cause.test.ts:82 and cloudflare/platform.test.ts:53 (TS2375 and the checker's missingEffectContext): after Effect.isEffect the member is Effect<unknown, unknown, unknown>, returned where Effect<unknown, unknown, never> is declared. That is a test file, which the build may not change, and it fails the same with or without this build's product edits. No lock line, no tsconfig override, no LOCKED row was added.",
+  "laws": [
+    {
+      "law": "L18 two ledgers keep their own starts, even when one is built inside the other's context",
+      "file": "next/packages/libfabrika/src/cloudflare/SettingsStarts.test.ts",
+      "red": "none: green before and after, with fromLedger now Layer.fresh around one value"
+    },
+    {
+      "law": "a rejected platform call fails with LedgerError unreachable, carrying the thrown error's name and text",
+      "file": "next/packages/libfabrika/src/cloudflare/platform.test.ts",
+      "red": "none: green with sync and deleteAlarm as Effect values; the file fails pnpm typecheck at line 53"
+    },
+    {
+      "law": "C5: a generated rejection on any client call is `unreachable` and keeps that very value",
+      "file": "next/packages/libfabrika/src/cloudflare/error-cause.test.ts",
+      "red": "none: green with sync and deleteAlarm as Effect values; the file fails pnpm typecheck at line 82"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 35,
+  "note": "Tests run at 32a7e76f3 (the branch with origin/main merged) plus this build's three product edits, under nice -n 15 with TYPESAFE_API_KEY unset: cloudflare/SettingsStarts.test.ts 13 passed, cloudflare/platform.test.ts 9 passed, cloudflare/error-cause.test.ts 12 passed. --changed origin/main: 53 files, 478 passed, 2 failed, both by the 60 s timeout: next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts (T753 L16) and next/apps/fabrika/src/start-child.laws.integration.test.ts (P42 L11). Each was run again alone, and again alone with this build's edits stashed: all four runs timed out the same way at a load average near 11, so the box's load, not this change, holds them; they were not proven green here. pnpm format changed nothing more. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144): only lint:promise-types failed, with EPIPE; run again alone it passed with 0 findings. The list ratchet exited 0. pnpm typecheck: next/packages/libfabrika failed only on the two test helper lines above; programs/compare, programs/experiments and programs/experiment were killed by SIGKILL and passed when run again alone; next/apps/fabrika and every next/programs package, cut off by the first failure, passed run alone.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "step": "build"
+}

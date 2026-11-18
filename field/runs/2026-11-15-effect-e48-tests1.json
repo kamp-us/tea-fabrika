@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e48-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:35:58-08:00",
+  "ended": "2026-11-15T20:58:33-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E48 (globalDateInEffect and globalDate together), in next/ and our tooling, with no lock line, as the owner ruled for judgment slices. Counted both checks at error through --lspconfig over the five tsconfigs the row's folders sit in: 87 hits in the row's folders (the plan's 87), 52 in exam paths and 35 in product files. Fixed all 52 exam-path hits by hand and with a scratch rewrite: a Date from a given time is DateTime.toDateUtc(DateTime.makeUnsafe(x)), an ISO string is DateTime.formatIso(DateTime.makeUnsafe(x)), a wall-clock read outside Effect is DateTime.nowUnsafe(), and a read inside an Effect generator is yield* Clock.currentTimeMillis. The 35 product hits are left for the build. No hit in the row's folders is in a file of pull request 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 23,
+  "note": "No new or changed law: the fixes keep each value's shape, and every law asserts what it did. .github/ci/field-schema.ts's calendar-date check now reads Option.exists(DateTime.make(day), ...): checked by hand against new Date(day) on 9 inputs, all equal. The two .visual. laws changed (page-runtime, resources) were not run here. In --changed origin/main without the visual project, 66 of 67 files passed; instance-wire.integration.test.ts failed because the box has no ssh-keygen (spawn ENOENT), which counts as neither red nor green. pnpm typecheck green, pnpm lint green, ratchet exit 0. Recount after: 0 hits in exam paths of the row's folders, 35 in product files.",
+  "step": "tests"
+}

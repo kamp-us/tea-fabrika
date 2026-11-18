@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-host-runtime-env-context-correction",
+  "corrects": "2026-11-17-host-runtime-remaining-faults-build",
+  "ticket": "kamp-us/tea-fabrika#1132",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-17T09:47:17.837Z",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling corrects the env-order decoder after source review proved that the inherited setup home and temporary root differ from the host fixture paths. Memory-only generated control failed on the old decoder, then all 18 safe unit laws passed. Seven deliberate decoder faults failed and restored identical bytes. The exact UTF-8 102/103-byte root boundary, direct host/fh children, removed flags, extra fields and frame are covered. An initial scoped lint found missing blank spacing; it was fixed and scoped lint passed. Original host laws, protected reporter integration, compiler, full lint, push and CI were not run. Same-reader source recheck remains lead-owned.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Timing was not captured for the full correction; no duration is inferred.",
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "env-order follows the adapter temp and exact testHomes root",
+      "plant": "Keep the cfb85d676 unchanged-home/tmp decoder against generated actual adapter/setup context.",
+      "result": "red"
+    },
+    {
+      "law": "env-order follows the adapter temp and exact testHomes root",
+      "plant": "Use UTF-16 string length for the socket path budget.",
+      "result": "red"
+    },
+    {
+      "law": "env-order follows the adapter temp and exact testHomes root",
+      "plant": "Allow the temporary root at the 103-byte socket bound.",
+      "result": "red"
+    },
+    {
+      "law": "env-order follows the adapter temp and exact testHomes root",
+      "plant": "Skip the expected host directory parent and prefix check.",
+      "result": "red"
+    },
+    {
+      "law": "env-order follows the adapter temp and exact testHomes root",
+      "plant": "Skip the inherited fh home parent and prefix check.",
+      "result": "red"
+    },
+    {
+      "law": "env-order follows the adapter temp and exact testHomes root",
+      "plant": "Skip the actual removed flag check.",
+      "result": "red"
+    },
+    {
+      "law": "env-order follows the adapter temp and exact testHomes root",
+      "plant": "Accept excess fixture JSON fields.",
+      "result": "red"
+    },
+    {
+      "law": "new host faults require their matcher values and exact assertion frame",
+      "plant": "Ignore the exact env-order assertion frame.",
+      "result": "red"
+    }
+  ]
+}

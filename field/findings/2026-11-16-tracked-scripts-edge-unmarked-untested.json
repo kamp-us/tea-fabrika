@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-tracked-scripts-edge-unmarked-untested",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "oxlint-plugins/tracked-scripts.ts",
+    "line": 86
+  },
+  "says": "In today's tooling, no law reaches the edge_unmarked finding of oxlint-plugins/tracked-scripts.ts: a malformed '# edge:' line, or one good and one malformed edge line in the same file, is never generated, so its tag, its message and the 'broken' rule can change without a red test.",
+  "proof": "On a scratch copy, replacing 'broken: good.length < lines.length' with 'broken: false' (line 67), and separately returning new_script instead of edge_unmarked (line 86), each left oxlint-plugins/tracked-scripts.test.ts at 5 of 5 passed; the edge law compares only paths (tracked-scripts.test.ts:142).",
+  "cost": "A file with one good edge line and one malformed one would pass lint after such a change, and the edge_unmarked message can drift with no test noticing.",
+  "head": "edbc685f5407f6378d2c4cb4aba99f8d7002455f",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null
+}

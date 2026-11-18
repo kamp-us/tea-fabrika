@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1133-lead-tooling",
+  "ticket": "1133",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T21:13:21-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Today's lead tooling adds the fixed two-case manual exercise. Eight deliberate unit/static breaks each failed their named assertion and were restored. No real adapter, integration law or remote dispatch ran. Typecheck and the final changed-test selection belong to the lead. Main's global fixed seed and plant-option extension are absent; no setup or dependency was changed. Model usage and list-price cost were unavailable to this bounded worker and remain unknown.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billing": null,
+  "plants": [
+    {
+      "law": "only exact case and SHA requests decode",
+      "plant": "accept unknown fields and cases",
+      "result": "red"
+    },
+    {
+      "law": "each case derives exactly one fixed byte edit and refuses ambiguous layouts",
+      "plant": "replace every occurrence instead of requiring exactly one",
+      "result": "red"
+    },
+    {
+      "law": "the byte edit cannot hide a changed index, mode, HEAD or extra path",
+      "plant": "check allowed paths but ignore bytes or index",
+      "result": "red"
+    },
+    {
+      "law": "only actual selected assertion results become phase observations",
+      "plant": "accept exit 1 without a failed target assertion",
+      "result": "red"
+    },
+    {
+      "law": "public observations copy no generated private diagnostic content",
+      "plant": "publish raw failure messages",
+      "result": "red"
+    },
+    {
+      "law": "every acquired source restores after an injected I/O failure",
+      "plant": "skip scoped restoration after the broken child fails",
+      "result": "red"
+    },
+    {
+      "law": "phase walks record only pass, failure, pass and keep incomplete answers terminal",
+      "plant": "advance on an incomplete phase",
+      "result": "red"
+    },
+    {
+      "law": "valid YAML forms pass and changed execution policy is refused",
+      "plant": "accept a raw report upload or arbitrary command",
+      "result": "red"
+    }
+  ]
+}

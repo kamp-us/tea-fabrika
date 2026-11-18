@@ -33,8 +33,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    - On a re-review, read every line the last fixes changed and what calls them first. Then finish
      the remaining checks.
    - Read every decided note the PR builds, following the plan's references and the change itself.
-     `sh .agents/skills/lead/scripts/governance.sh` lists the decision files the diff's words touch;
-     say for each whether the diff walks it back.
+     `node .agents/skills/lead/scripts/governance.ts` lists the decision files the diff's words
+     touch; say for each whether the diff walks it back.
    - Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law.
      Each blocker cites that source and shows the missed case.
    - It does what the plan and the notes' decided parts say, and nothing they leave undecided. Each
@@ -44,6 +44,17 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    - The data shape: name any fact this change loses forever (who, when on whose clock, what was
      seen, why something was refused).
    - "No rough first versions": no stub, dead button or "(not yet)".
+   - Existing tools first ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md),
+     [0040](../../../.decisions/0040-existing-tools-before-hand-written.md)): each helper, function
+     or tool the diff adds has its plan's `## Existing tools` line, and the line shows a real
+     search, with what was found or why none fits. One with no line, a search that could not have
+     found the one already in the repo, or a copy of one is sent back. `copies (advice)` in the
+     check job names each clone the diff adds; say for each whether it is a real copy.
+   - Each new name (type, service, function, file, setting, record field) has its line under the
+     description's `## New names`: the industry's word, with a source that says it. Check each line
+     against `.glossary/TERMS.md` and [the names rule](../../../docs/direction/use-the-industrys-names.md):
+     one word per idea, the glossary's word where it has one, and a plain gloss for an obscure one.
+     A line whose source does not name the thing is a finding.
    - Names follow `AGENTS.md` for its version (`_tag`, no `xOf`, short everyday keys, no question
      words, "run" means an agent run in `next/`) and `.glossary/TERMS.md`. Effect code follows
      `node_modules/effect/AGENTS.md` and [0023](../../../.decisions/0023-next-follows-effects-code-style.md).

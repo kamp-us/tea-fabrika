@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e88-review",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:59:12-08:00",
+  "ended": "2026-11-16T02:16:22-08:00",
+  "parent": "2026-11-16-effect-e88-tests",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_tests",
+  "why": "Review of slice E88 (nodeBuiltinImport) at d40629ad8 against base eeb8ecdbb, in next/: changes 1. The slice's job holds: the checker run with nodeBuiltinImport at error finds 0 hits in the app's src outside exam and 0 in libfabrika's cloudflare and runtime folders, and the two packages show no other type error. No assertion was weakened: every removed check has an equal one, and the two dropped existsSync guards sit before an import that fails on its own. The hand-written SSHSIG proof in next/apps/fabrika/src/person-key.test-support.ts matches PROTOCOL.sshsig byte for byte (signed data without the version, blob with it, sha512, the ssh-ed25519 signature wrapper, fingerprint over the 32 raw bytes), and its law caught all five plants run in a scratch copy. Blocking class: three new test helpers have no Existing tools line (0587, 0040): person-key.test-support.ts, whose field, concat and armor rows copy libfabrika's transport/Sshsig.test-support.ts and sit beside the product's writeSshsig and PublicKey; dev-child.test-support.ts start; and workerd.test-support.ts tree, whose walk the workerd function 20 lines below repeats.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Read-only on the branch apart from this row; plants and recounts ran in scratch files, deleted after, and a second detached worktree of eeb8ecdbb for base timings and counts. Ran from the repo root: person-key, door-spans, runtime-quotas, build.test, instance-watch, error-cause, runtime.decode, Built.test and all ten changed cloudflare plain files, all green. An earlier run from inside the package folders used vitest's 5 s default and timed out fetch.test and entry-flows L16 on head and base alike; that was this run's setup, not the slice. Recount: tsc -p with nodeBuiltinImport at error leaves 68 hits in the app (49 src/exam, 19 e2e) and 84 in libfabrika, all outside this slice. With preferNamespaceImport at error, libfabrika's cloudflare and runtime folders go from 666 hits at eeb8ecdbb to 684 here. loosening.sh eeb8ecdbb HEAD: removed expect hits in start-child.laws, worker-mail, worker-monitor, worker-supervision, ProjectAuditTest and RecoveryStore, each a node:crypto helper or an existsSync guard, none a loosened law. Every no-hooks entry in next-ledger.json still matches its line. git merge-tree with origin/main conflicts in 42 files, because main squash-merged the base branch; with eeb8ecdbb as the merge base it is clean, so a rebase onto main is clean. Not run, needs a box: every .integration. and .visual. file the slice changed. Not signed: no review step key exists, and the brief said to skip signing then.",
+  "step": "review"
+}

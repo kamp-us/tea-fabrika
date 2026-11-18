@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589 and 0594; body 5b83e3719c18
 Plancheck-Version: 3
 
 # The mock sweep in `oxlint-plugins/`: its one `vi.fn` becomes a plain list, and the folder is locked at zero
@@ -39,11 +39,18 @@ expect(reports).toEqual(keys.map((key) => ({ node: key, message })));
 ```
 
 All of this is our tooling, the `oxlint-plugins/` folder. Today's app is not touched, and `next/`
-is not touched.
+is not touched. It builds [0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi` mock,
+spy or env stub in a test), [0579](../../../.decisions/0579-property-laws-use-it-prop.md) (the
+Recorder replaces `vi.fn`) and [0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md)
+(a test gets its tools from our test package), on
+[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list lets broken code pass)
+and [0589](../../../.decisions/0589-agents-edit-files-with-any-tool.md) (one pull request per
+sweep). (Amendment 2026-11-15: the decisions named here.)
 
 ## The answer first
 
-- **One pull request, about 45 lines, no product code.** It rewrites the folder's one `vi.fn`, adds
+- **One slice on the sweep's one fold branch, `fabrikalfa/mock-fold`, about 45 lines, no product
+  code** (amended 2026-11-15; first "one pull request"). It rewrites the folder's one `vi.fn`, adds
   the lock rule for the folder, plants it, and notes it in the folder's README.
 - **The count, again on main at `f7169af`** with `nice -n 19 rg --hidden -g '!node_modules' -o`
   for `\bvi\.(fn|spyOn|mock|doMock|stubEnv)\(` and `toHaveBeenCalled\w*`: 1 `vi.fn(` call
@@ -115,6 +122,67 @@ it("format: diagnostic names the five words and offers no autofix", () => {
 - **Is this a setting?** No: a lint rule's scope is the repo's own code rule, not a choice a
   person makes in `fabrika.toml` ([0069](../../../.decisions/0069-choices-are-settings.md)).
 
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; one block.
+{
+  "files": ["oxlint-plugins/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "error",
+      // Written out again, since an override replaces options: the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`), of the Reflect ban's tooling block, which has no `JSON.parse` entry.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main `oxlint-plugins/**` takes the Reflect ban's tooling block (the three tooling folders, at `error`, the four Reflect entries), so the lock is one block for `oxlint-plugins/**`, as the sketch shows; the other two tooling folders keep that block as it is. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, or any new set.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+- **The `vitest(hoisted-apis-on-top)` plant** keeps its `vi.mock("./b.ts")` line. The pair now also fires `eslint(no-restricted-properties)` on it, and `plants.test.ts` reads each plant's lines under its own code only, so that plant stays as it is, as the bullet below says for the vitest rule.
+
 ## One value traced
 
 The key `"what"` goes through the rewritten law: the visitor's `Property` handler sees a `Literal`
@@ -125,10 +193,17 @@ nothing, so `reports.length` is 5.
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | M1, the `format` law: the rule reports each of the five question-word keys once, in order, with the one message and no autofix, and does not report an identifier key | test | format: the one exact message, over the five fixed words; the generated laws above it in the file stay as they are | in `oxlint-plugins/no-question-word-key.ts`, add `fix: () => null` to the report object, or skip the report for `"how"`: `reports` differs from the expected list and M1 is red | `oxlint-plugins/no-question-word-key.test.ts` |
-| M2, the lock refuses `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` and `vi.stubEnv`, and `v.fn` after `import { vi as v }`, in a test file under `oxlint-plugins/`, and takes a plain list | test, of a lint rule | scenario: the real oxlint over the planted file through the repo's own config, as every built-in plant runs | delete the new override: the six refused lines stop firing and M2 is red. Before the override exists M2 is red the same way | `oxlint-plugins/builtin-plants.ts` |
+| M2, the lock refuses `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` and `vi.stubEnv`, and `v.fn` after `import { vi as v }`, in a test file under `oxlint-plugins/`, and takes a plain list. Amendment 2026-11-15 (merge session ruling 2): this is node's M1 run under `oxlint-plugins/`, and its plant lines are node's shared `VI_METHODS` set, with this plan's `v.fn` and plain-list lines added to it | test, of a lint rule | scenario: the real oxlint over the planted file through the repo's own config, as every built-in plant runs | delete the new override: the six refused lines stop firing and M2 is red. Before the override exists M2 is red the same way. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | `oxlint-plugins/builtin-plants.ts` |
 | M3, the lock is on only where the folder is at zero: it fires on a planted `vi.fn()` under `oxlint-plugins/` and not on the same line under `next/` or `packages/` | test, of a lint config | scenario: the "rules that apply by path" block's `plantIn` | (a) move the rule to the root `rules`: the `next/` and `packages/` rows turn red. (b) drop `oxlint-plugins/**` from `files`: its row turns red | `oxlint-plugins/plants.test.ts` |
 | M4, the folder is at zero: `pnpm lint` passes with the lock an error, and no `oxlint-disable` line names it | lint | lint | put back `const report = vi.fn();`: `pnpm lint` exits 1 and names `no-question-word-key.test.ts` | `oxlint-plugins/no-question-word-key.test.ts` |
 
@@ -165,6 +240,10 @@ nothing, so `reports.length` is 5.
 
 ## Steps
 
+**Amendment (2026-11-15, merge session ruling 1).** The slice opens no pull request of its own. It
+lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in its one pull request (0589,
+amended 2026-11-15), after these steps, one fresh agent each, in its own box.
+
 1. **Tests:** writes M1 to M4: the rewritten law, the override, the plant, the path rows and the
    README line. Every changed file is an exam path or the lint config, so it owns them all.
 2. **Build:** no product code to write. It runs the checks (`pnpm lint`, the two test paths) at the
@@ -185,7 +264,14 @@ nothing, so `reports.length` is 5.
 
 ## Validation
 
-- The tests step, under `nice -n 15 pnpm exec vitest run --maxWorkers=3`, one path at a time:
+Every local test selection first needs the lead to read its actual code, helpers and cleanup under 0594. A listed filename or an old no-host-only statement is not local clearance. Protected resource laws run only on an eligible disposable CI runner; preserve the guard and obtain their actual proof before the first review.
+
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
+- The tests step, under `nice -n 19 pnpm exec vitest run --maxWorkers=1`, one path at a time:
   `oxlint-plugins/no-question-word-key.test.ts`, then `oxlint-plugins/plants.test.ts`.
 - `pnpm format`, then `pnpm lint` with `NODE_OPTIONS=--max-old-space-size=6144`. Lint is M4.
 - The lead, not a step, runs the changed tests once at the end and the one type check, which
@@ -196,7 +282,8 @@ nothing, so `reports.length` is 5.
 
 Confidence in the line counts: 90%; the doubt is how many path rows M3 needs.
 
-1. The rewrite, the lock, its plants and its README line, one pull request: 0 product lines, about
+1. The rewrite, the lock, its plants and its README line, one slice on the fold branch (amended
+   2026-11-15; first "one pull request"): 0 product lines, about
    30 test lines, about 15 config lines and 3 lines of docs. 45 lines.
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price, as the recorder

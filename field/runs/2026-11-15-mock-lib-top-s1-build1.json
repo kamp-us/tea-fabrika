@@ -1,0 +1,83 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-lib-top-s1-build1",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-15T23:38:49-08:00",
+  "ended": "2026-11-16T00:17:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step for slice 1 of the mock sweep's lib-top plan (docs/plan/quests/mock-lib-top-PLAN.md at 14e9b3134, decisions 0555 and 0579), in next/. Id.ts no longer reads globalThis.crypto: makeGenerator builds the generator's service from SecureRandom.SecureRandom, drawing 10 bytes with randomBytes(10) only when the millisecond is fresh, before the synchronous step, and Effect.catchDefect turns a throw from the random source into IdError entropy with its cause. Generator.layer is makeGenerator with SecureRandom.layerWebCrypto provided, typed Layer.Layer<Generator>, so no caller changes (the plan's settled amendment). The plan's sketch kept a throwing allocate inside Effect.gen, which lint refuses (fabrika/no-throw-in-effect-gen); the step is now a pure advance function outside the generator that returns the next clock and bits or undefined when exhausted, and next fails with yield* in place of throw. That removed the Effect.try and its entropy catch for a non-IdError throw, which no longer had any throw to catch. Nothing yields between reading and writing the state, so allocation stays synchronous. The pattern doc now covers Id.ts, says what was checked about SecureRandom.uuidV7, and names the bundled layer. The merge of origin/main the step rules ask for came first. All laws green; every tests-step plant rerun once against this Id.ts and each turned its law red, Id.ts restored by copy each time.",
+  "laws": [
+    {
+      "law": "T1 to T4 next/packages/libfabrika/src/Id.test.ts",
+      "result": "green, 29 of 29"
+    },
+    {
+      "law": "T1, T2 next/packages/libfabrika/src/Id.cause.test.ts (C1)",
+      "result": "green, 1 of 1"
+    },
+    {
+      "law": "T5 next/packages/libfabrika/src/Id.types.test.ts",
+      "result": "green in vitest (2 of 2) and in the one pnpm typecheck"
+    },
+    {
+      "law": "L1 oxlint-plugins/plants.test.ts",
+      "result": "green, 237 of 237"
+    }
+  ],
+  "plants": [
+    {
+      "law": "T1, Id.test.ts",
+      "plant": "the draw reads Effect.sync(() => crypto.getRandomValues(new Uint8Array(10))) in place of secure.randomBytes(10) (8 laws failed, the zero, 255 and raw laws, the entropy law and both T4 laws)",
+      "result": "red"
+    },
+    {
+      "law": "T1 and T2, C1 in Id.cause.test.ts",
+      "plant": "the same crypto.getRandomValues read",
+      "result": "red"
+    },
+    {
+      "law": "T2, an entropy failure is a typed IdError, never a defect (Id.test.ts)",
+      "plant": "drop the draw's Effect.catchDefect",
+      "result": "red"
+    },
+    {
+      "law": "T2, C1 in Id.cause.test.ts",
+      "plant": "drop the draw's Effect.catchDefect",
+      "result": "red"
+    },
+    {
+      "law": "T3, bad clocks fail clock even when entropy fails",
+      "plant": "move the validClock check after the draw",
+      "result": "red"
+    },
+    {
+      "law": "T4, the generated schedules and the pinned four-fiber case",
+      "plant": "the T518 review 5 P1 shape: advance takes fresh whenever it is given, without now > last.at (both laws)",
+      "result": "red"
+    },
+    {
+      "law": "T4, the generated schedules and the pinned four-fiber case",
+      "plant": "read last, Effect.yieldNow, then advance from the stale read and write it (both laws)",
+      "result": "red"
+    },
+    {
+      "law": "T5, Generator.layer needs nothing",
+      "plant": "drop Layer.provide(SecureRandom.layerWebCrypto) and the layer's type annotation (tsc --noEmit -p next/packages/libfabrika fails with missingEffectContext SecureRandom (first errors at Id.test-support.ts:49 and Id.test.ts:558; the output was cut at 12 lines, so the Id.types.test.ts line itself was not seen))",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 38,
+  "note": "The step first merged origin/main (at 701a6511d) into 8d92196df, as the step rules then asked; the coordinator's later rule (twin-tools 80087ddc8) says not to merge main now, which came after the merge, and the merge was kept, since the rules forbid a reset. .oxlintrc.json and the plants are untouched. Checks at the build's working tree on that merge: pnpm format exits 0. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: 17 of 18 parts pass; lint:dead fails on its one finding, only-called-from-tests next/packages/libfabrika/src/Id.test-support.ts:generatorWith, owner's call pending (finding row field/findings/2026-11-15-code-graph-misses-test-support-files.json; node-kinds.json, the helper and the ledger untouched); makeGenerator is not flagged. lint:dead also dies with EPIPE while closing its type checker after printing the finding, in both runs. The list ratchet exits 0. One pnpm typecheck exits 0. vitest --changed origin/main is refused by vitest.config.ts as a broad run, since the branch changes .oxlintrc.json and oxlint-plugins/, both force-rerun triggers; in its place the 18 plain test files that use Id.Generator, makeGenerator, generatorWith or processId ran one at a time, all green but next/apps/fabrika/src/exam/runner-contract-replay.test.ts, which failed 2 of 5 once and passed 13 runs after; the failing text was not kept, so it is not a finding yet. The 31 .integration. and .visual. files that reach the generator were not run here: they start real resources, and the build skill keeps signal-sending tests off this box; CI and the lead run them. loosening.sh 8d92196df HEAD is read after the commit.",
+  "step": "build",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}

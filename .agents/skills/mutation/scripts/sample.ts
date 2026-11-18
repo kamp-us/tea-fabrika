@@ -19,6 +19,7 @@ type Candidate = {
 };
 
 type Changed = { readonly file: string; readonly line: number };
+
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 const Sample = Schema.Struct({
@@ -57,6 +58,7 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 const range = (candidate: Candidate) => {
   const { start, end } = candidate.location;
+
   return `${candidate.fileName}:${start.line}:${start.column}-${end.line}:${end.column}`;
 };
 
@@ -76,16 +78,19 @@ export const sample = ({
   const cap = Math.max(0, Math.min(150, Math.floor(max)));
   const eligible = candidates.filter((candidate) => changed.some((line) => touches(candidate, line)));
   const sorted = [...eligible].sort((a, b) => compare(identity(a), identity(b)));
+
   const ordered = fc
     .sample(fc.shuffledSubarray(sorted, { minLength: sorted.length, maxLength: sorted.length }), {
       seed,
       numRuns: 1,
     })
     .flat();
+
   const selected = new Set<Candidate>();
   const ranges: string[] = [];
   const eligibleSet = new Set(eligible);
   const enclosing = new Map(eligible.map((c) => [c, candidates.filter((other) => encloses(c, other))]));
+
   // What taking a range would add, or `null` when it pulls in a mutant on an unchanged line, is
   // taken already, or would pass the cap.
   const adds = (candidate: Candidate) => {
@@ -96,8 +101,10 @@ export const sample = ({
     }
 
     const added = enclosed.filter((other) => !selected.has(other));
+
     return selected.size + added.length > cap ? null : added;
   };
+
   const take = (candidate: Candidate, added: readonly Candidate[]) => {
     ranges.push(range(candidate));
 
@@ -105,6 +112,7 @@ export const sample = ({
       selected.add(other);
     }
   };
+
   // First picks go round-robin across changed files, one range per file per turn, so no file gets
   // a second range before every file that can take one has its first. A turn takes the file's
   // cheapest range over a changed line no earlier range covers, the earlier line and then the
@@ -113,11 +121,14 @@ export const sample = ({
   // (ticket 655, quest t389).
   const files = [...new Set(changed.map((line) => line.file))].sort(compare);
   const open = new Map(files.map((file) => [file, new Set(changed.filter((c) => c.file === file).map((c) => c.line))]));
+
   const firstOpen = (candidate: Candidate) => {
     const lines = open.get(candidate.fileName) ?? new Set<number>();
     const { start, end } = candidate.location;
+
     return [...lines].filter((line) => line >= start.line && line <= end.line).sort((a, b) => a - b)[0];
   };
+
   const turn = (file: string) => {
     let best: { candidate: Candidate; added: readonly Candidate[]; line: number } | null = null;
 
@@ -204,6 +215,7 @@ if (import.meta.main) {
 
   const seed = Schema.decodeUnknownSync(Schema.Int)(Number(values.seed));
   const max = Schema.decodeUnknownSync(Count)(Number(values.max));
+
   const diff = execFileSync(
     "git",
     [
@@ -219,6 +231,7 @@ if (import.meta.main) {
     ],
     { encoding: "utf8" },
   );
+
   const changed: Changed[] = [];
   let file = "";
 
@@ -242,6 +255,7 @@ if (import.meta.main) {
   // Resolve from the package that owns the installed Instrumenter; no root dependency is added.
   const require = createRequire(resolve("packages/pipeline/package.json"));
   const { Instrumenter } = await import(pathToFileURL(require.resolve("@stryker-mutator/instrumenter")).href);
+
   const logger = {
     debug() {},
     info() {},
@@ -251,16 +265,19 @@ if (import.meta.main) {
     fatal() {},
     isDebugEnabled: () => false,
   };
+
   const files = [...new Set(changed.map((line) => line.file))].sort().map((name) => ({
     name,
     content: readFileSync(name, "utf8"),
     mutate: true,
   }));
+
   const result = await new Instrumenter(logger).instrument(files, {
     plugins: null,
     ignorers: [],
     excludedMutations: [],
   });
+
   // Instrumenter positions are zero-based; command-line ranges and git lines start at one.
   const candidates: Candidate[] = result.mutants.map((mutant: Candidate) => ({
     ...mutant,
@@ -269,6 +286,7 @@ if (import.meta.main) {
       end: { ...mutant.location.end, line: mutant.location.end.line + 1 },
     },
   }));
+
   const report = sample({ candidates, changed, seed, max });
   writeFileSync(values.report, `${Schema.encodeSync(Schema.fromJsonString(Sample))(report)}\n`);
   console.log(report.ranges.map((item) => JSON.stringify(item)).join(","));

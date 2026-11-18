@@ -53,3 +53,22 @@ goes through the merge queue like any pull request, with no admin merge.
 
 Judgment slices (E26 to E39) keep their review agent. They come as separate pull requests that add
 no lock lines, and their locks land in one small pull request at the end.
+
+### 2026-11-15: one pull request per sweep, never one per slice
+
+The owner ruled the same day, with 67 pull requests open, that a sweep lands as one pull request,
+never one per slice. A slice opens no pull request of its own. Its work goes onto the sweep's fold
+branch, and each judgment slice is reviewed in its own box before it is folded.
+
+| Sweep | One pull request |
+|---|---|
+| Effect checks, mechanical (E4 to E25) | `fabrikalfa/effect-mechanical` |
+| Effect checks, judgment (E26 onward) | `fabrikalfa/effect-judgment` |
+| Effect checks, laptop E0 to E3 | `fabrikalfa/effect-laptop-fold` |
+| Reflect ban, slices 2 to 8 | `fabrikalfa/reflect-fold` |
+| Reflect ban, slices 9 to 15 | `fabrikalfa/reflect-rest` |
+| The mock sweep's plans | one plan pull request, `fabrikalfa/mock-plans`, with one lead approval |
+| Anti-slop rules | one mechanical and one judgment pull request |
+
+A slice pull request opened before this ruling is closed with a link to its replacement once the
+replacement exists.

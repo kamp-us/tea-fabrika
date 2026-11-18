@@ -5,6 +5,8 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { Result } from "effect";
+import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { Archive } from "../Archive.ts";
@@ -12,8 +14,11 @@ import { RecordManager } from "../Records.ts";
 import { SpanSink } from "../Sink.ts";
 
 const HOUR = 3_600_000;
+
 const H = 1_790_002_800_000;
+
 const TAG = "fab.gateway.refused";
+
 const PIECE = "gateway.route";
 
 const database = Effect.acquireRelease(
@@ -114,10 +119,11 @@ describe("0140 sums", () => {
           expect(db.prepare("SELECT * FROM unsent").all()).toEqual([]);
           expect(db.prepare("SELECT * FROM measurements").all()).toEqual([]);
           const rows = db.prepare("SELECT piece,hour,refused,count FROM sums ORDER BY refused").all();
-          expect(rows.map((row) => ({ ...row }))).toEqual(
-            [...expected]
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([refused, count]) => ({ piece: PIECE, hour: H, refused, count })),
+          expect(Arr.map(rows, (row) => ({ ...row }))).toEqual(
+            Arr.map(
+              [...expected].sort(([a], [b]) => Str.localeCompare(b)(a)),
+              ([refused, count]) => ({ piece: PIECE, hour: H, refused, count }),
+            ),
           );
           const sink = yield* SpanSink;
           expect(yield* sink.sums(PIECE, H - HOUR, H + HOUR)).toEqual([]);
@@ -128,12 +134,13 @@ describe("0140 sums", () => {
           expect(db.prepare("SELECT * FROM measurements WHERE piece=?").all(PIECE)).toHaveLength(1);
           yield* sink.flush;
           const kept = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
-          expect(kept.map((row) => row.name)).toEqual([PIECE]);
+          expect(Arr.map(kept, (row) => row.name)).toEqual([PIECE]);
           yield* TestClock.setTime(H + HOUR);
           expect(yield* sink.sums(PIECE, H, H + HOUR)).toEqual(
-            [...expected]
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([refused, count]) => ({ _tag: "sum", piece: PIECE, hour: H, refused, count })),
+            Arr.map(
+              [...expected].sort(([a], [b]) => Str.localeCompare(b)(a)),
+              ([refused, count]) => ({ _tag: "sum", piece: PIECE, hour: H, refused, count }),
+            ),
           );
           expect(yield* sink.sums("runtime.rpc", H, H + HOUR)).toEqual([]);
         }).pipe(Effect.provide(world(db)));

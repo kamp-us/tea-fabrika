@@ -1,14 +1,14 @@
 ---
 id: 0454
-title: Each story and each layout gets an ARIA snapshot law that advises first, on today's app first
-status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
+title: Each story and each layout gets an ARIA snapshot law that advises first
+status: accepted
 date: 2026-11-07
 tags: [design, accessibility, aria, laws, today]
 ---
 
-# 0454: Each story and each layout gets an ARIA snapshot law that advises first, on today's app first
+# 0454: Each story and each layout gets an ARIA snapshot law that advises first
 
-**What this decides:** how the accessibility tree of each part is held, starting in today's app.
+**What this decides:** how the accessibility tree of each part is held, starting in `next/`.
 
 ## Context
 
@@ -21,7 +21,7 @@ Nothing held what a screen reader is given for each part and layout. From
 
 - The law advises first. It blocks only once its own false alarms are measured, as every blocking
   check is ([0470](0470-a-ui-check-advises-until-measured.md)).
-- It starts in today's app (`apps/fabrika`), and `next/` takes it for every window.
+- It starts in `next/`, for every window.
 - An approved snapshot is exam ([0474](0474-ui-goldens-are-exam.md)).
 
 ## Consequences

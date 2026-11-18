@@ -47,8 +47,8 @@ Tracker ticket 683. The owner decided this on 2026-11-10.
   is forced on a project.
 - This amends 0083 in part. `.fabrika/packs/<name>/` stays the place a repo offers packs to
   others (decided 2026-10-31), and the usual place for its own, but the path in `from` is what
-  counts. The rest of 0083 holds: a program's name is still `<pack>/<program>`, and the path here
-  is where a pack's code sits, never a spelling for a program.
+  counts. A program's name is still `<pack>/<program>`, and the path here is where a pack's code
+  sits, never a spelling for a program.
 
 The known ways, each page read on 2026-11-10:
 
@@ -96,7 +96,12 @@ is a path from the folder of the `fabrika.toml` that names it.**
 - **A pack must be listed to load.** A folder under `.fabrika/packs/` that no `[pack.<name>]`
   table names is not loaded. There is one registry: the `[pack.<name>]` tables.
 - **No folder is forced.** `.fabrika/packs/<name>/` is the usual place for a repo's own pack and the
-  place a repo offers packs to others, but `from` may name any folder the rules allow.
+  place a repo offers packs to others, but `from` may name any folder the machine can read.
+- **A path may leave the repo.** Fabrika loads a path pack from wherever its `from` leads and never
+  refuses it for being outside the repo, as [0132](0132-a-path-pack-may-sit-anywhere.md) decides. A
+  path pack still has no `ref` and no lock line.
+- **The person's file lists path packs too.** `~/.fabrika/fabrika.toml` may hold a `[pack.<name>]`
+  table with a `from` that starts with a dot, read from `~/.fabrika/` by the same rule.
 
 **Binding constraints**
 
@@ -109,13 +114,8 @@ is a path from the folder of the `fabrika.toml` that names it.**
 - **What it costs.** A repo's own pack needs a two-line table even when it sits in the usual
   folder. In return, one look at `fabrika.toml` tells a reader every pack that runs, and a stray
   folder runs nothing.
-- **What changes.** 0083's status line and its "No loose program" bullet point here. The
+- **What changes.** 0083's "No loose program" bullet points here. The
   glossary's `pack` row says how a repo's own pack is listed.
-- **Not decided here:**
-  - Whether a path may point outside the repo, such as `../shared-packs`. Outside the repo, the
-    repo's commit no longer pins the code, so the "no lock line" rule would need a second look.
-  - Whether a person's home file, `~/.fabrika/fabrika.toml`, may list a path pack. **A lean, not a
-    decision:** yes, by the same rule, with the path read from that file's folder, `~/.fabrika/`.
 
 ## Records
 

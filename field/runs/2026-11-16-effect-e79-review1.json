@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e79-review1",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-15T21:45:24-08:00",
+  "ended": "2026-11-15T22:26:01-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "pipeline, tracker ticket 1075, review: the review of record for judgment slice E79 of the Effect-checker sweep, check preferEffectString, in next/, branch fabrikalfa/effect-e79 at ea7ec8b (tests c18e222, build 8c9e18c and ea7ec8b). Verdict done, merge-ready, with two finding rows. Every line of the 141 code files was read for this check's fixes; no file of pull request 1366 is touched (its 64 files, read with get_files, and the diff share no path). Counts in both rows add up: 756 met = 616 exam + 49 product + 91 waiting on 1366; 599 codemod + 17 hand edits in exam paths, 49 hand edits in product files. A recount here with only preferEffectString at error through --lspconfig gave 1047 hits over libfabrika and the app, the build's number, and 91 in E79's folders, every one in a 1366 file; --list-files showed every .ts file of those folders is in the two projects, so the count does not miss import-only files. Behavior: Effect's String.repeat turns a negative count into an empty string where native threw; every computed count in the 64 repeat calls was read and none can be negative (settings-generated's a.length - n is never below 0, the others are generator minimums or constants). indexOf, lastIndexOf, match, at and charCodeAt now answer an Option, and each hand edit keeps the old answer (getOrNull for match, getOrElse -1 for indexOf, lastNonEmpty of split for text after the last separator, an offset slice for indexOf with a position). A scratch script compared old and new commandMsg, lineStart, the previous-line start of TomlParser.sectionStart and platform.rejected on 19531 strings over a, dot, newline, colon and space, and cut on surrogate cases: 0 differences except lineStart at offset 0 on a text that opens with a newline, which no caller passes. Effect's localeCompare answers -1, 0 or 1, used only as sort comparators. The new export lineStart in settings/internal/edit.ts is @internal, under ./settings/internal/* which package.json maps to null, and used by TomlParser, so lint:dead and the jsdocs rule pass. No comment line was lost (per-file comment-line counts equal or higher, every header still on top), and the diff adds no disable or @effect-diagnostics line. loosening.sh: 56 hits beyond unrecognized changes, all removed expect but one; per file the counts of expect calls, matchers, tests and fc.property are equal before and after, so each is an expect whose subject was rewritten, and the one removed law in settings/Reference.test.ts is the tokenizer on a regex that holds a backtick, with 4 fc.property calls before and after. No lock line, no pull request, by the owner ruling.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 41,
+  "note": "Read-only apart from this row. On Node 26.13.0 at ea7ec8b: pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed (lint:dead included); one pnpm typecheck passed; vitest --changed origin/main on the next and next-integration projects only: 237 files passed, 1 skipped, 1 failed, next/apps/fabrika/src/instance-wire.integration.test.ts with spawn ssh-keygen ENOENT. After installing openssh-client in the box that file passed alone, 15 of 15, so every test the diff reaches is green. No .visual. test ran. git merge-tree with origin/main 59910b0: clean. The slice adds no law (no lock, by the owner ruling), so the review planted none; the tests step's two plants are in its row. By reading: dropping the dot > 0 filter in commandMsg would be caught by no law, since no test reads commandMsg, which is the missing_test row. The other rewritten product functions were checked by the equivalence script, not by plants.",
+  "step": "review"
+}

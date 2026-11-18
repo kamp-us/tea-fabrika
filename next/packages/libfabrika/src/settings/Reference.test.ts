@@ -15,18 +15,26 @@
 //   environment name, flag (`--` and the path), reload, since, default and doc, in Markdown that
 //   keeps the doc's meaning whatever punctuation it holds.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Print from "@kalfa/config/Print";
+import * as Reference from "@kalfa/config/Reference";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import * as ByteSize from "effect/ByteSize";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
-import * as Print from "./Print.ts";
-import * as Reference from "./Reference.ts";
-import * as Setting from "./Setting.ts";
-import * as Snapshot from "./Snapshot.ts";
-import * as Sources from "./Sources.ts";
+import * as Setting from "./Fabrika.ts";
+import * as Sources from "./Fabrika.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 const PERSON = "~/.fabrika/fabrika.toml";
+
 const REPO = ".fabrika/fabrika.toml";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).annotate({
@@ -34,8 +42,8 @@ const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).
   description: "A port is a whole number from 1 to 65535.",
 });
 
-it("T753 L7–L8 byte references distinguish file input from recorded values and keep explicit defaults visible", async () => {
-  await fc.assert(
+it("T753 L7–L8 byte references distinguish file input from recorded values and keep explicit defaults visible", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({ count: fc.bigInt({ min: 1n, max: 2n ** 80n }), doc, explicit: fc.boolean(), all: fc.boolean() }),
       async (v) => {
@@ -48,15 +56,19 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
           since: "1.2.3",
           format: "text",
         });
+
         const group = Setting.group({ record: d });
+
         const origins = {
           [d.path]: v.explicit
             ? Sources.Origin.cases.file.make({ file: REPO, line: 2 })
             : Sources.Origin.cases.default.make({}),
         };
+
         const snapshot = await Effect.runPromise(
           Snapshot.make(group, { values: { record: d.default }, origins }).pipe(Effect.provide(Digest.layerWebCrypto)),
         );
+
         const rows = Reference.rows(group, snapshot);
         expect(rows[0]).toMatchObject({
           path: d.path,
@@ -67,8 +79,8 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
           since: d.since,
         });
         const report = Print.report(rows, { all: v.all });
-        expect(report.includes(`${d.path} =`)).toBe(v.explicit || v.all);
-        const text = plain(Reference.markdown(group));
+        expect(Str.includes(`${d.path} =`)(report)).toBe(v.explicit || v.all);
+        const text = group.pipe(Reference.markdown, plain);
         // The reference must show the declaration-derived file spelling separately from JSON digits.
         const fileDefault = Schema.encodeSync(Schema.toCodecStringTree(d.schema))(d.default);
         expect(text).toContain(String(fileDefault));
@@ -77,14 +89,15 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
       },
     ),
     check,
-  );
-});
+  ));
 
 // Release triples near 9 and 10, where text order and number order part.
 const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
+
 const release = fc.tuple(part, part, part).map((t) => t.join("."));
 
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
+
 const scopes = fc.constantFrom<Setting.Scope>(["person"], ["repo"], ["person", "repo"], ["repo", "person"]);
 
 // Words with Markdown punctuation and line breaks.
@@ -121,7 +134,7 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 
 const grouped = (ds: Declared) =>
   Setting.group(
-    Object.fromEntries(
+    Rec.fromEntries(
       ds.map((d, n) => [
         `s${n}`,
         Setting.make(`${d.table}.${d.key}`, {
@@ -137,7 +150,7 @@ const grouped = (ds: Declared) =>
   );
 
 /** The snapshot a real resolve gives for the generated sources. */
-const loaded = async (ds: Declared) => {
+const loaded = (ds: Declared) => {
   const group = grouped(ds);
   const flags: Record<string, string> = {};
   const env: Record<string, string> = {};
@@ -157,44 +170,46 @@ const loaded = async (ds: Declared) => {
       person[d.table] = { ...person[d.table], [d.key]: d.value };
     }
   });
-  const snapshot = await Effect.runPromise(
-    Sources.resolve(group, {
-      flags: Sources.flags(flags),
-      env: Sources.env(env),
-      repo: Sources.file(REPO, { value: {}, spans: [] }),
-      person: Sources.file(PERSON, { value: person, spans: [] }),
-    }).pipe(
-      Effect.flatMap((resolved) => Snapshot.make(group, resolved)),
-      Effect.provide(Digest.layerWebCrypto),
-    ),
+
+  return Sources.resolve(group, {
+    flags: Sources.flags(flags),
+    env: Sources.env(env),
+    repo: Sources.file(REPO, { value: {}, spans: [] }),
+    person: Sources.file(PERSON, { value: person, spans: [] }),
+  }).pipe(
+    Effect.flatMap((resolved) => Snapshot.make(group, resolved)),
+    Effect.map((snapshot) => ({ group, snapshot })),
+    Effect.provide(Digest.layerWebCrypto),
   );
-  return { group, snapshot };
 };
 
-const triple = (version: string) => version.split(".").map(Number);
+const triple = (version: string) => Str.split(version, ".").map(Number);
 
 /** Whether release `a` is newer than `b`, by whole numbers. */
 const newer = (a: string, b: string) => {
   const [x, y] = [triple(a), triple(b)];
   const n = x.findIndex((p, i) => p !== y[i]);
+
   return n >= 0 && x[n]! > y[n]!;
 };
 
 describe("L5, rows carry the snapshot's values and origins, and only declared keys", () => {
-  it("one row per declaration, by path, with the snapshot's value and origin and the declaration's metadata", async () => {
-    await fc.assert(
+  it("one row per declaration, by path, with the snapshot's value and origin and the declaration's metadata", () =>
+    fc.assert(
       fc.asyncProperty(declared, fc.dictionary(segment, port, { maxKeys: 2 }), async (ds, stray) => {
-        const { group, snapshot } = await loaded(ds);
+        const { group, snapshot } = await Effect.runPromise(loaded(ds));
         // Keys no declaration names, such as a field a later release dropped, stay out of the rows.
-        const extra = Object.fromEntries(Object.entries(stray).map(([k, v]) => [`zz-${k}.stray`, v]));
+        const extra = Rec.fromEntries(Rec.toEntries(stray).map(([k, v]) => [`zz-${k}.stray`, v]));
+
         const widened: Snapshot.Snapshot = {
           ...snapshot,
           values: { ...snapshot.values, ...extra },
           origins: {
             ...snapshot.origins,
-            ...Object.fromEntries(Object.keys(extra).map((k) => [k, { _tag: "flag" as const, name: `--${k}` }])),
+            ...Rec.fromEntries(Rec.keys(extra).map((k) => [k, { _tag: "flag" as const, name: `--${k}` }])),
           },
         };
+
         const rows = Reference.rows(group, widened);
         const paths = group.declarations.map((d) => d.path).sort();
         expect(rows.map((r) => r.path)).toEqual(paths);
@@ -213,24 +228,26 @@ describe("L5, rows carry the snapshot's values and origins, and only declared ke
         }
       }),
       check,
-    );
-  });
+    ));
 });
 
 describe("L6, a warning names exactly the explicit keys newer than the repo's minimum", () => {
-  it("explicit rows whose since is a newer release than the minimum, by number, and no default row", async () => {
-    await fc.assert(
+  it("explicit rows whose since is a newer release than the minimum, by number, and no default row", () =>
+    fc.assert(
       fc.asyncProperty(declared, release, async (ds, minimum) => {
-        const { group, snapshot } = await loaded(ds);
+        const { group, snapshot } = await Effect.runPromise(loaded(ds));
         const rows = Reference.rows(group, snapshot);
+
         const want = rows
           .filter((r) => r.origin._tag !== "default" && newer(r.since, minimum))
           .map((r) => ({ path: r.path, since: r.since, minimum }));
+
         const got = Reference.warnings(rows, minimum).map((w) => ({
           path: w.path,
           since: w.since,
           minimum: w.minimum,
         }));
+
         expect([...got].sort((a, b) => (a.path < b.path ? -1 : 1))).toEqual(want);
       }),
       {
@@ -255,31 +272,54 @@ describe("L6, a warning names exactly the explicit keys newer than the repo's mi
           ],
         ],
       },
-    );
-  });
+    ));
 });
 
 /** The reference as a reader sees it: Markdown escapes and line breaks undone, spaces collapsed. */
 const plain = (text: string) =>
-  text
-    .replace(/<br\s*\/?>/g, " ")
-    .replace(/\\([\\`*_{}[\]()#+\-.!|<>~&])/g, "$1")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#124;|&vert;|&#x7[cC];/g, "|")
-    .replace(/&#96;/g, "`")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ");
+  Str.replace(
+    /\s+/g,
+    " ",
+  )(
+    Str.replace(
+      /&amp;/g,
+      "&",
+    )(
+      Str.replace(
+        /&quot;/g,
+        '"',
+      )(
+        Str.replace(
+          /&#96;/g,
+          "`",
+        )(
+          Str.replace(
+            /&#124;|&vert;|&#x7[cC];/g,
+            "|",
+          )(
+            Str.replace(
+              /&gt;/g,
+              ">",
+            )(
+              Str.replace(
+                /&lt;/g,
+                "<",
+              )(Str.replace(/\\([\\`*_{}[\]()#+\-.!|<>~&])/g, "$1")(Str.replace(/<br\s*\/?>/g, " ")(text))),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
-const collapse = (text: string) => text.replace(/\s+/g, " ").trim();
+const collapse = (text: string) => Str.trim(Str.replace(/\s+/g, " ")(text));
 
 describe("L3, the reference keeps each declaration's words, default, scope and release", () => {
   it("every declaration's path, scope, env, flag, reload, since, default and doc are in the reference", () => {
     fc.assert(
       fc.property(declared, (ds) => {
         const group = grouped(ds);
-        const text = plain(Reference.markdown(group));
+        const text = group.pipe(Reference.markdown, plain);
 
         for (const d of group.declarations) {
           for (const shown of [d.path, d.env, `--${d.path}`, d.since, d.reload, ...d.scope]) {

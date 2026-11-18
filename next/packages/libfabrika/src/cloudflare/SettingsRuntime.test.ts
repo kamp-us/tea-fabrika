@@ -20,6 +20,7 @@ describe("L16 shared settings context, next/", () => {
         let attempts = 0;
         let consumers = 0;
         let refuse = false;
+
         const ready = Layer.effect(
           Consumer,
           Effect.gen(function* () {
@@ -37,9 +38,11 @@ describe("L16 shared settings context, next/", () => {
             }
 
             consumers++;
+
             return { build };
           }),
         );
+
         const open = Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
         let owner = yield* open;
         let holder = yield* SettingsRuntime.make(ready).pipe(Effect.provideService(Scope.Scope, owner));
@@ -53,6 +56,7 @@ describe("L16 shared settings context, next/", () => {
             saved === undefined
               ? ["fail", "enter", "concurrent", "reopen"]
               : ["enter", "concurrent", "work-fails", "reopen"];
+
           const move = moves[choice % moves.length];
 
           if (move === "reopen") {
@@ -67,6 +71,7 @@ describe("L16 shared settings context, next/", () => {
           refuse = move === "fail";
           const before = attempts;
           const entries = move === "concurrent" ? 2 + (choice % 7) : 1;
+
           const results = yield* Effect.forEach(
             Array.from({ length: entries }),
             () => Effect.exit(ScopedCache.get(holder, undefined)),
@@ -121,6 +126,7 @@ describe("L16 shared settings context, next/", () => {
         let builds = 0;
         let released = 0;
         const owner = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
+
         const ready = Layer.effect(
           Consumer,
           Effect.gen(function* () {
@@ -132,15 +138,19 @@ describe("L16 shared settings context, next/", () => {
             );
             yield* Deferred.succeed(entered, undefined);
             yield* Deferred.await(pending);
+
             return { build: builds };
           }),
         );
+
         const holder = yield* SettingsRuntime.make(ready).pipe(Effect.provideService(Scope.Scope, owner));
+
         const fibers = yield* Effect.forEach(
           Array.from({ length: total }),
           () => Effect.scoped(ScopedCache.get(holder, undefined)).pipe(Effect.forkChild),
           { concurrency: 1 },
         );
+
         yield* Deferred.await(entered);
 
         for (const fiber of fibers) {

@@ -1,0 +1,272 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-effect-e88-main-integration",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-17T09:04:53.187035+00:00",
+  "ended": "2026-11-17T10:01:43.085655+00:00",
+  "parent": "2026-11-17-effect-e88-fold-integration",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "A normal merge joins current main with the approved E88 next/ and Effect-fold source. The494 source conflicts are resolved, preserving both sets of changes. This records local source and safe unit checks, not merge readiness.",
+  "note": "The code tree passed28 safe plain test files with495 tests and no skipped tests. It has a source-only independent check, not a formal whole-diff review. No protected runtime, compiler, full typed API, temporary product fault or CI dispatch ran in this task. Main runner and shared job locks are retained. Only checklist-pid has its fixed edit fragment at this source; the other3 fixed cases have no match. None supplies E88 R5/R6 proof. The39-file runtime command packet is preparation only. Exact model, tokens and billing are unavailable.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "checkedHead": "d5c36367c1c09f79980854e3bbb9cc00f49ef043",
+  "tree": "20c07c2915f7af56ff21a2a01c85419825a85f47",
+  "parents": [
+    "b9b2170b951751882201e57aacfb365a7dc1c5b3",
+    "cb978023c2cc0d51ce68970f4b825acfcf39b97f"
+  ],
+  "mergeReady": false,
+  "scratchPreserved": true,
+  "guardedLawsRun": false,
+  "sourceChecks": {
+    "conflictFiles": 494,
+    "resolvedSourceFiles": 480,
+    "parsedSourceFiles": 518,
+    "syntaxErrors": 0,
+    "netChangedSourceImportScanFiles": 59,
+    "missingParentImportBindings": 0,
+    "formattedPaths": 532,
+    "scopedLintFirstExit": 1,
+    "scopedLintFirstBlocking": 2,
+    "spacingOnlyFixFiles": 2,
+    "scopedLintCorrectionExit": 0,
+    "independentTree": "dc87e835be97c0b5304546449aba00c73cf67070",
+    "checkedTreeDiff": "Two blank lines only.",
+    "mainAddedPathsPreserved": 146
+  },
+  "safeTests": [
+    {
+      "file": "next/apps/fabrika/src/build.test.ts",
+      "sha256": "4eee92c116f54ecccd35050c263c1c37fcecdace68705f4b5dc3005503377e93",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/door-spans.test.ts",
+      "sha256": "99572a40329addf4dd490baad3b1ce493f5e7496c75e7d77f594ab6282972e61",
+      "numPassedTests": 6,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/error-cause.test.ts",
+      "sha256": "0f184749286b071465878745fdc8f14ab41c7f4435a7e4daaed3098804ce429a",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/instance-watch.laws.test.ts",
+      "sha256": "372050ddedeef6441faed31ad4bc6cfa80bb9ad782c14f90eeb043b4a75f42c0",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/runtime-quotas.laws.test.ts",
+      "sha256": "367653d03ea883dea6c893857b59090497533be945efb0c850d2b418dc9d457b",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/runtime.decode.test.ts",
+      "sha256": "b4b401a7825c7cfb987761dd1d9ea412726a8d0cc9911ea7d587b7ad9861b092",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/connection.test.ts",
+      "sha256": "504760d8004d3e6b2f78f58b4cdcfe2084b695579b2e00a2f2c291a688538ccd",
+      "numPassedTests": 11,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts",
+      "sha256": "163a098a6e91c0039760e7c01f346998c21a3142d7df904740c2965d964d4d9e",
+      "numPassedTests": 6,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/error-cause.test.ts",
+      "sha256": "d8f9a29341d99a4cd11856b022b1eeda049aa355979b7964eb48e2f2f2b955c3",
+      "numPassedTests": 12,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/fetch.test.ts",
+      "sha256": "45ece0781940ff6922df36af2cf394fd96160ab6140b9120118296c25e84e9bb",
+      "numPassedTests": 9,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/index.test.ts",
+      "sha256": "70404bb04a331a06ab2589cfe97be9a5200bd9445f84cccbff8ab19356d4e4ef",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/leave.laws.test.ts",
+      "sha256": "848370e235c449e549626b00e23f54d2ba4c77bb9f2940c651c9e39bdeea6919",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/mail.test.ts",
+      "sha256": "2de60926542d142ce93df7602bfbb0a0dafac8440c44262fab501b2e53dc6637",
+      "numPassedTests": 8,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/readers.laws.test.ts",
+      "sha256": "229fb2af55a7179d1b074648f987073a48e6406942575d53cefe30a197a3d256",
+      "numPassedTests": 39,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/reload.laws.test.ts",
+      "sha256": "fd1a1c78da278d57c0fe5afdbe753dd15703b9c85cd016d81a10d27a539debac",
+      "numPassedTests": 11,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/transport/Sshsig.test.ts",
+      "sha256": "62754093ab35684cdfe3a0652e868d399faca4324833ff8a492f1c7d7c06bb55",
+      "numPassedTests": 28,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/p14.test.ts",
+      "sha256": "94fa73274bda08cda1719c9fab1f1450be125d35274cae3d9aef46dab497db86",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/runtime/Built.test.ts",
+      "sha256": "4049c8e69c66cade6fdb1c2174287f085917a4b01441d145de090d678db29e3a",
+      "numPassedTests": 3,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts",
+      "sha256": "ee9c00192f99d8f268b5483dbae0afcd58ce42645cd2383ce64958dff36a5029",
+      "numPassedTests": 2,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": ".agents/skills/lead/scripts/pr/Stack.test.ts",
+      "sha256": "b4864508229bd1f17b6c6d7a778ae392ea26c4d23d57972e09d131d478bcbe67",
+      "numPassedTests": 10,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": ".agents/skills/lead/scripts/pr/Publish.test.ts",
+      "sha256": "5c1ec8106f9b6cb36b32a20d2fbe4c7d1057c05bafd2c22a949c5575f923ff75",
+      "numPassedTests": 9,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": ".github/ci/plant.test.ts",
+      "sha256": "e3435ea4356bce36bbfb1645a9a6d0aea1daa7b90a85fbba2fa6946373c1d77a",
+      "numPassedTests": 14,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": ".github/ci/workflow-lint/plant.test.ts",
+      "sha256": "f73f81612e09adc426bb4398f1c05d2c3d48adb43e4e44ea5618be6960def12a",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": ".github/ci/workflow-lint/scheduled.test.ts",
+      "sha256": "c6bc96479e7d66a0d34b70a3fdb6419fa920f44144061507db1348bb2ce8ef6b",
+      "numPassedTests": 232,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": ".github/ci/workflow-lint/merge-line.test.ts",
+      "sha256": "f5a385e20f6671c14e947fb6147798bc1bc8cc7530075ab4ffb7685fba9f9ee9",
+      "numPassedTests": 78,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "oxlint-plugins/effect-checks.test.ts",
+      "sha256": "dd168a28f30aafd38c9feaffccb1bbdbae1d9cb00da1d513e0d6a95145fa68fb",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "oxlint-plugins/effect-checks-held.test.ts",
+      "sha256": "3612af9923552b5262762ec1d92d2d297fa92f1c19f907ab815cfb8de358831e",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    },
+    {
+      "file": "next/apps/fabrika/src/exam/node-kinds.test.ts",
+      "sha256": "f2e0e52b842a3f394c86d0f896f7fc86187192e7ddd977052e99a16380c640aa",
+      "numPassedTests": 1,
+      "numFailedTests": 0,
+      "numPendingTests": 0
+    }
+  ],
+  "install": {
+    "offlineFrozenExit": 1,
+    "offlineReason": "The local package mirror lacked registry metadata for @anthropic-ai/sdk.",
+    "frozenExit": 0,
+    "sourceAndLockChanged": false,
+    "policyBypass": false
+  },
+  "privateHelperFailure": {
+    "exit": 134,
+    "reason": "An empty conflict fragment made a private merge helper loop indefinitely.",
+    "fixed": "Return immediately for the empty fragment. Bounded empty, repeated and missing-fragment checks passed.",
+    "heapLimitRaised": false
+  },
+  "assertionAccounting": [
+    "Main replaces the third-configure poll with the direct asked(3) event wait and its5-second timeout.",
+    "Scoped child acquisition fails if Node cannot start; actual module import fails if RecoveryStore is missing.",
+    "The shared config reader preserves duplicate-key failure and throws on parser errors.",
+    "Related, launchd and stylelint test-title sets match both parents; call-chain syntax caused the earlier count difference."
+  ],
+  "pending": [
+    "Lead publication of the exact local head",
+    "Joined whole compiler and full typed API checks",
+    "All39 remote whole-file results",
+    "R5 and R6 baseline, intended fault and restoration",
+    "Fresh whole-diff review, including the prior four String sweep sites"
+  ]
+}

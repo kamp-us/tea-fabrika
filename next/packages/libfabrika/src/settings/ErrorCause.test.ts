@@ -8,11 +8,13 @@
 // the written-undefined case of that error fails to decode; set either line to
 // `Schema.optional(Schema.Unknown)`, and that error's encoded Error cause stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
+import { SettingsError } from "@kalfa/config/Files";
+import { SnapshotError } from "@kalfa/config/Snapshot";
 import { runsFor } from "@kampus/vitest";
 import { Exit, Schema } from "effect";
+import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
-import { SettingsError } from "./Files.ts";
-import { SnapshotError } from "./Snapshot.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -21,9 +23,11 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
  * in the encoded form `Schema.Defect()` writes, the one case where `Defect` and `Unknown` differ.
  */
 type Form = "absent" | "undefined" | "json" | "error";
+
 const FORMS: ReadonlyArray<Form> = ["absent", "undefined", "json", "error"];
 
 const settingsBefore = Schema.Struct({ ...SettingsError.fields, cause: Schema.optionalKey(Schema.Defect()) });
+
 const snapshotBefore = Schema.Struct({ ...SnapshotError.fields, cause: Schema.optionalKey(Schema.Defect()) });
 
 /**
@@ -48,6 +52,7 @@ const errors = {
 } as const;
 
 type Name = keyof typeof errors;
+
 const NAMES: ReadonlyArray<Name> = ["SettingsError", "SnapshotError"];
 
 /** An Error with a drawn name and message, encoded the way `Schema.Defect()` writes it. */
@@ -56,8 +61,16 @@ const encodedError = fc
   .map(({ name, message }) => Schema.encodeUnknownSync(Schema.Defect())(Object.assign(new Error(message), { name })));
 
 /** The cause in each form, or no key at all. */
-const causeKey = (form: Form, json: fc.JsonValue, error: unknown): { cause?: unknown } =>
-  form === "absent" ? {} : { cause: form === "undefined" ? undefined : form === "json" ? json : error };
+const causeKey = (form: Form, json: fc.JsonValue, cause: unknown): { cause?: unknown } =>
+  form === "absent"
+    ? {}
+    : {
+        cause: Match.value(form).pipe(
+          Match.when("undefined", () => undefined),
+          Match.when("json", () => json),
+          Match.orElse(() => cause),
+        ),
+      };
 
 /** One encoded value of a drawn error, its cause in a drawn form. */
 const encoded = fc
@@ -76,7 +89,7 @@ const encoded = fc
  * field: an Error keeps `message` as an own key that does not enumerate.
  */
 const own = (value: object) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     Object.getOwnPropertyNames(value)
       .filter((key) => key !== "stack")
       .map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value]),

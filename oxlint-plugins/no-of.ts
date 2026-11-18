@@ -20,6 +20,7 @@
 //
 // `.oxlintrc.json` turns it on in all of `next/**`, tests included: a test names its helpers too.
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr, Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 const OF = /^of$|[A-Za-z0-9]Of$/;
@@ -34,7 +35,7 @@ const spelled = (node: Node | null | undefined): string | null => {
     return node.name;
   }
 
-  if (node.type === "Literal" && typeof node.value === "string") {
+  if (node.type === "Literal" && Predicate.isString(node.value)) {
     return node.value;
   }
 
@@ -47,27 +48,35 @@ const spelled = (node: Node | null | undefined): string | null => {
  */
 const exportsOf = (program: Node): boolean =>
   program.type === "Program" &&
-  program.body.some(
+  Arr.some(
+    program.body,
     (s) =>
       s.type === "ExportNamedDeclaration" &&
       s.source == null &&
       s.exportKind !== "type" &&
-      s.specifiers.some((e) => e.exportKind !== "type" && spelled(e.local) === "of" && spelled(e.exported) === "of"),
+      Arr.some(
+        s.specifiers,
+        (e) => e.exportKind !== "type" && spelled(e.local) === "of" && spelled(e.exported) === "of",
+      ),
   );
 
 export const noOf: CreateRule = {
   create(context) {
     let exported = false;
+
     /** True when this declaration is the module's own top-level `of`, read by others as `M.of`. */
     const exportedTopLevel = (decl: Node): boolean => {
+      // SAFETY: a declaration always sits inside a statement or the Program, which oxlint sets as its `parent`.
       const { parent } = decl as Node & { readonly parent: Node };
 
       if (parent.type === "ExportNamedDeclaration") {
+        // SAFETY: an export declaration sits at a module's top, or in a namespace, and oxlint sets its `parent` either way.
         return (parent as Node & { readonly parent: Node }).parent.type === "Program";
       }
 
       return parent.type === "Program" && exported;
     };
+
     /** Reports a declared `of` or `xOf` name; `allowOf` lets exactly `of` pass. */
     const check = (node: Node | null | undefined, allowOf = false) => {
       const name = spelled(node);
@@ -81,6 +90,7 @@ export const noOf: CreateRule = {
         message: `\`${name}\`: no bare \`of\` and no \`xOf\` names in next/. Put the helper on its type as a static (\`make\`, \`fromX\`, \`toX\`), give it a plain name, or export a top-level \`of\` that readers call as \`Lease.of(...)\` (0029).`,
       });
     };
+
     /** Each name a binding pattern declares, leaving out a shorthand key's borrowed name. */
     const bound = (node: Node | null | undefined, allowOf = false): void => {
       if (node == null) {
@@ -90,6 +100,7 @@ export const noOf: CreateRule = {
       switch (node.type) {
         case "Identifier":
           check(node, allowOf);
+
           return;
         case "ObjectPattern":
           for (const p of node.properties) {
@@ -109,22 +120,27 @@ export const noOf: CreateRule = {
           return;
         case "RestElement":
           bound(node.argument, allowOf);
+
           return;
         case "AssignmentPattern":
           bound(node.left, allowOf);
+
           return;
         case "TSParameterProperty":
           bound(node.parameter);
+
           return;
         default:
           return;
       }
     };
+
     const params = (node: { readonly params: readonly Node[] }) => {
       for (const p of node.params) {
         bound(p);
       }
     };
+
     /** A namespace's name, each part of `A.B.C`; a `declare module "x"` string is a path, not a name. */
     const namespace = (node: Node) => {
       if (node.type === "TSQualifiedName") {
@@ -134,16 +150,19 @@ export const noOf: CreateRule = {
         check(node);
       }
     };
+
     const member = (node: { readonly computed: boolean; readonly key: Node }) => {
       if (!node.computed) {
         check(node.key);
       }
     };
+
     return {
       Program(node) {
         exported = exportsOf(node);
       },
       VariableDeclarator(node) {
+        // SAFETY: a VariableDeclarator always sits inside its VariableDeclaration, which oxlint sets as `parent`.
         bound(node.id, exportedTopLevel((node as Node & { readonly parent: Node }).parent));
       },
       FunctionDeclaration(node) {
@@ -216,6 +235,7 @@ export const noOf: CreateRule = {
         check(node.exported, true);
       },
       Property(node) {
+        // SAFETY: a Property always has an object as its `parent`, which oxlint sets on each node it visits.
         const { parent } = node as Node & { readonly parent: Node };
 
         if (parent.type === "ObjectExpression" && !node.computed && !node.shorthand) {

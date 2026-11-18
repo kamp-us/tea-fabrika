@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-program-ts-still-has-machine-view-refuse-shape",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Program.ts",
+    "line": 290
+  },
+  "says": "next/'s Program.ts still builds a program from a Machine value with a typed view, a refuse check, a cmds list and Input.make/Input.group, the shape 0256 to 0260 and 0601 replaced with Program.make(name)(fn) and its inputs, outputs and errors pipes. Ticket text: move Program.ts onto Program.make with the three pipes in 0601's build order, then each program in next/ in its own slice.",
+  "proof": "Program.ts:36 `readonly cmds?: ReadonlyArray<AnyCmdDef>`, :290 `readonly view: (model: ...) =>`, :295 `readonly refuse: (model, msg) => Refusal | null`; `ls kalfa` shows only config and quality, so @kalfa/program does not exist yet.",
+  "cost": "A reader who trusts the code over the records builds the replaced shape.",
+  "head": "7b63f09b0a109363abe07f950ad7e02f6f5ce9e6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}

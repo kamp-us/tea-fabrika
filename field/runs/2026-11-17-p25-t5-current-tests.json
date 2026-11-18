@@ -1,0 +1,69 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-p25-t5-current-tests",
+  "ticket": "tracker:888",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1099",
+  "started": "2026-11-17T18:31:37.050Z",
+  "ended": "2026-11-17T18:37:08.464Z",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/ P25 current T5 proof: scenario and all 19 layers checks pass; real gateway and native Node import faults fail, then exact restoration passes.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "head": "54400d6f02f9297521ad35c6cdfeaac9f523a11c",
+  "checks": [
+    {
+      "check": "scoped format and lint",
+      "result": "pass",
+      "note": "0 blocking; one existing JSON.parse advice."
+    },
+    {
+      "check": "P25 T5 scenario",
+      "result": "pass",
+      "passed": 1,
+      "note": "18 other checks excluded by name filter."
+    },
+    {
+      "check": "complete layers.integration.test.ts",
+      "result": "pass",
+      "passed": 19
+    },
+    {
+      "check": "restored real repository layer checker",
+      "result": "pass"
+    },
+    {
+      "check": "restored scoped Tools lint",
+      "result": "pass"
+    }
+  ],
+  "plants": [
+    {
+      "law": "T5 lint: Tools cannot import gateway",
+      "plant": "Add ../gateway/Gateway.ts import to actual Tools.ts; code-graph reports next-mcp -> next-door outside-imports.",
+      "result": "red"
+    },
+    {
+      "law": "T5 lint: Tools cannot import native Node",
+      "plant": "Add node:fs import below module doc to actual Tools.ts; exactly one fabrika(no-node-imports) diagnostic.",
+      "result": "red"
+    }
+  ],
+  "faults": [
+    "First node:fs placement at file top also produced module-doc diagnostic. Restored, repeated below existing doc, observed only the intended rule, and restored again."
+  ],
+  "limits": "Existing owner-approved resource setting used per command with unchanged guards. Pinned Node26.13.0, nice19, one worker, paid-call key unset. No broad suite, compiler or CI dispatch; final full proof and review belong to lead. No repository changes retained; all owned processes exited."
+}

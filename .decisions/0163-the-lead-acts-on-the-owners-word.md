@@ -72,9 +72,8 @@ owner-only rules bind the agents nobody is watching (owner, 2026-11-13).**
 - **The call stays the owner's.** This moves who carries an act out. Where a decision says a
   choice waits on the owner, such as a real loosening of a law or a new design call, it still
   waits.
-- This supersedes 0116's "Only the owner changes the ruleset" for the lead. For every other agent
-  that line holds as written. The same reading applies to any other decision that keeps an act for
-  the owner.
+- This supersedes 0116's "Only the owner changes the ruleset" for the lead. The same reading applies
+  to any other decision that keeps an act for the owner.
 
 **Binding constraints**
 

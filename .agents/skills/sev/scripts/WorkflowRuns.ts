@@ -8,8 +8,25 @@
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
-/** GitHub could not be asked, refused, or answered in a shape we do not read. */
-export class WorkflowRunsError extends Schema.TaggedError<WorkflowRunsError>()("WorkflowRunsError", {
+/**
+ * GitHub could not be asked, refused, or answered in a shape we do not read. `status` is the HTTP
+ * status GitHub answered with; `null` when no answer came back, as when gh could not start or the
+ * network failed.
+ */
+export class WorkflowRunsError extends Schema.TaggedError<WorkflowRunsError, { readonly brand: unique symbol }>()(
+  "WorkflowRunsError",
+  {
+    reason: Schema.String,
+    status: Schema.NullOr(Schema.Int),
+  },
+) {}
+
+/**
+ * GitHub refused the call for its rate limit, which every agent on the login shares. It takes calls
+ * again at `until`; one asked before then only spends more of the next hour's.
+ */
+export class RateLimited extends Schema.TaggedError<RateLimited, { readonly brand: unique symbol }>()("RateLimited", {
+  until: Schema.DateTimeUtc,
   reason: Schema.String,
 }) {}
 
@@ -32,14 +49,15 @@ export const Run = Schema.Struct({
   /** When GitHub made it, as GitHub wrote it (ISO 8601). */
   created: Schema.String,
 });
+
 export type Run = typeof Run.Type;
 
 export class WorkflowRuns extends Context.Service<
   WorkflowRuns,
   {
     /** Every run of the repo that has not completed yet. */
-    readonly unfinished: Effect.Effect<ReadonlyArray<Run>, WorkflowRunsError>;
+    readonly unfinished: Effect.Effect<ReadonlyArray<Run>, WorkflowRunsError | RateLimited>;
     /** Asks GitHub to cancel run `id`. */
-    readonly cancel: (id: number) => Effect.Effect<void, WorkflowRunsError>;
+    readonly cancel: (id: number) => Effect.Effect<void, WorkflowRunsError | RateLimited>;
   }
 >()("sev/WorkflowRuns") {}

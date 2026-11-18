@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1133-source-recheck",
+  "ticket": "1133",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T21:59:55-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Same-reviewer source recheck at 40efa19a7c6be408b68c1e3a133b0f5789d2c19b read all five fix paths. Both named reporting faults are fixed; no new source fault found. Tests now use actual installed matcher stack/message and the real attempt boundary with in-memory I/O. Raw values stay private, unknown received tags remain unknown and validated facts survive early failures. No tests/compiler/adapters/CI actions ran. Full lead checks and real adapter proof remain owed.",
+  "note": "Source-only verdict. Recheck start time and model usage were not captured and remain null; no public run row requested or committed. See manual-plant-source-recheck.md.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billing": null
+}

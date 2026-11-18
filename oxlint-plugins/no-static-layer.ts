@@ -19,6 +19,7 @@
 //
 // Which folders it holds is the config's `files` list, and tests are left out there (README.md).
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 type Member = ESTree.ClassBody["body"][number];
@@ -39,6 +40,7 @@ const imported = (variable: Variable | undefined): { readonly from: string; read
 
   if (spec.type === "ImportSpecifier") {
     const name = spec.imported.type === "Identifier" ? spec.imported.name : String(spec.imported.value);
+
     return { from: def.parent.source.value, name };
   }
 
@@ -51,7 +53,7 @@ const memberName = (node: ESTree.MemberExpression): string | null => {
     return node.property.name;
   }
 
-  return node.computed && node.property.type === "Literal" && typeof node.property.value === "string"
+  return node.computed && node.property.type === "Literal" && Predicate.isString(node.property.value)
     ? node.property.value
     : null;
 };
@@ -83,6 +85,7 @@ export const noStaticLayer: CreateRule = {
     const isContext = (node: Node): boolean => {
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return (
           at !== null &&
           ((at.from === "effect" && at.name === "Context") || (at.from === "effect/Context" && at.name === "*"))
@@ -91,6 +94,7 @@ export const noStaticLayer: CreateRule = {
 
       if (node.type === "MemberExpression" && memberName(node) === "Context" && node.object.type === "Identifier") {
         const at = imported(resolve(node.object));
+
         return at?.from === "effect" && at.name === "*";
       }
 
@@ -110,6 +114,7 @@ export const noStaticLayer: CreateRule = {
 
         if (at.type === "Identifier") {
           const by = imported(resolve(at));
+
           return by?.from === "effect/Context" && by.name === "Service";
         }
       }

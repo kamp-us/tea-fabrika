@@ -15,7 +15,7 @@
 // and the step runs again: a step must be safe to run twice.
 
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Schema, Array as Arr, Option } from "effect";
 import { Flow } from "./Flow.ts";
 import { Answer, Outcome, Spent } from "./Outcome.ts";
 import { Step } from "./Step.ts";
@@ -24,11 +24,12 @@ import { Step } from "./Step.ts";
 export const Attempt = Schema.Struct({
   position: Schema.Int,
   name: Schema.String,
-  startedAt: Schema.Number,
-  endedAt: Schema.NullOr(Schema.Number),
+  startedAt: Schema.Finite,
+  endedAt: Schema.NullOr(Schema.Finite),
   outcome: Schema.NullOr(Outcome),
   spent: Schema.NullOr(Spent),
 });
+
 export type Attempt = typeof Attempt.Type;
 
 const History = Schema.Array(Attempt);
@@ -39,6 +40,7 @@ export const Model = Schema.TaggedUnion({
   parked: { flow: Flow, position: Schema.Int, history: History, reason: Schema.String },
   stuck: { flow: Flow, position: Schema.Int, history: History, reason: Schema.String },
 });
+
 export type Model = typeof Model.Type;
 
 /** Run one step; the runner's answer comes back as `step_run_ok`. */
@@ -62,7 +64,7 @@ const closed = (
   outcome: Outcome,
   spent: Answer["spent"],
 ): ReadonlyArray<Attempt> =>
-  history.map((a, i) => (i === history.length - 1 ? { ...a, endedAt: at, outcome, spent } : a));
+  Arr.map(history, (a, i) => (i === history.length - 1 ? { ...a, endedAt: at, outcome, spent } : a));
 
 /**
  * The flow machine. `lead` says whether this process was started by the lead session: a step marked
@@ -79,6 +81,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
 
     if (history.length >= flow.attempts) {
       const reason = `${flow.attempts} step attempts ran (the flow's cap); it stops before ${step.name}`;
+
       return stay(Model.cases.stuck.make({ flow, position, history, reason }));
     }
 
@@ -87,6 +90,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
     if (step.lead && !lead) {
       const reason = `${step.name} acts in the lead session's name; the lead runs this flow again with --resume --lead`;
       const asked = { ...attempt, endedAt: at, outcome: Outcome.cases.ask.make({ reason }) };
+
       return stay(Model.cases.parked.make({ flow, position, history: [...history, asked], reason }));
     }
 
@@ -100,6 +104,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
     model: Model,
     msg: Schema.Never,
     cmds: [stepRun],
+    // SAFETY: tea's `types` slot only carries the Ctx type; tea never reads this empty value (0561).
     types: { ctx: {} as Ctx },
     init: (loaded, ctx): Next => {
       if (loaded === null) {
@@ -130,8 +135,9 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
         }
 
         if (outcome._tag === "send") {
-          const to = flow.steps.findIndex((step) => step.name === outcome.to);
-          return to === -1
+          const to = Arr.findFirstIndex(flow.steps, (step) => step.name === outcome.to);
+
+          return Option.isNone(to)
             ? stay(
                 Model.cases.stuck.make({
                   flow,
@@ -140,7 +146,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
                   reason: `${name} sent the flow to ${outcome.to}, which is no step of it: ${outcome.reason}`,
                 }),
               )
-            : enter(flow, history, to, m.at);
+            : enter(flow, history, to.value, m.at);
         }
 
         if (outcome._tag === "ask") {
@@ -156,8 +162,10 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
 
         const cause =
           m.error._tag === "StepFailed" ? String(m.error.reason) : `its answer did not parse (${m.error._tag})`;
+
         const reason = `${m.cmd.step.name} failed: ${cause}`;
         const history = closed(s.history, m.at, Outcome.cases.stuck.make({ reason }), null);
+
         return stay(Model.cases.stuck.make({ flow: s.flow, position: s.position, history, reason }));
       },
     },

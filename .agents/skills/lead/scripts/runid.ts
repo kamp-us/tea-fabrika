@@ -13,6 +13,8 @@
 // it: a restarted quest never takes the name of a box or a log that is still there (p39s1,
 // 2026-11-11: two launches both counted the state file's entries and both took `p39s1-tests2`).
 
+import { String as Str, pipe } from "effect";
+
 /** One run id's parts. */
 export interface Parts {
   readonly quest: string;
@@ -47,14 +49,15 @@ export const make = (parts: Parts): string => `${parts.quest}-${parts.step}${par
 /** A run id's parts, or `null` when the text is no run id. */
 export const parse = (id: string): Parts | null => {
   const m = ID.exec(id);
+
   return m === null ? null : { quest: m[1] ?? "", step: m[2] ?? "", n: Number(m[3]) };
 };
 
 /** The run a file in the boxes folder belongs to, or `null` when it is no run's file. */
 export const owner = (name: string): Parts | null => {
   for (const suffix of FILES) {
-    if (name.endsWith(suffix)) {
-      const parts = parse(name.slice(0, name.length - suffix.length));
+    if (pipe(name, Str.endsWith(suffix))) {
+      const parts = parse(pipe(name, Str.slice(0, name.length - suffix.length)));
 
       if (parts !== null) {
         return parts;

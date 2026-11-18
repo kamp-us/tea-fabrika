@@ -33,7 +33,7 @@ read of the package comes first. Neither says what the issue holds. The issues f
 the fix in words or in a short excerpt, while the full change sat in our `patches/` folder where the
 maintainer cannot see it.
 
-This refines both: their rules still hold, and this adds what the issue carries.
+This refines both: it adds what the issue carries.
 
 ## Decision
 

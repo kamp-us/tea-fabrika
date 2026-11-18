@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Array as Arr, Predicate } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { CEILING, FACTOR, FLOOR, limit, type Report, slowest } from "./limit.ts";
@@ -12,13 +13,17 @@ const options = { seed: 119120, numRuns: 200 };
 type File = (typeof Report.Type)["testResults"][number];
 
 const duration = fc.oneof(fc.double({ min: 0, max: 120_000, noNaN: true }), fc.constant(null), fc.constant(undefined));
-const tests = fc.array(duration, { maxLength: 6 }).map((ds) => ds.map((d) => (d === undefined ? {} : { duration: d })));
+
+const tests = fc
+  .array(duration, { maxLength: 6 })
+  .map((ds) => Arr.map(ds, (d) => (d === undefined ? {} : { duration: d })));
 
 /** A file with times that hold its tests and some set-up, or a file that failed to load and has none. */
 const file: fc.Arbitrary<File> = fc
   .tuple(tests, fc.double({ min: 0, max: 120_000, noNaN: true }), fc.boolean(), fc.integer({ min: 0, max: 2e12 }))
   .map(([assertionResults, setup, timed, start]) => {
-    const sum = assertionResults.reduce((s, t) => s + (typeof t.duration === "number" ? t.duration : 0), 0);
+    const sum = Arr.reduce(assertionResults, 0, (s, t) => s + (Predicate.isNumber(t.duration) ? t.duration : 0));
+
     return timed ? { startTime: start, endTime: start + sum + setup, assertionResults } : { assertionResults };
   });
 
@@ -83,9 +88,11 @@ describe("the mutation run's per-test limit, today's tooling", () => {
   // one, so the mutation command stops instead of taking the floor in silence.
   it("scenario: the command prints the limit for a report and fails on anything else", () => {
     const dir = mkdtempSync(join(tmpdir(), "mut-limit-"));
+
     const run = (text: string) => {
       const path = join(dir, "baseline.json");
       writeFileSync(path, text);
+
       return spawnSync(process.execPath, [join(import.meta.dirname, "limit.ts"), path], { encoding: "utf8" });
     };
 
@@ -104,6 +111,7 @@ describe("the mutation run's per-test limit, today's tooling", () => {
           ],
         }),
       );
+
       expect(good.status).toBe(0);
       expect(good.stdout).toBe("39000\n");
       const bad = run('{"testResults": "none"}');

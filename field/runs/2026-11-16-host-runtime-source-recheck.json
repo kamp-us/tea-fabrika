@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-host-runtime-source-recheck",
+  "ticket": "kamp-us/tea-fabrika#1132",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T21:41:06-08:00",
+  "parent": "2026-11-16-host-runtime-source-review",
+  "role": "hand",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Source-only same-reviewer recheck resolves the one timeout fault: lazy cached discovery runs inside the existing command budget, and installed Effect cancellation interrupts and awaits abandoned discovery. No new source fault proved.",
+  "note": "Read exact fix delta, callers, protected regression law and installed cached/race/cancellation/process-cleanup source. No tests, compiler, install, real discovery/process/signal, CI/ref/publication actions. Required remote baseline, regression plant/restoration and compiler proof remain owed; this is not full-review approval. Start time was not sampled.",
+  "head": "e33239acefa0d13f74e5b6390eb58184df9247c2",
+  "base": "ff8e14daee3442dec442b291b9aaaeb5fd78323a",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

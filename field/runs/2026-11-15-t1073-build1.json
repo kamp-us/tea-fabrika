@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1073-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1420",
+  "started": "2026-11-15T20:14:00-08:00",
+  "ended": "2026-11-15T20:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Build for ticket 1073 slice 1 in next/ and our tooling: the nine renamed next/ test files had stale rows in vitest.shards.json and vitest.shards.full.json (17 rows, shard-rows.ts failing, six laws in vitest.shards.test.ts red). A throwaway script read the renames from git diff -M and renamed each row key in place, keeping its seconds. The stale file name in vitest.shards.ts's comment moved to RepositoriesGit.integration.test.ts. The deps and laws-scan splits are out of this slice by the lead's call.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 16,
+  "note": "L18 and F2 stayed red after the row move because a stale vitest results cache in node_modules/.vite held node-kinds.test.ts as failed, and the sequencer starts a failed file first. Deleting that local cache folder made vitest.shards.test.ts pass 34 of 34. This is local state, not in git.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "build"
+}

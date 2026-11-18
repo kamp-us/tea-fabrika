@@ -3,9 +3,17 @@ import { applyCell } from "@demlik/tea";
 import { foldEvents } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { syncTest } from "../../Testing.ts";
 import { nth } from "../RepliesTest.ts";
 import { Model, watchers } from "./watchers.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  end: {},
+  open: {},
+});
 
 const Client = Schema.Struct({
   client: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
@@ -28,7 +36,7 @@ describe("saved view membership, next/", () => {
     [Walk],
     ([walk]) => {
       let [state] = watchers.init(null, {});
-      const msgs: Array<{ type: "open"; watch: typeof Client.Type } | { type: "end"; client: string }> = [];
+      const msgs: Array<{ _tag: "open"; watch: typeof Client.Type } | { _tag: "end"; client: string }> = [];
       let expected: Array<typeof Client.Type> = [];
 
       for (const [pick, fresh] of walk) {
@@ -36,19 +44,19 @@ describe("saved view membership, next/", () => {
         const client = held.length > 0 && pick % 3 !== 0 ? nth(held, pick).client : fresh.client;
 
         if (pick % 3 === 2) {
-          const msg = { type: "end" as const, client };
+          const msg = { ...Tag.cases.end.make({}), client };
           msgs.push(msg, msg);
           [state] = applyCell(watchers, state, msg);
           const [again, cmds] = applyCell(watchers, state, msg);
           expect(again).toEqual(state);
           expect(cmds).toEqual([]);
-          expected = expected.filter((c) => c.client !== client);
+          expected = Arr.filter(expected, (c) => c.client !== client);
         } else {
           const watch = { ...fresh, client };
-          const msg = { type: "open" as const, watch };
+          const msg = { ...Tag.cases.open.make({}), watch };
           msgs.push(msg);
           [state] = applyCell(watchers, state, msg);
-          expected = [...expected.filter((c) => c.client !== client), watch].slice(-1024);
+          expected = [...Arr.filter(expected, (c) => c.client !== client), watch].slice(-1024);
         }
 
         expect(clients(state)).toEqual(expected);
@@ -83,7 +91,7 @@ describe("saved view membership, next/", () => {
         const opened = Array.from({ length: 1026 }, (_, i) => ({ client: `client-${i}`, at: i, position: i }));
 
         for (const watch of opened) {
-          [state] = applyCell(watchers, state, { type: "open", watch });
+          [state] = applyCell(watchers, state, { ...Tag.cases.open.make({}), watch });
         }
 
         expect(state).toStrictEqual({ _tag: "watching", clients: opened.slice(2) });
@@ -95,24 +103,24 @@ describe("saved view membership, next/", () => {
 
       for (const [pick, fresh] of walk) {
         const held = clients(state);
-        const client = held.length && pick % 3 ? nth(held, pick).client : fresh.client;
+        const client = held.length > 0 && pick % 3 !== 0 ? nth(held, pick).client : fresh.client;
 
         if (pick % 3 === 2) {
-          [state] = applyCell(watchers, state, { type: "end", client });
-          expected = expected.filter((c) => c.client !== client);
+          [state] = applyCell(watchers, state, { ...Tag.cases.end.make({}), client });
+          expected = Arr.filter(expected, (c) => c.client !== client);
         } else {
           const watch = { ...fresh, client };
-          [state] = applyCell(watchers, state, { type: "open", watch });
-          expected = [...expected.filter((c) => c.client !== client), watch].slice(-1024);
+          [state] = applyCell(watchers, state, { ...Tag.cases.open.make({}), watch });
+          expected = [...Arr.filter(expected, (c) => c.client !== client), watch].slice(-1024);
         }
 
         expect(clients(state)).toEqual(expected);
-        expect(new Set(clients(state).map((c) => c.client)).size).toBe(clients(state).length);
+        expect(new Set(Arr.map(clients(state), (c) => c.client)).size).toBe(clients(state).length);
         expect(clients(state).length).toBeLessThanOrEqual(1024);
       }
 
       for (const c of [...clients(state)]) {
-        [state] = applyCell(watchers, state, { type: "end", client: c.client });
+        [state] = applyCell(watchers, state, { ...Tag.cases.end.make({}), client: c.client });
       }
 
       expect(state).toEqual(Model.cases.empty.make({}));

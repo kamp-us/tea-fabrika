@@ -1,7 +1,9 @@
 import { resolve } from "node:path";
+import { expect, it } from "@effect/vitest";
+import { Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
 import { LIMIT, reportRows, staleRows, rowLine, type Row } from "./shard-times.ts";
+import { markdown, readFiles, type Timings } from "./time-table.ts";
 
 const options = { seed: 119120, numRuns: 100 };
 
@@ -20,22 +22,28 @@ it("L10: report times advise exactly for stale rows, including unmeasured files"
       ),
       (entries) => {
         const root = resolve("timing-fixture");
+
         const report = {
-          testResults: Object.entries(entries).map(([path, value]) => ({
+          testResults: Rec.toEntries(entries).map(([path, value]) => ({
             name: resolve(root, path),
             startTime: value.start,
             endTime: value.start + value.real * 1000,
           })),
         };
-        const rows: Row[] = Object.entries(entries).map(([path, value]) => ({ path, seconds: value.real }));
+
+        const rows: Row[] = Rec.toEntries(entries).map(([path, value]) => ({ path, seconds: value.real }));
         expect(reportRows(report, root)).toEqual(rows);
-        const table = Object.fromEntries(
-          Object.entries(entries).flatMap(([path, value]) => (value.row === undefined ? [] : [[path, value.row]])),
+
+        const table = Rec.fromEntries(
+          Rec.toEntries(entries).flatMap(([path, value]) => (value.row === undefined ? [] : [[path, value.row]])),
         );
+
         table["not-run.test.ts"] = 10000;
+
         const expected = rows
           .filter((row) => Math.abs(row.seconds - (entries[row.path]!.row ?? 1)) > LIMIT)
           .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+
         expect(staleRows(table, rows)).toEqual(expected);
       },
     ),
@@ -60,3 +68,64 @@ it("L11: printed rows round-trip paths and real seconds to one decimal", () => {
     options,
   );
 });
+
+it.prop(
+  "T1: a report's seconds per file are the same in the time table and in reportRows, to the same one decimal",
+  {
+    entries: Schema.Array(
+      Schema.Tuple([
+        Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,20}\.test\.ts$/)),
+        Schema.Struct({
+          start: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })),
+          real: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 900_000 })),
+        }),
+      ]),
+    ).check(Schema.isMinLength(1), Schema.isMaxLength(10), Schema.isUniqueKey()),
+  },
+  ({ entries }) => {
+    // The fullSamples of vitest.shards.test.ts are read from job logs' time tables, because the
+    // reports' artifacts were out of reach; the table's seconds must be the ones `shard-times` reads
+    // from the report. Up to ten files, so each is among the table's slowest.
+    // Plant, run once and restored: `reportRows` rounds its seconds to whole seconds (red).
+    const root = resolve("timing-fixture");
+
+    const files = entries.map(([name, file]) => ({ name, ...file }));
+
+    const report = {
+      testResults: files.map((file) => ({
+        name: resolve(root, file.name),
+        status: "passed",
+        startTime: file.start,
+        endTime: file.start + file.real,
+        assertionResults: [],
+      })),
+    };
+
+    const read = readFiles(report, root);
+    expect(read._tag).toBe("read");
+    const table = read._tag === "read" ? read.rows : [];
+    const rows = reportRows(report, root);
+    expect(rows.map((each) => each.path)).toEqual(table.map((each) => each.path));
+    expect(rows.map((each) => each.seconds)).toEqual(table.map((each) => each.seconds));
+
+    const timings: Timings = {
+      run: "1",
+      attempt: "1",
+      workflow: "scheduled",
+      event: "schedule",
+      sha: "0",
+      job: "tests",
+      leg: "1",
+      steps: { _tag: "read", rows: [] },
+      files: read,
+    };
+
+    const printed = markdown(timings).split("\n");
+
+    for (const each of rows) {
+      const cells = printed.find((line) => line.startsWith(`| ${each.path} | `))?.split(" | ");
+      expect(cells?.[1], `${each.path} is in the printed table`).toBeDefined();
+      expect(cells?.[1]).toBe(rowLine(each).slice(rowLine(each).lastIndexOf(": ") + 2, -1));
+    }
+  },
+);

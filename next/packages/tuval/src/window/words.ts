@@ -6,6 +6,7 @@
 import type { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 
 type Link = WindowModel["link"];
+
 type Reach = WindowModel["tiles"][number]["reach"];
 
 /** A tile's state in words, never color alone (0502): an ended tile names its exit's reason, and a

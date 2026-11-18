@@ -4,7 +4,8 @@
 // a restarted brain would: the durable half of a reopen is the file twin's,
 // `RunnerHands.integration.test.ts`, on the schedule.
 import { DatabaseSync } from "node:sqlite";
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Id from "../../Id.ts";
 import { Doorbell } from "../../ledger/Ledger.ts";
 import * as LedgerSql from "../../ledger/LedgerSql.ts";
@@ -44,6 +45,7 @@ const databases = Effect.gen(function* () {
       }
     }),
   );
+
   return (part: string): Sql => {
     const known = held.get(part);
 
@@ -55,6 +57,7 @@ const databases = Effect.gen(function* () {
     opened.push(db);
     const made = nodeSql(db);
     held.set(part, made);
+
     return made;
   };
 });

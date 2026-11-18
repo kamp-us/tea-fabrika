@@ -1,6 +1,7 @@
 #!/bin/sh
 # redact.sh <answer> <events>: scrub saved bytes, print only a count.
-# --run <cwd> <prompt> <answer> <events> <command>... runs with isolated auth first.
+# --run <cwd> <prompt> <answer> <events> [--requested-profile model effort] <command>...
+#   runs with isolated auth first; a profile record is written only after the fresh event file opens.
 set -eu
 # Some system Python launchers print platform diagnostics before Python starts. Resolve the
 # interpreter quietly, then keep Python's own errors visible. The public result is only a count.
@@ -57,6 +58,10 @@ args = sys.argv[1:]
 status = 0
 if args and args[0] == "--run":
     _, cwd, prompt, answer, events, *command = args
+    profile = None
+    if command and command[0] == "--requested-profile":
+        _, model, effort, *command = command
+        profile = {"type": "fabrika.requested_profile", "model": model, "effort": effort}
     answer, events = pathlib.Path(answer).absolute(), pathlib.Path(events).absolute()
     receipt = pathlib.Path(str(events) + ".redacted")
     receipt.unlink(missing_ok=True)
@@ -85,6 +90,9 @@ if args and args[0] == "--run":
                 env.update(NPM_CONFIG_USERCONFIG=str(empty), NPM_CONFIG_GLOBALCONFIG=str(pathlib.Path(tmp) / "global"))
                 pathlib.Path(env["NPM_CONFIG_GLOBALCONFIG"]).write_text("")
                 with open(prompt, "rb") as source, open(events, "wb") as log:
+                    if profile:
+                        log.write((json.dumps(profile) + "\n").encode())
+                        log.flush()
                     child[0] = subprocess.Popen(command, cwd=cwd, env=env, stdin=source, stdout=log, stderr=subprocess.STDOUT)
                     code = child[0].wait()
                     status = 128 - code if code < 0 else code

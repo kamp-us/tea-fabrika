@@ -23,6 +23,7 @@
 // compiler checks it is an Effect. The rule sees no types, so any other place is flagged: write
 // the loop with `Effect.forEach`, or name the return type when a helper hands the Effect on.
 import type { Context, CreateRule } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import { ancestors, grouped, type Node } from "./match.ts";
 
 const isTell = (node: Node): boolean => {
@@ -39,6 +40,7 @@ const isTell = (node: Node): boolean => {
   }
 
   const { property } = node.callee;
+
   return (
     property.type === "Identifier" &&
     (property.name === "tell" || property.name === "offer") &&
@@ -70,6 +72,7 @@ const keepsIt = (source: Context["sourceCode"], callee: Node): boolean => {
 export const noBareTell: CreateRule = {
   create(context) {
     const source = context.sourceCode;
+
     return {
       ExpressionStatement(node) {
         if (grouped(source, node.expression) === 0 && isTell(node.expression)) {
@@ -92,7 +95,7 @@ export const noBareTell: CreateRule = {
             continue;
           }
 
-          const same = up.arguments.some((arg) => grouped(source, arg) === 0 && source.getText(arg) === text);
+          const same = Arr.some(up.arguments, (arg) => grouped(source, arg) === 0 && source.getText(arg) === text);
 
           if (same) {
             return;

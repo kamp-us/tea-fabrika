@@ -5,19 +5,41 @@ import { Status } from "@kampus/libfabrika/ci/Ci";
 import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
-import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { StartRefusal, startChild } from "@kampus/libfabrika/runtime/StartChild";
+import { Array as Arr, String as Str, ConfigProvider, Effect, Match, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
 import * as Settings from "./Settings.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  abandon: {},
+  drop: {},
+  enqueue: {},
+  land: {},
+  resume: {},
+  send: {},
+  send_err: {},
+  send_ok: {},
+  start_child: {},
+  start_child_err: {},
+  start_child_ok: {},
+});
+
 type Program = ReturnType<typeof queue>;
+
 type Model = Program["machine"]["model"]["Type"];
+
 type Msg = Program["msg"]["Type"];
+
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
-type Start = Extract<Command, { type: "start_child" }>;
+
+type Start = Extract<Command, { _tag: "start_child" }>;
+
 type Entry = { change: number; head: string; reply: { to: string; ref: string } | null };
+
 type Active = Entry & { name: string; ref: string };
 
 type Oracle = {
@@ -31,9 +53,13 @@ type Oracle = {
 };
 
 const ctx = stubCtxThrowingProxy<never>();
-const head = Schema.decodeUnknownSync(Commit)("a".repeat(40));
-const tree = Schema.decodeUnknownSync(Tree)("b".repeat(40));
-const other = Schema.decodeUnknownSync(Tree)("c".repeat(40));
+
+const head = Schema.decodeSync(Commit)(Str.repeat(40)("a"));
+
+const tree = Schema.decodeSync(Tree)(Str.repeat(40)("b"));
+
+const other = Schema.decodeSync(Tree)(Str.repeat(40)("c"));
+
 const pid = "process_0000000000e008000000000001";
 
 const draw = fc.record({
@@ -46,7 +72,9 @@ const draw = fc.record({
 });
 
 type Cell = typeof draw extends fc.Arbitrary<infer A> ? A : never;
+
 const world = fc.record({ most: fc.integer({ min: 1, max: 6 }), enabled: fc.boolean() });
+
 type World = typeof world extends fc.Arbitrary<infer A> ? A : never;
 
 const program = (w: World) =>
@@ -73,14 +101,13 @@ const initial = (): Oracle => ({
 
 const enqueue = (cell: Cell, change: number) =>
   Mail.Enqueue.make({
-    type: "enqueue",
     change,
     head,
     ...(cell.reply ? { reply: { to: `quest:${change}`, ref: `own:${cell.pick}` } } : {}),
   });
 
 const reply = (cell: Cell, active: Pick<Active, "ref" | "change">): typeof Mail.Reply.Type => {
-  const fields = { type: "reply" as const, ref: active.ref, change: active.change };
+  const fields = { ref: active.ref, change: active.change };
 
   switch (cell.which) {
     case 0:
@@ -126,41 +153,57 @@ const reasons = [...StartRefusal.literals, "bad_cmd"] as const;
 
 const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
   const reason = reasons[cell.pick % reasons.length]!;
+
+  // A refused start as the runner sends it: `cmd` echoes only the Cmd's `_tag`, and `reason` rides
+  // beside `error` (Runner.ts `echo` and `err`). Wire data, so it is decoded as unknown.
   return Schema.decodeUnknownSync(p.msg)({
-    type: "start_child_err",
-    cmd: { type: "start_child" },
+    ...Tag.cases.start_child_err.make({}),
+    cmd: Tag.cases.start_child.make({}),
     reason,
     error: Schema.TaggedStruct(reason, {}).make({}),
     at: cell.at,
   });
 };
 
+/** The three started values a start's `ok` answer draws from, by `which` (0, 1, or 2 and above). */
+const startedValue = (cmd: Start, which: number) =>
+  Match.value(which).pipe(
+    Match.when(0, () => Started.cases.started.make({ process: pid, name: cmd.name, rev: 1 })),
+    Match.when(1, () => Started.cases.already_started.make({ process: pid, name: cmd.name })),
+    Match.orElse(() => Started.cases.already_present.make({ process: pid, name: cmd.name })),
+  );
+
 const startAnswer = (p: Program, cmd: Start, cell: Cell, allowRefusal = true): Msg => {
   const which = cell.pick % (allowRefusal ? reasons.length + 3 : 3);
-  return Schema.decodeUnknownSync(p.msg)(
+
+  return Schema.decodeSync(p.msg)(
     which < 3
-      ? {
-          type: "start_child_ok",
-          cmd,
-          at: cell.at,
-          value:
-            which === 0
-              ? Started.cases.started.make({ process: pid, name: cmd.name, rev: 1 })
-              : which === 1
-                ? Started.cases.already_started.make({ process: pid, name: cmd.name })
-                : Started.cases.already_present.make({ process: pid, name: cmd.name }),
-        }
+      ? { ...Tag.cases.start_child_ok.make({}), cmd, at: cell.at, value: startedValue(cmd, which) }
       : startRefusalAnswer(p, { ...cell, pick: which - 3 }),
   );
 };
 
+/**
+ * A start's answer as tea mints it, for tea's guided walk, whose answers are the machine's own Msgs:
+ * one of the same three started values, or a refusal as tea's own `start_child_err`, named. The
+ * runner's refusal, with no name and a `reason`, comes in the walk after it, through `choose`; Q5
+ * sees `bad_cmd`, which only the runner's refusal carries, so it cannot pass without one.
+ */
+const settledStart = (cmd: Start, cell: Cell) => {
+  const which = cell.pick % (StartRefusal.literals.length + 3);
+
+  return which < 3
+    ? startChild.ok(cmd, startedValue(cmd, which), cell.at)
+    : startChild.err(cmd, Schema.TaggedStruct(StartRefusal.literals[which - 3]!, {}).make({}), cell.at);
+};
+
 const refusal = (m: Oracle, w: World, msg: Msg) => {
-  if (msg.type === "enqueue") {
+  if (msg._tag === "enqueue") {
     if (!w.enabled) {
       return { reason: "unset" };
     }
 
-    if (m.current?.change === msg.change || m.line.some((e) => e.change === msg.change)) {
+    if (m.current?.change === msg.change || Arr.some(m.line, (e) => e.change === msg.change)) {
       return { reason: "queued" };
     }
 
@@ -169,8 +212,8 @@ const refusal = (m: Oracle, w: World, msg: Msg) => {
     }
   }
 
-  if (msg.type === "drop") {
-    if (m.current?.change !== msg.change && !m.line.some((e) => e.change === msg.change)) {
+  if (msg._tag === "drop") {
+    if (m.current?.change !== msg.change && !Arr.some(m.line, (e) => e.change === msg.change)) {
       return { reason: "missing" };
     }
 
@@ -179,7 +222,7 @@ const refusal = (m: Oracle, w: World, msg: Msg) => {
     }
   }
 
-  if (msg.type === "resume" && m.state !== "stopped") {
+  if (msg._tag === "resume" && m.state !== "stopped") {
     return { reason: "running" };
   }
 
@@ -208,15 +251,18 @@ const step = (walk: Walk, input: Msg) => {
   if (refused !== null) {
     walk.seen.add(refused.reason);
     expect(p.view.select(walk.model)).toEqual(originalView);
+
     return;
   }
 
   const expected: Array<unknown> = [];
+
   const forward = (entry: Entry, answer: typeof Mail.Reply.Type) => {
     if (entry.reply !== null) {
-      expected.push({ type: "send", to: entry.reply.to, m: { ...answer, ref: entry.reply.ref } });
+      expected.push({ ...Tag.cases.send.make({}), to: entry.reply.to, m: { ...answer, ref: entry.reply.ref } });
     }
   };
+
   const next = () => {
     const entry = m.line.shift();
     m.reason = null;
@@ -230,16 +276,22 @@ const step = (walk: Walk, input: Msg) => {
       m.state = "starting";
       m.current = { ...entry, name: `merger:${entry.change}.${m.attempt}`, ref: String(m.attempt) };
       expected.push({
-        type: "start_child",
+        ...Tag.cases.start_child.make({}),
         program: "pipeline/merger",
         name: m.current.name,
-        input: { type: "land", ref: m.current.ref, change: entry.change, head: entry.head, reply: "queue:law" },
+        input: {
+          ...Tag.cases.land.make({}),
+          ref: m.current.ref,
+          change: entry.change,
+          head: entry.head,
+          reply: "queue:law",
+        },
       });
       walk.seen.add("started");
     }
   };
 
-  if (input.type === "enqueue") {
+  if (input._tag === "enqueue") {
     m.line.push({ change: input.change, head: input.head, reply: input.reply ?? null });
 
     if (m.state === "idle") {
@@ -247,19 +299,22 @@ const step = (walk: Walk, input: Msg) => {
     } else if (m.state === "stopped") {
       walk.seen.add("enqueue_stopped");
     }
-  } else if (input.type === "start_child_ok" || input.type === "start_child_err") {
+  } else if (input._tag === "start_child_ok" || input._tag === "start_child_err") {
     if (m.state !== "starting" || ("name" in input.cmd && input.cmd.name !== m.current?.name)) {
-      walk.seen.add(`late:${input.type}:${m.state}`);
+      walk.seen.add(`late:${input._tag}:${m.state}`);
       m.late++;
-    } else if (input.type === "start_child_ok" && input.value._tag === "started") {
+    } else if (input._tag === "start_child_ok" && input.value._tag === "started") {
       m.state = "landing";
       m.since = input.at;
     } else {
       const current = m.current!;
+
+      // A refused start's own `reason` when the answer carries one, as the runner's does, else its error's tag.
       const tag =
-        input.type === "start_child_ok" ? input.value._tag : "reason" in input ? input.reason : input.error._tag;
+        input._tag === "start_child_ok" ? input.value._tag : "reason" in input ? input.reason : input.error._tag;
+
       m.reason = Schema.TaggedStruct("start_refused", {
-        change: Schema.Number,
+        change: Schema.Finite,
         name: Schema.String,
         refusal: Schema.String,
       }).make({ change: current.change, name: current.name, refusal: tag });
@@ -275,7 +330,7 @@ const step = (walk: Walk, input: Msg) => {
       expect(walk.unanswered?.name).toBe(before._tag === "starting" ? before.current.name : null);
       walk.unanswered = null;
     }
-  } else if (input.type === "reply") {
+  } else if (Schema.is(Mail.Reply)(input)) {
     if (m.state !== "landing" || input.ref !== m.current?.ref) {
       m.late++;
     } else {
@@ -286,7 +341,7 @@ const step = (walk: Walk, input: Msg) => {
       if (input._tag === "merged" && input.tree !== input.checked) {
         m.state = "stopped";
         m.reason = Schema.TaggedStruct("tree_drift", {
-          change: Schema.Number,
+          change: Schema.Finite,
           commit: Commit,
           tree: Tree,
           checked: Tree,
@@ -298,23 +353,23 @@ const step = (walk: Walk, input: Msg) => {
         next();
       }
     }
-  } else if (input.type === "drop") {
+  } else if (input._tag === "drop") {
     if (m.current?.change === input.change) {
       expected.push({
-        type: "send",
+        ...Tag.cases.send.make({}),
         to: m.current.name,
-        m: Mail.Abandon.make({ type: "abandon", ref: m.current.ref }),
+        m: Mail.Abandon.make({ ref: m.current.ref }),
       });
       walk.seen.add("abandon_current");
     } else {
-      for (const entry of m.line.filter((e) => e.change === input.change)) {
-        forward(entry, Mail.Reply.cases.abandoned.make({ type: "reply", ref: "dropped", change: entry.change }));
+      for (const entry of Arr.filter(m.line, (e) => e.change === input.change)) {
+        forward(entry, Mail.Reply.cases.abandoned.make({ ref: "dropped", change: entry.change }));
       }
 
-      m.line = m.line.filter((e) => e.change !== input.change);
+      m.line = Arr.filter(m.line, (e) => e.change !== input.change);
       walk.seen.add("drop_waiting");
     }
-  } else if (input.type === "resume") {
+  } else if (input._tag === "resume") {
     next();
   }
 
@@ -328,7 +383,7 @@ const step = (walk: Walk, input: Msg) => {
     state: m.state,
     current: m.current === null ? null : { change: m.current.change, head: m.current.head, name: m.current.name },
     since: m.since,
-    line: m.line.map(({ change, head }) => ({ change, head })),
+    line: Arr.map(m.line, ({ change, head }) => ({ change, head })),
     attempt: m.attempt,
     late: m.late,
     reason: m.reason,
@@ -347,7 +402,7 @@ const step = (walk: Walk, input: Msg) => {
   walk.model = model;
 
   for (const command of commands) {
-    if (command.type === "start_child") {
+    if (command._tag === "start_child") {
       expect(walk.unanswered, "only one start may be unanswered").toBeNull();
       walk.unanswered = command;
     }
@@ -361,22 +416,23 @@ const open = (w: World, seen: Set<string>): Walk => {
   const [model, commands] = p.machine.init(null, ctx);
   expect(commands).toEqual([]);
   expect(p.inputs.resume).toMatchObject({ personOnly: true });
+
   return { p, w, model, oracle: initial(), history: [], unanswered: null, seen };
 };
 
 const choose = (walk: Walk, cell: Cell): Msg => {
   const { p, oracle: m } = walk;
-  const starts = walk.history.filter((c) => c.type === "start_child");
-  const sends = walk.history.filter((c) => c.type === "send");
+  const starts = Arr.filter(walk.history, (c) => c._tag === "start_child");
+  const sends = Arr.filter(walk.history, (c) => c._tag === "send");
   const queued = [...(m.current === null ? [] : [m.current]), ...m.line];
-  const moves: Array<() => unknown> = [
+
+  const moves: Array<() => object> = [
     () => enqueue(cell, (cell.pick % 10) + 1),
     () =>
       Mail.Drop.make({
-        type: "drop",
         change: cell.pick % 2 === 0 && queued.length > 0 ? queued[cell.pick % queued.length]!.change : 99,
       }),
-    () => Mail.Resume.make({ type: "resume" }),
+    () => Mail.Resume.make({}),
     () => reply(cell, cell.pick % 3 !== 0 && m.current !== null ? m.current : { ref: `late:${cell.pick}`, change: 99 }),
   ];
 
@@ -396,9 +452,14 @@ const choose = (walk: Walk, cell: Cell): Msg => {
   if (sends.length > 0) {
     moves.push(() =>
       cell.pick % 2 === 0
-        ? { type: "send_ok", cmd: sends[cell.pick % sends.length], at: cell.at, value: Queued.make({ id: "sent" }) }
+        ? {
+            ...Tag.cases.send_ok.make({}),
+            cmd: sends[cell.pick % sends.length],
+            at: cell.at,
+            value: Queued.make({ id: "sent" }),
+          }
         : {
-            type: "send_err",
+            ...Tag.cases.send_err.make({}),
             cmd: sends[cell.pick % sends.length],
             at: cell.at,
             error: Schema.TaggedStruct("forbidden", {}).make({}),
@@ -437,13 +498,13 @@ for (const law of [
       { seed: 119120, numRuns: 200 },
     );
 
-    if (law.startsWith("Q3")) {
+    if (Str.startsWith("Q3")(law)) {
       for (const tag of ["merged", "red", "conflict", "moved", "closed", "unset", "abandoned", "behind"]) {
         expect(seen.has(`reply:${tag}`), tag).toBe(true);
       }
     }
 
-    if (law.startsWith("Q6")) {
+    if (Str.startsWith("Q6")(law)) {
       for (const state of ["idle", "landing", "stopped"]) {
         expect(seen.has(`late:start_child_err:${state}`), state).toBe(true);
       }
@@ -480,19 +541,21 @@ for (const [law, reached] of [
           const w = { ...drawn, enabled: true };
           const p = program(w);
           const first = draw.map((cell) => enqueue(cell, (cell.pick % 10) + 1));
+
           const guided = arbGuidedSequence(
             p.machine,
             ctx,
             {
               outside: {
                 enqueue: first,
-                resume: fc.constant(Mail.Resume.make({ type: "resume" })),
-                drop: fc.integer({ min: 1, max: 10 }).map((change) => Mail.Drop.make({ type: "drop", change })),
+                resume: fc.constant(Mail.Resume.make({})),
+                drop: fc.integer({ min: 1, max: 10 }).map((change) => Mail.Drop.make({ change })),
               },
-              answers: { start_child: { draw, make: (cmd: Start, cell: Cell) => startAnswer(p, cmd, cell) } },
+              answers: { start_child: { draw, make: (cmd: Start, cell: Cell) => settledStart(cmd, cell) } },
             },
             { maxLength: 100, size: "max" },
           );
+
           return fc
             .tuple(guided, fc.array(draw, { minLength: 80, maxLength: 100 }))
             .map(([msgs, cells]) => ({ w, msgs, cells }));
@@ -502,7 +565,7 @@ for (const [law, reached] of [
 
           // Keep the guided fold intact: interleaving another walk would orphan its answers.
           for (const msg of msgs) {
-            step(walk, Schema.decodeUnknownSync(walk.p.msg)(msg));
+            step(walk, Schema.decodeSync(walk.p.msg)(msg));
           }
 
           for (const cell of cells) {
@@ -518,11 +581,11 @@ for (const [law, reached] of [
     );
     expect(seen.has(reached), reached).toBe(true);
 
-    if (law.startsWith("Q4")) {
+    if (Str.startsWith("Q4")(law)) {
       expect(seen.has("enqueue_stopped")).toBe(true);
     }
 
-    if (law.startsWith("Q5")) {
+    if (Str.startsWith("Q5")(law)) {
       for (const tag of [...reasons, "already_started", "already_present"]) {
         expect(seen.has(tag), tag).toBe(true);
       }
@@ -537,7 +600,8 @@ const invalidModels = (idle: Extract<Model, { _tag: "idle" }>, entry: Entry) => 
   // @ts-expect-error idle cannot hold a current landing
   const current: Extract<Model, { _tag: "idle" }> = { ...idle, current: entry };
   // @ts-expect-error a reply address requires its ref
-  const partial: typeof Mail.Enqueue.Type = { type: "enqueue", change: 1, head, reply: { to: "quest" } };
+  const partial: typeof Mail.Enqueue.Type = { ...Tag.cases.enqueue.make({}), change: 1, head, reply: { to: "quest" } };
+
   return [line, current, partial];
 };
 

@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l13-guard-bundle-build1",
+  "ticket": "kamp-us/tea-fabrika#1167",
+  "pr": "kamp-us/tea-fabrika#1622",
+  "started": "2026-11-18T05:15:00-08:00",
+  "ended": "2026-11-18T05:19:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Build step for slice B of the two-flakes plan (docs/plan/quests/l13-guard-bundle-PLAN.md, ticket 1167, decision 0036) in next/. The plan gives every file to the tests step, so there is no product file. Confirmed at 24cea938b that the pinned L13 bundle law (G1) and the G2 crash-half property in next/apps/fabrika/e2e/electron-launchd.visual.test.ts are green (2 passed, the L13 scenario skipped on Linux) and that .github/ci/workflow-lint/host.test.ts is green (30 passed). Read next/apps/fabrika/e2e/node/P19Guard.test-support.ts and the changes to next/apps/fabrika/e2e/node/P19Launchd.test-support.ts: the guard and its helpers moved unchanged, ready races guard.ready against the guard's exit, guardMs is recorded; nothing there needs a product change. The change to .github/ci/workflow-lint/host.ts is needed: lintHost requires host.yaml's pull_request paths to equal its PATHS list exactly. No product commit.",
+  "note": "Started time is approximate; usage and cost are not recorded. Local runs used a Node 26.13.0 installed in a scratch folder outside the repo (the container has Node 22, the pin is Node 26); no CI variable was set. The L13 scenario (G2 host half) and G3 need launchd, Electron and signals (0594) and were not run here.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

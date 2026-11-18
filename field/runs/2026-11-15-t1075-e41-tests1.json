@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e41-tests1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T20:35:51-08:00",
+  "ended": "2026-11-15T20:47:06-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E41 of the Effect-checker sweep, in next/ and our tooling: anyUnknownInErrorContext over the slice's folders, fixing code only, with no lock line and no pull request (owner ruling: the branch is pushed and folded into one pull request later). Count with only the check at error through --lspconfig, one effect-tsgo run per tsconfig: 698 hits on the five tsconfigs, 323 in the slice's folders as the plan counted, 312 in exam paths, 11 in product files, 0 in pull request 1366's files. Fixed by hand edits, each naming the error the code really fails with: 92 hits in 7 files (the exam's process helpers name PlatformError; the build laws' stand-in types name BuildError or PlatformError, as build.ts and css.ts fail, read with a narrow tsc probe; the counter law's runner stand-in reads the real ProgramRunner's error type). Recount: 606 on the five tsconfigs, 231 in the slice. Left in exam paths: 220. 205 are decision 0565's false-alarm class, a shared suite or law helper whose parameter takes an effect of any error from the code that calls it; they are counted and reported for the owner, not fixed. 9 have their root in a product type of another slice's folder (lib:runtime Entry.ts Handler, lib:cloudflare settingsWire, control, ConnectionService, projectLayer; E82). 4 come from an untyped dynamic import of the installed Alchemy package. 2 have their root in .agents BoxTest.ts, a product file. 11 product hits are left for the build. No law is new or changed: every edit is a type, the laws' assertions are untouched, and the touched laws are green.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Tests run at e613fa4 plus this diff, one file at a time: exam/ratchet.test.ts 5, exam/commits.test.ts 39, exam/ratchet.integration.test.ts 5, programs/counter runner.laws.integration.test.ts 5, node/build/css.integration.test.ts 30, node/build/build-assets.integration.test.ts 25, node/build/build-one-file.integration.test.ts 12, all green. exam/commits-git-steps.integration.test.ts could not run: the box has no ssh-keygen, and its setup fails before any test. e2e/one-file.visual.test.ts was not run (a visual test). Narrow tsc on the seven files: clean.",
+  "plants": [
+    {
+      "law": "L1 as a count (no lock in a judgment slice)",
+      "plant": "ratchet.ts's text helper back to Stream.Stream<Uint8Array, unknown>: the app's anyUnknownInErrorContext count goes from 123 to 126, then back to 123 when restored",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

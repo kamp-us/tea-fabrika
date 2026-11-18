@@ -44,23 +44,29 @@ const setup = Effect.gen(function* () {
   const path = yield* Path.Path;
   const dir = yield* checkout;
   const named = yield* REPO;
+
   const repo = Option.isSome(named)
     ? named.value
     : PullRequestsGh.repoFromUrl((yield* run("git", ["-C", dir, "remote", "get-url", "origin"], dir)).out);
 
   if (repo === null) {
-    return yield* new Refused({ reason: "no GH_REPO, and an origin that is not a GitHub repo" });
+    return yield* Refused.make({ reason: "no GH_REPO, and an origin that is not a GitHub repo" });
   }
 
   const every = Duration.seconds(yield* SECONDS);
+
   const services = Layer.mergeAll(
     WorkflowRunsGh.layer(repo, dir),
     PullRequestsGh.layer(repo, dir),
     BranchesGit.layer(dir),
     AlertsGh.layer(repo, dir),
   );
+
   return { home: path.join(dir, "runs", "sev"), every, wait: Duration.times(every, 3), services };
 });
+
+/** The services of the commands that call GitHub, given to each with `Command.provide`. */
+const services = Layer.unwrap(Effect.map(setup, (s) => s.services));
 
 const openCommand = Command.make(
   "open",
@@ -75,12 +81,13 @@ const openCommand = Command.make(
     ),
   },
   Effect.fn(function* ({ reason, allow }) {
-    const { home, every, services } = yield* setup;
-    yield* Effect.andThen(Incident.open({ home, reason, allow }), Freeze.loop(home, every, process.pid)).pipe(
-      Effect.provide(services),
-    );
+    const { home, every } = yield* setup;
+    yield* Effect.andThen(Incident.open({ home, reason, allow }), Freeze.loop(home, every, process.pid));
   }),
-).pipe(Command.withDescription("Open a sev0 on the owner's call, and cancel every other run until a close"));
+).pipe(
+  Command.provide(services),
+  Command.withDescription("Open a sev0 on the owner's call, and cancel every other run until a close"),
+);
 
 const branchArgument = Argument.String("branch").pipe(Argument.withSchema(Schema.NonEmptyString));
 
@@ -108,38 +115,47 @@ const closeCommand = Command.make(
     ),
   },
   Effect.fn(function* ({ by }) {
-    const { home, wait, services } = yield* setup;
-    yield* Incident.close(home, by, wait).pipe(Effect.provide(services));
+    const { home, wait } = yield* setup;
+    yield* Incident.close(home, by, wait);
   }),
-).pipe(Command.withDescription("End the sev0: stop the loop, print what the lead does next and the level now"));
+).pipe(
+  Command.provide(services),
+  Command.withDescription("End the sev0: stop the loop, print what the lead does next and the level now"),
+);
 
 const statusCommand = Command.make(
   "status",
   {},
   Effect.fn(function* () {
-    const { home, services } = yield* setup;
-    yield* Incident.status(home).pipe(Effect.provide(services));
+    const { home } = yield* setup;
+    yield* Incident.status(home);
   }),
-).pipe(Command.withDescription("Print the level now: sev0, sev1 or none, since when and why"));
+).pipe(
+  Command.provide(services),
+  Command.withDescription("Print the level now: sev0, sev1 or none, since when and why"),
+);
 
 const loopCommand = Command.make(
   "loop",
   {},
   Effect.fn(function* () {
-    const { home, every, services } = yield* setup;
-    yield* Freeze.loop(home, every, process.pid).pipe(Effect.provide(services));
+    const { home, every } = yield* setup;
+    yield* Freeze.loop(home, every, process.pid);
   }),
-).pipe(Command.withDescription("Run the cancel loop of the open sev0 again, when the one before died"));
+).pipe(
+  Command.provide(services),
+  Command.withDescription("Run the cancel loop of the open sev0 again, when the one before died"),
+);
 
 const sev = Command.make("sev").pipe(
   Command.withSubcommands([openCommand, nextCommand, allowCommand, closeCommand, statusCommand, loopCommand]),
 );
 
 /** A refusal or a failed GitHub call ends the command with its reason and exit 1. */
-const told = (e: unknown) =>
-  Predicate.hasProperty(e, "reason") && Predicate.isString(e.reason)
+const told = (cause: unknown) =>
+  Predicate.hasProperty(cause, "reason") && Predicate.isString(cause.reason)
     ? Effect.andThen(
-        Console.error(`sev: ${e.reason}`),
+        Console.error(`sev: ${cause.reason}`),
         Effect.sync(() => {
           process.exitCode = 1;
         }),

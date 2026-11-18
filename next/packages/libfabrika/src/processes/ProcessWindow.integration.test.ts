@@ -1,6 +1,7 @@
 // P33 / p79 and p80, next/: real restart policy and recovery functions.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Result, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -30,10 +31,12 @@ const policy = Schema.Struct({
 });
 
 const nat = (max: number) => Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: max }));
+
 // Effect 4.1.1 has no examples option. Each callback also checks its old inputs.
 // Retain 0..40 times/texts and 2..31 errors. Explicit number bounds above
 // keep the old full nat range without making every string that large.
 const options = { arbitrary: { seed: 119120, runs: 100, size: 40 } };
+
 // The schema generates every free base32 character, both version characters and all eight variants.
 const processIds = Arbitrary.schema(Id.Process);
 
@@ -159,9 +162,9 @@ describe("T540, next/ process UUIDv7 refusals", () => {
     [
       Schema.Struct({
         process: Id.Process,
-        version: Schema.Literals([...alphabet].filter((char) => !"ef".includes(char))),
-        variant: Schema.Literals([...alphabet].filter((char) => !"89abrstv".includes(char))),
-        first: Schema.Literals([...alphabet.slice(8)]),
+        version: Schema.Literals([...alphabet].filter((char) => !Str.includes(char)("ef"))),
+        variant: Schema.Literals([...alphabet].filter((char) => !Str.includes(char)("89abrstv"))),
+        first: Schema.Literals([...Str.slice(8)(alphabet)]),
         length: Schema.Union([nat(25), Schema.Int.check(Schema.isBetween({ minimum: 27, maximum: 52 }))]),
         char: Schema.String.check(Schema.isPattern(/^[^0-9a-hjkmnp-tv-z]$/u)),
         position: nat(25),
@@ -169,15 +172,18 @@ describe("T540, next/ process UUIDv7 refusals", () => {
       }),
     ],
     ([{ process, version, variant, first, length, char, position, prefix }]) => {
-      const suffix = process.slice("process_".length);
-      const replace = (at: number, char: string) => `process_${suffix.slice(0, at)}${char}${suffix.slice(at + 1)}`;
+      const suffix = Str.slice("process_".length)(process);
+
+      const replace = (at: number, char: string) =>
+        `process_${Str.slice(0, at)(suffix)}${char}${Str.slice(at + 1)(suffix)}`;
+
       expect(Result.isSuccess(Schema.decodeUnknownResult(Id.Process)(process))).toBe(true);
 
       for (const [part, invalid] of [
         ["version", replace(10, version)],
         ["variant", replace(13, variant)],
         ["first character", replace(0, first)],
-        ["length", `process_${suffix.repeat(2).slice(0, length)}`],
+        ["length", `process_${Str.slice(0, length)(Str.repeat(2)(suffix))}`],
         ["alphabet", replace(position, char)],
         ["prefix", `${prefix}_${suffix}`],
       ]) {
@@ -222,6 +228,7 @@ describe("p80, supplied policy events", () => {
         [{ reason: "owner-policy", crashes: 17, until: 123_456 }, generated],
         (supplied) => {
           const store = storage();
+
           return Effect.gen(function* () {
             const processes = yield* ProcessManager;
             yield* processes.start(first(), from());
@@ -240,6 +247,7 @@ describe("p80, supplied policy events", () => {
       ),
     { arbitrary: { seed: 119120, runs: 20, size: 40 } },
   );
+
   // Dead needs dependent generation: errors.length must equal tries.
   const dead = Arbitrary.all({
     process: Arbitrary.schema(Id.Process),
@@ -258,6 +266,7 @@ describe("p80, supplied policy events", () => {
       }),
     ),
   );
+
   it.prop(
     "plant, fewer error classes than tries: dead keeps one class per attempt",
     [dead],
@@ -295,6 +304,7 @@ describe("p80, supplied policy events", () => {
     [policy],
     ([supplied]) => {
       const store = storage();
+
       return Effect.gen(function* () {
         yield* ProcessManager.use((p) => p.start(first(), from())).pipe(Effect.provide(manager(store, brain())));
         const before = store.rows();
@@ -306,6 +316,7 @@ describe("p80, supplied policy events", () => {
           const answer = yield* ProcessManager.use((p) => Effect.result(p.down(A, supplied, from()))).pipe(
             Effect.provide(manager(store, caller)),
           );
+
           expect(Result.isFailure(answer)).toBe(true);
 
           if (Result.isFailure(answer)) {
@@ -322,6 +333,7 @@ describe("p80, supplied policy events", () => {
 
 describe("T319, next/ complete dead values", () => {
   const text = fc.string({ minLength: 1, maxLength: 256 });
+
   const complete = fc
     .record({
       process: fcProcessIds,

@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1161-review1",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623",
+  "started": "2026-11-18T05:38:48-08:00",
+  "ended": "2026-11-18T05:49:18-08:00",
+  "parent": "2026-11-18-t1161-build1",
+  "active": null,
+  "driver_caused": false,
+  "role": "reviewer",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "send tests",
+  "head": "a2217352223acf0e6754240e1dd2a07dfbdd0e3f",
+  "base": "bed76e02fd286e6c15b54decde83ba4ceaaac83e",
+  "why": "The one review of ticket 1161 in today's CI (scheduled.yaml's hand start takes scope and law). Send back to the tests step, which owns every .github/ file here, 1 blocking class: SC21's read check (.github/ci/workflow-lint/scheduled.ts:184) and its law S9 (.github/ci/workflow-lint/scheduled.test.ts:1458) miss GitHub's other ways to read the whole event: toJSON(github['event']), toJSON(github.event.*) and toJSON(github.*) each pass every lint rule in 27 places, the tests job's step env among them, and dropping the rule's case-insensitive flag leaves all 302 tests green. No path to narrow main was found: SC15, SC11, SC7 and SC6 pin the if, depth, commands and matrix. The branch also conflicts with origin/main 279f97ee0 (pull request 1618) in proof.ts, proof.test.ts, scheduled.yaml and TERMS.md, and that commit makes PROJECTS three, so the new 'four projects' wording goes stale. proof.ts holds: a bad SCOPE or LAW throws in the select step, scheduled.mjs reads the failed select as red, and a valid full ask gives the full set with its law in the record. loosening.sh: 5 unrecognized-change hits on the whole diff and on b163a3792, all stricter or additive; 0 on a22173522.",
+  "note": "Read-only apart from this row. Container Node 22.23.5, CI=1, nice 19, one worker. Plants were run in a scratch copy outside the repo (tar of the worktree with node_modules linked) and restored: askOf without isLaw red (P8, P9); summary hand line keyed off no triggers red (P11); inProjects without next-visual red (P10); SC21 without the i flag green (302 passed); SC21 law description check dropped green (302 passed); SC21 law default any text red (S8). Read forms were run against lintScheduled by a scratch node script. Not run: D1, which is the lead's dispatch; pnpm typecheck (review rule); scheduled.integration.test.ts. Four finding rows: SC17 accepts SCOPE as the plain text inputs.scope; no law reaches SC21's law description check; the new property laws use raw fc.assert with a hand seed against 0579; the PR has no New names section, and Ask/asked reuse the glossary's ask.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": null,
+  "plants": [
+    {
+      "law": "P8 askOf accepts exactly changed with no law, and full with a law isLaw holds",
+      "plant": ".github/ci/proof.ts askOf: the isLaw check dropped, so any plain path is a law",
+      "result": "red"
+    },
+    {
+      "law": "P11 a full ask's summary names its law and says it was asked by hand",
+      "plant": ".github/ci/proof.ts summary: the hand line only when no trigger was touched",
+      "result": "red"
+    },
+    {
+      "law": "P10 inProjects asks the lister for exactly the four projects and the path",
+      "plant": ".github/ci/proof.ts inProjects: next-visual left out of the lister's projects",
+      "result": "red"
+    },
+    {
+      "law": "S9 an inputs read anywhere but select's set step gives SC21's error",
+      "plant": ".github/ci/workflow-lint/scheduled.ts READS_INPUTS: the case-insensitive flag dropped",
+      "result": "green"
+    },
+    {
+      "law": "S8 each SC21 input plant gives SC21's error",
+      "plant": ".github/ci/workflow-lint/scheduled.ts dispatchInputs: the law input's description check dropped",
+      "result": "green"
+    },
+    {
+      "law": "S8 each SC21 input plant gives SC21's error",
+      "plant": ".github/ci/workflow-lint/scheduled.ts dispatchInputs: the law default may be any text with no leading dash",
+      "result": "red"
+    }
+  ]
+}

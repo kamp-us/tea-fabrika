@@ -1,7 +1,8 @@
 // What the landing runners read from each script, and that they refuse args they cannot parse. No
 // script runs here.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, type Scope } from "effect";
+import { Array as Arr, Effect, Order, Record as Rec } from "effect";
+import type { Scope } from "effect";
 import { describe, expect, it } from "vitest";
 import { PullRequestsError } from "../pr/PullRequests.ts";
 import { LeakGrepRefused } from "../pr/Pushes.ts";
@@ -36,7 +37,12 @@ describe("what the landing scripts' exit codes mean", () => {
   const r = (code: number, output = "line") => ({ code, output });
 
   it("pinned: the landing table has a runner for each step of the land-decision flow, and no other", () => {
-    expect(Object.keys(landing).toSorted()).toEqual(decision.steps.map((s) => s.name).toSorted());
+    expect(Arr.sort(Rec.keys(landing), Order.String)).toEqual(
+      Arr.sort(
+        Arr.map(decision.steps, (s) => s.name),
+        Order.String,
+      ),
+    );
   });
 
   it("vector: each script's exit codes, as the scripts document them", () => {
@@ -48,9 +54,9 @@ describe("what the landing scripts' exit codes mean", () => {
     expect(leakOutcome(r(0))._tag).toBe("done");
     expect(leakOutcome(r(1))._tag).toBe("ask");
     expect(leakOutcome(r(2))._tag).toBe("stuck");
-    expect(queueRefused(new LeakGrepRefused({ reason: "private_word" }))._tag).toBe("ask");
-    expect(queueRefused(new NotQueued({ reason: "pr 9: draft" }))._tag).toBe("stuck");
-    expect(queueRefused(new PullRequestsError({ reason: "gh: offline" }))._tag).toBe("stuck");
+    expect(queueRefused(LeakGrepRefused.make({ reason: "private_word" }))._tag).toBe("ask");
+    expect(queueRefused(NotQueued.make({ reason: "pr 9: draft" }))._tag).toBe("stuck");
+    expect(queueRefused(PullRequestsError.make({ reason: "gh: offline" }))._tag).toBe("stuck");
     expect(listedPr(r(0, "812\n"))).toBe(812);
     expect(listedPr(r(0, "\n"))).toBeNull();
     expect(listedPr(r(1, "812"))).toBeNull();
@@ -63,9 +69,11 @@ describe("what the landing scripts' exit codes mean", () => {
       Effect.gen(function* () {
         const format = landing.format;
         expect(format).toBeDefined();
+
         const failed = yield* (format ?? (() => Effect.die("no format")))(Step.act("format", { folder: "x" })).pipe(
           Effect.flip,
         );
+
         expect(failed.reason).toContain("args do not parse");
       }),
     ));

@@ -3,6 +3,7 @@
 // order their messages print, and is what `pnpm lint` calls.
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 import { cacheFiles, lintCaches } from "./workflow-lint/caches.ts";
 import { changesJob } from "./workflow-lint/changes.ts";
@@ -11,11 +12,15 @@ import { ciRequired } from "./workflow-lint/ci-required.ts";
 import { lintCiSpeed } from "./workflow-lint/ci-speed.ts";
 import { classifyStep } from "./workflow-lint/classify.ts";
 import { failFast } from "./workflow-lint/fail-fast.ts";
+import { lintHost } from "./workflow-lint/host.ts";
 import { lintIssues } from "./workflow-lint/issues.ts";
 import { jobLaws } from "./workflow-lint/jobs.ts";
+import { lintL11 } from "./workflow-lint/l11.ts";
 import { lintNoTooling, mergeLine } from "./workflow-lint/merge-line.ts";
 import { nextLaws } from "./workflow-lint/next-job.ts";
+import { lintPlant } from "./workflow-lint/plant.ts";
 import { record } from "./workflow-lint/record.ts";
+import { relatedChecks } from "./workflow-lint/related.ts";
 import { lintScheduled } from "./workflow-lint/scheduled.ts";
 import { ends, legs, map, nextJob, numbered, type Require, type Rule } from "./workflow-lint/shared.ts";
 import { timeTables } from "./workflow-lint/time-tables.ts";
@@ -46,20 +51,20 @@ const CHECK_RULES: readonly Rule[] = [
   classifyStep,
   mergeLine,
   nextLaws,
+  relatedChecks,
   timeTables,
 ];
 
 export const lintWorkflow = (text: string): string[] => {
-  let source: unknown;
+  const source = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(source)) {
     return ["check.yaml: invalid YAML"];
   }
 
-  const workflow = map(source);
+  const workflow = map(source.success);
   const errors: string[] = [];
+
   const require: Require = (holds, reason) => {
     if (!holds) {
       errors.push(`check.yaml: ${reason}`);
@@ -74,20 +79,24 @@ export const lintWorkflow = (text: string): string[] => {
 };
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  try {
+  const ran = Result.try(() => {
     const read = (path: string) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
     const check = read(".github/workflows/check.yaml");
     const files = cacheFiles(read);
+
     const errors = [
       ...lintWorkflow(check),
       ...lintScheduled(read(".github/workflows/scheduled.yaml"), check),
       // T1 on the other workflows a pull request or the merge queue starts; lintWorkflow holds check.yaml.
-      ...Object.entries(files.workflows)
+      ...Rec.toEntries(files.workflows)
         .filter(([path]) => path !== ".github/workflows/check.yaml")
         .flatMap(([path, text]) => lintNoTooling(path, text)),
       ...lintIssues(files.workflows),
       ...lintCaches(files),
       ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
+      ...lintHost(read(".github/workflows/host.yaml")),
+      ...lintPlant(read(".github/workflows/plant.yaml")),
+      ...lintL11(read(".github/workflows/l11-exercise.yaml")),
     ];
 
     const manifest: unknown = JSON.parse(read("package.json"));
@@ -117,7 +126,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
     console.log(`workflow-lint: ${errors.length} errors`);
     process.exitCode = errors.length === 0 ? 0 : 1;
-  } catch {
+  });
+
+  if (Result.isFailure(ran)) {
     console.error("workflow-lint: input could not be read");
     process.exitCode = 2;
   }

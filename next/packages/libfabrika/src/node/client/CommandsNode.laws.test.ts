@@ -20,7 +20,19 @@
 // toward the cap. C2, spawn with `extendEnv: true`. C3, report `git` when the file exists without
 // an execute bit.
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Layer, Path } from "effect";
+import * as Arr from "effect/Array";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
 import { Command, type Result } from "../../tasks/Task.ts";
@@ -31,12 +43,14 @@ import { type Child, fresh, gitVectors, type Seen, spawner } from "./Spawner.tes
 
 /** The plan's cap for `git_version`: stdout and stderr together, in bytes. */
 const CAP = 4096;
+
 const GIT_VERSION = Command.cases.git_version.make({});
 
 /** The disk C1 and C2 run on: one executable `git` on the `PATH` they give. */
 const withGit = () => {
   const d = MemoryFiles.disk(["/usr/bin"]);
   MemoryFiles.put(d, "/usr/bin/git", new Uint8Array([0x7f, 0x45, 0x4c, 0x46]), 0o755);
+
   return d;
 };
 
@@ -58,14 +72,16 @@ const expected = (child: Child): Result => {
     return { _tag: "failed", reason: "spawn_failed" };
   }
 
-  const total = child.chunks.reduce((n, c) => n + c.bytes.length, 0);
+  const total = Arr.reduce(child.chunks, 0, (n, c) => n + c.bytes.length);
 
   if (total > CAP) {
     return { _tag: "failed", reason: "output_limit" };
   }
 
-  const out = new Uint8Array(child.chunks.filter((c) => c.to === "out").flatMap((c) => [...c.bytes]));
+  const stdout = Arr.filter(child.chunks, (c) => c.to === "out");
+  const out = new Uint8Array(Arr.flatMap(stdout, (c) => [...c.bytes]));
   const decoded = new TextDecoder().decode(out);
+
   // Bytes are UTF-8 exactly when decoding and encoding again gives them back: a byte that is not
   // becomes U+FFFD, three other bytes. stdout that is not UTF-8 answers an empty version.
   const text =
@@ -73,14 +89,22 @@ const expected = (child: Child): Result => {
       ? decoded
       : "";
 
-  return { _tag: "exited", code: child.code, version: text.endsWith("\n") ? text.slice(0, -1) : text };
+  return {
+    _tag: "exited",
+    code: child.code,
+    version: Function.pipe(text, Str.endsWith("\n")) ? Function.pipe(text, Str.slice(0, -1)) : text,
+  };
 };
 
 const encoder = new TextEncoder();
 
 /** Bytes cut at generated points into chunks, each at least one byte. */
 const cut = (bytes: Uint8Array, at: ReadonlyArray<number>): Array<Uint8Array> => {
-  const points = [...new Set(at.map((n) => (bytes.length === 0 ? 0 : n % bytes.length)))].filter((n) => n > 0);
+  const points = Arr.filter(
+    [...new Set(Arr.map(at, (n) => (bytes.length === 0 ? 0 : n % bytes.length)))],
+    (n) => n > 0,
+  );
+
   points.sort((a, b) => a - b);
   const chunks: Array<Uint8Array> = [];
   let from = 0;
@@ -98,12 +122,14 @@ const cut = (bytes: Uint8Array, at: ReadonlyArray<number>): Array<Uint8Array> =>
 /** Two chunk lists merged in a generated order that keeps each list's own order. */
 const merge = <A>(a: ReadonlyArray<A>, b: ReadonlyArray<A>, picks: ReadonlyArray<boolean>): Array<A> => {
   const out: Array<A> = [];
+
   let i = 0,
     j = 0,
     k = 0;
 
   while (i < a.length || j < b.length) {
     const takeA = j >= b.length || (i < a.length && (picks[k++ % Math.max(picks.length, 1)] ?? true));
+    // SAFETY: the loop guard keeps i below a.length when it takes from a, and j below b.length otherwise.
     out.push(takeA ? (a[i++] as A) : (b[j++] as A));
   }
 
@@ -138,7 +164,7 @@ const ChildArb: fc.Arbitrary<Child> = fc
   })
   .map((g): Child => {
     // No byte order mark: the plan does not say whether a leading one stays in `version`.
-    let out = encoder.encode(g.text.replaceAll("﻿", "").repeat(g.repeat) + g.ending);
+    let out = encoder.encode(Function.pipe(g.text, Str.replaceAll("﻿", ""), Str.repeat(g.repeat)) + g.ending);
 
     if (g.broken !== null) {
       // 0xFF is never a byte of UTF-8, wherever it stands.
@@ -151,12 +177,15 @@ const ChildArb: fc.Arbitrary<Child> = fc
     }
 
     const err = new Uint8Array(Math.max(0, g.total - out.length)).fill(g.errByte);
+
     const chunks = merge<Child["chunks"][number]>(
-      cut(out, g.outCuts).map((bytes) => ({ to: "out", bytes })),
-      cut(err, g.errCuts).map((bytes) => ({ to: "err", bytes })),
+      Arr.map(cut(out, g.outCuts), (bytes) => ({ to: "out", bytes })),
+      Arr.map(cut(err, g.errCuts), (bytes) => ({ to: "err", bytes })),
       g.order,
     );
+
     const total = out.length + err.length;
+
     return {
       spawn: g.spawnFails ? "fails" : "ok",
       chunks,
@@ -235,12 +264,14 @@ describe("P39 slice 4b: the real command layer", () => {
 
       for (const vector of gitVectors) {
         const seen = fresh();
+
         const child: Child = {
           spawn: "ok",
           chunks: [{ to: "out", bytes: encoder.encode(vector.stdout) }],
           code: 0,
           endless: false,
         };
+
         const exit = yield* execute(child, seen, { PATH: "/usr/bin" }, withGit());
         const answer = Exit.isSuccess(exit) && exit.value._tag === "Some" ? exit.value.value : null;
         expect(answer).toEqual({ _tag: "exited", code: 0, version: vector.version });
@@ -261,7 +292,7 @@ describe("P39 slice 4b: the real command layer", () => {
         ({ env, name, secret, path }) =>
           Effect.gen(function* () {
             const planted = `planted-${secret}`;
-            const PATH = path.join(":");
+            const PATH = Arr.join(path, ":");
             const seen = fresh();
             const child: Child = { spawn: "ok", chunks: [], code: 0, endless: false };
             yield* execute(child, seen, { ...env, [name]: planted, PATH }, withGit());
@@ -273,17 +304,20 @@ describe("P39 slice 4b: the real command layer", () => {
             }
 
             expect(command.command, "C2: the executable is git, found on PATH").toBe("git");
-            expect(command.args.map(String), "C2: the argv is exactly --version").toEqual(["--version"]);
+            expect(Arr.map(command.args, String), "C2: the argv is exactly --version").toEqual(["--version"]);
             expect(command.options.extendEnv, "C2: the child is not given the hands' environment").toBe(false);
             const childEnv = command.options.env ?? {};
-            expect(Object.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
+            expect(Rec.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
             expect(String(childEnv["PATH"]), "C2: PATH is the hands' own PATH").toBe(PATH);
+
             // Every named output of the spawn: the executable, the argv and every option, in each form a
             // value could be written.
-            const text = JSON.stringify(
-              { c: command.command, a: command.args.map(String), o: command.options },
-              (_k, v) => (typeof v === "object" && v !== null && "value" in v ? String(v.value) : v),
-            );
+            const text = yield* Schema.encodeEffect(
+              Schema.fromJsonString(Schema.Unknown, {
+                replacer: (_k, v) => (Predicate.isObjectOrArray(v) && "value" in v ? String(v.value) : v),
+              }),
+            )({ c: command.command, a: Arr.map(command.args, String), o: command.options });
+
             const forms = [
               planted,
               encodeURIComponent(planted),
@@ -292,7 +326,10 @@ describe("P39 slice 4b: the real command layer", () => {
             ];
 
             for (const form of forms) {
-              expect(text.includes(form), "C2: [secrets] the planted value reaches the child in no form").toBe(false);
+              expect(
+                Function.pipe(text, Str.includes(form)),
+                "C2: [secrets] the planted value reaches the child in no form",
+              ).toBe(false);
             }
           }),
         { numRuns: 100 },
@@ -317,34 +354,45 @@ describe("P39 slice 4b: the real command layer", () => {
           ),
           (folders) =>
             Effect.gen(function* () {
-              const names = folders.map((_, i) => `/opt/p${i}/bin`);
+              const names = Arr.map(folders, (_, i) => `/opt/p${i}/bin`);
               const d = MemoryFiles.disk(names);
-              folders.forEach((f, i) => {
+              Arr.forEach(folders, (f, i) => {
                 const git = `${names[i]}/git`;
 
                 if (f.kind === "file") {
                   MemoryFiles.put(d, git, new Uint8Array([0x23, 0x21]), f.mode);
                 } else if (f.kind === "folder") {
-                  d.entries.set(git, { type: "Directory", mode: 0o755, mtime: new Date(0) });
+                  d.entries.set(git, {
+                    type: "Directory",
+                    mode: 0o755,
+                    mtime: DateTime.toDateUtc(DateTime.makeUnsafe(0)),
+                  });
                 }
               });
-              const runnable = folders.some((f) => f.kind === "file" && (f.mode & 0o111) !== 0);
+              const runnable = Arr.some(folders, (f) => f.kind === "file" && (f.mode & 0o111) !== 0);
+
               const has = yield* Commands.use((commands) => Effect.succeed(commands.has)).pipe(
                 Effect.provide(
-                  layers({ spawn: "ok", chunks: [], code: 0, endless: false }, fresh(), { PATH: names.join(":") }, d),
+                  layers(
+                    { spawn: "ok", chunks: [], code: 0, endless: false },
+                    fresh(),
+                    { PATH: Arr.join(names, ":") },
+                    d,
+                  ),
                 ),
               );
+
               expect(
                 has,
                 "C3: has reads an executable git on PATH, never a folder or a file without an execute bit",
               ).toEqual(runnable ? ["git"] : []);
               reached.add(runnable ? "git" : "none");
 
-              if (!runnable && folders.some((f) => f.kind === "file")) {
+              if (!runnable && Arr.some(folders, (f) => f.kind === "file")) {
                 reached.add("file-without-x");
               }
 
-              if (!runnable && folders.some((f) => f.kind === "folder")) {
+              if (!runnable && Arr.some(folders, (f) => f.kind === "folder")) {
                 reached.add("folder");
               }
             }),

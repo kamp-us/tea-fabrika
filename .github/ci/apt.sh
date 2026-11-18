@@ -1,4 +1,5 @@
 #!/bin/sh
+# edge: it sets up the CI machine's system packages as root, the shell edge 0113 names (0113)
 # Today's CI. apt on a GitHub-hosted Ubuntu runner that survives dead Ubuntu mirrors.
 #
 #   sudo sh .github/ci/apt.sh update             refresh the lists, nothing else

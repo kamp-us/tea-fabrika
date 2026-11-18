@@ -1,0 +1,17 @@
+{
+  "id": "2026-11-18-t1144-pushed-without-typecheck",
+  "date": "2026-11-18",
+  "quests": ["tea-fabrika#1144"],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "Today's CI tooling, PR 1567: the lead pushed head fee4a4e6 with a TT8 law that failed typecheck (TS18048, `created` and `started` possibly undefined). CI run 44303818915 caught it during a sev0, so it cost a run and a second allowed push.",
+  "cause": "The fix round's brief said not to run pnpm typecheck, as AGENTS.md's caps ask of step agents, and the lead ran only narrow tests and scoped lint before pushing. 0133 lets a push go without a local typecheck because CI runs it. During a sev0, where each push is rationed, that leaves no check of types before the one push. The type error itself came from `...Array.from({ length: 4 }, () => \"z\")` inside an `as const` table, which types its entries as string and so made timeField's switch not exhaustive.",
+  "person": false,
+  "primitive": null,
+  "fix": "Commit 28a03e96 writes the tables out as literals. While pushes are rationed, the lead runs one `pnpm typecheck` before each push.",
+  "test": "A full pnpm typecheck at 28a03e96 passed all 30 workspaces. The same reviewer read the diff and found the tables identical in content and order (field/runs/2026-11-18-t1144-review2-typefix.json).",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44303818915",
+    "https://github.com/kamp-us/tea-fabrika/pull/1567"
+  ]
+}

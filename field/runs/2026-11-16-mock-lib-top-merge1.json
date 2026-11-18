@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-lib-top-merge1",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-16T00:23:38-08:00",
+  "ended": "2026-11-16T00:43:12-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Merge round for slice 1 of the mock sweep's lib-top plan, in next/ and the lint tooling: origin/main (PRs 1498, 1462, 1515 and 1516) merged into fabrikalfa/mock-lib-top-s1 at 5c6f381e7, merge commit 135df3c1e, with no new law and no new behavior. Six files conflicted, each folded with both sides kept. next/packages/libfabrika/src/Id.ts keeps the branch's generator whole (makeGenerator over SecureRandom, the draw's Effect.catchDefect, the pure advance step, Generator.layer over SecureRandom.layerWebCrypto) in main's namespace imports, with SecureRandom from effect/crypto/SecureRandom as libfabrika imports Digest; main's IdError.make in place of new IdError is applied to the branch's generator body too. Id.test-support.ts, Id.cause.test.ts and Id.types.test.ts take main's namespace imports with the branch's content; Id.cause.test.ts keeps vi removed and the branch's comment, and drops main's comment that pointed at the old Id.ts:198 spy site. oxlint-plugins/builtin-plants.ts keeps both VI_METHODS and TAGGED_ERROR. oxlint-plugins/plants.test.ts keeps main's harness (inConfigCopy, globsHolding, refusedIn, textOf, the new plantPath) and the branch's viGlobs; the branch's refusedInEveryFolder helper is gone and its VI_METHODS scenario is rewritten on inConfigCopy with the same coverage checks, the same one-file-per-glob check and the same exact-lines check per file. The branch's plantPath case for a glob by extension is dropped: main's plantPath already answers next/packages/libfabrika/src/*.ts with src/planted.ts and *.tsx with src/planted.tsx, the same paths. Main's L2 law, the root rules and every override that sets no-restricted-properties carry the Data.TaggedError entry, is green on the merged tree, so no entry was added.",
+  "laws": [
+    {
+      "law": "next/packages/libfabrika/src/Id.test.ts",
+      "result": "green, 29 of 29"
+    },
+    {
+      "law": "next/packages/libfabrika/src/Id.cause.test.ts (C1)",
+      "result": "green, 1 of 1"
+    },
+    {
+      "law": "next/packages/libfabrika/src/Id.types.test.ts",
+      "result": "green in vitest (2 of 2) and in tsc --noEmit -p next/packages/libfabrika"
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts, the REFLECT, TAGGED_ERROR L1 and L2, and VI_METHODS scenarios included",
+      "result": "green, 254 of 254"
+    }
+  ],
+  "plants": [
+    {
+      "law": "T4, the generated schedules and the pinned four-fiber case (Id.test.ts)",
+      "plant": "advance takes fresh whenever it is given, without now > last.at (both laws failed); Id.ts restored by copy, 29 of 29 green after",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "Checks on the merged tree, before the commit: pnpm format exits 0. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: 16 of 18 parts pass; lint:dead fails on its one known finding, only-called-from-tests next/packages/libfabrika/src/Id.test-support.ts:generatorWith, owner's call pending (node-kinds.json, the helper and the ledger untouched); lint:promise-types died with EPIPE and passed alone on rerun with 0 findings. A second pnpm lint after this row was written gave the same result, field-check included, and promise-types again passed alone after its EPIPE. tsc --noEmit -p next/packages/libfabrika exits 0. loosening.sh 5c6f381e7 HEAD lists every change main brought in since the branch's base (its own reviewed PRs: deleted no-node-filesystem, one-id-module and namespace-imports laws, and import rewrites), plus plants.test.ts 'removed expect' on the REFLECT and VI_METHODS scenarios, where each expect moved from the deleted helper into the scenario body with the same assertion. loosening.sh origin/main HEAD, the branch's own part, shows no removed expect in plants.test.ts; its one removed law, in Id.test.ts, is the tests step's earlier rename of the shared-fibers law to T4, which this merge did not touch. vitest --changed was not run: the merge changes package tsconfigs and .oxlintrc.json, which make it the full suite.",
+  "step": "build",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}

@@ -5,7 +5,9 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 /** No sweep was started. The timer's next sweep still runs. */
-export class SweepsError extends Schema.TaggedError<SweepsError>()("SweepsError", { reason: Schema.String }) {}
+export class SweepsError extends Schema.TaggedError<SweepsError, { readonly brand: unique symbol }>()("SweepsError", {
+  reason: Schema.String,
+}) {}
 
 export class Sweeps extends Context.Service<
   Sweeps,

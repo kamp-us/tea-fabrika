@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e53-build2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:42:24-08:00",
+  "ended": "2026-11-15T22:58:37-08:00",
+  "parent": "2026-11-15-t1075-e53-review1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second build step for judgment slice E53 of the Effect-checker sweep (missedPipeableOpportunity), in next/, from 2d257ba, after the merge session's Q6 ruling that the hit left as a false alarm takes the pipe form. The one hit left, next/packages/libfabrika/src/codehost/CodeHost.ts:62, is the paths field inside the Change schema (the Updated schema starts at line 73 and has no hit). It was fixed by the checker's own quick fix through checkerfix.mjs (CHANGE src/codehost/CodeHost.ts:62: Convert to pipe style), run with a temporary plugin block in next/packages/libfabrika/tsconfig.json that was put back before the commit: Schema.NullOr(Schema.Array(Path)) becomes Path.pipe(Schema.Array, Schema.NullOr). The same two functions run in the same order, so the schema, its exported type and every caller are unchanged; the comment above the field is kept, and the diff is that one line. CodeHost.ts is not in PR 1366's 70 files. No disable line, no lock line, no tsconfig change, no law touched. Recount with only this check at error through --lspconfig: next/packages/libfabrika 34, all in src/cloudflare/ (E91's folder), 0 in CodeHost.ts; next/apps/fabrika 0. The slice's 22 hits are now all fixed: 19 in exam paths and 3 in product files.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 16,
+  "note": "Run at the build's working tree on 2d257ba plus the one-line edit, one file at a time, all green: CodeHost.test.ts 3, the pipeline's Change.test.ts 2, Merger.laws.test.ts 12, handlers.test.ts 2, Queue.laws.test.ts 7, and the .integration. laws that reach codehost: queue.laws.integration.test.ts 7, runner.laws.integration.test.ts 4, next/apps/fabrika/src/exam/layers.integration.test.ts 18. Then --changed origin/main on the today, tooling, next and next-integration projects (the next-visual project left out, as step rules ask): 70 files, 599 passed, 1 expected fail, 7 skipped. pnpm format changed nothing more; pnpm lint with a 6144 MB heap, the ratchet, one pnpm typecheck and loosening.sh (0 hits) all passed. The check has no lock line yet, so typecheck does not prove the zero; the recount is by diagnostics, which can undercount files reached only by import.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "build"
+}

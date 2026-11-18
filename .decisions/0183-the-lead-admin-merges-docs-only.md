@@ -1,7 +1,7 @@
 ---
 id: 0183
 title: The lead admin-merges a docs-only pull request without asking, after it checks that the change is not broken
-status: amended-in-part by [0530](0530-lead-turns-on-merge-when-ready.md)
+status: accepted
 date: 2026-11-13
 tags: [merge, admin, docs, queue, lead, owner, main]
 ---
@@ -43,9 +43,9 @@ request, and makes sure, each time, that it is not broken.
 - **After the merge** the lead reads the push run on main, and fixes a red one the same turn.
 - One changed file that is not docs puts the whole pull request back under 0179.
 
-This amends 0179 for docs-only pull requests. Everything else in 0179 holds: for any other pull
-request an admin merge is started only by the owner, and no agent but the lead starts one at all.
-Still never: a force push, auto-merge, or a change to the bypass list by an agent.
+This amends 0179 for docs-only pull requests. Still never: a force push, auto-merge other than the
+lead's own turn-on of merge when ready ([0530](0530-lead-turns-on-merge-when-ready.md)), or a change
+to the bypass list by an agent.
 
 ## Consequences
 

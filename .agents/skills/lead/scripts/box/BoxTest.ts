@@ -1,12 +1,13 @@
+import { Array as Arr, String as Str, pipe, Effect, FileSystem, Formatter, Layer, Option } from "effect";
+import type { Path, Scope } from "effect";
 // BoxTest: the laws of the box command, as suites a world runs (0062). A world makes MAIN and one clean box
 // in a fresh temp folder and gives the layers rm runs on: `BoxTest.memory` answers Git and the runs/
-// move from memory, `BoxTestGit.world` uses real git and keepruns.sh, so the memory one stays honest.
+// move from memory, `BoxTestGit.world` uses real git and RunsFs, so the memory one stays honest.
 //
 //   BoxTest.rm.suite("memory", BoxTest.memory, run, { numRuns: 300, seed: 119120 })
 //
 // Each case is a generated plan: one box, then what is planted in it. The oracle below names the
 // verdict the old Python rm gave that plan, check by check in its order.
-import { Effect, FileSystem, Layer, type Path, type Scope } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -56,9 +57,11 @@ export type World = {
   readonly make: (dir: string, plan: Plan) => Effect.Effect<Made, unknown, Platform>;
 };
 
-const TIP = "1".repeat(40);
-const LOST = "2".repeat(40);
-const OTHER = "3".repeat(40);
+const TIP = pipe("1", Str.repeat(40));
+
+const LOST = pipe("2", Str.repeat(40));
+
+const OTHER = pipe("3", Str.repeat(40));
 
 /** The world in memory: files written by hand, Git and the runs/ move answered from the plan. */
 export const memory: World = {
@@ -89,13 +92,14 @@ export const memory: World = {
       [`${data}/index`, "DIRC"],
       [`${data}/config`, "[core]\n"],
       [`${data}/refs/heads/main`, `${TIP}\n`],
-      [`${data}/logs/HEAD`, `${"0".repeat(40)} ${TIP} Fixture <fixture@example.test> 0 +0000\tclone\n`],
+      [`${data}/logs/HEAD`, `${pipe("0", Str.repeat(40))} ${TIP} Fixture <fixture@example.test> 0 +0000\tclone\n`],
     ] as const) {
       yield* fs.writeFileString(path, text);
     }
 
     const flag = { plain: "H", flagged: "h", submodule: "H" }[plan.index];
     const mode = plan.index === "submodule" ? "160000" : "100644";
+
     const git = BoxGitTest.layer({
       index: [`${flag} ${mode} ${TIP} 0\ttracked`],
       dirty: plan.dirty,
@@ -108,12 +112,15 @@ export const memory: World = {
       reachable: plan.retained ? [TIP, OTHER] : [OTHER],
       failing: plan.failing === "none" ? [] : [plan.failing],
     });
+
     const runs = RunsTest.layer(
       plan.runs === "stuck"
         ? { said: "", kept: false }
         : { said: plan.runs === "moved" ? `kept runs of ${plan.name} at runs/${plan.name}\n` : "", kept: true },
     );
+
     const layer: Layer.Layer<BoxGit | Runs> = Layer.mergeAll(git, runs);
+
     return { main, boxes, tip: TIP, lost: LOST, layer };
   }),
 };
@@ -150,8 +157,10 @@ export const expected = (plan: Plan): Remove.Verdict => {
     return Remove.Verdict.cases.absent.make({});
   }
 
-  const first = order.find(([holds]) => holds);
-  return first === undefined ? Remove.Verdict.cases.removed.make({}) : kept(first[1]);
+  return Option.match(
+    Arr.findFirst(order, ([holds]) => holds),
+    { onNone: () => Remove.Verdict.cases.removed.make({}), onSome: (first) => kept(first[1]) },
+  );
 };
 
 /** Plant the parts of a plan that are only files, the same in every world. */
@@ -270,12 +279,14 @@ const law = Effect.fnUntraced(function* (world: World, plan: Plan) {
   const work = `${made.boxes}/${plan.name}`;
   const data = `${work}-gitdata`;
   const before = [yield* present(fs, work), yield* present(fs, data)];
+
   const removal = yield* Remove.remove(plan.asked, { boxes: made.boxes, main: made.main }).pipe(
     Effect.provide(made.layer),
   );
+
   const verdict = expected(plan);
   const removed = verdict._tag === "removed";
-  expect(removal.verdict, JSON.stringify(plan)).toEqual(verdict);
+  expect(removal.verdict, Formatter.formatJson(plan)).toEqual(verdict);
   expect(Remove.exitCode(removal.verdict)).toBe(verdict._tag === "kept" ? verdict.code : 0);
   expect(removal.runs).toBe(removed && plan.runs === "moved" ? `kept runs of ${plan.name} at runs/${plan.name}` : "");
   expect([yield* present(fs, work), yield* present(fs, data)]).toEqual(removed ? [false, false] : before);
@@ -326,6 +337,7 @@ export const rm = {
         failing: "none",
         runs: "moved",
       };
+
       const vectors: ReadonlyArray<Partial<Plan>> = [
         {},
         { asked: "../clean" },
@@ -351,7 +363,7 @@ export const rm = {
       ];
 
       it.each(
-        vectors.map((planted) => ({
+        Arr.map(vectors, (planted) => ({
           planted: JSON.stringify(planted),
           plan: { ...clean, ...planted },
           reason: Remove.line({ shown: "clean", runs: "", verdict: expected({ ...clean, ...planted }) }),
