@@ -1,7 +1,7 @@
 ---
 id: 0133
 title: No push waits on a local typecheck, because CI's check job runs it on every push
-status: amended-in-part by [0603](0603-lead-admin-merges-every-ready-pull-request.md)
+status: accepted
 date: 2026-11-11
 tags: [checks, typecheck, ci, lead, laptop]
 ---

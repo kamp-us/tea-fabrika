@@ -136,11 +136,9 @@ These hold in every review and recheck, so the brief does not repeat them.
 - **Git in a worktree:** start every git command with `cd <worktree> || exit 1`. Ignore git's
   `gc.log` warnings. Check that `HEAD` is the brief's reviewed head before you read.
 - **Do not start subagents.** Do not wait on CI. Do not mark the pull request ready or merge it.
-- **Read CI's result at the head; do not run its checks again** ([0603](../../../.decisions/0603-lead-admin-merges-every-ready-pull-request.md)). Run a test only to see a
-  plant go red, or a law CI does not run (a tooling `.integration.`, visual or host-only law the
-  change reaches): `nice -n 19 pnpm exec vitest run --maxWorkers=1 <one file>`, with
-  `TYPESAFE_API_KEY` unset; the test config refuses a broad run. No `pnpm typecheck` or `pnpm lint`:
-  CI ran them on this head. Never run a test that sends a real signal, calls `launchctl`, starts Electron or
+- **Tests one file at a time:** `nice -n 19 pnpm exec vitest run --maxWorkers=1 <one file>`, with
+  `TYPESAFE_API_KEY` unset; the test config refuses a broad run. No `pnpm typecheck`: the build ran
+  it on this head. Never run a test that sends a real signal, calls `launchctl`, starts Electron or
   needs the real machine; judge it by reading.
 - **Run row:** when the brief's `Run row:` field names a file, write it in the shape of the newest
   review rows, with real start and end times from `TZ=America/Los_Angeles date`. It is the one file

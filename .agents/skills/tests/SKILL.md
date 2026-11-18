@@ -161,10 +161,11 @@ These hold in every tests round, so the brief does not repeat them.
   turned down, no `oxlint-disable` on wrong code
   ([0168](../../../.decisions/0168-old-lint-breaks-are-fixed.md),
   [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)). A law you cannot write as
-  planned is not weakened: stop that law and say exactly why, with file and line. A red CI lint caused
+  planned is not weakened: stop that law and say exactly why, with file and line. A red lint caused
   only by product names that do not exist yet is reported, not hidden.
-- **Before the commit:** `pnpm format`, and each law seen red once. Lint, the list ratchet and the
-  typecheck run in CI on the pushed head ([0603](../../../.decisions/0603-lead-admin-merges-every-ready-pull-request.md)); a red one there comes back to you.
+- **Checks before the commit:** `pnpm format`, `pnpm lint` once, and the list ratchet CI runs that
+  local lint does not:
+  `node next/apps/fabrika/src/exam/ratchet.ts --base "$(git merge-base origin/main HEAD)"` exits 0.
 - **Run row:** write the file the brief's `Run row:` field names, in the shape of the newest tests
   rows (`ls field/runs | grep tests | tail -3`), with real start and end times from
   `TZ=America/Los_Angeles date`, every law with its red reason, and every plant as
@@ -192,6 +193,6 @@ These hold in every tests round, so the brief does not repeat them.
 - Write a law that cannot fail, or one whose plant you did not run and record. A plant that needs
   the build's file is written and named in the report as "after build", and runs at review.
 - Hold `done` for a part you cannot do here. Work until every part this worktree allows is done. A
-  part that needs another step's code or a typecheck is written, named in the report as "after
-  build" or "CI runs it", and does not block `done`. Never send the quest to tests.
+  part that needs another step's code, a typecheck or `--changed` is written, named in the report
+  as "after build" or "lead runs it", and does not block `done`. Never send the quest to tests.
 - Commit a plant test.

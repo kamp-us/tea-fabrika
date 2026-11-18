@@ -18,7 +18,7 @@ the bounded task and the ticket it serves.
 
 ```text
 plan (read-only) -> lead approves -> box -> tests -> build -> review
-  -> fetch, read the diff, e2e -> push as the bot -> pull request -> merge rule -> admin merge, in order
+  -> fetch, read the diff, e2e -> push as the bot -> pull request -> merge rule -> merge queue
 ```
 
 A step's brief is short. It is [the step's template](#step-briefs) filled in: the quest's facts as
@@ -49,8 +49,8 @@ first step:
 Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
 Children: <ticket, branch and signed parent head for each child>, or none. Record before starting.
 Start a child at its parent's signed build head. Keep the child's tests until it lands.
-Each layer lands on its own, bottom first, with `land.ts merge <pr> --admin` (0603); no native
-stack link. After a parent head changes, update each open child with `gh pr update-branch <child>`,
+Each layer is a plain pull request with no native stack link, and lands on its own, bottom first (0603).
+After a parent head changes, update each open child with `gh pr update-branch <child>`,
 bottom-to-top. The child keeps its tests; its own step owner signs changed tree links again.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
 ```
@@ -305,8 +305,7 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md) for the split; checks that still need
   network isolation keep [0045](../../../.decisions/0045-test-steps-run-in-containers.md)'s fence.
   Inspect the actual selected tests and cleanup before a direct run. A plain filename is not
-  clearance. A check CI runs is not run here before a push: only `pnpm format` and the leak grep
-  ([0603](../../../.decisions/0603-lead-admin-merges-every-ready-pull-request.md)).
+  clearance; narrow a `--changed` selection that reaches these laws to verified-safe local paths.
   Mutation still runs through `mutbox.ts` on its hourly schedule (0066).
 - **One fresh Claude agent per step, not one long driver per ticket** (owner, 2026-11-09). Each
   step gets a new agent with a short brief. It reads the quest's state file
@@ -338,7 +337,7 @@ Read the header before you run one; this table only says what each is for.
 | `box.sh gc` | remove boxes and landed worktrees whose work is safe elsewhere (`gc.ts` says when); `gcloop.ts` runs it ([below](#box-cleanup-on-a-timer)) |
 | `gcloop.ts` | the box cleanup's loop: a timer sweep, a sweep after each merge, and `status` ([0101](../../../.decisions/0101-box-cleanup-runs-on-a-timer.md)) |
 | `drive.ts` | one step end to end, with no agent waiting ([below](#use-drivets-for-any-step)) |
-| `chain.ts` | a whole quest end to end, to its pull request ([below](#run-a-whole-quest-with-chaints)) |
+| `chain.ts` | a whole quest end to end, to the merge queue ([below](#run-a-whole-quest-with-chaints)) |
 | `quests.ts` | what each quest is doing now, read-only |
 | `flow/run.ts` | run one flow of typed steps with no agent holding the loop ([0064](../../../.decisions/0064-the-lead-drives-with-flows.md)); `flow/flows/land-decision.ts` lands a docs-only decision PR |
 | `mutbox.ts` | the mutation run's Stryker sample in a container ([0045](../../../.decisions/0045-test-steps-run-in-containers.md), 0066) |
@@ -347,7 +346,7 @@ Read the header before you run one; this table only says what each is for.
 | `publish.ts` | leak-check, push HEAD and open a draft PR when the branch has none ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)); `stepcommit.sh` runs it |
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
-| `land.ts run`, `merge --admin`, `merged` | the lead session only: land a ready quest, admin-merge a ready pull request in order ([0603](../../../.decisions/0603-lead-admin-merges-every-ready-pull-request.md)), and close its tickets after the merge |
+| `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)), and close its tickets after the merge |
 | `governance.sh` | list the `.decisions/` files a diff touches; advice only |
 | `sizecap.ts` | a diff's or a plan's size, as advice only ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)); run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.py`, `clauderow.ts` | print one `field/runs/` row from a Codex run's events, or from a Claude subagent's transcript |
@@ -450,8 +449,10 @@ means the timer is dead or every sweep was skipped behind a hung one. Fix the ca
 
 ## Pushes and protected refs
 
-Every commit the lead or an agent makes is the bot's ([0407](../../../.decisions/0407-this-repos-agent-commits-are-the-bots.md)), a merge of main into a pull request's branch included: make it with
-`git -c user.name='fabrikalfa[bot]' -c user.email='353269643+fabrikalfa[bot]@users.noreply.github.com' merge origin/main`, never with the person's git config. `botpush.mjs` refuses to push a commit whose author or committer is not the bot, before it reads any key, and names the commit.
+Every commit the lead or an agent makes is the bot's ([0407](../../../.decisions/0407-this-repos-agent-commits-are-the-bots.md)), a merge of main into a pull request's branch included. Make it with
+`git -c user.name='fabrikalfa[bot]' -c user.email='353269643+fabrikalfa[bot]@users.noreply.github.com' merge origin/main`,
+never with the person's git config. `botpush.mjs` refuses to push a commit whose author or committer
+is not the bot, before it reads any key, and names the commit.
 
 Every commit leaves the laptop when it is made
 ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)). `stepcommit.sh` (signed)
@@ -469,7 +470,7 @@ own branch), or its merge of a passing test-only fix or a rows-only PR, the lead
 same command itself, without asking the owner again
 ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md)). Only the script reads the key.
 Report every other refused action to the owner with the exact command and worktree; never route
-around it. A quest agent does not meet this for its landing: it stops at `land.ts ready` (step 8). A rows-only PR lands with `land.ts merge <pr> --admin` once its leak grep is clean (0603); a test-only
+around it. A quest agent does not meet this for its landing: it stops at `land.ts ready` (step 8). A rows-only PR lands with `land.ts queue <pr>` on green CI with a clean leak grep; a test-only
 fix still runs every step first.
 
 `Cannot update this protected ref.` alone does not prove a push failed. Read the command's exit
@@ -492,11 +493,7 @@ visible, and never weaken the rules to hide this message.
    return it unsigned, with line one blank. The agent that wrote it sends it to the lead session for approval.
    After the read, fill line one with `Approved by the lead agent, builds <note>; body <sha256-12>`
    using the draft check's digest, then run `plancheck.sh --approved <plan>`. Any body edit,
-   including an amendment, needs the same read and checks again. An amendment that only narrows a
-   proof bar to the cause its slice fixes, with every law unchanged and the other cause filed as
-   its own ticket, is the lead's to sign in that read, with no owner ask: a narrowed or removed law
-   still goes to the owner (step 9). The lead session the quest reports to signs it, never a
-   relay to another session. A new design call goes to the owner as one
+   including an amendment, needs the same read and checks again. A new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
    A plan that patches or changes a package (tea, demlik, Manti, Effect, Alchemy) names what it
    read of that package's decisions, patterns and source; else send it back
@@ -533,7 +530,7 @@ visible, and never weaken the rules to hide this message.
    one Electron app at a time, each with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`.
    No focus taken and nothing left behind. Look at every screenshot.
 8. **Ready to land.** A quest agent never signs as lead, pushes, opens the pull request or adds
-   merges it: the permission check refuses a subagent the lead key, and the quest stops
+   it to the merge queue: the permission check refuses a subagent the lead key, and the quest stops
    ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md), ticket 652). Its last act
    is `land.ts ready` ([the template](#quest-brief-template)). The PR body file says which parts were
    this repo's steps, what ran each one, and the dollars, in the order
@@ -558,39 +555,41 @@ visible, and never weaken the rules to hide this message.
    Never write "owner read" unless the owner did. Log each required owner read in a field note.
    An exam change that is all proper property tests merges without the owner's read (owner,
    2026-11-08). A change that loosens or removes a law still stays `ask owner exam_read`.
-   Then the lead lands it itself with `land.ts merge <pr> --admin`, one pull request at a time,
-   in order ([0603](../../../.decisions/0603-lead-admin-merges-every-ready-pull-request.md)). The
-   merge queue and merge when ready are not the route, and no agent arms its own pull request: it
-   marks it ready and stops. `land.ts merge` refuses one that is a draft, not into main, titled
-   `Plan:` or changing no files; runs the leak gate on the change, each commit and the title and
-   description; runs the `## New names` check; and, unless every file is docs, refuses unless
-   `ci-required` is a success at the head. Then one squash pinned to that head, with `--admin`.
-   A bare `gh pr merge` is never used, since it skips the leak check (it once merged past a
-   printed hit). Never pass `--auto`.
-   - **The order:** a sev1 fix first; then the format and code-quality sweeps (format, lint,
-     Effect, mock and exam sweeps), which touch many files, so a ready sweep jumps the line; then
-     every other pull request in the order it became ready, a stacked child right after its
-     parent. A docs-only pull request
-     ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)) lands at once on your
-     read, with no wait for CI and no place in the order.
-   - **One at a time:** read each merge's answer before the next. Do not catch a green pull
-     request up with main first. One that conflicts after an earlier merge gets main merged in
-     with `botpush.mjs` (never as the person), and takes its place again once its new head is
-     green.
-   - **Stacks:** no native stack links, since GitHub refuses `gh pr merge` on a pull request in
-     one. A child targets its parent's branch. When the parent lands, GitHub moves the child onto
-     main, and it lands on its own. An open child stays current by merging its parent's head
-     (`gh pr update-branch <child>`, [0599](../../../.decisions/0599-native-stack-upkeep.md)),
-     never a rebase or a force push; if its signed tree links changed, only its own step owner
-     signs them again. An old native stack is unstacked once with `gh stack unstack <number>`
-     (`gh api repos/<repo>/stacks` lists them).
-   - Every PR squash-merges, a stacked parent too
-     ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). The squash commit's
-     title and message are the pull request's title and description, so write them to be read on
-     main.
-   - `land.ts run <quest> <ticket>` still ends by adding the pull request to the queue; until its
-     own ticket moves it to the admin route, stop it after `pr` and land the pull request with
-     `land.ts merge <pr> --admin`.
+   Then the lead session turns on GitHub's "merge when ready" at once, without waiting for CI
+   ([0530](../../../.decisions/0530-lead-turns-on-merge-when-ready.md)), only with
+   `land.ts arm <pr>`, never by hand: it takes a green proof run at the head, the full set or the
+   changed set ([0590](../../../.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)),
+   refuses one that is red or not ended, and a changed-set run at an older head, and
+   prints each red job's failed steps and tests; with none at the head it arms, as
+   [0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md) allows. GitHub puts it in the merge queue
+   when `ci-required` goes green, never when red. If anything is pushed after the final read, run
+   `disablePullRequestAutoMerge` and read again. Main takes changes only
+   through that queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)). For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`
+   in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
+   For any other pull request, run `land.ts queue <pr>` once its checks
+   are green. Both leak-check the change, each commit and the title and description, then add it to
+   the queue with one squash pinned to the head; `land.ts`'s header says how. `land.ts merge <pr>`
+   is the only way to merge by hand; a bare `gh pr merge` is never used, since it skips the leak
+   check (it once merged past a printed hit).
+   GitHub then tests the pull request on newest main and merges it. Nobody merges main in to catch
+   up, and nobody runs the checks again on newest main by hand. The squash commit's title and
+   message are the pull request's title and description, so write them to be read on main. Never
+   pass `--auto`. Two exceptions take `land.ts merge <pr> --admin`, which refuses any other: a sev0
+   fix on a branch the open sev0 allows
+   ([0532](../../../.decisions/0532-a-sev0-freezes-ci.md), the [sev skill](../sev/SKILL.md)) and a
+   docs-only pull request ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
+   A pull request the queue puts back out stays open: the
+   quest merges main or fixes the red check, pushes, and it is queued again. No pull request is in a native stack
+   ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)): GitHub refuses `gh pr merge` and merge when ready on a stack member
+   (github/gh-stack#591), so a chain is plain pull requests. A child targets its parent's branch.
+   When the parent lands, GitHub moves the child onto main, and the child is armed next with
+   `land.ts arm`. Unstack an old native stack once with `gh stack unstack <number>`
+   (`gh api repos/<repo>/stacks` lists them). Every PR squash-merges, a parent too
+   ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). An open child stays
+   current by merging its parent's head with `gh pr update-branch <child>`
+   ([0599](../../../.decisions/0599-native-stack-upkeep.md)), never a rebase or a force push; if its
+   signed tree links changed, only its own step owner signs them again. In a sev0 the lead lands
+   every ready pull request by admin merge, in order, as [the sev skill](../sev/SKILL.md#sev0) says.
    After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.
    `land.ts merged <pr>` does both (step 10).
    The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.
@@ -601,8 +600,8 @@ visible, and never weaken the rules to hide this message.
    A box is removed only when every commit and file it saved is somewhere MAIN keeps
    (`scripts/box/Remove.ts` says how it proves that). Remote-tracking refs and object presence do
    not count: fetch remote-only work into a retained MAIN ref first.
-10. **After the merge:** right after each admin merge, before the next one: `land.ts merged <pr>`
-    reads the pull request once. When it has merged, it closes each
+10. **After the merge:** GitHub's queue merges later than the command that queued, so this is its
+    own act: `land.ts merged <pr>` reads the pull request once. When it has merged, it closes each
     ticket the description names on a line of its own, `fabrika close ticket <N>`, so put that line
     in when the PR finishes the ticket
     ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Each close gets a comment
@@ -662,7 +661,7 @@ Decisions live in `.decisions/`, one file per decision
 ([0001](../../../.decisions/0001-decisions-live-in-the-repo.md), owner, 2026-11-09). The whole path:
 
 ```text
-owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> admin merge at once
+owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on green
 ```
 
 - **Write it the turn it is decided,** with a docs agent using [the adr skill](../adr/SKILL.md),
@@ -670,9 +669,8 @@ owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> admin merge
   one exists.
 - **One decision, one PR.** Never batch decisions, and never wait for a code PR or for the end of
   the day.
-- **Merge at once.** A docs-only PR that writes down a decision lands with `land.ts merge <pr>
-  --admin` as soon as the lead has read it and the leak grep is clean, with no wait for CI and no
-  plan, tests, review or field rows (0183, 0603). Code PRs keep their steps.
+- **Merge on green.** A docs-only PR that writes down a decision is merged when CI is green and the
+  leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their steps.
 - **Search before you ask.** Before the lead or any step asks the owner or writes a plan, it
   searches `.decisions/`, `.glossary/` and `docs/direction/` for the topic.
 - **Ask in plain words, from the code.** Before a question to the owner, read the code it is about
@@ -700,8 +698,8 @@ what counts as a hit.
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase or force-push a stacked child for upkeep. Use `gh pr update-branch <child>` once the
-  parent head moved (0599); it adds a merge commit. For an ordinary
+- Rebase or force-push a stacked child for upkeep. Use `gh pr update-branch <child>` only after the
+  parent head and source, queue and writer agree (0599); it adds a merge commit. For an ordinary
   branch, bring main in with a merge.
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 

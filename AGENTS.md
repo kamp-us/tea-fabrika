@@ -278,29 +278,31 @@ is linked; the others have no other home yet.
 ## Checks
 
 ```sh
-pnpm format     # before every push: formats and applies safe fixes, in place
+pnpm format     # first, so a diff holds only what was meant: formats and applies safe fixes, in place
 pnpm typecheck  # tsc with Effect's own checks (@effect/tsgo): an Effect made and dropped fails it
 pnpm lint       # oxlint, oxfmt and stylelint, changing nothing; a warning fails it too
 pnpm test
 ```
 
-Before a push, run `pnpm format` and the leak grep, and nothing else that CI runs. CI runs lint,
-typecheck and the tests a change reaches on every push, and a pull request merges only when
-`ci-required` is green ([0603](./.decisions/0603-lead-admin-merges-every-ready-pull-request.md), after
-[0133](./.decisions/0133-no-push-waits-on-a-local-typecheck.md)). A red check in CI is read and
-fixed forward on the same branch. No local lint, typecheck, `--changed` or full test run as a
-check, and no repeat run of a law that is already green. None needs a key or the network.
+Typecheck, lint and test must all pass before a change is offered. None needs a key or the network. A push does
+not wait on a local `pnpm typecheck`: CI runs it, and a pull request merges only when it is green
+([0133](./.decisions/0133-no-push-waits-on-a-local-typecheck.md)). Run the narrowest check that
+still covers the change, as
+[Effect's own repo](https://github.com/Effect-TS/effect/blob/main/.agents/AGENTS.md) asks of its
+agents. This table adds no rule, and `pnpm format` comes first in every row. In a sev0, before a push,
+run only `pnpm format` and the leak grep, and let CI judge the rest
+([the sev skill](./.agents/skills/sev/SKILL.md#sev0), [0603](./.decisions/0603-no-stacks-and-sev0-admin-merges.md)).
 
-Local runs that stay are the work loop and what CI does not run: the test writer seeing its law go
-red, a plant going red, the builder's narrow test while it works, and the rows below.
-
-| What changed | What CI does not run, so you run it here |
+| What changed | What to run here |
 |---|---|
-| Only plan files and field rows | `pnpm lint`, which checks the added rows: such a pull request starts no CI run (changes.mjs's `ignored`) |
-| A script under `experiments/` | the changed script, once: it is outside the typecheck |
-| A tutorial's files | every step on a fresh clone |
-| A tooling `.integration.` law, a visual law or a host-only law the change reaches | that law, on a narrow path or its remote proof: no pull request runs it ([0602](./.decisions/0602-integration-laws-leave-merge-line.md), [0536](./.decisions/0536-real-resource-tests-run-only-on-the-schedule.md), [0594](./.decisions/0594-safe-checks-direct-mac-ci.md)) |
-| A program's window | shots from the real built app at the five layouts ([Changing the product](#changing-the-product)) |
+| Only Markdown that no program or skill reads, or field rows | `pnpm lint`, which checks the added rows too. CI skips the heavy jobs; a pull request of only plan files and rows starts no CI run (changes.mjs's `ignored`) |
+| Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
+| A skill script, or Markdown that a program or skill reads | as code, below |
+| Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
+| A dependency's version | as code, but narrow paths in place of `--changed`, which a lockfile change makes the full suite |
+| A script under `experiments/` | `pnpm lint`, and run the changed script once yourself: it is outside the typecheck |
+| A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
+| A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](#changing-the-product)) |
 
 - **Never switch a lint rule off to pass.** A `// oxlint-disable-next-line <rule> -- <why>` is for a
   line where the code is right and the rule does not fit, and its reason says why in plain words.
@@ -335,13 +337,15 @@ red, a plant going red, the builder's narrow test while it works, and the rows b
 These run on a laptop a person is using. A prompt can't see the load, so every agent brief carries
 these caps. Each one came from a laptop that became unusable.
 
-- **Tests:** `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you work, and
-  never `--changed` or the full suite as a check, since CI runs them ([0603](./.decisions/0603-lead-admin-merges-every-ready-pull-request.md)). The test config
-  refuses the full suite ([0410](./.decisions/0410-the-machine-caps-live-in-code.md)). CI picks its jobs from the changed paths
+- **Tests:** `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you work, then
+  `--changed origin/main` once at the end. Never the full suite locally: the test config refuses it
+  ([0410](./.decisions/0410-the-machine-caps-live-in-code.md)). When a change makes `--changed` the
+  full suite (a `package.json`, the lockfile, a tsconfig), run the narrow paths of the tests you
+  touched and of the tests that read that file. CI picks its jobs from the changed paths
   (`.github/ci/changes.mjs`, [0175](./.decisions/0175-every-run-follows-its-paths.md)); a run that
   needs what CI lacks (Electron shots, a stage with workerd) still runs here.
-- **With two or more code agents running:** `nice -n 19`, `--maxWorkers=1`. A typecheck is CI's; one
-  run here, when someone wants the answer sooner, takes about 8 cores.
+- **With two or more code agents running:** `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at
+  the very end. `tsgo` takes about 8 cores, so small jobs add up.
 - **Count actual productive workers** under
   [0597](./.decisions/0597-eight-workers-before-twelve.md), which holds the staffing targets,
   fresh verification and immediate replacement rules. Keep one file owner, fresh steps,
@@ -367,7 +371,8 @@ these caps. Each one came from a laptop that became unusable.
   or real process signals, use eligible disposable CI off the owner's laptop. Read
   [0594](./.decisions/0594-safe-checks-direct-mac-ci.md) for the split and what remains of
   [0045](./.decisions/0045-test-steps-run-in-containers.md). Read the selected tests and cleanup
-  before a direct run: a plain filename is not clearance.
+  before a direct run: a plain filename is not clearance. When `--changed` reaches these laws,
+  run explicit verified-safe paths locally and obtain their remote proof separately.
 
 ### Tool facts that cost us time
 

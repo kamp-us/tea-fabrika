@@ -4,10 +4,9 @@
 //
 //   queue   as Queue.add: open, ready, into main -> the leak gate -> ci-required green -> one
 //           pinned squash, which adds it to the merge queue
-//   admin   the lead's route for every ready pull request (0603): open, ready, into main, no
-//           `Plan:` title -> the leak gate -> each new exported name under `## New names` (0587)
-//           -> every file docs (0183), or ci-required green at the head -> one pinned squash with
-//           --admin, past the queue
+//   admin   open, ready, into main, no `Plan:` title -> every file docs (0183), or the branch is one
+//           an open sev0 allows (0532) -> the leak gate -> for a sev0 fix, ci-required green -> one
+//           pinned squash with --admin, past the queue
 //
 // A bare `gh pr merge` skips the gate: on 2026-11-15 a shell line ran the grep, never read its exit
 // code, and merged past a hit (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json).
@@ -16,7 +15,6 @@ import { Effect, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import * as Arm from "./Arm.ts";
 import * as Leaks from "./Leaks.ts";
-import * as Names from "./Names.ts";
 import { PullRequests } from "./PullRequests.ts";
 import * as Queue from "./Queue.ts";
 
@@ -30,10 +28,11 @@ export class NotMerged extends Schema.TaggedError<NotMerged>()("NotMerged", { re
 export const isDocsFile = (path: string): boolean =>
   Arm.isDocs(path) && (path.endsWith(".md") || path.startsWith("field/"));
 
-/** How the lead merges: past the queue with an admin merge (0603), or through the queue. */
+/** How the lead merges: through the queue, or past it with an admin merge. */
 export const Route = Schema.TaggedUnion({
   queue: {},
-  admin: {},
+  /** `sev0` holds the branches an open sev0 allows, and none when no sev0 is open. */
+  admin: { sev0: Schema.Array(Schema.String) },
 });
 
 export type Route = typeof Route.Type;
@@ -45,23 +44,38 @@ export type Ask = {
   readonly route: Route;
 };
 
-/**
- * What `merge` did: queued, admin-merged, or found it merged already. An admin merge says what let
- * it land: `docs`, a change of only words, which starts no CI (0183); `green`, `ci-required` a
- * success at the head that was merged.
- */
+/** What `merge` did: queued, admin-merged, or found it merged already. */
 export const Done = Schema.TaggedUnion({
   queued: { pr: Schema.Number, oid: Schema.String },
-  admin: { pr: Schema.Number, oid: Schema.String, for: Schema.Literals(["docs", "green"]) },
+  admin: { pr: Schema.Number, oid: Schema.String, for: Schema.Literals(["docs", "sev0"]) },
   merged: { pr: Schema.Number, commit: Schema.String },
 });
 
 export type Done = typeof Done.Type;
 
-/** Whether every file is docs (0183): such a change starts no CI, so it lands on the lead's read. */
-const docsOnly = (files: ReadonlyArray<string>): boolean => files.length > 0 && files.every(isDocsFile);
+/** Why the admin merge is allowed for this pull request, or why not. */
+const adminFor = (head: string, files: ReadonlyArray<string>, sev0: ReadonlyArray<string>) => {
+  const code = files.filter((path) => !isDocsFile(path));
 
-const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number) {
+  if (files.length > 0 && code.length === 0) {
+    return { for: "docs" as const };
+  }
+
+  if (sev0.includes(head)) {
+    return { for: "sev0" as const };
+  }
+
+  const shown = code.length > 5 ? [...code.slice(0, 5), `and ${code.length - 5} more`] : code;
+
+  return {
+    refused:
+      files.length === 0
+        ? "it changes no files, so it is not docs only; refused"
+        : `not docs only (0183), and no open sev0 allows ${head} (0532); --admin refused: ${shown.join(", ")}`,
+  };
+};
+
+const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, sev0: ReadonlyArray<string>) {
   const prs = yield* PullRequests;
   const found = yield* prs.view(pr);
   const refuse = (reason: string) => new NotMerged({ reason: `pr ${found.number}: ${reason}` });
@@ -76,23 +90,16 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number) {
     return yield* refuse(refused);
   }
 
-  const files = yield* prs.files(found.number);
+  const allowed = adminFor(found.head, yield* prs.files(found.number), sev0);
 
-  if (files.length === 0) {
-    return yield* refuse("it changes no files; refused");
+  if ("refused" in allowed) {
+    return yield* refuse(allowed.refused);
   }
 
   yield* Leaks.gate(dir, found);
 
-  const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
-
-  if (unnamed !== null) {
-    return yield* refuse(unnamed);
-  }
-
-  const docs = docsOnly(files);
-
-  if (!docs) {
+  // A sev0 fix lands once its required checks are green (the sev skill); a docs change starts no CI.
+  if (allowed.for === "sev0") {
     const required = yield* (yield* Checks).job(found.oid, Queue.REQUIRED);
 
     if (required._tag === "None" || required.value.conclusion !== "success") {
@@ -104,12 +111,12 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number) {
 
   yield* prs.admin(found.number, found.oid);
 
-  return Done.cases.admin.make({ pr: found.number, oid: found.oid, for: docs ? "docs" : "green" });
+  return Done.cases.admin.make({ pr: found.number, oid: found.oid, for: allowed.for });
 });
 
 export const merge = Effect.fn("Merge.merge")(function* (a: Ask) {
   if (a.route._tag === "admin") {
-    return yield* admin(a.dir, a.pr);
+    return yield* admin(a.dir, a.pr, a.route.sev0);
   }
 
   const added = yield* Queue.add({ dir: a.dir, pr: a.pr });
@@ -124,6 +131,6 @@ export const line = (done: Done): string =>
   Done.match(done, {
     queued: (d) => Queue.line(Queue.Added.cases.queued.make({ pr: d.pr, oid: d.oid })),
     admin: (d) =>
-      `pr ${d.pr}: admin-merged at ${d.oid}, ${d.for === "docs" ? "docs only (0183)" : `${Queue.REQUIRED} green (0603)`}; read the push run on main next`,
+      `pr ${d.pr}: admin-merged at ${d.oid}, ${d.for === "docs" ? "docs only (0183)" : "a sev0 fix (0532)"}; read the push run on main next`,
     merged: (d) => `pr ${d.pr}: already merged at ${d.commit}`,
   });

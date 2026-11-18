@@ -1,7 +1,7 @@
 ---
 id: 0530
 title: The lead turns on GitHub's merge when ready once the steps passed and its final read is done, without waiting for CI, and GitHub queues the pull request when ci-required goes green
-status: superseded by [0603](0603-lead-admin-merges-every-ready-pull-request.md)
+status: accepted
 date: 2026-11-14
 tags: [merge, lead, auto-merge, merge-queue, ci-required]
 ---

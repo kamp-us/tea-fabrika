@@ -112,7 +112,7 @@ one line of checks.
   says so, such as a maker's docs or `.glossary/TERMS.md`. A name we coined says what it was
   searched against and why no industry word fits
   ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md)).
-  `land.ts merge --admin` refuses a pull request whose diff exports a name this part does
+  `land.ts queue` and `land.ts arm` refuse a pull request whose diff exports a name this part does
   not name (`.agents/skills/lead/scripts/pr/Names.ts`).
 - **Laws and checks.** Each law by its exact test title, with what it protects in a few words. Then
   what ran, at which head, and what ran it. Say what could not run and why, and what is not known

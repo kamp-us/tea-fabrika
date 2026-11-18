@@ -59,9 +59,9 @@ The test config and typecheck.sh hold worker, home and typecheck limits.
 - **Run tests one file at a time:** `nice -n 19 pnpm exec vitest run --maxWorkers=1 <one file>`,
   with `TYPESAFE_API_KEY` unset. The config refuses a broad run and a Node other than the pinned
   one, and its refusal prints the command to use instead.
-- **No `pnpm typecheck`, no `pnpm lint` and no `--changed` run before the push:** CI runs them on
-  the pushed head and the lead reads the result ([0603](../../../.decisions/0603-lead-admin-merges-every-ready-pull-request.md)). A red one comes back as a fix round. A
-  type law is red only in a typecheck: name it in the report as CI's.
+- **One `pnpm typecheck`, at the very end,** after the laws are green. `typecheck.sh` takes the one
+  lock every shell shares, so a second one waits; start it in the background when another agent's
+  `tsgo` runs (`pgrep -x tsgo`). It must pass whole, type laws included.
 - **Never run a test here that sends a real signal** (`kill`, `process.kill`, SIGTERM or SIGKILL),
   calls `launchctl`, starts Electron or needs the real machine. A host-only law the plan names runs
   on the real machine before any review, and the build is not done until it has passed there
@@ -90,9 +90,11 @@ These hold in every build round, so the brief does not repeat them.
   [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)). An import line a list
   already holds stays byte for byte as main has it. Only a secret, a paid account or a person's Mac
   stops you.
-- **Before the commit:** every law green, one file at a time, as you work; `pnpm format`; then
-  `sh .agents/skills/lead/scripts/loosening.sh <the brief's head> HEAD`, with your reading of each
-  hit. Lint, the list ratchet and the typecheck are CI's.
+- **Checks, in this order:** every law green, one file at a time; `pnpm format`; `pnpm lint` once;
+  the list ratchet CI runs that local lint does not,
+  `node next/apps/fabrika/src/exam/ratchet.ts --base "$(git merge-base origin/main HEAD)"`, exits 0;
+  one `pnpm typecheck`; then `sh .agents/skills/lead/scripts/loosening.sh <the brief's head> HEAD`,
+  with your reading of each hit.
 - **Run row:** write the file the brief's `Run row:` field names, in the shape of the newest build
   rows (`ls field/runs | grep build | tail -3`), with real start and end times from
   `TZ=America/Los_Angeles date`. CI's `field` job checks its shape.
