@@ -58,8 +58,10 @@ Do not add a marker, key or readable file as proof of session identity.
 
 ## Step briefs
 
-One template a step, each filled in under a minute. Start each step as a fresh Opus agent at its
-default effort, and record the effort on its run row. The lines are fields, as in phoenix's
+One template a step, each filled in under a minute. Use the role settings in `local.env`: planning
+uses Astra/high, mechanical work Luna/max, coordination Sol/high, review Sol/xhigh.
+Record the model and effort sent to the runner as requested values. Mark effective context unknown
+unless the runner reports it. The lines are fields, as in phoenix's
 `fabrika lane brief` (`## Task` and `## Ground`): facts and paths, never a summary of the plan or
 the skill. What is special about this quest goes under `This quest:`, one bullet a fact, and nowhere
 else:

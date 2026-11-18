@@ -3,9 +3,13 @@ import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Clock from "effect/Clock";
 import * as Digest from "effect/crypto/Digest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as ScopedCache from "effect/ScopedCache";
 import * as TestClock from "effect/testing/TestClock";
 import { Writer } from "../access/SessionManager.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -117,7 +121,7 @@ const snapshot = (sql: Sql) =>
 
 const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
   const store = yield* ProgramMailTestSupport.runtime;
-  let limits = initial;
+  let current = Equal.byReference({ limits: initial });
   let cut: number | null = null;
   let sequence = 0;
   const deliveries = new Map<string, string>();
@@ -167,7 +171,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
     recipient: Recipient.cases.client.make({ client: "test", session: "process_0000000000e008000000000099" }),
   };
 
-  const data = () =>
+  const data = (limits = current.limits) =>
     Layer.mergeAll(LedgerSql.layer(project, { reader: "quota-test" }), LedgerTransactionSql.layer(project)).pipe(
       Layer.provideMerge(QuotasSql.layer(project, { brain: BRAIN, limits })),
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
@@ -185,8 +189,24 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
   }
 
   // These are synchronous ports over the real name-local SQL, recreated from saved accounting.
-  const accounting = (name: string) => QuotasSql.accounting(sql(name), { name, limits: limits.recovery.process });
-  const base = () => Layer.mergeAll(Mailbox.layer, ProcessManager.layer(caller, pid)).pipe(Layer.provideMerge(data()));
+  const accounting = (name: string) =>
+    QuotasSql.accounting(sql(name), { name, limits: current.limits.recovery.process });
+
+  const base = (limits = current.limits) =>
+    Layer.mergeAll(Mailbox.layer, ProcessManager.layer(caller, pid)).pipe(Layer.provideMerge(data(limits)));
+
+  const admission = yield* ScopedCache.makeWith({
+    capacity: 1,
+    requireServicesAt: "construction",
+    lookup: (key: typeof current) =>
+      Effect.gen(function* () {
+        const memo = yield* Layer.makeMemoMap;
+        const scope = yield* Effect.scope;
+
+        return yield* Layer.buildWithMemoMap(base(key.limits), memo, scope);
+      }),
+    timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),
+  });
 
   const runner = Effect.fnUntraced(function* (name: string) {
     const status = yield* ProcessManager.use((m) => m.status(name)).pipe(Effect.provide(manager()));
@@ -290,8 +310,10 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       Effect.map(store.alarms.saved, (alarms) => alarms.find((alarm) => alarm.name === name)?.at ?? null),
     input: Effect.fnUntraced(function* (name, id, m) {
       // Admission only, so laws can inspect charges before the real step starts.
+      const services = yield* ScopedCache.get(admission, current);
+
       return yield* Mailbox.use((mailbox) => mailbox.send(name, id, m, { ...from(), parent: null })).pipe(
-        Effect.provide(base()),
+        Effect.provideContext(services),
       );
     }),
     program: (program) => Quotas.use((q) => q.program(program)).pipe(Effect.provide(data())),
@@ -327,7 +349,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       cut = at;
     },
     limits: (next) => {
-      limits = next;
+      current = Equal.byReference({ limits: next });
     },
     restart: Effect.fnUntraced(function* (name, id, person) {
       // The public adapter checks the caller; an agent cannot clear a reserve fault.

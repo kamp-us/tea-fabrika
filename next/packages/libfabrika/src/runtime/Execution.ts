@@ -26,6 +26,7 @@ const Outcome = Schema.TaggedUnion({
 
 // oxlint-disable-next-line fabrika/no-hand-tag -- a reader that knows no cases: any program's Msg or Cmd, so its key is an open string (as for ledger/Log.ts)
 const Typed = Schema.Struct({ _tag: Schema.String });
+const PortEvent = Schema.Struct({ type: Schema.String });
 
 // Match the deletable failure-content ceiling, half a Durable Object row.
 const MOST_CONTENT = 1_000_000;
@@ -184,16 +185,21 @@ const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
   return Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value));
 };
 
-/** True when `m` names a write port and decodes against that port's schema. */
+/** True when `m` names a write port and that port schema's JSON codec decodes it. */
 const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean => {
-  const typed = Schema.decodeUnknownOption(Typed)(m);
+  const event = Schema.decodeUnknownOption(PortEvent)(m);
 
-  if (Option.isNone(typed) || !Object.hasOwn(inputs, typed.value._tag)) {
+  if (Option.isNone(event) || !Object.hasOwn(inputs, event.value.type)) {
     return false;
   }
 
-  const port = inputs[typed.value._tag];
-  return port !== undefined && port._tag === "write" && Result.isSuccess(Schema.decodeUnknownResult(port.schema)(m));
+  const port = inputs[event.value.type];
+
+  return (
+    port !== undefined &&
+    port._tag === "write" &&
+    Result.isSuccess(Schema.decodeUnknownResult(Schema.toCodecJson(port.schema))(m))
+  );
 };
 
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {

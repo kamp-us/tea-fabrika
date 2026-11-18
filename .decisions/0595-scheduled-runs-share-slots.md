@@ -1,7 +1,7 @@
 ---
 id: 0595
 title: Scheduled runs share ten job groups before proof queues separate
-status: accepted
+status: amended-in-part by [0598](0598-merge-line-leaves-scheduled-groups.md)
 date: 2026-11-16
 tags: [ci, concurrency, schedule, proof, runners]
 ---

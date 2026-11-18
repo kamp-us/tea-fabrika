@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-t1076-command-l7-never-shows-a-file-origin",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/settings/Command.test.ts",
+    "line": 308
+  },
+  "says": "In next/, the settings command's L7 law never has a successful run whose report shows the person's file as an origin, so the shown name of the person's file in node/settings/Command.ts (line 62) is held by no law.",
+  "proof": "In a scratch worktree of e46fae8f7, Command.ts line 62 was changed to name the person's file ~/.kalfa/kalfa.toml while still reading the right path. nice -n 15 pnpm exec vitest run --maxWorkers=3 next/packages/libfabrika/src/node/settings/Command.test.ts printed 3 passed, also with FABRIKA_TEST_DEPTH=full. A log of L7's 100 cases showed 0 successful runs whose report contains 'line', since every valid person port came with a flag that overrode it. Command.test.ts is not changed by this branch, so main has the same gap.",
+  "cost": "A change that shows the wrong file name to a person running fabrika settings passes every law.",
+  "head": "e46fae8f73b664d5ab684036af63e41c6d3d90be",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1427"
+}

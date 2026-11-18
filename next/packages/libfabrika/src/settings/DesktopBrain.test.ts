@@ -4,9 +4,9 @@ import { expect, it } from "@effect/vitest";
 import { ByteSize, ConfigProvider, Effect, Exit, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as Declarations from "./Declarations.ts";
+import * as Sources from "./Fabrika.ts";
 import * as Files from "./Files.ts";
 import * as Snapshot from "./Snapshot.ts";
-import * as Sources from "./Sources.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 

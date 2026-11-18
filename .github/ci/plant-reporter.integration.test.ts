@@ -14,7 +14,7 @@ for (const key of Request.fields.case.literals) {
     continue;
   }
 
-  const variants = key === "checklist-drop-notify" ? [0, 1] : [0];
+  const variants = key === "checklist-drop-notify" || key === "checklist-pid" ? [0, 1] : [0];
 
   for (const variant of variants) {
     it.effect(`scenario: a real child proves causal reporter compatibility for ${key}/${variant}`, () =>
@@ -29,7 +29,14 @@ for (const key of Request.fields.case.literals) {
           prefix: ".plant-reporter-",
         });
 
-        const fixed = "failures" in selected ? selected.failures[variant] : undefined;
+        const zero = key === "checklist-pid" && variant === 1;
+
+        const fixed = zero
+          ? { diagnostic: "AssertionError: the client heard the checklist's views", line: 824, column: 80 }
+          : "failures" in selected
+            ? selected.failures[variant]
+            : undefined;
+
         const suite = "L13: notices name their process";
         const test = path.join(scratch, selected.test);
         yield* fs.makeDirectory(path.dirname(test), { recursive: true });
@@ -48,9 +55,11 @@ for (const key of Request.fields.case.literals) {
           const broken = phase === "broken" || phase === "wrong";
           const count = key === "checklist-drop-notify" && variant === 1;
 
-          const expression = count
-            ? `expect(${broken ? "0" : "1"}${phase === "wrong" ? `, ${JSON.stringify(label)}` : ""}).toBe(1);`
-            : `expect(${broken ? "undefined" : "pid"}, ${JSON.stringify(label)}).toBe(pid);`;
+          const expression = zero
+            ? `expect(${broken ? "0" : "1"}, ${JSON.stringify(label)}).toBeGreaterThan(0);`
+            : count
+              ? `expect(${broken ? "0" : "1"}${phase === "wrong" ? `, ${JSON.stringify(label)}` : ""}).toBe(1);`
+              : `expect(${broken ? "undefined" : "pid"}, ${JSON.stringify(label)}).toBe(pid);`;
 
           const prefix = `import { describe, test, expect } from "vitest";
 import fc from "fast-check";
