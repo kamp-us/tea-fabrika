@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-codex-kalfa-config-review-review1",
+  "ticket": "1076",
+  "pr": null,
+  "started": "2026-11-16T18:48:21-08:00",
+  "ended": "2026-11-16T18:58:53-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "gpt-6.1-sol",
+  "effort": "high",
+  "outcome": "fail",
+  "why": "drive.ts review in box codex-kalfa-config-review-review1 at 037c7466: send:plan:step_said. Amend K5 to match the decided S5 rule that refused scalar values appear in errors. Then tests must cover early version refusal through the generic Load.load and convert all seven new properties to decision 0579’s runner form. Dollars are gpt-6.1-sol's standard list price (fieldrow.py's table); the plan bills no call.",
+  "tokens": null,
+  "tools": 47,
+  "minutes": 10.5,
+  "note": null,
+  "costUsd": null,
+  "listUsd": 1.0022,
+  "billed": 4114995,
+  "inputTokens": 4096990,
+  "cachedTokens": 3879936,
+  "outputTokens": 18005,
+  "step": "review",
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "K1",
+      "plant": "By reading: retain nested(\"fabrika\") in Sources.env; the pinned kalfa/fabrika isolation case detects it.",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "By reading: accept another app’s home variable in Snapshot.read; the explicit foreign-home refusal detects it.",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "By reading: remove the two-app group check; the generated mixed group no longer throws.",
+      "result": "red"
+    },
+    {
+      "law": "K4",
+      "plant": "By reading: remove the early Files.supported call from generic Load.load; K4 calls Files.validate directly and the other laws supply no minimum version.",
+      "result": "green"
+    },
+    {
+      "law": "K5",
+      "plant": "By reading: print the refused value in either the table-of-settings or unknown-key message; the added readable-file cases detect it.",
+      "result": "red"
+    }
+  ]
+}
