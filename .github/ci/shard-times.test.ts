@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { LIMIT, reportRows, staleRows, rowLine, type Row } from "./shard-times.ts";
+import { markdown, readFiles, type Timings } from "./time-table.ts";
 
 const options = { seed: 119120, numRuns: 100 };
 
@@ -63,6 +64,66 @@ it("L11: printed rows round-trip paths and real seconds to one decimal", () => {
       expect(rowLine(row)).toBe(`  ${JSON.stringify(path)}: ${seconds.toFixed(1)},`);
       expect(JSON.parse(`{${rowLine(row).trim().slice(0, -1)}}`)).toEqual({ [path]: Number(seconds.toFixed(1)) });
     }),
+    options,
+  );
+});
+
+it("T1: a report's seconds per file are the same in the time table and in reportRows, to the same one decimal", () => {
+  // The fullSamples of vitest.shards.test.ts are read from job logs' time tables, because the
+  // reports' artifacts were out of reach; the table's seconds must be the ones `shard-times` reads
+  // from the report. Up to ten files, so each is among the table's slowest.
+  // Plant, run once and restored: `reportRows` rounds its seconds to whole seconds (red).
+  const root = resolve("timing-fixture");
+
+  fc.assert(
+    fc.property(
+      fc.uniqueArray(
+        fc.record({
+          name: fc.stringMatching(/^[a-z][a-z0-9-]{0,20}\.test\.ts$/),
+          start: fc.integer({ min: 0, max: 1_000_000 }),
+          real: fc.integer({ min: 0, max: 900_000 }),
+        }),
+        { minLength: 1, maxLength: 10, selector: (file) => file.name },
+      ),
+      (files) => {
+        const report = {
+          testResults: files.map((file) => ({
+            name: resolve(root, file.name),
+            status: "passed",
+            startTime: file.start,
+            endTime: file.start + file.real,
+            assertionResults: [],
+          })),
+        };
+
+        const read = readFiles(report, root);
+        expect(read._tag).toBe("read");
+        const table = read._tag === "read" ? read.rows : [];
+        const rows = reportRows(report, root);
+        expect(rows.map((each) => each.path)).toEqual(table.map((each) => each.path));
+        expect(rows.map((each) => each.seconds)).toEqual(table.map((each) => each.seconds));
+
+        const timings: Timings = {
+          run: "1",
+          attempt: "1",
+          workflow: "scheduled",
+          event: "schedule",
+          sha: "0",
+          job: "tests",
+          leg: "1",
+          steps: { _tag: "read", rows: [] },
+          files: read,
+        };
+
+        const printed = markdown(timings).split("\n");
+
+        for (const each of rows) {
+          const cells = printed.find((line) => line.startsWith(`| ${each.path} | `))?.split(" | ");
+          expect(cells?.[1], `${each.path} is in the printed table`).toBeDefined();
+          expect(cells?.[1]).toBe(rowLine(each).slice(rowLine(each).lastIndexOf(": ") + 2, -1));
+        }
+      },
+    ),
     options,
   );
 });
