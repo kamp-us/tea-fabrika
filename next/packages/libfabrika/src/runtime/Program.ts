@@ -8,6 +8,7 @@ import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "eff
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
+import { isJsonObject } from "./Patch.ts";
 
 /** A function type whose parameters TypeScript checks both ways, as it does a method's: a program
  *  declares `(model: Model) => …`, and the runner calls it with the model it decoded. */
@@ -487,9 +488,6 @@ const Payload = Schema.Record(Schema.String, Schema.Json).check(
 );
 
 const Fields = Schema.Record(Schema.String, Schema.Unknown);
-
-/** Narrows a JSON value to its object case. `Predicate.isObject` alone leaves a type no rest pattern takes. */
-const isJsonObject = (u: Schema.Json): u is Schema.JsonObject => Predicate.isObject(u);
 
 // Keep the Msg's codecs and checks intact. Only add and remove the port's discriminator.
 const writePortCodec = (msg: Declared, key: string) =>

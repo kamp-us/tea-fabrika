@@ -25,8 +25,13 @@ export type Patch = typeof Patch.Type;
 /** A JSON Pointer token: `~` as `~0`, `/` as `~1` (RFC 6901). */
 const token = (key: string | number): string => String(key).replaceAll("~", "~0").replaceAll("/", "~1");
 
-/** A JSON value that is an object, not an array or a leaf. */
-const isObject = (json: Schema.Json): json is Schema.JsonObject => Predicate.isObject(json);
+/**
+ * Narrows a JSON value to its object case: an object, not an array or a leaf. `Predicate.isObject`
+ * alone narrows to a plain record, which no rest pattern over `Schema.JsonObject` takes.
+ *
+ * @category guards
+ */
+export const isJsonObject = (json: Schema.Json): json is Schema.JsonObject => Predicate.isObject(json);
 
 /** The value an object holds under `key` as its own, never one from its prototype. */
 const own = (object: Schema.JsonObject, key: string): Schema.Json | undefined =>
@@ -38,7 +43,7 @@ const same = (a: Schema.Json, b: Schema.Json): boolean => {
     return a.length === b.length && a.every((one, i) => same(one, b[i]));
   }
 
-  if (isObject(a) && isObject(b)) {
+  if (isJsonObject(a) && isJsonObject(b)) {
     const entries = Object.entries(a);
     return (
       entries.length === Object.keys(b).length &&
@@ -75,7 +80,7 @@ const walk = (path: string, before: Schema.Json, after: Schema.Json, out: Array<
     return;
   }
 
-  if (isObject(before) && isObject(after)) {
+  if (isJsonObject(before) && isJsonObject(after)) {
     for (const key of Object.keys(before)) {
       if (!Object.hasOwn(after, key)) {
         out.push({ op: "remove", path: `${path}/${token(key)}` });

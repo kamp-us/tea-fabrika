@@ -89,7 +89,7 @@ import { Failure, Policy, type Receipt, Work } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
 import { DemonitorInput, MonitorInput } from "./Monitor.ts";
-import { diff } from "./Patch.ts";
+import { diff, isJsonObject } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
 import { QuotaWaiting, reserveFault } from "./QuotaRunner.ts";
 import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
@@ -314,9 +314,6 @@ const decodeDemonitor = (cmd: unknown) => Option.flatMap(operands(cmd, Demonitor
 const encodeResult = Schema.encodeSync(TaskResult);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
-
-/** A JSON value that is an object, not an array or a scalar. */
-const isJsonObject = (json: Schema.Json): json is Schema.JsonObject => Predicate.isObject(json);
 
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
