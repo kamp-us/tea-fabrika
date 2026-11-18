@@ -8,18 +8,22 @@
 // file, frontmatter included, `form` one of "amendments", "still-holds" and "carried-forward". It reads the
 // tracked `.decisions/NNNN-slug.md` files only.
 //
-// The still-holds and carried-forward forms are read as a block, not a line (the lead's rule after the finding
-// on .decisions/0414): prose outside fenced code with inline code removed, each Markdown link replaced by its
-// text, consecutive lines joined with single spaces, a block ending at a blank line, a heading line and the
-// start of a list item (`- `, `* `, `+ `, `1. `). The finding's `line` is the file line where the match
-// begins, the line that holds "rest" or "carried". The `## Amendments` heading stays a per-line match.
+// The still-holds and carried-forward forms are read as a sentence of a block (the lead's rule after the finding
+// on .decisions/0414, and the two measured false alarms after it): a block is a heading, a paragraph, a list
+// item's paragraph or a table cell, read as Markdown, outside fenced code, with inline code removed and each
+// link replaced by its text. A sentence ends at `.`, `!` or `?` followed by a space or the block's end. A form
+// fires only when its sentence holds a record reference: a four-digit number that is not part of a date, or a
+// link to a `NNNN-slug.md` record. The finding's `line` is the file line where the match begins, the line that
+// holds "rest" or "carried". The `## Amendments` heading stays a match of the heading alone.
+//
+// No law reads a committed record: another slice of this quest edits those, so each real shape is fixture text
+// below, with the commit or finding it came from.
 //
 // Each run builds one record that holds every positive form, every form in a fence and in inline code, and
 // a history line, in a generated order among generated prose, so each case is reached in every run.
-import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Finding } from "./Finding.ts";
 import * as Patches from "./Patches.ts";
 import {
@@ -34,7 +38,6 @@ import {
   Words,
   world,
 } from "./Records.test-support.ts";
-import { Tracked } from "./Tracked.ts";
 
 const check = { arbitrary: { seed: 119120, runs: runsFor({ fast: 50, full: 200 }) } };
 
@@ -42,31 +45,44 @@ type Form = "amendments" | "still-holds" | "carried-forward";
 
 const FORMS: ReadonlyArray<Form> = ["amendments", "still-holds", "carried-forward"];
 
-// Eight phrasings of each of 0605's three forms, as the regexes of the plan read them. The heading has two,
-// since its form is the heading itself.
+// Eight phrasings of each of 0605's three forms, as the regexes of the plan read them, each with a record
+// reference in its sentence. The heading has two, since its form is the heading itself.
 const PHRASINGS: Record<Form, ReadonlyArray<string>> = {
   amendments: ["## Amendments", "## Amendments "],
   "still-holds": [
     "The rest of 0066 still holds.",
     "The rest of 0066 holds.",
-    "The rest of this record still holds as written.",
-    "the rest of the rule holds",
+    "The rest of this record, 0066, still holds as written.",
+    "the rest of the rule in 0066 holds",
     "The rest of 0049 (the budget numbers) still holds.",
-    "Everything else changes; the rest stays in force and holds.",
+    "Everything else in 0066 changes; the rest stays in force and holds.",
     "THE REST OF 0012 STILL HOLDS.",
-    "- The rest of the file, unchanged, still holds.",
+    "- The rest of 0066, unchanged, still holds.",
   ],
   "carried-forward": [
     "The rule is carried forward from 0012.",
-    "Carried forward unchanged.",
-    "carried forward from the older record: use it.",
-    "- Carried forward: the budget stays.",
-    "This section is CARRIED FORWARD as written.",
-    "The limit, carried forward, is 12.",
+    "Carried forward unchanged from 0012.",
+    "carried forward from the older record 0012: use it.",
+    "- Carried forward: the budget of 0012 stays.",
+    "This section is CARRIED FORWARD as written from 0012.",
+    "The limit, carried forward from 0012, is 12.",
     "Rules carried forward from 0030 to 0031:",
-    "(carried forward)",
+    "(carried forward, 0012)",
   ],
 };
+
+// The same words with no record reference in their sentence: plain English, no finding. The first of each is
+// the shape of .decisions/0227's false alarm; the others are the first phrasings above with the number gone.
+const PLAIN: ReadonlyArray<string> = [
+  "This walks back the old note for state carried forward.",
+  "The rest of this record still holds as written.",
+  "the rest of the rule holds",
+  "Carried forward unchanged.",
+  "carried forward from the older record: use it.",
+  "- Carried forward: the budget stays.",
+  "The owner ruled on 2026-11-18: the rest holds, for now.",
+  "The limit, carried forward, is 12.5 and the rest holds.",
+];
 
 const phrase = (form: Form, phrasing: number) => PHRASINGS[form][phrasing % PHRASINGS[form].length]!;
 
@@ -87,6 +103,7 @@ type Block =
     }
   | { readonly _tag: "inline"; readonly form: Form; readonly phrasing: number; readonly lead: string }
   | { readonly _tag: "history"; readonly id: string; readonly date: string }
+  | { readonly _tag: "plain"; readonly phrasing: number }
   | {
       readonly _tag: "text";
       readonly lines: ReadonlyArray<string>;
@@ -94,7 +111,7 @@ type Block =
     };
 
 /** Shapes of a still-holds or carried-forward line over a line break, with Markdown links in them. */
-const MULTI = 7;
+const MULTI = 10;
 
 const multi = (variant: number, a: string, b: string, name: string): Block => {
   const one = `[${a}](${a}-${name}.md)`;
@@ -134,22 +151,38 @@ const multi = (variant: number, a: string, b: string, name: string): Block => {
         lines: ["The rule is carried", `forward from ${one}.`],
         hit: { at: 0, form: "carried-forward" },
       };
-    default:
+    case 6:
       return { _tag: "text", lines: [`1. The rest of ${one} and`, `   ${two} still holds.`], hit: still };
+    case 7:
+      // A heading's own text is a block: the finding is on the heading's line.
+      return { _tag: "text", lines: [`## The rest of ${a} still holds`], hit: still };
+    case 8:
+      // A cell is a block: the match and its record reference are in one cell, a later row is another.
+      return {
+        _tag: "text",
+        lines: ["| rule | note |", "| --- | --- |", `| ${name} | The rest of ${one} holds. |`],
+        hit: { at: 2, form: "still-holds" },
+      };
+    default:
+      // A `1)` item, which .decisions/0093 uses.
+      return { _tag: "text", lines: [`1) The rest of ${one} and`, `   ${two} still holds.`], hit: still };
   }
 };
 
-const SPLITS = ["bullets", "heading", "paragraphs"] as const;
+const SPLITS = ["bullets", "heading", "paragraphs", "cells"] as const;
 
 /** "rest" in one block and "holds" in the next: no finding, whatever separates them. */
-const split = (kind: (typeof SPLITS)[number], marker: string): Block => ({
+const split = (kind: (typeof SPLITS)[number], marker: string, id: string): Block => ({
   _tag: "text",
   lines:
     kind === "bullets"
-      ? [`${marker} The rest of the table is small`, `${marker} the next rule holds as written.`]
+      ? [`${marker} The rest of ${id} is small`, `${marker} the next rule holds as written.`]
       : kind === "heading"
-        ? ["The rest of the table is small,", "### Later", "holds as written."]
-        : ["The rest of the table is small,", "", "holds as written."],
+        ? [`The rest of ${id} is small,`, "### Later", "holds as written."]
+        : kind === "cells"
+          ? // Rows of a table are not one sentence: the cell with "rest" and the cell with "holds" are two blocks.
+            ["| a | b |", "| --- | --- |", `| the rest of ${id} | x |`, "| y | holds as written. |"]
+          : [`The rest of ${id} is small,`, "", "holds as written."],
   hit: undefined,
 });
 
@@ -182,6 +215,9 @@ const render = (blocks: ReadonlyArray<Block>) => {
       case "history":
         lines.push(`${block.id} was superseded on ${block.date}.`);
         break;
+      case "plain":
+        lines.push(PLAIN[block.phrasing % PLAIN.length]!);
+        break;
       case "text":
         if (block.hit !== undefined) {
           hits.push({ line: lines.length + block.hit.at, form: block.hit.form });
@@ -197,14 +233,15 @@ const render = (blocks: ReadonlyArray<Block>) => {
   return { lines, hits };
 };
 
-const SPOTS = 22;
+/** The required blocks of `arrange`: three hits, three inline, a fence, a history line, four prose, and each shape below. */
+const SPOTS = 3 + 3 + 1 + 1 + 4 + MULTI + SPLITS.length + PLAIN.length;
 
 /** The ways a list item starts. */
-const MARKERS = ["-", "*", "+", "1."] as const;
+const MARKERS = ["-", "*", "+", "1.", "1)"] as const;
 
 const Extra = Schema.Struct({
   at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 40 })),
-  kind: Schema.Literals(["prose", "hit", "inline", "history", "fence", "multi", "split"]),
+  kind: Schema.Literals(["prose", "hit", "inline", "history", "fence", "multi", "split", "plain"]),
   form: Schema.Literals(FORMS),
   phrasing: Phrasing,
   words: Words,
@@ -246,7 +283,9 @@ const arrange = (d: typeof Blocks.Type): ReadonlyArray<Block> => {
     { _tag: "prose", text: lead },
     // Every shape over a line break, each in every run, and every way to keep "rest" and "holds" apart.
     ...Array.from({ length: MULTI }, (_, i) => multi(i, id, other, name)),
-    ...SPLITS.map((kind, i) => split(kind, MARKERS[d.phrasings[12 + i]! % MARKERS.length]!)),
+    ...SPLITS.map((kind, i) => split(kind, MARKERS[d.phrasings[12 + i]! % MARKERS.length]!, id)),
+    // The words of a form with no record reference, each in every run.
+    ...PLAIN.map((_, i): Block => ({ _tag: "plain", phrasing: i })),
   ];
 
   const placed = d.keys
@@ -267,13 +306,15 @@ const arrange = (d: typeof Blocks.Type): ReadonlyArray<Block> => {
               : extra.kind === "multi"
                 ? multi(extra.phrasing, id, other, name)
                 : extra.kind === "split"
-                  ? split(SPLITS[extra.phrasing % SPLITS.length]!, MARKERS[extra.at % MARKERS.length]!)
-                  : {
-                      _tag: "fence",
-                      fence: d.fence,
-                      info: d.info,
-                      inside: [{ form: extra.form, phrasing: extra.phrasing }],
-                    };
+                  ? split(SPLITS[extra.phrasing % SPLITS.length]!, MARKERS[extra.at % MARKERS.length]!, id)
+                  : extra.kind === "plain"
+                    ? { _tag: "plain", phrasing: extra.phrasing }
+                    : {
+                        _tag: "fence",
+                        fence: d.fence,
+                        info: d.info,
+                        inside: [{ form: extra.form, phrasing: extra.phrasing }],
+                      };
 
     placed.splice(extra.at % (placed.length + 1), 0, block);
   }
@@ -341,45 +382,148 @@ it.effect.prop(
   check,
 );
 
+/** .decisions/0605, as of commit 604bbcf0b, cut to the shape that matters: its forbidden forms quoted in a fence, and named in inline code. */
+const RECORD_0605 = [
+  "---",
+  "id: 0605",
+  "title: A rule changes where it lives, and no record patches another with an Amendments section, a still-holds line or a carried-forward copy, held by a records check in pnpm lint",
+  "status: accepted",
+  "date: 2026-11-18",
+  "tags: [records, decisions, amendments, rules, lint, kalfa-records]",
+  "---",
+  "",
+  "# 0605: A rule changes where it lives, and no record patches another",
+  "",
+  "```text",
+  "a ruling that changes a rule",
+  "  -> one edit to the rule's home (a check, a config file, the instruction read for that job,",
+  "     or the record itself while it is still the home), in the same pull request",
+  "  -> one new record that says why, and in its context what it changed",
+  "never",
+  "  ## Amendments                         a heading in a record",
+  '  "the rest of 0534 still holds"        a line that patches a record from outside',
+  '  "carried forward from 0023: ..."      a copy of another record\'s rule',
+  "```",
+  "",
+  "## Decision",
+  "",
+  "**A change to a rule edits the rule's home in the same pull request as the record of why, and no",
+  "record holds an `## Amendments` heading, a still-holds line or a carried-forward copy of another",
+  "record's rule.**",
+  "",
+  "- A record whose why was reversed whole is superseded whole ([0606](0606-a-record-is-accepted-or-superseded.md)).",
+  "- A line that only tells history (`0146 was superseded on 2026-11-12`) is not a patch and stays.",
+  "",
+].join("\n");
+
+/** .decisions/0414, as of commit 7b63f09b0: the one still-holds line, in a list item, over a line break, in two links. */
+const RECORD_0414 = [
+  "---",
+  "id: 0414",
+  "title: A new Jev question asked at volume is measured against hand labels written before the run and controls, and a saved agent turn counts the person's plan quota as well as dollars",
+  "status: accepted",
+  "date: 2026-10-28",
+  "tags: [jev, judge, measurement, cost]",
+  "---",
+  "",
+  "# 0414: A new Jev question asked at volume is measured against hand labels written before the run and controls, and a saved agent turn counts the person's plan quota as well as dollars",
+  "",
+  "```ts",
+  "// A sketch, from the note: the duplicate hint, asked on every filing.",
+  "const scores = yield* scoresOf(filed, candidatesOf(filed, openOf(tickets, filed.number)));",
+  "hintsOf(scores); // [{of: 6, yes: 0.78}]: advice, with accept and dismiss",
+  "```",
+  "",
+  "**What this decides:** how a Jev use that no agent ever asked is measured, and what an agent turn",
+  "costs.",
+  "",
+  "## Context",
+  "",
+  "From [Jev, changed 2026-10-28](../docs/direction/jev-same-answer-cheaper.md#changed-2026-10-28),",
+  "decided with the first live use, the duplicate hint ([experiment 167](../experiments/167-duplicate-hint.md)):",
+  "1,638 calls for $0.05.",
+  "",
+  "## Decision",
+  "",
+  "**A question asked only because a call is cheap has no agent answer to agree with.**",
+  "",
+  "- It is measured against hand labels written before the run, for the hits, and controls, for the",
+  "  false alarms. The rest of [0412](0412-jev-is-measured-by-agreement.md) and",
+  "  [0413](0413-a-jev-question-is-narrow.md) holds: a floor per question, advice not an action, never",
+  "  a person removed.",
+  "- Each person runs agents on their own plan, so a saved agent turn counts twice: the dollars, and",
+  "  the turns left in that person's plan quota.",
+  "",
+  "## Consequences",
+  "",
+  "- How much a turn costs in quota is not measured; providers set and change plan limits.",
+].join("\n");
+
 // Plant: match the still-holds pattern on the raw text, fenced and inline code included.
 it.effect(
-  "L4 scenario: the records 0605 to 0608, which quote the forbidden forms in fences and code, have no patch finding",
+  "L4 scenario: a record that quotes the forbidden forms in a fence and in code (0605, as of 604bbcf0b) has no patch finding",
   () =>
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = path.resolve(import.meta.dirname, "../../..");
-      const names = (yield* fs.readDirectory(path.join(root, ".decisions"))).filter((name) => /^060[5-8]-/.test(name));
-
-      expect(names).toHaveLength(4);
-
-      const tracked = names.map((name) => ({ path: `.decisions/${name}`, symlink: false }));
-
-      const found = yield* Patches.check(root).pipe(Effect.provideService(Tracked, { files: Effect.succeed(tracked) }));
+      const found = yield* Patches.check(ROOT).pipe(
+        Effect.provide(world(ROOT, { ".decisions/0605-no-record-patches-another.md": RECORD_0605 })),
+      );
 
       expect(found).toEqual([]);
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }),
 );
 
-/** The line of the one still-holds finding in .decisions/0414, "The rest of [0412](...) and", in a list item. */
+/** The line of the one still-holds finding in 0414: "The rest of [0412](...) and", in a list item. */
 const LINE_0414 = 31;
 
 // Plant: match line by line again, so the line break and the `.md` dots of the links hide the match.
 it.effect(
-  'L3 scenario: the committed .decisions/0414 has exactly one still-holds finding, at the line that holds "rest"',
+  'L3 scenario: .decisions/0414 as of 7b63f09b0 has exactly one still-holds finding, at the line that holds "rest"',
   () =>
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const root = path.resolve(import.meta.dirname, "../../..");
-      const names = (yield* fs.readDirectory(path.join(root, ".decisions"))).filter((name) => /^0414-/.test(name));
+      const path = ".decisions/0414-jev-at-volume-uses-hand-labels.md";
+      const found = yield* Patches.check(ROOT).pipe(Effect.provide(world(ROOT, { [path]: RECORD_0414 })));
 
-      expect(names).toHaveLength(1);
+      expect(found).toEqual([{ _tag: "patch", path, line: LINE_0414, form: "still-holds" }]);
+    }),
+);
 
-      const tracked = names.map((name) => ({ path: `.decisions/${name}`, symlink: false }));
+/**
+ * The measured false alarms of the first run of the check on main (finding 2026-11-18-patch-regex-misses-rest-holds-across-links
+ * and the records' own text), each as it is written there: no sentence holds a record reference.
+ */
+const FALSE_ALARMS = {
+  // .decisions/0227, lines 37-40: "carried forward" over a line break, and a link to a note, not a record.
+  "0227-saved-state-carries-shape-number": [
+    "Every engine that carries state forward",
+    "numbers it (Minecraft, Unreal, Erlang's `vsn`, Factorio, Temporal), and hot reload makes a shape",
+    'change an everyday event. This walks back "no version number on each machine" for state carried',
+    "forward. See [saved state](../docs/direction/saved-state.md).",
+  ],
+  // .decisions/0281, line 38: the same words about a note, and a link to a note.
+  "0281-a-saved-job-is-decoded-not-trusted": [
+    '- The note\'s "no version number on each machine" no longer holds where state is carried forward: a',
+    "  saved model carries its shape's number and a chain of named upgrades",
+    "  ([saved state, S3](../docs/direction/saved-state.md)). The schema is still the last check.",
+  ],
+  // .decisions/0603, line 38: a date is not a record reference.
+  "0603-no-stacks-and-sev0-admin-merges": [
+    "The owner ruled on 2026-11-18: stacks go for good,",
+    "since they fight the merge queue, and the rest holds in a sev0, for now.",
+  ],
+} as const;
 
-      const found = yield* Patches.check(root).pipe(Effect.provideService(Tracked, { files: Effect.succeed(tracked) }));
+// Plant: let any number in the sentence count as a reference, dates included; or drop the reference rule.
+it.effect("L3 scenario: the measured false alarms of the first run (0227, 0281, 0603) have no patch finding", () =>
+  Effect.gen(function* () {
+    const files = Object.fromEntries(
+      Object.entries(FALSE_ALARMS).map(([name, body]) => [
+        `.decisions/${name}.md`,
+        record({ id: name.slice(0, 4), body: [...body] }),
+      ]),
+    );
 
-      expect(found).toEqual([{ _tag: "patch", path: tracked[0]!.path, line: LINE_0414, form: "still-holds" }]);
-    }).pipe(Effect.provide(NodeServices.layer)),
+    const found = yield* Patches.check(ROOT).pipe(Effect.provide(world(ROOT, files)));
+
+    expect(found).toEqual([]);
+  }),
 );

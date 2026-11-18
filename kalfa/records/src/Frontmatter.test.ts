@@ -10,20 +10,24 @@
 // - `Tracked.ts`: `Tracked`, the service `git ls-files -s` answers behind (see Records.test-support.ts).
 // - A finding's `line` is the line, counted from 1, of the key that is wrong: `id:`, `successor:` or `status:`.
 //
+// A successor that is wrong is reported at the `successor:` line, with the successor as `raw`: a successor that
+// is not four digits, and a successor on a record that is accepted. A superseded record with no successor is
+// reported at the `status:` line, with `superseded` as `raw`.
+//
+// No law reads a committed record: another slice of this quest edits those, so a real shape is fixture text.
+//
 // The ids are written as the repo writes them, `id: 0146` unquoted, which `yaml`'s default schema reads as
 // the number 146: the check must still match it to the file's `0146`.
-import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Finding } from "./Finding.ts";
 import * as Frontmatter from "./Frontmatter.ts";
 import { distinct, lineOf, Number4, pad, record, ROOT, slugOf, Words, world } from "./Records.test-support.ts";
-import { Tracked } from "./Tracked.ts";
 
 const check = { arbitrary: { seed: 119120, runs: runsFor({ fast: 25, full: 100 }) } };
 
-const KINDS = ["accepted", "superseded", "dangling", "amended"] as const;
+const KINDS = ["accepted", "superseded", "dangling", "amended", "malformed", "unwanted", "missing"] as const;
 
 const Spec = Schema.Struct({
   right: Schema.Boolean,
@@ -32,7 +36,8 @@ const Spec = Schema.Struct({
   name: Words,
 });
 
-// Plant: drop the successor lookup, so a successor that names no file passes.
+// Plants: drop the successor lookup, so a successor that names no file passes; or report a malformed or
+// unwanted successor at the status line, as the first build did.
 it.effect.prop(
   "L2 an id that is not the file's number, a successor with no file and a status that is not one of two are status findings",
   {
@@ -68,7 +73,13 @@ it.effect.prop(
               ? record({ id, status: "superseded", successor: pad(next) })
               : spec.kind === "dangling"
                 ? record({ id, status: "superseded", successor: pad(ghost) })
-                : record({ id, status: `amended-in-part by [${pad(next)}](${pad(next)}-x.md)` });
+                : spec.kind === "malformed"
+                  ? record({ id, status: "superseded", successor: pad(next).slice(1) })
+                  : spec.kind === "unwanted"
+                    ? record({ id, status: "accepted", successor: pad(next) })
+                    : spec.kind === "missing"
+                      ? record({ id, status: "superseded" })
+                      : record({ id, status: `amended-in-part by [${pad(next)}](${pad(next)}-x.md)` });
 
         files[path] = text;
 
@@ -78,6 +89,18 @@ it.effect.prop(
 
         if (spec.kind === "dangling") {
           expected.push({ path, line: lineOf(text, "successor:") });
+        }
+
+        if (spec.kind === "malformed") {
+          expected.push({ path, line: lineOf(text, "successor:"), raw: pad(next).slice(1) });
+        }
+
+        if (spec.kind === "unwanted") {
+          expected.push({ path, line: lineOf(text, "successor:"), raw: pad(next) });
+        }
+
+        if (spec.kind === "missing") {
+          expected.push({ path, line: lineOf(text, "status:"), raw: "superseded" });
         }
 
         if (spec.kind === "amended") {
@@ -162,22 +185,50 @@ it.prop(
   check,
 );
 
+/** The frontmatter of .decisions/0605 to 0608, as of commit 604bbcf0b: ids written unquoted, long titles with commas. */
+const FRONTMATTER = {
+  "0605-no-record-patches-another": [
+    "id: 0605",
+    "title: A rule changes where it lives, and no record patches another with an Amendments section, a still-holds line or a carried-forward copy, held by a records check in pnpm lint",
+    "status: accepted",
+    "date: 2026-11-18",
+    "tags: [records, decisions, amendments, rules, lint, kalfa-records]",
+  ],
+  "0606-a-record-is-accepted-or-superseded": [
+    "id: 0606",
+    "title: A record's status is accepted, or superseded with the one record that replaced it, typed as a Schema in @kalfa/records, never amended in part",
+    "status: accepted",
+    "date: 2026-11-18",
+    "tags: [records, decisions, status, frontmatter, schema, lint, kalfa-records]",
+  ],
+  "0607-every-link-lands-on-a-live-record": [
+    "id: 0607",
+    "title: No instruction file, plan file, pattern doc, glossary row or code comment links a superseded record, held by a link check in pnpm lint",
+    "status: accepted",
+    "date: 2026-11-18",
+    "tags: [records, decisions, links, superseded, agents-md, skills, lint, kalfa-records]",
+  ],
+  "0608-the-map-fits-its-readers-limits": [
+    "id: 0608",
+    "title: The AGENTS.md files an agent reads together stay under the smallest documented limit of the agents that read them, a setting with its source, held by a size check in pnpm lint",
+    "status: accepted",
+    "date: 2026-11-18",
+    "tags: [agents-md, map, size, setting, codex, lint, kalfa-records]",
+  ],
+} as const;
+
 // Plant: compare `id` as a string the yaml parser has turned into the number 605.
-it.effect("L2 scenario: the four records 0605 to 0608, as committed, have no status finding", () =>
+it.effect("L2 scenario: the frontmatter of the four records 0605 to 0608 (as of 604bbcf0b) has no status finding", () =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const root = path.resolve(import.meta.dirname, "../../..");
-    const names = (yield* fs.readDirectory(path.join(root, ".decisions"))).filter((name) => /^060[5-8]-/.test(name));
-
-    expect(names).toHaveLength(4);
-
-    const tracked = names.map((name) => ({ path: `.decisions/${name}`, symlink: false }));
-
-    const found = yield* Frontmatter.check(root).pipe(
-      Effect.provideService(Tracked, { files: Effect.succeed(tracked) }),
+    const files = Object.fromEntries(
+      Object.entries(FRONTMATTER).map(([name, keys]) => [
+        `.decisions/${name}.md`,
+        `${["---", ...keys, "---", "", "A rule.", ""].join("\n")}`,
+      ]),
     );
 
+    const found = yield* Frontmatter.check(ROOT).pipe(Effect.provide(world(ROOT, files)));
+
     expect(found).toEqual([]);
-  }).pipe(Effect.provide(NodeServices.layer)),
+  }),
 );
