@@ -8,7 +8,7 @@ import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, list, room, withReaders } from "./legs.ts";
 import type { Request } from "./plant-cases.ts";
 import { checklistCases, fixture, wanted } from "./plant-related.ts";
-import { isTrigger, legsOf, slots, whole } from "./proof.ts";
+import { isTrigger, legsOf, whole } from "./proof.ts";
 
 const PROJECTS = ["next-integration", "tooling"] as const;
 
@@ -20,14 +20,7 @@ export type Sizing = Readonly<Record<Project, { readonly most: number; readonly 
 
 /** Separate project legs keep their existing full-depth counts and test-step limits. */
 
-export const select = (
-  files: Readonly<Record<Project, readonly string[]>>,
-  sizing: Sizing,
-  run: number,
-  plants = false,
-) => {
-  const groups = slots(run);
-
+export const select = (files: Readonly<Record<Project, readonly string[]>>, sizing: Sizing, plants = false) => {
   const all = PROJECTS.flatMap((project) => files[project]);
 
   if (all.some((path) => /\s/.test(path)) || new Set(all).size !== all.length) {
@@ -49,7 +42,7 @@ export const select = (
   }
 
   if (Object.keys(legs).length > 9) {
-    throw new Error("related: the existing nine shared test groups cannot hold this selection");
+    throw new Error("related: the selection must fit check.yaml's related max-parallel of nine legs");
   }
 
   const owners = Object.entries(legs).filter(
@@ -78,7 +71,7 @@ export const select = (
     throw new Error("related: every checklist case must have exactly one existing integration leg");
   }
 
-  return { legs, projects, slots: groups, plants: assignment };
+  return { legs, projects, plants: assignment };
 };
 
 export const outputs = (selection: ReturnType<typeof select>): string[] => [
@@ -86,14 +79,10 @@ export const outputs = (selection: ReturnType<typeof select>): string[] => [
   `legs=${JSON.stringify(Object.keys(selection.legs))}`,
   `files=${JSON.stringify(Object.fromEntries(Object.entries(selection.legs).map(([leg, paths]) => [leg, paths.join(" ")])))}`,
   `projects=${JSON.stringify(selection.projects)}`,
-  `slots=${JSON.stringify(selection.slots)}`,
   `plants=${JSON.stringify(selection.plants)}`,
 ];
 
 if (import.meta.main) {
-  const run = whole("RUN_NUMBER", process.env["RUN_NUMBER"]);
-  slots(run);
-
   const root = fileURLToPath(new URL("../../", import.meta.url));
 
   const git = (args: readonly string[]): string => {
@@ -157,7 +146,7 @@ if (import.meta.main) {
     table: rowsAt("full"),
   };
 
-  const selected = select(files, sizing, run, plants);
+  const selected = select(files, sizing, plants);
 
   const lines = outputs(selected);
 
