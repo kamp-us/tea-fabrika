@@ -33,8 +33,7 @@ flowchart LR
 ```yaml
 # after, a sketch of the decision, not the workflow file's own text; the times are the cron line's
 on:
-  schedule:
-    - cron: "17 * * * *"
+  schedule: # the times are the workflow's cron line
   workflow_dispatch:
 ```
 
@@ -82,8 +81,8 @@ it.**
 ## Consequences
 
 - This amends 0067 in part: its "never a cron trigger" and "started by hand each hour".
-- A run can start 10 to 60 minutes late when GitHub is busy. For an hourly check on main that is
-  accepted.
+- A run can start 10 to 60 minutes late when GitHub is busy. For a check at the cron line's times
+  that is accepted.
 - The scheduler session is no longer needed to start runs. An agent still has to judge.
 - The cost: about 40 lines of lead tooling, in one small pull request.
 - Not decided here: whether mutation returns to a pull request's steps after the trial.

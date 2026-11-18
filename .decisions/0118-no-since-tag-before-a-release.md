@@ -32,7 +32,7 @@ tells a reader nothing.
 [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) dropped `@stability` too on
 2026-11-15, for the same reason.
 
-This amends 0023 in part: its doc comment rule stands, minus the two tags.
+This amends 0023 in part: it takes `@since` and `@stability` out of 0023's doc comment rule.
 
 ## Decision
 

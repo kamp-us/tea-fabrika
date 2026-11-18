@@ -83,9 +83,8 @@ with main (owner, 2026-11-11). It also required `commits` until that left the re
 - No agent nobody is watching adds, drops or edits a required check or a bypass. The lead changes
   the ruleset when the owner tells it to, for that one change
   ([0163](0163-the-lead-acts-on-the-owners-word.md)).
-- GitHub's required check is the guard on a merge. The lead lands a pull request by a push, green
-  CI and `gh pr merge --squash`, pinned to the head that was checked, and no script waits for the
-  checks ([0162](0162-no-friction-before-a-merge.md)). Being behind main stays allowed.
+- GitHub's required check is the guard on a merge; being behind main stays allowed. How the lead
+  lands a pull request is in [0162](0162-no-friction-before-a-merge.md).
 
 **Binding constraints**
 

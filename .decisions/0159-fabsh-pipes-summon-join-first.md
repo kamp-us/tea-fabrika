@@ -117,8 +117,8 @@ working for real, with whatever they need.**
       deploys that follow is not decided here.
     - P24 needs P16, P17 and P21: P16 is already needed, P17 is done, and P21 comes as above.
   - **Recovery and the rest of the cloud rows (P26, P27, P28, P29, P36) wait behind Tier 2,** which
-    comes right after the 4 primitives ([0185](0185-tier-2-runs-agents-after-the-four-primitives.md)),
-    and come ahead of the programs with their own view. Until recovery lands, daily work in `next/`
+    comes right after the 4 primitives ([0185](0185-tier-2-runs-agents-after-the-four-primitives.md)).
+    Until recovery lands, daily work in `next/`
     lives only in the laptop's ledger, and the owner accepts that.
 - **This milestone is named "4 primitives"** (the changed Tier 1). Tier 2 comes right after it and
   is where hands and an agent fabrika starts are built for real, never before or beside it
@@ -127,8 +127,9 @@ working for real, with whatever they need.**
   built-ins, then `summon` and `join`.
 - **A program with its own React view that the four primitives do not need is not part of done,**
   such as the tracker and the ticket page. A piece the four need is in scope even when it has a
-  view of its own: `fabsh`'s view, the desk, and wherever a room's talk is shown. The tracker and
-  the ticket page are built inside fabrika after the recovery and cloud rows above.
+  view of its own: `fabsh`'s view, the desk, and wherever a room's talk is shown. Where the tracker
+  and the ticket page come is left to the Tier 2 plan
+  ([0185](0185-tier-2-runs-agents-after-the-four-primitives.md)).
 - **The purpose is the test.** Once this works, the next work is built inside fabrika, by talking
   to a summoned agent there.
 - **Tier 1 changes to enable this.** The rows this scope needs come first. The rows it does not

@@ -73,7 +73,7 @@ tooling, and that a step's agent keeps running in a box.
   [0045](0045-test-steps-run-in-containers.md)). A step's agent runs install scripts and tests it
   did not write, so it is the last place a login should be in reach.
 
-This amends 0161 in part: its "no bot" half goes, and its "no step signature" half stands. It
+This amends 0161 in part: its "no bot" half goes. It
 amends 0162 in part: "the bot is gone" no longer holds, and the push in its landing line is the
 bot's. It amends 0407 in part: pull requests now open as the bot.
 
@@ -84,8 +84,7 @@ as co-author, and boxes stay (owner, 2026-11-13).**
 
 - **Commits.** A commit of agent work is authored by `fabrikalfa[bot]` and names the owner in git's
   own `Co-authored-by` trailer, as 0401 and 0407 say. The tooling writes both lines.
-- **No signature.** No step key signs a commit, and no note goes under `refs/notes/fabrika`. That
-  half of 0161 stands, with its rule that practice holds "nobody writes their own exam" for now.
+- **No signature.** No step key signs a commit, and no note goes under `refs/notes/fabrika`.
 - **Pushes.** A `fabrikalfa/` branch is pushed by the bot, with a token that lasts one hour.
 - **Pull requests.** The bot opens them. This is 0405's setting, set to "as the bot" for this repo.
 - **Boxes stay.** A step's agent runs in its box and holds no login for the code host. 0161's
