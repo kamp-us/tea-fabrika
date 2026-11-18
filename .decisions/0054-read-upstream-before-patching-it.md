@@ -30,8 +30,8 @@ coming back through the socket's Sub.
 
 The patch would have worked around a design nobody had read. That is what this rule stops.
 
-This amends in part [patch upstream locally](../docs/direction/patch-upstream-locally.md): "never
-wait on upstream" still holds, but the read comes before any patch. It amends in part
+This amends in part [patch upstream locally](../docs/direction/patch-upstream-locally.md): the read
+comes before any patch. It amends in part
 [0041](0041-object-classes-are-effect-objects.md) and
 [0042](0042-platform-pieces-go-through-alchemy.md) too, which each say a gap in Alchemy is patched
 locally.
