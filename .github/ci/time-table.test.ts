@@ -511,6 +511,8 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
     created_at: "2026-11-17T15:14:09Z",
     started_at: "2026-11-17T15:25:54Z",
   };
+  const noRunner = { ...real, runner_id: null };
+  const skippedWithRunner = { ...skipped, ...realRunner };
   const realTimings = await timingsOf(
     env,
     io(
@@ -520,6 +522,8 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
   );
   expect(readQueueWait(real)).toEqual({ created: real.created_at, started: real.started_at, seconds: 705 });
   expect(realTimings.queueWait).toEqual({ created: real.created_at, started: real.started_at, seconds: 705 });
+  expect(readQueueWait(noRunner)).toBeUndefined();
+  expect(readQueueWait(skippedWithRunner)).toBeUndefined();
 
   for (const [field, value] of [
     ["created_at", "2026-02-30T09:59:56Z"],
