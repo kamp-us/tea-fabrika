@@ -32,7 +32,20 @@ export interface Exit {
  * `restart` are the runner's other calls, `shutdown` is a writer outside the runner ending the live
  * process, and `wake` is a new runner over the same stores, as an object's wake makes one.
  */
-export type Move = "inc" | "work" | "stop" | "crash" | "due" | "open" | "restart" | "shutdown" | "wake";
+export type Move =
+  | "inc"
+  | "work"
+  | "stop"
+  | "crash"
+  | "due"
+  | "open"
+  | "restart"
+  | "shutdown"
+  | "wake"
+  | "overlap"
+  | "successor"
+  | "replaced"
+  | "schedule";
 
 export interface World {
   /** One move, as the object's own call or an outside writer would make it. */
@@ -46,6 +59,12 @@ export interface World {
   readonly reset: Effect.Effect<void>;
   /** How many times a `work` Cmd's handler has run. */
   readonly worked: Effect.Effect<number>;
+  /** The alarm the runner saved last. */
+  readonly alarm: Effect.Effect<number | null>;
+  /** Each time the runner armed or cleared the alarm since the last `reset`, with the table's state then. */
+  readonly armings: Effect.Effect<
+    ReadonlyArray<{ readonly at: number | null; readonly state: string; readonly reason: string | null }>
+  >;
 }
 
 /** The table's state as the walk knows it, from the moves it made. */
@@ -73,6 +92,45 @@ const REASONS: Record<Model, string | null> = {
   ended_crashed: "crashed",
 };
 
+/** B2's states: the table's, and `other_live`, where the name is live under a process this runner does not
+ *  run, because a writer outside it replaced that process. A new runner is not built there: an outside start
+ *  skips the object's own journal, which a real object keeps in step with its table. */
+type Standing = Model | "other_live";
+
+/** B2's moves. Beside the others it has the timer the program asks for (`schedule`), a stop Cmd that exits
+ *  while another call's step holds a snapshot (`overlap`), and the replacements by a writer outside the
+ *  runner: while a Cmd is in its handler (`replaced`), or after the process ended (`successor`). */
+const WALK: Record<Standing, ReadonlyArray<Move>> = {
+  live: [...POSSIBLE.live, "schedule", "overlap", "replaced"],
+  ended_normal: POSSIBLE.ended_normal,
+  ended_shutdown: [...POSSIBLE.ended_shutdown, "successor"],
+  ended_crashed: POSSIBLE.ended_crashed,
+  other_live: ["due", "open"],
+};
+
+/** How each of B2's walks begins, so no walk leaves a case to the generator's luck: an exit and the input after
+ *  it; a crash, a restart and a shutdown; a timer and then a replacement (and the stale runner's first calls),
+ *  a shutdown with an outside successor, or an overlap. The generated tape goes on from where each leaves the
+ *  table. */
+const PREFIXES: ReadonlyArray<ReadonlyArray<Move>> = [
+  ["work", "stop", "inc"],
+  ["crash", "restart", "shutdown"],
+  ["schedule", "replaced", "due"],
+  ["schedule", "shutdown", "successor", "open"],
+  ["schedule", "overlap"],
+];
+
+/** Where a B2 move leaves the walk. */
+const TO: Partial<Record<Move, Standing>> = {
+  stop: "ended_normal",
+  overlap: "ended_normal",
+  crash: "ended_crashed",
+  shutdown: "ended_shutdown",
+  restart: "live",
+  replaced: "other_live",
+  successor: "other_live",
+};
+
 const Pick = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
 
 const Tape = Schema.Array(Pick).check(Schema.isMinLength(4), Schema.isMaxLength(14));
@@ -86,7 +144,19 @@ const reach = (law: string, kind: string) => reached.set(law, (reached.get(law) 
 
 const REQUIRED: Record<string, ReadonlyArray<string>> = {
   B1: ["inc", "work", "due", "open", "wake"],
-  B2: ["inc", "work", "stop", "crash", "shutdown", "restart", "refused after exit"],
+  B2: [
+    "inc",
+    "work",
+    "stop",
+    "crash",
+    "shutdown",
+    "restart",
+    "refused after exit",
+    "overlap",
+    "replaced",
+    "successor",
+    "stale runner with a timer",
+  ],
   B3: ["stop", "crash", "shutdown", "restart from live"],
 };
 
@@ -95,6 +165,9 @@ const REQUIRED: Record<string, ReadonlyArray<string>> = {
 const STEPS: Partial<Record<Move, number>> = { inc: 1, due: 1, open: 1, work: 2 };
 
 const BUDGET_PER_STEP = 3;
+
+/** What `overlap` answers: the stop Cmd's call, then the call that held a snapshot. */
+const Overlap = Schema.Struct({ stop: Sent });
 
 const answer = (value: unknown) => Schema.decodeUnknownSync(Sent)(value);
 
@@ -128,54 +201,92 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
       options,
     );
 
-    // Plants: `ended` keeps its first answer for the runner's life, so an input after the program's own exit
-    // is not refused (red after an exit); the build's own plants for the snapshot are named in the report.
+    // Plants, each applied once to Runner.ts and undone: the runner's own exit does not drop a step's snapshot
+    // (red on the overlap: an alarm is armed for a process that exited normally); `living` is derived
+    // without the process id (red on a replaced process: the old runner arms its program's timer); and `ended`
+    // keeps its first answer for the runner's life (red on the Cmd listed after an exit). The snapshot kept
+    // past its step's end cannot be seen here: see the report.
     it.effect.prop(
-      "B2 what a runner answers follows the process table after its own exit, a crash, an outside shutdown and a restart",
+      "B2 what a runner does follows the process table after its own exit, a crash, an outside shutdown, a restart and a replaced process",
       { tape: Tape },
       ({ tape }) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const w = yield* open;
-            let model: Model = "live";
+        Effect.forEach(
+          PREFIXES,
+          (prefix) =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                const w = yield* open;
+                let standing: Standing = "live";
+                let scheduled = false;
 
-            for (const pick of tape) {
-              const choices: ReadonlyArray<Move> = POSSIBLE[model];
-              const move: Move = choices[pick % choices.length] ?? "due";
-              reach("B2", move);
-              const before = yield* w.table;
-              expect(before.state === "live" ? null : before.reason, `the table is ${model} before ${move}`).toBe(
-                REASONS[model],
-              );
-              const worked = yield* w.worked;
-              const done = yield* w.call(move);
+                for (const step of [...prefix, ...tape]) {
+                  const choices: ReadonlyArray<Move> = WALK[standing];
+                  const move: Move = typeof step === "string" ? step : (choices[step % choices.length] ?? "due");
+                  expect(choices, `${move} is possible in ${standing}`).toContain(move);
+                  reach("B2", move);
+                  const before = yield* w.table;
+                  const model: Model = standing === "other_live" ? "live" : standing;
+                  expect(
+                    before.state === "live" ? null : before.reason,
+                    `the table is ${standing} before ${move}`,
+                  ).toBe(REASONS[model]);
+                  const worked = yield* w.worked;
+                  yield* w.reset;
+                  const done = yield* w.call(move);
+                  const armed = yield* w.armings;
+                  scheduled = scheduled || move === "schedule";
 
-              if (move === "stop") {
-                expect(
-                  yield* w.worked,
-                  "a Cmd listed after the program's own exit never runs, so the runner sees its exit at once",
-                ).toBe(worked);
-              }
+                  if (move === "stop") {
+                    expect(
+                      yield* w.worked,
+                      "a Cmd listed after the program's own exit never runs, so the runner sees its exit at once",
+                    ).toBe(worked);
+                  }
 
-              if (move === "inc" || move === "work") {
-                const sent = answer(done);
+                  if (move === "inc" || move === "work") {
+                    const sent = answer(done);
 
-                if (model === "ended_normal") {
-                  reach("B2", "refused after exit");
-                  expect(sent, "an input after the program's own exit is refused").toEqual(
-                    Sent.cases.refused.make({ reason: "ended" }),
-                  );
-                } else {
-                  expect(sent._tag, "an input to a live process is accepted").toBe("accepted");
+                    if (standing === "ended_normal") {
+                      reach("B2", "refused after exit");
+                      expect(sent, "an input after the program's own exit is refused").toEqual(
+                        Sent.cases.refused.make({ reason: "ended" }),
+                      );
+                    } else {
+                      expect(sent._tag, "an input to a live process is accepted").toBe("accepted");
+                    }
+                  }
+
+                  if (move === "overlap") {
+                    expect(Schema.decodeUnknownSync(Overlap)(done).stop._tag, "the stop Cmd is accepted").toBe(
+                      "accepted",
+                    );
+                  }
+
+                  const next: Standing = TO[move] ?? standing;
+                  const table = yield* w.table;
+                  const after: Model = next === "other_live" ? "live" : next;
+                  expect(table.state === "live" ? null : table.reason, `the table after ${move}`).toBe(REASONS[after]);
+                  expect(
+                    armed.filter(({ at, reason }) => at !== null && reason === "normal"),
+                    `${move} armed an alarm while the table said its process exited normally`,
+                  ).toEqual([]);
+
+                  if (standing === "other_live" && (move === "due" || move === "open")) {
+                    if (scheduled) {
+                      reach("B2", "stale runner with a timer");
+                    }
+
+                    expect(
+                      armed.filter(({ at }) => at !== null),
+                      `${move} armed the program's timer for a life the table no longer calls live`,
+                    ).toEqual([]);
+                  }
+
+                  standing = next;
                 }
-              }
-
-              const next: Model = AFTER[move]?.to ?? (move === "restart" ? "live" : model);
-              model = next;
-              const table = yield* w.table;
-              expect(table.state === "live" ? null : table.reason, `the table after ${move}`).toBe(REASONS[model]);
-            }
-          }),
+              }),
+            ),
+          { concurrency: 1, discard: true },
         ),
       options,
     );

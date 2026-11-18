@@ -6,7 +6,9 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -46,13 +48,14 @@ const from = () => ({
 
 const person = Writer.cases.person.make({ key: "SHA256:input", for: "test-person" });
 
-const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
+const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int, wake: Schema.NullOr(Schema.Finite) });
 
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("inc") }),
   Schema.Struct({ type: Schema.Literal("work") }),
   Schema.Struct({ type: Schema.Literal("stop") }),
   Schema.Struct({ type: Schema.Literal("crash") }),
+  Schema.Struct({ type: Schema.Literal("schedule") }),
 ]);
 
 const work = Cmd.make("work", { input: Schema.Struct({}), ok: Schema.Null, err: ["failed"] });
@@ -63,9 +66,11 @@ const program = {
     model: Model,
     msg: Msg,
     cmds: [work, exit],
-    init: (saved) => [saved ?? { count: 0, replies: 0 }, []],
+    init: (saved) => [saved ?? { count: 0, replies: 0, wake: null }, []],
     update: {
       inc: (s) => [{ ...s, count: s.count + 1 }, []],
+      // The program asks for a timer, so a runner that thinks its life is live arms the alarm.
+      schedule: (s) => [{ ...s, wake: 50 }, []],
       work: (s) => [s, [work({})]],
       // The Cmd after the exit is one the ended life still owed, which never runs.
       stop: (s) => [s, [exit({}), work({})]],
@@ -84,15 +89,31 @@ const program = {
   view: { data: Model, select: (s: typeof Model.Type) => s },
   refuse: () => null,
   inputs: Object.fromEntries(
-    ["inc", "work", "stop", "crash"].map((key) => [
+    ["inc", "work", "stop", "crash", "schedule"].map((key) => [
       key,
       { ...Schema.TaggedStruct("write", {}).make({}), schema: Msg, personOnly: false, description: key },
     ]),
   ),
   outputs: {},
   writes: {},
-  wake: () => null,
+  wake: (s: typeof Model.Type) => s.wake,
 };
+
+interface Hold {
+  readonly entered: Deferred.Deferred<void>;
+  readonly release: Deferred.Deferred<void>;
+  /** Succeeds once the held call has run. */
+  readonly done: Deferred.Deferred<void>;
+}
+
+const hold = Effect.all(
+  {
+    entered: Deferred.make<void>(),
+    release: Deferred.make<void>(),
+    done: Deferred.make<void>(),
+  },
+  { concurrency: 1 },
+);
 
 const open = Effect.fnUntraced(function* () {
   const memory = (): Sql => {
@@ -105,9 +126,12 @@ const open = Effect.fnUntraced(function* () {
   const state = memory();
   let sequence = 0;
   let alarm: number | null = null;
+  const armings: Array<{ at: number | null; state: string; reason: string | null }> = [];
   let worked = 0;
   let input = 0;
   const reads = { status: 0, isLive: 0 };
+  // A hold stops the runner's next call of its kind until the law lets it go, as a slow platform call would.
+  const holds: { exit: Hold | null; read: Hold | null; work: Hold | null } = { exit: null, read: null, work: null };
   const pid = Effect.sync(() => `process_0000000000e008${(++sequence).toString(16).padStart(12, "0")}`);
 
   const caller = {
@@ -129,10 +153,36 @@ const open = Effect.fnUntraced(function* () {
   const counted = Context.add(real, ProcessManager, {
     ...manager,
     status: (name: string) =>
-      Effect.suspend(() => {
+      Effect.gen(function* () {
         reads.status++;
+        const answer = yield* manager.status(name);
+        const hold = holds.read;
 
-        return manager.status(name);
+        if (hold !== null) {
+          holds.read = null;
+          yield* Deferred.succeed(hold.entered, undefined);
+          yield* Deferred.await(hold.release);
+        }
+
+        return answer;
+      }),
+    exit: (process: string, reason: ExitReason, origin: Parameters<typeof manager.exit>[2]) =>
+      Effect.gen(function* () {
+        const hold = holds.exit;
+
+        if (hold !== null) {
+          holds.exit = null;
+          yield* Deferred.succeed(hold.entered, undefined);
+          yield* Deferred.await(hold.release);
+        }
+
+        const answer = yield* manager.exit(process, reason, origin);
+
+        if (hold !== null) {
+          yield* Deferred.succeed(hold.done, undefined);
+        }
+
+        return answer;
       }),
     isLive: (process: string) =>
       Effect.suspend(() => {
@@ -190,7 +240,15 @@ const open = Effect.fnUntraced(function* () {
             { [PROGRAM]: program },
             {
               work: () =>
-                Effect.sync(() => {
+                Effect.gen(function* () {
+                  const gate = holds.work;
+
+                  if (gate !== null) {
+                    holds.work = null;
+                    yield* Deferred.succeed(gate.entered, undefined);
+                    yield* Deferred.await(gate.release);
+                  }
+
                   worked++;
 
                   return Outcome.ok(null);
@@ -202,8 +260,11 @@ const open = Effect.fnUntraced(function* () {
           Layer.succeed(WatcherManager, { publish: () => Effect.void }),
           Layer.succeed(Recording, { flush: Effect.void }),
           Layer.succeed(Alarm, {
+            // Each arming is logged with what the table said at that moment, read outside the runner.
             set: (at: number | null) =>
-              Effect.sync(() => {
+              Effect.gen(function* () {
+                const seen = yield* Effect.orDie(table);
+                armings.push({ at, state: seen.state, reason: seen.reason });
                 alarm = at;
               }),
           }),
@@ -217,7 +278,7 @@ const open = Effect.fnUntraced(function* () {
 
   let current = yield* runner();
 
-  const send = Effect.fnUntraced(function* (type: "inc" | "work" | "stop" | "crash") {
+  const send = Effect.fnUntraced(function* (type: "inc" | "work" | "stop" | "crash" | "schedule") {
     input += 1;
 
     return yield* current.msg({
@@ -239,6 +300,7 @@ const open = Effect.fnUntraced(function* () {
       case "inc":
       case "work":
       case "stop":
+      case "schedule":
         return yield* send(move);
       // The program throws, so the call fails with `ProgramDown`: the failure is the move's answer.
       case "crash":
@@ -255,6 +317,70 @@ const open = Effect.fnUntraced(function* () {
         return now.state === "live"
           ? yield* manager.exit(now.process, ExitReason.cases.shutdown.make({}), from())
           : undefined;
+      }
+
+      // A stop Cmd runs its exit outside the lock while another input's step holds it: the input's first
+      // lifecycle read comes before the exit, and its checks after. Both calls answer.
+      case "overlap": {
+        const exitHold = yield* hold;
+        holds.exit = exitHold;
+        const stopper = yield* Effect.forkChild(send("stop"));
+        yield* Effect.race(Deferred.await(exitHold.entered), Fiber.await(stopper));
+        const readHold = yield* hold;
+        holds.read = readHold;
+        const writer = yield* Effect.forkChild(current.due(alarm ?? (yield* Clock.currentTimeMillis)));
+        yield* Effect.race(Deferred.await(readHold.entered), Fiber.await(writer));
+        holds.read = null;
+        yield* Deferred.succeed(exitHold.release, undefined);
+        yield* Effect.race(Deferred.await(exitHold.done), Fiber.await(stopper));
+        yield* Deferred.succeed(readHold.release, undefined);
+        const incAnswer = yield* Fiber.join(writer);
+
+        return { stop: yield* Fiber.join(stopper), due: incAnswer };
+      }
+
+      // A `work` Cmd is in its handler when a writer outside the runner ends its process and starts the
+      // name's next one. The runner finishes the Cmd for a life the table no longer calls live.
+      case "replaced": {
+        const workHold = yield* hold;
+        holds.work = workHold;
+        const worker = yield* Effect.forkChild(send("work"));
+        yield* Effect.race(Deferred.await(workHold.entered), Fiber.await(worker));
+        const now = yield* table;
+
+        if (now.state === "live") {
+          yield* manager.exit(now.process, ExitReason.cases.shutdown.make({}), from());
+          yield* manager.start(
+            Start.cases.again.make({
+              id: `again-${++sequence}`,
+              name: NAME,
+              code: { program: PROGRAM, hash: "test" },
+              after: now.process,
+              reason: "shutdown",
+            }),
+            from(),
+          );
+        }
+
+        yield* Deferred.succeed(workHold.release, undefined);
+
+        return yield* Fiber.join(worker);
+      }
+
+      // A writer outside the runner starts the name's next process, as another object's supervisor would.
+      case "successor": {
+        const now = yield* table;
+
+        return yield* manager.start(
+          Start.cases.again.make({
+            id: `again-${++sequence}`,
+            name: NAME,
+            code: { program: PROGRAM, hash: "test" },
+            after: now.process,
+            reason: "shutdown",
+          }),
+          from(),
+        );
       }
 
       case "wake":
@@ -280,8 +406,11 @@ const open = Effect.fnUntraced(function* () {
         }),
     ),
     worked: Effect.sync(() => worked),
+    alarm: Effect.sync(() => alarm),
+    armings: Effect.sync(() => [...armings]),
     reads: Effect.sync(() => ({ ...reads })),
     reset: Effect.sync(() => {
+      armings.length = 0;
       reads.status = 0;
       reads.isLive = 0;
     }),
