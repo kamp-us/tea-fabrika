@@ -21,10 +21,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT, TAGGED_ERROR } from "./builtin-plants.ts";
+import { BUILTIN_PLANTS, type Plant, REFLECT, REFLECT_NEW_FOLDERS, TAGGED_ERROR } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -691,6 +692,65 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   }, 120_000);
 });
 
+describe("L10 of the Reflect ban: after the fold the base blocks hold it for all of next/, and no list block is left", () => {
+  // scenario: the repo's own config, read by oxlint's own --print-config, and one oxlint run over
+  // REFLECT's lines planted in folders that no block names, at generated names under each shape in
+  // REFLECT_NEW_FOLDERS. The prefix keeps a name from being a folder that exists. The second half
+  // reads the blocks: of the overrides that name a next/ folder and hold the ban, one is next/ whole,
+  // one is client/, and one lists folders, the JSON.parse warn block, which is the only list there is.
+  // Plant: leave the four Reflect entries out of the next/ block, and the folders are not refused
+  // and the blocks are two; put one of the three deleted list blocks back, and the blocks are four.
+  it("scenario: REFLECT's lines are refused in a folder no block names, and the only blocks that hold the ban for next/ are the three base blocks", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const names = fc.sample(fc.stringMatching(/^[a-z]{3,8}$/), {
+        seed: 119_120,
+        numRuns: REFLECT_NEW_FOLDERS.length * 2,
+      });
+
+      const files = [
+        ...new Set(
+          REFLECT_NEW_FOLDERS.flatMap((folder, i) =>
+            [names[i * 2], names[i * 2 + 1]].map((name) => `${folder.replace("NAME", `planted-${name}`)}/planted.ts`),
+          ),
+        ),
+      ];
+
+      // Coverage: every shape was drawn, with two names each, none the same as another.
+      expect(files.length).toBe(REFLECT_NEW_FOLDERS.length * 2);
+
+      const { text, want } = textOf(REFLECT);
+      const diagnostics = lint(text, files);
+
+      for (const file of files) {
+        expect(refusedIn(diagnostics, file, REFLECT.code), file).toEqual(want);
+      }
+
+      const blocks = printed.overrides.filter(
+        ({ files: globs, rules }) =>
+          globs.some((glob) => glob.startsWith("next/")) &&
+          optionsOf(rules["no-restricted-properties"]).some(isReflectGet),
+      );
+
+      // One block names one glob and the other names the folders of the JSON.parse warn block, so a
+      // leftover list block, blocking or warning, makes a fourth or a second list.
+      expect(
+        blocks.map(({ files: globs }) => (globs.length === 1 ? globs[0] : "a list of folders")),
+        "the blocks that hold the ban for next/",
+      ).toEqual(["next/**/*", "next/packages/libfabrika/src/client/**", "a list of folders"]);
+
+      // The list is the JSON.parse warn block: it advises for that entry alone, and the rest of its
+      // fires block (advice.test.ts).
+      expect(
+        blocks.map(({ rules }) => {
+          const setting = rules["no-restricted-properties"];
+
+          return Array.isArray(setting) ? setting[0] : setting;
+        }),
+      ).toEqual(["deny", "deny", "warn"]);
+    });
+  }, 120_000);
+});
+
 describe("the Data.TaggedError entry, which stands beside fabrika/no-data-taggederror (0573)", () => {
   // L1. scenario: the repo's own config, read by oxlint's own --print-config, so every folder that
   // any block setting `no-restricted-properties` lists gets TAGGED_ERROR's lines and ours'
@@ -735,8 +795,9 @@ describe("the Data.TaggedError entry, which stands beside fabrika/no-data-tagged
     inConfigCopy(({ printed }) => {
       expect(optionsOf(printed.rules["no-restricted-properties"]).some(isTaggedError), "the root rules").toBe(true);
       const setting = printed.overrides.filter(({ rules }) => rules["no-restricted-properties"] !== undefined);
-      // Coverage: the seven blocks that set the rule when the swap landed, at least.
-      expect(setting.length).toBeGreaterThanOrEqual(7);
+      // Coverage: the five blocks that set the rule after the Reflect ban's fold, at least: today's
+      // e2e scripts, next/ whole, client/, the JSON.parse warn block and the tooling.
+      expect(setting.length).toBeGreaterThanOrEqual(5);
       expect(
         setting
           .filter(({ rules }) => !optionsOf(rules["no-restricted-properties"]).some(isTaggedError))

@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, matchesGlob } from "node:path";
+import { dirname, join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
@@ -782,9 +782,6 @@ describe("Reflect ban L3 a Reflect fire does not keep a JSON.parse warn line ali
   }, 120_000);
 });
 
-/** A file inside one folder glob of the config: `next/a/**` and `next/a/*` give `next/a/planted.ts`. */
-const inside = (glob: string): string => `${glob.replace(/(\/\*\*)?\/\*\*?$/, "")}/planted.ts`;
-
 /** One option of the rule, named as oxlint names its fire: `JSON.parse`, or `setBounds` alone. */
 const nameOf = (entry: unknown): string => {
   if (typeof entry !== "object" || entry === null) {
@@ -797,11 +794,16 @@ const nameOf = (entry: unknown): string => {
   return `${object}${property}`;
 };
 
-describe("Reflect ban L4 each ban block under next/ keeps what the rule held there before", () => {
+describe("Reflect ban L4 each block that sets the rule for next/ keeps what the rule held there before", () => {
   // pinned: the real config, read from oxlint 1.90.0's own --print-config, since the law is about
-  // this one file. A level prints as "deny" or "warn", and a setting as [level, [options]].
-  // Plant: drop JSON.parse from the second ban block, and that block no longer keeps it.
-  it("pinned: every ban block under next/ keeps the JSON.parse entry at its folder's old level, and client/ keeps both retry entries", () => {
+  // this one file. A level prints as "deny" or "warn", and a setting as [level, [options]]. After the
+  // fold each block that holds the ban is a base block, so its JSON.parse entry sits in the same
+  // block, at the same level. A block's level cannot differ from JSON.parse's any more, so the level
+  // is held by two reads: next/ whole and client/ start at zero and block, and only the block that
+  // lists folders warns, which the stale warn-line law (T930 L3) keeps to folders with a JSON.parse fire.
+  // Plant: drop JSON.parse from the block for next/ whole, or set client/'s block to "warn", or drop
+  // one retry entry from client/'s block.
+  it("pinned: every block that sets the rule for next/ keeps the JSON.parse entry and the ban, next/ whole and client/ block, and client/ keeps both retry entries", () => {
     const { at, done } = repo(readFileSync(join(ROOT, ".oxlintrc.json"), "utf8"), {});
 
     try {
@@ -825,25 +827,25 @@ describe("Reflect ban L4 each ban block under next/ keeps what the rule held the
           : [];
       });
 
-      // The folders where JSON.parse advised before the ban: the warn override with no Reflect entry.
-      const advised = settings
-        .filter(({ level, names }) => level === "warn" && !names.includes("Reflect.get"))
-        .flatMap(({ files }) => files);
+      const blocks = settings.filter(({ files }) => files.some((glob) => glob.startsWith("next/")));
 
-      const blocks = settings.filter(
-        ({ files, names }) => names.includes("Reflect.get") && files.some((glob) => glob.startsWith("next/")),
+      // Coverage: a block where JSON.parse blocks and one where it still advises, and next/ whole and client/.
+      expect(new Set(blocks.map(({ level }) => level))).toEqual(new Set(["deny", "warn"]));
+      expect(blocks.flatMap(({ files }) => files)).toEqual(
+        expect.arrayContaining(["next/**/*", "next/packages/libfabrika/src/client/**"]),
       );
 
-      // Coverage: a block where JSON.parse blocks and one where it still advises.
-      expect(new Set(blocks.map(({ level }) => level))).toEqual(new Set(["deny", "warn"]));
-
       for (const { files, level, names } of blocks) {
-        expect(names, files.join(" ")).toContain("JSON.parse");
+        expect(names, files.join(" ")).toEqual(
+          expect.arrayContaining(["JSON.parse", "Reflect.get", "Reflect.set", "Reflect.has", "globalThis.Reflect"]),
+        );
 
         for (const glob of files) {
-          expect(glob, "a ban block under next/ names next/ folders only").toMatch(/^next\//);
-          const was = advised.some((warn) => matchesGlob(inside(glob), warn)) ? "warn" : "deny";
-          expect(level, glob).toBe(was);
+          expect(glob, "a block under next/ names next/ folders only").toMatch(/^next\//);
+
+          if (glob === "next/**/*" || glob.startsWith("next/packages/libfabrika/src/client/")) {
+            expect(level, glob).toBe("deny");
+          }
 
           if (glob.startsWith("next/packages/libfabrika/src/client/")) {
             expect(names, glob).toEqual(expect.arrayContaining(["Effect.retry", "Stream.retry"]));

@@ -1151,15 +1151,18 @@ so a file that moves to it keeps its integration name and its depth-read count.
 
 Oxlint's own `no-restricted-properties` holds the ban, with four entries: `Reflect.get`,
 `Reflect.set`, `Reflect.has`, and `globalThis.Reflect`, which would hide the call from the rule.
-It is on, at zero, for the tooling (`.agents/`, `.github/`, `oxlint-plugins/`) and for every
-`next/` folder with no fire. Three blocks near the end of `.oxlintrc.json` list those folders. A
-folder is listed whole the day its own slice brings it to zero, and none is ever taken off. The
-last slice folds the lists into the base blocks
+It is on, at zero, for the tooling (`.agents/`, `.github/`, `oxlint-plugins/`) and for all of
+`next/`. The ban covers all of `next/` by the base blocks of the rule, so a folder that is new
+gets it the day it appears, with no line to add. The tooling has one block of its own, since no
+base block covers only the tooling. Each folder joined the ban the day its own slice brought it to
+zero, in lists of folders; the last slice folded the lists into the base blocks and deleted them,
+so no list of folders at zero is left
 ([the plan](../docs/plan/quests/reflect-ban-PLAN.md)).
 
-An override replaces a rule's options, so each `next/` block writes out again what the rule held
-there: the `JSON.parse` entry, and `client/`'s two retry entries once that folder joins. In the
-folders where `JSON.parse` still advises, the block says `warn`. `advice.ts` lets only the
+An override replaces a rule's options, so each base block for `next/` writes out again what the
+rule held there, then the four entries: `next/**/*` holds `Data.TaggedError` and `JSON.parse`;
+`client/` also holds its two retry entries; and the block that lists the folders where `JSON.parse`
+still advises says `warn`. `advice.ts` lets only the
 `JSON.parse` fire advise, so a `Reflect` fire there fails `pnpm lint` and CI, though a plain
 `oxlint` run in an editor shows it yellow. Oxlint prints the fire's message as
 `'JSON.parse' is restricted from being used.` and the entry's own text apart as a hint, so the
@@ -1190,16 +1193,18 @@ covers names `Reflect` in code. A `JSON.parse` oracle's comment covers no such l
 counted. Its `allow` option in `.oxlintrc.json` gives each named file its count, 2 each for
 `runtime/Program.test.ts`, `transport/Connection.test.ts` and the app's `runtime.decode.test.ts`;
 the last two are counted before their slices land. Every other file may hold none, and the rule is
-on for all of `next/` and the tooling, whether or not the folder has joined the ban. The known
+on for all of `next/` and the tooling. The known
 rule, `eslint-comments/no-restricted-disable`, refuses every comment for a rule, which would
 refuse the `JSON.parse` oracles too. It reports at the top of the file, as `no-bare-disable`
 does, so a comment that also named it cannot silence it. `reflect-disables.test.ts` generates the
 files at `next/` and tooling paths and runs them with the real config.
 
 `plants.test.ts` reads the ban blocks from oxlint's own `--print-config` and plants `REFLECT` in
-every folder they list. `advice.test.ts` holds the runner's side: a `Reflect` fire at `warn`
-blocks, it never keeps a `JSON.parse` warn line alive, and each block keeps what the rule held
-before.
+every folder they list (L1). It also plants it in folders that no block names, at generated names
+(`REFLECT_NEW_FOLDERS`), and holds that the only blocks that hold the ban for `next/` are the
+three base blocks (L10). `advice.test.ts` holds the runner's side: a `Reflect` fire at `warn`
+blocks, it never keeps a `JSON.parse` warn line alive, and each block that sets the rule for
+`next/` keeps what it held before (L4).
 
 ## Rules that gave way to trusted ones, decision 0573
 
