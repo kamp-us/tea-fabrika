@@ -3,11 +3,10 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeAll } from "@effect/vitest";
+import { beforeAll, expect, it } from "@effect/vitest";
 import { Effect, Record as Rec, Schema, Config } from "effect";
 
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
 import { readers } from "./changes.mjs";
 import {
   budgetOf,
@@ -271,24 +270,32 @@ it("property: a sized pull request without the visual label, and every merge que
   );
 });
 
-it("property: a sized pull request with the visual label, and a push to main, start the end-to-end legs their visual files need", () => {
-  // The label still asks, and a push to main keeps the visual files its change reaches. Plants, each
-  // run once on legs.ts and restored: `visual` false on every run (red: both lost their e2e legs);
-  // the push dropped (red: a push lost them).
-  fc.assert(
-    fc.property(
-      picked(),
-      fc.oneof(
-        fc.constant(pr),
-        line.filter((run) => run.event === "push"),
-      ),
-      ({ selected, table }, run) => {
-        expect(size(run, selected, full, limit, table).e2e).toBe(fewest(selected.e2e, full.e2e, limit.e2e, table));
-      },
-    ),
-    options,
-  );
-});
+it.prop(
+  "property: a sized pull request with the visual label, and a push to main, start the end-to-end legs their visual files need",
+  {
+    event: Schema.Literals(["pull_request", "push"]),
+    flag: Schema.Boolean,
+    rows: Schema.Array(
+      Schema.Tuple([
+        Schema.String.check(Schema.isPattern(/^next\/[a-z]{1,8}\.visual\.test\.ts$/)),
+        Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 600 })),
+      ]),
+    ).check(Schema.isMaxLength(12)),
+  },
+  ({ event, flag, rows }) => {
+    // The label still asks, and a push to main keeps the visual files its change reaches. No label
+    // reaches a push, so its flag is either way. Plants, each run once on legs.ts and restored:
+    // `visual` false on every run (red: both lost their e2e legs); the push dropped (red: a push
+    // lost them).
+    const run: Run = { event, scope: "all", base, visual: event === "pull_request" || flag };
+    const files = rows.map(([path]) => path);
+    const table = Rec.fromEntries(rows);
+    expect(size(run, { vitest: [], e2e: files }, full, limit, table).e2e).toBe(
+      fewest(files, full.e2e, limit.e2e, table),
+    );
+  },
+  { arbitrary: { runs: 100 } },
+);
 
 it("property: every selected file lands on exactly one leg, on any count up to the full one", () => {
   // `split` is the cut `Shards` keeps on each leg (vitest.shards.test.ts, E6). Plant: keep a file on
