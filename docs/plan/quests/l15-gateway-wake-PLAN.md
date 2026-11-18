@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds slice C of the two-flakes plan (0036), approved by the lead (fabrikaa-merger, 2026-11-18); body f9bf1ea7ae5b
 Plancheck-Version: 3
 
 # Plan: a knock that lands after a grant is woken by `granted` news, and L15 names the tab it waits on, in next/ (ticket 1163, slice C of the two-flakes plan)
