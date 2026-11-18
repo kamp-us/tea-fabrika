@@ -1189,7 +1189,6 @@ const fullSamples: {
       C: ["tests-tooling-1", 32.9],
     },
     ".github/ci/l11-exercise.test.ts": { B: ["tests-tooling-2", 35.3] },
-    ".github/ci/plant-reporter.integration.test.ts": { B: ["tests-tooling-2", 37.0] },
     ".github/ci/related.test.ts": { C: ["tests-tooling-2", 34.6] },
     ".github/ci/workflow-lint/changes.test.ts": {
       A: ["related-6", 67.6],

@@ -1783,8 +1783,10 @@ const projectLogic = Effect.fn("project.init")(function* (
       { concurrency: 1, discard: true },
     ),
   );
+  // The call's spans land in one commit before the call answers (0122); `complete` then flushes them.
+  const batched = <A, E, R>(effect: Effect.Effect<A, E, R>) => SpanSink.use((sink) => sink.batch(effect));
   const wrapped = <A, E>(effect: Effect.Effect<A, E>) =>
-    complete(effect).pipe(projectStorage, Effect.provideContext(services));
+    complete(batched(effect)).pipe(projectStorage, Effect.provideContext(services));
   const own = Effect.fn("project.own")(function* (pid: string, id: string, stream: string, event: unknown) {
     if (!(yield* processes.isLive(pid))) {
       return yield* new LedgerError({ reason: "refused" });
@@ -2425,7 +2427,10 @@ const processLogic = Effect.fnUntraced(function* (
   const runner = QuotaRunner.guard(yield* ProgramRunner.pipe(Effect.provide(runnerLayer)), accounting);
   yield* sink.flush.pipe(Effect.provideContext(services));
   const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
-    Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
+    Effect.suspend(() =>
+      // One batch for the whole call, inside the runner's own flush, which commits it first (0122).
+      sink.batch(work).pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)),
+    );
   return {
     usage: Effect.fnUntraced(
       function* (rows: unknown) {

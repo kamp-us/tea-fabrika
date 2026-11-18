@@ -237,6 +237,21 @@ const isRefusal = Schema.is(MailRefusal);
 /** Whether a journal state is program work; the stores charge recovery by the same schema. */
 const isWork = Schema.is(Work);
 
+/** One serial step's view of its name's lifecycle: the last `status` answer it read, if no write of this
+ *  runner's has come since, and an `epoch` that every such write moves, so an answer a write overtook is
+ *  not kept. `open` is false once the step's permit is released. */
+interface Reading {
+  seen: Effect.Success<ReturnType<ProcessManager["Service"]["status"]>> | null;
+  epoch: number;
+  open: boolean;
+}
+
+/** The serial step the running fiber is inside, if any. A reference, so a read outside any step, such as
+ *  a Cmd's dispatch that holds no permit, never takes a step's snapshot. */
+const InStep = Context.Reference<Reading | null>("@kampus/libfabrika/runtime/Runner.InStep", {
+  defaultValue: () => null,
+});
+
 /** The Cmds a program asks its supervisor for: a child by name, a child's end, and its own. */
 const START_CHILD = "start_child";
 const STOP_CHILD = "stop_child";
@@ -522,7 +537,44 @@ export class ProgramRunner extends Context.Service<
         const rootStore = yield* ProcessStore;
         let store = rootStore;
         let process = initial;
-        const manager = yield* ProcessManager;
+        const base = yield* ProcessManager;
+        // The lifecycle is read from its machine once per serial step. A step is one permit-held section, and
+        // it keeps the first answer of `status` for its own name. Every write this runner makes to the
+        // process table drops that answer, so the runner sees its own writes at once. It has no second
+        // writer of this process's normal exit: only its built-in exit writes `normal` (B3), and any other
+        // writer's exit is seen at the next step. A read outside a step is always fresh. The writes that
+        // drop it are the ones the process table folds into a life's state or restarts: a start, an exit and
+        // a down. An ack, a dead letter and a watch write lines that `status` does not read.
+        let stepping: Reading | null = null;
+        const forget = Effect.sync(() => {
+          if (stepping !== null) {
+            stepping.seen = null;
+            stepping.epoch += 1;
+          }
+        });
+        const writes =
+          <Args extends ReadonlyArray<unknown>, A, E>(call: (...args: Args) => Effect.Effect<A, E>) =>
+          (...args: Args) =>
+            Effect.ensuring(Effect.andThen(forget, call(...args)), forget);
+        const manager: ProcessManager["Service"] = {
+          ...base,
+          status: (name) =>
+            Effect.gen(function* () {
+              const step = yield* InStep;
+              const epoch = step?.epoch;
+              const status = yield* base.status(name);
+
+              // An answer that a write overtook while it was asked is not kept.
+              if (step !== null && step.open && step.epoch === epoch && name === initial.name) {
+                step.seen = status;
+              }
+
+              return status;
+            }),
+          start: writes(base.start),
+          exit: writes(base.exit),
+          down: writes(base.down),
+        };
         const recovery = recoveryStore(options.recovery.sql, { ...options.recovery, schema: Supervision });
         const replies = yield* Replies.pipe(Effect.provide(RepliesSql.layer(options.recovery.sql, options.recovery)));
         let supervision: Supervision | null = null;
@@ -545,18 +597,49 @@ export class ProgramRunner extends Context.Service<
         const handsTasks = yield* Effect.serviceOption(HandsTasks);
         const children = yield* Effect.serviceOption(Children);
         const monitors = yield* Effect.serviceOption(Monitors);
-        // Read the lifecycle from its machine; the runner keeps no second copy.
+        // The name's status as this step last read it, else a fresh read.
+        const lifecycle = Effect.gen(function* () {
+          const step = yield* InStep;
+
+          if (step !== null && step.open && step.seen !== null) {
+            return step.seen;
+          }
+
+          return yield* manager.status(process.name);
+        });
         const ended = Effect.map(
-          Effect.suspend(() => manager.status(process.name)),
+          lifecycle,
           ({ state }) => state._tag === "ended" && state.process === process.id && state.reason._tag === "normal",
         );
+        /** This life is the live one: the name has one current life, so its state says so. */
+        const living = Effect.map(lifecycle, ({ state }) => state._tag === "live" && state.process === process.id);
         const stepFault = yield* Effect.serviceOption(StepFault);
         /** Sends running now, sends a drain of ordinary mail made, and when a failed send is retried. */
         const sending = new Set<string>();
         let drained: ReadonlyArray<Dispatched> = [];
         let mailRetry: number | null = null;
         let sendRetry: number | null = null;
-        const permit = yield* Semaphore.make(1);
+        const lock = yield* Semaphore.make(1);
+        /** One serial step: the permit held, with a lifecycle snapshot that lives exactly as long. */
+        const permit = {
+          withPermit: <A, E, R>(work: Effect.Effect<A, E, R>) =>
+            lock.withPermit(
+              Effect.suspend(() => {
+                const step: Reading = { seen: null, epoch: 0, open: true };
+                stepping = step;
+                return work.pipe(
+                  Effect.provideService(InStep, step),
+                  Effect.ensuring(
+                    Effect.sync(() => {
+                      step.open = false;
+                      step.seen = null;
+                      stepping = null;
+                    }),
+                  ),
+                );
+              }),
+            ),
+        };
         const commandPermit = yield* Semaphore.make(1);
         let live: Live | null = null;
         let alarmAt: number | null | undefined;
@@ -656,7 +739,7 @@ export class ProgramRunner extends Context.Service<
             return;
           }
 
-          const running = !recovering(supervision) && (supervision === null || (yield* manager.isLive(process.id)));
+          const running = !recovering(supervision) && (supervision === null || (yield* living));
           const waited = waitUntil(supervision);
           const owes = running && live !== null && owesHostCmd(live.cmds);
           const now = yield* Clock.currentTimeMillis;
@@ -990,8 +1073,9 @@ export class ProgramRunner extends Context.Service<
         });
         const interrupted = ExitReason.cases.crashed.make({ phase: "interrupted" });
         const ensure = Effect.fnUntraced(function* (time?: number) {
-          const p = yield* coordinator;
-          const status = yield* p.status(initial.name);
+          // A first start takes `at` from a fresh read. After that, a step's first read is fresh and the
+          // rest of the step answers from it.
+          const status = supervision === null ? yield* manager.status(initial.name) : yield* lifecycle;
 
           if (supervision === null) {
             supervision = yield* recovery.load;
@@ -1448,7 +1532,7 @@ export class ProgramRunner extends Context.Service<
 
             // A stopped life leaves its ordinary mail, in order, to the life that follows it.
             if (!accepted) {
-              alive = alive ?? (yield* manager.isLive(process.id));
+              alive = alive ?? (yield* living);
 
               if (!alive) {
                 stop = index;

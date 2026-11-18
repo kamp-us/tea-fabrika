@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-project-exit-rpc-accepts-normal-unused",
+  "date": "2026-11-18",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "dead_code",
+  "location": {
+    "path": "next/apps/fabrika/src/brain.ts",
+    "line": 124
+  },
+  "says": "In next/, the Project object's public exit RPC (brain.ts exit, ProjectClient.exit in libfabrika cloudflare/platform.ts:163) has no caller in product code and writes any decoded exit reason, normal included, for any pid, while OTP ignores a normal exit signal from another process and the Runner's lifecycle read relies on only a process's own exit Cmd writing normal.",
+  "proof": "rg -n '\\bp\\.exit\\(|project\\.exit\\(|stub\\.exit\\(' next/packages next/apps --glob '!*test*' prints only brain.ts:126 (the method itself), cloudflare/runtime.ts:1536 (its implementation) and platform.ts:165 (the stub wrapper); the Runner's own exits go through processExit. cloudflare/runtime.ts:1530-1538 decodes the reason with decodeExitReason, which accepts normal.",
+  "cost": "A future caller could end another process with normal mid-step, which the Runner's per-step lifecycle read (plan t753-l16-full-depth) would see only at the next step; unused surface to keep in step with the process table's rules.",
+  "head": "a6761bce1d846d856d7260b2e8c8338d86a16448",
+  "ticket": null,
+  "pr": null
+}
