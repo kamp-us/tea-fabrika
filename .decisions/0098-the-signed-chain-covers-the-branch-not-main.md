@@ -1,7 +1,7 @@
 ---
 id: 0098
 title: The signed chain covers a branch's own change, from where it left main to its head, and a branch behind main is never refused for that
-status: amended-in-part by [0110](0110-merge-queue-is-fabrika-programs.md), [0161](0161-no-step-signing-by-hand.md)
+status: accepted
 date: 2026-11-11
 tags: [commits, signing, chain, merge, behind, main, release]
 ---
@@ -69,6 +69,9 @@ branch head's tree. A branch that is behind main is checked the same way as one 
 - After a squash, the chain is read against the pull request's own change, not against whatever
   main held when it landed.
 - A merge of main into a branch is still a `lead` link when one is made. It is no longer required.
+- The chain is made wherever signing runs. Today's hand-run tooling makes plain commits, with no
+  signed link, and the `commits` check no longer gates a merge
+  ([0161](0161-no-step-signing-by-hand.md)); signing stays the design for `next/`'s own pipeline.
 
 **The merge cycle is not the release cycle.** A pull request lands when its own checks pass. Main
 turning red after two pull requests clash is a new ticket, fixed the same turn, not a reason to
@@ -87,7 +90,8 @@ make every pull request wait on every other.
   the time of one lint run.
 - The cost: the chain no longer proves the squash's tree by itself. The squash is the head's
   change applied to main by a clean merge, and the lint on the true merge is the check on it
-  ([0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)).
+  ([0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)). The merge queue closes
+  this gap in its secure stage ([0110](0110-merge-queue-is-fabrika-programs.md)).
 - Main can be red for a short time after a clash that only tests or types would catch. What we
   watch is how often.
 - Not decided here: moving tests off the pull request and onto a schedule, as mutation already is
