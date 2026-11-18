@@ -4,6 +4,7 @@
 // own passkey and signs with it, so only the client data is damaged.
 import { describe, expect, it, vi } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { subtle } from "./internal/binary.ts";
@@ -44,7 +45,7 @@ const call = (method: Method, bytes: Uint8Array<ArrayBuffer>) => {
 };
 
 /** A spy on one WebCrypto method that rejects with `failure`, restored when the Effect ends. */
-const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A, E>) =>
+const rejecting = <A, E>(method: Method, failure: object, work: Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => vi.spyOn(crypto.subtle, method).mockRejectedValue(failure)),
     () => work,
@@ -80,7 +81,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
 });
 
 const field = (value: string | Uint8Array) => {
-  const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const bytes = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(bytes.length);
 

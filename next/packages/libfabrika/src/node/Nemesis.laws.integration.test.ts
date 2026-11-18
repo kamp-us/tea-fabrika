@@ -8,7 +8,9 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
@@ -282,7 +284,7 @@ NemesisTest.suite({
 
         const health = sql
           .exec("SELECT * FROM measurements")
-          .filter((row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]));
+          .filter((row) => Predicate.isString(row["piece"]) && /nemesis/i.test(row["piece"]));
 
         return { rows, health };
       }).pipe(Effect.orDie),
@@ -299,7 +301,11 @@ NemesisTest.suite({
     } else {
       sql.exec(
         "UPDATE entries SET pos=? WHERE stream=? AND id=?",
-        kind === "zero" ? 0 : kind === "negative" ? -1 : 1.5,
+        Match.value(kind).pipe(
+          Match.when("zero", () => 0),
+          Match.when("negative", () => -1),
+          Match.orElse(() => 1.5),
+        ),
         inbox("checklist:1"),
         key,
       );

@@ -7,7 +7,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Layer, Match, Predicate, Schema, Scope, Stream } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
@@ -197,7 +197,7 @@ const replyRows = (sql: Sql, id: string) =>
         .exec(`SELECT * FROM "${table}"`)
         .flatMap((row) =>
           Object.entries(row).flatMap(([column, value]) =>
-            typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
+            Predicate.isString(value) && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
           ),
         ),
     );
@@ -209,7 +209,7 @@ const replyCells = (sql: Sql): ReadonlyArray<string> =>
     .map(({ name }) => String(name))
     .filter((table) => !KNOWN.has(table))
     .flatMap((table) => sql.exec(`SELECT * FROM "${table}"`).flatMap((row) => Object.values(row)))
-    .filter((cell): cell is string => typeof cell === "string");
+    .filter((cell): cell is string => Predicate.isString(cell));
 
 let counter = 0;
 
@@ -371,6 +371,7 @@ const walk = (
     });
 
     const sorted = (view: unknown) => {
+      // SAFETY: the view compared here is this program's own model, which holds `notes`.
       const notes = (view as Model).notes;
 
       return { notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => a.localeCompare(b))) };
@@ -436,6 +437,7 @@ const walk = (
         errors.push(Cause.pretty(exit.cause));
         // A throw or defect is not a typed failure.
         expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
+        // SAFETY: the expect above failed the law unless the cause holds a typed failure, a RunnerFailure, and the next expect fails it unless that failure is a RepliesError.
         const error = Cause.squash(exit.cause) as RepliesError;
         expect(error._tag).toBe("RepliesError");
         expect(error.reason).toBe("bad_row");
@@ -485,6 +487,7 @@ const walk = (
       } else if (move === "reuse") {
         // The same letter with one bound part changed: its payload, or for a refusal its caller.
         const prior = nth(intact, step.kind);
+        // SAFETY: this letter was a Save the walk sent, so its input is a Save.
         const input = prior.letter.envelope.input as typeof Save.Type;
         const parts = prior.first._tag === "refused" ? 3 : 1;
         const part = step.pick % parts;
@@ -566,23 +569,24 @@ const walk = (
         const prior = nth(stored, step.kind);
         const located = replyRows(live.inbox, prior.letter.id);
         expect(located, "one stored JSON value holds the refusal").toHaveLength(1);
+        // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
+        // SAFETY: the located value is a stored JSON object, the refusal.
         const json = JSON.parse(value) as Record<string, unknown>;
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
 
-        const cell =
-          kind === "json"
-            ? `${value.slice(0, -1)}${step.secret}`
-            : kind === "missing"
-              ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
-                )
-              : kind === "key"
-                ? JSON.stringify({ ...json, id: `${prior.letter.id}-other` })
-                : kind === "accepted"
-                  ? JSON.stringify({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
-                  : JSON.stringify({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) });
+        const cell = Match.value(kind).pipe(
+          Match.when("json", () => `${value.slice(0, -1)}${step.secret}`),
+          Match.when("missing", () =>
+            JSON.stringify(Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length]))),
+          ),
+          Match.when("key", () => JSON.stringify({ ...json, id: `${prior.letter.id}-other` })),
+          Match.when("accepted", () =>
+            JSON.stringify({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) }),
+          ),
+          Match.orElse(() => JSON.stringify({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) })),
+        );
 
         secrets.push(step.secret);
         live.inbox.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, cell, value);

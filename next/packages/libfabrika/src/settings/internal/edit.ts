@@ -57,7 +57,7 @@ export const prefix = (parent: Path, path: Path): boolean =>
 const same = (left: Path, right: Path): boolean => left.length === right.length && prefix(left, right);
 
 /** @internal */
-export const read = (value: unknown, path: Path): unknown =>
+export const read = (value: Index["value"], path: Path): unknown =>
   path.reduce<unknown>(
     (parent, key) => (Predicate.hasProperty(parent, key) && Object.hasOwn(parent, key) ? parent[key] : undefined),
     value,

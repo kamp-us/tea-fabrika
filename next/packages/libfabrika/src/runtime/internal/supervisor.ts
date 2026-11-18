@@ -50,7 +50,7 @@ const CodeChange = Schema.Struct({
   ran: Schema.Array(Text),
   origin: From,
   pos: Millis,
-  view: Schema.Unknown,
+  view: Schema.Json,
   wake: Schema.NullOr(Millis),
   maxDeliveries: Schema.NullOr(Deliveries),
 }).check(
@@ -209,7 +209,7 @@ const DEAD = Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }).
 const unchanged = (s: Supervision) => [s, []] as const;
 
 const crashReason = (failure: Failure) =>
-  failure._tag === "saved" ? "saved_letter" : failure._tag === "fresh" ? "step" : "interrupted";
+  Failure.match(failure, { saved: () => "saved_letter", fresh: () => "step", interrupted: () => "interrupted" });
 
 /** The successor's start request, after the process that ended. */
 const again = (s: Supervision, id: string, after: string, reason: string, code: { program: string; hash: string }) =>
@@ -302,6 +302,7 @@ export const supervisor = Machine.make({
   model: Supervision,
   msg: Msg,
   cmds: [],
+  // SAFETY: `types` only carries the Ctx type; tea never reads this value at run time.
   types: { ctx: {} as Ctx },
   init: (saved, ctx) => [
     saved ??

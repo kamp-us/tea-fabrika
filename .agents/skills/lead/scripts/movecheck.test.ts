@@ -1,3 +1,4 @@
+import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { moveFaults, partFaults, renameFaults, splitFaults } from "./movecheck.ts";
@@ -211,11 +212,11 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
             fates[n] === "moved"
               ? []
               : [
-                  fates[n] === "elsewhere"
-                    ? `${move.to}.elsewhere.ts`
-                    : fates[n] === "wrong-source"
-                      ? move.to
-                      : move.from,
+                  Match.value(fates[n]).pipe(
+                    Match.when("elsewhere", () => `${move.to}.elsewhere.ts`),
+                    Match.when("wrong-source", () => move.to),
+                    Match.orElse(() => move.from),
+                  ),
                 ],
           );
 

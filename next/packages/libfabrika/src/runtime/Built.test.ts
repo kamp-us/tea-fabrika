@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -108,6 +108,7 @@ describe("P16 checked built tables", () => {
         fc.constantFrom("text/html", "application/json", "text/javascript"),
         fc.oneof(fc.integer(), fc.boolean(), fc.constant(null)),
         async (rows, assets, junk, route, type, other) => {
+          // SAFETY: the rows generator above draws at least two rows.
           const [a, b] = rows as [(typeof rows)[0], (typeof rows)[0]];
           const asset = assets[0]!;
 
@@ -145,7 +146,7 @@ describe("P16 checked built tables", () => {
               assets: { [asset.route]: { hash: sha(String(other)), type: asset.type, body: other } },
             },
           ]) {
-            if (raw === junk && typeof junk === "object" && junk !== null) {
+            if (raw === junk && Predicate.isObjectOrArray(junk)) {
               continue;
             }
 

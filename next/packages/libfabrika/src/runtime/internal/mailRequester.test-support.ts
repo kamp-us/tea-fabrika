@@ -4,7 +4,7 @@
 // a late one leaves an answered request as it is. A permanent send refusal moves it to `failed`.
 // It shares the message shape with the responder, never the responder's code.
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Schema, Predicate } from "effect";
 import { Program } from "../Program.ts";
 import { send } from "../Send.ts";
 
@@ -70,11 +70,7 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
           : [s, []],
       send_ok: (s) => [s, []],
       send_err: (s, m) =>
-        s._tag === "waiting" &&
-        m.cmd.m !== null &&
-        typeof m.cmd.m === "object" &&
-        "ref" in m.cmd.m &&
-        m.cmd.m.ref === s.ref
+        s._tag === "waiting" && Predicate.isObjectOrArray(m.cmd.m) && "ref" in m.cmd.m && m.cmd.m.ref === s.ref
           ? [Model.cases.failed.make({ ref: s.ref, reason: m.error._tag }), []]
           : [s, []],
     },

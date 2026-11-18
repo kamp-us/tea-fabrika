@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-as-no-runtime-typeof-2-build1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:10:05-08:00",
+  "ended": "2026-11-15T22:29:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Build step of anti-slop judgment slice AS-no-runtime-typeof-2 (decision 0563 and its amendment), in next/ and our tooling, on the tests step's head d27180154. Rule anti-slop/no-runtime-typeof forced to error in a scratch config outside the repo, with absolute override globs over the slice's folders. Product-file hits met: 65, the tests step's count, recounted here; hits in pull request 1366's files (9 files) were not touched and wait on 1366. Fixed by hand edits through a scratch replace script outside the repo: 62, each typeof check turned into the Effect Predicate guard that answers the same (isString, isNumber, isObjectOrArray for typeof object and not null, isObject where the old code also excluded arrays, isTagged for an object whose _tag is one value, hasProperty in one JSON note read). Three side changes the fix needed: Patch.ts drops its own isPlain helper for Predicate.isObject, as Effect's AGENTS.md asks; control.ts had the same reason check twice in one ternary, and the unreachable copy went; quest.ts newly imports effect, so fabrika/no-raw-try-catch blocked its three JSON.parse try/catch blocks, which now read through Result.try as chain.ts does. NodeSqlite.ts's refusal text for a column the ledger never writes now says a big integer or a blob, as its own doc comment does, in place of the JS type name. Left: 3, all JS type labels that are right as written: next/packages/libfabrika/src/runtime/Program.ts:574 and next/packages/libfabrika/src/telemetry/Trace.ts:329 (the error class label, which the integration laws compute the same way), and next/packages/libfabrika/src/cloudflare/platform.ts:56 (a thrown non-Error's description). Their fit is the 0563 ignore line, which fails lint until the lock names the rule's folders, so none was added. No lock line, no .oxlintrc.json change, no test file touched.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 19,
+  "note": "Checks at the working tree on d27180154: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 fails only on oxlint-plugins/anti-slop.ts's audit asking to add folders now at zero to the rule's block (.agents/**, libfabrika src/*, access, processes, schedules, tezgah, tuval, programs checklist, counter, pipeline), which the owner ruled comes later with the locks; every other part passed. The list ratchet exits 0. One pnpm typecheck: exit 0 in all 30 projects. loosening.sh: 0 hits. Tests: the 15 plain test files beside the touched files, one at a time, all green (Program.test.ts law D4 included, 44 tests); then the 114 plain test files that import a touched module, 1295 tests: all green but .agents/skills/lead/scripts/box.test.ts, whose 40 failures are ssh-keygen missing in this cloud box (spawnSync ssh-keygen ENOENT) and fail the same at the base. vitest --changed origin/main was refused by the 0178 guard (123 real-resource files), and running it with the cloud box override was not allowed in this session, so the .integration. laws the touched files reach (for example next/packages/libfabrika/src/ledger/LedgerSpans.integration.test.ts and the build and supervision laws) did not run here; a scheduled.yaml run on the branch proves them.",
+  "step": "build"
+}

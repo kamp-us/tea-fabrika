@@ -600,6 +600,7 @@ const lawsFor = (
 };
 
 describe("P33, the process fold ignores events not written by the brain", () => {
+  // SAFETY: `Object.keys` of the event union's `cases` answers exactly its case names.
   for (const tag of Object.keys(ProcessEvent.cases) as Array<keyof typeof ProcessEvent.cases>) {
     it.effect(`the fold ignores an event tagged ${tag} whose by is not the brain's writer`, () =>
       check(

@@ -113,6 +113,7 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
 
         const connection = Stub.make<ConnectionBinding>(() => refuse);
 
+        // SAFETY: fetch names only CONNECTION and PROJECT besides INSTANCE, and each answers with its stub above.
         // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles stand in for the two namespaces fetch can name
         const env = {
           INSTANCE: JSON.stringify(config),

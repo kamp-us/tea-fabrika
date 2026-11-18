@@ -111,7 +111,7 @@ const deliver: IsolateUsageTest.Deliver = (props, events, receive) =>
   Effect.acquireUseRelease(
     Effect.sync(() => new AbortController()),
     (controller) => {
-      // oxlint-disable-next-line fabrika/no-type-assertions -- fake platform namespace routes to the real recorder under the receiving object's tracer
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: fake platform namespace routes to the real recorder under the receiving object's tracer
       const env = {
         PROCESS: {
           getByName: (object: string) => ({
@@ -122,7 +122,7 @@ const deliver: IsolateUsageTest.Deliver = (props, events, receive) =>
         },
       } as unknown as Env;
 
-      // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform timing fields are needed; no platform type is named outside cloudflare/
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: only the platform timing fields are needed; no platform type is named outside cloudflare/
       return tail(env, props, events as unknown as Parameters<typeof tail>[2]);
     },
     (controller) => Effect.sync(() => controller.abort()),
@@ -211,7 +211,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
       admit: (msg: unknown) => Effect.runPromise(execution.admit(msg)),
     };
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform loader and opaque tail fetcher are doubled
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: only the platform loader and opaque tail fetcher are doubled
     const platform = { get: () => ({ getEntrypoint: () => rpc }) } as unknown as Parameters<typeof workerLoader>[0];
     const loader = workerLoader(platform, { "test/usage-fixture": CODE });
 
@@ -220,7 +220,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
       (held) => Effect.sync(() => held.abort()),
     );
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- an opaque platform tail represents this runner's independent usage invocation
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: an opaque platform tail represents this runner's independent usage invocation
     const bound = {
       fetch: () => Effect.runPromise(usage.pipe(Effect.as(new Response())), { signal: controller.signal }),
     } as unknown as NonNullable<Parameters<typeof loader.load>[2]>;
@@ -351,7 +351,7 @@ for (const accepted of [true, false]) {
           const written: Array<SpanRow> = [];
           const saved = { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER };
 
-          // oxlint-disable-next-line fabrika/no-type-assertions -- native storage handles only; the Process service and telemetry sink are real
+          // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: native storage handles only; the Process service and telemetry sink are real
           const ctx = {
             id: { name: JSON.stringify(["project-test", NAME]) },
             storage: {
@@ -366,7 +366,7 @@ for (const accepted of [true, false]) {
             },
           } as unknown as Parameters<typeof processRuntime>[0];
 
-          // oxlint-disable-next-line fabrika/no-type-assertions -- record RPC is captured at the platform edge; program execution must remain unopened
+          // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: record RPC is captured at the platform edge; program execution must remain unopened
           const env = {
             INSTANCE: JSON.stringify(START),
             PROJECT: { getByName: () => ({ settingsStart }) },
@@ -552,7 +552,7 @@ it.effect(
               },
             };
 
-            // oxlint-disable-next-line fabrika/no-type-assertions -- only native object handles are supplied; processRuntime and its loader are real
+            // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: only native object handles are supplied; processRuntime and its loader are real
             const ctx = {
               id: { name: JSON.stringify(["project-test", NAME]) },
               storage: {
@@ -577,7 +577,7 @@ it.effect(
               exports: loopbacks,
             } as unknown as Parameters<typeof processRuntime>[0];
 
-            // oxlint-disable-next-line fabrika/no-type-assertions -- native RPC handles and loader transport only; ledger, manager, runner and bindings stay real
+            // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: native RPC handles and loader transport only; ledger, manager, runner and bindings stay real
             const env = {
               INSTANCE: JSON.stringify(START),
               PROJECT: { getByName: () => project },
@@ -639,7 +639,7 @@ it.effect(
             const projectStore = yield* open;
             const projectValues = new Map<string, unknown>();
 
-            // oxlint-disable-next-line fabrika/no-type-assertions -- the Project receives only native SQL, storage and loopback handles
+            // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: the Project receives only native SQL, storage and loopback handles
             const projectCtx = {
               id: { name: "project-test" },
               storage: {
@@ -662,7 +662,7 @@ it.effect(
 
             const descriptors = new Map<string, typeof saved>();
 
-            // oxlint-disable-next-line fabrika/no-type-assertions -- native Process RPC handles only; descriptors come from the processes started below
+            // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: native Process RPC handles only; descriptors come from the processes started below
             const projectEnv = {
               ...env,
               PROCESS: {

@@ -8,7 +8,7 @@
 // so a failure always prints the count at the largest history the law uses.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Result, Schema, type Scope } from "effect";
+import { Effect, Layer, Result, Schema, type Scope, Predicate } from "effect";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -82,7 +82,7 @@ const counted = (sql: Sql) => {
 
       for (const row of rows) {
         for (const value of Object.values(row)) {
-          count.bytes += typeof value === "string" ? encoder.encode(value).length : 8;
+          count.bytes += Predicate.isString(value) ? encoder.encode(value).length : 8;
         }
       }
 
@@ -104,6 +104,7 @@ const layer = (sql: Sql, next: Effect.Effect<string>) =>
       ProcessManager.layer(
         {
           owner: Owner.cases.brain.make({}),
+          // SAFETY: PIDS holds 40 ids, so index 3, the brain's session here, is present.
           recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[3] as string }),
           by: BRAIN,
         },
@@ -154,6 +155,7 @@ const mail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     // counts differ only by the mail history.
     yield* ProcessManager.use((p) => p.info).pipe(Effect.provide(context), Effect.orDie);
 
+    // SAFETY: PIDS holds 40 ids, so the requester's id at index 0 is there.
     const source = { name: REQUESTER, process: PIDS[0] as string };
     let sent = 0;
 
@@ -178,6 +180,7 @@ const mail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
     /** T1041: the responder's live life reads up to `pos` and the brain records it. */
     const ack = (pos: number) =>
+      // SAFETY: PIDS holds 40 ids, and index 1 is the responder's live process.
       ProcessManager.use((p) => p.ack(PIDS[1] as string, pos, from({ by: BRAIN }))).pipe(
         Effect.provide(context),
         Effect.orDie,

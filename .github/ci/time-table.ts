@@ -86,8 +86,8 @@ const Report = Schema.Struct({
 });
 
 /** An error's message on one line, short enough for a table's note. */
-export const reasonOf = (error: unknown): string =>
-  (error instanceof Error ? error.message : String(error)).replaceAll(/\s+/g, " ").trim().slice(0, 300) ||
+export const reasonOf = (cause: unknown): string =>
+  (cause instanceof Error ? cause.message : String(cause)).replaceAll(/\s+/g, " ").trim().slice(0, 300) ||
   "no reason given";
 
 const unavailable = <A>(reason: string): Section<A> => ({ _tag: "unavailable", reason });

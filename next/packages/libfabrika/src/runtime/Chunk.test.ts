@@ -164,6 +164,7 @@ describe("T1041: a large output is cut into chunk letters", () => {
 
           case "repeat": {
             const k = at(a);
+            // SAFETY: `at` takes k modulo n, the length of chunks, so chunks[k] is there.
             list = [...chunks.slice(0, k + 1), chunks[k] as (typeof chunks)[number], ...chunks.slice(k + 1)];
             break;
           }
@@ -176,7 +177,9 @@ describe("T1041: a large output is cut into chunk letters", () => {
             const i = at(a);
             const j = (i + 1 + (b % (n - 1))) % n;
             const swapped = [...chunks];
+            // SAFETY: i and j are both taken modulo n, the length of chunks.
             swapped[i] = chunks[j] as (typeof chunks)[number];
+            // SAFETY: i and j are both taken modulo n, the length of chunks.
             swapped[j] = chunks[i] as (typeof chunks)[number];
             list = swapped;
             break;

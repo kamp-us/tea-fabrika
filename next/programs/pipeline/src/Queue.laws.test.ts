@@ -6,7 +6,7 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { ConfigProvider, Effect, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
@@ -157,12 +157,11 @@ const startAnswer = (p: Program, cmd: Start, cell: Cell, allowRefusal = true): M
           type: "start_child_ok",
           cmd,
           at: cell.at,
-          value:
-            which === 0
-              ? Started.cases.started.make({ process: pid, name: cmd.name, rev: 1 })
-              : which === 1
-                ? Started.cases.already_started.make({ process: pid, name: cmd.name })
-                : Started.cases.already_present.make({ process: pid, name: cmd.name }),
+          value: Match.value(which).pipe(
+            Match.when(0, () => Started.cases.started.make({ process: pid, name: cmd.name, rev: 1 })),
+            Match.when(1, () => Started.cases.already_started.make({ process: pid, name: cmd.name })),
+            Match.orElse(() => Started.cases.already_present.make({ process: pid, name: cmd.name })),
+          ),
         }
       : startRefusalAnswer(p, { ...cell, pick: which - 3 }),
   );
@@ -390,7 +389,7 @@ const choose = (walk: Walk, cell: Cell): Msg => {
   const sends = walk.history.filter((c) => c.type === "send");
   const queued = [...(m.current === null ? [] : [m.current]), ...m.line];
 
-  const moves: Array<() => unknown> = [
+  const moves: Array<() => object> = [
     () => enqueue(cell, (cell.pick % 10) + 1),
     () =>
       Mail.Drop.make({
@@ -427,7 +426,7 @@ const choose = (walk: Walk, cell: Cell): Msg => {
     );
   }
 
-  return Schema.decodeUnknownSync(p.msg)(moves[cell.move % moves.length]!());
+  return Schema.decodeSync(p.msg)(moves[cell.move % moves.length]!());
 };
 
 for (const law of [

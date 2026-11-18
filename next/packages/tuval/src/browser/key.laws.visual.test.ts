@@ -154,11 +154,13 @@ const stored = (page: Page) =>
           out.push({ kind: `key:${v.type}`, extractable: v.extractable, exported });
         } else if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
           out.push({ kind: "bytes", hex: hex(v) });
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- runs in the page through page.evaluate, where Effect is not loaded
         } else if (typeof v === "string") {
           out.push({
             kind: "string",
             hex: [...new TextEncoder().encode(v)].map((x) => x.toString(16).padStart(2, "0")).join(""),
           });
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- runs in the page through page.evaluate, where Effect is not loaded
         } else if (typeof v === "object" && v !== null) {
           for (const one of Object.values(v)) {
             await walk(one);

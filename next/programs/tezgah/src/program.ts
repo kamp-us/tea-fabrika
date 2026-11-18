@@ -101,8 +101,7 @@ type Step = readonly [
 
 const DIRS = { "tezgah.split_right": "row", "tezgah.split_down": "column" } as const;
 
-const holding = (m: Model, tile: string) =>
-  m.workspaces.find((w) => Layout.order(w.layout).includes(tile as Workspace.TileId));
+const holding = (m: Model, tile: string) => m.workspaces.find((w) => Layout.order(w.layout).some((id) => id === tile));
 
 const known = (m: Model, tile: string) => m.tiles.some((t) => t.id === tile) || m.starting.some((s) => s.tile === tile);
 

@@ -36,6 +36,7 @@ if (draft) {
     process.exit(1);
   }
 
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- the stdin JSON's one shape check, by hand: this script imports no effect, since an effect import makes its seven try blocks fabrika/no-raw-try-catch errors
   if (typeof text?.title !== "string" || text.title.trim() === "" || typeof text.body !== "string") {
     throw new Error("bot draft: title and body must be text");
   }

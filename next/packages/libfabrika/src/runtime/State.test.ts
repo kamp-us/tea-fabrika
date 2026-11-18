@@ -1,6 +1,6 @@
 // S3, next/. Saved.upgrade(saved, state, build) returns {saved, ran}; no I/O.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Match, Predicate, Schema } from "effect";
 
 const Model = Schema.Struct({ count: Schema.Int, step: Schema.Int });
 
@@ -67,31 +67,35 @@ describe("S3 saved state and named upgrades", () => {
               const raw = {
                 ...old,
                 model: { n: value },
-                v: fault === "future" ? 4 : fault === "zero" ? 0 : 1,
+                v: Match.value(fault).pipe(
+                  Match.when("future", () => 4),
+                  Match.when("zero", () => 0),
+                  Match.orElse(() => 1),
+                ),
               };
 
               const before = JSON.stringify(raw);
               const normal = state();
 
-              const upgrades =
-                fault === "gap"
-                  ? normal.upgrades.slice(1)
-                  : fault === "duplicate"
-                    ? [...normal.upgrades, normal.upgrades[0]!]
-                    : fault === "throw"
-                      ? [
-                          {
-                            name: "broken",
-                            from: 1,
-                            run: () => {
-                              throw new Error("upgrade detail");
-                            },
-                          },
-                          normal.upgrades[1]!,
-                        ]
-                      : fault === "decode"
-                        ? [normal.upgrades[0]!, { name: "bad_model", from: 2, run: () => ({ count: "bad", step: 1 }) }]
-                        : normal.upgrades;
+              const upgrades = Match.value(fault).pipe(
+                Match.when("gap", () => normal.upgrades.slice(1)),
+                Match.when("duplicate", () => [...normal.upgrades, normal.upgrades[0]!]),
+                Match.when("throw", () => [
+                  {
+                    name: "broken",
+                    from: 1,
+                    run: () => {
+                      throw new Error("upgrade detail");
+                    },
+                  },
+                  normal.upgrades[1]!,
+                ]),
+                Match.when("decode", () => [
+                  normal.upgrades[0]!,
+                  { name: "bad_model", from: 2, run: () => ({ count: "bad", step: 1 }) },
+                ]),
+                Match.orElse(() => normal.upgrades),
+              );
 
               expect(() => Saved.upgrade(raw, { ...normal, upgrades }, "new-build")).toThrowError(
                 expect.objectContaining({ _tag: "ProgramDown", reason: "saved_state" }),
@@ -115,7 +119,7 @@ describe("S3 saved state and named upgrades", () => {
         run: (value: unknown) => {
           Object.assign(Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Int }))(value), { n: 99 });
 
-          if (typeof value === "object" && value !== null) {
+          if (Predicate.isObjectOrArray(value)) {
             Object.assign(value, { n: 99 });
           }
 

@@ -16,7 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
@@ -202,7 +202,7 @@ export const childInstance = Effect.fnUntraced(function* (
 });
 
 /** A letter for the door's `process.send`. */
-export const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
+export const letter = (pid: string, id: string, m: Schema.Json) => ({ pid, letter: id, m, sentAt: SENT, seen: 0 });
 
 // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: platform RPC doubles return Promises to the public client adapters
 const remote = <A>(work: Effect.Effect<A>) => Effect.runPromise(work);
@@ -275,7 +275,7 @@ export const childProject = Effect.fnUntraced(function* () {
         // Keep each occurrence, including repeated reads before and after the write turn.
         observe(query.replace(/\s+/g, " ").trim());
 
-        const process = typeof params[0] === "string" ? params[0] : undefined;
+        const process = Predicate.isString(params[0]) ? params[0] : undefined;
 
         if (query === "SELECT value FROM dev_descriptors WHERE process=?") {
           trip("owner");
@@ -325,7 +325,7 @@ export const childProject = Effect.fnUntraced(function* () {
     },
   };
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage members read by the public Project service; workerd alone constructs the branded handle
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies the storage members read by the public Project service; workerd alone constructs the branded handle
   const ctx = {
     id: { name: PROJECT },
     storage,
@@ -333,7 +333,7 @@ export const childProject = Effect.fnUntraced(function* () {
     exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
   } as unknown as DurableObjectState;
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- only platform transports are supplied; authority, ledger and start logic are real
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: only platform transports are supplied; authority, ledger and start logic are real
   const env = {
     INSTANCE: JSON.stringify(
       RecordWireTest.settingsFixture({
@@ -348,6 +348,7 @@ export const childProject = Effect.fnUntraced(function* () {
     ),
     PROCESS: {
       getByName: (name: string) => {
+        // SAFETY: the name is the JSON pair of namespace and registered name that the runtime writes for getByName.
         const [, registered] = JSON.parse(name) as [string, string];
 
         return {
@@ -475,7 +476,7 @@ export const childProject = Effect.fnUntraced(function* () {
       sql
         .exec("SELECT name FROM sqlite_master WHERE type='table'")
         .flatMap(({ name }) =>
-          typeof name === "string" ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
+          Predicate.isString(name) ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
         ),
     observe: (operation?: number, error?: Error) => {
       operations = [];

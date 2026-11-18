@@ -6,7 +6,7 @@
  * allows, in the same ledger turn.
  */
 import { applyCell } from "@demlik/tea";
-import { Equal, Option, Result, Schema } from "effect";
+import { Equal, Option, Predicate, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -746,7 +746,7 @@ export class ProcessTable {
    * its own recipient, and only while its watch is live. Anything else is plain mail.
    */
   deliver(entry: Entry, m: unknown, process: string): "mail" | "signal" | "drop" {
-    if (typeof m !== "object" || m === null || !("_tag" in m) || m._tag !== "DOWN") {
+    if (!Predicate.isTagged(m, "DOWN")) {
       return "mail";
     }
 

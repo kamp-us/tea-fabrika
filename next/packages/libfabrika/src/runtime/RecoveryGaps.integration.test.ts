@@ -4,7 +4,7 @@
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Schema, Predicate } from "effect";
 import { TestClock } from "effect/testing";
 import {
   Activity,
@@ -77,7 +77,7 @@ const world = Effect.fnUntraced(function* () {
 
   const controls = {
     cut: "",
-    hits: [] as string[],
+    hits: Array.of<string>(),
     steps: 0,
     commands: 0,
     owns: 0,
@@ -353,7 +353,7 @@ describe("P34 interrupted recovery", () => {
                 for (let n = 0; n < 8 && w.controls.hits.length === 0; n++) {
                   const deadline = w.alarms.at(-1);
 
-                  if (typeof deadline !== "number") {
+                  if (!Predicate.isNumber(deadline)) {
                     break;
                   }
 
@@ -373,7 +373,7 @@ describe("P34 interrupted recovery", () => {
                   );
                   const deadline = w.alarms.at(-1);
 
-                  if (typeof deadline === "number") {
+                  if (Predicate.isNumber(deadline)) {
                     yield* TestClock.setTime(deadline);
                     yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline))).pipe(Effect.provide(w.layer()));
                   }
@@ -388,7 +388,7 @@ describe("P34 interrupted recovery", () => {
                 for (let n = 0; n < 2; n++) {
                   const at = w.alarms.at(-1);
 
-                  if (typeof at !== "number") {
+                  if (!Predicate.isNumber(at)) {
                     break;
                   }
 

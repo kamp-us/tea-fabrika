@@ -59,6 +59,7 @@ import {
   Fiber,
   Layer,
   Logger,
+  Match,
   Option,
   Predicate,
   Result,
@@ -132,7 +133,7 @@ const u32 = (n: number) => {
 };
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
 
   return Buffer.concat([u32(b.length), b]);
 };
@@ -440,6 +441,7 @@ const world = Effect.fnUntraced(function* (
     notify: (_client: string, _news: News): Effect.Effect<void, LedgerError> => Effect.void,
     next: () => ProcessIdGenerator.use((g) => g.next),
     // What the injected program answers a delivered letter with, as the runner's Sent does.
+    // SAFETY: the answer starts unset; a law sets it only to a refused Sent value.
     answer: undefined as typeof Sent.cases.refused.Type | undefined,
   };
 
@@ -642,7 +644,7 @@ const failedSelection = (body: string): never => {
   throw new Error(body);
 };
 
-const auditProgram = (select: (m: typeof AuditMessage.Type) => unknown) => ({
+const auditProgram = <A>(select: (m: typeof AuditMessage.Type) => A) => ({
   name: "audit-fixture",
   machine: Machine.make({
     model: Schema.Null,
@@ -880,7 +882,7 @@ const wire = Effect.fnUntraced(function* (
     PROJECT: {
       getByName: () => ({
         settingsStart: async () => StartsTest.reply(input),
-        route: (_client: string, method: string, params: unknown) =>
+        route: (_client: string, method: string, params: Schema.Json | undefined) =>
           Effect.runPromise(d.route(client, method, params).pipe(Effect.provideContext(projectContext))),
       }),
     },
@@ -979,16 +981,18 @@ describe("T843 sender budget, next/", () => {
             ];
 
             const move: string = moves[pick % moves.length]!;
-            const method = move === "read" ? "ledger.read" : move === "unknown" ? "missing.method" : "process.send";
 
-            const params =
-              move === "read"
-                ? { stream: "empty", after: 0 }
-                : move === "reserved"
-                  ? { ...request("same-letter"), by: "claimed-key" }
-                  : move === "bad"
-                    ? { m: false }
-                    : request("same-letter");
+            const method = Match.value(move).pipe(
+              Match.when("read", () => "ledger.read"),
+              Match.when("unknown", () => "missing.method"),
+              Match.orElse(() => "process.send"),
+            );
+            const params = Match.value(move).pipe(
+              Match.when("read", () => ({ stream: "empty", after: 0 })),
+              Match.when("reserved", () => ({ ...request("same-letter"), by: "claimed-key" })),
+              Match.when("bad", () => ({ m: false })),
+              Match.orElse(() => request("same-letter")),
+            );
 
             const before = w.usedInputs.length;
             const sent = w.deliveries.length;
@@ -1003,13 +1007,12 @@ describe("T843 sender budget, next/", () => {
               expect(w.deliveries).toHaveLength(sent);
             } else {
               expect(answer).toMatchObject(
-                move === "reserved"
-                  ? { _tag: "refused", reason: "reserved" }
-                  : move === "bad"
-                    ? { _tag: "refused", reason: "bad_input" }
-                    : move === "unknown"
-                      ? { _tag: "refused", reason: "unknown_method" }
-                      : { _tag: "ok" },
+                Match.value(move).pipe(
+                  Match.when("reserved", () => ({ _tag: "refused", reason: "reserved" })),
+                  Match.when("bad", () => ({ _tag: "refused", reason: "bad_input" })),
+                  Match.when("unknown", () => ({ _tag: "refused", reason: "unknown_method" })),
+                  Match.orElse(() => ({ _tag: "ok" })),
+                ),
               );
               passed++;
               delivered ||= move === "send";
@@ -1490,7 +1493,11 @@ describe("T843 sender budget, next/", () => {
             expect(now._tag).toBe("online");
             const moves = now._tag === "online" && !now.busy ? ["send", "read", "stamped", "unknown"] : ["send"];
             const move = moves[choices[n % choices.length]! % moves.length]!;
-            const method = move === "read" ? "ledger.wait" : move === "unknown" ? "missing.method" : "process.send";
+            const method = Match.value(move).pipe(
+              Match.when("read", () => "ledger.wait"),
+              Match.when("unknown", () => "missing.method"),
+              Match.orElse(() => "process.send"),
+            );
 
             const params =
               move === "read"
@@ -1593,7 +1600,7 @@ const rawRows = (db: DatabaseSync, stream: string) =>
     ? db.prepare("SELECT * FROM entries WHERE stream=? ORDER BY rev").all(stream)
     : [];
 
-const request = (letter: string, m: unknown = comment()) => ({
+const request = (letter: string, m: Schema.Json = comment()) => ({
   pid: PROCESS,
   letter,
   m,
@@ -1975,29 +1982,29 @@ describe("P10 review regressions", () => {
 
   // The spied WebCrypto call fails once, by a throw or a rejection, with the generated value.
   type Spy = {
-    mockImplementationOnce: (fn: () => never) => unknown;
-    mockRejectedValueOnce: (value: unknown) => unknown;
+    mockImplementationOnce: (fn: () => never) => void;
+    mockRejectedValueOnce: (value: unknown) => void;
     mockRestore: () => void;
   };
 
-  const failOnce = (spy: Spy, thrown: unknown, sync: boolean) =>
+  const failOnce = (spy: Spy, cause: unknown, sync: boolean) =>
     sync
       ? spy.mockImplementationOnce(() => {
-          throw thrown;
+          throw cause;
         })
-      : spy.mockRejectedValueOnce(thrown);
+      : spy.mockRejectedValueOnce(cause);
 
   type Edge = {
     readonly name: string;
     readonly spy: () => Spy;
     readonly fail: (w: World, armed: Armed) => Effect.Effect<unknown, unknown>;
-    readonly refused: (failure: unknown, thrown: unknown) => void;
+    readonly refused: (failure: unknown, cause: unknown) => void;
   };
 
-  const gatewayCrypto = (failure: unknown, thrown: unknown) => {
+  const gatewayCrypto = (failure: unknown, cause: unknown) => {
     assert(Schema.is(GatewayError)(failure));
     expect(failure).toMatchObject({ _tag: "GatewayError", reason: { _tag: "Crypto" } });
-    expect(failure.reason.cause).toBe(thrown);
+    expect(failure.reason.cause).toBe(cause);
   };
 
   const ledgerCrypto = (failure: unknown) => {
@@ -2005,14 +2012,14 @@ describe("P10 review regressions", () => {
     expect(failure).toMatchObject({ _tag: "LedgerError", reason: "crypto" });
   };
 
-  const membershipCrypto = (failure: unknown, thrown: unknown) => {
+  const membershipCrypto = (failure: unknown, cause: unknown) => {
     assert(Schema.is(SessionManagerError)(failure));
     expect(failure).toMatchObject({
       _tag: "SessionManagerError",
       reason: { _tag: "Membership", cause: { _tag: "LedgerError", reason: "crypto" } },
     });
     assert(Schema.is(LedgerError)(failure.reason.cause));
-    expect(failure.reason.cause.cause).toBe(thrown);
+    expect(failure.reason.cause.cause).toBe(cause);
   };
 
   const edges: ReadonlyArray<Edge> = [
@@ -2372,7 +2379,7 @@ describe("P10 review regressions", () => {
 
         expect(rows()).toHaveLength(2);
         assert(
-          "disconnect" in d && typeof d.disconnect === "function",
+          "disconnect" in d && Predicate.isFunction(d.disconnect),
           "Gateway.disconnect must handle a closed connection",
         );
         yield* d.disconnect(closed.client);
@@ -2653,7 +2660,11 @@ describe("P10 door admission and waiting", () => {
 
                 expect(answer).toMatchObject({
                   _tag: "refused",
-                  reason: kind === "unknown" ? "not_granted" : kind === "no version" ? "no_version" : "bad_signature",
+                  reason: Match.value(kind).pipe(
+                    Match.when("unknown", () => "not_granted"),
+                    Match.when("no version", () => "no_version"),
+                    Match.orElse(() => "bad_signature"),
+                  ),
                 });
                 expect((yield* d.knock(client, { label: "Pending" }))._tag).toBe(kind === "unknown" ? "ok" : "refused");
                 expect(rawRows(w.db, "gateway/access")).toEqual([]);
@@ -3308,38 +3319,43 @@ describe("P10 signed membership changes", () => {
               yield* Effect.gen(function* () {
                 const d = yield* Gateway;
 
-                const text =
-                  kind === "granted"
-                    ? grantText({
-                        id: "wrong-to",
-                        key: w.otherWindow.raw,
-                        for: PERSON,
-                        to: value,
-                        as: "window",
-                        saw: SAW,
-                        sentAt: SENT,
-                      })
-                    : kind === "revoked"
-                      ? revokeText({
-                          id: "wrong-to",
-                          key: w.window.raw,
-                          for: PERSON,
-                          to: value,
-                          saw: TOOK,
-                          sentAt: SENT,
-                        })
-                      : addText({
-                          id: "wrong-to",
-                          for: PERSON,
-                          to: value,
-                          adds: Adds.cases.person.make({
-                            key: w.otherRoot.line,
-                            window: w.otherWindow.raw,
-                          }),
-                          drops: [],
-                          saw: ADD_SAW,
-                          sentAt: SENT,
-                        });
+                const text = Match.value(kind).pipe(
+                  Match.when("granted", () =>
+                    grantText({
+                      id: "wrong-to",
+                      key: w.otherWindow.raw,
+                      for: PERSON,
+                      to: value,
+                      as: "window",
+                      saw: SAW,
+                      sentAt: SENT,
+                    }),
+                  ),
+                  Match.when("revoked", () =>
+                    revokeText({
+                      id: "wrong-to",
+                      key: w.window.raw,
+                      for: PERSON,
+                      to: value,
+                      saw: TOOK,
+                      sentAt: SENT,
+                    }),
+                  ),
+                  Match.orElse(() =>
+                    addText({
+                      id: "wrong-to",
+                      for: PERSON,
+                      to: value,
+                      adds: Adds.cases.person.make({
+                        key: w.otherRoot.line,
+                        window: w.otherWindow.raw,
+                      }),
+                      drops: [],
+                      saw: ADD_SAW,
+                      sentAt: SENT,
+                    }),
+                  ),
+                );
 
                 expect(yield* d.grant({ text, armored: yield* w.root.sign(text) })).toMatchObject({
                   _tag: "refused",
@@ -3691,7 +3707,7 @@ describe("P10 inputs, retries and signer", () => {
       junk: { reason: Schema.Literals(["wrong", "missing"]) },
     });
 
-    type MessageState = { readonly schema: typeof schema; readonly m: Readonly<Record<string, unknown>> };
+    type MessageState = { readonly schema: typeof schema; readonly m: Schema.JsonObject };
 
     const editMessage = (state: MessageState, edit: typeof Broken.Type): Arbitrary.Arbitrary<MessageState> => {
       const missing = edit._tag === "missing" || (edit._tag === "junk" && edit.reason === "missing");
@@ -3710,7 +3726,8 @@ describe("P10 inputs, retries and signer", () => {
 
           const replacement = missing
             ? Arbitrary.Constant(undefined)
-            : Arbitrary.schema(SpoofedWrite.fields.value).pipe(
+            : // A wrong value is one the door's JSON params can carry; a missing one is the edit above.
+              Arbitrary.schema(Schema.Json).pipe(
                 Arbitrary.filter((value) => Schema.decodeUnknownResult(field)(value)._tag === "Failure"),
               );
 
@@ -3733,7 +3750,8 @@ describe("P10 inputs, retries and signer", () => {
             Arbitrary.map(({ value, junk }) => {
               const m = { ...state.m };
 
-              if (missing) {
+              // Only a missing edit draws no value, since a wrong one is JSON.
+              if (value === undefined) {
                 delete m[key];
               } else {
                 m[key] = value;
@@ -3751,7 +3769,8 @@ describe("P10 inputs, retries and signer", () => {
       edits: Arbitrary.array(Arbitrary.schema(Broken), { minLength: 1, maxLength: Object.keys(schema.fields).length }),
       key: Arbitrary.schema(SpoofedWrite.fields.key),
       inner: Arbitrary.schema(SpoofedWrite.fields.inner),
-      value: Arbitrary.schema(SpoofedWrite.fields.value),
+      // The stamp is a JSON value, as the door's params are (ticket 1057): JSON has no undefined.
+      value: Arbitrary.schema(Schema.Json),
     }).pipe(
       Arbitrary.flatMap(({ m, edits, ...stamp }) =>
         edits
@@ -4094,7 +4113,7 @@ describe("P10 inputs, retries and signer", () => {
                   reason === "dead" ? { _tag: "refused", reason: "dead" } : { _tag: "ok", result: answered };
 
                 // These are JSON replies: -0 and 0 have the same wire representation.
-                const wire = (value: unknown) => JSON.parse(JSON.stringify(value));
+                const wire = (value: object) => JSON.parse(JSON.stringify(value));
                 expect(wire(yield* d.route(client, "process.send", params))).toEqual(wire(expected));
                 const delivered = w.deliveries.length;
                 // A settled retry must use the saved result rather than call the program again.
@@ -4363,13 +4382,12 @@ describe("P10 passkey roots and recovery", () => {
               : {
                   passkey: {
                     ...p.add.adds.passkey!,
-                    ...(missing === "verification"
-                      ? { proof: noUv.armored }
-                      : missing === "backup state"
-                        ? { bs: false }
-                        : missing === "origin"
-                          ? { origin: "https://other.test" }
-                          : { be: false }),
+                    ...Match.value(missing).pipe(
+                      Match.when("verification", () => ({ proof: noUv.armored })),
+                      Match.when("backup state", () => ({ bs: false })),
+                      Match.when("origin", () => ({ origin: "https://other.test" })),
+                      Match.orElse(() => ({ be: false })),
+                    ),
                   },
                 };
 

@@ -16,6 +16,7 @@ import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Match from "effect/Match";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -25,7 +26,7 @@ import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
 import { type Tile, type TileId, TezgahView, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
-import { optimisticState, type PendingMutation, type TezgahClient, tezgahMachine } from "./Tezgah.ts";
+import { optimisticState, type PendingMutation, type TezgahClient, type TezgahMsg, tezgahMachine } from "./Tezgah.ts";
 import {
   type Handling,
   handle,
@@ -45,7 +46,7 @@ const Json = Schema.fromJsonString(Schema.Unknown);
 /** A tile's fields as every client reads them off the wire: none may be left out. */
 const FIELDS = ["id", "n", "shows", "program", "child", "keep", "cursor"] as const;
 
-const step = (m: unknown, msg: unknown) => applyCell(tezgahMachine as never, m as never, msg as never)[0] as never;
+const step = (m: TezgahClient, msg: TezgahMsg) => applyCell(tezgahMachine, m, msg)[0];
 
 describe("Desk S2a L11: tezgah's view in the window", () => {
   it.prop(
@@ -61,6 +62,7 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
       expect(JSON.stringify(Schema.encodeSync(TezgahView)(same)), "L11: the wire view decodes to the view it was").toBe(
         JSON.stringify(wire),
       );
+      // SAFETY: `wire` is the JSON of an encoded TezgahView, an object whose `tiles` is an array of tile objects.
       const tiles = (wire as { readonly tiles: ReadonlyArray<Record<string, unknown>> }).tiles;
       expect(tiles, "L11: one wire tile per tile").toHaveLength(view.tiles.length);
 
@@ -69,7 +71,7 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
           expect.arrayContaining([...FIELDS].sort()),
         );
         expect(tile["child"], "L11: the wire says whether tezgah started the tile").toBe(view.tiles[i]?.child);
-        expect(typeof tile["child"], "L11: child is a boolean on the wire").toBe("boolean");
+        expect(Predicate.isBoolean(tile["child"]), "L11: child is a boolean on the wire").toBe(true);
       }
 
       const [fresh] = tezgahMachine.init(null, { workspace: 1 });
@@ -79,16 +81,15 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
         rev: 0,
         pendingMutations: [],
       });
-      const after: { readonly serverState: unknown } = step(fresh, { type: "server", rev, view: wire });
+      const after = step(fresh, { type: "server", rev, view: wire });
       expect(after.serverState, "L11: the window's server state is tezgah's view").toEqual(same);
-      expect(optimisticState(after as never), "L11: with nothing pending, the drawn state is the server's").toEqual(
-        same,
-      );
+      expect(optimisticState(after), "L11: with nothing pending, the drawn state is the server's").toEqual(same);
 
       // A wire view that drops `child` from a tile is not tezgah's view: the window keeps what it had.
       if (tiles.length > 0) {
+        // SAFETY: `wire` is the JSON of an encoded TezgahView, so it is an object.
         const dropped = { ...(wire as object), tiles: tiles.map(({ child: _child, ...rest }) => rest) };
-        const kept: { readonly serverState: unknown } = step(after, { type: "server", rev: rev + 1, view: dropped });
+        const kept = step(after, { type: "server", rev: rev + 1, view: dropped });
         expect(kept.serverState, "L11: a view without child changes nothing").toEqual(same);
       }
     },
@@ -111,21 +112,20 @@ const PatchStep = Schema.Struct({
   to: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000 })),
 });
 
-const both = (
-  m: unknown,
-  msg: unknown,
-): readonly [{ readonly serverState: unknown; readonly rev: number }, ReadonlyArray<{ readonly type: string }>] =>
-  applyCell(tezgahMachine as never, m as never, msg as never) as never;
+const both = (m: TezgahClient, msg: TezgahMsg) => applyCell(tezgahMachine, m, msg);
+
+/** The two view Msgs the L11 walk sends: a whole view or a patch, each with its `rev`. */
+type ViewMsg = Extract<TezgahMsg, { readonly type: "server" | "patch" }>;
 
 /** A view as the wire carries it, JSON. */
-const onWire = (view: TezgahView): unknown =>
-  Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
+const onWire = (view: TezgahView): Schema.Json =>
+  Schema.decodeSync(Schema.fromJsonString(Schema.Json))(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
 
 /** A value the walk built, checked as the JSON the diff takes: the check hands back the same value. */
 const json = Schema.decodeUnknownSync(Schema.Json);
 
-const text = (state: unknown) =>
-  state === null ? "null" : Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(state as never));
+const text = (state: TezgahView | null) =>
+  state === null ? "null" : Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(state));
 
 describe("Desk S2a L11: a tezgah view patch in the window", () => {
   it.prop(
@@ -166,21 +166,33 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
         const target = wires[to % wires.length];
         const rev = m.rev;
 
-        const msg =
-          kind === "whole"
-            ? { type: "server", rev: rev + skew, view: target }
-            : kind === "next"
-              ? { type: "patch", base: rev, rev: rev + 1, patch: diff(json(shown), json(target)) }
-              : kind === "gap_base"
-                ? { type: "patch", base: rev - skew, rev: rev + 1, patch: diff(json(shown), json(target)) }
-                : kind === "gap_rev"
-                  ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(json(shown), json(target)) }
-                  : {
-                      type: "patch",
-                      base: rev - skew - 1,
-                      rev: rev - skew + 1,
-                      patch: diff(json(shown), json(target)),
-                    };
+        const msg = Match.value(kind).pipe(
+          Match.when("whole", (): ViewMsg => ({ type: "server", rev: rev + skew, view: target })),
+          Match.when("next", (): ViewMsg => ({
+            type: "patch",
+            base: rev,
+            rev: rev + 1,
+            patch: diff(json(shown), json(target)),
+          })),
+          Match.when("gap_base", (): ViewMsg => ({
+            type: "patch",
+            base: rev - skew,
+            rev: rev + 1,
+            patch: diff(json(shown), json(target)),
+          })),
+          Match.when("gap_rev", (): ViewMsg => ({
+            type: "patch",
+            base: rev,
+            rev: rev + 1 + skew,
+            patch: diff(json(shown), json(target)),
+          })),
+          Match.orElse((): ViewMsg => ({
+            type: "patch",
+            base: rev - skew - 1,
+            rev: rev - skew + 1,
+            patch: diff(json(shown), json(target)),
+          })),
+        );
 
         const [next, cmds] = both(m, msg);
         const asks = cmds.filter((c) => c.type === "ask").length;
@@ -367,8 +379,11 @@ type Win = {
 
 type World = { pos: number; view: TezgahView; wins: Array<Win>; letters: number };
 
+// SAFETY: with a tile TypeID, a process name in `shows`, a Keep of `failed` and
+// a null cursor, the row holds every field the Tile schema has.
 const tileRow = (id: string, n: number): Tile =>
   ({
+    // SAFETY: every caller passes an id that `typeId("tile", n)` spelled, a canonical tile TypeID.
     id: id as TileId,
     n,
     shows: n === 1 ? "checklist:1" : `checklist:t${n}`,
@@ -380,6 +395,7 @@ const tileRow = (id: string, n: number): Tile =>
 
 /** A workspace of 1 + cuts tiles, split by `cuts`, focus on the tile `focus` picks. */
 const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
+  // SAFETY: `typeId` spells a canonical TypeID with the `tile` prefix, which is what TileId decodes.
   const first = typeId("tile", 1) as TileId;
 
   let w: Workspace = Schema.decodeSync(Workspace)({
@@ -394,6 +410,7 @@ const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: bool
 
   for (const [k, cut] of cuts.entries()) {
     const at = Layout.order(w.layout)[cut.at % Layout.order(w.layout).length]!;
+    // SAFETY: `typeId` spells a canonical TypeID with the `tile` prefix, which is what TileId decodes.
     const id = typeId("tile", k + 2) as TileId;
     w = Layout.split(w, at, cut.down ? "column" : "row", id);
     tiles.push(tileRow(id, k + 2));
@@ -422,14 +439,14 @@ const serverFocus = (s: WindowModel) =>
 const letterIn = (p: object): string | null => {
   const own = Predicate.hasProperty(p, "letter") ? p.letter : undefined;
 
-  if (typeof own === "string") {
+  if (Predicate.isString(own)) {
     return own;
   }
 
   for (const v of Object.values(p)) {
-    const inner = typeof v === "object" && v !== null && Predicate.hasProperty(v, "letter") ? v.letter : undefined;
+    const inner = Predicate.isObjectOrArray(v) && Predicate.hasProperty(v, "letter") ? v.letter : undefined;
 
-    if (typeof inner === "string") {
+    if (Predicate.isString(inner)) {
       return inner;
     }
   }
@@ -451,14 +468,12 @@ const target = (s: WindowModel, to: (typeof FOCUS_KEYS)[number]["to"]): string |
   const tiles = Layout.order(space.layout);
   const i = tiles.indexOf(space.focus);
 
-  const found =
-    to === "next"
-      ? tiles[(i + 1) % tiles.length]
-      : to === "previous"
-        ? tiles[(i - 1 + tiles.length) % tiles.length]
-        : to === "last"
-          ? space.recent[1]
-          : (Layout.neighbor(space.layout, space.focus, to) ?? undefined);
+  const found = Match.value(to).pipe(
+    Match.when("next", () => tiles[(i + 1) % tiles.length]),
+    Match.when("previous", () => tiles[(i - 1 + tiles.length) % tiles.length]),
+    Match.when("last", () => space.recent[1]),
+    Match.orElse((side) => Layout.neighbor(space.layout, space.focus, side) ?? undefined),
+  );
 
   return found === undefined || found === space.focus ? null : found;
 };
@@ -476,14 +491,17 @@ type Event = {
 const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void) => {
   const w = world.wins[i]!;
   const prev = w.s;
+  // SAFETY: `focusWindow` is a window machine, whose model is WindowModel and whose Cmds each have a `type`.
   const [next, cmds] = applyCell(focusWindow, prev, m) as readonly [WindowModel, ReadonlyArray<Cmd>];
   w.waiting = [...w.waiting.filter((c) => !("cmd" in m) || m.cmd !== c), ...cmds];
   w.s = next;
 
   for (const c of cmds) {
+    // SAFETY: only a write Cmd has a `call`, a tagged Call (WindowMachine.ts), and other Cmds have none.
     const call = c["call"] as Call | undefined;
 
     if (c.type === "write" && call?._tag === "send" && call["pid"] === TEZGAH_PID) {
+      // SAFETY: a send's `m` is the letter's Msg; every field read off it is checked below, `type === "did"` first.
       const did = call["m"] as Did;
       const letter = String(call["letter"]);
 
@@ -523,6 +541,8 @@ const housekeep = (world: World, i: number, each: (e: Event) => void) => {
       return;
     }
 
+    // SAFETY: `cmd` is a waiting record, write, ping or persist Cmd, and each has a
+    // `<type>_ok` Msg of `cmd` and `value`: a boolean for persist, null for the rest.
     stepWin(world, i, { type: `${cmd.type}_ok`, cmd, value: cmd.type === "persist" ? true : null } as WindowMsg, each);
   }
 };
@@ -537,6 +557,7 @@ const arrive = (world: World, i: number) => {
     return;
   }
 
+  // SAFETY: a letter's `m` is the Msg it carried; the check below reads `type === "did"` before any other field.
   const did = letter.m as Did & { readonly cursor?: string | null };
   const space = world.view.workspaces[0]!;
   const tiles = Layout.order(space.layout);
@@ -544,7 +565,9 @@ const arrive = (world: World, i: number) => {
   if (
     did?.type !== "did" ||
     did.to === undefined ||
+    // SAFETY: `includes` only looks the value up: a string that is not a tile of the layout is not found.
     !tiles.includes(did.to as TileId) ||
+    // SAFETY: `includes` only looks the value up: a string that is not a tile of the layout is not found.
     !tiles.includes(did.from as TileId)
   ) {
     w.replies.push({ id: letter.id, dial: letter.dial, pos: -1 });
@@ -553,6 +576,7 @@ const arrive = (world: World, i: number) => {
   }
 
   world.pos++;
+  // SAFETY: the check above found `did.to` in the layout's tile order, so it is one of its TileIds.
   const to = did.to as TileId;
   world.view = {
     workspaces: [{ ...space, focus: to, recent: [to, ...space.recent.filter((t) => t !== to)] }],
@@ -603,6 +627,7 @@ const reply = (world: World, i: number, each: (e: Event) => void) => {
   stepWin(
     world,
     i,
+    // SAFETY: send_ok is its write's id and dial, a Sent (refused with a reason, or accepted with rev and pos) and ms.
     {
       type: "send_ok",
       id: r.id,
@@ -626,6 +651,7 @@ const notice = (world: World, i: number, each: (e: Event) => void) => {
   stepWin(
     world,
     i,
+    // SAFETY: the view case is `{type, pid, note}` with any note, and this note is tezgah's whole view.
     { type: "view", pid: TEZGAH_PID, note: { pid: TEZGAH_PID, type: "whole", rev: n.rev, view: n.view } } as WindowMsg,
     each,
   );
@@ -644,6 +670,7 @@ const date = (world: World, i: number, each: (e: Event) => void) => {
   stepWin(
     world,
     i,
+    // SAFETY: `cmd` is a waiting now Cmd, and `{letter, sentAt}` is the now Cmd's ok value.
     {
       type: "now_ok",
       cmd,
@@ -670,6 +697,7 @@ const pressFocus = (world: World, i: number, k: (typeof FOCUS_KEYS)[number], eac
       }
     }
 
+    // SAFETY: the key case is exactly `{type, key, at}`, the fields this builds.
     stepWin(world, i, { type: "key", key, at: (clock += 10) } as WindowMsg, each);
     housekeep(world, i, each);
   }
@@ -680,10 +708,12 @@ const focusIn = (world: World, i: number, tile: string, cursor: string | null, e
   const w = world.wins[i]!;
   const from = drawnFocus(w.s);
 
+  // SAFETY: `includes` only looks the value up: a string that is not a tile of the layout is not found.
   if (from !== null && tile !== from && Layout.order(drawnSpace(w.s)!.layout).includes(tile as TileId)) {
     w.moves.push({ from, to: tile, does: "tezgah.focus", cursor: w.cursors.get(from) ?? null, letter: null });
   }
 
+  // SAFETY: the focus case is `{type, tile, cursor}`, and each cursor here is null or a short CURSORS key.
   stepWin(world, i, { type: "focus", tile, cursor } as WindowMsg, each);
   w.cursors.set(tile, cursor);
   housekeep(world, i, each);
@@ -699,25 +729,30 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
     stepWin(
       world,
       i,
+      // SAFETY: `key` is the key Cmd the window handed out, and `{found, fingerprint}` is the key Cmd's ok value.
       { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:k" } } as WindowMsg,
       each,
     );
   }
 
+  // SAFETY: the socket_opened case is exactly `{type, dial, at}`, the fields this builds.
   stepWin(world, i, { type: "socket_opened", dial: 1, at: 0 } as WindowMsg, each);
   stepWin(
     world,
     i,
+    // SAFETY: the frame case is `{type, dial, text, at, ms?}`, and this builds it without `ms`.
     { type: "frame", dial: 1, text: rpc({ method: "challenge", params: { nonce: `n0nce${i}` } }), at: 1 } as WindowMsg,
     each,
   );
   const hello = w.waiting.find((c) => c.type === "hello");
 
   if (hello !== undefined) {
+    // SAFETY: `hello` is the hello Cmd the window handed out, whose ok value is null.
     stepWin(world, i, { type: "hello_ok", cmd: hello, value: null } as WindowMsg, each);
     stepWin(
       world,
       i,
+      // SAFETY: the frame case is `{type, dial, text, at, ms?}`, and this builds it without `ms`.
       { type: "frame", dial: 1, text: rpc({ id: hello["id"], result: ADMITTED }), at: 2 } as WindowMsg,
       each,
     );
@@ -740,6 +775,7 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
       stepWin(
         world,
         i,
+        // SAFETY: this flight is a read, and read_ok is its write's id and dial, an array of entries and ms.
         {
           type: "read_ok",
           ...on,
@@ -754,12 +790,16 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
       stepWin(
         world,
         i,
+        // SAFETY: this flight is an open of tezgah's pid, and open_ok's value is `{rev, view}` with a JSON view.
         { type: "open_ok", ...on, value: { rev: world.pos, view: world.view }, ms: 1 } as WindowMsg,
         each,
       );
     } else if (flight.call._tag === "open") {
+      // SAFETY: this flight is an open, and open_ok's value is `{rev, view}` with a JSON view.
       stepWin(world, i, { type: "open_ok", ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg, each);
     } else {
+      // SAFETY: sends are left out above, and the window's other calls here are
+      // knocks: knock_ok is its id, dial, a null value and ms.
       stepWin(world, i, { type: "knock_ok", ...on, value: null, ms: 1 } as WindowMsg, each);
     }
   }
@@ -770,6 +810,8 @@ const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): W
   const world: World = { pos: 1, view, wins: [], letters: 0 };
 
   for (let i = 0; i < count; i++) {
+    // SAFETY: this is the window's WindowCtx (no tiles, a tab, tezgah's workspace 1), which
+    // WindowMachine.ts does not export; `init` answers its WindowModel and Cmds, each with a `type`.
     const [s, cmds] = focusWindow.init(null, {
       tiles: [],
       tab: `tab_${i + 1}`,
@@ -790,6 +832,7 @@ const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): W
       moves: [],
       cursors: new Map(),
     });
+    // SAFETY: the size case is exactly `{type, width, height}`, both finite and not negative.
     stepWin(world, i, { type: "size", width: 1440, height: 868 } as WindowMsg, each);
     online(world, i, each);
   }
@@ -1037,12 +1080,14 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
       fc.property(Desk, arbMsgSequence(Pick, { minLength: 8, maxLength: 60, size: "max" }), (d, picks) => {
         walk(makeDesk(d.cuts, d.focus), picks, ({ win, cmds, world }) => {
           for (const c of cmds) {
+            // SAFETY: only a write Cmd has a `call`, a tagged Call (WindowMachine.ts), and other Cmds have none.
             const call = c["call"] as Call | undefined;
 
             if (c.type !== "write" || call?._tag !== "send" || call["pid"] !== TEZGAH_PID) {
               continue;
             }
 
+            // SAFETY: a send's `m` is the letter's Msg; the expect below checks it is a `did` before the law reads it.
             const did = call["m"] as Did & {
               readonly via?: { readonly _tag: string };
               readonly cursor?: string | null;
@@ -1087,6 +1132,7 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
           const w = world.wins[0]!;
 
           if (down) {
+            // SAFETY: the socket_closed case is exactly `{type, dial, code, at}`, the fields this builds.
             stepWin(world, 0, { type: "socket_closed", dial: 1, code: 1006, at: 3 } as WindowMsg, () => {});
             housekeep(world, 0, () => {});
             expect(w.s.link._tag, "the socket dropped").not.toBe("online");
@@ -1157,6 +1203,7 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
 
           const focusRows = cmds.flatMap((c) => {
             const record =
+              // SAFETY: a `record` Cmd's input is `{ record: ClientRecord }`, a tagged union.
               c.type === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
 
             return record?._tag === "focus" ? [record] : [];
@@ -1224,7 +1271,10 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
 
           const each = ({ cmds }: Event) => {
             for (const c of cmds) {
+              // SAFETY: only a write Cmd has a `call`, a tagged Call (WindowMachine.ts), and other Cmds have none.
               const call = c["call"] as Call | undefined;
+              // SAFETY: no tile here has a program (`focusWindow`'s `tile` is undefined), so
+              // every send is a letter to tezgah, a `did` Msg with `does` and `from`.
               const did = call?.["m"] as (Did & { readonly cursor?: string | null }) | undefined;
 
               if (c.type !== "write" || call?._tag !== "send" || !did?.does.startsWith("tezgah.split_")) {
@@ -1258,6 +1308,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
                 const cursor = w.cursors.get(from) ?? null;
 
                 for (const key of ["ctrl+b", c.pick % 2 === 0 ? "%" : '"']) {
+                  // SAFETY: the key case is exactly `{type, key, at}`, the fields this builds.
                   stepWin(world, 0, { type: "key", key, at: (clock += 10) } as WindowMsg, each);
                   housekeep(world, 0, each);
                 }
@@ -1269,6 +1320,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
                   stepWin(
                     world,
                     0,
+                    // SAFETY: `mint` is the mint Cmd the window handed out, and `{tile}` is the mint Cmd's ok value.
                     {
                       type: "mint_ok",
                       cmd: mint,
@@ -1393,6 +1445,7 @@ const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule
 
   const each = (e: Event) => {
     for (const c of e.cmds) {
+      // SAFETY: only a write Cmd has a `call`, a tagged Call (WindowMachine.ts), and other Cmds have none.
       const call = c["call"] as Call | undefined;
 
       if (c.type === "write" && call?._tag === "send") {
@@ -1449,6 +1502,7 @@ const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule
     stepWin(
       world,
       0,
+      // SAFETY: `mint` is the mint Cmd the window handed out, and `{tile}` is the mint Cmd's ok value.
       { type: "mint_ok", cmd: mint, value: { tile: typeId("tile", 7_000 + ++minted) } } as WindowMsg,
       each,
     );

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-prefer-effect-match-1-review1",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-15T22:43:45-08:00",
+  "ended": "2026-11-15T23:10:06-08:00",
+  "parent": "2026-11-15-antislop-prefer-effect-match-1-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of slice AS-prefer-effect-match-1 (anti-slop-effect/prefer-effect-match in next/ and our tooling, no lock line) at 2fc1ade61, the whole diff against merge base bcad0080d read line by line: merge-ready, two finding rows. Rule forced to error in a scratch config outside the repo: 260 hits at the base and 22 at the head, the 12 the tests step stopped, the 1 the build stopped (.agents/skills/lead/scripts/chain.ts:728, held by an agents-ledger.json no-of entry keyed on its text) and 9 in PR 1366's files, which the diff does not touch. 238 fixed matches the rows' 195 plus 43. Every rewrite keeps the old answer: each Match.when pattern is a literal (or Match.is of literals, or a {type} object pattern that is false on undefined in effect 4.1.3's matcher), arms keep their order, the else arm became Match.orElse, a full Union.match or Match.valueTags is only used where the union's cases equal the old arms (typecheck proves exhaustiveness), and the three chains with yield* in a branch now pick an Effect and run it once. Order follows 0567 and the pattern doc: the union's own match or matchOrElse where in reach, Match.valueTags on narrowed values, Match.discriminators for type keys, no Predicate.isTagged, no _tag read into a variable to hide it. No comment line was lost, no disable line added, no expect removed or changed in meaning, no numRuns or bound changed. loosening.sh: 107 hits, each an 'unrecognized change' at a file's first changed line (the Match import, or the rewritten chain); read each, none loosens a law. Plants by reading: a swapped Verdict.match arm in ci/typecheck.ts fails typecheck.test.ts:301-304; a swapped markFrom arm fails the chain.test.ts:1424 property; a wrong Merger.ts commandFor case fails Merger.laws.test.ts:579.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 26,
+  "note": "Ran at 2fc1ade61: 98 unit test files one at a time, all green; mutbox.test.ts with -t 'mutbox, the pure parts' only (the rest signals a child or a stand-in docker), 10 passed; pnpm typecheck green; pnpm lint fails only on the zero lock asking to add 16 folders to the rule's block, which this slice may not do. Not run, 0178 guard (PR 1508 is not in this branch): the 24 touched or reached .integration. files, for example next/programs/counter/src/runner.laws.integration.test.ts (refused when tried), and the integration suites that run the touched *Test.ts files. A merge of origin/main 9598eee20 conflicts in TomlEdit.test.ts, counter runner.laws.integration.test.ts, pipeline QueueRunnerTest.ts and Settings.test.ts. Findings: oxlint-plugins/jsdocs.ts and oxlint-plugins/advice.test.ts have their file-head comment moved below an import; the build row's end time 22:44:00 is later than its own commit at 22:42:15.",
+  "step": "review"
+}

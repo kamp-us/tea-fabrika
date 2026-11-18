@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Predicate, Schema } from "effect";
 import { QuotasError, type Accounting } from "../processes/Quotas.ts";
 import { type Sql } from "../Sql.ts";
 import { changes, JournalState, Receipt, Work } from "./internal/recovery.ts";
@@ -100,10 +100,10 @@ const JOURNAL =
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
 /** A row's text column, or null when there is no row. */
-const textIn = (value: unknown): string | null => (typeof value === "string" ? value : null);
+const textIn = (value: unknown): string | null => (Predicate.isString(value) ? value : null);
 
 /** A row's generation, or null when there is no row or no save has counted one yet. */
-const generationIn = (value: unknown): number | null => (typeof value === "number" ? value : null);
+const generationIn = (value: unknown): number | null => (Predicate.isNumber(value) ? value : null);
 
 /**
  * Makes the store for one name's saved journal in `sql`, checked whole against its caller's schema

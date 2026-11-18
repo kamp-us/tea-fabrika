@@ -1,6 +1,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Logger,
+  Redacted,
+  Schema,
+  type Scope,
+  type Tracer,
+  Match,
+} from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 
@@ -37,7 +49,7 @@ export type World = {
   readonly reopen: Effect.Effect<void, unknown>;
   readonly fire: Effect.Effect<void, unknown>;
   readonly green: Effect.Effect<void>;
-  readonly deliver: (input: unknown) => Effect.Effect<unknown, unknown>;
+  readonly deliver: (input: typeof Mail.Land.Type | typeof Mail.Abandon.Type) => Effect.Effect<unknown, unknown>;
   readonly land: (ref: string) => Effect.Effect<unknown, unknown>;
   readonly savedReplies: Effect.Effect<ReadonlyArray<unknown>, unknown>;
 };
@@ -85,12 +97,11 @@ const secret = Arbitrary.schema(
 
     return {
       token,
-      text:
-        form === "token"
-          ? token
-          : form === "bearer"
-            ? `Bearer ${token}`
-            : `https://invalid.test/auth?access_token=${token}`,
+      text: Match.value(form).pipe(
+        Match.when("token", () => token),
+        Match.when("bearer", () => `Bearer ${token}`),
+        Match.orElse(() => `https://invalid.test/auth?access_token=${token}`),
+      ),
     };
   }),
 );
@@ -210,13 +221,11 @@ export const suite = (driver: Driver) =>
             );
           } else {
             yield* r.h.host.fail(
-              state._tag === "reading"
-                ? cell.pick % 3 === 0
-                  ? "update"
-                  : "change"
-                : state._tag === "updating"
-                  ? "update"
-                  : "merge",
+              Match.value(state).pipe(
+                Match.tag("reading", () => (cell.pick % 3 === 0 ? ("update" as const) : ("change" as const))),
+                Match.tag("updating", () => "update" as const),
+                Match.orElse(() => "merge" as const),
+              ),
               cell.pick % 2 === 0 ? { kind: "fault", reason: cell.reason } : { kind: "defect" },
             );
           }

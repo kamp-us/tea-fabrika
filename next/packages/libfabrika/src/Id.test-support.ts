@@ -1,5 +1,6 @@
 import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
@@ -14,7 +15,13 @@ export const processClocks = Arbitrary.schema(
 const encodeProcess = (at: number, random: ReadonlyArray<number>): string => {
   const bytes = Uint8Array.from([
     ...Array.from({ length: 6 }, (_, i) => Number((BigInt(at) >> BigInt((5 - i) * 8)) & 255n)),
-    ...random.map((byte, i) => (i === 0 ? (byte & 15) | 0x70 : i === 2 ? (byte & 63) | 0x80 : byte)),
+    ...random.map((byte, i) =>
+      Match.value(i).pipe(
+        Match.when(0, () => (byte & 15) | 0x70),
+        Match.when(2, () => (byte & 63) | 0x80),
+        Match.orElse(() => byte),
+      ),
+    ),
   ]);
 
   const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";

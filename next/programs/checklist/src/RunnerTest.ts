@@ -6,9 +6,9 @@
 // Ticket 839, slice 1 (0137): L9 sends `check` with and without a note, L16 resends a letter by its
 // id (p53's checklist form), L17 reads the saved letter's note and writer back (p52's checklist form).
 import { describe, expect, it } from "@effect/vitest";
-import type { ProgramRunner } from "@kampus/libfabrika";
+import type { Incoming, ProgramRunner } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, DateTime, Effect, flow, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
@@ -24,9 +24,10 @@ const MOST = 256;
 
 type Runner = ProgramRunner["Service"];
 
-/** A writer as the door stamps it on a letter, made by the part that supplies it: the suite only
- *  carries it, and knows a person's from an agent's by which one it was given. */
-export type Writer = unknown;
+/** A writer as the door stamps it on a letter, the type the runner's `Incoming` decodes, made by the
+ *  part that supplies it: the suite only carries it, and knows a person's from an agent's by which
+ *  one it was given. */
+export type Writer = Incoming["envelope"]["by"];
 
 /** A letter as the process's inbox saved it: its id, its input, its writer's checked key and clock. */
 export type Saved = { readonly id: string; readonly m: unknown; readonly by: string; readonly sentAt: string };
@@ -58,7 +59,7 @@ export type Fresh = Effect.Effect<typeof checklist>;
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 /** A delivered input with a fresh id: the `n`th of its run, sent on the writer's own clock. */
-const letter = (n: number, by: Writer, input: unknown, sentAt = "writer clock") => ({
+const letter = (n: number, by: Writer, input: Readonly<Record<string, string>>, sentAt = "writer clock") => ({
   id: `checklist-${n}`,
   envelope: {
     id: `input_0000000000e0080000000000${ALPHABET[(n >> 5) % 32]}${ALPHABET[n % 32]}`,
@@ -77,16 +78,12 @@ const View = Schema.Struct({
   left: Schema.Int,
 });
 
-const shown = (view: unknown) => {
-  const v = Schema.decodeUnknownSync(View)(view);
-
-  return {
-    items: v.items
-      .map((i) => ({ name: i.name, state: i.state, note: i.note }))
-      .sort((a, b) => (a.name < b.name ? -1 : 1)),
-    left: v.left,
-  };
-};
+const shown = flow(Schema.decodeUnknownSync(View), (v) => ({
+  items: v.items
+    .map((i) => ({ name: i.name, state: i.state, note: i.note }))
+    .sort((a, b) => (a.name < b.name ? -1 : 1)),
+  left: v.left,
+}));
 
 /** Only the letters this suite sent: the runner's own timers are not a writer's. */
 const sent = (letters: ReadonlyArray<Saved>) => letters.filter((l) => l.id.startsWith("checklist-"));

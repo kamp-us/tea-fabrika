@@ -3,7 +3,20 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+  Tracer,
+  Match,
+} from "effect";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
@@ -118,8 +131,8 @@ export const capture = () => {
   const write = (span: Tracer.NativeSpan) =>
     [
       span.name,
-      JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
-      JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
+      JSON.stringify([...span.attributes], (_, value) => (Predicate.isBigInt(value) ? value.toString() : value)),
+      JSON.stringify(span.events, (_, value) => (Predicate.isBigInt(value) ? value.toString() : value)),
       span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
     ].join("\n");
 
@@ -214,8 +227,10 @@ const key = (name: string, id: string) => JSON.stringify([name, id]);
 
 /** A stored cell read as a JSON object, or undefined when it is not one. */
 export const parsed = (cell: string): Record<string, unknown> | undefined => {
+  // SAFETY: JSON.parse answers any JSON value, and unknown says only that.
   const value = Result.try(() => JSON.parse(cell) as unknown);
 
+  // SAFETY: the cast runs only after Predicate.isObject checked that the value is an object.
   return Result.isSuccess(value) && Predicate.isObject(value.success)
     ? (value.success as Record<string, unknown>)
     : undefined;
@@ -227,6 +242,7 @@ type Proposed = Reply & { readonly body: string };
 const propose = (n: number, step: Step, name: string, id: string): Proposed => ({
   name,
   id,
+  // SAFETY: a reply's parent is an input id: `input_`, then 26 characters, as this one is built.
   parent: `input_0000000000e0080000000000${step.parent[0]}${step.parent[1]}` as Reply["parent"],
   by: `SHA256:${step.by}`,
   for: step.for,
@@ -256,6 +272,7 @@ const refusedWith = Effect.fnUntraced(function* <A>(
 
   // A throw or defect is not a typed failure: the plant of R5.
   expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
+  // SAFETY: the expect above failed the law unless the cause holds a typed failure, and refusedWith takes an Effect whose only typed failure is RepliesError.
   const error = Cause.squash(exit.cause) as Module.RepliesError;
   expect(error._tag).toBe("RepliesError");
   expect(error.reason).toBe(reason);
@@ -369,7 +386,7 @@ const walk = (
 
         const located = dump(raw).flatMap(({ table, row }) =>
           Object.entries(row).flatMap(([column, value]) => {
-            if (typeof value !== "string" || parsed(value)?.["digest"] !== stored.digest) {
+            if (!Predicate.isString(value) || parsed(value)?.["digest"] !== stored.digest) {
               return [];
             }
 
@@ -378,27 +395,31 @@ const walk = (
         );
 
         expect(located, "one stored JSON value holds the reply").toHaveLength(1);
+        // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
+        // SAFETY: the located value is a stored JSON object, the reply.
         const json = JSON.parse(value) as Record<string, unknown>;
         const secret = step.body;
         secrets.push(secret);
         const kind = move === "corrupt" ? nth(CORRUPT, step.kind) : nth(ANSWER, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
 
-        const damaged =
-          kind === "json"
-            ? `${value.slice(0, -1)}${secret}`
-            : kind === "missing"
-              ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
-                )
-              : kind === "key"
-                ? JSON.stringify({ ...json, ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }) })
-                : kind === "typed"
-                  ? JSON.stringify({ ...json, by: { text: secret } })
-                  : kind === "accepted"
-                    ? JSON.stringify({ ...json, answer: Wrong.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
-                    : JSON.stringify({ ...json, answer: Wrong.cases.refused.make({ reason: { text: secret } }) });
+        const damaged = Match.value(kind).pipe(
+          Match.when("json", () => `${value.slice(0, -1)}${secret}`),
+          Match.when("missing", () =>
+            JSON.stringify(Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length]))),
+          ),
+          Match.when("key", () =>
+            JSON.stringify({ ...json, ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }) }),
+          ),
+          Match.when("typed", () => JSON.stringify({ ...json, by: { text: secret } })),
+          Match.when("accepted", () =>
+            JSON.stringify({ ...json, answer: Wrong.cases.accepted.make({ rev: n + 1, pos: n + 1 }) }),
+          ),
+          Match.orElse(() =>
+            JSON.stringify({ ...json, answer: Wrong.cases.refused.make({ reason: { text: secret } }) }),
+          ),
+        );
 
         raw.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, damaged, value);
         corrupt.set(k, damaged);
@@ -423,7 +444,7 @@ const walk = (
 
       const cells = dump(raw)
         .flatMap(({ row }) => Object.values(row))
-        .filter((cell): cell is string => typeof cell === "string" && !damaged.has(cell));
+        .filter((cell): cell is string => Predicate.isString(cell) && !damaged.has(cell));
 
       unleaked([...cells, ...errors, ...spans.text()], secrets);
     }
