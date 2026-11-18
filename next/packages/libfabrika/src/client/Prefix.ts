@@ -34,7 +34,6 @@ export type Prefix = typeof Prefix.Type;
 /**
  * Schema for what a window's prefix machine takes, each Msg made with its case's maker.
  *
- * @stability unstable
  * @category schemas
  */
 export const PrefixMsg = Schema.TaggedUnion({

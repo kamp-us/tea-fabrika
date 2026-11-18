@@ -94,7 +94,6 @@ type DevState = typeof DevState.Type;
 /**
  * Schema for what the dev loop tells its life machine, each made with `DevMsg.cases.<name>.make`.
  *
- * @stability unstable
  * @category schemas
  */
 export const DevMsg = Schema.TaggedUnion({

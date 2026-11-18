@@ -341,7 +341,6 @@ type Founded = typeof Model.cases.founded.Type;
 /**
  * Schema for the access machine's one Msg: fold one member event.
  *
- * @stability unstable
  * @category schemas
  */
 export const Fold = Schema.TaggedStruct("fold", { event: MemberEvent });

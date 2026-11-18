@@ -18,11 +18,12 @@ export type CheckedSelection = import("./internal/open.ts").CheckedSelection;
 /**
  * Schema for what an opening session is told, each Msg made with `Msg.cases.<name>.make`.
  *
- * @stability unstable
  * @category schemas
  */
 export const Msg = OpenMsg;
+
 type Msg = typeof Msg.Type;
+
 type State = typeof machine.model.Type;
 
 /**

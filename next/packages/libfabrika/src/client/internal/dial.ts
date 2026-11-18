@@ -35,10 +35,10 @@ export type Handle = {
  * @internal
  */
 export const DialMsg = Schema.TaggedUnion({
-  socket_opened: { dial: Schema.Number, at: Schema.Number },
-  frame: { dial: Schema.Number, text: Schema.String, at: Schema.Number, ms: Schema.optionalKey(Schema.Number) },
-  socket_closed: { dial: Schema.Number, code: Schema.Number, at: Schema.Number },
-  socket_failure: { dial: Schema.Number, op: Schema.Literal("connect"), error: ErrorClass },
+  socket_opened: { dial: Schema.Finite, at: Schema.Finite },
+  frame: { dial: Schema.Finite, text: Schema.String, at: Schema.Finite, ms: Schema.optionalKey(Schema.Finite) },
+  socket_closed: { dial: Schema.Finite, code: Schema.Finite, at: Schema.Finite },
+  socket_failure: { dial: Schema.Finite, op: Schema.Literal("connect"), error: ErrorClass },
 });
 
 /**

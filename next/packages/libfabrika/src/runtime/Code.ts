@@ -91,7 +91,6 @@ const swap = Cmd.make("swap", {
 /**
  * Schema for what the code machine takes: a build checked for a program, or one loaded.
  *
- * @stability unstable
  * @category schemas
  */
 export const CodeMsg = Schema.TaggedUnion({

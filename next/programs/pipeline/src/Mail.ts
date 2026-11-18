@@ -49,4 +49,5 @@ export const Enqueue = Schema.TaggedStruct("enqueue", {
 });
 
 export const Drop = Schema.TaggedStruct("drop", { change: CodeHost.ChangeId });
+
 export const Resume = Schema.TaggedStruct("resume", {});
