@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l10-boot-drain-merged-proof",
+  "ticket": "kamp-us/tea-fabrika#1172",
+  "pr": null,
+  "started": "2026-11-18T20:08:14Z",
+  "ended": "2026-11-18T20:12:33Z",
+  "parent": "2026-11-18-l10-boot-drain-cloud-proof2",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/ ticket 1172, the watcher laws at the merge of origin/main 4b3758a4 (merge 90e2ba2b, authored as fabrikalfa[bot]), which changed watch.ts, internal/watcher.ts and Code.ts in small ways: the whole law file passed 6 of 6 laws in 216 s (first L17/L18 22.1 s, save-driven 69.9 s, R1 7.7 s, L10 39.5 s, L10 scenario 6.6 s, L18 66.5 s), then L10 alone in 36 s and the L10 scenario alone in 7 s, all at full depth on an idle Linux cloud box. pnpm typecheck in next/packages/libfabrika passed at this head.",
+  "note": "FABRIKA_TEST_DEPTH=full nice -n 15 pnpm exec vitest run --project next-integration --maxWorkers=1 on the watcher law file, Node 26.13.0, seed 119120.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.3,
+  "costUsd": null,
+  "billed": null,
+  "head": "90e2ba2b0f3444ae416e7bd6e06578f6b7eb9d57"
+}
