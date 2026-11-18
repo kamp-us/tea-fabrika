@@ -47,6 +47,7 @@ import * as Tracer from "effect/Tracer";
 import { grantText, revokeText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { MailWakeups, MailWakeupsError } from "../runtime/MailWakeups.ts";
+import type { News } from "../runtime/News.ts";
 import type { Sql } from "../Sql.ts";
 import { Task, State, type Request, Request as RequestSchema, Result as TaskResult } from "../tasks/Task.ts";
 import { Tasks, targetStream } from "../tasks/Tasks.ts";
@@ -259,8 +260,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
   ]);
 
   const urls: Array<string> = [URL];
-
-  const notices: Array<unknown> = [],
+  const notices: Array<{ client: string; news: News }> = [],
     delivered: Array<unknown> = [],
     opened: Array<unknown> = [],
     frames: Array<string> = [];

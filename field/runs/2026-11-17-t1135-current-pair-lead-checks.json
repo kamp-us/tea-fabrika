@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1135-current-pair-lead-checks",
+  "ticket": "kamp-us/tea-fabrika#1135",
+  "pr": "kamp-us/tea-fabrika#1560",
+  "started": "2026-11-17T12:16:52.930Z",
+  "ended": "2026-11-17T12:19:46.249Z",
+  "parent": "2026-11-17-t1135-current-pair-repin",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling passed its reserved current-pair checks at clean 917ce4ab70b22dbe7f0d82a484b73cae9e72ba30. Normal format changed no tracked bytes or modes. One canonical whole compiler completed all 30 packages, and all 18 normal lint parts passed. The prior source judgments carry across eight byte-identical files and the two files with only seven authorized source-reference replacements. The pair is the fixed historical cached 07c65 and uncached 610ab, with unchanged law, product and transform hashes. No real adapter result or current-main runtime equivalence is claimed. Old compiler failures and the uncached 60000 ms branch timeout remain in their original records.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 2.88865,
+  "note": "Actual adapter exercises follow trusted-main tooling landing under the approved plan. Row, initialization/recovery, Runner and CPU-profile gaps remain separate. No extra test, protected local law, actual adapter, CI dispatch or legacy signature ran in these checks.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "driver_caused": false,
+  "head": "917ce4ab70b22dbe7f0d82a484b73cae9e72ba30",
+  "plan": "819ce27a44a652966cc80d278cc06d936b7b555b6db2d5e9769e5cba2636bd29",
+  "checks": {
+    "node": "26.13.0",
+    "pnpm": "12.16.1",
+    "paidKeyUnset": true,
+    "lockOverrides": false,
+    "phases": {
+      "format": {
+        "started": "2026-11-17T12:16:52.930Z",
+        "ended": "2026-11-17T12:17:25.713Z",
+        "pid": 14951,
+        "code": 0
+      },
+      "typecheck": {
+        "started": "2026-11-17T12:17:45.866Z",
+        "ended": "2026-11-17T12:17:50.088Z",
+        "pid": 18038,
+        "code": 0
+      },
+      "lint": {
+        "started": "2026-11-17T12:19:13.404Z",
+        "ended": "2026-11-17T12:19:46.249Z",
+        "pid": 22721,
+        "code": 0
+      }
+    },
+    "compilerPackages": 30,
+    "fullLintParts": 18,
+    "trackedFilesPreserved": 5241,
+    "modesPreserved": true,
+    "headPreserved": true,
+    "indexPreserved": true,
+    "protectedFilesPreserved": true,
+    "tsgoClear": true,
+    "actualAdapters": null
+  }
+}

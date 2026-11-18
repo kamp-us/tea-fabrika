@@ -15,6 +15,7 @@ import { expect } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Activity } from "../processes/Process.ts";
+import { News } from "../runtime/News.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient, rejected } from "./platform.ts";
 
@@ -309,7 +310,7 @@ const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
  *  values where it takes others, and nothing where it takes nothing. */
 const letter = (call: string, secret: string): ReadonlyArray<unknown> => {
   const given: Record<string, ReadonlyArray<unknown>> = {
-    "Gateway.notify": ["client-1", { news: secret }],
+    "Gateway.notify": ["client-1", News.cases.granted.make({ nonce: secret })],
     "Gateway.ring": ["stream-1", 1],
     "Gateway.probe": ["session-1"],
     "Process.msg": [{ text: secret }],

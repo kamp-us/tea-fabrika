@@ -126,6 +126,9 @@ const both = (
 const onWire = (view: TezgahView): unknown =>
   Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
 
+/** A value the walk built, checked as the JSON the diff takes: the check hands back the same value. */
+const json = Schema.decodeUnknownSync(Schema.Json);
+
 const text = (state: unknown) =>
   state === null ? "null" : Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(state as never));
 
@@ -175,12 +178,17 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
           kind === "whole"
             ? { type: "server", rev: rev + skew, view: target }
             : kind === "next"
-              ? { type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) }
+              ? { type: "patch", base: rev, rev: rev + 1, patch: diff(json(shown), json(target)) }
               : kind === "gap_base"
-                ? { type: "patch", base: rev - skew, rev: rev + 1, patch: diff(shown, target) }
+                ? { type: "patch", base: rev - skew, rev: rev + 1, patch: diff(json(shown), json(target)) }
                 : kind === "gap_rev"
-                  ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }
-                  : { type: "patch", base: rev - skew - 1, rev: rev - skew + 1, patch: diff(shown, target) };
+                  ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(json(shown), json(target)) }
+                  : {
+                      type: "patch",
+                      base: rev - skew - 1,
+                      rev: rev - skew + 1,
+                      patch: diff(json(shown), json(target)),
+                    };
 
         const [next, cmds] = both(m, msg);
         const asks = Arr.filter(cmds, (c) => c.type === "ask").length;

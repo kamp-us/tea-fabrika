@@ -38,7 +38,7 @@ import {
 } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
-import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
+import { CAPACITY, codexExecAdapter, type Sandbox } from "./codexexec.ts";
 
 export const PROVIDERS = ["codex", "codex-read", "codex-exec", "codex-exec-read", "claude"] as const;
 
@@ -235,7 +235,7 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
  * starts from the env `boxEnv` gives, so a box finds the Node the checkout at `main` pins first,
  * and a `codex-exec` turn starts only once the box's shell finds that pin (codexexec.ts).
  */
-export const makeStepAgents = (sessionsDir: string, main: string) =>
+export const makeStepAgents = (sessionsDir: string, main: string, sandbox?: Sandbox) =>
   Effect.gen(function* () {
     yield* adaptersReady();
     const sessions = yield* Agent.fileSessions(sessionsDir);
@@ -245,8 +245,8 @@ export const makeStepAgents = (sessionsDir: string, main: string) =>
     const adapters = {
       codex: yield* acpAdapter({ name: "codex", access: "write" }, env),
       "codex-read": yield* acpAdapter({ name: "codex", access: "read" }, env),
-      "codex-exec": yield* codexExecAdapter({ access: "write", env, pin }),
-      "codex-exec-read": yield* codexExecAdapter({ access: "read", env, pin }),
+      "codex-exec": yield* codexExecAdapter({ access: "write", sandbox, env, pin }),
+      "codex-exec-read": yield* codexExecAdapter({ access: "read", sandbox, env, pin }),
       claude: yield* acpAdapter("claude", env),
     };
 

@@ -98,6 +98,7 @@ import { type Ask, HandsTasks, type HandsTasksError, type Reply as HandsReply } 
 import * as HandsTasksLive from "../runtime/HandsTasksLive.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { MailWakeups } from "../runtime/MailWakeups.ts";
+import { type News, Published } from "../runtime/News.ts";
 import { Checkpoint, ProcessStore, RuntimeRecord } from "../runtime/ProcessStore.ts";
 import { ProgramDown } from "../runtime/Program.ts";
 import * as QuotaRunner from "../runtime/QuotaRunner.ts";
@@ -337,7 +338,7 @@ export interface ProjectDoorOptions {
   readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
   readonly audit: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError>;
   readonly nextProcess: () => Effect.Effect<string>;
-  readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
+  readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError>;
   readonly deliver: (process: string, input: Incoming) => Effect.Effect<Sent, LedgerError>;
   /**
    * Whether the program behind `process` has room for this input, asked before it is saved (0147).
@@ -1174,10 +1175,9 @@ const projectLogic = Effect.fn("project.init")(function* (
       .pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     return remember(life.name, program.declaration);
   });
-  const publish = Publish.make(sql, (connection, client, news) =>
+  const clients = Publish.make(sql, (connection, client, news) =>
     rpc(GatewayClient.make(env.CONNECTION.getByName(connection)).notify(client, news)),
   );
-  const notify = (client: string, news: unknown) => publish(client, news).pipe(Effect.asVoid);
   sql.exec(
     "CREATE TABLE IF NOT EXISTS dev_clients (client TEXT PRIMARY KEY, connection TEXT NOT NULL, session TEXT NOT NULL)",
   );
@@ -1209,7 +1209,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         return yield* program.execution.audit(message);
       }),
       nextProcess: () => ids.next,
-      notify,
+      notify: clients.notify,
       admit: (pid, incoming, before) =>
         ProjectQuotas.admitsInput(Context.get(services, Quotas), processes, pid, incoming, config.build, before),
       deliver: (pid, incoming) =>
@@ -1875,7 +1875,12 @@ const projectLogic = Effect.fn("project.init")(function* (
           session,
         );
       }),
-    publish,
+    // Project RPC input is untrusted: a Process object on another build may send another shape.
+    publish: (client: string, update: Published) =>
+      Schema.decodeUnknownEffect(Published)(update).pipe(
+        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+        Effect.flatMap((checked) => clients.publish(client, checked)),
+      ),
     connect: () => wrapped(door.connect()),
     challenge: (client: ConnectionId) => wrapped(door.challenge(client)),
     initialize: (
@@ -2012,7 +2017,7 @@ export class ProjectService extends Context.Service<
     ) => Effect.Effect<typeof HandsReply.Type, HandsTasksError | ProjectFailure>;
     readonly target: GatewayCalls["target"];
     readonly register: (client: string, gateway: string, session: string) => Effect.Effect<void>;
-    readonly publish: (client: string, update: unknown) => Effect.Effect<typeof Publication.Type, LedgerError>;
+    readonly publish: (client: string, update: Published) => Effect.Effect<typeof Publication.Type, LedgerError>;
     // The door's calls. A door fails with `unknown`, which takes in every other failure.
     readonly connect: () => Effect.Effect<ConnectionId, ProjectFailure>;
     readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;

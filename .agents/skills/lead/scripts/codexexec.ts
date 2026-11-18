@@ -17,7 +17,8 @@
 // What it gives up next to the ACP row, on purpose (owner, 2026-11-11: make it work first, it only
 // runs on his own laptop): no private Codex home, no permission profile of ours, no keep-list of
 // the environment, and the user's own config, skills and rules. Its only fence is Codex's own
-// sandbox: `workspace-write` (the folder and temp folders, no network) or `read-only`.
+// sandbox: `workspace-write` (the folder and temp folders, no network) or `read-only` by default.
+// An explicit `danger-full-access` setting gives any step full physical access; its role stays the same.
 //
 // A turn is done when Codex wrote a last message (`-o`), as the shell wrapper it copies says. The
 // last message file lives in a temp folder the turn's scope gives back.
@@ -41,8 +42,11 @@ import { holdsPin, NODE_PROBE } from "./boxnode.ts";
 /** What a turn may do in its folder: change it, or only read it (a plan, a review). */
 export type Access = "write" | "read";
 
+export type Sandbox = "danger-full-access";
+
 export interface CodexExecConfig {
   readonly access: Access;
+  readonly sandbox?: Sandbox | undefined;
   /** The whole environment Codex runs in: the caller's, as `boxEnv` gives it. */
   readonly env: Readonly<Record<string, string | undefined>>;
   /**
@@ -64,17 +68,19 @@ const tomlText = (text: string) => pipe(JSON.stringify(text), Str.replaceAll("\x
  * How Codex runs a command, the same for a turn and for its probe: the sandbox, and a shell that
  * is never a login shell, so no profile sets the PATH again (see the top).
  */
-export const routeArgs = (access: Access): string[] => [
+export const routeArgs = (access: Access, sandbox?: Sandbox): string[] => [
   "-c",
-  `sandbox_mode=${tomlText(access === "write" ? "workspace-write" : "read-only")}`,
+  `sandbox_mode=${tomlText(sandbox ?? (access === "write" ? "workspace-write" : "read-only"))}`,
   "-c",
   "allow_login_shell=false",
+  "-c",
+  'approval_policy="never"',
 ];
 
 /** The probe's command line: `NODE_PROBE` in `shell`, in Codex's own sandbox, on `routeArgs`. */
-export const probeArgs = (access: Access, shell: string): string[] => [
+export const probeArgs = (access: Access, shell: string, sandbox?: Sandbox): string[] => [
   "sandbox",
-  ...routeArgs(access),
+  ...routeArgs(access, sandbox),
   "--",
   shell,
   "-c",
@@ -83,6 +89,7 @@ export const probeArgs = (access: Access, shell: string): string[] => [
 
 export interface ExecAsk {
   readonly access: Access;
+  readonly sandbox?: Sandbox | undefined;
   readonly folder: string;
   readonly prompt: string;
   /** Codex's own thread to carry on, or `null` to start one. */
@@ -110,9 +117,7 @@ export const execArgs = (a: ExecAsk): string[] => [
   a.folder,
   ...(a.model === null ? [] : ["-m", a.model]),
   ...(a.effort === null ? [] : ["-c", `model_reasoning_effort=${tomlText(a.effort)}`]),
-  ...routeArgs(a.access),
-  "-c",
-  'approval_policy="never"',
+  ...routeArgs(a.access, a.sandbox),
   ...(a.system === null || Str.trim(a.system) === "" ? [] : ["-c", `developer_instructions=${tomlText(a.system)}`]),
   ...(a.resume === null ? [] : ["resume", a.resume]),
   pipe(a.prompt, Str.startsWith("-")) ? `\n${a.prompt}` : a.prompt,
@@ -145,7 +150,7 @@ const probe = (config: CodexExecConfig, folder: string) =>
     }
 
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const args = probeArgs(config.access, config.env.SHELL ?? "/bin/sh");
+    const args = probeArgs(config.access, config.env.SHELL ?? "/bin/sh", config.sandbox);
 
     const said = yield* spawner
       .string(
@@ -202,6 +207,7 @@ export const codexExecAdapter = (
 
           const args = execArgs({
             access: config.access,
+            sandbox: config.sandbox,
             folder: turn.folder,
             prompt: turn.prompt,
             resume: turn.resume,

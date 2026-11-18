@@ -37,6 +37,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { nodeExecution } from "@kampus/libfabrika/runtime/Execution";
 import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
+import { News } from "@kampus/libfabrika/runtime/News";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
@@ -457,11 +458,10 @@ const world = Effect.fnUntraced(function* (
   };
 
   const deliveries: Array<Delivery> = [],
-    notices: Array<{ client: string; news: unknown }> = [];
-
+    notices: Array<{ client: string; news: News }> = [];
   const controls = {
     deliver: (_: Delivery): DeliveryCheck => Effect.void,
-    notify: (_client: string, _news: unknown): Effect.Effect<void, LedgerError> => Effect.void,
+    notify: (_client: string, _news: News): Effect.Effect<void, LedgerError> => Effect.void,
     next: () => ProcessIdGenerator.use((g) => g.next),
     // What the injected program answers a delivered letter with, as the runner's Sent does.
     answer: undefined as typeof Sent.cases.refused.Type | undefined,
@@ -517,7 +517,7 @@ const world = Effect.fnUntraced(function* (
     spentCap: options.spentCap ?? 1000,
     nextProcess: () => controls.next(),
     deliver,
-    notify: (client: string, news: unknown) =>
+    notify: (client: string, news: News) =>
       Effect.gen(function* () {
         notices.push({ client, news });
         yield* controls.notify(client, news);
@@ -2819,12 +2819,8 @@ describe("P10 door admission and waiting", () => {
         const text = grantText(grant);
         expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
         expect((yield* d.watch(client)).rows).toEqual([]);
-        expect(
-          Arr.some(w.notices, (n) => n.client === pending && Str.includes("client.granted")(JSON.stringify(n.news))),
-        ).toBe(true);
-        expect(
-          Arr.some(w.notices, (n) => n.client === pending2 && Str.includes("client.granted")(JSON.stringify(n.news))),
-        ).toBe(true);
+        expect(Arr.some(w.notices, (n) => n.client === pending && News.guards.granted(n.news))).toBe(true);
+        expect(Arr.some(w.notices, (n) => n.client === pending2 && News.guards.granted(n.news))).toBe(true);
         expect(
           (yield* d.initialize(pending, hello, {
             url: URL,
@@ -3001,7 +2997,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
           connections = Arr.filter(connections, (c) => c.key !== pick.k.raw);
           const row = Option.getOrUndefined(Arr.findFirst(kept, (r) => r.key === pick.k.raw));
           const told = Arr.map(
-            Arr.filter(w.notices.slice(before), (n) => Str.includes("client.granted")(JSON.stringify(n.news))),
+            Arr.filter(w.notices.slice(before), (n) => News.guards.granted(n.news)),
             (n) => n.client,
           );
           // Every tab of the admitted key, and only those, is told once to answer a fresh nonce.
@@ -4499,7 +4495,7 @@ describe("P10 revocation and append", () => {
               const members = yield* ClientManager.use((m) => m.members);
               expect(members.keys.get(w.otherRoot.line)?.live).toBe(true);
               expect(members.keys.get(w.sheet.line)?.live).toBe(true);
-              expect(Arr.some(w.notices, (n) => Str.includes("4003")(JSON.stringify(n.news)))).toBe(true);
+              expect(Arr.map(w.notices, (n) => n.news)).toContainEqual(News.cases.close.make({ code: 4003 }));
             }).pipe(w.provide);
           }),
         { concurrency: 1, discard: true },
@@ -5916,7 +5912,7 @@ describe("P10 refusal records and checked writes", () => {
         });
 
         expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
-        expect(w.notices).toEqual([{ client, news: { close: 4003 } }]);
+        expect(w.notices).toEqual([{ client, news: News.cases.close.make({ code: 4003 }) }]);
       }).pipe(w.provide);
     }),
   );

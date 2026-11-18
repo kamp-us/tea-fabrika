@@ -10,8 +10,8 @@
 //   the same events, the reader tests alone      sized from the reader tests, with or without a base
 //   anything else                                the full matrix: all of next/ with no base
 //
-// Only a pull request with the `visual` label starts end-to-end legs, which run `next-visual`; the
-// merge queue and main never do, and the schedule runs every layer (0536).
+// Related visual tests run automatically on the PR, queue and main line. The visual label also
+// keeps its explicit opt-in meaning for other events. Global triggers select every file.
 //
 // The reader tests (changes.mjs's `readers`) read source as text, so `--changed`, which follows
 // imports, misses them. A sized run adds them to the vitest files, each once, and prints that list
@@ -25,13 +25,14 @@
 // this split is the one `Shards` makes on each leg.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Record as Rec, Config, ConfigProvider, Effect, Option } from "effect";
-
+import { testConfig } from "../../vitest.config.ts";
 import { assign, measured, median } from "../../vitest.shards.ts";
-import { readers, validSha } from "./changes.mjs";
+import { readers, readPaths, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
 /** How many legs of each kind run. Zero of a kind starts none of its machines. */
@@ -135,6 +136,12 @@ export const fewest = (files: readonly string[], most: number, limit: number, ta
 /** The events on the merge line, each of which runs only what its change reaches (0534). */
 const LINE = new Set(["pull_request", "merge_group", "push"]);
 
+const match = createRequire(import.meta.resolve("vitest/package.json"))("picomatch");
+
+/** Vitest's installed matcher and the configured global rerun triggers. */
+export const isTrigger = (path: string): boolean =>
+  match.isMatch(path, testConfig.test.forceRerunTriggers, { dot: true });
+
 /**
  * A run legs.ts sizes: one on the merge line that tests all of next/ from a base commit, or only the
  * reader tests, which are listed whole and need no base. Every other run is the full matrix: one
@@ -142,12 +149,8 @@ const LINE = new Set(["pull_request", "merge_group", "push"]);
  */
 const sizes = (run: Run) => LINE.has(run.event) && (run.scope === "readers" || validSha(run.base));
 
-/**
- * Whether a run's end-to-end legs, which run the visual tests, may start: only on a pull request
- * that asked with the `visual` label; never in the merge queue or on main, since the schedule runs
- * them (0536). check.yaml's fallback says the same (workflow-lint.ts, E10).
- */
-const visual = (run: Run) => run.event === "pull_request" && run.visual;
+/** Related visual tests run on the merge line, or when explicitly requested. */
+const visual = (run: Run) => LINE.has(run.event) || run.visual;
 
 /**
  * The legs a run starts: sized on a merge line run, each kind to its own limit, else `full`, each
@@ -188,10 +191,10 @@ export const withReaders = (changed: readonly string[], readerFiles: readonly st
  * end-to-end files the size step sized them with, `--changed` from the same commit; every other run
  * prints none, and its end-to-end legs run every file, as a sized run of the reader tests sized them.
  */
-export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
+export const outputs = (run: Run, legs: Legs, selected: Selected, full = false): string[] => {
   const some = legs.vitest + legs.e2e > 0;
   const listed = sizes(run) && legs.vitest > 0;
-  const narrowed = sizes(run) && run.scope === "all" && legs.e2e > 0;
+  const narrowed = sizes(run) && validSha(run.base) && legs.e2e > 0 && !full;
 
   if (listed && selected.vitest.some((path) => /\s/.test(path))) {
     throw new Error("legs: a vitest file's path holds a space, so it cannot be one word of `files`");
@@ -263,13 +266,15 @@ if (import.meta.main) {
   };
 
   const limit = limits(nextMinutes(workflow), budgetOf(env.budget));
+  const head = spawnSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], { cwd: root, encoding: "utf8" });
+  const paths = head.status === 0 ? readPaths(run.base, head.stdout.trim(), run.event) : null;
+  const force = paths === null || paths.some(isTrigger);
   // `--changed` from the base on a run of all of next/; none on a run of the reader tests alone.
-  const changed = run.scope === "all" ? [`--changed=${run.base}`] : [];
+  const changed = validSha(run.base) && !force ? [`--changed=${run.base}`] : [];
   const sized = sizes(run);
   // The reader tests are listed whole, with no `--changed`: Vitest's own match of changes' paths.
-  // The merge line's vitest legs run the `next` project alone, and a pull request's end-to-end legs
-  // the `next-visual` one, only when it asked (0536).
-  const picked = sized && run.scope === "all" ? list(root, ["--project", "next", "next/", ...changed]) : [];
+  // The existing matrix keeps next and visual files separate; related.ts adds other projects.
+  const picked = sized && (run.scope === "all" || force) ? list(root, ["--project", "next", "next/", ...changed]) : [];
   const readerFiles = sized ? list(root, ["--project", "next", ...readers]) : [];
 
   const selected: Selected = sized
@@ -280,7 +285,7 @@ if (import.meta.main) {
     : { vitest: [], e2e: [] };
 
   const legs = size(run, selected, full, limit);
-  const lines = outputs(run, legs, selected);
+  const lines = outputs(run, legs, selected, force);
   const missed = selected.vitest.length - picked.length;
 
   const vitestNote =

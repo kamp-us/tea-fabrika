@@ -143,6 +143,42 @@ const LIB = "next/packages/libfabrika/src";
 const TUVAL = "next/packages/tuval/src";
 
 describe("the real rule file on planted trees", () => {
+  // scenario: P25 T5 uses the real import rules. Tools takes runtime and transport contracts and
+  // shared types, but cannot reach gateway or platform implementations. Plant: allow next-door
+  // in next-mcp's imports. The gateway import then passes and this check fails.
+  it.effect("scenario: P25 T5 Tools accepts its contracts and refuses gateway and platform imports", () =>
+    Effect.gen(function* () {
+      const { plant } = yield* planter;
+
+      const tree = plant({
+        [`${LIB}/mcp/Tools.ts`]: lines(
+          'import { Program } from "../runtime/Program.ts";',
+          'import { Call } from "../transport/Call.ts";',
+          'import { Id } from "../Id.ts";',
+          'import { Gateway } from "../gateway/Gateway.ts";',
+          'import { load } from "../node/settings/Load.ts";',
+          'import { object } from "../cloudflare/objects.ts";',
+        ),
+        [`${LIB}/runtime/Program.ts`]: lines("export const Program = 1;"),
+        [`${LIB}/transport/Call.ts`]: lines("export const Call = 1;"),
+        [`${LIB}/Id.ts`]: lines("export const Id = 1;"),
+        [`${LIB}/gateway/Gateway.ts`]: lines("export const Gateway = 1;"),
+        [`${LIB}/node/settings/Load.ts`]: lines("export const load = 1;"),
+        [`${LIB}/cloudflare/objects.ts`]: lines("export const object = 1;"),
+      });
+
+      expect(runTool(tree, REAL)).toMatchObject({
+        edges: [
+          `${LIB}/mcp/Tools.ts -> next-door [outside-imports]`,
+          `${LIB}/mcp/Tools.ts -> next-node [upward]`,
+          `${LIB}/mcp/Tools.ts -> next-workers [upward]`,
+        ],
+        unclaimed: [],
+        status: 1,
+      });
+    }),
+  );
+
   // scenario: each line is one named wall of the table, met in a module folder: the ledger may not
   // import processes, transport may not import the ledger, processes and access may not import the
   // gateway or the runtime, and the runtime may not import the ledger or transport. The runtime's

@@ -10,10 +10,10 @@
 // had to write `volta run --node 26.13.0` (field note 2026-11-10-22). So the agents start with two
 // folders first on that PATH: the pinned Node's own `bin`, found through `volta run --node <pin>`
 // with the pin read from the repo's root package.json (`repoNode`), and pnpm's own `bin`, found
-// with `volta which pnpm`. That pnpm starts `#!/usr/bin/env node`, so it runs on the pinned Node,
-// and so does every command it starts. The box opens both folders, as the toolchain of what is
-// first on its PATH (`toolchain`), and drops Volta's shim folder from it: a brief writes a plain
-// `node` and `pnpm`.
+// with `volta which pnpm`. pnpm may be native or start through `#!/usr/bin/env node`; its own bin
+// bypasses Volta's package shim, and the Node bin supplies its children. The box opens both folders
+// as the toolchain of what is first on its PATH (`toolchain`), and drops Volta's shim folder from
+// it: a brief writes a plain `node` and `pnpm`.
 //
 // With no Volta, no pin or an answer that is not the pin, the PATH stays as it is, and one line on
 // stderr says why. A PATH here is split on `:`; this tooling runs on macOS and Linux only.
@@ -97,13 +97,15 @@ const said = (cwd: string, command: string, args: readonly string[]) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-    return yield* spawner.string(ChildProcess.make(command, args, { cwd, extendEnv: true, stdin: "ignore" }));
+    return yield* spawner.string(
+      ChildProcess.make(command, args, { cwd, extendEnv: true, stdin: "ignore", forceKillAfter: "10 seconds" }),
+    );
   }).pipe(Effect.orElseSucceed(() => ""));
 
-/** `parent` with the pinned Node's and pnpm's own folders first on its PATH (see the top). */
-export const boxEnv = (main: string, parent: Env) =>
+/** `parent` with the requested Node's and pnpm's bins first; defaults to the root manifest's pin. */
+export const boxEnv = (main: string, parent: Env, requested?: string) =>
   Effect.gen(function* () {
-    const pin = yield* repoNode(main);
+    const pin = requested ?? (yield* repoNode(main));
 
     const keep = (reason: string) =>
       Effect.sync(() => {

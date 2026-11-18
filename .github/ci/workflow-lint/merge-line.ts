@@ -3,6 +3,7 @@ import { Record as Rec } from "effect";
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
 import { parse } from "yaml";
+import { relatedWorkload } from "./related.ts";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
 
 // Today's app: its package name, or its folder outside next/. No command in check.yaml runs it.
@@ -53,14 +54,18 @@ const shellCommands = (script: string) =>
  * argument leaves that folder. Either way it reads no shell value but RUNNER_TEMP, untouched, and
  * the step's own pinned `VITEST_VARS`, and no `${{ }}` or command substitution.
  */
-const toolingJobs = (workflow: Record<string, unknown>): string[] => {
+const toolingJobs = (workflow: Record<string, unknown>, automatic = false): string[] => {
   const outer = { ...map(workflow["env"]) };
 
   return Rec.toEntries(map(workflow["jobs"]))
     .filter(([, job]) => !DISPATCH_ONLY.test(compact(map(job)["if"])))
-    .filter(([, job]) =>
+    .filter(([name, job]) =>
       steps(map(job)).some((step) => {
         if (typeof step["run"] !== "string") {
+          return false;
+        }
+
+        if (automatic && relatedWorkload(workflow, name, map(job), step)) {
           return false;
         }
 
@@ -106,7 +111,9 @@ export const lintNoTooling = (path: string, text: string): string[] => {
   const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Rec.keys(map(on));
 
   return events.includes("pull_request") || events.includes("merge_group")
-    ? toolingJobs(workflow).map((job) => `${path}: T1: ${job} runs no tooling test (0539)`)
+    ? toolingJobs(workflow, path === ".github/workflows/check.yaml").map(
+        (job) => `${path}: T1: ${job} runs no tooling test (0539)`,
+      )
     : [];
 };
 
@@ -114,7 +121,7 @@ export const mergeLine: Rule = ({ workflow, jobs }, require) => {
   // T1 (0539). No event here runs a tooling test: their author runs the narrow ones on the laptop,
   // and the schedule runs them all (scheduled.yaml's tooling job, SC8). Today's version is frozen
   // (0525, 0533), so its tests run on no event either. `toolingJobs` says how a vitest call passes.
-  for (const name of toolingJobs(workflow)) {
+  for (const name of toolingJobs(workflow, true)) {
     require(false, `T1: ${name} runs no tooling test (0539)`);
   }
 

@@ -9,6 +9,10 @@ export const jobLaws: Rule = ({ jobs }, require) => {
   // (required.mjs's `gates`): check on check or field rows, next on next, which already holds the
   // sizing.
   for (const name of gated) {
+    if (name === "related") {
+      continue;
+    }
+
     const job = map(jobs[name]);
     const flags = gates[name].map((flag) => `needs.changes.outputs.${flag} != 'false'`).join(" || ");
     require(job["needs"] === "changes", `${name} needs changes`);
@@ -25,6 +29,9 @@ export const jobLaws: Rule = ({ jobs }, require) => {
   // A job with no limit runs for GitHub's 360 minute default when a step hangs (ticket 496).
   for (const [name, job] of Rec.toEntries(jobs)) {
     const limit = map(job)["timeout-minutes"];
-    require(typeof limit === "number" && limit > 0 && limit < 360, `${name} sets timeout-minutes`);
+    require((typeof limit === "number" && limit > 0 && limit < 360) ||
+      (name === "related" &&
+        compact(limit) ===
+          "fromJSON(needs.select.outputs.projects)[matrix.shard]=='tooling'&&33||20"), `${name} sets timeout-minutes`);
   }
 };

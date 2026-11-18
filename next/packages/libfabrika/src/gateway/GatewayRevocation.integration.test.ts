@@ -42,6 +42,7 @@ import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import { MailWakeups } from "../runtime/MailWakeups.ts";
+import type { News } from "../runtime/News.ts";
 import { Sent } from "../runtime/Runner.ts";
 import { Tasks } from "../tasks/Tasks.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -186,8 +187,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
   };
 
   const deliveries: Incoming[] = [],
-    notices: unknown[] = [];
-
+    notices: Array<{ client: string; news: News }> = [];
   const controls = {
     letter: "",
     open: (_process: string, _client: string): Effect.Effect<Schema.Json> => Effect.succeed(null),

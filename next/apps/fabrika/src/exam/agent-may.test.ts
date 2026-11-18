@@ -527,13 +527,10 @@ const bindPolicy = (_w: World): PolicyDoor => {
   );
 };
 
-const paths = [
-  "../../../../packages/libfabrika/src/mcp",
-  "../../../../packages/libfabrika/src/mcp.ts",
-  "../../mcp.ts",
-  "../mcp.ts",
-  "../mcp",
-];
+// P25 slice 2 owns policy. Slice 1's Tools cannot activate this law.
+const policyPath = "../../../../packages/libfabrika/src/gateway/Methods.ts";
+
+const paths = [policyPath];
 
 const presence = (files: ReadonlySet<string>, load: () => PolicyDoor): PolicyDoor | null => {
   if (!Arr.some(paths, (p) => files.has(p))) {
@@ -755,25 +752,42 @@ it.effect.prop(
   options,
 );
 
+const slicePaths = [
+  "../../mcp.ts",
+  "../mcp.ts",
+  "../mcp",
+  "../../../../packages/libfabrika/src/mcp",
+  "../../../../packages/libfabrika/src/mcp.ts",
+  "../../../../packages/libfabrika/src/mcp/Tools.ts",
+  "../../../../packages/libfabrika/src/mcp/Server.ts",
+  "../../../../packages/libfabrika/src/mcp/Bridge.ts",
+  "../../../../packages/libfabrika/src/node/transport/ClientKeyFile.ts",
+  "../mcp-demo.laws.test.ts",
+] as const;
+
 it.prop(
-  "presence controls: every P25 path calls the actual binding helper",
-  { message: Arbitrary.schema(bounded(0, 128)) },
-  ({ message }) => {
+  "presence controls: only policy source activates the law; every failed or partial binding fails",
+  {
+    files: Schema.Record(Schema.Literals(slicePaths), Schema.Boolean),
+    message: bounded(0, 128),
+  },
+  ({ files, message }) => {
+    const absent = new Set(Object.entries(files).flatMap(([path, present]) => (present ? [path] : [])));
+    const present = new Set([...absent, policyPath]);
+    let loads = 0;
+
     const failed = (): PolicyDoor => {
+      loads++;
       throw new Error(`failed import: ${message}`);
     };
 
+    // Plants: restore the all-MCP trigger, suppress a failed load, or accept a missing operation.
     expect(presence(new Set(), failed)).toBeNull();
-
-    for (const p of [
-      "../../mcp.ts",
-      "../mcp.ts",
-      "../mcp",
-      "../../../../packages/libfabrika/src/mcp",
-      "../../../../packages/libfabrika/src/mcp.ts",
-    ]) {
-      expect(() => presence(new Set([p]), failed)).toThrow("failed import");
-    }
+    expect(presence(new Set(slicePaths), failed)).toBeNull();
+    expect(presence(absent, failed)).toBeNull();
+    expect(loads).toBe(0);
+    expect(() => presence(present, failed)).toThrow("failed import");
+    expect(loads).toBe(1);
 
     personRefusal(() => ({ _tag: "refused", reason: "not_for_agents" }));
     expect(() => personRefusal(() => ({ _tag: "ok" }))).toThrow();
@@ -787,8 +801,23 @@ it.prop(
       knock: () => Effect.die("control only"),
     };
 
-    expect(presence(new Set(paths), () => clean)).toBe(clean);
-    expect(() => presence(new Set(paths), () => ({ ...clean, install: undefined! }))).toThrow("missing policy binding");
+    expect(
+      presence(present, () => {
+        loads++;
+        return clean;
+      }),
+    ).toBe(clean);
+    expect(loads).toBe(2);
+
+    for (const name of ["call", "install", "personCall", "checklistInputs", "knock"] as const) {
+      const { [name]: _missing, ...partial } = clean;
+
+      // @ts-expect-error A partial runtime binding must be refused even when a caller skips its type.
+      expect(() => presence(present, () => partial)).toThrow(`missing policy binding: ${name}`);
+    }
+
+    // @ts-expect-error The runtime boundary must also refuse a missing parked-wait Effect.
+    expect(() => presence(present, () => ({ ...clean, parkedWait: undefined }))).toThrow("missing parked wait");
   },
   options,
 );

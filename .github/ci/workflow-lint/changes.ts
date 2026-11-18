@@ -1,7 +1,18 @@
 import { Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's changes job (S1): its flags and outputs, the
 // parser's pass, and the size step that sizes next's legs (legs.ts).
-import { classifier, compact, env, FLAGS, map, ROW_INSTALL, type Rule, steps, VISUAL_LABEL } from "./shared.ts";
+import {
+  classifier,
+  compact,
+  env,
+  FLAGS,
+  map,
+  RELATED,
+  ROW_INSTALL,
+  type Rule,
+  steps,
+  VISUAL_LABEL,
+} from "./shared.ts";
 
 // When changes' size step sizes next: any run next tests, all of next/ or the reader tests alone, as
 // the parser's pass left next, a pull request, a merge queue group and a push to main alike (0534);
@@ -57,7 +68,9 @@ export const changesJob: Rule = ({ jobs }, require) => {
     require(compact(outputs[name]) === `steps.size.outputs.${from}`, `S1: changes exposes ${name} from the size step`);
   }
 
-  const exposed = [...FLAGS, "next", "filter", ...LEGS_OUTPUTS.map(([name]) => name)].toSorted();
+  require(compact(outputs["related"]) ===
+    compact(RELATED), "R1: ready PR and queue checks select their missing projects");
+  const exposed = [...FLAGS, "next", "filter", "related", ...LEGS_OUTPUTS.map(([name]) => name)].toSorted();
   require(JSON.stringify(Rec.keys(outputs).toSorted()) ===
     JSON.stringify(exposed), "S1: changes exposes its flags, filter and the size step's outputs, and nothing else");
 

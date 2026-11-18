@@ -1,11 +1,14 @@
 // P8, next/. Port source: apps/fabrika/src/host/agents.test.ts at 13e0c2305beb.
 // Mapping: toolsOf/callOf -> schema tools and malformed calls; SDK client -> approval/retry/writer.
 // Tracker, quit, desk control, top-bar counts and the old host/stdio handshake are not ported.
+import { Machine } from "@demlik/tea/effect";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { expect, it } from "@effect/vitest";
+import { expect, expectTypeOf, it } from "@effect/vitest";
+import { checklist } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
+import * as Programs from "@kampus/libfabrika/runtime/Program";
 import { senderTest } from "@kampus/libfabrika/testing";
-import { Array as Arr, pipe, Record as Rec, Arbitrary, Effect, FileSystem, Schema } from "effect";
+import { Array as Arr, pipe, Record as Rec, Arbitrary, Effect, FileSystem, type Option, Result, Schema } from "effect";
 
 const SEED = 119120;
 
@@ -46,7 +49,7 @@ type Tool = {
 
 type InputDeclaration = {
   readonly name: string;
-  readonly schema: Schema.Codec<unknown>;
+  readonly schema: Schema.Struct<Readonly<Record<string, Schema.Top & Schema.Codec<unknown, unknown>>>> | Schema.Null;
   readonly readOnly: boolean;
   readonly personOnly: boolean;
 };
@@ -110,12 +113,12 @@ const declarationSets = (inputs: ReadonlyArray<InputDeclaration>) => [
 ];
 
 const inputSchema = (input: InputDeclaration) =>
-  Schema.toJsonSchemaDocument(Schema.Struct({ value: input.schema })).schema;
+  Schema.toJsonSchemaDocument(Schema.Struct({ value: input.schema }), { onExcessProperty: "error" }).schema;
 
 const tools = (actual: ReadonlyArray<Tool>, declarations: ReadonlyArray<InputDeclaration> = standard) => {
   const publicInputs = Arr.filter(declarations, (d) => !d.personOnly);
   expect(Arr.map(actual, (t) => t.name)).toEqual(["ps", ...Arr.map(publicInputs, (d) => `checklist_${d.name}`)]);
-  expect(actual[0]?.inputSchema).toEqual({ type: "object" });
+  expect(actual[0]?.inputSchema).toEqual({ type: "object", additionalProperties: false });
   expect(actual[0]?.annotations?.readOnlyHint).toBe(true);
 
   for (const [i, d] of publicInputs.entries()) {
@@ -209,7 +212,7 @@ type Bridge = {
   }>;
 };
 
-const refusePersonInputs = Effect.fnUntraced(function* (b: Bridge, c: Call) {
+const refusePersonInputs = Effect.fnUntraced(function* (b: Pick<Bridge, "hidden">, c: Call) {
   for (const d of personInputs) {
     const name = `checklist_${d.name}`;
     const value = d.name === "rename" ? { name: c.name, to: c.other } : { name: c.name };
@@ -217,51 +220,137 @@ const refusePersonInputs = Effect.fnUntraced(function* (b: Bridge, c: Call) {
   }
 });
 
-const bind = (): Bridge => {
-  throw new Error("P25 started: bind real tools, bridge and SDK client; declare their test dependencies before build");
+type Law = "tools" | "waiting" | "approved" | "check" | "malformed";
+
+const paths = {
+  tools: "../../../../packages/libfabrika/src/mcp/Tools.ts",
+  waiting: "../../../../packages/libfabrika/src/mcp/Server.ts",
+  approved: "../../../../packages/libfabrika/src/node/transport/ClientKeyFile.ts",
+  check: "../mcp-demo.laws.test.ts",
+  malformed: "../../../../packages/libfabrika/src/mcp/Bridge.ts",
+} as const;
+
+const declared = (inputs: ReadonlyArray<InputDeclaration>) => {
+  const writes = inputs.filter((d) => !d.readOnly || d.personOnly);
+  const msg = Schema.Union([
+    ...writes.map((d) =>
+      Schema.Struct({ type: Schema.Literal(d.name), ...("fields" in d.schema ? d.schema.fields : {}) }),
+    ),
+    Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
+  ]);
+  const machine = Machine.make({
+    model: Schema.Null,
+    msg,
+    cmds: [],
+    init: () => [null, []],
+    update: Object.fromEntries([...writes.map((d) => [d.name, (m: null) => [m, []]]), ["timer", (m: null) => [m, []]]]),
+  });
+  return Programs.Program.make({
+    name: "fabrika/checklist",
+    machine,
+    state: { v: 1, upgrades: [] },
+    view: () => null,
+    refuse: () => null,
+    outputs: {},
+    writes: {},
+    wake: () => null,
+    inputs: Object.fromEntries(
+      inputs.map((d) => [
+        d.name,
+        d.readOnly && !d.personOnly
+          ? Programs.Input.cases.read.make({ schema: d.schema, description: d.name, answer: () => null })
+          : d.personOnly
+            ? { description: d.name, personOnly: true as const }
+            : d.name,
+      ]),
+    ),
+  });
 };
 
-const paths = [
-  "../../../../packages/libfabrika/src/mcp",
-  "../../../../packages/libfabrika/src/mcp.ts",
-  "../../mcp.ts",
-  "../mcp.ts",
-  "../mcp",
-];
+const bindTools = Effect.fnUntraced(function* () {
+  const moduleName = "@kampus/libfabrika/mcp/Tools";
+  // edge: JavaScript dynamic import loads only the law whose product file exists.
+  const toolsModule: typeof import("@kampus/libfabrika/mcp/Tools") = yield* Effect.tryPromise({
+    try: () => import(/* @vite-ignore */ moduleName),
+    catch: (cause) => new Error("Tools import failed", { cause }),
+  });
+  const binding: Pick<Bridge, "tools" | "hidden"> = {
+    tools: (inputs) =>
+      Effect.gen(function* () {
+        const result = toolsModule.list([declared(inputs)]);
+        return yield* Effect.fromResult(result);
+      }).pipe(Effect.orDie),
+    hidden: (name, input, declarations) =>
+      Effect.sync(() => {
+        const call = toolsModule.read([declared(declarations)], name, { value: input });
+        expect(call).toEqual({ _tag: "refused", reason: "unknown_tool" });
+        return { words: `unknown tool ${name}`, letters: [] };
+      }),
+  };
+  // The app owns the checklist dependency; lower library modules cannot import it.
+  const listed = toolsModule.list([checklist]);
+  expect(Result.isSuccess(listed)).toBe(true);
 
-const presence = (files: ReadonlySet<string>, load: () => Bridge): Bridge | null => {
-  if (!Arr.some(paths, (p) => files.has(p))) {
+  if (Result.isSuccess(listed)) {
+    expect(listed.success.map((tool) => tool.name)).toEqual([
+      "ps",
+      "checklist_check",
+      "checklist_uncheck",
+      "checklist_left",
+      "checklist_items",
+    ]);
+  }
+
+  return binding;
+});
+
+const bind = (): Bridge => {
+  throw new Error("P25 started: bind the real bridge and SDK client for this law");
+};
+
+const presence = <A extends Partial<Bridge>>(files: ReadonlySet<string>, law: Law, load: () => A): A | null => {
+  if (!files.has(paths[law])) {
     return null;
   }
 
-  const b = load();
+  const binding = load();
+  const methods: ReadonlyArray<keyof Bridge> =
+    law === "tools" ? ["tools", "hidden"] : law === "malformed" ? ["malformed", "missing"] : [law];
 
-  for (const name of ["tools", "hidden", "waiting", "approved", "check", "malformed", "missing"] as const) {
-    if (typeof b[name] !== "function") {
+  for (const name of methods) {
+    if (typeof binding[name] !== "function") {
       throw new Error(`missing bridge export: ${name}`);
     }
   }
 
-  return b;
+  return binding;
 };
 
-const target = Effect.fnUntraced(function* (ctx: { skip: (reason?: string) => never }) {
+const target = Effect.fnUntraced(function* (ctx: { skip: (reason?: string) => never }, law: Exclude<Law, "tools">) {
   const fs = yield* FileSystem.FileSystem;
   const found = new Set<string>();
 
-  for (const p of paths) {
-    if (yield* fs.exists(new URL(p, import.meta.url).pathname)) {
-      found.add(p);
-    }
+  if (yield* fs.exists(new URL(paths[law], import.meta.url).pathname)) {
+    found.add(paths[law]);
   }
 
-  const b = presence(found, bind);
+  const b = presence(found, law, bind);
 
   if (b === null) {
-    ctx.skip("not built: P25 agent tools and SDK");
+    ctx.skip(`not built: P25 ${law}`);
   }
 
   return b;
+});
+
+const targetTools = Effect.fnUntraced(function* (ctx: { skip: (reason?: string) => never }) {
+  const fs = yield* FileSystem.FileSystem;
+
+  if (!(yield* fs.exists(new URL(paths.tools, import.meta.url).pathname))) {
+    ctx.skip("not built: P25 tools");
+  }
+
+  return yield* bindTools();
 });
 
 const platform = NodeFileSystem.layer;
@@ -271,7 +360,7 @@ it.effect.prop(
   { declarations: DeclarationCases, input: Arbitrary.schema(json(4)) },
   ({ declarations, input }, ctx) =>
     Effect.gen(function* () {
-      const b = yield* target(ctx);
+      const b = yield* targetTools(ctx);
 
       yield* refusePersonInputs(b, { name: "item", other: "renamed", note: "checked", input });
 
@@ -292,7 +381,7 @@ it.effect.prop(
   { c: AgentCalls },
   ({ c }, ctx) =>
     Effect.gen(function* () {
-      const b = yield* target(ctx),
+      const b = yield* target(ctx, "waiting"),
         a = yield* b.waiting(c);
 
       waiting(a);
@@ -306,7 +395,7 @@ it.effect.prop(
   { c: AgentCalls },
   ({ c }, ctx) =>
     Effect.gen(function* () {
-      const b = yield* target(ctx),
+      const b = yield* target(ctx, "approved"),
         a = yield* b.approved(c);
 
       expect(a).toEqual({ afterRestart: true, otherName: false, drives: 0 });
@@ -320,7 +409,7 @@ it.effect.prop(
   { c: AgentCalls },
   ({ c }, ctx) =>
     Effect.gen(function* () {
-      const b = yield* target(ctx),
+      const b = yield* target(ctx, "check"),
         a = yield* b.check(c);
 
       expect(a.letters.length).toBeGreaterThan(0);
@@ -336,7 +425,7 @@ it.effect.prop(
   { c: AgentCalls },
   ({ c }, ctx) =>
     Effect.gen(function* () {
-      const b = yield* target(ctx),
+      const b = yield* target(ctx, "malformed"),
         malformed = yield* b.malformed(c),
         missing = yield* b.missing(c);
 
@@ -348,7 +437,7 @@ it.effect.prop(
 );
 
 const cleanTools = (declarations: ReadonlyArray<InputDeclaration> = standard): ReadonlyArray<Tool> => [
-  { name: "ps", inputSchema: { type: "object" }, annotations: { readOnlyHint: true } },
+  { name: "ps", inputSchema: { type: "object", additionalProperties: false }, annotations: { readOnlyHint: true } },
   ...pipe(
     declarations,
     Arr.filter((d) => !d.personOnly),
@@ -377,6 +466,11 @@ it.prop(
   },
   ({ c, declarations }) => {
     personRefusalControls();
+
+    for (const inputs of declarationSets(declarations)) {
+      expect(Result.isSuccess(Schema.decodeResult(Programs.Program.schema)(declared(inputs)))).toBe(true);
+    }
+
     checkDeclarations(cleanTools, declarations);
     unknownTool({ words: "unknown tool checklist_add", letters: [] }, "checklist_add");
 
@@ -602,16 +696,18 @@ it.prop(
       throw new Error(`failed import: ${message}`);
     };
 
-    expect(presence(new Set(), failed)).toBeNull();
+    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+      expect(presence(new Set(), law, failed)).toBeNull();
 
-    for (const p of [
-      "../../mcp.ts",
-      "../mcp.ts",
-      "../mcp",
-      "../../../../packages/libfabrika/src/mcp",
-      "../../../../packages/libfabrika/src/mcp.ts",
-    ]) {
-      expect(() => presence(new Set([p]), failed)).toThrow("failed import");
+      for (const other of Object.keys(paths) as ReadonlyArray<Law>) {
+        if (other !== law) {
+          expect(presence(new Set([paths[other]]), law, failed)).toBeNull();
+        }
+      }
+    }
+
+    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+      expect(() => presence(new Set([paths[law]]), law, failed)).toThrow("failed import");
     }
 
     const clean: Bridge = {
@@ -624,8 +720,24 @@ it.prop(
       missing: () => Effect.die("control only"),
     };
 
-    expect(presence(new Set(paths), () => clean)).toBe(clean);
-    expect(() => presence(new Set(paths), () => ({ ...clean, hidden: undefined! }))).toThrow("missing bridge export");
+    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+      expect(presence(new Set([paths[law]]), law, () => clean)).toBe(clean);
+    }
+
+    expect(() => presence(new Set([paths.tools]), "tools", () => ({ ...clean, hidden: undefined! }))).toThrow(
+      "missing bridge export",
+    );
   },
   options,
 );
+
+// T4 uses the actual checklist here, where its package is already a dependency.
+const checklistPortType = () => {
+  const port = Programs.port(checklist, "check");
+  expectTypeOf<Option.Option.Value<typeof port>["Type"]>().toEqualTypeOf<{
+    readonly name: string;
+    readonly note?: string;
+  }>();
+};
+
+void checklistPortType;

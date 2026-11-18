@@ -34,15 +34,14 @@
 // cannot be worked out again later.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { DateTime, Config, ConfigProvider, Effect, Option } from "effect";
-
+import { Config, ConfigProvider, DateTime, Effect, Option, Result, Schema } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
-import { testConfig } from "../../vitest.config.ts";
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
-import { E2E_SETUP, fewest, list, room, seconds, split, withReaders } from "./legs.ts";
+import { E2E_SETUP, fewest, isTrigger, list, room, seconds, split, withReaders } from "./legs.ts";
+
+export { isTrigger };
 
 /** The projects a proof run lists and runs: every one CI runs, today's left out (0533). */
 export const PROJECTS = ["next", "next-integration", "next-visual", "tooling"] as const;
@@ -88,13 +87,6 @@ export type Sizing = {
   readonly table: Readonly<Record<string, number>>;
 };
 
-// vitest.config.ts's own match: Vitest's installed picomatch, with dot files.
-const match = createRequire(import.meta.resolve("vitest/package.json"))("picomatch");
-
-/** Whether a path from the repo's top is one of vitest.config.ts's rerun triggers, as Vitest matches them. */
-export const isTrigger = (path: string): boolean =>
-  match.isMatch(path, testConfig.test.forceRerunTriggers, { dot: true });
-
 /** The changed files that match a rerun trigger, in git's order. */
 export const triggered = (changed: readonly string[], isTrigger: (path: string) => boolean): string[] =>
   changed.filter(isTrigger);
@@ -138,16 +130,35 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
 /**
  * What the select step gives the next jobs: `scope`, `full` or `changed`; `legs`, the `changed`
  * job's matrix, a JSON list, `[]` when it starts no leg; and `files`, each leg's files as one line of
- * words, a JSON map by leg.
+ * words, a JSON map by leg; and `slots`, the nine shared groups rotated by the workflow run number.
  */
-export const outputs = (proof: Proof): string[] => {
+export const outputs = (proof: Proof, run: number): string[] => {
   const legs = proof._tag === "changed" ? proof.legs : {};
+  const groups = slots(run);
 
   return [
     `scope=${proof._tag}`,
     `legs=${JSON.stringify(Object.keys(legs))}`,
     `files=${JSON.stringify(Object.fromEntries(Object.entries(legs).map(([leg, list]) => [leg, list.join(" ")])))}`,
+    `slots=${JSON.stringify(groups)}`,
   ];
+};
+
+const Run = Schema.Int.check(Schema.isGreaterThan(0));
+
+/** A full permutation of 0595's nine groups. A retry keeps its workflow run number. */
+export const slots = (run: number): Record<string, string> => {
+  const parsed = Schema.decodeUnknownResult(Run)(run);
+
+  if (Result.isFailure(parsed)) {
+    throw new Error("proof: RUN_NUMBER must be a positive safe whole number");
+  }
+
+  const offset = parsed.success % 9;
+
+  return Object.fromEntries(
+    Array.from({ length: 9 }, (_, index) => [String(index + 1), String(((index + offset) % 9) + 1)]),
+  );
 };
 
 /** The run's summary: what it tests and why, and each leg's files. */
@@ -205,19 +216,22 @@ export const whole = (name: string, value: string | undefined): number => {
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {
   // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
-  // process.env gave it, so `whole` still refuses an empty MOST or LIMIT.
+  // process.env gave it, so `whole` still refuses an empty MOST, LIMIT or RUN_NUMBER.
   const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
 
   const env = Effect.runSync(
     Config.all({
       most: text("MOST"),
       limit: text("LIMIT"),
+      run: text("RUN_NUMBER"),
       record: text("RECORD"),
       output: text("GITHUB_OUTPUT"),
       summary: text("GITHUB_STEP_SUMMARY"),
     }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
   );
 
+  const run = whole("RUN_NUMBER", env.run);
+  const groups = slots(run);
   const root = fileURLToPath(new URL("../../", import.meta.url));
 
   const git = (args: readonly string[]) => {
@@ -267,14 +281,14 @@ if (import.meta.main) {
     sizing,
   );
 
-  const lines = outputs(proof);
+  const lines = outputs(proof, run);
   const said = summary(proof);
   console.log(said);
   console.log(lines.join("\n"));
   const record = env.record;
 
   if (record !== undefined && record !== "") {
-    writeFileSync(record, `${JSON.stringify(proof, null, 2)}\n`);
+    writeFileSync(record, `${JSON.stringify({ ...proof, slots: groups }, null, 2)}\n`);
   }
 
   const output = env.output;

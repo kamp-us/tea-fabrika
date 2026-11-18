@@ -22,6 +22,7 @@ import type { Descriptor } from "@kampus/libfabrika";
 import { programBox } from "@kampus/libfabrika/box";
 import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
+import { News, Published } from "@kampus/libfabrika/runtime/News";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
@@ -42,6 +43,7 @@ import {
   String as Str,
   Cause,
   DateTime,
+  Deferred,
   Effect,
   Exit,
   Formatter,
@@ -175,25 +177,34 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
   };
 };
 
+const proof = () => ({ cases: 0, moves: 0, started: 0, completed: 0, canceled: 0, future: 0 });
+
+type Proof = ReturnType<typeof proof>;
+
+class AlarmFailure extends Schema.TaggedError<AlarmFailure, { readonly brand: unique symbol }>()("AlarmFailure", {
+  cause: Schema.Defect(),
+}) {}
+
+/** The wall clock in milliseconds, read where the platform alarm and the proof counts need it. */
+const nowMillis = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
+
+type AlarmWork = {
+  readonly at: number;
+  readonly done: Deferred.Deferred<void, AlarmFailure>;
+};
+
 type Entry = {
   object: ReturnType<typeof processObject>;
   readonly db: DatabaseSync;
   readonly ctx: DurableObjectState;
-  timer: Fiber.Fiber<void> | undefined;
-};
-
-/** Cancels a pending alarm the way clearTimeout did: the interrupt lands before this returns. */
-const cancel = (timer: Fiber.Fiber<void> | undefined) => {
-  if (timer !== undefined) {
-    Effect.runFork(Fiber.interrupt(timer));
-  }
+  scheduled: { readonly timer: Fiber.Fiber<void>; readonly work: AlarmWork } | undefined;
 };
 
 /** What a client was sent, and what each Process published for it, in order. */
 type Heard = { readonly client: string; readonly news: unknown };
 
 /** One brain on fresh stores: the real Project, a real Process per started name, and the loader. */
-const world = (options: { readonly lacks?: string } = {}) =>
+const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}) =>
   Effect.acquireRelease(
     Effect.gen(function* () {
       // In place: the mocked modules hold this very object, so a new one would never reach them.
@@ -219,10 +230,45 @@ const world = (options: { readonly lacks?: string } = {}) =>
         exports: loopbacks,
       } as unknown as DurableObjectState;
 
+      const counts = options.proof ?? proof();
+      counts.cases++;
+
       const processes = new Map<string, Entry>(),
         configured: Array<Descriptor> = [],
         heard: Array<Heard> = [],
-        published: Array<Heard> = [];
+        published: Array<Heard> = [],
+        alarms = new Set<AlarmWork>(),
+        running = new Set<AlarmWork>();
+
+      const cancel = (entry: Entry) => {
+        const pending = entry.scheduled;
+
+        if (pending !== undefined) {
+          // The interrupt lands before this returns, as clearTimeout did.
+          Effect.runFork(Fiber.interrupt(pending.timer));
+          counts.canceled++;
+          Deferred.doneUnsafe(pending.work.done, Effect.void);
+          alarms.delete(pending.work);
+          entry.scheduled = undefined;
+        }
+      };
+
+      // Finished records stay until read, so a failure before settled starts cannot disappear.
+      const settled = Effect.gen(function* () {
+        while (true) {
+          const due = Arr.filter(Arr.fromIterable(alarms), (work) => work.at <= nowMillis() || running.has(work));
+
+          if (due.length === 0) {
+            return;
+          }
+
+          yield* Effect.forEach(due, (work) => Deferred.await(work.done), { concurrency: "unbounded" });
+
+          for (const work of due) {
+            alarms.delete(work);
+          }
+        }
+      });
 
       let closed = false;
       let project: ReturnType<typeof projectObject>;
@@ -294,18 +340,44 @@ const world = (options: { readonly lacks?: string } = {}) =>
                   return;
                 }
 
-                cancel(entry.timer);
+                cancel(entry);
 
                 if (at !== null && !closed) {
-                  entry.timer = Effect.runFork(
-                    Effect.sleep(Duration.millis(Math.max(0, at - DateTime.toEpochMillis(DateTime.nowUnsafe())))).pipe(
+                  const current = entry;
+                  const work: AlarmWork = { at, done: Deferred.makeUnsafe<void, AlarmFailure>() };
+                  alarms.add(work);
+
+                  const timer = Effect.runFork(
+                    Effect.sleep(Duration.millis(Math.max(0, at - nowMillis()))).pipe(
                       Effect.andThen(
                         Effect.sync(() => {
-                          entry!.object.call("alarm", []).catch(() => {});
+                          current.scheduled = undefined;
+                          running.add(work);
+                          counts.started++;
                         }),
                       ),
+                      // The existing platform Promise ends after publish and notify have been awaited.
+                      Effect.andThen(
+                        Deferred.complete(
+                          work.done,
+                          Effect.tryPromise({
+                            try: () => current.object.call("alarm", []),
+                            catch: (cause) => AlarmFailure.make({ cause }),
+                          }).pipe(
+                            Effect.asVoid,
+                            Effect.ensuring(
+                              Effect.sync(() => {
+                                running.delete(work);
+                                counts.completed++;
+                              }),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Effect.asVoid,
                     ),
                   );
+                  current.scheduled = { timer, work };
                 }
               });
 
@@ -316,7 +388,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
                 exports: loopbacks,
               } as unknown as DurableObjectState;
 
-              entry = { db: processDb, ctx: processCtx, timer: undefined, object: processObject(processCtx, env) };
+              entry = { db: processDb, ctx: processCtx, scheduled: undefined, object: processObject(processCtx, env) };
               processes.set(storageKey, entry);
 
               return entry;
@@ -398,6 +470,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
         startsPending: () => db.prepare("SELECT process FROM dev_descriptors WHERE pending>0").all().length,
         heard,
         published,
+        settled,
         from,
         get project() {
           return project;
@@ -410,9 +483,23 @@ const world = (options: { readonly lacks?: string } = {}) =>
         }),
         close: async () => {
           closed = true;
+          counts.future += Arr.filter(
+            Arr.fromIterable(alarms),
+            (work) => work.at > nowMillis() && !running.has(work),
+          ).length;
 
           for (const p of processes.values()) {
-            cancel(p.timer);
+            cancel(p);
+          }
+
+          // Calls already started keep their own records when another alarm replaces theirs.
+          await Effect.runPromise(
+            Effect.forEach([...running], (work) => Effect.exit(Deferred.await(work.done)), {
+              concurrency: "unbounded",
+            }),
+          );
+
+          for (const p of processes.values()) {
             await p.object.runtime.dispose();
             p.db.close();
           }
@@ -474,8 +561,6 @@ const admit = (w: World) =>
 
     return client;
   });
-
-const settle = Effect.sleep("50 millis");
 
 describe("L21: the boot list", () => {
   it("each entry starts once, in order; a reopen starts none again and reads each entry's first placing", async () => {
@@ -564,25 +649,16 @@ describe("L21: the boot list", () => {
   }
 });
 
-const Notice = Schema.Struct({
-  method: Schema.Literals(["view.whole", "view.patch"]),
-  params: Schema.Record(Schema.String, Schema.Unknown),
-});
-
-const without = (params: Readonly<Record<string, unknown>>) => {
-  const { pid: _pid, ...rest } = params;
-
-  return rest;
-};
-
 describe("L13: notices name their process", () => {
   it("successive sends land and a client joining after the first send opens the current checklist", async () => {
+    const counts = proof();
+    const started = nowMillis();
     await fc.assert(
       fc.asyncProperty(fc.uniqueArray(fc.stringMatching(/^[a-z]{1,12}$/), { minLength: 2, maxLength: 5 }), (names) =>
         Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const w = yield* world();
+              const w = yield* world({ proof: counts });
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
               const [, [pid]] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
@@ -593,6 +669,7 @@ describe("L13: notices name their process", () => {
               let model = checklistMachine.init(null, {})[0];
 
               for (const [n] of names.entries()) {
+                counts.moves++;
                 const name = Arr.filter(
                   names,
                   (candidate) => !Arr.some(model.items, (item) => item.name === candidate),
@@ -613,8 +690,8 @@ describe("L13: notices name their process", () => {
                   result: { _tag: "accepted" },
                 });
                 model = applyCell(checklistMachine, model, msg)[0];
-                // Let the platform's past-time alarm run between inputs, as it does in dev.ts.
-                yield* settle;
+                // Plant: finish the alarm record before a Deferred-held Process call.
+                yield* w.settled;
                 const late = yield* admit(w);
                 const opened = yield* call(w, (p) => p.route(late, "view.open", { pid }));
                 const { result } = yield* Schema.decodeUnknownEffect(
@@ -643,9 +720,13 @@ describe("L13: notices name their process", () => {
         examples: [[["milk", "bread"]]],
       },
     );
+    console.info("L13 successive sends proof", { ...counts, ms: nowMillis() - started });
   });
 
+  // Plants: remove pid, alter the body, or drop notify at the real delivery adapter.
   it("each view.whole and view.patch for checklist:1 carries its pid and the update its Process published", async () => {
+    const counts = proof();
+    const started = nowMillis();
     const seen = { whole: 0, patch: 0, arrays: 0, refused: 0 };
     await fc.assert(
       fc.asyncProperty(
@@ -657,7 +738,7 @@ describe("L13: notices name their process", () => {
           Effect.runPromise(
             Effect.scoped(
               Effect.gen(function* () {
-                const w = yield* world();
+                const w = yield* world({ proof: counts });
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
                 const [, [pid]] = yield* Schema.decodeUnknownEffect(
                   Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
@@ -671,6 +752,7 @@ describe("L13: notices name their process", () => {
                 let n = 0;
 
                 for (const m of moves) {
+                  counts.moves++;
                   const names = [...items.keys()];
                   const held = names.length === 0 ? null : names[m.pick % names.length]!;
 
@@ -712,23 +794,31 @@ describe("L13: notices name their process", () => {
                     }
                   }
 
-                  yield* settle;
+                  yield* w.settled;
                 }
 
-                yield* settle;
-                const views = Arr.filter(w.heard, (h) => Schema.is(Notice)(h.news));
-                const theirs = Arr.filter(w.published, (h) => Reflect.get(Object(h.news), "type") !== undefined);
+                yield* w.settled;
+                // Read as the Connection object reads them: a view news, and the Published it holds.
+                const views = Arr.filter(
+                  Arr.map(w.heard, (h) => h.news),
+                  News.guards.view,
+                );
+
+                const theirs = Arr.filter(
+                  Arr.map(w.published, (h) => h.news),
+                  Schema.is(Published),
+                );
                 expect(views.length, "the client heard the checklist's views").toBeGreaterThan(0);
                 expect(views.length).toBe(theirs.length);
 
-                for (const [i, h] of views.entries()) {
-                  const news = yield* Schema.decodeUnknownEffect(Notice)(h.news);
-                  expect(news.params.pid, "a notice names its process").toBe(pid);
-                  expect(without(news.params), "the update reached the client unchanged").toEqual(
-                    without(Object(theirs[i]!.news)),
-                  );
-                  seen[news.method === "view.whole" ? "whole" : "patch"]++;
-                  seen.arrays += Str.includes('"/items/')(Formatter.formatJson(news.params)) ? 1 : 0;
+                for (const [i, { update }] of views.entries()) {
+                  expect(update.pid, "a notice names its process").toBe(pid);
+                  expect(update, "the update its Process published reached the client unchanged").toEqual(theirs[i]);
+                  seen[update.type]++;
+                  seen.arrays +=
+                    update.type === "patch" && Arr.some(update.patch, (op) => Str.startsWith("/items/")(op.path))
+                      ? 1
+                      : 0;
                 }
               }),
             ),
@@ -736,6 +826,7 @@ describe("L13: notices name their process", () => {
       ),
       { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) },
     );
+    console.info("L13 forwarding proof", { ...counts, ms: nowMillis() - started });
     expect(seen.patch).toBeGreaterThan(0);
     expect(seen.arrays, "array ops reached the client").toBeGreaterThan(0);
     expect(seen.refused, "some inputs were refused").toBeGreaterThan(0);

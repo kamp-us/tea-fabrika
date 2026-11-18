@@ -20,6 +20,7 @@ import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { News } from "../runtime/News.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
@@ -446,7 +447,7 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
               close: () => gateway.close(w.socket),
               ring: () => gateway.ring("stream", 1),
               probe: () => gateway.probe("session"),
-              notify: () => gateway.notify("client", {}),
+              notify: () => gateway.notify("client", News.cases.granted.make({ nonce: "nonce-1" })),
             })[method]();
 
           typed(await runtime.runPromiseExit(Effect.suspend(work)));

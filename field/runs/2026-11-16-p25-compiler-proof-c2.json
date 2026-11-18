@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-p25-compiler-proof-c2",
+  "corrects": "2026-11-16-p25-compiler-proof",
+  "ticket": "kamp-us/tea-fabrika#888",
+  "pr": "kamp-us/tea-fabrika#1099",
+  "started": "2026-11-16T21:44:20.748233-08:00",
+  "ended": "2026-11-16T21:45:56.263331-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/, P25 slice 1 compiler proof at fd5ce441dbcf47dbd6a12b75cfff8320e8f0caf7. After explicit resource release and two source fixes, one whole nice19 pnpm typecheck through the unchanged global wrapper passed. Native pnpm 12.16.1 and direct/Python-child Node 26.13.0 verified. One temporary Program.ts:471 PortFields type widening to unknown caused the existing Tools.types.test.ts:34 assertion to fail with TS2344, Expected fields versus Actual unknown. It was the sole compiler diagnostic, not a startup or implementation failure. Original bytes restored in guaranteed cleanup; one narrow libfabrika compiler then passed. Same reserved compiler ownership and fixed lock inode held for the plant and restored check. HEAD, index, checked source/wrapper bytes unchanged and tracked tree clean; no compiler remains. Older failed rows and logs remain unchanged. T5 remote proof and fresh review are separate; this is no merge-ready verdict.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "driver_caused": false,
+  "plants": [
+    {
+      "law": "T4 typed Program.port fields, Tools.types.test.ts:34",
+      "plant": "Program.ts:471 changed the successful PortFields case from Omit<M, type> to unknown, then ran the narrow package compiler once and restored original bytes.",
+      "result": "red"
+    }
+  ]
+}

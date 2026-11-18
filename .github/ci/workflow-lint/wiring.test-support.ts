@@ -1,11 +1,13 @@
-import { Record as Rec } from "effect";
 // Today's CI, serving both versions. What the workflow-lint tests share: `wiring`, a generated
 // valid check.yaml, lookups of a step by its name, and `rejects`, which gives each listed plant to
 // every generated valid workflow, one at a time, so an unrelated error cannot mask it.
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
+import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
+import { parse } from "yaml";
 import { ignored } from "../changes.mjs";
 import { lintWorkflow as lint } from "../workflow-lint.ts";
 
@@ -117,6 +119,11 @@ const vitestCommand =
 // 0536: a pull request that asked for its visual tests.
 export const visualLabel = "contains(github.event.pull_request.labels.*.name, 'visual')";
 
+export const visualRoute =
+  "(github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')";
+
+const automatic = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
+
 // Chromium is fetched only once a visual file exists.
 const visualFiles = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
 
@@ -143,17 +150,22 @@ export const nextLegs = (count: number) => [
 // S1: the matrix is changes' `shards`, else a fallback (legs.ts): the full matrix on a pull request
 // with the `visual` label, the vitest legs alone everywhere else (0536, E10).
 export const sizedLegs = (legs: readonly unknown[], plain: readonly unknown[] = ["1", "2", "3", "4", "5"]) =>
-  `\${{ fromJSON(needs.changes.outputs.shards || (${visualLabel} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`;
+  `\${{ fromJSON(needs.changes.outputs.shards || (${visualRoute} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`;
 
 /** The full matrix a workflow's next job falls back to, as `sizedLegs` wrote it. */
 export const legsOf = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }): unknown[] =>
   JSON.parse(/&& '(.*?)' \|\|/s.exec(w.jobs.next.strategy.matrix.shard)?.[1] ?? "[]");
 
 export const setLegs = (
-  w: { jobs: { next: { strategy: { matrix: { shard: string } } } } },
+  w: { jobs: { next: { strategy: { matrix: { shard: string } }; concurrency?: unknown } } },
   legs: readonly unknown[],
 ) => {
   w.jobs.next.strategy.matrix.shard = sizedLegs(legs);
+  w.jobs.next.concurrency = {
+    group: `scheduled-test-\${{ fromJSON('${JSON.stringify(Object.fromEntries(legs.map((leg, index) => [leg, String(index + 1)])))}')[matrix.shard] || '1' }}`,
+    queue: "max",
+    "cancel-in-progress": false,
+  };
 };
 
 // A leg's `--shard`: its own kind's count from changes' size step, else the full matrix's.
@@ -255,6 +267,7 @@ const valid = (label: string, extra: string) => ({
         "vitest-legs": `\${{ steps.size.outputs.vitest }}`,
         "e2e-legs": `\${{ steps.size.outputs.e2e }}`,
         base: `\${{ steps.size.outputs.base }}`,
+        related: automatic.jobs.changes.outputs.related,
       } as Record<string, string>,
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
@@ -377,7 +390,10 @@ const valid = (label: string, extra: string) => ({
         { name: "typecheck", run: "pnpm typecheck" },
       ],
     },
+    select: structuredClone(automatic.jobs.select),
+    related: structuredClone(automatic.jobs.related),
     next: {
+      concurrency: structuredClone(automatic.jobs.next.concurrency),
       needs: "changes" as string | string[],
       if: guard("next"),
       "timeout-minutes": 17,
@@ -387,7 +403,7 @@ const valid = (label: string, extra: string) => ({
           name: "vitest",
           run: vitestCommand,
           if: `!${onE2e}`,
-          env: { SHARD: vitestShard(), FILTER: vitestFilter },
+          env: { SHARD: vitestShard(), FILTER: vitestFilter, FABRIKA_TEST_DEPTH: "full" },
         },
         {
           name: "chromium",
@@ -400,7 +416,7 @@ const valid = (label: string, extra: string) => ({
           name: "end to end",
           run: e2eCommand,
           if: onE2e,
-          env: { SHARD: e2eShard(2), CHANGED: changedFromBase },
+          env: { SHARD: e2eShard(2), CHANGED: changedFromBase, FABRIKA_TEST_DEPTH: "full" },
         },
         {
           name: "edges",
@@ -414,7 +430,7 @@ const valid = (label: string, extra: string) => ({
     },
     "ci-required": {
       name: `\${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}`,
-      needs: ["changes", "check", "typecheck", "next"],
+      needs: ["changes", "check", "typecheck", "next", "select", "related"],
       if: "always()",
       "timeout-minutes": 5,
       permissions: { contents: "read" } as unknown,

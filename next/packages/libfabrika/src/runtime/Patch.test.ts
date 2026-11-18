@@ -3,10 +3,13 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
-
 import * as fc from "fast-check";
 import { apply, diff } from "./Patch.ts";
+
+/** A value the walk built, checked as the JSON the diff takes: the check hands back the same value. */
+const json = Schema.decodeUnknownSync(Schema.Json);
 
 type Patch = {
   readonly op: "add" | "remove" | "replace";
@@ -77,7 +80,7 @@ describe("p22 whole view plus patches", () => {
         let watcher: unknown = structuredClone(views[0]);
 
         for (const next of views.slice(1)) {
-          watcher = independentApply(watcher, diff(watcher, next));
+          watcher = independentApply(watcher, diff(json(watcher), json(next)));
           expect(watcher).toEqual(next);
         }
       }),
@@ -187,7 +190,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
             Arr.some(p, (k) => (UNSAFE as ReadonlyArray<string>).includes(k)),
           ),
         );
-        const ops = diff(before, after);
+        const ops = diff(json(before), json(after));
         const beforeCopy = structuredClone(before);
         const opsCopy = structuredClone(ops);
         const got = apply(before, ops);

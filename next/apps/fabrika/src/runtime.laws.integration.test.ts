@@ -9,6 +9,7 @@ import { Child, type StartGrant } from "@kampus/libfabrika/processes/Children";
 import { type From } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
+import { News } from "@kampus/libfabrika/runtime/News";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
@@ -1014,17 +1015,20 @@ describe("P12 Connection recording", () => {
       try {
         const gateway = await runtime.runPromise(ConnectionService),
           before = w.recorded.length;
-
-        const action: Effect.Effect<unknown, unknown> =
-          operation === "ring"
-            ? gateway.ring("events", rev)
-            : operation === "probe"
-              ? gateway.probe("session-test")
-              : operation === "close"
-                ? gateway.close(socket)
-                : gateway.notify(letter, { method: "view.patch", params: {} });
-
-        await runtime.runPromise(Effect.exit(action));
+        const actions: Record<typeof operation, () => Effect.Effect<unknown, unknown>> = {
+          ring: () => gateway.ring("events", rev),
+          probe: () => gateway.probe("session-test"),
+          close: () => gateway.close(socket),
+          // A real news, so the send is reached and its failure is what the span records.
+          notify: () =>
+            gateway.notify(
+              letter,
+              News.cases.view.make({
+                update: { type: "patch", base: rev, rev: rev + 1, patch: [], pid: "process_a1" },
+              }),
+            ),
+        };
+        await runtime.runPromise(Effect.exit(actions[operation]()));
         const rows = w.recorded.slice(before);
         expect(Arr.some(rows, (row) => row.name === `connection.${operation}`)).toBe(true);
 

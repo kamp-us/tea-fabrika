@@ -265,4 +265,4 @@ const clean =
   vendored.length === 0 &&
   Arr.every(ledgers, ({ refused }) => refused.length === 0);
 
-process.exit(clean ? 0 : 1);
+process.exitCode = clean ? 0 : 1;

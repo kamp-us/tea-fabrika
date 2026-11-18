@@ -9,8 +9,8 @@
 //   cd apps/fabrika && SHOTS=../../programs/ticket/docs/ask-desk nice -n 15 node e2e.ts --ask-desk
 //   ```
 //
-// Write the commands with a plain `node` and `pnpm`: the step runs each one under the repo's own
-// Node (`volta run --node <version>`, the version from the root package.json; `commandArgv`).
+// Write plain `node` and `pnpm`: `boxEnv` puts their real bins first when discovery succeeds,
+// using the root package.json's pin. If discovery fails, it reports why and keeps the caller's PATH.
 //
 // chain.ts runs this step between build and review, and the flow runner can run it too
 // (`Step.act("host", args)`). It answers in the five verbs:
@@ -44,7 +44,7 @@ import {
 } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
-import { repoNode } from "../boxnode.ts";
+import { boxEnv, repoNode } from "../boxnode.ts";
 import { questKeyed, wipBranch } from "../quest.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
@@ -203,27 +203,15 @@ export const exec = Effect.fn("host.exec")(
     Effect.mapError(effect, () => StepFailed.make({ reason: `${command} could not start in ${dir}` })),
 );
 
-/**
- * How one host command starts: through `sh -c`, under `volta run --node <node>` when the repo names
- * its Node. Volta takes a folder's Node from its nearest package.json, and `apps/fabrika`'s names
- * none, so a command there ran the laptop's default Node (22 on askdesk7's hand run, where the repo
- * pins 26.13.0). Under `volta run`, every `node` and `pnpm` the line starts is the repo's.
- */
-export const commandArgv = (line: string, node: string | null): readonly [string, ...string[]] =>
-  node === null ? ["sh", "-c", line] : ["volta", "run", "--node", node, "sh", "-c", line];
+/** A nonlogin shell keeps the runtime PATH prepared by `runCommands`. */
+export const commandArgv = (line: string): readonly [string, ...string[]] => ["sh", "-c", line];
 
 /** One host command in `dir` (`commandArgv` says how), its output appended to `log`; its exit code. */
 const runLine = Effect.fn("host.runLine")(
-  function* (
-    dir: string,
-    line: string,
-    env: Readonly<Record<string, string | undefined>>,
-    log: string,
-    node: string | null,
-  ) {
+  function* (dir: string, line: string, env: Readonly<Record<string, string | undefined>>, log: string) {
     const fs = yield* FileSystem.FileSystem;
     yield* fs.writeFileString(log, `$ ${line}\n`, { flag: "a" });
-    const [command, ...args] = commandArgv(line, node);
+    const [command, ...args] = commandArgv(line);
 
     // Its own process group (the spawner's default), so the scope's end stops everything it started.
     const handle = yield* ChildProcess.make(command, args, {
@@ -264,8 +252,19 @@ export const runCommands = Effect.fn("host.runCommands")(function* (
   minutes: number,
   node: string | null = null,
 ) {
+  if (lines.length === 0) {
+    return null;
+  }
+
+  const childEnv = yield* Effect.cached(
+    node === null ? Effect.succeed(env) : boxEnv(dir, { ...process.env, ...env }, node),
+  );
+
   for (const line of lines) {
-    const ended = yield* runLine(dir, line, env, log, node).pipe(Effect.timeoutOption(Duration.minutes(minutes)));
+    const ended = yield* childEnv.pipe(
+      Effect.flatMap((prepared) => runLine(dir, line, prepared, log)),
+      Effect.timeoutOption(Duration.minutes(minutes)),
+    );
 
     if (Option.isNone(ended)) {
       const tail = yield* logTail(log);
