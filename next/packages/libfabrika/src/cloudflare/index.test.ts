@@ -1,9 +1,12 @@
 import { expect, it } from "@effect/vitest";
+import { Stub } from "@kampus/vitest";
 import { Effect } from "effect";
 import * as Digest from "effect/crypto/Digest";
 
 import * as fc from "fast-check";
+import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
+import type { ConnectionBinding, ProjectBinding } from "./bindings.ts";
 import { fetch, serveAsset, workerLoader } from "./index.ts";
 import type { Env } from "./runtime.ts";
 
@@ -113,17 +116,15 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
         const refuse = () => {
           throw new Error("an asset request reached a binding");
         };
-
-        const stub = new Proxy(
-          {},
-          { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(config) : refuse) },
-        );
-
+        const project = Stub.make<ProjectBinding>(() => refuse, {
+          settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(config) }),
+        });
+        const connection = Stub.make<ConnectionBinding>(() => refuse);
         // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles stand in for the two namespaces fetch can name
         const env = {
           INSTANCE: JSON.stringify(config),
-          CONNECTION: { getByName: () => stub },
-          PROJECT: { getByName: () => stub },
+          CONNECTION: { getByName: () => connection },
+          PROJECT: { getByName: () => project },
         } as unknown as Env;
 
         const origin = `http://127.0.0.1:${port}`;

@@ -19,6 +19,7 @@ import * as Arbitrary from "effect/Arbitrary";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -433,15 +434,15 @@ const serverFocus = (s: WindowModel) =>
 
 /** A pending move's letter, wherever its state keeps it (plan amendment 10: `waiting {n}`, `sent
  *  {letter}`, `answered {letter, pos, ms}`), or null while it waits for one. */
-const letterIn = (p: object): string | null => {
-  const own: unknown = Reflect.get(p, "letter");
+const letterIn = (p: Readonly<Record<string, unknown>>): string | null => {
+  const own = Predicate.hasProperty(p, "letter") ? p.letter : undefined;
 
   if (typeof own === "string") {
     return own;
   }
 
   for (const v of Rec.values(p)) {
-    const inner: unknown = typeof v === "object" && v !== null ? Reflect.get(v, "letter") : undefined;
+    const inner = typeof v === "object" && v !== null && Predicate.hasProperty(v, "letter") ? v.letter : undefined;
 
     if (typeof inner === "string") {
       return inner;
@@ -518,8 +519,10 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
     }
   }
 
-  if (m.type === "view" && Reflect.get(Object(m.note), "type") === "whole") {
-    w.seen = Math.max(w.seen, Number(Reflect.get(Object(m.note), "rev")));
+  const note = m.type === "view" ? m.note : undefined;
+
+  if (Predicate.hasProperty(note, "type") && note.type === "whole") {
+    w.seen = Math.max(w.seen, Number(Predicate.hasProperty(note, "rev") ? note.rev : undefined));
   }
 
   each({ win: i, m, prev, next, cmds, world });
@@ -1146,10 +1149,10 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
                 ).toEqual([]);
               }
 
+              const key = Predicate.hasProperty(m, "key") ? m.key : undefined;
+
               const last =
-                m.type === "focus" ||
-                (Arr.some(FOCUS_KEYS, (k) => k.keys.at(-1) === Reflect.get(m, "key")) &&
-                  Reflect.get(m, "key") !== "ctrl+b");
+                m.type === "focus" || (Arr.some(FOCUS_KEYS, (k) => k.keys.at(-1) === key) && key !== "ctrl+b");
 
               if (!last) {
                 return;
@@ -1157,10 +1160,9 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
 
               const made = w.moves.length > moves ? w.moves.at(-1)! : null;
               seen[made === null ? "still" : "drawn"]++;
-              expect(
-                drawnFocus(next),
-                `L25: ${String(Reflect.get(m, "key") ?? "a click")} is drawn on its own step`,
-              ).toBe(made === null ? before : made.to);
+              expect(drawnFocus(next), `L25: ${String(key ?? "a click")} is drawn on its own step`).toBe(
+                made === null ? before : made.to,
+              );
             };
 
             if (p.click) {
@@ -1516,7 +1518,7 @@ describe("Ticket 1043: a burst of presses is judged as the same presses one step
         const desk = makeDesk(d.cuts, d.focus);
         const apart = typed(desk, picks, "apart");
         counts.splits += Arr.filter(apart.letters, (m) =>
-          Function.pipe(String(Reflect.get(Object(m), "does")), Str.startsWith("tezgah.split")),
+          Function.pipe(String(Predicate.hasProperty(m, "does") ? m.does : undefined), Str.startsWith("tezgah.split")),
         ).length;
 
         for (const schedule of SCHEDULES) {

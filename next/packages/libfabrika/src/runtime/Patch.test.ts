@@ -1,6 +1,7 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -32,7 +33,7 @@ const independentApply = (before: unknown, patches: ReadonlyArray<Patch>): unkno
     let object = root;
 
     for (const key of keys.slice(0, -1)) {
-      object = Reflect.get(Object(object), key);
+      object = Predicate.hasProperty(object, key) ? object[key] : undefined;
     }
 
     const last = keys.at(-1)!;
@@ -49,8 +50,8 @@ const independentApply = (before: unknown, patches: ReadonlyArray<Patch>): unkno
       }
     } else if (patch.op === "remove") {
       Reflect.deleteProperty(Object(object), last);
-    } else {
-      Reflect.set(Object(object), last, structuredClone(patch.value));
+    } else if (Predicate.isObjectKeyword(object)) {
+      Object.assign(object, { [last]: structuredClone(patch.value) });
     }
   }
 
@@ -119,7 +120,7 @@ const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyAr
 };
 
 const read = (value: unknown, at: ReadonlyArray<string>): unknown =>
-  Arr.reduce(at, value, (v, key) => (typeof v === "object" && v !== null ? Reflect.get(v, key) : undefined));
+  Arr.reduce<string, unknown>(at, value, (v, key) => (Predicate.hasProperty(v, key) ? v[key] : undefined));
 
 /** `value` with `f` done to the container at `at`, copied on the way down. */
 const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => unknown): unknown => {
@@ -136,7 +137,10 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
     return copy;
   }
 
-  return { ...(value as Record<string, unknown>), [key]: change(Reflect.get(Object(value), key), rest, f) };
+  return {
+    ...(value as Record<string, unknown>),
+    [key]: change(Predicate.hasProperty(value, key) ? value[key] : undefined, rest, f),
+  };
 };
 
 /** One generated edit: which path the value holds now, and what to do there. */
@@ -244,7 +248,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
           const got = apply(before, [op === "remove" ? { op, path } : { op, path, value }]);
           expect(Result.isFailure(got), `${op} ${path}`).toBe(true);
           expect(before).toEqual(copy);
-          expect(Reflect.get({}, "polluted"), "Object.prototype was written").toBeUndefined();
+          expect(Object.hasOwn(Object.prototype, "polluted"), "Object.prototype was written").toBe(false);
         },
       ),
       { seed: 119120, numRuns: 500 },

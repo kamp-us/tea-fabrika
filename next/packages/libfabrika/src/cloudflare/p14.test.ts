@@ -14,12 +14,15 @@ import * as Exit from "effect/Exit";
 // tables it carried before) and builds a move that state allows: a rebuild, or a request for a route
 // the current table holds, a fresh absent route or `/`, with the current validator or a stale one.
 
+import { Stub } from "@kampus/vitest";
 import * as Digest from "effect/crypto/Digest";
 import * as Rec from "effect/Record";
 
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
+import type { ConnectionBinding, ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
 import * as Route from "./fetch.ts";
 import type { Env } from "./runtime.ts";
 
@@ -58,32 +61,29 @@ const config = (port: number) =>
 /** An environment whose every stub call is written down, so the law can say none was made. */
 const world = (input: Awaited<ReturnType<typeof config>>) => {
   const calls: Array<string> = [];
-
-  const stub = (to: string) =>
-    new Proxy(
-      {},
-      {
-        get:
-          (_t, method) =>
-          (..._args: Array<unknown>) => {
-            if (method === "settingsStart") {
-              return Promise.resolve(StartsTest.reply(input));
-            }
-
-            calls.push(`${to}.${String(method)}`);
-
-            return Promise.resolve({ _tag: "ok" });
-          },
-      },
-    );
-
+  /** Any call on the stub for `to`: written down, and answered `{ _tag: "ok" }`. */
+  const recorded = (to: string) => (method: string) => async () => {
+    calls.push(`${to}.${method}`);
+    return { _tag: "ok" };
+  };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members these routes call
   const env = {
     INSTANCE: JSON.stringify(input),
-    PROJECT: { getByName: () => stub("project") },
-    CONNECTION: { getByName: () => stub("connection") },
-    PROCESS: { getByName: () => stub("process") },
-    RECORD: { getByName: () => stub("record") },
+    PROJECT: {
+      getByName: () =>
+        Stub.make<ProjectBinding>(recorded("project"), {
+          settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(input) }),
+        }),
+    },
+    CONNECTION: {
+      getByName: () =>
+        Stub.make<ConnectionBinding>(
+          // @ts-expect-error the canned `{ _tag: "ok" }` is no Connection call's answer; any call fails this law anyway
+          recorded("connection"),
+        ),
+    },
+    PROCESS: { getByName: () => Stub.make<ProcessBinding>(recorded("process")) },
+    RECORD: { getByName: () => Stub.make<RecordBinding>(recorded("record")) },
   } as unknown as Env;
 
   return { env, calls };

@@ -138,7 +138,7 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
     );
     const r = yield* reader(h, dev);
     const inbox = yield* r.read(`${PROCESS}/inbox`);
-    const sent = Arr.filter(inbox, (e) => Reflect.get(Object(Reflect.get(Object(e.body), "m")), "name") === "milk");
+    const sent = Arr.filter(inbox, (e) => named(e.body) === "milk");
     return { first, kept, sent: sent.length };
   });
 
@@ -236,12 +236,11 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       state: Effect.map(state, (s) => {
         const reach = s.tiles[0]?.reach;
         const tag: string = reach?._tag ?? "missing";
-        const reason = Reflect.get(Object(Reflect.get(Object(reach), "reason")), "_tag");
 
         return s.link._tag !== "online"
           ? "Connecting"
-          : tag === "ended"
-            ? `Ended (${String(reason)})`
+          : reach?._tag === "ended"
+            ? `Ended (${reach.reason._tag})`
             : tag === "open"
               ? "Online"
               : tag === "missing"
@@ -277,7 +276,34 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 /** One entry of a stream as the suite reads it: its tag, its place in the whole log and its body. */
 type Fact = Entry;
 
-const field = (body: unknown, key: string): unknown => Reflect.get(Object(body), key);
+/** What the suite reads of a fact's body, or of a start's answer. Every field is optional and as loose
+ *  as the read it replaces: a body that holds none of them, or is not an object at all, reads as an
+ *  empty one, and a field of another shape still reads as itself. */
+const Body = Schema.Struct({
+  process: Schema.optionalKey(Schema.Unknown),
+  ref: Schema.optionalKey(Schema.Unknown),
+  reason: Schema.optionalKey(Schema.Unknown),
+  m: Schema.optionalKey(Schema.Unknown),
+  to: Schema.optionalKey(Schema.Unknown),
+});
+
+/** What the suite reads of a letter's `m`. */
+const Letter = Schema.Struct({ name: Schema.optionalKey(Schema.Unknown) });
+
+/** What the suite reads of a watch's `to`. */
+const Watcher = Schema.Struct({ client: Schema.optionalKey(Schema.Unknown) });
+
+const NO_BODY: typeof Body.Type = {};
+
+const read = (body: unknown): typeof Body.Type =>
+  Option.getOrElse(Schema.decodeUnknownOption(Body)(body), () => NO_BODY);
+
+/** The name of the letter an entry's body carries, if it carries one. */
+const named = (body: unknown): unknown => Option.getOrUndefined(Schema.decodeUnknownOption(Letter)(read(body).m))?.name;
+
+/** The client a watch's body is for, if it names one. */
+const watcher = (body: unknown): unknown =>
+  Option.getOrUndefined(Schema.decodeUnknownOption(Watcher)(read(body).to))?.client;
 
 /**
  * The app's own build, started in this process on a held port as `dev.ts` starts it, for the person
@@ -348,20 +374,11 @@ export const served = (h: Home) =>
 
 type Served = Effect.Success<ReturnType<typeof served>>;
 
-/** A local binding's calls, as the dev command hands them out. */
-type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
-
-/** One control call, as the chaos-revoke suite's `invoke` makes it: the binding's method, awaited. */
-const invoke = Effect.fnUntraced(function* (binding: Binding, method: string, args: ReadonlyArray<unknown>) {
-  const target = binding[method];
-
-  if (target === undefined) {
-    return yield* SuiteError.make({ waited: `the control endpoint's ${method}, which the binding does not have` });
-  }
-
+/** One typed control call, as the chaos-revoke suite's `invoke` makes it, awaited; `method` names it in the failure. */
+const invoke = Effect.fnUntraced(function* <A>(method: string, call: () => Promise<A>) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: the local instance's Durable Object RPC answers a Promise
   return yield* Effect.tryPromise({
-    try: () => Reflect.apply(target, binding, args),
+    try: call,
     catch: () => SuiteError.make({ waited: `the control endpoint's ${method}` }),
   });
 });
@@ -370,7 +387,7 @@ const invoke = Effect.fnUntraced(function* (binding: Binding, method: string, ar
 const newest = (facts: ReadonlyArray<Fact>) =>
   Arr.map(
     Arr.filter(facts, (f) => f._tag === "started" || f._tag === "restarted"),
-    (f) => String(field(f.body, "process")),
+    (f) => String(read(f.body).process),
   ).at(-1);
 
 /**
@@ -396,7 +413,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       return yield* SuiteError.make({ waited: `${backend.name}: a live ${PROCESS}` });
     }
 
-    yield* invoke(s.control, "exit", [first, ExitReason.cases.crashed.make({ phase: "step" }), s.from()]);
+    yield* invoke("exit", () => s.control.exit(first, ExitReason.cases.crashed.make({ phase: "step" }), s.from()));
     yield* until(
       `${backend.name}: the tile says Ended (crashed)`,
       Effect.map(backend.state, (words) => words === "Ended (crashed)"),
@@ -404,19 +421,19 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     );
     const ended = yield* backend.state;
     const endedBody = yield* backend.body;
-
-    const started = yield* invoke(s.control, "start", [
-      Start.cases.again.make({
-        id: "p18-e1-again",
-        name: PROCESS,
-        code: { program: "fabrika/checklist", hash: s.hash },
-        after: first,
-        reason: "p18-e1",
-      }),
-      s.from(),
-    ]);
-
-    const second = String(field(started, "process"));
+    const started = yield* invoke("start", () =>
+      s.control.start(
+        Start.cases.again.make({
+          id: "p18-e1-again",
+          name: PROCESS,
+          code: { program: "fabrika/checklist", hash: s.hash },
+          after: first,
+          reason: "p18-e1",
+        }),
+        s.from(),
+      ),
+    );
+    const second = String(read(started).process);
     yield* until(
       `${backend.name}: the tile is online on the successor`,
       Effect.gen(function* () {
@@ -436,19 +453,16 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     const restarted = Option.getOrUndefined(
       Arr.findFirst(
         yield* s.facts(`processes/${PROCESS}`),
-        (f) => f._tag === "restarted" && field(f.body, "process") === second,
+        (f) => f._tag === "restarted" && read(f.body).process === second,
       ),
     );
-    const sent = Arr.filter(yield* s.facts(`${PROCESS}/inbox`), (f) => field(field(f.body, "m"), "name") === "milk");
-    const watches = Arr.filter(
-      yield* s.facts("processes"),
-      (f) => f._tag === "monitored" && field(field(f.body, "to"), "client") === tab,
-    );
+    const sent = Arr.filter(yield* s.facts(`${PROCESS}/inbox`), (f) => named(f.body) === "milk");
+    const watches = Arr.filter(yield* s.facts("processes"), (f) => f._tag === "monitored" && watcher(f.body) === tab);
 
     yield* backend.close;
 
     const ends = (stream: ReadonlyArray<Fact>) =>
-      Arr.filter(stream, (f) => f._tag === "demonitored" && field(field(f.body, "to"), "client") === tab);
+      Arr.filter(stream, (f) => f._tag === "demonitored" && watcher(f.body) === tab);
     yield* until(
       `${backend.name}: its session's watch ended after the close`,
       Effect.map(s.facts("processes"), (all) => ends(all).length > 0),
@@ -464,12 +478,12 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       restartedAt: restarted?.rev ?? null,
       sent: Arr.map(sent, (f) => f.rev),
       watched: Arr.map(watches, (f) => ({
-        ref: String(field(f.body, "ref")),
-        process: String(field(f.body, "process")),
+        ref: String(read(f.body).ref),
+        process: String(read(f.body).process),
       })),
       unwatched: Arr.map(ends(yield* s.facts("processes")), (f) => ({
-        ref: String(field(f.body, "ref")),
-        reason: String(field(f.body, "reason")),
+        ref: String(read(f.body).ref),
+        reason: String(read(f.body).reason),
       })),
     };
   });

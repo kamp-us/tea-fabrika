@@ -107,15 +107,14 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         };
 
         const started = yield* Effect.promise(() =>
-          Reflect.get(instance.project(PROJECT), "start")(
-            { _tag: "first", id: "start-beat", name: NAME, code: { program: PROGRAM, hash: code!.hash } },
-            from,
-          ),
+          instance
+            .project(PROJECT)
+            .start({ _tag: "first", id: "start-beat", name: NAME, code: { program: PROGRAM, hash: code!.hash } }, from),
         );
         const pid = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started)).process;
         const beats = yield* until(
           "three beat facts",
-          Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")("beats", 0, "audit")).pipe(
+          Effect.promise(() => instance.project(PROJECT).read("beats", 0, "audit")).pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Beat))),
           ),
           (rows) => rows.length >= 3,
@@ -132,7 +131,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         }
 
         const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Letter))(
-          yield* Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")(`${NAME}/inbox`, 0, "audit")),
+          yield* Effect.promise(() => instance.project(PROJECT).read(`${NAME}/inbox`, 0, "audit")),
         );
         const timers = Arr.filter(rows, (row) => Schema.is(Timer)(row.body.m));
         expect(timers.length).toBeGreaterThanOrEqual(3);
@@ -155,12 +154,12 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           "stable idle view around saved alarm",
           Effect.gen(function* () {
             const before = yield* Schema.decodeUnknownEffect(View)(
-              yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
+              yield* Effect.promise(() => instance.process(pid).open("scheduled-job-observer")),
             );
 
-            const alarm = yield* Effect.promise(() => Reflect.get(instance.process(pid), "savedAlarm")());
+            const alarm = yield* Effect.promise(() => instance.process(pid).savedAlarm());
             const after = yield* Schema.decodeUnknownEffect(View)(
-              yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
+              yield* Effect.promise(() => instance.process(pid).open("scheduled-job-observer")),
             );
 
             return { before, alarm, after };

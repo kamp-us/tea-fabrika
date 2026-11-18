@@ -3,6 +3,7 @@ import { NodeServices } from "@effect/platform-node";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import { ConnectionId } from "@kampus/libfabrika/workers/bindings";
 import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
 import { Array as Arr, String as Str, Effect, FileSystem, Formatter, Path, Schema } from "effect";
@@ -48,9 +49,10 @@ class CallError extends Schema.TaggedError<CallError, { readonly brand: unique s
   cause: Schema.Defect(),
 }) {}
 
-const invoke = (target: object, method: string, args: ReadonlyArray<unknown>) =>
+/** One typed call on the local instance's client, its rejection kept as the cause. */
+const invoke = <A>(call: () => PromiseLike<A>) =>
   Effect.tryPromise({
-    try: () => Reflect.apply(Reflect.get(target, method), target, args) as PromiseLike<unknown>,
+    try: call,
     catch: (cause) => CallError.make({ message: "local instance call failed", cause }),
   });
 
@@ -169,18 +171,20 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     build: built.build,
   };
 
-  const started = yield* invoke(project, "start", [
-    Start.cases.first.make({
-      id: "recording-start",
-      name: NAME,
-      code: { program: PROGRAM, hash: built.programs[PROGRAM]!.hash },
-    }),
-    from,
-  ]);
+  const started = yield* invoke(() =>
+    project.start(
+      Start.cases.first.make({
+        id: "recording-start",
+        name: NAME,
+        code: { program: PROGRAM, hash: built.programs[PROGRAM]!.hash },
+      }),
+      from,
+    ),
+  );
   const pid = (yield* Schema.decodeUnknownEffect(Started)(started)).process;
   const connect = Effect.fnUntraced(function* (n: number) {
-    const client = yield* invoke(project, "connect", []);
-    const nonce = yield* Schema.decodeUnknownEffect(Schema.String)(yield* invoke(project, "challenge", [client]));
+    const client = yield* Schema.decodeUnknownEffect(ConnectionId)(yield* invoke(() => project.connect()));
+    const nonce = yield* Schema.decodeUnknownEffect(Schema.String)(yield* invoke(() => project.challenge(client)));
     const tab = `recording-${n}`;
 
     const signed = yield* writeSshsig({
@@ -190,22 +194,24 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       sign: key.sign,
     });
 
-    const answer = yield* invoke(project, "initialize", [
-      client,
-      {
-        versions: [1, 2],
-        has: ["seal"],
-        ping: "30s",
-        key: key.raw,
-        tab,
-        nonce,
-        signed,
-        platform: "headless",
-        os: "linux",
-        sentAt: SENT,
-      },
-      { url: instance.url, tab, name: fingerprint },
-    ]);
+    const answer = yield* invoke(() =>
+      project.initialize(
+        client,
+        {
+          versions: [1, 2],
+          has: ["seal"],
+          ping: "30s",
+          key: key.raw,
+          tab,
+          nonce,
+          signed,
+          platform: "headless",
+          os: "linux",
+          sentAt: SENT,
+        },
+        { url: instance.url, tab, name: fingerprint },
+      ),
+    );
 
     expect(answer).toMatchObject({ _tag: "online" });
 
@@ -243,17 +249,15 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       const prior = history[Math.floor(entropy / choices.length) % history.length]!;
 
       if (move === "refused_lost_answer") {
-        yield* invoke(instance.process(pid), "abort", []);
+        yield* invoke(() => instance.process(pid).abort());
         client = yield* connect(++serial);
       }
 
       // A previous call has already committed. Its answer may have been lost to the caller.
       expect(
-        yield* invoke(project, "route", [
-          client,
-          "process.send",
-          { pid, letter: prior.letter, m: prior.m, sentAt: SENT, seen: 0 },
-        ]),
+        yield* invoke(() =>
+          project.route(client, "process.send", { pid, letter: prior.letter, m: prior.m, sentAt: SENT, seen: 0 }),
+        ),
       ).toEqual(prior.answer);
     } else {
       const body = `BODY-${entropy}-${serial} "/雪\n`;
@@ -268,12 +272,13 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       } as const;
 
       const letter = `wire-${++serial}`;
-      const route = () => invoke(project, "route", [client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 }]);
+      const route = () =>
+        invoke(() => project.route(client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 }));
       let result;
 
       if (move === "reply_write" || move === "reply_complete") {
         yield* Effect.scoped(pendingReply(home, move, body, letter, route()));
-        yield* invoke(instance.process(pid), "abort", []);
+        yield* invoke(() => instance.process(pid).abort());
         client = yield* connect(++serial);
         result = yield* Effect.result(route());
         yield* Effect.scoped(resumedReply(home));
@@ -300,7 +305,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       }
     }
 
-    const page = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-check"]);
+    const page = yield* invoke(() => project.read("gateway/inputs", 0, "p13-check"));
     const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Stored))(page);
     const selected = Arr.map(
       rows,
@@ -319,24 +324,32 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   // A13 reaches the project call below the wire. An unknown type must remain a normal refusal.
   const unknown = { type: `unknown-${count}-${serial}`, body: `BODY-unknown-${tape.at(-1)} "/雪\n` };
   expect(
-    yield* invoke(project, "route", [
-      client,
-      "process.send",
-      { pid, letter: `unknown-${++serial}`, m: unknown, sentAt: SENT, seen: 0 },
-    ]),
+    yield* invoke(() =>
+      project.route(client, "process.send", {
+        pid,
+        letter: `unknown-${++serial}`,
+        m: unknown,
+        sentAt: SENT,
+        seen: 0,
+      }),
+    ),
   ).toMatchObject({ _tag: "ok", result: { _tag: "refused" } });
   reached.add("unknown");
 
   // The same client can still submit a valid input after the refusal.
   const control = { type: "save", note: "record", base: count, reason: "user-save", body: "control" };
   expect(
-    yield* invoke(project, "route", [
-      client,
-      "process.send",
-      { pid, letter: `control-${++serial}`, m: control, sentAt: SENT, seen: 0 },
-    ]),
+    yield* invoke(() =>
+      project.route(client, "process.send", {
+        pid,
+        letter: `control-${++serial}`,
+        m: control,
+        sentAt: SENT,
+        seen: 0,
+      }),
+    ),
   ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
-  const rows = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-unknown-check"]);
+  const rows = yield* invoke(() => project.read("gateway/inputs", 0, "p13-unknown-check"));
 
   for (const form of [
     unknown.body,

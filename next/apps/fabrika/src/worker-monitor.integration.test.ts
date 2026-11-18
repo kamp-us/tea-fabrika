@@ -16,6 +16,7 @@ import {
   Effect,
   FileSystem,
   Path,
+  Predicate,
   Schema,
   Scope,
   Array as Arr,
@@ -308,12 +309,9 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
               const program = `m13/${Str.split(name, ":")[0]}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
-
-              const started = await Reflect.get(instance.project(PROJECT), "start")(
-                { _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } },
-                from,
-              );
-
+              const started = await instance
+                .project(PROJECT)
+                .start({ _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } }, from);
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             },
           }),
@@ -337,7 +335,8 @@ const carries = (value: unknown, type: string): boolean =>
     ? Arr.some(value, (item) => carries(item, type))
     : typeof value === "object" &&
       value !== null &&
-      (Reflect.get(value, "type") === type || Arr.some(Rec.values(value), (item) => carries(item, type)));
+      ((Predicate.hasProperty(value, "type") && value.type === type) ||
+        Arr.some(Rec.values(value), (item) => carries(item, type)));
 
 /** The next view update the brain pushes for `pid` whose rows hold one of this type. It asks nothing. */
 const pushed = (client: Awaited<ReturnType<typeof wire>>, pid: string, type: string) =>

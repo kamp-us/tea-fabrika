@@ -34,6 +34,7 @@ import * as Formatter from "effect/Formatter";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Random from "effect/Random";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
@@ -104,6 +105,18 @@ const decodeFrame = Schema.decodeUnknownOption(Call);
 
 /** One sent frame as the whole JSON value the page wrote, every key kept. */
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
+
+/** The fields of a frame's params these laws read, each as loose as the page wrote it. */
+const Params = Schema.Struct({
+  pid: Schema.optionalKey(Schema.Unknown),
+  stream: Schema.optionalKey(Schema.Unknown),
+  signed: Schema.optionalKey(Schema.Unknown),
+  tab: Schema.optionalKey(Schema.Unknown),
+});
+
+/** A frame's params, decoded once: a value that is not an object, or lacks a field, reads it as undefined. */
+const paramsIn = (params: unknown): typeof Params.Type =>
+  Option.getOrElse(Schema.decodeUnknownOption(Params)(params), () => ({}));
 
 /** A notice that makes the page say hello: a nonce to sign, from the first challenge or a grant. */
 const asksHello = Schema.is(
@@ -1197,7 +1210,8 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           if (thrown !== null) {
             const failures = Arr.filter(rows, (r) => r.record._tag === "failure" && r.record.op === "connect");
             expect(failures.length, "the throw left no failure row").toBeGreaterThan(0);
-            expect(Schema.is(ErrorClass)(Reflect.get(failures.at(-1)!.record, "error"))).toBe(true);
+            const failure = failures.at(-1)!.record;
+            expect(failure._tag === "failure" && Schema.is(ErrorClass)(failure.error)).toBe(true);
             expect(
               Option.getOrUndefined(Arr.findFirst(rows, (r) => r.record._tag === "connect" && r.record.dial === thrown))
                 ?.record,
@@ -1360,8 +1374,8 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
           ),
         );
 
-        const signed = String(Reflect.get(Object(hello?.params), "signed") ?? "");
-        const tab = String(Reflect.get(Object(hello?.params), "tab") ?? "");
+        const signed = String(paramsIn(hello?.params).signed ?? "");
+        const tab = String(paramsIn(hello?.params).tab ?? "");
         expect(signed.length, "the hello was signed").toBeGreaterThan(0);
         expect(
           Arr.some(door.sent, (t) => Arr.some(forms(s.body), (form) => Function.pipe(t, Str.includes(form)))),
@@ -1378,7 +1392,7 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
             Arr.map(own, (span) => ({
               name: span.name,
               attributes: [...span.attributes],
-              events: Reflect.get(span, "events") ?? [],
+              events: (Predicate.hasProperty(span, "events") ? span.events : undefined) ?? [],
             })),
           ),
           urls: Formatter.formatJson([...urls, ...Arr.map(urls, (u) => decodeURIComponent(u))]),
@@ -1487,28 +1501,28 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
           expect(
             Arr.filter(
               Arr.map(door.sent, (t) => decodeJson(t)),
-              (f) => Reflect.get(Object(f), "id") === w.id,
+              (f) => Predicate.hasProperty(f, "id") && f.id === w.id,
             ),
             `the frame of write ${w.id}`,
           ).toEqual([{ jsonrpc: "2.0", id: w.id, ...params }]);
         }
 
         expect(
-          Arr.map(waits, (w) => Reflect.get(w.call, "stream")),
+          Arr.map(waits, (w) => (w.call._tag === "wait" ? w.call.stream : undefined)),
           "the wait is on the dial's own tab's inbox",
         ).toContain(`client:${tab}/inbox`);
         const monitored = Arr.findFirstIndex(frames, (f) => f.method === "process.monitor");
         const opened = Arr.findFirstIndex(frames, (f) => f.method === "view.open");
 
         const paramsAt = (at: Option.Option<number>) =>
-          Object(Option.getOrUndefined(Option.flatMapNullishOr(at, (i) => frames[i]?.params)));
+          paramsIn(Option.getOrUndefined(Option.flatMapNullishOr(at, (i) => frames[i]?.params)));
 
-        expect(Reflect.get(paramsAt(monitored), "pid"), "the monitor names the read's pid").toBe(pid);
+        expect(paramsAt(monitored).pid, "the monitor names the read's pid").toBe(pid);
         expect(Option.isSome(opened), "the open went out").toBe(true);
         expect(Option.getOrThrow(monitored), "the monitor goes before the open").toBeLessThan(
           Option.getOrThrow(opened),
         );
-        expect(Reflect.get(paramsAt(opened), "pid")).toBe(pid);
+        expect(paramsAt(opened).pid).toBe(pid);
         yield* Scope.close(scope, Exit.void);
       }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
     { arbitrary: { seed: SEED, runs: 12 } },
@@ -1556,7 +1570,7 @@ describe("Desk S2a L10: a start with the tezgah option", () => {
             Arr.flatMap(door.sent, (text) => Option.toArray(decodeFrame(text))),
             (frame) => frame.method === "ledger.read",
           ),
-          (frame) => String(Reflect.get(Object(frame.params), "stream")),
+          (frame) => String(paramsIn(frame.params).stream),
         );
 
         expect(streams[0], "L10: the first read is the person's tezgah").toMatch(/^processes\/tezgah:/);

@@ -4,6 +4,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import { Stub } from "@kampus/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
@@ -20,8 +21,10 @@ import { Writer } from "../access/SessionManager.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Alarm } from "../runtime/Entry.ts";
 import { ProgramRunner, Sent } from "../runtime/Runner.ts";
+import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import type { ProjectBinding } from "./bindings.ts";
 import * as ProcessObject from "./ProcessObject.ts";
 import { processRuntime, settings } from "./runtime.ts";
 
@@ -170,11 +173,10 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
             ),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
-          const stub = new Proxy({}, { get: unexpected });
-          const project = new Proxy(
-            {},
-            { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(start) : unexpected()) },
-          );
+          const stub = Stub.make<R2Bucket>(unexpected);
+          const project = Stub.make<ProjectBinding>(unexpected, {
+            settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(start) }),
+          });
           const runtime = yield* Effect.acquireRelease(
             Effect.sync(() =>
               processRuntime(
@@ -380,11 +382,10 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             ),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
-          const stub = new Proxy({}, { get: unexpected });
-          const project = new Proxy(
-            {},
-            { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(start) : unexpected()) },
-          );
+          const stub = Stub.make<R2Bucket>(unexpected);
+          const project = Stub.make<ProjectBinding>(unexpected, {
+            settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(start) }),
+          });
           // The app's checked read of the instance setting, as next/apps/fabrika/src/runtime.ts has it.
           ProcessObject.layer({
             programs: {},

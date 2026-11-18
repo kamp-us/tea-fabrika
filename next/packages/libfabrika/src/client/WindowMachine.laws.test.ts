@@ -50,6 +50,7 @@ import * as Arbitrary from "effect/Arbitrary";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -170,6 +171,28 @@ const isWrite = (c: Cmd): c is Write => c.type === "write";
 const mounted = (s: WindowModel): WindowModel => ({ ...s, said: { id: s.said.id, messages: [] } });
 
 const recordIn = (c: Cmd): Row | null => (c.type === "record" ? (c["record"] as Row) : null);
+
+/** The fields of a loose value these laws read: a ledger entry, its body, a letter or a sub's deps. */
+const Loose = Schema.Struct({
+  _tag: Schema.optionalKey(Schema.Unknown),
+  by: Schema.optionalKey(Schema.Unknown),
+  id: Schema.optionalKey(Schema.Unknown),
+  rev: Schema.optionalKey(Schema.Unknown),
+  body: Schema.optionalKey(Schema.Unknown),
+  process: Schema.optionalKey(Schema.Unknown),
+  name: Schema.optionalKey(Schema.Unknown),
+  reason: Schema.optionalKey(Schema.Unknown),
+  m: Schema.optionalKey(Schema.Unknown),
+  to: Schema.optionalKey(Schema.Unknown),
+  msg: Schema.optionalKey(Schema.Unknown),
+  type: Schema.optionalKey(Schema.Unknown),
+  dial: Schema.optionalKey(Schema.Unknown),
+});
+
+/** A loose value decoded once, each field as loose as it came: a value that is not an object, or lacks
+ *  a field, reads that field as undefined. */
+const loose = (value: unknown): typeof Loose.Type =>
+  Option.getOrElse(Schema.decodeUnknownOption(Loose)(value), () => ({}));
 
 const socketDial = (s: WindowModel): number | null =>
   s.link._tag === "dialing" || s.link._tag === "waiting_grant" || s.link._tag === "online" ? s.link.dial : null;
@@ -613,7 +636,7 @@ const walk = <W extends World, C extends Choice>(
       w.from.set(p.n, m.type === "press" ? m.tile : m.type === "tile" ? m.id : "?");
 
       if (m.type === "tile") {
-        const sent: unknown = Reflect.get(Object(p.m), "name");
+        const sent = loose(p.m).name;
         w.submitted.add(typeof sent === "string" ? sent : "");
       }
     }
@@ -1459,7 +1482,7 @@ type FrameEvent = {
 
 /** The model's handshake: its state, its dial and its live request id. */
 const handshakeIn = (s: WindowModel): { readonly _tag: string; readonly dial?: number; readonly id?: string } =>
-  Reflect.get(s, "handshake") ?? { _tag: "none" };
+  s.handshake;
 
 const frame = (w: FrameWorld, dial: number, text: string, ms?: number): WindowMsg =>
   ({ type: "frame", dial, text, at: w.at, ...(ms === undefined ? {} : { ms }) }) as WindowMsg;
@@ -2388,15 +2411,15 @@ type InboxView = { readonly _tag: string; readonly after: number; readonly id?: 
 const reachIn = (s: WindowModel, tile: string): ReachView =>
   Option.getOrThrow(Arr.findFirst(s.tiles, (t) => t.id === tile)).reach;
 
-const inboxIn = (s: WindowModel): InboxView => Reflect.get(s, "inbox") ?? { _tag: "none", after: -1 };
+const inboxIn = (s: WindowModel): InboxView => s.inbox;
 
 const holds = (r: ReachView) => r._tag === "opening" || r._tag === "open";
 
 /** A Msg's type and the write it answers, read the same for the Msgs slice 2 adds. */
 const msgKey = (m: WindowMsg) => ({
   type: m.type as string,
-  id: Reflect.get(m, "id") as unknown,
-  dial: Reflect.get(m, "dial") as unknown,
+  id: Predicate.hasProperty(m, "id") ? m.id : undefined,
+  dial: Predicate.hasProperty(m, "dial") ? m.dial : undefined,
 });
 
 const answeredFlight = (s: WindowModel, m: WindowMsg) => {
@@ -2438,7 +2461,7 @@ const lastLife = (w: Follow, name: string): string | null => {
 
   const body = lives.at(-1)?.body;
 
-  return body === undefined ? null : String(Reflect.get(body, "process"));
+  return body === undefined ? null : String(loose(body).process);
 };
 
 const crash = (w: Follow, name: string, reason: ExitReason) => {
@@ -2717,23 +2740,23 @@ const readName = (entries: ReadonlyArray<unknown>, name: string) => {
   let after = 0;
 
   for (const raw of entries) {
-    const entry = Object(raw);
-    const rev: unknown = Reflect.get(entry, "rev");
+    const entry = loose(raw);
+    const rev = entry.rev;
     after = typeof rev === "number" ? Math.max(after, rev) : after;
-    const body = Object(Reflect.get(entry, "body"));
-    const process: unknown = Reflect.get(body, "process");
+    const body = loose(entry.body);
+    const process = body.process;
 
-    if (!trusted(Reflect.get(entry, "by")) || typeof process !== "string") {
+    if (!trusted(entry.by) || typeof process !== "string") {
       continue;
     }
 
-    const tag: unknown = Reflect.get(entry, "_tag");
+    const tag = entry._tag;
 
     if (tag === "started" || tag === "restarted") {
-      const named: unknown = Reflect.get(body, "name");
+      const named = body.name;
       live = named === undefined || named === name ? process : live;
     } else if (tag === "exited") {
-      const reason: unknown = Reflect.get(body, "reason");
+      const reason = body.reason;
       ended = Schema.is(ExitReason)(reason) ? { pid: process, reason } : ended;
       live = process === live ? null : live;
     }
@@ -2744,11 +2767,11 @@ const readName = (entries: ReadonlyArray<unknown>, name: string) => {
 
 /** A letter the window must take as a DOWN, read on `s`, the Model before its page was taken. */
 const takenOn = (s: WindowModel, letter: unknown) => {
-  const entry = Object(letter);
-  const id: unknown = Reflect.get(entry, "id");
-  const m: unknown = Reflect.get(Object(Reflect.get(entry, "body")), "m");
+  const entry = loose(letter);
+  const id = entry.id;
+  const m = loose(entry.body).m;
 
-  if (!trusted(Reflect.get(entry, "by")) || typeof id !== "string" || !inSignalSpace(id) || !Schema.is(Down)(m)) {
+  if (!trusted(entry.by) || typeof id !== "string" || !inSignalSpace(id) || !Schema.is(Down)(m)) {
     return null;
   }
 
@@ -2760,16 +2783,16 @@ const takenOn = (s: WindowModel, letter: unknown) => {
     }),
   );
 
-  return tile === undefined ? null : { tile, down: m, rev: Number(Reflect.get(entry, "rev")) };
+  return tile === undefined ? null : { tile, down: m, rev: Number(entry.rev) };
 };
 
 /** Why the window leaves a letter alone, for the laws' counts. */
 const ignoredAs = (s: WindowModel, letter: unknown): string => {
-  const entry = Object(letter);
-  const id: unknown = Reflect.get(entry, "id");
-  const m: unknown = Reflect.get(Object(Reflect.get(entry, "body")), "m");
+  const entry = loose(letter);
+  const id = entry.id;
+  const m = loose(entry.body).m;
 
-  return !trusted(Reflect.get(entry, "by"))
+  return !trusted(entry.by)
     ? "writer"
     : typeof id !== "string" || !inSignalSpace(id)
       ? "plain"
@@ -2839,7 +2862,7 @@ const pageBook = () => {
 /** What a tile must do with a full page of its name: read the next page after that page's last rev,
  *  and nothing else for that tile, before it decides. */
 const readsOn = (e: Event, tile: WindowModel["tiles"][number], page: ReadonlyArray<unknown>) => {
-  const last = Reflect.get(Object(page.at(-1)), "rev");
+  const last = loose(page.at(-1)).rev;
   const stream = `processes/${tile.name}`;
 
   const mine = Arr.filter(
@@ -3092,11 +3115,9 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
     const armed = (s: WindowModel): boolean =>
       Arr.some(machine.subs ?? [], (sub) => {
         const deps: unknown = sub.deps(s as never);
-        const msg = Object(Reflect.get(Object(deps), "msg"));
+        const msg = loose(loose(deps).msg);
 
-        return (
-          sub.type === "timer" && Reflect.get(msg, "type") === "resend" && Reflect.get(msg, "dial") === socketDial(s)
-        );
+        return sub.type === "timer" && msg.type === "resend" && msg.dial === socketDial(s);
       });
 
     fc.assert(
@@ -3127,7 +3148,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               m.cmd.id === was.id &&
               Arr.some(prev.flight, (f) => f.id === m.cmd.id && f.dial === m.cmd.dial && streamIn(f.call) === INBOX));
 
-          const top = Math.max(was.after, ...Arr.map(page ?? [], (l) => Number(Reflect.get(Object(l), "rev"))));
+          const top = Math.max(was.after, ...Arr.map(page ?? [], (l) => Number(loose(l).rev)));
 
           const [want, label]: readonly [unknown, string] =
             prev.link._tag !== "online" && next.link._tag === "online"
@@ -3267,8 +3288,8 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               : [
                   {
                     _tag: "monitor",
-                    name: named.get(String(Reflect.get(monitored.call, "ref"))),
-                    pid: Reflect.get(monitored.call, "pid"),
+                    name: named.get(String(monitored.call._tag === "monitor" ? monitored.call.ref : undefined)),
+                    pid: monitored.call._tag === "monitor" ? monitored.call.pid : undefined,
                     result,
                   },
                 ],
@@ -3841,7 +3862,7 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
           }
 
           if (m.type === "read_ok" && m.value.length > 0) {
-            const name = String(Reflect.get(Object(Reflect.get(Object(m.value[0]), "body")), "name"));
+            const name = String(loose(loose(m.value[0]).body).name);
 
             if (Arr.some(next.tiles, (t) => t.name === name)) {
               expect(
@@ -4274,7 +4295,7 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
               if (c.call._tag === "send" && c.call["pid"] === TEZGAH_PID) {
                 const letter = String(c.call["letter"]);
                 take(letter, c.call["m"]);
-                named.set(letter, Reflect.get(Object(c.call["m"]), "to"));
+                named.set(letter, loose(c.call["m"]).to);
                 const move = Option.getOrUndefined(Arr.findFirst(w.moves, (x) => x.letter === null));
 
                 if (move !== undefined && !Arr.some(w.moves, (x) => x.letter === letter)) {
@@ -4669,7 +4690,7 @@ const foldWalk = (
   /** tezgah takes a move as the socket hands it over and sends its view while the window listens. */
   const each = (e: DeskEvent) => {
     for (const c of Arr.filter(e.cmds, isWrite)) {
-      const to = Reflect.get(Object(c.call["m"]), "to");
+      const to = loose(c.call["m"]).to;
       const space = w.view.workspaces[0]!;
       const letter = String(c.call["letter"]);
 

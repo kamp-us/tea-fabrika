@@ -27,6 +27,7 @@ import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import type { ProcessBinding, ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import {
   configureProcess,
   processDescriptor,
@@ -37,7 +38,7 @@ import {
   commitReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
-import { runsFor } from "@kampus/vitest";
+import { runsFor, Stub } from "@kampus/vitest";
 import {
   Array as Arr,
   String as Str,
@@ -48,6 +49,7 @@ import {
   Exit,
   Formatter,
   Option,
+  Predicate,
   Schema,
   Duration,
   Fiber,
@@ -55,7 +57,7 @@ import {
 
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
@@ -157,6 +159,16 @@ const storage = (db: DatabaseSync, alarm?: (at: number | null) => void) => {
   };
 };
 
+/**
+ * The call `method` names on a service, as the platform's RPC reaches it: any own or inherited
+ * member, which must be a function, called on the service with `args`.
+ */
+const callByName = (service: object, method: string, args: ReadonlyArray<unknown>): unknown => {
+  const member = Predicate.hasProperty(service, method) ? service[method] : undefined;
+  assert(Predicate.isFunction(member), `the service has no ${method} call`);
+  return Reflect.apply(member, service, args);
+};
+
 const projectObject = (ctx: DurableObjectState, env: Env) => {
   const runtime = projectRuntime(ctx, env);
   const run = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProjectService.use(use));
@@ -173,7 +185,7 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
     configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor, runtime)),
     descriptor: () => Effect.runPromise(processDescriptor(ctx)),
     call: (method: string, args: ReadonlyArray<unknown>) =>
-      run((p) => Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>),
+      run((p) => callByName(p, method, args) as Effect.Effect<unknown, unknown>),
   };
 };
 
@@ -290,8 +302,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
         }
 
         return project.run((p) => {
-          const work = Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>;
-
+          const work = callByName(p, method, args) as Effect.Effect<unknown, unknown>;
           return method === "sign"
             ? signingReply(work as never)
             : method === "commit"
@@ -314,14 +325,10 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
         ),
         PROJECT: {
           getByName: () =>
-            new Proxy(
-              {},
-              {
-                get: (_t, method) =>
-                  typeof method !== "string" || method === "then"
-                    ? undefined
-                    : (...args: ReadonlyArray<unknown>) => projectCall(method)(args),
-              },
+            Stub.make<ProjectBinding>(
+              (method) =>
+                (...args: ReadonlyArray<unknown>) =>
+                  projectCall(method)(args),
             ),
         },
         PROCESS: {
@@ -395,29 +402,16 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
             };
 
             const current = processes.get(storageKey) ?? made();
-
-            return new Proxy(
-              {},
+            return Stub.make<ProcessBinding>(
+              (method) =>
+                (...args: ReadonlyArray<unknown>) =>
+                  current.object.call(method, args),
               {
-                get: (_t, method) => {
-                  if (typeof method !== "string" || method === "then") {
-                    return undefined;
-                  }
-
-                  if (method === "configure") {
-                    return (descriptor: Descriptor) => {
-                      configured.push(structuredClone(descriptor));
-
-                      return current.object.configure(descriptor);
-                    };
-                  }
-
-                  if (method === "descriptor") {
-                    return () => current.object.descriptor();
-                  }
-
-                  return (...args: ReadonlyArray<unknown>) => current.object.call(method, args);
+                configure: (descriptor: Descriptor) => {
+                  configured.push(structuredClone(descriptor));
+                  return current.object.configure(descriptor);
                 },
+                descriptor: () => current.object.descriptor(),
               },
             );
           },

@@ -27,6 +27,7 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
+import type { DevProject } from "@kampus/libfabrika/node/dev";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
@@ -101,7 +102,11 @@ const keyFingerprint = Effect.fnUntraced(
 );
 
 /** A call on the brain's own local handle, by its method name on the fixture's Project. */
-const method = (project: object, name: keyof LauncherProject) => Reflect.get(project, name);
+const method = (project: DevProject, name: Exclude<keyof LauncherProject, keyof DevProject>) => {
+  // @ts-expect-error these are the fixture's own calls, which only its Control takes (hands-launcher.test-support.ts:136); DevProject names the real door's calls, and the dev client sends any name to the wire
+  const picked: (...args: ReadonlyArray<unknown>) => Promise<unknown> = project[name];
+  return picked;
+};
 
 class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
   message: Schema.String,
@@ -233,7 +238,7 @@ const flow = Effect.fnUntraced(
     const project = running.project(NAME);
     // The task's requester is a started name: a finish wakes it (P39 slice 3).
     yield* call("requester start failed", () =>
-      Reflect.get(project, "start")(
+      project.start(
         {
           _tag: "first",
           id: "start-wire",

@@ -26,6 +26,7 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -538,11 +539,9 @@ const viewWalks = fc.tuple(
 const pidKind = (pid: string): Kind => Arr.lastNonEmpty(Str.split(pid, "_")) as Kind;
 const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
 
-const noteType = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "type") : null;
+const noteType = (note: unknown): unknown => (Predicate.hasProperty(note, "type") ? note.type : null);
 
-const noteRev = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "rev") : null;
+const noteRev = (note: unknown): unknown => (Predicate.hasProperty(note, "rev") ? note.rev : null);
 
 // L6 checks apply independently. Here the oracle owns revision and decoder checks, starting from
 // notices it accepted, since a valid foreign whole can replace the brain's historical value.
@@ -621,7 +620,7 @@ describe("L5: client views (p3)", () => {
             return;
           }
 
-          const view = Reflect.get(Object(notice.note), "view");
+          const view = Predicate.hasProperty(notice.note, "view") ? notice.note.view : undefined;
           const ok = decodes(notice.pid, view);
           seen[ok ? "installed" : "refused"]++;
           expect(next.views).toEqual(

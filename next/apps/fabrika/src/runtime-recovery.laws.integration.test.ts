@@ -7,7 +7,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { it as effect } from "@effect/vitest";
 import { checklist } from "@kampus/checklist";
 import { counter } from "@kampus/counter";
-import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrika";
+import { nodeExecution, type Descriptor } from "@kampus/libfabrika";
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
 import { Start } from "@kampus/libfabrika/processes/Process";
@@ -22,6 +22,7 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
+import type { ProcessBinding, ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import {
   commitReply,
@@ -33,13 +34,13 @@ import {
   savedAlarm,
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
-import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema, DateTime, String as Str, Duration, Fiber, Record as Rec } from "effect";
+import { runsFor, Stub } from "@kampus/vitest";
+import { Effect, Exit, Schema, DateTime, String as Str, Duration, Fiber, Predicate, Record as Rec } from "effect";
 
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
@@ -53,6 +54,16 @@ vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
 type ProcessCalls = (typeof ProcessService)["Service"];
+
+/**
+ * The call `method` names on an object, as the platform's RPC reaches it: any own or inherited
+ * member, which must be a function, called on the object with `args`.
+ */
+const callByName = (object: object, method: string, args: ReadonlyArray<unknown>): unknown => {
+  const member = Predicate.hasProperty(object, method) ? object[method] : undefined;
+  assert(Predicate.isFunction(member), `the object has no ${method} call`);
+  return Reflect.apply(member, object, args);
+};
 
 // What the Project class hands off: each call runs one service method on the object's runtime.
 const projectObject = (ctx: DurableObjectState, env: Env) => {
@@ -499,7 +510,7 @@ const world = async (
   const processes = new Map<string, Entry>(),
     attempts: Descriptor[] = [],
     deliveries: Array<Promise<"configured" | "failed">> = [],
-    received: Incoming[] = [],
+    received: unknown[] = [],
     entered = gate(),
     interrupted = gate(),
     // Each one looks again whenever a configure is asked for, so a wait on attempts polls no clock.
@@ -548,7 +559,7 @@ const world = async (
   };
   const call = (method: string) => async (args: ReadonlyArray<unknown>) => {
     beforeProject(method);
-    const work = () => Reflect.apply(Reflect.get(project, method), project, args);
+    const work = () => callByName(project, method, args);
 
     if (method === "settingsStart" || method === "settingsRead") {
       settingsCounts.calls++;
@@ -598,38 +609,24 @@ const world = async (
     // Every Project RPC the real class hands off, so new Project calls reach the real service too.
     PROJECT: {
       getByName: () =>
-        new Proxy(
-          {},
+        Stub.make<ProjectBinding>(
+          (method) =>
+            (...args: ReadonlyArray<unknown>) =>
+              call(method)(args),
           {
-            get: (_target, method) => {
-              if (typeof method !== "string" || method === "then") {
-                return undefined;
-              }
-
-              if (method === "sign") {
-                return (...args: Parameters<ProjectObject["sign"]>) => {
-                  signs++;
-                  return project.sign(...args);
-                };
-              }
-
-              if (method === "mail") {
-                return async (...args: Parameters<ProjectObject["mail"]>) => {
-                  const reply = await project.mail(...args);
-                  await afterMail();
-                  return reply;
-                };
-              }
-
-              if (method === "commit") {
-                return async (...args: Parameters<ProjectObject["commit"]>) => {
-                  commits++;
-                  await beforeCommit();
-                  return project.commit(...args);
-                };
-              }
-
-              return (...args: ReadonlyArray<unknown>) => call(method)(args);
+            sign: (...args: Parameters<ProjectObject["sign"]>) => {
+              signs++;
+              return project.sign(...args);
+            },
+            mail: async (...args: Parameters<ProjectObject["mail"]>) => {
+              const reply = await project.mail(...args);
+              await afterMail();
+              return reply;
+            },
+            commit: async (...args: Parameters<ProjectObject["commit"]>) => {
+              commits++;
+              await beforeCommit();
+              return project.commit(...args);
             },
           },
         ),
@@ -674,52 +671,42 @@ const world = async (
         };
         const current: Entry = processes.get(storageKey) ?? made();
         // Every Process RPC the real class hands off; reopen swaps the object behind the same stub.
-        return new Proxy(
-          {},
+        return Stub.make<ProcessBinding>(
+          // A Durable Object stub answers every call as a Promise, as the platform does.
+          (method) =>
+            async (...args: ReadonlyArray<unknown>) =>
+              callByName(current.object, method, args),
           {
-            get: (_target, method) => {
-              if (typeof method !== "string" || method === "then") {
-                return undefined;
+            configure: async (descriptor: Descriptor) => {
+              attempts.push(structuredClone(descriptor));
+              entered.resolve();
+
+              for (const look of onAttempt) {
+                look();
               }
 
-              if (method === "configure") {
-                return async (descriptor: Descriptor) => {
-                  attempts.push(structuredClone(descriptor));
-                  entered.resolve();
-
-                  for (const look of onAttempt) {
-                    look();
-                  }
-
-                  if (attempts.length === 1 && fault === "failed") {
-                    throw new Error("configure failed before save");
-                  }
-
-                  if (attempts.length === 1 && fault === "interrupted") {
-                    await interrupted.promise;
-                    return;
-                  }
-
-                  const delivery = current.object.configure(descriptor);
-                  deliveries.push(
-                    delivery.then(
-                      () => "configured" as const,
-                      () => "failed" as const,
-                    ),
-                  );
-                  return delivery;
-                };
+              if (attempts.length === 1 && fault === "failed") {
+                throw new Error("configure failed before save");
               }
 
-              if (method === "msg") {
-                return (incoming: Incoming) => {
-                  received.push(incoming);
-                  return current.object.msg(incoming);
-                };
+              if (attempts.length === 1 && fault === "interrupted") {
+                await interrupted.promise;
+                return;
               }
 
-              return (...args: ReadonlyArray<unknown>) =>
-                Reflect.apply(Reflect.get(current.object, method), current.object, args);
+              const delivery = current.object.configure(descriptor);
+              deliveries.push(
+                delivery.then(
+                  () => "configured" as const,
+                  () => "failed" as const,
+                ),
+              );
+              return delivery;
+            },
+            // The Process object takes any input and decodes it itself, so the stand-in keeps it as sent.
+            msg: (incoming: unknown) => {
+              received.push(incoming);
+              return current.object.msg(incoming);
             },
           },
         );
@@ -853,11 +840,13 @@ const world = async (
     }
 
     const name = nameFor(pid);
-    const found = [...processes.entries()].find(
-      ([storageKey, entry]) =>
-        Reflect.get(Object(entry.values.get("descriptor")), "id") === pid ||
-        (name !== undefined && storageKey === name),
-    );
+    const found = [...processes.entries()].find(([storageKey, entry]) => {
+      const descriptor = entry.values.get("descriptor");
+      return (
+        (Predicate.hasProperty(descriptor, "id") && descriptor.id === pid) ||
+        (name !== undefined && storageKey === name)
+      );
+    });
 
     if (found === undefined) {
       throw new Error(`no storage owner for ${pid}`);
@@ -1511,7 +1500,7 @@ const runFlow = async (flow: RecoveryFlow) => {
     if (n === BRAKE) {
       const [down] = await until("down", downs, (found) => found.length > 0);
       expect(down).toMatchObject({ process: chain.at(-1), crashes: BRAKE, until: expect.any(Number) });
-      held = Number(Reflect.get(Object(down), "until"));
+      held = Number(Predicate.hasProperty(down, "until") ? down.until : undefined);
 
       // Resends while down wake nothing: no step, no try counted, no restart.
       for (let r = 0; r < Math.max(1, flow.resends); r++) {
@@ -1530,7 +1519,8 @@ const runFlow = async (flow: RecoveryFlow) => {
 
     expect(rows).toHaveLength(n);
     expect(rows[n - 1]).toMatchObject({ after: chain.at(-1), name: NAME });
-    const next = String(Reflect.get(Object(rows[n - 1]), "process"));
+    const last = rows[n - 1];
+    const next = String(Predicate.hasProperty(last, "process") ? last.process : undefined);
     expect(chain).not.toContain(next);
     chain.push(next);
     await until(`process ${n} live`, live, (pid) => pid === next);
@@ -1656,8 +1646,8 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         const before = (await restarts()).length;
         const request = { id: `r${flow.restart}`, build: poisonCode.hash };
         const object = w.process(current).object;
-        await Reflect.apply(Reflect.get(object, "restart"), object, [request]);
-        await Reflect.apply(Reflect.get(object, "restart"), object, [request]);
+        await object.restart(request);
+        await object.restart(request);
         const rows = await until("trusted restart", restarts, (found) => found.length > before);
         expect(rows).toHaveLength(before + 1);
         expect(rows.at(-1)).toMatchObject({ after: current, name: NAME });
@@ -1835,9 +1825,14 @@ const oneExchange = async (w: Awaited<ReturnType<typeof world>>, requester: stri
   expect(mailModel(w, requester)).toMatchObject({ _tag: "answered", ref, value: 8 });
   expect(mailModel(w, responder)).toMatchObject({ answered: 1 });
   const requests = await w.project.read("responder:1/inbox", 0, "audit");
-  expect(requests.filter((row) => Reflect.get(Object(row.body), "m")?.ref === ref)).toHaveLength(1);
+  expect(
+    requests.filter(
+      (row) =>
+        Predicate.hasProperty(row.body, "m") && Predicate.hasProperty(row.body.m, "ref") && row.body.m.ref === ref,
+    ),
+  ).toHaveLength(1);
   const receipts = await w.project.read("requester:1/outbox", 0, "audit");
-  expect(receipts.filter((row) => Reflect.get(Object(row.body), "ref") === ref)).toHaveLength(1);
+  expect(receipts.filter((row) => Predicate.hasProperty(row.body, "ref") && row.body.ref === ref)).toHaveLength(1);
   await until(
     "the answered Send leaves no sender alarm",
     () => w.process(requester).object.savedAlarm(),

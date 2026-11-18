@@ -229,7 +229,7 @@ const world = async (
             const code = built.programs[program];
             expect(code, `fixture program ${program} must be built`).toBeDefined();
 
-            const started = await Reflect.get(instance.project("p12-records"), "start")(
+            const started = await instance.project("p12-records").start(
               {
                 _tag: "first",
                 id: `start-${name}`,
@@ -273,7 +273,7 @@ export class Process extends Brain.Process {
     };
     return new Proxy(this, {
       get: (base, name) => {
-        const member = Reflect.get(base, name);
+        const member = base[name];
         if (typeof member !== "function" || name === "constructor") return member;
         if (name === "msg") return async (...args) => {
           if (await ctx.storage.get("exam.hold")) { await ctx.storage.put("exam.entered",true); await new Promise(()=>{}); }

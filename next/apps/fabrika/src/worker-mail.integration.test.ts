@@ -3,6 +3,7 @@
 // No directly constructed runner and no raw Miniflare stands in for the instance.
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import type { Start } from "@kampus/libfabrika/processes/Process";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import {
   Effect,
@@ -321,8 +322,7 @@ const world = async (
               const program = `p41/${Str.replace(":", "-")(name)}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
-
-              const started = await Reflect.get(instance.project(PROJECT), "start")(
+              const started = await instance.project(PROJECT).start(
                 {
                   _tag: "first",
                   id: `start-${name}`,
@@ -723,8 +723,7 @@ const checklistWorld = async (
           start: async (name, program = "fabrika/checklist") => {
             const code = built.programs[program];
             expect(code).toBeDefined();
-
-            const started = await Reflect.get(instance.project(PROJECT), "start")(
+            const started = await instance.project(PROJECT).start(
               {
                 _tag: "first",
                 id: `start-${name}`,
@@ -923,12 +922,9 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
 
       yield* Effect.promise(async () => {
         const project = instance.project(PROJECT);
-
-        const start = async (request: object) =>
-          Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(
-            await Reflect.get(project, "start")(request, from),
-          ).process;
-
+        const start = async (request: Start) =>
+          Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(await project.start(request, from))
+            .process;
         const code = (role: string) => ({ program: `t1041/${role}`, hash: built.programs[`t1041/${role}`]!.hash });
 
         const writer = await start({
