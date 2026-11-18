@@ -21,6 +21,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import { WebCrypto } from "effect/crypto";
 import { Base64, Base64Url } from "effect/encoding";
 import * as Formatter from "effect/Formatter";
 import * as Rec from "effect/Record";
@@ -683,6 +684,7 @@ export const checkedPut = Effect.fnUntraced(function* (
   sha256: string,
 ) {
   const copy = new Uint8Array(body);
+  const crypto = yield* WebCrypto.WebCrypto;
   const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", copy), catch: fail });
@@ -767,6 +769,36 @@ export const complete = Effect.fn(function* <A, E, R>(
 });
 
 /**
+ * How an object builds its span sink: the live `SpanSink.layer` unless a law provides another.
+ *
+ * **Details**
+ *
+ * A Reference with a live default, as Effect's own `WebCrypto` is. The live Worker provides none, so
+ * it runs the live sink. `recordingLayer` reads it where it builds the sink.
+ *
+ * @category references
+ */
+export const SinkLayer = Context.Reference<typeof SpanSink.layer>("@kampus/libfabrika/cloudflare/runtime.SinkLayer", {
+  defaultValue: () => SpanSink.layer,
+});
+
+/**
+ * How a Process object builds its program runner: the live `ProgramRunner.withLoader` unless a law
+ * provides another.
+ *
+ * **Details**
+ *
+ * A Reference with a live default. The live Worker provides none, so it runs the live runner.
+ * `processLogic` reads it where it builds the runner.
+ *
+ * @category references
+ */
+export const RunnerLayer = Context.Reference<typeof ProgramRunner.withLoader>(
+  "@kampus/libfabrika/cloudflare/runtime.RunnerLayer",
+  { defaultValue: () => ProgramRunner.withLoader },
+);
+
+/**
  * Layer that provides an object's recording: the remote Record calls, the archive and the span sink
  * on its own SQL, with every span tagged with the start's settings hash and build.
  *
@@ -776,9 +808,10 @@ export const recordingLayer = (sql: Sql, env: Env, project: string, object: stri
   Layer.effectContext(
     Effect.gen(function* () {
       const start = yield* RecordedStart;
+      const sink = yield* SinkLayer;
 
       const services = yield* Layer.build(
-        Layer.mergeAll(recordLayer(env, project), archiveLayer(env), SpanSink.layer(sql, { object })),
+        Layer.mergeAll(recordLayer(env, project), archiveLayer(env), sink(sql, { object })),
       );
 
       const tracer = yield* Tracer.Tracer.pipe(Effect.provideContext(services));
@@ -809,6 +842,7 @@ const fingerprint = Effect.fnUntraced(function* (value: string) {
   }
 
   const bytes = blob.success.slice(-32);
+  const crypto = yield* WebCrypto.WebCrypto;
   const fail = (cause: unknown) => new LedgerError({ reason: "crypto", cause });
   // SSH Ed25519 blobs end with the 32 public bytes. P10 uses this same key fingerprint.
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
@@ -2558,7 +2592,7 @@ const processLogic = Effect.fnUntraced(function* (
 
   // P34 on the Worker: receipts and pending recovery live in this object's own SQLite, beside
   // ProcessStore, under the registered name every successor shares.
-  const runnerLayer = ProgramRunner.withLoader(
+  const runnerLayer = (yield* RunnerLayer)(
     saved,
     {
       load: (name, hash) =>
