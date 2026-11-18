@@ -1,0 +1,749 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-dev-watch-rebuild-fix-cloud-proof",
+  "ticket": "kamp-us/tea-fabrika#1122",
+  "pr": "kamp-us/tea-fabrika#1542",
+  "started": "2026-11-18T11:30:07Z",
+  "ended": "2026-11-18T13:48:43Z",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/ watcher laws, cloud-box proof for PR 1542 (ticket 1122). On the merged head 47b4d134 (PR head 85246a12 plus origin/main e693fe82): all five laws of watch.laws.integration.test.ts passed at full depth in the baseline and in 10 of 10 repeats on an idle box, the slowest law L10 at 259.7 to 264.1 s and each run 424 to 440 s. The R1 plant (original next-answer assertion) turned the save-driven law and the R1 scenario red with expected same to match loaded or failed, the CI failure's shape, and green again once removed. Two product plants in watch.ts were each caught: P1 (failed-input suppression off) by the first L17/L18, save-driven and R1 laws, P2 (stale successful build) by the save-driven, R1 and L10 laws. Everything was also run at 85246a12 before the merge, with the same plant results; that series' repeats 2 and 3 overlapped a concurrent pnpm lint and failed in L10 (finding 2026-11-18-watch-l10-boot-drain-saw-repeated-installs), and repeat 3's worker was killed by the kernel memory limit.",
+  "note": "Command: FABRIKA_TEST_DEPTH=full nice -n 15 pnpm exec vitest run --project next-integration --maxWorkers=1 next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts, with -t 'save-driven rebuilds|scenario: R1' for the R1 plant and its restore run. Linux cloud box (CLAUDE_CODE_REMOTE guard), 4 CPUs, 16 GB, Node 26.13.0 from nodejs.org checked against its SHASUMS256, pnpm 12.16.1, TYPESAFE_API_KEY unset, seed 119120. Plants lived only on a local scratch worktree and branch, never committed or pushed. pnpm typecheck passed at 47b4d134. CI run https://github.com/kamp-us/tea-fabrika/actions/runs/44229079899 at 85246a12 passed the watcher file (5 tests, 457.6 s) in job related (1). Raw logs stay off git.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 138.6,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+  "runs": [
+    {
+      "label": "baseline0",
+      "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+      "exit": 0,
+      "seconds": 432,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 23124
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 75535
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8142
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 261670
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 60102
+        }
+      }
+    },
+    {
+      "label": "plant-r1",
+      "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+      "exit": 1,
+      "seconds": 5,
+      "laws": {
+        "L17/L18 first": {
+          "result": "skip",
+          "ms": null
+        },
+        "L17/L18 save-driven": {
+          "result": "fail",
+          "ms": 1042
+        },
+        "R1 scenario": {
+          "result": "fail",
+          "ms": 683
+        },
+        "L10": {
+          "result": "skip",
+          "ms": null
+        },
+        "L18 interruption": {
+          "result": "skip",
+          "ms": null
+        }
+      },
+      "plant": "R1: receiveChange's duplicate skip removed, restoring the original next-answer assertion (test file)"
+    },
+    {
+      "label": "restore-r1",
+      "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+      "exit": 0,
+      "seconds": 81,
+      "laws": {
+        "L17/L18 first": {
+          "result": "skip",
+          "ms": null
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 71401
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 7715
+        },
+        "L10": {
+          "result": "skip",
+          "ms": null
+        },
+        "L18 interruption": {
+          "result": "skip",
+          "ms": null
+        }
+      }
+    },
+    {
+      "label": "plant-p1",
+      "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+      "exit": 1,
+      "seconds": 328,
+      "laws": {
+        "L17/L18 first": {
+          "result": "fail",
+          "ms": 1557
+        },
+        "L17/L18 save-driven": {
+          "result": "fail",
+          "ms": 1255
+        },
+        "R1 scenario": {
+          "result": "fail",
+          "ms": 2444
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 260316
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 60124
+        }
+      },
+      "plant": "P1: watch.ts failed-input suppression disabled, so an unchanged broken input reports again (product)"
+    },
+    {
+      "label": "plant-p2",
+      "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+      "exit": 1,
+      "seconds": 100,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 21670
+        },
+        "L17/L18 save-driven": {
+          "result": "fail",
+          "ms": 4933
+        },
+        "R1 scenario": {
+          "result": "fail",
+          "ms": 4080
+        },
+        "L10": {
+          "result": "fail",
+          "ms": 7353
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 59769
+        }
+      },
+      "plant": "P2: watch.ts installs the watcher's first good bundle for every later build, a stale successful build (product)"
+    },
+    {
+      "label": "restore-all",
+      "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+      "exit": 0,
+      "seconds": 431,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22382
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 74668
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 7964
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 261943
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 61199
+        }
+      }
+    },
+    {
+      "label": "repeat-1",
+      "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+      "exit": 0,
+      "seconds": 432,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22854
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 75347
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 7687
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 262981
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 60746
+        }
+      }
+    },
+    {
+      "label": "repeat-2",
+      "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+      "exit": 1,
+      "seconds": 217,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22447
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 73600
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8028
+        },
+        "L10": {
+          "result": "fail",
+          "ms": 45195
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 65647
+        }
+      },
+      "note": "overlapped a concurrent pnpm lint on the same box; L10 boot drain saw repeated watch installs"
+    },
+    {
+      "label": "repeat-3",
+      "head": "85246a120286b74ab8404739bc9a6694667d1dcc",
+      "exit": 1,
+      "seconds": 253,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 24893
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 79681
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 7882
+        },
+        "L10": {
+          "result": "fail",
+          "ms": 105740
+        }
+      },
+      "note": "overlapped a concurrent pnpm lint; L10 failed, then the kernel memory limit killed the vitest worker; series stopped and repeated on the merged head"
+    },
+    {
+      "label": "m-baseline",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 436,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22623
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 75167
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8266
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 263939
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 63353
+        }
+      }
+    },
+    {
+      "label": "m-plant-r1",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 1,
+      "seconds": 5,
+      "laws": {
+        "L17/L18 first": {
+          "result": "skip",
+          "ms": null
+        },
+        "L17/L18 save-driven": {
+          "result": "fail",
+          "ms": 903
+        },
+        "R1 scenario": {
+          "result": "fail",
+          "ms": 630
+        },
+        "L10": {
+          "result": "skip",
+          "ms": null
+        },
+        "L18 interruption": {
+          "result": "skip",
+          "ms": null
+        }
+      },
+      "plant": "R1: receiveChange's duplicate skip removed, restoring the original next-answer assertion (test file)"
+    },
+    {
+      "label": "m-restore-r1",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 92,
+      "laws": {
+        "L17/L18 first": {
+          "result": "skip",
+          "ms": null
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 79615
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8917
+        },
+        "L10": {
+          "result": "skip",
+          "ms": null
+        },
+        "L18 interruption": {
+          "result": "skip",
+          "ms": null
+        }
+      }
+    },
+    {
+      "label": "m-plant-p1",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 1,
+      "seconds": 331,
+      "laws": {
+        "L17/L18 first": {
+          "result": "fail",
+          "ms": 1676
+        },
+        "L17/L18 save-driven": {
+          "result": "fail",
+          "ms": 1271
+        },
+        "R1 scenario": {
+          "result": "fail",
+          "ms": 2975
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 262487
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 60284
+        }
+      },
+      "plant": "P1: watch.ts failed-input suppression disabled, so an unchanged broken input reports again (product)"
+    },
+    {
+      "label": "m-plant-p2",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 1,
+      "seconds": 101,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22446
+        },
+        "L17/L18 save-driven": {
+          "result": "fail",
+          "ms": 5053
+        },
+        "R1 scenario": {
+          "result": "fail",
+          "ms": 3574
+        },
+        "L10": {
+          "result": "fail",
+          "ms": 7364
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 60625
+        }
+      },
+      "plant": "P2: watch.ts installs the watcher's first good bundle for every later build, a stale successful build (product)"
+    },
+    {
+      "label": "m-restore-all",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 433,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 23090
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 75231
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8373
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 262587
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 61829
+        }
+      }
+    },
+    {
+      "label": "m-repeat-1",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 432,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 23162
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 73342
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8513
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 262533
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 61081
+        }
+      }
+    },
+    {
+      "label": "m-repeat-2",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 432,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22896
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 74714
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8066
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 261358
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 63049
+        }
+      },
+      "note": "overlapped a concurrent pnpm lint on the same box; L10 boot drain saw repeated watch installs"
+    },
+    {
+      "label": "m-repeat-3",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 428,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22899
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 73376
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8342
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 260108
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 60104
+        }
+      },
+      "note": "overlapped a concurrent pnpm lint; L10 failed, then the kernel memory limit killed the vitest worker; series stopped and repeated on the merged head"
+    },
+    {
+      "label": "m-repeat-4",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 424,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 21073
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 72163
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8051
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 260512
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 60157
+        }
+      }
+    },
+    {
+      "label": "m-repeat-5",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 436,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22406
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 76699
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8525
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 263709
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 62300
+        }
+      }
+    },
+    {
+      "label": "m-repeat-6",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 439,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 23231
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 77920
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8518
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 264145
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 62227
+        }
+      }
+    },
+    {
+      "label": "m-repeat-7",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 440,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 23141
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 78561
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8462
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 264070
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 62561
+        }
+      }
+    },
+    {
+      "label": "m-repeat-8",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 437,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 23689
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 78473
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8685
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 261973
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 61177
+        }
+      }
+    },
+    {
+      "label": "m-repeat-9",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 436,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22890
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 77025
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 9121
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 262855
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 61493
+        }
+      }
+    },
+    {
+      "label": "m-repeat-10",
+      "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
+      "exit": 0,
+      "seconds": 429,
+      "laws": {
+        "L17/L18 first": {
+          "result": "pass",
+          "ms": 22848
+        },
+        "L17/L18 save-driven": {
+          "result": "pass",
+          "ms": 75006
+        },
+        "R1 scenario": {
+          "result": "pass",
+          "ms": 8329
+        },
+        "L10": {
+          "result": "pass",
+          "ms": 259722
+        },
+        "L18 interruption": {
+          "result": "pass",
+          "ms": 60693
+        }
+      }
+    }
+  ],
+  "plants": [
+    {
+      "law": "L17/L18 save-driven; scenario R1",
+      "plant": "R1: receiveChange's duplicate skip removed, restoring the original next-answer assertion (test file)",
+      "result": "red"
+    },
+    {
+      "law": "L17/L18 first; L17/L18 save-driven; scenario R1",
+      "plant": "P1: watch.ts failed-input suppression disabled, so an unchanged broken input reports again (product)",
+      "result": "red"
+    },
+    {
+      "law": "L17/L18 save-driven; scenario R1; L10",
+      "plant": "P2: watch.ts installs the watcher's first good bundle for every later build, a stale successful build (product)",
+      "result": "red"
+    }
+  ]
+}
