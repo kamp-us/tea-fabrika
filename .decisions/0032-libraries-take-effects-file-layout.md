@@ -21,7 +21,7 @@ flowchart LR
   index -->|"export * as LedgerStore"| store["src/ledger/LedgerStore.ts (a variant)"]
   index -->|"export * as Gateway"| gateway["src/gateway/Gateway.ts"]
   gateway --> part["src/gateway/Gateway/Shard.ts (a part of Gateway)"]
-  ledger --> internal["src/ledger/internal/binary.ts (@internal)"]
+  ledger --> internal["src/ledger/internal/ledgerStore.ts (@internal)"]
   test["src/ledger/Ledger.test.ts"] --> ledger
 ```
 
@@ -123,7 +123,7 @@ next/packages/libfabrika/src/
   index.ts                     export * as Ledger from "./ledger/Ledger.ts", one per public file
   Id.ts  Testing.ts  ProcessId.ts  Rev.ts  Sql.ts    the shared names, beside it
   ledger/      Ledger.ts  LedgerTransaction.ts  Log.ts  Referee.ts  ...
-               internal/  binary.ts  ledgerStore.ts  ...     each export @internal
+               internal/  ledgerStore.ts  ...                      each export @internal
                Ledger.test.ts  ...                           each test beside its file
   gateway/     Gateway.ts  ...
   processes/   Mailbox.ts  Process.ts  ProcessManager.ts  ...
@@ -137,23 +137,21 @@ folders, each beside a same-name module (`Door.ts` + `Door/`). The owner has not
 
 Binding constraints:
 
-- A new file in a `next/` library follows this layout from today, even before the move lands.
-- The move is `git mv` only, with import lines rewritten, and changes no law. The five layers keep
-  their import order: `layer-rules.json` lists each layer's files, so `pnpm lint:layers` checks
-  exactly what it checked before.
-- The move starts only after the Effect format sweep (0029, ticket 466, after the braces sweep in
-  PR 681) has merged, so the two big diffs do not collide.
+- A new file in a `next/` library follows this layout.
+- A move of files is `git mv` only, with import lines rewritten, and changes no law:
+  `layer-rules.json` lists each module's layer, so `pnpm lint:layers` checks exactly what it checked
+  before.
 
 ## Consequences
 
-- One move, split into small pull requests that each land whole, per its plan. It touches every
-  file in `libfabrika`, every import of it in `next/apps/fabrika` and `next/programs/counter`, the
-  path-bearing configs (`layer-rules.json`, `exam-paths.json`, `fixtures/next/p10`) and the lint
+- The move to this layout was split into small pull requests that each landed whole. It touched
+  every file in `libfabrika`, every import of it in `next/apps/fabrika` and `next/programs/counter`,
+  the path-bearing configs (`layer-rules.json`, `exam-paths.json`, `fixtures/next/p10`) and the lint
   rules that name a libfabrika path.
-- Callers move from named imports (`import {Ledger} from "@kampus/libfabrika/data"`) to namespaces
-  (`Ledger.Ledger`). Longer at each use; one way in for every module.
-- The folder no longer shows a file's layer. A reader learns it from `layer-rules.json` or the
-  lint error. That is the cost of the flat tree.
+- Callers use namespaces (`Ledger.Ledger`) in place of named imports
+  (`import {Ledger} from "@kampus/libfabrika/data"`). Longer at each use; one way in for every file.
+- The path shows a file's subject and not its layer. A reader learns the layer from
+  `layer-rules.json` or the lint error. That is the cost.
 - 0023's "PascalCase module files plus `internal/` and the namespace barrel" item is closed by this
   record. The `@since` value stays `0.0.0` while `libfabrika` is `0.0.0`.
 - Not decided here: the app's layout (a lean above), and better names than the mechanical ones the
