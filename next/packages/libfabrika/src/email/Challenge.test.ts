@@ -30,7 +30,7 @@ import {
 // The brain's challenge machine. The law reads its saved states as the store wrote them, so the
 // contract leaves the Model's cases to the machine.
 const module = pureModule<{
-  readonly challenge: Made<unknown, { readonly type: string }, { readonly type: string }, object>;
+  readonly challenge: Made<unknown, { readonly _tag: string }, { readonly _tag: string }, object>;
 }>("Challenge.ts");
 
 // Plants after build: reset a saved try count; reopen used/ended as open; discard a pending add.
@@ -122,7 +122,7 @@ it.effect.prop(
               const [restored] = machine.init(back, {});
               expect(restored).toEqual(saved);
 
-              if (acceptedTypes(machine, saved).includes(message.type)) {
+              if (acceptedTypes(machine, saved).includes(message._tag)) {
                 expect(applyCell(machine, restored, message)).toEqual(applyCell(machine, saved, message));
               }
             }

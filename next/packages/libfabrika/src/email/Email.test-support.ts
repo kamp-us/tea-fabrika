@@ -402,7 +402,7 @@ export type NoticeView = (fact: {
 }) => Notice;
 
 /** A tea machine made with `Machine.make`, with the schemas it was made from. */
-export type Made<S, M extends { type: string }, C extends { readonly type: string }, Ctx> = Machine<
+export type Made<S, M extends { _tag: string }, C extends { readonly _tag: string }, Ctx> = Machine<
   S,
   M,
   C,

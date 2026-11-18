@@ -26,20 +26,20 @@ type Model =
   | { readonly _tag: "in"; readonly added: string };
 
 type Msg =
-  | { readonly type: "recover" }
-  | { readonly type: "issued"; readonly challenge: { readonly id: string; readonly until: number } }
-  | { readonly type: "code"; readonly secret: string }
-  | { readonly type: "old"; readonly old: "lost" | "kept" }
-  | { readonly type: "checked"; readonly check: "touch" }
-  | { readonly type: "redeemed"; readonly added: string }
+  | { readonly _tag: "recover" }
+  | { readonly _tag: "issued"; readonly challenge: { readonly id: string; readonly until: number } }
+  | { readonly _tag: "code"; readonly secret: string }
+  | { readonly _tag: "old"; readonly old: "lost" | "kept" }
+  | { readonly _tag: "checked"; readonly check: "touch" }
+  | { readonly _tag: "redeemed"; readonly added: string }
   | {
-      readonly type: "failed";
+      readonly _tag: "failed";
       readonly reason: "wrong_code" | "expired" | "exhausted" | "send" | "storage";
     }
-  | { readonly type: "tick"; readonly now: number };
+  | { readonly _tag: "tick"; readonly now: number };
 
 // What the child asks its parent to do. Each has one answer below.
-type Command = { readonly type: "issue" | "old" | "check" | "redeem" };
+type Command = { readonly _tag: "issue" | "old" | "check" | "redeem" };
 
 type Ctx = { readonly cloud: boolean; readonly binding: Binding };
 
@@ -50,20 +50,20 @@ const email = pureModule<{
 
 // A strict table means a new message needs a generator before CI accepts it.
 const messages: MsgArbitraryTable<Msg> = {
-  recover: fc.constant({ type: "recover" }),
+  recover: fc.constant({ _tag: "recover" }),
   issued: fc.record({
-    type: fc.constant("issued"),
+    _tag: fc.constant("issued"),
     challenge: fc.record({ id: fc.string(), until: fc.integer() }),
   }),
-  code: fc.record({ type: fc.constant("code"), secret: fc.string() }),
-  old: fc.record({ type: fc.constant("old"), old: fc.constantFrom("lost", "kept") }),
-  checked: fc.record({ type: fc.constant("checked"), check: fc.constant("touch") }),
-  redeemed: fc.record({ type: fc.constant("redeemed"), added: fc.string({ minLength: 1 }) }),
+  code: fc.record({ _tag: fc.constant("code"), secret: fc.string() }),
+  old: fc.record({ _tag: fc.constant("old"), old: fc.constantFrom("lost", "kept") }),
+  checked: fc.record({ _tag: fc.constant("checked"), check: fc.constant("touch") }),
+  redeemed: fc.record({ _tag: fc.constant("redeemed"), added: fc.string({ minLength: 1 }) }),
   failed: fc.record({
-    type: fc.constant("failed"),
+    _tag: fc.constant("failed"),
     reason: fc.constantFrom("wrong_code", "expired", "exhausted", "send", "storage"),
   }),
-  tick: fc.record({ type: fc.constant("tick"), now: fc.integer() }),
+  tick: fc.record({ _tag: fc.constant("tick"), now: fc.integer() }),
 };
 
 const msg = arbMsg(messages);
@@ -146,11 +146,11 @@ it("not built: P36 / P36.10 no generated Msg makes RecoveryEmail in without an a
 
         for (const message of sequence) {
           // Tea drops a message with no cell. This uses tea's table, not a copy of its rules.
-          if (!acceptedTypes(machine, model).includes(message.type)) {
+          if (!acceptedTypes(machine, model).includes(message._tag)) {
             continue;
           }
 
-          if (message.type === "redeemed") {
+          if (message._tag === "redeemed") {
             appended.add(message.added);
           }
 
@@ -167,7 +167,7 @@ pureLaw("not built: P36 / P36.10 local setup keeps the sheet path and offers no 
   const machine = email().recoveryEmail;
   const ctx = { cloud: false, binding: binding() };
   const [start] = machine.init(null, ctx);
-  const [next, commands] = applyCell(machine, start, { type: "recover" });
+  const [next, commands] = applyCell(machine, start, { _tag: "recover" });
   expect(next._tag).toBe("off");
   expect(commands).toEqual([]);
   void flow;
@@ -185,8 +185,8 @@ it.effect.prop(
       const [model] = parent.Recovery.init({ cloud: true });
 
       const [next, commands] = parent.Recovery.update(model, {
-        type: "email",
-        msg: { type: "code", secret: "secret-holder-ref" },
+        _tag: "email",
+        msg: { _tag: "code", secret: "secret-holder-ref" },
       });
 
       for (const command of commands) {
@@ -200,17 +200,17 @@ it.effect.prop(
       let [child] = machine.init(null, ctx);
 
       for (const message of [
-        { type: "recover" },
-        { type: "issued", challenge: { id: input(1), until: EPOCH + 600000 } },
-        { type: "code", secret: "secret-holder-ref" },
-        { type: "old", old: flow.old },
-        { type: "checked", check: "touch" },
+        { _tag: "recover" },
+        { _tag: "issued", challenge: { id: input(1), until: EPOCH + 600000 } },
+        { _tag: "code", secret: "secret-holder-ref" },
+        { _tag: "old", old: flow.old },
+        { _tag: "checked", check: "touch" },
       ] satisfies Msg[]) {
         [child] = applyCell(machine, child, message);
         expect(child._tag).not.toBe("in");
       }
 
-      [child] = applyCell(machine, child, { type: "redeemed", added: input(100) });
+      [child] = applyCell(machine, child, { _tag: "redeemed", added: input(100) });
       expect(child).toMatchObject({ _tag: "in", added: input(100) });
     }),
   EFFECT,
