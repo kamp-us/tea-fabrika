@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0600; body 0c47b1e1ffbb
+Approved by the lead agent, builds 0600; body 9aab9cf07b3a
 Plancheck-Version: 3
 
 # Plan: @kalfa/quality/stryker, the plant runner on Stryker, and libfabrika's laws in the hourly mutation run (decision 0600's first build; ticket to be filed)
@@ -465,7 +465,7 @@ lives in the tests step's report and run row, and fixed laws keep main's title l
 | Q11, real Stryker answers a plant: in a scoped temp folder the test writes (one product file, one law file with two laws, one that kills the target mutant and one that does not, and a link to this package's `node_modules`), `plant` on the killing law answers `killed` naming only that law, `plant` on the other answers `elsewhere`, and `survey` lists every mutant in the range with its status and killers. Real Stryker spawns its own processes in a temp folder; no stand-in can show the form of the report it really writes, which is what Q4 and Q5 rest on | test | scenario: one fixture, two plants and one survey, written by the test | read only the first entry of `killedBy` with bail on: the second law's plant answers `killed`, red | kalfa/quality/src/stryker/node/MutantsStryker.integration.test.ts |
 | Q12, the repo's catalog holds at head: for each plant in `.github/ci/plants.ts`, its file holds its target exactly once (the real instrumenter on the file's text, no Stryker run) and its law file holds a test whose suite chain and title equal `law.name` (read with `oxc-parser`); names are unique | test | scenario: the repo's own catalog at head | change host-pnpm-path's `original` to `pnpm !== null`: red | .github/ci/plants.test.ts |
 | Q13 [secrets], no failure text is recorded: a generated secret placed in a report's `statusReason`, in a test name's neighbor field, and in a mutant's `description` never appears in the record line, the `--out` file or a `Refused` message, in any spelling the [secrets] helpers make. 100 runs | test | fc.record: a secret string, which field holds it, a report around it | copy `statusReason` into the record: red | kalfa/quality/src/stryker/Report.test.ts |
-| Q14, the command's shape: `./cli` exports an `effect/cli` `Command` named `quality`, whose only subcommand is `stryker`, with exactly `plant` and `survey` | type | type | add a third subcommand or name the root `kalfa`: tsc red | kalfa/quality/src/cli.types.test.ts |
+| Q14, the command's shape: `./cli` exports an `effect/cli` `Command` named `quality`, whose only subcommand is `stryker`, with exactly `plant` and `survey`. Lead amendment: Effect 4.1.3's `Command` type carries no subcommand names, so the type law pins the root name and a `format:` test in cli.test.ts pins the tree at run time | type | type | add a third subcommand: test red; name the root `kalfa`: tsc red | kalfa/quality/src/cli.types.test.ts, kalfa/quality/src/cli.test.ts |
 | Q15, importing `./stryker` loads no Stryker: the module graph of `kalfa/quality/src/stryker/index.ts` reaches no `@stryker-mutator/*` import | lint | lint | import `Instrumenter` in `Plant.ts`: lint red | .oxlintrc.json, the same `kalfa/quality/**` override, its `no-restricted-imports` scoped to `index.ts` and `Plant.ts` |
 | Q16, kind siblings join the pick: for generated folders, stems and kinds, a changed product `d/s.ts` with a tracked list picks every tracked `d/s.<kinds>.test.ts(x)` whose kinds hold neither `types` nor `visual`, picks no file whose stem only starts with `s` (`s-x.laws.test.ts`) and no file in another folder, and with no tracked list picks exactly what it picks today. 100 runs | test | fc.record: 1 to 4 folders, stems, kind lists, which are tracked and which changed | match the stem as a prefix without its dot: `runtime-recovery.laws.integration.test.ts` is picked for `runtime.ts`, red | .agents/skills/mutation/scripts/scope.test.ts |
 | Q17, the workflow hands the head's file list to the pick: the mutation workflow's range step writes `git ls-tree -r --name-only` of the head and passes it to `scope.ts --tracked`, before the existence check | test | scenario: the workflow's range step, read as text | drop `--tracked` from the step: red | .agents/skills/mutation/scripts/scope.test.ts |
@@ -481,7 +481,7 @@ runner (0594), never on the owner's laptop.
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| kalfa/quality/package.json | tests | tests | slice 1, new: name, `private`, exports, `kalfa.cli`, optional peers, dev dependencies. The tests step owns it with the lockfile, so its laws can install and run red |
+| kalfa/quality/package.json | tests | tests | slice 1, new: name, `private`, exports, `kalfa.cli`, optional peers, dev dependencies. The tests step owns it with the lockfile, so its laws can install and run red. Lead amendment: it also exports `./stryker/Settings`, `./stryker/Target`, `./stryker/Mutants` and `./stryker/node/MutantsStryker`, which the repo's edge and Q12 import |
 | kalfa/quality/tsconfig.json | tests | tests | slice 1, new: as `kalfa/config`'s, with the Effect checks |
 | pnpm-workspace.yaml | tests | tests | slice 1: one `kalfa/*` line, as the coordinator routed; pull requests 1583 and 1506 touch it too, and the second to land merges main |
 | pnpm-lock.yaml | tests | tests | slice 1: the `kalfa/quality` importer and the CI scripts' importer only |
@@ -505,7 +505,11 @@ runner (0594), never on the owner's laptop.
 | kalfa/quality/src/stryker/Settings.test.ts | tests | tests | slice 1: Q7 |
 | kalfa/quality/src/stryker/Run.test.ts | tests | tests | slice 1: Q9, Q10 |
 | kalfa/quality/src/stryker/node/MutantsStryker.integration.test.ts | tests | tests | slice 1: Q11 |
-| kalfa/quality/src/cli.types.test.ts | tests | tests | slice 1: Q14 |
+| kalfa/quality/src/cli.types.test.ts | tests | tests | slice 1: Q14, the root name |
+| kalfa/quality/src/cli.test.ts | tests | tests | slice 1: Q14, the tree (lead amendment) |
+| kalfa/quality/src/stryker/Built.test-support.ts | tests | tests | slice 1: built file texts and mutant lists the laws share (lead amendment) |
+| kalfa/quality/src/stryker/Fixture.test-support.ts | tests | tests | slice 1: Q11's fixture folder (lead amendment) |
+| kalfa/quality/src/stryker/MemoryFiles.test-support.ts | tests | tests | slice 1: an in-memory file system for Q9 and Q10 (lead amendment) |
 | .oxlintrc.json | tests | tests | slice 1: one override for `kalfa/quality/**` (Q8, Q15). Pull request 1583 edits this file too |
 | .github/ci/plants.ts | tests | tests | slice 1, new: the five plants and the edge (guard, repo settings, run the Command). Exam data: which laws can be shown to fail |
 | .github/ci/plants.test.ts | tests | tests | slice 1: Q12 |
@@ -518,6 +522,7 @@ runner (0594), never on the owner's laptop.
 | .github/ci/plant-errors.ts | tests | tests | no change, for the same reason |
 | .github/workflows/plant.yaml | tests | tests | no change, for the same reason |
 | vitest.config.ts | tests | tests | no change: pull request 1589 adds `kalfa/` to its globs (open question 1) |
+| .github/workflows/check.yaml | tests | tests | no change (lead amendment): the workflow guard wants a `kalfa/*` tsc cache path once the workspace lists `kalfa/*`, and pull request 1583 adds exactly that line. This pull request puts its `kalfa/*` workspace line where 1583 does, so workflow-lint is red here until 1583 is on main, which comes before this pull request is armed anyway |
 | .github/ci/changes.mjs | tests | tests | no change: pull request 1589 routes `kalfa/` |
 | next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | no change: checklist-pid's law file, read by Q12 |
 | .agents/skills/mutation/scripts/scope.ts | build | 30 | slice 2: `related(changed, tracked)`, the `--tracked` flag at its edge |
