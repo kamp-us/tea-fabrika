@@ -12,7 +12,7 @@
 # style shapes.
 # A line is read the way git writes it: up to the newline, and nothing else ends one.
 # In a shallow clone a range's base may be out of reach: the check deepens the fetch (50, 200, then
-# 1000 commits) until the two ends meet, refuses with exit 2 when they never do, and never reads a
+# 1000 commits) until the two ends meet, refuses with exit 2 when they never do, and refuses a range that still holds a
 # commit at the shallow boundary, which git shows as a root holding everything.
 set -eu
 # Only deliberate diagnostics use fd 3. Shell and tool failures may contain private paths.
@@ -258,7 +258,10 @@ if sys.argv[2] == 'commits':
     boundary = set(Path(git('rev-parse', '--git-path', 'shallow').strip()).read_text().split()) if is_shallow() else set()
     # Oldest first, each with its parents. No path limits, so the parents are the real ones.
     commits = [line.split() for line in git('rev-list', '--reverse', '--parents', *sys.argv[3:], '--').split('\n') if line]
-    commits = [commit for commit in commits if commit[0] not in boundary]
+    # A boundary commit still in the list was not reached past by a range: reading it would scan old
+    # history as new, and skipping it could miss the branch's own text, so refuse.
+    if any(commit[0] in boundary for commit in commits):
+        refuse('a commit at this shallow clone\'s boundary is in the range; give a base..head range or fetch more history')
     for commit, *parents in commits:
         hits, old = commit_hits(commit, parents)
         respaced += old
