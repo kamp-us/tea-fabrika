@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-17-codex-exec-full-access",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1152", "tea-fabrika#888"],
+  "stage": "harness",
+  "kind": "friction",
+  "person": true,
+  "primitive": "Draft",
+  "what": "Today's lead driver had no supported full-resource option for an owner-authorized step. Its Codex exec adapters always selected workspace-write or read-only physical containment.",
+  "cause": "The step's judgment role and its physical sandbox were selected together. An owner instruction granting full resources could not change the adapter's explicit sandbox setting.",
+  "fix": "An explicit --agent codex-exec --sandbox danger-full-access selects full physical access for the invocation, including plan and review roles. Approval stays never and the pinned Node probe uses the same route. Defaults, model settings, source ownership checks, review judgment and resource guards stay unchanged.",
+  "test": "All 18 Codex exec tests, 66 driver tests and two agent tests passed. The new properties cover both roles, resumed turns, pin refusal and CLI selection. Scoped lint passed with four existing advice entries. The whole typecheck passed. The installed Codex 0.169.0 ran the generated full-access probe for both roles and found Node 26.13.0 through node and pnpm. No model call or product step was started by this repair worker.",
+  "links": []
+}

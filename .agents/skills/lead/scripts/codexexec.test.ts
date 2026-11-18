@@ -25,7 +25,7 @@ import { Effect, FileSystem, type Scope } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, CapacityRetry, runTurn, type TurnAsk, type Turned } from "./agents.ts";
-import { CAPACITY, codexExecAdapter, type ExecAsk, execArgs, probeArgs, routeArgs } from "./codexexec.ts";
+import { CAPACITY, codexExecAdapter, type ExecAsk, execArgs, probeArgs, routeArgs, type Sandbox } from "./codexexec.ts";
 
 const options = { seed: 119120, numRuns: 12 };
 
@@ -90,7 +90,7 @@ const failing = (message: string): Play => ({
 });
 
 /** A world: the fake on PATH, its plays, the agents on the codex-exec rows, and what each call was handed. */
-const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } | null = null) =>
+const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } | null = null, sandbox?: Sandbox) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const dir = yield* fs.makeTempDirectoryScoped({ prefix: "codexexec-" });
@@ -111,8 +111,8 @@ const world = (plays: ReadonlyArray<Play>, node: { pin: string; said: string } |
 
     const agents = Agent.makeAgents({
       adapters: {
-        "codex-exec": yield* codexExecAdapter({ access: "write", env, pin }),
-        "codex-exec-read": yield* codexExecAdapter({ access: "read", env, pin }),
+        "codex-exec": yield* codexExecAdapter({ access: "write", sandbox, env, pin }),
+        "codex-exec-read": yield* codexExecAdapter({ access: "read", sandbox, env, pin }),
       },
       sessions: yield* Agent.fileSessions(`${dir}/sessions`),
       reaper: Agent.noReaper,
@@ -376,6 +376,39 @@ describe("codex-exec: the session", () => {
 
 describe("codex-exec: the box's Node", () => {
   const pin = "26.13.0";
+  it("property: explicit full access reaches every role and its pinned probe, including resumed turns", () =>
+    fc.assert(
+      fc.asyncProperty(fc.boolean(), (read) =>
+        ran(
+          Effect.gen(function* () {
+            const w = yield* world(
+              [answered(JSON.stringify(ANSWER)), answered(JSON.stringify(ANSWER))],
+              { pin, said: `v${pin}\nv${pin}\n` },
+              "danger-full-access",
+            );
+
+            const provider = read ? "codex-exec-read" : "codex-exec";
+
+            yield* w.turn({ provider });
+            yield* w.turn({ provider });
+
+            const calls = yield* w.calls;
+            expect(calls).toHaveLength(2);
+
+            for (const args of calls) {
+              expect(args).toContain('sandbox_mode="danger-full-access"');
+              expect(args).toContain('approval_policy="never"');
+              expect(args).toContain("allow_login_shell=false");
+            }
+
+            expect(calls[1]).toContain("resume");
+            const [, ...probe] = yield* w.probed;
+            expect(probe).toEqual(probeArgs(read ? "read" : "write", "/bin/zsh", "danger-full-access"));
+          }),
+        ),
+      ),
+      options,
+    ));
   const version = fc.tuple(fc.nat(30), fc.nat(30), fc.nat(30)).map((v) => `v${v.join(".")}`);
 
   /** A probe answer that is not the pin on both lines: another Node, a missing line, or nothing. */
@@ -389,10 +422,10 @@ describe("codex-exec: the box's Node", () => {
 
   it("property: a box whose shell finds any Node but the pin fails the start, and no Codex turn runs", () =>
     fc.assert(
-      fc.asyncProperty(notPin, (said) =>
+      fc.asyncProperty(notPin, fc.constantFrom(undefined, "danger-full-access" as const), (said, sandbox) =>
         ran(
           Effect.gen(function* () {
-            const w = yield* world([answered(JSON.stringify(ANSWER))], { pin, said });
+            const w = yield* world([answered(JSON.stringify(ANSWER))], { pin, said }, sandbox);
             const t = yield* w.turn();
             expect(yield* w.calls).toHaveLength(0);
             expect(t).toMatchObject({ _tag: "failed", reason: "start" });
@@ -452,6 +485,7 @@ describe("codex-exec: the box's Node", () => {
 describe("codex-exec: the command line", () => {
   const execAsk: fc.Arbitrary<ExecAsk> = fc.record({
     access: fc.constantFrom("write" as const, "read" as const),
+    sandbox: fc.constantFrom(undefined, "danger-full-access" as const),
     folder: fc.string({ minLength: 1 }).map((s) => `/w/${s}`),
     prompt: fc.string(),
     resume: fc.option(fc.uuid(), { nil: null }),

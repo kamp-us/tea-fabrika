@@ -23,6 +23,7 @@ type Step = Record<string, unknown> & { env?: Record<string, unknown>; with?: Re
 
 type Job = Record<string, unknown> & {
   steps: Step[];
+  outputs?: Record<string, unknown>;
   concurrency?: Record<string, unknown>;
   strategy?: { "fail-fast"?: unknown; "max-parallel"?: unknown; matrix: { shard: unknown } };
   permissions?: unknown;
@@ -74,17 +75,52 @@ const step = (w: Workflow, job: string, name: string): Step => {
 const spaced = (value: unknown, gap: string) =>
   typeof value === "string" ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
 
+// 0598's split of the nine test groups: MAIN_SLOTS for main's full run (1 to 8), PROOF_SLOTS for a
+// branch's proof, the rest. A `tests` group takes the prefix and the pin map by the ref, so the
+// workflow holds two maps, each leg's number in its group; a first leg of each map takes group 1 to N
+// in order, and every other leg any group (SC19, SC20).
+const REF = "github.ref == 'refs/heads/main'";
+
+/** The names 1 to `count`, as text. */
+const upTo = (count: number) => Array.from({ length: count }, (_, index) => String(index + 1));
+
+const counts = (w: Workflow) => ({ main: Number(w.env!["MAIN_SLOTS"]), proof: Number(w.env!["PROOF_SLOTS"]) });
+
+/** Each leg's pin: the first `count` legs take groups 1 to `count` in order, the others `tail`'s group. */
+const pinned = (shards: readonly string[], count: number, tail: readonly number[]) =>
+  Object.fromEntries(shards.map((shard, i) => [shard, i < count ? String(i + 1) : String((tail[i]! % count) + 1)]));
+
+/** The `tests` group as the real file writes it, from a main map and a proof map. */
+const groupOf = (main: unknown, proof: unknown, gap = " ", upper = false) =>
+  `\${{${gap}${REF} && '${upper ? "SCHEDULED-MAIN-" : "scheduled-main-"}' || '${upper ? "SCHEDULED-PROOF-" : "scheduled-proof-"}'${gap}}}\${{${gap}fromJSON(${REF} && '${JSON.stringify(main)}' || '${JSON.stringify(proof)}')[matrix.shard]${gap}}}`;
+
+/** The two pin maps of a `tests` group written by `groupOf`, in the text's order: main, then proof. */
+const pinsIn = (w: Workflow): [Record<string, unknown>, Record<string, unknown>] => {
+  const found = [...String(w.jobs["tests"]!.concurrency!["group"]).matchAll(/'(\{[^']*\})'/g)];
+
+  return [JSON.parse(found[0]![1]!), JSON.parse(found[1]![1]!)];
+};
+
+/** The `changed` group's closed identity lookup over the proof groups. */
+const rotationSlots = (count: number): Record<string, string> =>
+  Object.fromEntries(upTo(count).map((slot) => [slot, slot]));
+
+const rotationGroup = (slots: unknown, gap = " ", upper = false) =>
+  `${upper ? "SCHEDULED-PROOF-" : "scheduled-proof-"}\${{${gap}fromJSON('${JSON.stringify(slots)}')[fromJSON(needs.select.outputs.slots)[matrix.shard]]${gap}||${gap}'1'${gap}}}`;
+
 const scheduled = fc
   .tuple(
     fc.integer({ min: 1, max: 59 }),
     fc.integer({ min: 60, max: 1440 }),
-    fc.integer({ min: 1, max: 9 }),
+    fc.integer({ min: 1, max: 8 }),
     fc.constantFrom("", " ", "  "),
-    fc.shuffledSubarray(["1", "2", "3", "4", "5", "6", "7", "8", "9"], { minLength: 9, maxLength: 9 }),
+    fc.array(fc.integer({ min: 0, max: 1000 }), { minLength: 9, maxLength: 9 }),
+    fc.array(fc.integer({ min: 0, max: 1000 }), { minLength: 9, maxLength: 9 }),
     fc.boolean(),
     fc.boolean(),
   )
-  .map(([minute, minutes, most, gap, slots, numeric, upper]) => {
+  .map(([minute, minutes, main, gap, mainTail, proofTail, numeric, upper]) => {
+    const proof = 9 - main;
     const w = real();
     const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
 
@@ -94,24 +130,31 @@ const scheduled = fc
       }
     }
 
-    if (w.env !== undefined && "GAP_MINUTES" in w.env) {
-      w.env["GAP_MINUTES"] = minutes;
-    }
+    w.env = { GAP_MINUTES: minutes, MAIN_SLOTS: main, PROOF_SLOTS: proof };
 
     w.concurrency["group"] = `${upper ? "SCHEDULED" : "scheduled"}-\${{${gap}github.ref${gap}}}`;
-    w.jobs["tests"]!.strategy!["max-parallel"] = most;
-    // The most changed legs at once is one setting, MOST, the matrix's alias of it (0590).
-    w.jobs["changed"]!.strategy!["max-parallel"] = most;
-    step(w, "select", "set").env!["MOST"] = most;
+    // The count of groups is a setting, and `max-parallel` of the test job and MOST are its copies (0598).
+    w.jobs["tests"]!.strategy!["max-parallel"] = spaced(`\${{ ${REF} && ${main} || ${proof} }}`, gap);
+    w.jobs["changed"]!.strategy!["max-parallel"] = proof;
+    step(w, "select", "set").env!["MOST"] = proof;
 
-    const shards = w.jobs["tests"]!.strategy!.matrix.shard;
-    const full = w.jobs["tests"]!.concurrency;
+    const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
 
-    if (Array.isArray(shards) && full !== undefined && "group" in full) {
-      const pairs = shards.map((shard, i) => [shard, numeric ? Number(slots[i]) : slots[i]]);
-      const values = Object.fromEntries(upper ? pairs.toReversed() : pairs);
-      full["group"] = `scheduled-test-\${{${gap}fromJSON('${JSON.stringify(values)}')[matrix.shard]${gap}}}`;
-    }
+    const asValue = (pins: Record<string, string>) =>
+      numeric ? Object.fromEntries(Object.entries(pins).map(([leg, group]) => [leg, Number(group)])) : pins;
+
+    const pins = (count: number, tail: readonly number[]) => {
+      const all = asValue(pinned(shards, count, tail));
+
+      return upper ? Object.fromEntries(Object.entries(all).toReversed()) : all;
+    };
+
+    w.jobs["tests"]!.concurrency!["group"] = spaced(
+      groupOf(pins(main, mainTail), pins(proof, proofTail), gap, upper),
+      gap,
+    );
+
+    w.jobs["changed"]!.concurrency!["group"] = rotationGroup(rotationSlots(proof), gap, upper);
 
     for (const job of Object.values(w.jobs)) {
       if (upper && typeof job.concurrency?.["group"] === "string") {
@@ -136,17 +179,63 @@ const scheduled = fc
 
 const lint = (w: Workflow) => lintScheduled(JSON.stringify(w), check);
 
-/** Rebuilds the full matrix's closed slot map, then applies one isolated input mutation. */
-const remap = (w: Workflow, change: (slots: Record<string, string>) => void) => {
+const changedRotation = (w: Workflow, slots: unknown = rotationSlots(counts(w).proof)) => {
+  step(w, "select", "set").env!["RUN_NUMBER"] = `\${{ github.run_number }}`;
+  w.jobs["select"]!.outputs!["slots"] = `\${{ steps.set.outputs.slots }}`;
+  w.jobs["changed"]!.concurrency!["group"] = rotationGroup(slots);
+
+  return w;
+};
+
+// S1. Plant: keep the nine-slot `TEST_SLOTS` in SC19 (red: every split fails). A split is any
+// MAIN_SLOTS from 1 to 8 with the rest PROOF_SLOTS, so the count of groups of each ref is a setting, not
+// nine fixed slots, and the pins start every group at once.
+it("property: SC19 accepts any split of nine test groups into MAIN_SLOTS and PROOF_SLOTS, with pins that start every group at once and the proof rotation through a closed lookup", () => {
+  const splits = new Set<number>();
+  fc.assert(
+    fc.property(scheduled, (w) => {
+      const { main, proof } = counts(w);
+      splits.add(main);
+      expect(main + proof).toBe(9);
+      expect(lint(changedRotation(w))).toEqual([]);
+      const [mains, proofs] = pinsIn(w);
+      // Every group's first leg is among the first legs, in order: the matrix start is the pins' start.
+      const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
+      expect(shards.slice(0, main).map((shard) => String(mains[shard]))).toEqual(upTo(main));
+      expect(shards.slice(0, proof).map((shard) => String(proofs[shard]))).toEqual(upTo(proof));
+    }),
+    options,
+  );
+  expect([...splits].toSorted(), "every split from 1 to 8 reached").toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+/** The leg at place `index` of the test matrix, which is the order the legs start in. */
+const legAt = (w: Workflow, index: number) => (w.jobs["tests"]!.strategy!.matrix.shard as string[])[index]!;
+
+/** Rebuilds the full matrix's two closed pin maps from its legs, then applies one isolated mutation. */
+const remap = (w: Workflow, change: (main: Record<string, string>, proof: Record<string, string>) => void) => {
   const shards = w.jobs["tests"]!.strategy!.matrix.shard;
 
   if (!Array.isArray(shards) || !shards.every((shard) => typeof shard === "string")) {
     throw new Error("the full matrix has no literal shard list");
   }
 
-  const slots = Object.fromEntries(shards.map((shard, i) => [shard, String(i + 1)]));
-  change(slots);
-  w.jobs["tests"]!.concurrency!["group"] = `scheduled-test-\${{ fromJSON('${JSON.stringify(slots)}')[matrix.shard] }}`;
+  const { main, proof } = counts(w);
+
+  const mains = pinned(
+    shards,
+    main,
+    shards.map(() => 0),
+  );
+
+  const proofs = pinned(
+    shards,
+    proof,
+    shards.map(() => 0),
+  );
+
+  change(mains, proofs);
+  w.jobs["tests"]!.concurrency!["group"] = groupOf(mains, proofs);
 };
 
 // SC18's message, which a scenario on the next limit expects beside SC13's.
@@ -157,12 +246,93 @@ it("pinned: the real scheduled.yaml passes, against the real check.yaml", () => 
   expect(lintScheduled(read("scheduled.yaml"), check)).toEqual([]);
 });
 
+// S5. Plant, run once on the real scheduled.yaml and restored: e2e-1 first in the matrix, in group 1
+// before tooling-1 (red: the order differs).
+it("vector: the real scheduled.yaml's start order, both pin maps and both counts are decision 0598's", () => {
+  // From run 44155250216's leg times (tooling-1 11.7 min, 3 11.6, 2 10.7, 5 10.1, tooling-2 9.3, ...):
+  // the five longest legs first, one to a group, then each leg behind the group that frees first. The
+  // proof's four groups are the same order by longest processing time first (Graham, 1969).
+  const w = real();
+  expect(w.env).toEqual({ GAP_MINUTES: 60, MAIN_SLOTS: 5, PROOF_SLOTS: 4 });
+  expect(w.jobs["tests"]!.strategy!.matrix.shard).toEqual([
+    "tooling-1",
+    "3",
+    "2",
+    "5",
+    "tooling-2",
+    "e2e-2",
+    "1",
+    "4",
+    "e2e-1",
+  ]);
+  expect(pinsIn(w)).toEqual([
+    {
+      "tooling-1": "1",
+      "3": "2",
+      "2": "3",
+      "5": "4",
+      "tooling-2": "5",
+      "e2e-2": "4",
+      "1": "3",
+      "4": "2",
+      "e2e-1": "1",
+    },
+    {
+      "tooling-1": "1",
+      "3": "2",
+      "2": "3",
+      "5": "4",
+      "tooling-2": "4",
+      "e2e-2": "3",
+      "1": "2",
+      "4": "1",
+      "e2e-1": "1",
+    },
+  ]);
+  expect(w.jobs["tests"]!.strategy!["max-parallel"]).toBe(`\${{ ${REF} && 5 || 4 }}`);
+  expect(w.jobs["changed"]!.strategy!["max-parallel"]).toBe(4);
+  expect(step(w, "select", "set").env!["MOST"]).toBe(4);
+});
+
+// S4. Plant: drop the "first legs in order" check in SC20 (red: a swap of tooling-1 and e2e-2 passes).
+// A first leg swapped with any other leg is refused exactly when a group is then left waiting while
+// another has no first leg, which is the pins' first legs no longer in order in main's or the proof's.
+it("property: SC20 refuses a swap of two legs exactly when some group's first leg is no longer first", () => {
+  const reached = new Set<string>();
+  fc.assert(
+    fc.property(scheduled, fc.nat(8), fc.nat(8), (clean, a, b) => {
+      const w = structuredClone(clean);
+      const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
+      [shards[a], shards[b]] = [shards[b]!, shards[a]!];
+      const [mains, proofs] = pinsIn(w);
+      const { main, proof } = counts(w);
+
+      const ordered =
+        shards.slice(0, main).every((shard, index) => String(mains[shard]) === String(index + 1)) &&
+        shards.slice(0, proof).every((shard, index) => String(proofs[shard]) === String(index + 1));
+
+      reached.add(ordered ? "ordered" : "waiting");
+      const errors = lint(w);
+      expect(
+        errors.some((error) => error.startsWith("scheduled.yaml: SC20:")),
+        JSON.stringify(errors),
+      ).toBe(!ordered);
+      expect(errors.length === 0, JSON.stringify(errors)).toBe(ordered);
+    }),
+    options,
+  );
+  expect([...reached].toSorted(), "both a swap that keeps the order and one that breaks it").toEqual([
+    "ordered",
+    "waiting",
+  ]);
+});
+
 it("property: a schedule varied only where its meaning holds passes", () => {
   const reached = new Set<string>();
   fc.assert(
     fc.property(scheduled, (w) => {
       const group = String(w.jobs["tests"]!.concurrency?.["group"]);
-      reached.add(group.startsWith("SCHEDULED-") ? "upper" : "lower");
+      reached.add(group.includes("SCHEDULED-MAIN-") ? "upper" : "lower");
       reached.add(/:"[1-9]"/.test(group) ? "text" : "number");
       reached.add(String(w.concurrency["group"]).includes(`\${{github.ref}}`) ? "compact" : "spaced");
       expect(lint(w)).toEqual([]);
@@ -195,6 +365,84 @@ const gate = (w: Workflow): Job => {
   return job;
 };
 
+// Each fault starts from a valid rotation, including while main still uses direct slots.
+const rotationPlants: [string, (w: Workflow) => void][] = [
+  ["SC19: rotation has no run number", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "RUN_NUMBER")],
+  [
+    "SC19: rotation changes on retry",
+    (w) => (step(w, "select", "set").env!["RUN_NUMBER"] = `\${{ github.run_attempt }}`),
+  ],
+  [
+    "SC19: rotation reads a private run source",
+    (w) => (step(w, "select", "set").env!["RUN_NUMBER"] = `\${{ vars.RUN_NUMBER }}`),
+  ],
+  ["SC19: rotation has no slot output", (w) => Reflect.deleteProperty(w.jobs["select"]!.outputs!, "slots")],
+  [
+    "SC19: rotation reads another step's output",
+    (w) => (w.jobs["select"]!.outputs!["slots"] = `\${{ steps.other.outputs.slots }}`),
+  ],
+  [
+    "SC19: rotation reaches a proof group past PROOF_SLOTS",
+    (w) => void changedRotation(w, { ...rotationSlots(counts(w).proof), "1": String(counts(w).proof + 1) }),
+  ],
+  [
+    "SC19: rotation reuses a slot",
+    // With one proof group this adds a key instead; either way the lookup is no longer the identity.
+    (w) => void changedRotation(w, { ...rotationSlots(counts(w).proof), "2": "1" }),
+  ],
+  [
+    "SC19: rotation hides the recorded physical slots",
+    (w) => void changedRotation(w, { ...rotationSlots(counts(w).proof), "1": "2", "2": "1" }),
+  ],
+  [
+    "SC19: rotation adds another key",
+    (w) => void changedRotation(w, { ...rotationSlots(counts(w).proof), [String(counts(w).proof + 1)]: "1" }),
+  ],
+  [
+    "SC19: rotation loses a key",
+    (w) => {
+      const slots = rotationSlots(counts(w).proof);
+      Reflect.deleteProperty(slots, "1");
+      changedRotation(w, slots);
+    },
+  ],
+  ["SC19: rotation has a JSON list", (w) => void changedRotation(w, upTo(counts(w).proof))],
+  ["SC19: rotation runs over nine groups, as 0595's did", (w) => void changedRotation(w, rotationSlots(9))],
+  [
+    "SC19: rotation has malformed JSON",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        '"1":"1"',
+        '"1":',
+      );
+    },
+  ],
+  [
+    "SC19: rotation takes a private suffix",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = `${String(w.jobs["changed"]!.concurrency!["group"])}-private`;
+    },
+  ],
+  [
+    "SC19: rotation reads arbitrary runtime slots",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        "needs.select.outputs.slots",
+        "vars.slots",
+      );
+    },
+  ],
+  [
+    "SC19: rotation falls back outside the shared slots",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        "|| '1'",
+        "|| '10'",
+      );
+    },
+  ],
+];
+
 const plants: [string, (w: Workflow) => void][] = [
   // SC1: a push to main, the hourly catch-up and a hand start, nothing else (0581); no merge line
   // event runs the whole suite. The plants of SC1, SC5, SC6 and SC14 to SC16 were each run once on
@@ -210,15 +458,20 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC1: a push to any branch starts it", (w) => (w.on["push"] = {})],
   ["SC1: a push to main skips some paths", (w) => (w.on["push"] = { branches: ["main"], "paths-ignore": ["docs/**"] })],
   ["SC1: no hand start", (w) => Reflect.deleteProperty(w.on, "workflow_dispatch")],
-  // SC16: the gap, a setting of an hour at least (0581's binding constraint).
-  ["SC16: a gap of half an hour", (w) => (w.env = { GAP_MINUTES: 30 })],
-  ["SC16: a gap a minute short of an hour", (w) => (w.env = { GAP_MINUTES: 59 })],
-  ["SC16: a gap in words", (w) => (w.env = { GAP_MINUTES: "1h" })],
-  ["SC16: a gap as text", (w) => (w.env = { GAP_MINUTES: "60" })],
+  // SC16: the gap, a setting of an hour at least (0581's binding constraint), and the two counts of
+  // groups (0598): the env is these three, nothing else.
+  ["SC16: a gap of half an hour", (w) => (w.env = { ...w.env, GAP_MINUTES: 30 })],
+  ["SC16: a gap a minute short of an hour", (w) => (w.env = { ...w.env, GAP_MINUTES: 59 })],
+  ["SC16: a gap in words", (w) => (w.env = { ...w.env, GAP_MINUTES: "1h" })],
+  ["SC16: a gap as text", (w) => (w.env = { ...w.env, GAP_MINUTES: "60" })],
+  ["SC16: a count is text", (w) => (w.env = { ...w.env, PROOF_SLOTS: `${counts(w).proof}` })],
+  ["SC16: a count of 0", (w) => (w.env = { ...w.env, MAIN_SLOTS: 0 })],
+  ["SC16: a count is missing", (w) => Reflect.deleteProperty(w.env!, "PROOF_SLOTS")],
+  ["SC16: a count is fractional", (w) => (w.env = { ...w.env, MAIN_SLOTS: counts(w).main + 0.5 })],
   [
     "SC16: the gap moved to the gate's step",
     (w) => {
-      Reflect.deleteProperty(w, "env");
+      Reflect.deleteProperty(w.env!, "GAP_MINUTES");
       const decide = gate(w).steps.find((s) => s["id"] === "decide")!;
       decide.env = { ...decide.env, GAP_MINUTES: 60 };
     },
@@ -322,6 +575,13 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC12: one waiting run at most", (w) => (w.concurrency["queue"] = "single")],
   // SC19: the same nine test groups and one control group across participating workflows.
   // Plants, each run once with its new guard dropped and restored, must fail their own rule.
+  ...rotationPlants.map(([name, mutate]): [string, (w: Workflow) => void] => [
+    name,
+    (w) => {
+      changedRotation(w);
+      mutate(w);
+    },
+  ]),
   ["SC19: an extra job has no shared slot", (w) => (w.jobs["extra"] = { "runs-on": "ubuntu-latest", steps: [] })],
   [
     "SC19: changed adds another matrix axis",
@@ -364,30 +624,95 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC19: changed uses its own slot namespace",
     (w) => (w.jobs["changed"]!.concurrency!["group"] = `scheduled-changed-\${{ matrix.shard }}`),
   ],
-  ["SC19: the full slot map loses a shard", (w) => remap(w, (slots) => Reflect.deleteProperty(slots, "e2e-1"))],
-  ["SC19: the full slot map adds a shard", (w) => remap(w, (slots) => (slots["extra"] = "1"))],
-  ["SC19: two full shards share one slot", (w) => remap(w, (slots) => (slots["e2e-2"] = slots["e2e-1"]!))],
-  ["SC19: the full slot map reaches a tenth test slot", (w) => remap(w, (slots) => (slots["e2e-1"] = "10"))],
+  ["SC19: the full slot map loses a shard", (w) => remap(w, (main) => Reflect.deleteProperty(main, "e2e-1"))],
+  ["SC19: the full slot map adds a shard", (w) => remap(w, (main) => (main["extra"] = "1"))],
+  ["SC19: the proof pins lose a shard", (w) => remap(w, (_, proof) => Reflect.deleteProperty(proof, "e2e-1"))],
+  [
+    "SC19: two full shards share one slot",
+    // With two or more main groups, the second leg joins the first's group and leaves group 2 empty;
+    // with one, it goes to a group past it. Either way the pins are not 1 to MAIN_SLOTS in order.
+    (w) => remap(w, (main) => (main["3"] = counts(w).main > 1 ? main["tooling-1"]! : "2")),
+  ],
+  [
+    "SC19: the main pins reach a group past MAIN_SLOTS",
+    (w) => remap(w, (main) => (main["e2e-1"] = String(counts(w).main + 1))),
+  ],
+  [
+    "SC19: the main pins leave a main group unused",
+    // The leg that starts main group MAIN_SLOTS goes to group 1, so that group has no leg; with one
+    // main group, it goes to a group past it, so none stays unused.
+    (w) => remap(w, (main) => (main[legAt(w, counts(w).main - 1)] = counts(w).main > 1 ? "1" : "2")),
+  ],
+  [
+    "SC19: the proof pins reach a group past PROOF_SLOTS",
+    (w) => remap(w, (_, proof) => (proof["e2e-1"] = String(counts(w).proof + 1))),
+  ],
+  [
+    "SC19: the proof pins leave a proof group unused",
+    (w) => remap(w, (_, proof) => (proof[legAt(w, counts(w).proof - 1)] = counts(w).proof > 1 ? "1" : "2")),
+  ],
   [
     "SC19: the full slot map is malformed JSON",
-    (w) => (w.jobs["tests"]!.concurrency!["group"] = `scheduled-test-\${{ fromJSON('{')[matrix.shard] }}`),
+    (w) =>
+      (w.jobs["tests"]!.concurrency!["group"] = String(w.jobs["tests"]!.concurrency!["group"]).replace(
+        /'\{[^']*\}'/,
+        "'{'",
+      )),
   ],
   [
     "SC19: the full slot map is a JSON list",
     (w) =>
-      (w.jobs["tests"]!.concurrency!["group"] = `scheduled-test-\${{ fromJSON('[1,2,3,4,5,6,7,8,9]')[matrix.shard] }}`),
+      (w.jobs["tests"]!.concurrency!["group"] = String(w.jobs["tests"]!.concurrency!["group"]).replace(
+        /'\{[^']*\}'/,
+        "'[1,2,3,4,5,6,7,8,9]'",
+      )),
+  ],
+  [
+    "SC19: tests uses 0595's scheduled-test- names",
+    (w) =>
+      (w.jobs["tests"]!.concurrency!["group"] =
+        `scheduled-test-\${{ fromJSON('${JSON.stringify(pinsIn(w)[0])}')[matrix.shard] }}`),
+  ],
+  [
+    "SC19: the test groups follow a push, not main's ref",
+    (w) =>
+      (w.jobs["tests"]!.concurrency!["group"] = String(w.jobs["tests"]!.concurrency!["group"]).replaceAll(
+        /github\.ref\s*==\s*'refs\/heads\/main'/g,
+        "github.event_name == 'push'",
+      )),
+  ],
+  [
+    "SC19: changed uses main's groups",
+    (w) =>
+      (w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        /^scheduled-proof-/i,
+        "scheduled-main-",
+      )),
   ],
   ["SC19: the workflow holds the control job's group", (w) => (w.concurrency["group"] = "SCHEDULED-CONTROL")],
-  ["SC19: the workflow holds a test job's group", (w) => (w.concurrency["group"] = "SCHEDULED-TEST-1")],
+  ["SC19: the workflow holds a test job's group", (w) => (w.concurrency["group"] = "SCHEDULED-MAIN-1")],
+  ["SC19: the workflow holds a proof job's group", (w) => (w.concurrency["group"] = "SCHEDULED-PROOF-1")],
+  [
+    "SC19: the group counts add up to more than the ten jobs",
+    (w) => (w.env = { ...w.env, MAIN_SLOTS: counts(w).main + 1 }),
+  ],
+  [
+    "SC19: select's MOST differs from PROOF_SLOTS",
+    (w) => (step(w, "select", "set").env!["MOST"] = counts(w).proof === 1 ? 2 : counts(w).proof - 1),
+  ],
+  [
+    "SC19: changed's parallel count differs from PROOF_SLOTS",
+    (w) => (w.jobs["changed"]!.strategy!["max-parallel"] = counts(w).proof === 1 ? 2 : counts(w).proof - 1),
+  ],
   [
     "SC19: the full matrix gains another dimension",
     (w) => void Object.assign(w.jobs["tests"]!.strategy!.matrix, { extra: ["a", "b"] }),
   ],
   [
-    "SC19: changed can name a tenth test slot",
+    "SC19: changed can name a proof group past PROOF_SLOTS",
     (w) => {
-      w.jobs["changed"]!.strategy!["max-parallel"] = 10;
-      step(w, "select", "set").env!["MOST"] = 10;
+      w.jobs["changed"]!.strategy!["max-parallel"] = counts(w).proof + 1;
+      step(w, "select", "set").env!["MOST"] = counts(w).proof + 1;
     },
   ],
   // SC3: the token, the gate's included.
@@ -533,12 +858,19 @@ const plants: [string, (w: Workflow) => void][] = [
     (w) => (w.jobs["tests"]!["name"] = "full suite"),
   ],
   // SC6: one matrix for every test leg, at most half the runners.
-  ["SC6: one more leg at once than the cap holds", (w) => (w.jobs["tests"]!.strategy!["max-parallel"] = 10)],
+  [
+    "SC6: the test job's max-parallel is a number, not the count of its ref",
+    (w) => (w.jobs["tests"]!.strategy!["max-parallel"] = counts(w).main),
+  ],
+  [
+    "SC6: the test job's two counts are swapped",
+    (w) => (w.jobs["tests"]!.strategy!["max-parallel"] = `\${{ ${REF} && ${counts(w).proof} || ${counts(w).main} }}`),
+  ],
   [
     "SC6: the tests no longer wait on the gate, so they run beside it: 11 machines",
     (w) => {
       Reflect.deleteProperty(w.jobs["tests"]!, "needs");
-      w.jobs["tests"]!.strategy!["max-parallel"] = 10;
+      w.jobs["tests"]!.strategy!["max-parallel"] = `\${{ ${REF} && 10 || 10 }}`;
     },
   ],
   ["SC6: the test job has no max-parallel", (w) => Reflect.deleteProperty(w.jobs["tests"]!.strategy!, "max-parallel")],
@@ -551,7 +883,6 @@ const plants: [string, (w: Workflow) => void][] = [
   [
     "SC6: a new job, in the cap",
     (w) => {
-      w.jobs["tests"]!.strategy!["max-parallel"] = 8;
       w.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
       (w.jobs["report"]!.needs as string[]).push("extra");
     },
@@ -569,12 +900,25 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC7: vitest runs on the tooling legs too",
     (w) => (step(w, "tests", "vitest")["if"] = `\${{ !startsWith(matrix.shard, 'e2e-') }}`),
   ],
-  // SC8: the tooling legs, after next's.
+  // SC20: the start order. The first legs of each pin map take groups 1 to N in order.
   [
-    "SC8: a tooling leg comes before the next legs",
-    (w) =>
-      (w.jobs["tests"]!.strategy!.matrix.shard = ["tooling-1", "e2e-1", "e2e-2", "1", "2", "3", "4", "5", "tooling-2"]),
+    "SC20: a first leg swaps with a later one, so a group waits while another is empty",
+    // The first two legs pin to different groups in one map at least (the two counts add up to 9), so
+    // swapping them breaks that map's order whatever the split.
+    (w) => {
+      const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
+      [shards[0], shards[1]] = [shards[1]!, shards[0]!];
+    },
   ],
+  ["SC20: a leg is listed twice", (w) => void (w.jobs["tests"]!.strategy!.matrix.shard as string[]).push("tooling-1")],
+  [
+    "SC8: a tooling leg is renamed",
+    (w) => {
+      const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
+      shards[shards.indexOf("tooling-2")] = "tooling-9";
+    },
+  ],
+  // SC8: the tooling legs, among next's.
   [
     "SC8: the tooling legs are numbered like next's",
     (w) => (w.jobs["tests"]!.strategy!.matrix.shard = ["e2e-1", "e2e-2", "1", "2", "3", "4", "5", "6", "7"]),
@@ -943,13 +1287,38 @@ it("SC6 scenario: on the real scheduled.yaml, the tooling legs or the next legs 
 
   // One more job beside the test job, even with no matrix, is not the one-matrix shape either.
   const beside = real();
-  beside.jobs["tests"]!.strategy!["max-parallel"] = 8;
   beside.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
   (beside.jobs["report"]!.needs as string[]).push("extra");
   expect(lint(beside)).toEqual([
     ONE,
     "scheduled.yaml: SC19: every admitted job is one of the five jobs with shared slots",
   ]);
+});
+
+it("SC6 scenario: on the real scheduled.yaml, the per-run budget counts the larger of the two counts at the tests' step, so 6 more jobs there make 11 machines and 5 make 10", () => {
+  // 0598: main runs 5 legs at once and a proof 4, but a run is one or the other, so the step holds the
+  // larger, 5. Plant, run once on scheduled.ts and restored: the smaller count taken (red: 6 more jobs
+  // at 4 make 10 and pass).
+  const BUDGET_RULE = "scheduled.yaml: SC6: its jobs take at most 10 machines at once, half of the 20 runners";
+
+  const crowd = (extra: number) => {
+    const w = real();
+
+    for (let index = 0; index < extra; index++) {
+      w.jobs[`extra-${index}`] = {
+        needs: ["gate", "select"],
+        "runs-on": "ubuntu-latest",
+        "timeout-minutes": 5,
+        steps: [{ run: "true" }],
+      };
+      (w.jobs["report"]!.needs as string[]).push(`extra-${index}`);
+    }
+
+    return lint(w);
+  };
+
+  expect(crowd(5)).not.toContain(BUDGET_RULE);
+  expect(crowd(6)).toContain(BUDGET_RULE);
 });
 
 it("SC13 scenario: on the real scheduled.yaml, a test step with no limit of its own, or a job limit that is no backstop, is named by SC13", () => {
@@ -1030,7 +1399,7 @@ it("SC1 and SC16 property: a cron at any minute from 1 to 59 every hour, and any
       (clean, minute, hours, gap) => {
         const w = structuredClone(clean);
         w.on["schedule"] = [{ cron: `${minute} ${hours} * * *` }];
-        w.env = { GAP_MINUTES: gap };
+        w.env = { ...w.env, GAP_MINUTES: gap };
         const errors = lint(w);
         const hourly = minute >= 1 && hours === "*";
         reached.minuteZero += minute === 0 ? 1 : 0;

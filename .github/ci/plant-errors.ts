@@ -5,6 +5,14 @@ import { cases, type Request } from "./plant-cases.ts";
 export const Failure = Schema.Struct({
   diagnostic: Schema.Literals([
     "AssertionError: a notice names its process",
+    "AssertionError: the update its Process published reached the client unchanged",
+    "AssertionError: the client heard the checklist's views",
+    "AssertionError: checklist notice count differs",
+    "AssertionError: alarm completion waits for the real callback",
+    "AssertionError: settled stays pending while the callback is held",
+    "AssertionError: settled includes the rescheduled due callback",
+    "AssertionError: canceling a schedule keeps the running call pending",
+    "AssertionError: alarm failure reaches the completion waiter",
     "AssertionError: direct and nested pnpm versions differ from the explicit Node pin",
     "AssertionError: runtime discovery exceeded the existing command cleanup bound",
     "AssertionError: runtime discovery ignored the explicit Node pin",
@@ -32,6 +40,58 @@ const ErrorDetails = Schema.Struct({
   operator: Schema.optionalKey(Schema.String),
 });
 
+export const Issue = Schema.Struct({
+  kind: Schema.Literals([
+    "AssertionError",
+    "SyntaxError",
+    "ReferenceError",
+    "TypeError",
+    "RangeError",
+    "Error",
+    "timeout",
+    "unknown",
+  ]),
+  frame: Failure.fields.assertion,
+});
+
+/** Diagnostic only: closed error names and a position in the selected test, never error text. */
+export const issue = (key: Request["case"], input: unknown): typeof Issue.Type => {
+  let current = input;
+  const seen = new Set<unknown>();
+
+  while (!seen.has(current)) {
+    seen.add(current);
+
+    const decoded = Schema.decodeUnknownOption(ErrorDetails)(current);
+
+    if (Option.isNone(decoded)) {
+      break;
+    }
+
+    const error = decoded.value;
+
+    if (error.cause != null) {
+      current = error.cause;
+      continue;
+    }
+
+    const frame = new RegExp(`${Regex.escape(cases[key].test)}:([0-9]+):([0-9]+)`).exec(error.stack ?? "");
+
+    const position = Schema.decodeUnknownOption(Failure.fields.assertion)(
+      frame === null ? null : { line: Number(frame[1]), column: Number(frame[2]) },
+    );
+
+    const kind = Schema.decodeUnknownOption(Issue.fields.kind)(error.name);
+
+    return Issue.make({
+      kind: /^Test timed out in [0-9]+ms/.test(error.message) ? "timeout" : Option.getOrElse(kind, () => "unknown"),
+      frame: Option.getOrNull(position),
+    });
+  }
+
+  return Issue.make({ kind: "unknown", frame: null });
+};
+
 const Directory = Schema.String.check(Schema.isPattern(/^\/(?:[^/]+\/)*[^/]+$/));
 
 const Fixture = Schema.Struct({
@@ -43,8 +103,56 @@ const Fixture = Schema.Struct({
   paid: Schema.Literal(true),
 });
 
+const Count = Schema.Union([
+  Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)$/)),
+]);
+
 const diagnostic = (key: Request["case"], error: typeof ErrorDetails.Type) => {
   const message = error.message;
+  const selected = cases[key];
+
+  if ("failures" in selected) {
+    const fixed = selected.failures.find(
+      (entry) =>
+        entry.diagnostic !== "AssertionError: checklist notice count differs" &&
+        new RegExp(`^${Regex.escape(entry.diagnostic.slice("AssertionError: ".length))}(?::|\\n|$)`).test(message),
+    );
+
+    if (fixed !== undefined) {
+      return fixed.diagnostic;
+    }
+
+    if (
+      key === "checklist-drop-notify" &&
+      error.operator === "strictEqual" &&
+      /^expected \+?[0-9]+ to be \+?[0-9]+ \/\/ Object.is equality$/.test(message)
+    ) {
+      const actual = Schema.decodeUnknownOption(Count)(error.actual);
+      const expected = Schema.decodeUnknownOption(Count)(error.expected);
+
+      if (
+        Option.isSome(actual) &&
+        Option.isSome(expected) &&
+        Number.isFinite(Number(actual.value)) &&
+        Number.isFinite(Number(expected.value)) &&
+        Number(actual.value) !== Number(expected.value)
+      ) {
+        return "AssertionError: checklist notice count differs";
+      }
+    }
+
+    return null;
+  }
+
+  if (
+    key === "checklist-pid" &&
+    message === "the client heard the checklist's views: expected 0 to be greater than 0" &&
+    error.actual === 0 &&
+    error.expected === 0
+  ) {
+    return "AssertionError: the client heard the checklist's views";
+  }
 
   if (key === "checklist-pid" && /^a notice names its process(?::|\n|$)/.test(message)) {
     return "AssertionError: a notice names its process";
@@ -121,6 +229,7 @@ export const failure = (key: Request["case"], errors: readonly unknown[]) => {
 
   while (!seen.has(current)) {
     seen.add(current);
+
     const decoded = Schema.decodeUnknownOption(ErrorDetails)(current);
 
     if (Option.isNone(decoded)) {
@@ -141,6 +250,26 @@ export const failure = (key: Request["case"], errors: readonly unknown[]) => {
     const safe = diagnostic(key, error);
     const frame = new RegExp(`${Regex.escape(cases[key].test)}:([0-9]+):([0-9]+)`).exec(error.stack ?? "");
     const assertion = frame === null ? null : { line: Number(frame[1]), column: Number(frame[2]) };
+    const selected = cases[key];
+
+    if (
+      "failures" in selected &&
+      !selected.failures.some(
+        (entry) => entry.diagnostic === safe && entry.line === assertion?.line && entry.column === assertion.column,
+      )
+    ) {
+      return null;
+    }
+
+    if (
+      key === "checklist-pid" &&
+      safe === "AssertionError: the client heard the checklist's views" &&
+      (assertion?.line !== 824 ||
+        assertion.column !== 80 ||
+        !new RegExp(`(?:^|[/( ])${Regex.escape(selected.test)}:824:80(?:[)\\s]|$)`).test(error.stack ?? ""))
+    ) {
+      return null;
+    }
 
     if (
       (key === "host-requested-pin" && (assertion?.line !== 195 || assertion.column !== 62)) ||
