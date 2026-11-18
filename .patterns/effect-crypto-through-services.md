@@ -72,7 +72,7 @@ Rules:
   `crypto`) yield `WebCrypto.WebCrypto` and hash under one `Effect.tryPromise` whose `catch` makes
   the typed error, its `fabrika/no-promises` edge comment directly above. A reference needs no
   provide, so the callers do not change. A law hands in a stand-in with `WebCrypto.layer`
-  (`next/packages/libfabrika/src/crypto.test-support.ts:31` and `:68`, read at
+  (`next/packages/libfabrika/src/telemetry/Crypto.test-support.ts:31` and `:68`, read at
   `telemetry/ErrorCause.test.ts:41-42`).
 - **Random bytes and ids come from `SecureRandom`.** `grant.ts:76` makes a grant id with
   `SecureRandom.SecureRandom.use((random) => random.uuidV4())`, and `grant.ts:136` provides
