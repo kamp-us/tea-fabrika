@@ -12,7 +12,7 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Match, Predicate, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -131,7 +131,7 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
 
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -204,6 +204,7 @@ const world = (
         const scope = yield* Effect.scope;
 
         const connect = (tab: string) =>
+          // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
           Effect.runPromise(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
 
         yield* Effect.promise(() => test(fixture, connect));
@@ -212,6 +213,7 @@ const world = (
   );
 
 const helpers = ({ instance, hashes, from }: Fixture) => {
+  // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
   const project = () => (instance as Instance).project(PROJECT);
   return {
     start: async (name: string, program: "starter" | "child") => {
@@ -223,8 +225,10 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
     facts: async (stream: string) =>
+      // SAFETY: the audit read answers the stream's rows as an array.
       ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
     live: async (name: string): Promise<string | undefined> =>
+      // SAFETY: info answers the project's process rows as an array.
       ((await project().info()) as Array<any>).find((row) => row.name === name)?.process,
   };
 };
@@ -261,11 +265,11 @@ const ProjectTape = fc
 // Read stored JSON values and their string leaves. Error causes are deliberately excluded: only
 // the message that runPromise actually put in its rejected Error is an error output.
 const outputText = (value: unknown): Array<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return [value, JSON.stringify(value)];
   }
 
-  if (typeof value === "object" && value !== null) {
+  if (Predicate.isObjectOrArray(value)) {
     return Object.entries(value).flatMap(([key, entry]) => [key, ...outputText(entry)]);
   }
 
@@ -347,13 +351,12 @@ const projectSecrets = Effect.fnUntraced(function* (
   });
 
   const remaining = new Set<ChildFailure>(
-    path === "descriptor"
-      ? ["owner", "descriptor"]
-      : path === "recovery"
-        ? ["exists", "owner", "descriptor"]
-        : path === "configuration"
-          ? ["pending", "configure", "ack"]
-          : ["exit_write", "down", "watch_cleanup", "retire"],
+    Match.value(path).pipe(
+      Match.when("descriptor", (): ReadonlyArray<ChildFailure> => ["owner", "descriptor"]),
+      Match.when("recovery", (): ReadonlyArray<ChildFailure> => ["exists", "owner", "descriptor"]),
+      Match.when("configuration", (): ReadonlyArray<ChildFailure> => ["pending", "configure", "ack"]),
+      Match.orElse((): ReadonlyArray<ChildFailure> => ["exit_write", "down", "watch_cleanup", "retire"]),
+    ),
   );
 
   const expected = remaining.size;
@@ -888,7 +891,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     let armed: number | undefined;
     let fail = true;
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- the fixture supplies only the storage calls configureProcess reads; workerd owns the full context
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: the fixture supplies only the storage calls configureProcess reads; workerd owns the full context
     const ctx = {
       exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
       storage: {
@@ -987,6 +990,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         (opened) => (opened.result?.view?.told?.length ?? 0) >= asks.length,
       );
 
+      // SAFETY: the wait above returned once `told` held every ask, so it is an array.
       const told = view.result.view.told as Array<unknown>;
       expect(told, "L1: no start was refused, though no grant names its program").not.toContain("forbidden");
 
@@ -1087,7 +1091,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       const otherView = await until(
         "the independent counter has a nonzero count",
-        () => client.call("view.open", { pid: other }),
+        () => client.call("view.open", { pid: other! }),
         (frame) => frame.result?.view?.count === 2,
       );
 
@@ -1170,7 +1174,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "L10: the starter keeps its saved state after the child throws",
       ).toEqual(starterView.result.view);
       expect(
-        (await client.call("view.open", { pid: other })).result?.view,
+        (await client.call("view.open", { pid: other! })).result?.view,
         "L10: the independent program keeps its nonzero count after the child throws",
       ).toEqual(otherView.result.view);
       expect(
@@ -1218,6 +1222,7 @@ describe("Desk S1: start and stop refusals decode by name", () => {
       fc.property(fc.constantFrom(...named), fc.string(), (reason, other) => {
         const decoded = Schema.decodeOption(Schema.Union([stops, StartChild.StartRefusal]))(reason);
         expect(decoded._tag === "Some" ? decoded.value : null, `L4: ${reason} decodes by name`).toBe(reason);
+        // SAFETY: `includes` only compares; any string may be looked for in the list of names.
         expect(
           Schema.is(Schema.Union([stops, StartChild.StartRefusal]))(other),
           `L4: ${JSON.stringify(other)} is no refusal`,

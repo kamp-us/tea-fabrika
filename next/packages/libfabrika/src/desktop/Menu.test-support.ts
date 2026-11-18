@@ -26,7 +26,7 @@ export type Row = typeof Menu.Row.Type;
 
 type Client = typeof Menu.Client.Type;
 
-export const same = (a: unknown, b: unknown) => Equal.equals(a, b);
+export const same = <A>(a: A, b: A) => Equal.equals(a, b);
 
 export const cmdId = (n: number) => Id.Cmd.make(`cmd_0000000000e008${n.toString(16).padStart(12, "0")}`);
 

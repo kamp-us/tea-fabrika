@@ -1,0 +1,46 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-safety-2-tests3",
+  "ticket": "1057",
+  "pr": null,
+  "branch": "fabrikalfa/antislop-require-safety-comment-2",
+  "started": "2026-11-15T23:13:14-08:00",
+  "ended": "2026-11-15T23:27:11-08:00",
+  "parent": "2026-11-15-antislop-safety-2-review2",
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests round for anti-slop judgment slice AS-require-safety-comment-2 (decisions 0561 and 0563) after pull request 1366 merged to main: the hits that once waited on it are now this slice's. The rule anti-slop/require-safety-comment-for-type-assertion, forced to error with the SAFETY marker in a scratch config outside the repo, over next/apps/fabrika, next/packages/libfabrika/src/runtime, next/packages/libfabrika/src/node and the files directly in next/packages/libfabrika/src, counted 44 problems on the merged tree at f6875dfdb (an `x as unknown as T` counts twice). 38 are in exam paths and all are fixed by hand edits: local-instance.integration.test.ts (5), runtime-quotas.laws.test.ts (9, new since the merge), runtime-recovery.laws.integration.test.ts (13), worker-quotas.integration.test.ts (1, new since the merge), runtime/Runner.integration.test.ts (5) and runtime/RuntimeCauseTest.ts (5). 6 are in the product file next/packages/libfabrika/src/runtime/Runner.ts and are left for the build step (lines 296, 323, 1382, 1389, 1547, 2271). Three casts went away with the code unchanged: in RuntimeCauseTest.ts `delivery(...) as Incoming` became `delivery(...)` three times, since ProgramRunner's msg takes `unknown` and decodes Incoming itself; the then unused `type Incoming` import went too. Every other cast keeps its assertion and gains a SAFETY comment written from the code it sits over, each checked: the Durable Object state doubles name the members cloudflare/runtime.ts and connection.ts read (Project and Process read id.name, storage and exports for the tail; the Connection's acceptWebSocket is reached only by a fetch upgrade, which the door law never sends); the namespace doubles say the runtime calls only getByName and the loader's get; the fetch stub's body is the Uint8Array that HttpClientRequest.bodyText and FetchHttpClient send, and its JSON is dev.ts's dial body; the worker-quotas rpc helper's bindings are dev.ts proxies whose non-member methods return Effect.runPromise; the exited row body is ProcessEvent.cases.exited; the deliberately wrong casts (a damaged DeadInput, a non-integer Model, a bad ExitReason) say they are wrong on purpose and which decode refuses them. Two SAFETY lines were moved inside a call, because the rule stops its walk at a return statement and does not read a comment between chained calls. No assertion deleted or narrowed, no lock line, no .oxlintrc.json change, no disable line added; existing no-type-assertions disable lines are kept as they were, with the SAFETY line above them.",
+  "hits": {
+    "met": 44,
+    "examPaths": 38,
+    "fixedByQuickFix": 0,
+    "handEdits": 38,
+    "castsRemoved": 3,
+    "left": [
+      "next/packages/libfabrika/src/runtime/Runner.ts:296",
+      "next/packages/libfabrika/src/runtime/Runner.ts:323",
+      "next/packages/libfabrika/src/runtime/Runner.ts:1382",
+      "next/packages/libfabrika/src/runtime/Runner.ts:1389",
+      "next/packages/libfabrika/src/runtime/Runner.ts:1547",
+      "next/packages/libfabrika/src/runtime/Runner.ts:2271"
+    ],
+    "leftWhy": "product file, the build step's",
+    "waitingOn1366": 0,
+    "disableLinesAdded": 0
+  },
+  "plants": [
+    {
+      "law": "anti-slop/require-safety-comment-for-type-assertion, forced to error in a scratch oxlint config outside the repo",
+      "plant": "next/packages/libfabrika/src/runtime/RuntimeCauseTest.ts: the new SAFETY lines over `dead as never` removed, restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": "Checks on the pre-commit tree over f6875dfdb, Node v26.13.0: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 17 of 18 parts pass and the one failure is the expected ratchet ask to add next/packages/libfabrika/src/*, next/packages/libfabrika/src/node/** and now next/apps/fabrika/** to the rule's block (0563; locks come later in one small PR); the list ratchet exits 0; one pnpm typecheck, exit 0. Tests, one file at a time: next/apps/fabrika/src/runtime-quotas.laws.test.ts (2 passed), next/packages/libfabrika/src/node/ErrorCause.test.ts, which runs the RuntimeCauseTest suite (29 passed). Pull request 1508 is on main and this branch, so the integration laws ran in the box with no override: next/packages/libfabrika/src/runtime/Runner.integration.test.ts (117 passed), next/apps/fabrika/src/local-instance.integration.test.ts (3 passed), next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts (13 passed), next/apps/fabrika/src/worker-quotas.integration.test.ts (3 passed). None refused by the 0178 guard. No pull request opened, as the owner ruled for slices."
+}

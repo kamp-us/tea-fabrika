@@ -1,7 +1,7 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema, Predicate } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -190,6 +190,7 @@ StartsTest.law(
 
       const input = yield* StartsTest.input(recipe);
 
+      // SAFETY: the settings-start path reads only the object's name and its SQL handle; every other storage call fails the law through `unexpected`.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: only Alchemy can construct a full object state; these are its SQLite handles
       const ctx = {
         id: { name: input.name },
@@ -212,6 +213,7 @@ StartsTest.law(
         },
       } as unknown as DurableObjectState;
 
+      // SAFETY: a settings start reads only INSTANCE from the env; each binding here fails the law through `unexpected` if it is reached.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: namespace doubles count any non-ledger work without workerd's nominal brands
       const env = {
         INSTANCE: JSON.stringify(input),
@@ -333,7 +335,7 @@ describe("L5 minimal start path, next/", () => {
         let lower: unknown = error.reason;
 
         for (let depth = 0; depth < 8 && lower !== cause; depth++) {
-          lower = typeof lower === "object" && lower !== null && "cause" in lower ? lower.cause : undefined;
+          lower = Predicate.isObjectOrArray(lower) && "cause" in lower ? lower.cause : undefined;
         }
 
         expect(lower).toBe(cause);

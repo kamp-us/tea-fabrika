@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Match, Predicate, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -156,6 +156,8 @@ export const STEPS = ["tests", "build", "mutation", "review"] as const;
 
 export type StepName = (typeof STEPS)[number];
 
+// SAFETY: widening STEPS' literal tuple to readonly strings only lets `includes` take any
+// string; the array is only read.
 const isStep = (s: string): s is StepName => (STEPS as readonly string[]).includes(s);
 
 /** A quest's name, as its state files and its pin folder carry it. */
@@ -166,6 +168,8 @@ export const QUEST_STEPS = ["tests", "build", "review"] as const;
 
 export type QuestStep = (typeof QUEST_STEPS)[number];
 
+// SAFETY: widening QUEST_STEPS to readonly strings only lets `includes` take any string, and
+// the guard's own check is what narrows `s`.
 const isQuestStep = (s: string): s is QuestStep => (QUEST_STEPS as readonly string[]).includes(s);
 
 // ---------------------------------------------------------------- the limits
@@ -251,7 +255,7 @@ export type Line = {
   readonly listUsd: number | null;
 };
 
-const str = (v: unknown, or = ""): string => (typeof v === "string" ? v : or);
+const str = (v: Schema.Json | undefined, or = ""): string => (Predicate.isString(v) ? v : or);
 
 const FaultS = Schema.Literals(FAULTS);
 
@@ -260,7 +264,7 @@ const isFault = Schema.is(FaultS);
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
 export const lineOf = (out: string, exit: number): Line | null => {
   for (const raw of out.trim().split("\n").toReversed()) {
-    const parsed = Result.try((): unknown => JSON.parse(raw));
+    const parsed = Result.try((): Schema.Json => JSON.parse(raw));
 
     if (Result.isFailure(parsed)) {
       continue;
@@ -268,11 +272,13 @@ export const lineOf = (out: string, exit: number): Line | null => {
 
     const d = parsed.success;
 
-    if (d === null || typeof d !== "object" || !("outcome" in d)) {
+    if (!Predicate.isObjectOrArray(d) || !("outcome" in d)) {
       continue;
     }
 
-    const o = d as Record<string, unknown>;
+    // SAFETY: `d` is a non-null object, checked above, and each field is read as JSON and
+    // checked by `str`, `isFault` or a Predicate guard before use.
+    const o = d as Record<string, Schema.Json>;
     const outcome = str(o.outcome);
     const reason = str(o.reason);
 
@@ -281,10 +287,10 @@ export const lineOf = (out: string, exit: number): Line | null => {
       head: str(o.head),
       reason,
       fault: isFault(o.fault) ? o.fault : faultFrom(outcome, reason),
-      report: typeof o.report === "string" ? o.report : null,
+      report: Predicate.isString(o.report) ? o.report : null,
       box: str(o.box),
-      exit: typeof o.exit === "number" ? o.exit : exit,
-      listUsd: typeof o.listUsd === "number" ? o.listUsd : null,
+      exit: Predicate.isNumber(o.exit) ? o.exit : exit,
+      listUsd: Predicate.isNumber(o.listUsd) ? o.listUsd : null,
     };
   }
 
@@ -377,6 +383,8 @@ export const judgedMove = (j: Judgment): Judged =>
 export const moveFrom = (text: string): Judged => {
   // A text that is not such JSON, or reads as neither move, falls back to its `answer:` line.
   const move = Result.try((): Judged | undefined => {
+    // SAFETY: JSON.parse gives `any`; only `_tag` and `step` decide below, `step` through isQuestStep,
+    // and a text that parses to null throws inside Result.try, which falls back to the answer line.
     const d = JSON.parse(text) as Judged;
 
     if (d._tag === "step" && isQuestStep(d.step)) {
@@ -558,7 +566,11 @@ export type Mark = (typeof MARKS)[number];
 export const markFrom = (line: Line): Mark => {
   const [verb] = line.outcome.split(":");
 
-  return verb === "send" ? "send" : verb === "stuck" ? (line.fault ?? "work") : "pass";
+  return Match.value(verb).pipe(
+    Match.when("send", (): Mark => "send"),
+    Match.when("stuck", (): Mark => line.fault ?? "work"),
+    Match.orElse((): Mark => "pass"),
+  );
 };
 
 /** The marks the intensity counts against the quest: sends and work stucks. */
@@ -920,6 +932,8 @@ const take = (quest: Quest, step: StepName, line: Line, move: Move, limits: Limi
 
 export const makeMachine = (limits: Limits) =>
   defineMachine({
+    // SAFETY: tea's `types` slot only carries the Model and Msg types; tea never reads these empty
+    // values (0561).
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
     cmds: [stepRun, judge, prOpen, typecheckRead, loosen, land, hostRun],
     init: (): Step => [
@@ -945,9 +959,15 @@ export const makeMachine = (limits: Limits) =>
         }
 
         const { outcome, head, reason } = m.value;
+
         // 0076: the host step's mark joins the window like any step's. A send to build is a send
         // back; a stuck is the tool's (git, the signer, the push), never counted against the quest.
-        const mark: Mark = outcome === "send" ? "send" : outcome === "stuck" ? "tool" : "pass";
+        const mark = Match.value(outcome).pipe(
+          Match.when("send", (): Mark => "send"),
+          Match.when("stuck", (): Mark => "tool"),
+          Match.orElse((): Mark => "pass"),
+        );
+
         const quest: Quest = { ...s.quest, window: [...s.quest.window, mark].slice(-limits.intensity.within) };
         const intensity = intensityStop(quest, limits.intensity);
 
@@ -1735,9 +1755,11 @@ export const stepsTable = (
   if (existsSync(rowsFile)) {
     for (const raw of readFileSync(rowsFile, "utf8").split("\n")) {
       // A line that is not JSON, or is JSON null, holds no row.
+      // SAFETY: `run` is read only when truthy, as a map key, and `listUsd` only after typeof says it
+      // is a number; a JSON null or a non-object has neither.
       const r = Result.getOrUndefined(Result.try(() => JSON.parse(raw) as { run?: string; listUsd?: number } | null));
 
-      if (r?.run && typeof r.listUsd === "number") {
+      if (r?.run && Predicate.isNumber(r.listUsd)) {
         dollars.set(r.run, r.listUsd);
       }
     }
@@ -2023,8 +2045,8 @@ const main = () => {
       overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
       overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
     ),
-  ).catch((e: unknown) => {
-    console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));
+  ).catch((cause: unknown) => {
+    console.log(JSON.stringify({ outcome: "stuck", reason: String(cause), exit: 30 }));
     process.exitCode = 30;
   });
 };

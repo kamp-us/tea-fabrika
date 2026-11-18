@@ -42,7 +42,7 @@
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { Predicate, Result, Schema } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -68,18 +68,16 @@ const typeId = (prefix: string, n: number): string => {
 type Node = string | { readonly dir: string; readonly parts: ReadonlyArray<{ percent: number; inner: Node }> };
 
 const isNode = (u: unknown): u is Node =>
-  typeof u === "string" ||
-  (typeof u === "object" &&
-    u !== null &&
+  Predicate.isString(u) ||
+  (Predicate.isObjectOrArray(u) &&
     "dir" in u &&
     "parts" in u &&
     Array.isArray(u.parts) &&
     u.parts.every(
-      (p: unknown) =>
-        typeof p === "object" &&
-        p !== null &&
+      (p: unknown): p is { percent: number; inner: Node } =>
+        Predicate.isObjectOrArray(p) &&
         "percent" in p &&
-        typeof p.percent === "number" &&
+        Predicate.isNumber(p.percent) &&
         "inner" in p &&
         isNode(p.inner),
     ));
@@ -116,13 +114,13 @@ type Tile = View["tiles"][number];
 
 /** Reading order: a container's parts in order, depth first. */
 const order = (node: Node): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => order(p.inner));
+  Predicate.isString(node) ? [node] : node.parts.flatMap((p) => order(p.inner));
 
 type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 
 /** Each tile's rectangle in the unit square: a row splits the width by percent, a column the height. */
 const rects = (node: Node, r: Rect = { x: 0, y: 0, w: 1, h: 1 }, out = new Map<string, Rect>()) => {
-  if (typeof node === "string") {
+  if (Predicate.isString(node)) {
     out.set(node, r);
 
     return out;
@@ -202,6 +200,7 @@ const live = (v: View): ReadonlyArray<string> => v.workspaces.flatMap((w) => ord
 const begin = (p: Stepper): World => {
   const s = p.init(null);
   expect(s._tag).toBe("stepped");
+  // SAFETY: the expect above throws unless `s._tag` is "stepped", so `s` is the stepped case here.
   const stepped = s as Extract<typeof s, { _tag: "stepped" }>;
 
   return {
@@ -223,12 +222,15 @@ const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
     w.model = s.model;
     // L11's program half: every view decodes as a client reads it, `child` and all.
     w.view = Schema.decodeUnknownSync(View)(s.view);
+    // SAFETY: a stepped answer's cmds are the tea Cmds tezgah's update
+    // handed out, JSON objects each with a string `type`.
     const cmds = s.cmds as ReadonlyArray<Cmd>;
     w.stops.push(...cmds.filter((c) => c.type === "stop_child"));
 
     return { before, after: w.view, result: { _tag: "stepped" }, cmds };
   }
 
+  // SAFETY: an empty array holds no Cmd, so it is a list of any type.
   return { before, after: w.view, result: { _tag: s._tag, reason: s.reason }, cmds: [] as ReadonlyArray<Cmd> };
 };
 
@@ -943,6 +945,7 @@ const splitMove = (p: Stepper, w: World, c: FocusPick) => {
 const focusCommands = async () => {
   const { commands } = await loadCommands();
 
+  // SAFETY: every `does` in tezgah's commands table is a string literal, so widening it to string loses nothing.
   return [...commands.map((c) => c.does as string).filter((d) => d.startsWith("tezgah.focus_")), CLICK];
 };
 
@@ -1024,6 +1027,8 @@ describe("Desk S3: focus moves at the program", () => {
           // into `Event`, so `"to" in e` could not narrow a union of the three.
           const focus = c.kind === "focus" || c.kind === "focus_far" ? focusMove(p, w, does, c) : null;
 
+          // SAFETY: the branches below take `focus`, `focus_far` and `split_cursor`, and every other
+          // FocusPick kind (split_right, split_down, answer, attach, close) is a Kind.
           const e =
             focus ??
             (c.kind === "focus" || c.kind === "focus_far"

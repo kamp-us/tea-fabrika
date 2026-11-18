@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Predicate } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { CEILING, FACTOR, FLOOR, limit, type Report, slowest } from "./limit.ts";
@@ -19,7 +20,7 @@ const tests = fc.array(duration, { maxLength: 6 }).map((ds) => ds.map((d) => (d 
 const file: fc.Arbitrary<File> = fc
   .tuple(tests, fc.double({ min: 0, max: 120_000, noNaN: true }), fc.boolean(), fc.integer({ min: 0, max: 2e12 }))
   .map(([assertionResults, setup, timed, start]) => {
-    const sum = assertionResults.reduce((s, t) => s + (typeof t.duration === "number" ? t.duration : 0), 0);
+    const sum = assertionResults.reduce((s, t) => s + (Predicate.isNumber(t.duration) ? t.duration : 0), 0);
 
     return timed ? { startTime: start, endTime: start + sum + setup, assertionResults } : { assertionResults };
   });

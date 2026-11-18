@@ -95,7 +95,9 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
         expect(model._tag).toBe("checking");
         const result = send({ type: "history", selection, events: [...events] });
         expect(result._tag).toBe(
-          decision?._tag === "accepted" ? "saving" : decision?._tag === "denied" ? "refused" : "awaiting_trust",
+          decision === undefined
+            ? "awaiting_trust"
+            : TrustDecision.match(decision, { accepted: () => "saving", denied: () => "refused" }),
         );
 
         if (result._tag === "saving") {

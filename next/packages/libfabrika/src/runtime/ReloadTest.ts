@@ -17,6 +17,8 @@ import {
   Schema,
   Scope,
   Stream,
+  Predicate,
+  Match,
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -98,13 +100,14 @@ const BASE: Spec = { k: 1, shape: "same", min: 0, max: 0, v: 1, gaps: [], cmd: f
 type CounterModel = { readonly count: number; readonly step?: number };
 
 const schemaFor = (spec: Spec) =>
-  spec.shape === "widened"
-    ? Schema.Struct({ count: Schema.Number })
-    : spec.shape === "narrowed"
-      ? Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: spec.min, maximum: spec.max })) })
-      : spec.shape === "field"
-        ? Schema.Struct({ count: Schema.Int, step: Schema.Int })
-        : Schema.Struct({ count: Schema.Int });
+  Match.value(spec.shape).pipe(
+    Match.when("widened", () => Schema.Struct({ count: Schema.Number })),
+    Match.when("narrowed", () =>
+      Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: spec.min, maximum: spec.max })) }),
+    ),
+    Match.when("field", () => Schema.Struct({ count: Schema.Int, step: Schema.Int })),
+    Match.orElse(() => Schema.Struct({ count: Schema.Int })),
+  );
 
 /** A narrowed counter never leaves its bounds, so its own steps keep its model readable. */
 const clamp = (spec: Spec, n: number) => (spec.shape === "narrowed" ? Math.min(spec.max, Math.max(spec.min, n)) : n);
@@ -128,8 +131,8 @@ const upgradesFor = (spec: Spec) =>
     .map((from) => ({
       name: `${spec.shape}_${from}`,
       from,
-      run: (m: unknown): unknown =>
-        spec.shape === "field" && typeof m === "object" && m !== null && !("step" in m) ? { ...m, step: 1 } : m,
+      run: <M>(m: M): M | (M & { readonly step: number }) =>
+        spec.shape === "field" && Predicate.isObjectOrArray(m) && !("step" in m) ? { ...m, step: 1 } : m,
     }));
 
 const ping = Cmd.make("ping", { input: Schema.Struct({ n: Schema.Number }), ok: Schema.Number, err: [] });
@@ -153,6 +156,7 @@ const programFor = (spec: Spec) => {
   const model = schemaFor(spec);
 
   const machine = Machine.make({
+    // SAFETY: every variant schemaFor builds is a Struct of a numeric `count` and, for `field`, an Int `step`, so each type fits CounterModel.
     model: model as Schema.Codec<CounterModel>,
     msg: Msg,
     cmds: [ping, write, send],
@@ -350,7 +354,7 @@ const loader = (code: Code) => ({
                     yield* Deferred.await(code.cmdGate);
                   }
 
-                  const n = typeof cmd === "object" && cmd !== null && "n" in cmd ? Number(cmd.n) : 0;
+                  const n = Predicate.isObjectOrArray(cmd) && "n" in cmd ? Number(cmd.n) : 0;
 
                   return Outcome.ok(n);
                 }),
@@ -693,6 +697,7 @@ const history = Effect.fnUntraced(function* (w: World, name: string) {
         .map((e): Fact => ({
           tag: e.event,
           id: e.id,
+          // SAFETY: a process row's body is the object the runtime wrote for it.
           body: e.body as Readonly<Record<string, unknown>>,
           build: e.build,
         }));
@@ -746,8 +751,10 @@ const replay = (
         continue;
       }
 
+      // SAFETY: an inbox letter's `m` is a message the counter takes, with its `type`.
       model = updateFor(code.variants.get(String(body.build)) ?? spec, model, letter.m as { type: string });
     } else if (fact.tag === "state.upgraded") {
+      // SAFETY: a state.upgraded body names the upgrades it ran as a list of their names.
       upgraded = { ran: (body.ran as ReadonlyArray<string>) ?? [] };
     } else if (fact.tag === "code.swapped") {
       const next = code.variants.get(String(body.hash));
@@ -1404,6 +1411,7 @@ export const suite = (rig: Rig): void => {
 
                     if (late) {
                       const { checkpoint } = yield* history(w, NAME);
+                      // SAFETY: a checkpoint's cmds are the saved Cmds, each a record that may name its build.
                       const pending = (checkpoint?.cmds ?? []) as ReadonlyArray<{ readonly build?: string }>;
                       expect(
                         pending.map((c) => c.build),
@@ -1664,11 +1672,11 @@ export const suite = (rig: Rig): void => {
         const answer = yield* swap(yield* session(w, name), load, hash);
 
         expect(answer, `${name}: ${expected}`).toEqual(
-          expected === "same"
-            ? SwapAnswer.cases.same.make({})
-            : expected === "fits"
-              ? SwapAnswer.cases.swapped.make({ was: a.build })
-              : SwapAnswer.cases.refused.make({ was: a.build, reason: expected }),
+          Match.value(expected).pipe(
+            Match.when("same", () => SwapAnswer.cases.same.make({})),
+            Match.when("fits", () => SwapAnswer.cases.swapped.make({ was: a.build })),
+            Match.orElse((reason) => SwapAnswer.cases.refused.make({ was: a.build, reason })),
+          ),
         );
 
         if (expected === "same") {

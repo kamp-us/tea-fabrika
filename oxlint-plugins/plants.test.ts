@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { Predicate } from "effect";
 import fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
@@ -56,6 +57,7 @@ const firesIn = (paths: readonly string[]): ReadonlyMap<string, readonly Fire[]>
     encoding: "utf8",
   });
 
+  // SAFETY: oxlint's JSON report has a `diagnostics` list in the shape written below.
   const report = JSON.parse(out.stdout) as {
     readonly diagnostics: readonly {
       readonly code: string;
@@ -553,8 +555,7 @@ type Diagnostics = ReadonlyArray<{
 const isEntry =
   (object: string, property: string) =>
   (entry: unknown): boolean =>
-    typeof entry === "object" &&
-    entry !== null &&
+    Predicate.isObjectOrArray(entry) &&
     "object" in entry &&
     entry.object === object &&
     "property" in entry &&

@@ -4,7 +4,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import * as CodeHost from "@kampus/libfabrika/codehost/CodeHost";
 import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
-import { Cause, Context, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Redacted, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
 
@@ -26,12 +26,11 @@ describe("L12: handlers map faults", () => {
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
 
           const hostFault = CodeHost.CodeHostError.make({
-            reason:
-              reason === "refused"
-                ? CodeHost.Refused.make({ cause })
-                : reason === "rate_limited"
-                  ? CodeHost.RateLimited.make({ cause })
-                  : CodeHost.Unavailable.make({ cause }),
+            reason: Match.value(reason).pipe(
+              Match.when("refused", () => CodeHost.Refused.make({ cause })),
+              Match.when("rate_limited", () => CodeHost.RateLimited.make({ cause })),
+              Match.orElse(() => CodeHost.Unavailable.make({ cause })),
+            ),
           });
 
           const ciFault = Ci.CiError.make({
@@ -39,11 +38,11 @@ describe("L12: handlers map faults", () => {
           });
 
           const fail = <E>(fault: E): Effect.Effect<never, E> =>
-            cell.kind === "interrupt"
-              ? Effect.interrupt
-              : cell.kind === "defect"
-                ? Effect.die(new Error(cell.cause ?? "defect"))
-                : Effect.fail(fault);
+            Match.value(cell.kind).pipe(
+              Match.when("interrupt", () => Effect.interrupt),
+              Match.when("defect", () => Effect.die(new Error(cell.cause ?? "defect"))),
+              Match.orElse(() => Effect.fail(fault)),
+            );
 
           const host = Layer.succeed(CodeHost.CodeHost, {
             change: () => fail(hostFault),

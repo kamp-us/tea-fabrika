@@ -7,6 +7,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
@@ -46,7 +47,8 @@ const started = (id: string) => ({
 
 const disk = (calls: Partial<FileSystem.FileSystem>) => Layer.merge(FileSystem.layerNoop(calls), Path.layer);
 
-const fails = <A>(failure: unknown) => Effect.fail(failure as never) as Effect.Effect<A, never>;
+// SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it, and the Effect only fails, so its success type is free.
+const fails = <A>(failure: object) => Effect.fail(failure as never) as Effect.Effect<A, never>;
 
 const pendingFile = (path: string) => path.endsWith("brain.pending.jsonl");
 
@@ -55,7 +57,7 @@ type Read = "exists" | "read" | "decode";
 type Call = "pending" | "last" | "add";
 
 /** The outbox's disk, where reading the pending file goes wrong at `read`. */
-const brokenPending = (read: Read, failure: unknown, bad: string) =>
+const brokenPending = (read: Read, failure: object, bad: string) =>
   disk({
     exists: (path) => (read === "exists" && pendingFile(path) ? fails(failure) : Effect.succeed(pendingFile(path))),
     readFileString: () => (read === "read" ? fails(failure) : Effect.succeed(`${bad}\n`)),
@@ -65,11 +67,11 @@ const run = (call: Call) =>
   Effect.gen(function* () {
     const outbox = yield* brainOutbox(HOME);
 
-    return call === "pending"
-      ? yield* outbox.pending
-      : call === "last"
-        ? yield* outbox.last
-        : yield* outbox.add(started("e-1"));
+    return yield* Match.value(call).pipe(
+      Match.when("pending", () => outbox.pending),
+      Match.when("last", () => outbox.last),
+      Match.orElse(() => outbox.add(started("e-1"))),
+    );
   });
 
 describe("T695, the brain's outbox keeps what the disk did", () => {
@@ -90,6 +92,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
         const error = yield* Effect.flip(Effect.provide(run(call), brokenPending(read, failure, bad)));
         expect(error._tag).toBe("BrainError");
         expect(error.reason).toBe("bad_row");
+        // SAFETY: BrainError in local-dev.ts declares `cause` as an optional Defect, so it reads as optional unknown.
         const cause = (error as { readonly cause?: unknown }).cause;
 
         if (read === "decode") {
@@ -123,6 +126,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
 
         expect(error._tag).toBe("BrainError");
         expect(error.reason).toBe("storage");
+        // SAFETY: BrainError in local-dev.ts declares `cause` as an optional Defect, so it reads as optional unknown.
         expect((error as { readonly cause?: unknown }).cause).toBe(failure);
       }),
   );
@@ -146,6 +150,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
 
         const error = yield* Effect.flip(Effect.provide(run("last"), layer));
         expect(error.reason).toBe("bad_row");
+        // SAFETY: BrainError in local-dev.ts declares `cause` as an optional Defect, so it reads as optional unknown.
         expect(Schema.isSchemaError((error as { readonly cause?: unknown }).cause), "the decoder's failure").toBe(true);
       }),
   );
@@ -166,6 +171,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
         );
 
         expect(error.reason).toBe("bad_row");
+        // SAFETY: BrainError in local-dev.ts declares `cause` as an optional Defect, so it reads as optional unknown.
         expect(Schema.isSchemaError((error as { readonly cause?: unknown }).cause), "the decoder's failure").toBe(true);
       }),
   );
@@ -189,6 +195,7 @@ describe("T695, the brain's outbox keeps what the disk did", () => {
         );
 
         expect(error.reason).toBe("id_reused");
+        // SAFETY: BrainError in local-dev.ts declares `cause` as an optional Defect, so it reads as optional unknown.
         expect((error as { readonly cause?: unknown }).cause).toBeUndefined();
       }),
   );

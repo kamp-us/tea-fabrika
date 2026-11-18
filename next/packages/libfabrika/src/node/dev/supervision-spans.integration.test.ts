@@ -4,6 +4,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -52,7 +53,7 @@ const runnerLayer: (
   },
 ) => ReturnType<typeof ProgramRunner.layer> = ProgramRunner.layer;
 
-const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveries = policy.maxDeliveries) => {
+const world = (cause: unknown, adapter: "node" | "worker" = "node", maxDeliveries = policy.maxDeliveries) => {
   const ledger = storage(),
     state = storage(),
     sink = storage();
@@ -78,7 +79,7 @@ const world = (thrown: unknown, adapter: "node" | "worker" = "node", maxDeliveri
     init: (s) => [s ?? { count: 0 }, []],
     update: {
       poison: () => {
-        throw thrown;
+        throw cause;
       },
     },
   });
@@ -239,22 +240,16 @@ const failure = fc
 
     class ProgramError extends Error {}
 
-    const value =
-      kind === "TypeError"
-        ? new TypeError(message)
-        : kind === "RangeError"
-          ? new RangeError(message)
-          : kind === "SyntaxError"
-            ? new SyntaxError(message)
-            : kind === "custom"
-              ? new ProgramError(message)
-              : kind === "eval"
-                ? evaluated(new Error(message), id)
-                : kind === "Error"
-                  ? new Error(message)
-                  : kind === "object"
-                    ? { message }
-                    : message;
+    const value = Match.value(kind).pipe(
+      Match.when("TypeError", () => new TypeError(message)),
+      Match.when("RangeError", () => new RangeError(message)),
+      Match.when("SyntaxError", () => new SyntaxError(message)),
+      Match.when("custom", () => new ProgramError(message)),
+      Match.when("eval", () => evaluated(new Error(message), id)),
+      Match.when("Error", () => new Error(message)),
+      Match.when("object", () => ({ message })),
+      Match.orElse(() => message),
+    );
 
     return { value, message, private: [message, ...(value instanceof Error ? [value.stack!] : [])] };
   });
@@ -318,7 +313,7 @@ const generatedThrow = fc.oneof(
       fc.constant(Symbol("made-up-throw")),
       fc.func(fc.jsonValue()),
     )
-    .map((value) => ({ value, message: null, private: [] as string[] })),
+    .map((value) => ({ value, message: null, private: Array.of<string>() })),
 );
 
 for (const adapter of ["node", "worker"] as const) {

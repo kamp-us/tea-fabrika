@@ -80,6 +80,7 @@ const firesIn = (files: readonly string[]): ReadonlyMap<string, readonly number[
     encoding: "utf8",
   });
 
+  // SAFETY: oxlint's `--format=json` output is the `Report` shape this file declares.
   const report = JSON.parse(out.stdout) as Report;
   const lines = new Map<string, number[]>(files.map((f) => [f, []]));
 

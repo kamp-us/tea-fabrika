@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Match, Predicate } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
@@ -116,7 +117,11 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
   type Kind = "tree" | "files" | "file";
 
   const globOf = (folder: string, kind: Kind) =>
-    kind === "tree" ? `next/${folder}/**` : kind === "files" ? `next/${folder}/*` : `next/${folder}/a.ts`;
+    Match.value(kind).pipe(
+      Match.when("tree", () => `next/${folder}/**`),
+      Match.when("files", () => `next/${folder}/*`),
+      Match.orElse(() => `next/${folder}/a.ts`),
+    );
 
   it("names exactly the lines with no fire of their rule, and each line that names a file", () => {
     const folders = fc.uniqueArray(fc.stringMatching(/^[a-z]{2,5}$/), { minLength: 1, maxLength: 4 });
@@ -150,12 +155,11 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
           const advice: Fire[] = fires.map(({ folder, place, rule }) => ({
             code: rule,
             severity: "warning",
-            filename:
-              place === "direct"
-                ? `next/${folder}/b.ts`
-                : place === "deep"
-                  ? `next/${folder}/sub/b.ts`
-                  : `next/${folder}x/b.ts`,
+            filename: Match.value(place).pipe(
+              Match.when("direct", () => `next/${folder}/b.ts`),
+              Match.when("deep", () => `next/${folder}/sub/b.ts`),
+              Match.orElse(() => `next/${folder}x/b.ts`),
+            ),
           }));
 
           const want = lines.flatMap(({ folder, kind, rule }, i) => {
@@ -200,7 +204,7 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
   // The real config loads the vendored anti-slop plugins from here (0563).
   symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
-  writeFileSync(join(at, ".oxlintrc.json"), typeof config === "string" ? config : JSON.stringify(config));
+  writeFileSync(join(at, ".oxlintrc.json"), Predicate.isString(config) ? config : JSON.stringify(config));
 
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(at, path)), { recursive: true });

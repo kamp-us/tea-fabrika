@@ -40,7 +40,21 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
+import {
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  Result,
+  Schedule,
+  Schema,
+  Scope,
+  Stream,
+  Predicate,
+} from "effect";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
@@ -224,7 +238,7 @@ type World = {
   gate?: { readonly entered: Deferred.Deferred<void>; readonly release: Deferred.Deferred<void> } | undefined;
 };
 
-const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => typeof p === "string");
+const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => Predicate.isString(p));
 
 const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 
