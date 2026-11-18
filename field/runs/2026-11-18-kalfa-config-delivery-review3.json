@@ -12,7 +12,7 @@
   "step": "review",
   "model": "opus",
   "effort": "high",
-  "outcome": "done",
+  "outcome": "pass",
   "why": "Today's CI tooling. Recheck of f75c67809 against eca46d16e: the consumer fault's two P1 runs pass --fsModuleCache=false through an exported consumerArgs. Merge-ready. Installed Vitest is 5.0.5, and its cac chunk lists fsModuleCache as a top-level option (cac.CLrZKo1g.js:1157), not under experimental. Reproduced in a scratch copy with a cold cache: one plain P1 run filled node_modules/.vitest-cache; then --fault without the flag (CI and GITHUB_ACTIONS true) gave faulted exit 0, not_red, exit 1, manifest restored; after warming again, --fault with the flag gave faulted exit 1, rerun exit 0, the same digest, proven, exit 0. checkFault and the not_red refusal are unchanged. The commit changes only consumerArgs, its one caller in fault(), the new D5 property and the tests3 row; the run's arguments are the old ones plus the flag.",
   "note": "Plants in the scratch copy: dropping the flag and splitting it into two arguments are both red in the new D5 property. The property holds consumerArgs, not its use in fault(): an inlined argument list without the flag would pass it, though CI would then fail closed with not_red. related-selection at the head: 23 green. Usage and cost are unknown.",
   "head": "f75c678099dc1a0d72b52f2cf52a667e4e089bc0",

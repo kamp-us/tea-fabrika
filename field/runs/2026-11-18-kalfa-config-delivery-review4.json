@@ -12,7 +12,7 @@
   "step": "review",
   "model": "opus",
   "effort": "high",
-  "outcome": "done",
+  "outcome": "pass",
   "why": "Today's CI tooling. Recheck of merge 7a6862eb9, which took the package layer at 51acff46b holding main with #1569. Merge-ready, no findings: 1589's own .github change is the same before and after the merge except the lines about the plants #1569 removed (six outputs, no checklist faults step, wantsChecklistLaw in place of wanted, the R1 case receipt_after_tooling).",
   "note": "A fresh review agent, not the one behind review1 to review3: the rows do not keep the reviewer's agent id, so it could not be resumed. Plants in scratch copies: an order-blind R1 command list lets receipt_after_tooling lint clean, and dropping the receipt's integration or success() gate is refused by R1 and Q1. loosening.sh on 51acff46b..7a6862eb9 gives the same two hits as before the merge, both judged in earlier reviews. Ran the four related test files one at a time on Node 26.",
   "head": "7a6862eb99a19665fadea7e5bd7b34e09e5dc849",
