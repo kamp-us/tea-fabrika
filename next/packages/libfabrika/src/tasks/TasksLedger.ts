@@ -53,6 +53,13 @@ const decodeEvent = Schema.decodeUnknownSync(Event);
 
 const decodeCall = Schema.decodeUnknownResult(Schema.Struct({ msg: Msg, recorded: Recorded }));
 
+/** A call's field that does not decode is the caller's input (0215): `bad_input`, and no transaction runs. */
+const badInput = (cause: Schema.SchemaError) => TasksError.make({ reason: "bad_input", cause });
+
+/** One field the caller gave, decoded by its own schema. A decoder fills no default, so a missing tag is refused. */
+const decodeField = <A>(schema: Schema.Decoder<A>, input: A) =>
+  Schema.decodeUnknownEffect(schema)(input).pipe(Effect.mapError(badInput));
+
 /** A task's stream prefix. It keeps the word it was first written with, `job:`, since a saved
  *  ledger may hold streams under it (0545). */
 const PREFIX = "job:";
@@ -126,7 +133,8 @@ const saved = (turn: LedgerTurn, id: string): Task => {
  * **Details**
  *
  * A ledger refusal of a line becomes a `bad_input` error and any other ledger failure becomes
- * `storage`, each keeping its cause.
+ * `storage`, each keeping its cause. A call's field that does not decode is `bad_input`, before any
+ * transaction runs.
  *
  * @category layers
  */
@@ -152,7 +160,7 @@ export const layer = Layer.effect(
       const decoded = decodeCall({ msg: input, recorded: said });
 
       if (R.isFailure(decoded)) {
-        return yield* TasksError.make({ reason: "bad_input", cause: decoded.failure });
+        return yield* badInput(decoded.failure);
       }
 
       const { msg, recorded } = decoded.success;
@@ -203,31 +211,49 @@ export const layer = Layer.effect(
 
     return {
       request: Effect.fn("tasks.request")(function* (request: Request, recorded: Recorded) {
-        return (yield* call(request.id, Msg.cases.request.make({ request }), recorded)).receipt;
+        const asked = yield* decodeField(Msg.cases.request.fields.request, request);
+
+        return (yield* call(asked.id, Msg.cases.request.make({ request: asked }), recorded)).receipt;
       }),
       take: Effect.fn("tasks.take")(function* (id: string, executor: Executor, recorded: Recorded) {
+        const able = yield* decodeField(Msg.cases.take.fields.executor, executor);
+
         const proposed = yield* ids
           .next(Execution)
           .pipe(Effect.mapError((cause) => TasksError.make({ reason: "storage", cause })));
 
-        const { receipt, state } = yield* call(id, Msg.cases.take.make({ executor, execution: proposed }), recorded);
+        const { receipt, state } = yield* call(
+          id,
+          Msg.cases.take.make({ executor: able, execution: proposed }),
+          recorded,
+        );
+
         // An accepted or repeated take leaves the task owned, so the saved assignment is there.
         const execution = state._tag === "absent" || state._tag === "requested" ? proposed : state.assignment.execution;
 
         return { ...receipt, execution };
       }),
       started: Effect.fn("tasks.started")(function* (id: string, execution: string, recorded: Recorded) {
-        return (yield* call(id, Msg.cases.start.make({ execution }), recorded)).receipt;
+        const began = yield* decodeField(Msg.cases.start.fields.execution, execution);
+
+        return (yield* call(id, Msg.cases.start.make({ execution: began }), recorded)).receipt;
       }),
       finish: Effect.fn("tasks.finish")(function* (id: string, execution: string, result: Result, recorded: Recorded) {
-        return (yield* call(id, Msg.cases.finish.make({ execution, result }), recorded)).receipt;
+        const fields = {
+          execution: yield* decodeField(Msg.cases.finish.fields.execution, execution),
+          result: yield* decodeField(Msg.cases.finish.fields.result, result),
+        };
+
+        return (yield* call(id, Msg.cases.finish.make(fields), recorded)).receipt;
       }),
       collected: Effect.fn("tasks.collected")(function* (
         id: string,
         collection: typeof Collection.Type,
         recorded: Recorded,
       ) {
-        return (yield* call(id, Msg.cases.collect.make({ collection }), recorded)).receipt;
+        const gathered = yield* decodeField(Msg.cases.collect.fields.collection, collection);
+
+        return (yield* call(id, Msg.cases.collect.make({ collection: gathered }), recorded)).receipt;
       }),
       read,
       forTarget: Effect.fn("tasks.forTarget")(function* (key: string) {

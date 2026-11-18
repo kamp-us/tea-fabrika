@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-rules-and-records-s8-tests2",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-18T10:58:00-08:00",
+  "ended": "2026-11-18T11:22:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Slice 8 of docs/plan/quests/rules-and-records-build-PLAN.md, second tests round, after the build at 6e9275a9. Fixed the package's tsc (Effect.provideService in Frontmatter.test.ts and Patches.test.ts), dropped the unused Entry export, set kalfa-records in boundary-rules.json to import kalfa-config and next-vitest, added kalfa/records/** to the two anti-slop rule lists that had no hit left, and ran L4's own plant on the real Patches.ts: still-holds matched on the raw text made L4 and L3 red. Then, as the lead's change after slice 6 dropped the byte limit, rewrote the map laws: L6 (MapSize.test.ts) is a finding per root or one-folder-down AGENTS.md over 200 lines, with path and lines; L7 is a scenario that maxLines is 200, 201 lines is one finding and 200 none, and Settings.test.ts is deleted; L8 (cli.test.ts) prints the map's advice in path order ending in (advice), counts findings and advice apart, and fails only on a status, patch or link finding. The Toml stand-in, the Digest and the byte helper left Records.test-support.ts. Status, Frontmatter, Patches and Links pass on the build. The three map and command laws are red against the build as it is: its MapSize.check wants a byte limit and has no maxLines, and its cli still loads the byte-limit setting, so the command fails for a missing Toml service before it prints. Their plants run after the build is sent back.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Started is approximate, ended is an estimate written just before the commit; usage and cost are not recorded. Node here is v22 and the checks ran on a Node 26.13.0 outside the repo.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "6e9275a98d9bfd1659a2c67c5189c57f99547f23",
+  "plants": [
+    { "law": "L4 scenario: the records 0605 to 0608, which quote the forbidden forms in fences and code, have no patch finding", "plant": "Patches.ts matches the still-holds pattern on the raw lines of the record, fenced and inline code included", "result": "red" }
+  ]
+}

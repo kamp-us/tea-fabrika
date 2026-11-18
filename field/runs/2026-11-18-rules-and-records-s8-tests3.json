@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-rules-and-records-s8-tests3",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-18T11:23:00-08:00",
+  "ended": "2026-11-18T11:27:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Slice 8 of docs/plan/quests/rules-and-records-build-PLAN.md, third tests round, for the lead's block rule on the still-holds and carried-forward forms (prose outside fenced and inline code, links replaced by their text, consecutive lines joined, a block ending at a blank line, a heading and a list item start, the finding's line where the match begins). In kalfa/records/src/Patches.test.ts, L3 now holds seven shapes over a line break in every run (two links with plain and ./ targets, a link split inside its text, a reference-style link with its definition, a list item whose second line holds the match as in .decisions/0414, a carried-forward split over two lines, an ordered item) and three cases that keep rest and holds apart (two bullets with each list marker, a heading, a blank line); a new scenario law reads the committed .decisions/0414 and expects exactly one still-holds finding at line 31. Against today's line-by-line Patches.ts both are red: L3 finds the three single-line hits where ten are due in the shrunk run, and the 0414 law finds none. L4 still passes. No product file was touched.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Started and ended are approximate; usage and cost are not recorded. A throwaway reference of the block rule, outside the commit, passed all three Patches laws, so the laws can be met. The laws replace a link after the lines are joined, since one shape splits a link's text over the break. The build runs in parallel in this checkout and its edits are not in this commit.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "7716e39fa02be2554ee729b71fadc60fa18bacd3",
+  "plants": [
+    { "law": "L3 an Amendments heading, a still-holds line and a carried-forward line are patch findings; the same text in fenced or inline code, a history line, and a plan file outside .decisions are none", "plant": "Patches.ts matches line by line, as it does before the block rule", "result": "red" },
+    { "law": "L3 scenario: the committed .decisions/0414 has exactly one still-holds finding, at the line that holds \"rest\"", "plant": "Patches.ts matches line by line, as it does before the block rule", "result": "red" }
+  ]
+}

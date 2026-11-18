@@ -1,0 +1,46 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-rules-and-records-s8-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1634",
+  "started": "2026-11-18T11:36:00-08:00",
+  "ended": "2026-11-18T11:47:00-08:00",
+  "parent": "2026-11-18-rules-and-records-s8-build2",
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "fail",
+  "why": "One review of slice 8 of docs/plan/quests/rules-and-records-build-PLAN.md, today's tooling (kalfa/records), at 1b24c68f0. Sent back to build for two blocking classes. First, two scenario laws read records that other slices of this quest edit: the 0414 law (Patches.test.ts:368) is red with origin/main's 0414, which slice 4 (#1632) already folded, and the 0605 to 0608 status law (Frontmatter.test.ts:166) is red once #1633 sets 0608's status to superseded by 0609; both seen red in a scratch copy. Second, the link check misses links its scope names: a Markdown link whose text wraps a line (.patterns/effect-services-and-layers.md:230-231 is one today), and every comment after an unpaired backtick, such as a regex literal (20 tracked code files lose 176 line comments, Prose.ts:49 among them); L5's code-string case cannot fail, since a plant that stops tracking strings stays green at full depth; and Prose.ts and Comments.ts have no Existing tools line while the catalog's mdast-util-from-markdown and oxc-parser, already used in the repo, read both. Three finding rows: the link message names the next record, not the live one (0097 to 0146 to 0162); a malformed or unwanted successor is reported at the status line with the status as raw; the patch check drops heading lines and joins table rows. The status, patch per-block and command parts hold; bin.ts exits 0, 1 and 2 as documented.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Usage and cost are not recorded. Node here is v22, and every node, pnpm and vitest command ran on a Node 26.13.0 outside the repo. All six law files pass one at a time on the branch. Plants ran in a scratch copy of kalfa/records outside the repo, with its node_modules linked; none touched the branch.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "costUsd": null,
+  "billed": null,
+  "base": "1b24c68f0950252faffb67c30700f3015efe3714",
+  "plants": [
+    {
+      "law": "L2, kalfa/records/src/Frontmatter.test.ts:36",
+      "plant": "kalfa/records/src/Frontmatter.ts, a successor that names no file reported at the status line",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:286",
+      "plant": "kalfa/records/src/Patches.ts, a list item's start no longer opens a block, so two bullets join",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:92",
+      "plant": "kalfa/records/src/Links.ts, the #anchor no longer cut from a link target",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:92",
+      "plant": "kalfa/records/src/Comments.ts:56, quotes and backticks no longer open a string, so strings are read as code",
+      "result": "green"
+    }
+  ]
+}

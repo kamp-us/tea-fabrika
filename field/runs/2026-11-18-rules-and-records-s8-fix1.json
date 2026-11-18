@@ -1,0 +1,81 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-rules-and-records-s8-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1634",
+  "started": "2026-11-18T11:55:00-08:00",
+  "ended": "2026-11-18T12:15:00-08:00",
+  "parent": "2026-11-18-rules-and-records-s8-review1",
+  "active": null,
+  "role": "hand",
+  "step": "fix",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Fix round of slice 8 of docs/plan/quests/rules-and-records-build-PLAN.md, today's tooling (kalfa/records), after the first review (eight faults and four changes from the lead). Laws and fixes in two commits. The scenario laws read fixture text, not committed records (0414 as of 7b63f09b0, the frontmatter of 0605 to 0608 as of 604bbcf0b, the measured false alarms of 0227, 0281 and 0603). L5 draws wrapped link text, table cells, a backtick regex literal and a string holding // or # before a cited comment, chains of one to three superseded records and a loop. L2 draws a malformed, an unwanted and a missing successor. L3 draws headings, table cells, 1) items and the same words with no record reference. Product: Markdown.ts (micromark, mdast-util-gfm) replaces Prose.ts, Comments.ts reads .ts/.tsx/.js/.mjs with oxc-parser and keeps a small reader only for # comments, Links.ts names the record at the end of the chain and stops at a loop, Status.ts and Frontmatter.ts report a wrong successor at the successor line, Patches.ts reads sentences of blocks and needs a record reference in the sentence, the root package.json names @kalfa/records, and the map check cites 0610.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Usage and cost are not recorded. Node here is v22 and every node, pnpm and vitest command ran on a Node 26.13.0 outside the repo. The whole pnpm lint passes in every part but lint:promise-types, which the kernel's memory limit killed twice when run beside the other parts; run alone it reports 0 findings. The still-holds and carried-forward rule as the lead gave it drops eight real patches from the check on main (0215:49, 0279:35, 0532:15, 0549:56, 0551:58, 0569:82, 0585:63, 0600:83), whose record reference is in the sentence before.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "costUsd": null,
+  "billed": null,
+  "base": "604bbcf0ba477200cbb81134a2a6db7a25312d25",
+  "plants": [
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:143",
+      "plant": "kalfa/records/src/Markdown.ts, the line of a link is where it starts, not where its target is",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:143",
+      "plant": "kalfa/records/src/Links.ts, the chain walk stops after the first successor",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:143",
+      "plant": "kalfa/records/src/Links.ts, the first successor is returned at once",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:143",
+      "plant": "kalfa/records/src/Comments.ts, the reviewed head's reader, with quotes and backticks no longer opening a string",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts:143",
+      "plant": "kalfa/records/src/Comments.ts, a per-line search for // with no string or block comment",
+      "result": "red"
+    },
+    {
+      "law": "L2, kalfa/records/src/Frontmatter.test.ts:41",
+      "plant": "kalfa/records/src/Status.ts, a wrong successor reported at the status line",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:327",
+      "plant": "kalfa/records/src/Patches.ts, a form fires with no record reference in its sentence",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:327",
+      "plant": "kalfa/records/src/Patches.ts, a year in a date counts as a record number",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:327",
+      "plant": "kalfa/records/src/Patches.ts, the Amendments heading is never reported",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:327",
+      "plant": "kalfa/records/src/Markdown.ts, headings and table cells are not blocks",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:327",
+      "plant": "kalfa/records/src/Markdown.ts, a table row is one block and a heading is not",
+      "result": "red"
+    }
+  ]
+}
