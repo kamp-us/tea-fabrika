@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0565 and its amendments 0573, 0574, 0575, 0576, 0577, with 0584 and 0591; body 586d6719677b
+Approved by the lead agent, builds 0565 and its amendments 0573, 0574, 0575, 0576, 0577, with 0584 and 0591; body aef26bbe133f
 Plancheck-Version: 3
 # Plan: the Effect checker sweep in next/ and our tooling, one check and one folder set per pull request
 
@@ -843,6 +843,10 @@ This one plan covers every slice; the lead approves it once, and each slice's br
 | `next/**/*.test.ts`, `next/**/*.test.tsx`, `next/**/*Test.ts`, `next/**/*.test-support.ts`, `next/apps/fabrika/src/exam/`, `next/apps/fabrika/src/exam/**`, `next/apps/fabrika/e2e/`, `next/apps/fabrika/e2e/**` | tests | tests | The 29,226 hits in exam paths, by slice |
 | `next/**/*.ts`, `next/**/*.tsx`, `.agents/skills/**/*.ts` | build | 10,542 hits outside exam paths, about 1 line each for mechanical and 2 for judgment | By slice; one agent for an `.agents/`-only slice (call 5) |
 | `.patterns/doc-comments.md` | build | docs | E1: its tag order and example lose `@stability` |
+| `.github/ci/step-env.ts` | tests | tests | Fix round 2026-11-18: `readEnv` and `stepFiles`, shared by `field-check.ts`, `proof.ts` and `legs.ts` |
+| `.github/ci/copies.ts` | tests | tests | Named only: the jscpd clone check the fix round ran; no source edit |
+| `next/apps/fabrika/src/env.test-support.ts` | tests | tests | E86's scoped environment helpers; fix round 2026-11-18 gives them an Existing tools line |
+| `next/apps/fabrika/src/environment.ts` | build | 23 | Fix round 2026-11-18: `environment` and `present`, shared by `dev.ts` and `hands.ts` |
 | `docs/plan/quests/effect-sweep-PLAN.md` | lead | docs | This plan |
 
 ## Calls I took
