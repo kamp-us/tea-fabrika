@@ -1,7 +1,9 @@
 // `fabrika/no-stability-tag`, E1 of the Effect-check sweep (0574). Law 1 runs in process through
 // oxlint's RuleTester on generated doc blocks and reads the exact text the fix writes. Law 2 lints
 // planted files at their real paths with the repo's own `.oxlintrc.json`, so the scope is the
-// config's: the four folders fire, the 16 files of pull request 1366 and every other path do not.
+// config's: the four folders fire, the 16 files of pull request 1366 included, and every other path does not.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
@@ -88,9 +90,9 @@ describe("law 1: a @stability line is reported once, and the fix writes the bloc
   });
 });
 
-// The 16 tagged files of pull request 1366 (`gh pr diff 1366 --name-only`, 2026-11-15), which E60
-// does once that branch lands.
-const WAITING = [
+// The 16 files of pull request 1366 (`gh pr diff 1366 --name-only`, 2026-11-15), which carried the
+// tag until E60 deleted it and the config's "off" override for them.
+const FORMERLY_OFF = [
   "next/packages/libfabrika/src/cloudflare/runtime.ts",
   "next/packages/libfabrika/src/gateway/Gateway.ts",
   "next/packages/libfabrika/src/ledger/LedgerTransactionSql.ts",
@@ -123,23 +125,40 @@ const OUTSIDE = ["packages/fabrika/src/planted.ts", "docs/tutorials/planted.ts",
 
 describe("law 2: with the real config the rule fires in next/, .agents/, .github/ci/ and oxlint-plugins/, and nowhere else", async () => {
   const body = `${block(["A planted export.", "", "@stability unstable", "@category models"])}\nexport const planted = 1;\n`;
-  const linted = await plant(Object.fromEntries([...WAITING, ...IN_SCOPE, ...OUTSIDE].map((path) => [path, body])));
 
-  it("fires on the tag line in each folder it covers, tests and internal/ included", () => {
+  const linted = await plant(
+    Object.fromEntries([...FORMERLY_OFF, ...IN_SCOPE, ...OUTSIDE].map((path) => [path, body])),
+  );
+
+  // `examples` runs every listed path once, so the seed cannot leave one out; the generated draws
+  // come on top. Plant: an "off" override in .oxlintrc.json for ledger/Log.ts alone turns this red.
+  it("fires on the tag line in each folder it covers, tests, internal/ and the 16 files of pull request 1366 included", () => {
+    const paths = [...IN_SCOPE, ...FORMERLY_OFF];
+
     fc.assert(
-      fc.property(fc.constantFrom(...IN_SCOPE), (path) => {
+      fc.property(fc.constantFrom(...paths), (path) => {
         expect(linted(CODE, path), path).toEqual([4]);
       }),
-      { ...RUNS, numRuns: IN_SCOPE.length },
+      { ...RUNS, numRuns: paths.length, examples: paths.map((path) => [path] as [string]) },
     );
   });
 
-  it("stays silent on the 16 files of pull request 1366 and on paths outside the four folders", () => {
+  // scenario: `plant` links the real oxlint-plugins/ folder into its temp home, so a planted file
+  // there would be written into the repo. The fourth folder is read from the config's own block
+  // instead. Plant: dropping "oxlint-plugins/**" from that block turns this red.
+  it("scenario: the config's error block lists the oxlint-plugins/ folder", () => {
+    const config = readFileSync(join(import.meta.dirname, "..", ".oxlintrc.json"), "utf8");
+    const block = /"files":\s*\[([^\]]*)\],\s*"rules":\s*\{\s*"fabrika\/no-stability-tag":\s*"error"/.exec(config);
+
+    expect(block?.[1]).toContain('"oxlint-plugins/**"');
+  });
+
+  it("stays silent on paths outside the four folders", () => {
     fc.assert(
-      fc.property(fc.constantFrom(...WAITING, ...OUTSIDE), (path) => {
+      fc.property(fc.constantFrom(...OUTSIDE), (path) => {
         expect(linted(CODE, path), path).toEqual([]);
       }),
-      { ...RUNS, numRuns: WAITING.length + OUTSIDE.length },
+      { ...RUNS, numRuns: OUTSIDE.length, examples: OUTSIDE.map((path) => [path] as [string]) },
     );
   });
 });

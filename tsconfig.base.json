@@ -301,6 +301,7 @@
                 "effect/cli/Prompt",
                 "effect/crypto/Digest",
                 "effect/crypto/SecureRandom",
+                "effect/crypto/Signature",
                 "effect/http/FetchHttpClient",
                 "effect/http/HttpClient",
                 "effect/http/HttpClientRequest",

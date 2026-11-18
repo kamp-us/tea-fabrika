@@ -7,6 +7,7 @@
  * Model itself.
  */
 import { applyCell } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import type { Access, Folded, MemberEvent, Reason } from "./Access.ts";
 import { access, members } from "./Access.ts";
@@ -54,4 +55,4 @@ export const allows = (model: Folded, event: MemberEvent): Result.Result<Folded,
  *
  * @category combinators
  */
-export const foldAccess = (events: ReadonlyArray<MemberEvent>): Access => members(events.reduce(step, EMPTY));
+export const foldAccess = (events: ReadonlyArray<MemberEvent>): Access => members(Arr.reduce(events, EMPTY, step));

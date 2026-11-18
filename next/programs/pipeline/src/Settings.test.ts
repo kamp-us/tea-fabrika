@@ -1,5 +1,17 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Match, Predicate, type Schema, SchemaIssue } from "effect";
+import {
+  Array as Arr,
+  Record as Rec,
+  String as Str,
+  ConfigProvider,
+  Effect,
+  Exit,
+  Match,
+  Option,
+  Predicate,
+  type Schema,
+  SchemaIssue,
+} from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -48,20 +60,20 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 
         const table = {
           queue: {
-            ...(omitted[5] ? {} : { most: values.most }),
-            ...(omitted[0] ? {} : { kinds: { rows: [values.glob], docs: [values.glob] } }),
-            ...(omitted[1] ? {} : { checks: { rows: values.rows, docs: values.docs, code: values.code } }),
+            ...(omitted[5] === true ? {} : { most: values.most }),
+            ...(omitted[0] === true ? {} : { kinds: { rows: [values.glob], docs: [values.glob] } }),
+            ...(omitted[1] === true ? {} : { checks: { rows: values.rows, docs: values.docs, code: values.code } }),
           },
           merger: {
-            ...(omitted[2] ? {} : { wait: values.wait }),
-            ...(omitted[3] ? {} : { poll: values.poll }),
-            ...(omitted[4] ? {} : { backoff: values.backoff }),
-            ...(omitted[6] ? {} : { rounds: values.rounds }),
+            ...(omitted[2] === true ? {} : { wait: values.wait }),
+            ...(omitted[3] === true ? {} : { poll: values.poll }),
+            ...(omitted[4] === true ? {} : { backoff: values.backoff }),
+            ...(omitted[6] === true ? {} : { rounds: values.rounds }),
           },
         };
 
-        const defaults = Object.fromEntries(
-          Object.entries(Settings.all.settings).map(([key, setting]) => [key, setting.default]),
+        const defaults = Rec.fromEntries(
+          Arr.map(Rec.toEntries(Settings.all.settings), ([key, setting]) => [key, setting.default]),
         );
 
         const empty = read({});
@@ -71,7 +83,11 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           expect(empty.value).toEqual(defaults);
           // pinned: the approved settings table starts with five rounds and a 256-entry line.
           expect(empty.value).toMatchObject({ rounds: 5, most: 256 });
-          const checksDeclaration = Settings.all.declarations.find((d) => d.path === "queue.checks")!;
+
+          const checksDeclaration = Option.getOrThrow(
+            Arr.findFirst(Settings.all.declarations, (d) => d.path === "queue.checks"),
+          );
+
           expect(checksDeclaration.default).toEqual({ rows: [], docs: [], code: [] });
         }
 
@@ -81,10 +97,11 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         if (Exit.isSuccess(decoded)) {
           const actual: Readonly<Record<string, unknown>> = decoded.value;
 
-          for (const [key, setting] of Object.entries(Settings.all.settings)) {
-            const from = setting.segments.reduce<unknown>(
-              (value, segment) => (Predicate.hasProperty(value, segment) ? value[segment] : undefined),
-              table,
+          for (const [key, setting] of Rec.toEntries(Settings.all.settings)) {
+            const start: unknown = table;
+
+            const from = Arr.reduce(setting.segments, start, (value, segment) =>
+              Predicate.hasProperty(value, segment) ? value[segment] : undefined,
             );
 
             expect(actual[key]).toEqual(from ?? setting.default);
@@ -116,8 +133,8 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 
         const path = paths[pick % paths.length]!;
 
-        if (path.startsWith("merger.")) {
-          broken.merger[path.split(".")[1]!] = bad;
+        if (Str.startsWith("merger.")(path)) {
+          broken.merger[Str.split(path, ".")[1]!] = bad;
         } else if (path === "queue.most") {
           broken.queue.most = bad;
         } else if (path === "queue.kinds") {
@@ -126,7 +143,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
               Match.value(pick % 3).pipe(
                 Match.when(0, () => ""),
                 Match.when(1, () => "!docs/**"),
-                Match.orElse(() => "x".repeat(65_537)),
+                Match.orElse(() => Str.repeat(65_537)("x")),
               ),
             ],
             docs: [],
@@ -147,10 +164,13 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         expect(Exit.isFailure(refused)).toBe(true);
 
         if (Exit.isFailure(refused)) {
-          const keys = refused.cause.reasons.flatMap((reason) =>
+          const keys = Arr.flatMap(refused.cause.reasons, (reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
-              ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(Predicate.isObject(part) ? part.key : part)).join("."),
+              ? Arr.map(SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues, (issue) =>
+                  Arr.join(
+                    Arr.map(issue.path ?? [], (part) => String(Predicate.isObject(part) ? part.key : part)),
+                    ".",
+                  ),
                 )
               : [],
           );
@@ -160,7 +180,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           for (const key of keys) {
             expect(key).toContain(path);
 
-            for (const good of paths.filter((p) => p !== path)) {
+            for (const good of Arr.filter(paths, (p) => p !== path)) {
               expect(key).not.toContain(good);
             }
           }
@@ -174,10 +194,10 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 it("L11: every declared numeric setting refuses zero, negatives and fractions at its own path", () => {
   fc.assert(
     fc.property(invalid, fc.nat(), (bad, pick) => {
-      const declarations = Settings.all.declarations.filter((d) => Predicate.isNumber(d.default));
+      const declarations = Arr.filter(Settings.all.declarations, (d) => Predicate.isNumber(d.default));
       expect(declarations.length).toBeGreaterThan(0);
       const declaration = declarations[pick % declarations.length]!;
-      const [group, key] = declaration.path.split(".") as [string, string];
+      const [group, key] = Str.split(declaration.path, ".") as [string, string];
 
       const parse = (value: Schema.Json) =>
         Effect.runSyncExit(Settings.all.parse(ConfigProvider.fromUnknown({ [group]: { [key]: value } })));
@@ -187,15 +207,18 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
         expect(Exit.isFailure(refused)).toBe(true);
 
         if (Exit.isFailure(refused)) {
-          const paths = refused.cause.reasons.flatMap((reason) =>
+          const paths = Arr.flatMap(refused.cause.reasons, (reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
-              ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(Predicate.isObject(part) ? part.key : part)).join("."),
+              ? Arr.map(SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues, (issue) =>
+                  Arr.join(
+                    Arr.map(issue.path ?? [], (part) => String(Predicate.isObject(part) ? part.key : part)),
+                    ".",
+                  ),
                 )
               : [],
           );
 
-          expect(paths.some((path) => path.includes(declaration.path))).toBe(true);
+          expect(Arr.some(paths, (path) => Str.includes(declaration.path)(path))).toBe(true);
         }
       }
     }),

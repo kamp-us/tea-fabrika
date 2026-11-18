@@ -6,7 +6,8 @@
 // never on a laptop step. Every resource is acquired in the scope of `p14.test-support.ts`'s `suite`.
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Schema } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Formatter, Option, Order, Schema } from "effect";
+
 import type { BrowserContext } from "playwright";
 import { describe, expect, it } from "vitest";
 import {
@@ -37,7 +38,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
         try: () => page.getByRole("status").innerText(),
         catch: () => SuiteError.make({ waited: "browser: the status line" }),
       }).pipe(
-        Effect.map((text) => text.startsWith("Online")),
+        Effect.map((text) => pipe(text, Str.startsWith("Online"))),
         Effect.orDie,
       ),
       add: (name) =>
@@ -50,7 +51,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       state: t.state,
       body: t.body,
       // The tab's socket path is `/client/<fingerprint>/<tab>`: its last part is the tab id.
-      tab: Effect.sync(() => new URL(seen.sockets[0] ?? "ws://x/").pathname.split("/").at(-1) ?? ""),
+      tab: Effect.sync(() => Str.split(new URL(seen.sockets[0] ?? "ws://x/").pathname, "/").at(-1) ?? ""),
       pid: Effect.succeed(null),
       close: Effect.tryPromise({
         try: () => page.close(),
@@ -83,11 +84,13 @@ const headlessKey = Effect.gen(function* () {
   );
 
   return {
-    fingerprint: `SHA256:${btoa(String.fromCharCode(...digest)).replace(/=+$/, "")}`,
-    raw: btoa(String.fromCharCode(...raw))
-      .replaceAll("+", "-")
-      .replaceAll("/", "_")
-      .replace(/=+$/, ""),
+    fingerprint: `SHA256:${pipe(btoa(String.fromCharCode(...digest)), Str.replace(/=+$/, ""))}`,
+    raw: pipe(
+      btoa(String.fromCharCode(...raw)),
+      Str.replaceAll("+", "-"),
+      Str.replaceAll("/", "_"),
+      Str.replace(/=+$/, ""),
+    ),
     line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "created" as const,
     sign: (bytes: Uint8Array) =>
@@ -109,7 +112,7 @@ const backends = {
 } as const;
 
 describe("P18 L9: one client, two backends, one real round trip", () => {
-  for (const [name, make] of Object.entries(backends)) {
+  for (const [name, make] of Rec.toEntries(backends)) {
     it(
       `scenario: the ${name} client dials, waits, is granted, pings in text, opens the checklist, submits one add and reads it back, through the library's one start`,
       { timeout: LIMIT },
@@ -138,7 +141,7 @@ describe("P18 L9: one client, two backends, one real round trip", () => {
 // Plant: drop the window's DOWN handler; the tile stays `Online` on the dead pid and the wait for
 // `Ended (crashed)` runs out.
 describe("P18 E1: a tile monitors its process and follows the restart, on both backends", () => {
-  for (const [name, make] of Object.entries(backends)) {
+  for (const [name, make] of Rec.toEntries(backends)) {
     it(
       `scenario: the ${name} client's tile says Ended (crashed), opens the successor, sends it one add, and its watch ends when the client closes`,
       { timeout: LIMIT },
@@ -156,7 +159,7 @@ describe("P18 E1: a tile monitors its process and follows the restart, on both b
             if (walk.endedBody !== null) {
               expect(
                 /^\S+$/.test(walk.endedBody.words),
-                `${name}'s ended tile shows one word where its view was, not ${JSON.stringify(walk.endedBody.words)}`,
+                `${name}'s ended tile shows one word where its view was, not ${Formatter.format(walk.endedBody.words)}`,
               ).toBe(true);
               expect(walk.endedBody.ink, `${name}'s ended tile's word is in the tile's text token`).toBe(true);
             }
@@ -173,10 +176,13 @@ describe("P18 E1: a tile monitors its process and follows the restart, on both b
               walk.restartedAt ?? Number.POSITIVE_INFINITY,
             );
             expect(
-              walk.watched.map((w) => w.process).toSorted(),
+              Arr.sort(
+                Arr.map(walk.watched, (w) => w.process),
+                Order.String,
+              ),
               `${name}: processes holds one watch per pid, each for the tab`,
-            ).toEqual([walk.first, walk.second].toSorted());
-            const last = walk.watched.find((w) => w.process === walk.second);
+            ).toEqual(Arr.sort([walk.first, walk.second], Order.String));
+            const last = Option.getOrUndefined(Arr.findFirst(walk.watched, (w) => w.process === walk.second));
             expect(
               walk.unwatched,
               `${name}: the close ends the successor's watch, and only the client's leaving ends it`,

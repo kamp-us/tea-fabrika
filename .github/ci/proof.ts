@@ -35,11 +35,12 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { Result, Schema } from "effect";
+import { Config, DateTime, Result, Schema } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, fewest, isTrigger, list, room, seconds, split, withReaders } from "./legs.ts";
+import { readEnv, stepFiles } from "./step-env.ts";
 
 export { isTrigger };
 
@@ -228,8 +229,20 @@ export const whole = (name: string, value: string | undefined): number => {
 
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {
-  const run = whole("RUN_NUMBER", process.env["RUN_NUMBER"]);
-  const most = whole("MOST", process.env["MOST"]);
+  // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
+  // process.env gave it, so `whole` still refuses an empty MOST, LIMIT or RUN_NUMBER.
+  const env = readEnv(
+    Config.all({
+      most: Config.String("MOST").pipe(Config.withDefault(undefined)),
+      limit: Config.String("LIMIT").pipe(Config.withDefault(undefined)),
+      run: Config.String("RUN_NUMBER").pipe(Config.withDefault(undefined)),
+      record: Config.String("RECORD").pipe(Config.withDefault(undefined)),
+      ...stepFiles,
+    }),
+  );
+
+  const run = whole("RUN_NUMBER", env.run);
+  const most = whole("MOST", env.most);
   const groups = slots(run, most);
   const root = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -269,12 +282,12 @@ if (import.meta.main) {
 
   const sizing: Sizing = {
     most,
-    limit: room(whole("LIMIT", process.env["LIMIT"]), E2E_SETUP),
+    limit: room(whole("LIMIT", env.limit), E2E_SETUP),
     table: rowsAt("full"),
   };
 
   const proof = choose(
-    { base, head, at: new Date().toISOString(), vitest: vitestPackage.version, changed },
+    { base, head, at: DateTime.formatIso(DateTime.nowUnsafe()), vitest: vitestPackage.version, changed },
     triggers,
     files,
     sizing,
@@ -284,19 +297,19 @@ if (import.meta.main) {
   const said = summary(proof);
   console.log(said);
   console.log(lines.join("\n"));
-  const record = process.env["RECORD"];
+  const record = env.record;
 
   if (record !== undefined && record !== "") {
     writeFileSync(record, `${JSON.stringify({ ...proof, slots: groups }, null, 2)}\n`);
   }
 
-  const output = process.env["GITHUB_OUTPUT"];
+  const output = env.output;
 
   if (output !== undefined && output !== "") {
     appendFileSync(output, `${lines.join("\n")}\n`);
   }
 
-  const step = process.env["GITHUB_STEP_SUMMARY"];
+  const step = env.summary;
 
   if (step !== undefined && step !== "") {
     appendFileSync(step, `${said}\n`);

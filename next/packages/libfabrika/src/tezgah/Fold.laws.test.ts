@@ -30,6 +30,8 @@
 // decide the law, and so is a run whose strips and gaps alone overflow a container (an open point the
 // amendment does not settle; the law counts them).
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
@@ -75,7 +77,7 @@ const under = (r: Box) => r.width < SMALLEST.width || r.height < SMALLEST.height
 const near = (r: Box) => Math.abs(r.width - SMALLEST.width) <= EDGE || Math.abs(r.height - SMALLEST.height) <= EDGE;
 
 const tilesIn = (node: Node): ReadonlyArray<string> =>
-  Predicate.isString(node) ? [node] : node.parts.flatMap((p) => tilesIn(p.inner));
+  Predicate.isString(node) ? [node] : Arr.flatMap(node.parts, (p) => tilesIn(p.inner));
 
 /** What the rule draws: each tile's box outside a band, each band with its tiles, and for each
  *  container on the focused path the floor its focused part is held at, along its direction. */
@@ -102,22 +104,28 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
 
     const row = node.dir === "row";
     const left = (row ? box.width : box.height) - (node.parts.length - 1) * Layout.GAP;
-    const fixed = node.parts.map((p) => tilesIn(p.inner).every((t) => strips.has(t)));
-    const has = left - fixed.filter((f) => f).length * ACROSS[node.dir];
+    const fixed = Arr.map(node.parts, (p) => Arr.every(tilesIn(p.inner), (t) => strips.has(t)));
+    const has = left - Arr.filter(fixed, (f) => f).length * ACROSS[node.dir];
     overflow ||= has < 0;
-    const open = node.parts.flatMap((p, i) => (fixed[i] ? [] : [p.percent]));
-    const total = open.reduce((a, b) => a + b, 0);
-    const lead = node.parts.findIndex((p) => tilesIn(p.inner).includes(w.focus));
-    let shares = node.parts.map((p, i) => (fixed[i] ? ACROSS[node.dir] : (has * p.percent) / total));
+    const open = Arr.flatMap(node.parts, (p, i) => (fixed[i] === true ? [] : [p.percent]));
+    const total = Arr.reduce(open, 0, (a, b) => a + b);
+    const lead = Arr.findFirstIndex(node.parts, (p) => tilesIn(p.inner).includes(w.focus));
+    let shares = Arr.map(node.parts, (p, i) => (fixed[i] === true ? ACROSS[node.dir] : (has * p.percent) / total));
 
-    if (lead >= 0) {
+    if (Option.isSome(lead)) {
       const least = Math.min(row ? SMALLEST.width : SMALLEST.height, has);
       held.push({ dir: node.dir, at: least });
 
-      if (shares[lead]! < least) {
-        const rest = total - node.parts[lead]!.percent;
-        shares = node.parts.map((p, i) =>
-          i === lead ? least : fixed[i] ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+      if (shares[lead.value]! < least) {
+        const rest = total - node.parts[lead.value]!.percent;
+        shares = Arr.map(node.parts, (p, i) =>
+          i === lead.value
+            ? least
+            : fixed[i] === true
+              ? ACROSS[node.dir]
+              : rest > 0
+                ? ((has - least) * p.percent) / rest
+                : 0,
         );
       }
     }
@@ -129,7 +137,7 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
         ? { x: at, y: box.y, width: shares[i]!, height: box.height }
         : { x: box.x, y: at, width: box.width, height: shares[i]! };
 
-      if (fixed[i] && !Predicate.isString(p.inner)) {
+      if (fixed[i] === true && !Predicate.isString(p.inner)) {
         bands.push({ box: b, tiles: tilesIn(p.inner) });
       } else {
         walk(p.inner, b);
@@ -157,11 +165,11 @@ const replay = (
 
   for (;;) {
     const { boxes } = rule(w, size, folded);
-    const due = [...strips].filter((t) => !folded.has(t) && boxes.has(t) && under(boxes.get(t)!));
-    close ||= [...boxes].some(([t, r]) => !folded.has(t) && t !== w.focus && near(r));
+    const due = Arr.filter([...strips], (t) => !folded.has(t) && boxes.has(t) && under(boxes.get(t)!));
+    close ||= Arr.some([...boxes], ([t, r]) => !folded.has(t) && t !== w.focus && near(r));
 
     if (due.length === 0) {
-      return { left: [...strips].filter((t) => !folded.has(t)), close };
+      return { left: Arr.filter([...strips], (t) => !folded.has(t)), close };
     }
 
     folded = new Set([...folded, ...due]);
@@ -250,7 +258,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
         seen.runs++;
         expect(JSON.stringify(w), "L31: fold changes nothing it is given").toBe(before);
         expect(
-          [...strips].filter((t) => !live.includes(t)),
+          Arr.filter([...strips], (t) => !live.includes(t)),
           "L31: a strip is a tile of this workspace",
         ).toEqual([]);
         expect(strips.has(w.focus), `L31: the focused tile is never a strip, at ${width}x${height}`).toBe(false);
@@ -269,9 +277,9 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
           `L31 (c): at ${width}x${height} no tile folds unless it was under the floor where it folded`,
         ).toEqual([]);
         const boxes = drawn(w, size, strips);
-        const banded = new Set(want.bands.flatMap((b) => b.tiles));
+        const banded = new Set(Arr.flatMap(want.bands, (b) => b.tiles));
 
-        for (const t of live.filter((t) => !banded.has(t))) {
+        for (const t of Arr.filter(live, (t) => !banded.has(t))) {
           const got = boxes.get(t);
           expect(
             got !== undefined && same(got, want.boxes.get(t)!),
@@ -280,18 +288,20 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
         }
 
         for (const band of want.bands) {
-          const got = band.tiles.map((t) => boxes.get(t));
+          const got = Arr.map(band.tiles, (t) => boxes.get(t));
           expect(
-            got.every((b) => b !== undefined && inside(b, band.box)),
+            Arr.every(got, (b) => b !== undefined && inside(b, band.box)),
             `L31: the strips of a folded container lie inside its band ${JSON.stringify(band.box)}`,
           ).toBe(true);
           expect(
-            got.every((a, i) => got.every((b, j) => i === j || (a !== undefined && b !== undefined && apart(a, b)))),
+            Arr.every(got, (a, i) =>
+              Arr.every(got, (b, j) => i === j || (a !== undefined && b !== undefined && apart(a, b))),
+            ),
             "L31: the strips of a band lie apart",
           ).toBe(true);
         }
 
-        for (const t of live.filter((t) => t !== w.focus && !strips.has(t))) {
+        for (const t of Arr.filter(live, (t) => t !== w.focus && !strips.has(t))) {
           expect(under(boxes.get(t)!), `L31 (a): open ${t} is drawn at least 220x120 at ${width}x${height}`).toBe(
             false,
           );
@@ -300,7 +310,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
         const f = boxes.get(w.focus)!;
 
         for (const dir of ["row", "column"] as const) {
-          const last = want.held.filter((h) => h.dir === dir).at(-1);
+          const last = Arr.filter(want.held, (h) => h.dir === dir).at(-1);
           expect(
             last === undefined || (dir === "row" ? f.width : f.height) >= last.at - SAME,
             `L31 (b): the focused tile is drawn at least ${last?.at} along its ${dir} at ${width}x${height}`,
@@ -309,7 +319,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
 
         seen.strips += strips.size > 0 ? 1 : 0;
         const first = rule(w, size, new Set()).boxes;
-        seen.thin += [...strips].some((t) => {
+        seen.thin += Arr.some([...strips], (t) => {
           const r = first.get(t)!;
 
           return r.width < ACROSS.row || r.height < ACROSS.column;
@@ -317,7 +327,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
           ? 1
           : 0;
         seen.bands += want.bands.length > 0 ? 1 : 0;
-        seen.held += want.held.some((h) => h.at < (h.dir === "row" ? SMALLEST.width : SMALLEST.height)) ? 1 : 0;
+        seen.held += Arr.some(want.held, (h) => h.at < (h.dir === "row" ? SMALLEST.width : SMALLEST.height)) ? 1 : 0;
       }),
       { seed: SEED, numRuns: 300, examples: [[REVIEW_BUG]] },
     );
@@ -332,7 +342,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
   });
 
   it("scenario: a 2x2 at 400x300 with t1 focused folds the bottom row whole: one band 20px tall across the area, its two strips lying along it apart, and t1 holds the rest beside c's 22px strip (amendment 13, point 3)", () => {
-    const [t1, c, a, b] = [1, 2, 3, 4].map((n) => typeId("tile", n) as TileId);
+    const [t1, c, a, b] = Arr.map([1, 2, 3, 4], (n) => typeId("tile", n) as TileId);
 
     let w: Workspace = Schema.decodeUnknownSync(Workspace)({
       id: typeId("workspace", 1),
@@ -353,12 +363,12 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
     const band = { x: 0, y: 300 - ACROSS.column, width: 400, height: ACROSS.column };
     const bottom = [boxes.get(a!)!, boxes.get(b!)!];
     expect(
-      bottom.every((x) => inside(x, band) && Math.abs(x.height - ACROSS.column) <= SAME),
+      Arr.every(bottom, (x) => inside(x, band) && Math.abs(x.height - ACROSS.column) <= SAME),
       `the bottom row is one band ${JSON.stringify(band)}, its strips ${JSON.stringify(bottom)} lying along it`,
     ).toBe(true);
     expect(apart(bottom[0]!, bottom[1]!), "the band's two strips lie apart").toBe(true);
     expect(
-      bottom.every((x) => x.width > ACROSS.row),
+      Arr.every(bottom, (x) => x.width > ACROSS.row),
       "each strip in the band lies along it, wider than a row strip, so its name can be read",
     ).toBe(true);
     expect(boxes.get(c!)!.width, "c is a 22px strip beside t1").toBeCloseTo(ACROSS.row);

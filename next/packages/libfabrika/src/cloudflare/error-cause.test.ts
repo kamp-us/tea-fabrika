@@ -1,7 +1,11 @@
-import { createHash } from "node:crypto";
 import { Stub } from "@kampus/vitest";
 import { RpcCallError } from "alchemy/Rpc";
-import { Effect, Layer, Schema, Predicate } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
 // Only the platform is fake: each stub, storage, bucket, loader and object state is a plain value
@@ -54,10 +58,13 @@ const rejects = (failure: unknown) => () => Promise.reject(failure);
 // SAFETY: each law hands `fake` the parts the adapter reads for it, and the adapter reads nothing else.
 const fake = <A>(value: object): A => value as A;
 
+/** One client member: a call, or an Effect that needs no service, where the call takes nothing (the
+ *  checker's lazyEffect, T1075). The type holds every client to that, so a member that needs a
+ *  service fails the typecheck. */
+type Member = Effect.Effect<unknown, unknown, never> | ((...args: ReadonlyArray<never>) => unknown);
+
 /** Every client the shared callback serves, built on a rejecting platform object. */
-const clients = (
-  failure: unknown,
-): Record<string, Record<string, (...args: Array<never>) => Effect.Effect<unknown, unknown>>> => ({
+const clients = (failure: unknown): Record<string, Record<string, Member>> => ({
   project: ProjectClient.make(Stub.make<ProjectBinding>(() => rejects(failure))),
   process: ProcessClient.make(Stub.make<ProcessBinding>(() => rejects(failure))),
   gateway: GatewayClient.make(Stub.make<ConnectionBinding>(() => rejects(failure))),
@@ -65,8 +72,8 @@ const clients = (
   bucket: BucketClient.make(Stub.make<R2Bucket>(() => rejects(failure))),
 });
 
-const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
-  Object.keys(made).map((method) => ({ client, method })),
+const calls = Rec.toEntries(clients(null)).flatMap(([client, made]) =>
+  Rec.keys(made).map((method) => ({ client, method })),
 );
 
 // Ticket 502 slices S1 and S2: a ProcessClient call and a Connection call other than `fetch` go
@@ -75,6 +82,14 @@ const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
 // the fetcher fails typed with the rejection as its cause. Plant: `unreachable(error.cause)`.
 const throughStub = (client: string, method: string) =>
   client === "process" || (client === "gateway" && method !== "fetch");
+
+/** Runs one client member: a call is given `request`, and an Effect member runs as it is. */
+const run = (member: Member | undefined, request: Request): Effect.Effect<unknown, unknown> =>
+  Effect.isEffect(member)
+    ? member
+    : typeof member === "function"
+      ? Reflect.apply(member, undefined, [request])
+      : Effect.die(`no client member: ${String(member)}`);
 
 /** The rejection a client's `unreachable` kept: its cause, or what the stub's RpcCallError holds. */
 const kept = (client: string, method: string, cause: unknown) => {
@@ -106,19 +121,16 @@ describe("T695, the platform clients keep what the platform rejected with", () =
       Effect.gen(function* () {
         for (const { call, failure } of steps) {
           const method = clients(failure)[call.client]?.[call.method];
-          expect(method, `${call.client}.${call.method}`).toBeTypeOf("function");
-
+          expect(
+            typeof method === "function" || Effect.isEffect(method),
+            `${call.client}.${call.method} is a call or an Effect`,
+          ).toBe(true);
           // A real Request, so a client that hands `fetch` to a typed stub has one to read.
-          const error = yield* Effect.flip(
-            // SAFETY: `clients` maps each name to a client method, and the `toBeTypeOf("function")` above proved it is one.
-            (method as (request: Request) => Effect.Effect<unknown, LedgerError>)(
-              new Request("http://127.0.0.1:8787/client/a/b"),
-            ),
-          );
-
+          const error = yield* Effect.flip(run(method, new Request("http://127.0.0.1:8787/client/a/b")));
           expect(error).toBeInstanceOf(LedgerError);
-          expect(error.reason).toBe("unreachable");
-          expect(kept(call.client, call.method, error.cause), `${call.client}.${call.method} keeps the rejection`).toBe(
+          const lost = error instanceof LedgerError ? error : undefined;
+          expect(lost?.reason).toBe("unreachable");
+          expect(kept(call.client, call.method, lost?.cause), `${call.client}.${call.method} keeps the rejection`).toBe(
             failure,
           );
         }
@@ -212,13 +224,14 @@ const objectState = (name: unknown, saved: unknown = undefined): DurableObjectSt
     },
   });
 
+const INSTANCE = await Effect.runPromise(StartsTest.fixture({ name: "p", port: 8787 }));
+
 const env: Env = fake({
-  INSTANCE: JSON.stringify(instanceFixture({ name: "p", port: 8787 })),
+  INSTANCE: JSON.stringify(INSTANCE),
   PROJECT: {
     getByName: () =>
       Stub.make<ProjectBinding>(() => rejects(new Error("no project in this law")), {
-        settingsStart: async () =>
-          Start.Reply.cases.ok.make({ value: StartsTest.receipt(instanceFixture({ name: "p", port: 8787 })) }),
+        settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(INSTANCE) }),
       }),
   },
   RECORD: { getByName: () => Stub.make<RecordBinding>(() => rejects(new Error("no record in this law"))) },
@@ -228,7 +241,7 @@ const env: Env = fake({
   LOADER: loader(() => Promise.resolve(null)),
 });
 
-const config: BrainOptions = fake(instanceFixture({ name: "p", port: 8787 }));
+const config: BrainOptions = fake(INSTANCE);
 
 describe("T695, the object adapters keep what failed", () => {
   // C3, record.ts:22. Plant: `Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 }))`.
@@ -256,7 +269,7 @@ describe("T695, the object adapters keep what failed", () => {
     fc.record({ at: fc.nat(), other: fc.nat() }).filter(({ at, other }) => at !== other),
     ({ at, other }) =>
       Effect.gen(function* () {
-        const name = JSON.stringify(["p", `spans/${other}`]);
+        const name = Formatter.formatJson(["p", `spans/${other}`]);
         const error = yield* Effect.flip(recordWrite(objectState(name), undefined, Chain.cases.spans.make({}), at, []));
         expect(error.reason).toBe("bad_row");
         expect(error.cause).toBeUndefined();
@@ -379,9 +392,3 @@ describe("T695, the public route keeps what failed", () => {
       }),
   );
 });
-
-function instanceFixture(config: StartsTest.Fixture) {
-  return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
-}

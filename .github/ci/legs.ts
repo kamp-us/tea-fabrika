@@ -29,9 +29,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Record as Rec, Config } from "effect";
 import { testConfig } from "../../vitest.config.ts";
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, readPaths, validSha } from "./changes.mjs";
+import { readEnv, stepFiles } from "./step-env.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
 /** How many legs of each kind run. Zero of a kind starts none of its machines. */
@@ -92,7 +94,7 @@ export const budgetOf = (value: string | undefined): number => {
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
 const rowOf = (table: Readonly<Record<string, number>>, path: string) =>
-  Object.hasOwn(table, path) ? table[path] : undefined;
+  Rec.has(table, path) ? table[path] : undefined;
 
 /** Each leg's files when `assign` splits `files` over `count` legs, as `Shards` keeps them. */
 export const split = (files: readonly string[], count: number, table = measured): string[][] => {
@@ -100,7 +102,7 @@ export const split = (files: readonly string[], count: number, table = measured)
     files.map((path) => ({ path, seconds: rowOf(table, path) })),
     count,
     [],
-    median(Object.values(table)),
+    median(Rec.values(table)),
   );
 
   return Array.from({ length: count }, (_, leg) => files.filter((_, i) => placed[i] === leg));
@@ -108,7 +110,7 @@ export const split = (files: readonly string[], count: number, table = measured)
 
 /** The seconds of a leg's files, a file with no row at the table's median. */
 export const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
-  const unmeasured = median(Object.values(table));
+  const unmeasured = median(Rec.values(table));
 
   return files.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
 };
@@ -237,19 +239,32 @@ export const list = (root: string, args: readonly string[]): string[] => {
 
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {
+  // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
+  // process.env gave it, so an empty FILTER still means the reader tests alone.
+  const env = readEnv(
+    Config.all({
+      event: Config.String("EVENT").pipe(Config.withDefault(undefined)),
+      filter: Config.String("FILTER").pipe(Config.withDefault(undefined)),
+      base: Config.String("BASE").pipe(Config.withDefault(undefined)),
+      visual: Config.String("VISUAL").pipe(Config.withDefault(undefined)),
+      budget: Config.String("BUDGET").pipe(Config.withDefault(undefined)),
+      ...stepFiles,
+    }),
+  );
+
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const full = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow).length };
 
   const run: Run = {
-    event: process.env["EVENT"] ?? "",
+    event: env.event ?? "",
     // Only the exact reader filter narrows; a missing or unknown filter keeps full coverage.
-    scope: process.env["FILTER"] === readers.join(" ") ? "readers" : "all",
-    base: process.env["BASE"] ?? "",
-    visual: process.env["VISUAL"] === "true",
+    scope: env.filter === readers.join(" ") ? "readers" : "all",
+    base: env.base ?? "",
+    visual: env.visual === "true",
   };
 
-  const limit = limits(nextMinutes(workflow), budgetOf(process.env["BUDGET"]));
+  const limit = limits(nextMinutes(workflow), budgetOf(env.budget));
   const head = spawnSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], { cwd: root, encoding: "utf8" });
   const paths = head.status === 0 ? readPaths(run.base, head.stdout.trim(), run.event) : null;
   const force = paths === null || paths.some(isTrigger);
@@ -284,13 +299,13 @@ if (import.meta.main) {
 
   console.log(note);
   console.log(lines.join("\n"));
-  const output = process.env["GITHUB_OUTPUT"];
+  const output = env.output;
 
   if (output !== undefined && output !== "") {
     appendFileSync(output, `${lines.join("\n")}\n`);
   }
 
-  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  const summary = env.summary;
 
   if (summary !== undefined && summary !== "") {
     appendFileSync(summary, `${note}\n`);

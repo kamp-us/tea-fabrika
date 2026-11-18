@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e48-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:16:03-08:00",
+  "ended": "2026-11-15T23:21:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second tests step for judgment slice E48 (globalDateInEffect and globalDate), in our tooling and next/, after pull request 1366 merged and main was merged into the branch at dcabb2f. Recounted both checks at error through --lspconfig over .agents, .github/ci, next/packages/libfabrika, next/apps/fabrika and next/programs/tezgah: 62 hits in all, 2 of them in the row's folders, both brought in by the merge (gate.mjs and gate.test.ts from pull request 1404). The other 60 sit in app:src, lib:gateway and lib:settings, which belong to E89. Fixed .github/ci/gate.test.ts:24 by hand: the test clock's ISO string is now DateTime.formatIso(DateTime.makeUnsafe(...)), which is the same toISOString underneath. Left .github/ci/gate.mjs:238: the gate runs on the runner's own Node with no installed dependencies (its header and scheduled.yaml say so), so importing effect there would break the gate job; the right fix is not clear and it stays listed. No product-file hit is left in the row's folders, so the build has nothing to do. No hit in the row's folders was waiting on 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "No new or changed law. Plant, run once and undone: .github/ci/gate.mjs line 189 read each job start 120 minutes late; gate.test.ts went red (G2 and G3 properties failed), then green after the restore. The merge's resolved ChildrenTest.ts reads right: DateTime is used at line 360 and Deferred in L13; its runner next/packages/libfabrika/src/node/Children.integration.test.ts passed 8 of 8. Tests ran at dcabb2f plus this change: .github/ci/gate.test.ts 7 of 7 passed, Children.integration.test.ts 8 of 8 passed. pnpm format clean, pnpm lint green, ratchet exit 0. Recount after: 0 hits in the row's folders except gate.mjs:238. started is when this step read the clock first, a few minutes after the session began.",
+  "step": "tests",
+  "plants": [
+    {
+      "law": "G2 and G3 properties, .github/ci/gate.test.ts",
+      "plant": ".github/ci/gate.mjs:189 adds 120 minutes to each parsed job start",
+      "result": "red"
+    }
+  ]
+}

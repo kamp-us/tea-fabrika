@@ -2,7 +2,23 @@
 // time limit, what a failed command answers, and the quest's state file. Commands here are plain
 // `sh` lines; no git, Electron, network or agent runs.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Fiber, FileSystem, Option, Ref, type Scope } from "effect";
+import {
+  Array as Arr,
+  Option,
+  String as Str,
+  pipe,
+  Clock,
+  Effect,
+  Fiber,
+  FileSystem,
+  Formatter,
+  Layer,
+  Ref,
+  Schema,
+} from "effect";
+import type { Scope } from "effect";
+import { Digest } from "effect/crypto";
+
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { repoNode } from "../boxnode.ts";
@@ -20,9 +36,9 @@ import {
 } from "./host.ts";
 import * as Step from "./Step.ts";
 
-const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
+const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Digest.Digest | Scope.Scope>) =>
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits the Promise a test hands back
-  Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
+  Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(Layer.merge(NodeServices.layer, Digest.layerWebCrypto))));
 
 const options = { seed: 119120, numRuns: 200 };
 
@@ -32,9 +48,25 @@ const temp = Effect.gen(function* () {
   return yield* fs.makeTempDirectoryScoped({ prefix: "host-" });
 });
 
-const command = fc.stringMatching(/^[a-z][a-z0-9 ./=-]{0,40}$/).filter((c) => c === c.trim());
+const command = fc.stringMatching(/^[a-z][a-z0-9 ./=-]{0,40}$/).filter((c) => c === Str.trim(c));
 
-const sha = "a".repeat(40);
+const sha = pipe("a", Str.repeat(40));
+
+/** The quest's state file read back: each step's name and outcome typed, and every other key kept. */
+const readState = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.StructWithRest(
+      Schema.Struct({
+        steps: Schema.Array(
+          Schema.StructWithRest(Schema.Struct({ step: Schema.String, outcome: Schema.String }), [
+            Schema.Record(Schema.String, Schema.Unknown),
+          ]),
+        ),
+      }),
+      [Schema.Record(Schema.String, Schema.Unknown)],
+    ),
+  ),
+);
 
 const args = (commands: ReadonlyArray<string>) => ({
   main: "/nowhere/main",
@@ -53,7 +85,8 @@ describe("the quest brief's host commands", () => {
   it("property: only the lines inside a fence run, in order, without blanks and comments; prose never runs", () => {
     fc.assert(
       fc.property(fc.array(command, { maxLength: 6 }), fc.array(command, { maxLength: 4 }), (inside, prose) => {
-        const section = [...prose, "```sh", "# a comment", ...inside.flatMap((c) => [c, ""]), "```", ...prose].join(
+        const section = Arr.join(
+          [...prose, "```sh", "# a comment", ...Arr.flatMap(inside, (c) => [c, ""]), "```", ...prose],
           "\n",
         );
 
@@ -94,7 +127,7 @@ describe("the quest brief's host commands", () => {
         }) =>
           Effect.gen(function* () {
             const dir = yield* temp;
-            yield* fs.writeFileString(`${dir}/package.json`, JSON.stringify(pkg));
+            yield* fs.writeFileString(`${dir}/package.json`, Formatter.formatJson(pkg));
 
             return yield* repoNode(dir);
           });
@@ -283,10 +316,10 @@ exec "$@"
     ran(
       Effect.gen(function* () {
         const dir = yield* temp;
-        const started = Date.now();
+        const started = yield* Clock.currentTimeMillis;
         // 0.002 minutes is 120 ms.
         const outcome = yield* runCommands(dir, ["echo begun; sleep 30"], {}, `${dir}/log`, 0.002);
-        expect(Date.now() - started).toBeLessThan(10_000);
+        expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(10_000);
         expect(outcome).toMatchObject({ _tag: "send", to: "build" });
         expect(outcome?.reason).toContain("0.002-minute limit");
         expect(outcome?.reason).toContain("begun");
@@ -404,23 +437,23 @@ describe("the quest's state file", () => {
           steps: [{ step: "build", outcome: "done", head: sha }],
         };
 
-        yield* fs.writeFileString(state, JSON.stringify(before));
+        yield* fs.writeFileString(state, Formatter.formatJson(before));
         const at = { boxes, quest: "quest", name: "quest-host3", head: sha };
         const sent = { _tag: "send", to: "build", reason: "red" } as const;
         yield* recordInQuest(at, { outcome: sent, head: sha, log: "x.log" }, "t1");
         const done = { _tag: "done", reason: "ok" } as const;
-        yield* recordInQuest(at, { outcome: done, head: "b".repeat(40), log: "y.log" }, "t2");
-        const after = JSON.parse(yield* fs.readFileString(state));
+        yield* recordInQuest(at, { outcome: done, head: pipe("b", Str.repeat(40)), log: "y.log" }, "t2");
+        const after = yield* readState(yield* fs.readFileString(state));
         expect(after.ticket).toBe("7");
-        expect(after.head).toBe("b".repeat(40));
-        expect(after.steps.map((e: { step: string; outcome: string }) => `${e.step} ${e.outcome}`)).toEqual([
+        expect(after.head).toBe(pipe("b", Str.repeat(40)));
+        expect(Arr.map(after.steps, (e: { step: string; outcome: string }) => `${e.step} ${e.outcome}`)).toEqual([
           "build done",
           "host send:build:host_failed",
           "host done",
         ]);
         expect(after.steps[1]).toMatchObject({ head: sha, report: "x.log", box: "quest-host3", ended: "t1" });
         // A review is told the last host entry, read back from the file as written.
-        expect(lastHost(after.steps)).toBe(`done at ${"b".repeat(40)}: ok`);
+        expect(lastHost(after.steps)).toBe(`done at ${pipe("b", Str.repeat(40))}: ok`);
         expect(lastHost(before.steps)).toBeNull();
       }),
     ));
@@ -444,14 +477,14 @@ describe("the quest's state file", () => {
           steps: [{ step: "build", box: "t9-build1", outcome: "done", head: sha }],
         };
 
-        yield* fs.writeFileString(state, `${JSON.stringify(before, null, "\t")}\n`);
+        yield* fs.writeFileString(state, `${Formatter.formatJson(before, { space: "\t" })}\n`);
         const done = { _tag: "done", reason: "ok" } as const;
         yield* recordInQuest(
           { boxes, quest: "t9", name: "t9-host1", head: sha },
           { outcome: done, head: sha, log: null },
           "t1",
         );
-        const after = JSON.parse(yield* fs.readFileString(state));
+        const after = yield* readState(yield* fs.readFileString(state));
         expect(after).toMatchObject({
           quest: "t9",
           ticket: "9",
@@ -461,7 +494,7 @@ describe("the quest's state file", () => {
           head: sha,
         });
         expect(after).not.toHaveProperty("lane");
-        expect(after.steps.map((e: { step: string }) => e.step)).toEqual(["build", "host"]);
+        expect(Arr.map(after.steps, (e: { step: string }) => e.step)).toEqual(["build", "host"]);
       }),
     ));
 });

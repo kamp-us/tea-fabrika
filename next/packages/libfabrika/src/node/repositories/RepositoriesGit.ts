@@ -1,18 +1,25 @@
 /**
  * `Repositories` on Node, through the `git` command.
  */
-
+import * as Arr from "effect/Array";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import {
   Branch,
   DefaultUnknown,
@@ -32,6 +39,18 @@ const failure = (operation: string, cause: unknown, unknown = false) =>
       ? DefaultUnknown.make({ cause: Redacted.make(cause) })
       : ReadFailed.make({ cause: Redacted.make(cause) }),
   });
+
+/**
+ * What a git command takes from this process's environment, read at each command as process.env
+ * was: an empty variable stays empty, and an unset one stays unset.
+ */
+const inherited = Config.all({
+  PATH: Config.String("PATH").pipe(Config.withDefault(undefined)),
+  HOME: Config.String("HOME").pipe(Config.withDefault(undefined)),
+  GIT_CONFIG_NOSYSTEM: Config.String("GIT_CONFIG_NOSYSTEM").pipe(Config.withDefault(undefined)),
+  GIT_CONFIG_GLOBAL: Config.String("GIT_CONFIG_GLOBAL").pipe(Config.withDefault(undefined)),
+  SSH_AUTH_SOCK: Config.String("SSH_AUTH_SOCK").pipe(Config.withDefault(undefined)),
+});
 
 const safeConfig = [
   "-c",
@@ -82,20 +101,22 @@ export const layer = (options: { readonly person: string }) =>
 
         return yield* Effect.scoped(
           Effect.gen(function* () {
+            const env = yield* inherited.parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+
             const child = yield* spawner.spawn(
               ChildProcess.make("git", ["--no-replace-objects", "--literal-pathspecs", ...safeConfig, ...args], {
                 cwd,
                 extendEnv: false,
                 env: {
-                  PATH: process.env.PATH,
-                  HOME: process.env.HOME,
-                  GIT_CONFIG_NOSYSTEM: objects === undefined ? "1" : process.env.GIT_CONFIG_NOSYSTEM,
-                  GIT_CONFIG_GLOBAL: objects === undefined ? "/dev/null" : process.env.GIT_CONFIG_GLOBAL,
+                  PATH: env.PATH,
+                  HOME: env.HOME,
+                  GIT_CONFIG_NOSYSTEM: objects === undefined ? "1" : env.GIT_CONFIG_NOSYSTEM,
+                  GIT_CONFIG_GLOBAL: objects === undefined ? "/dev/null" : env.GIT_CONFIG_GLOBAL,
                   GIT_TERMINAL_PROMPT: "0",
                   GIT_ATTR_NOSYSTEM: "1",
                   GIT_ALLOW_PROTOCOL: "file:https:http:ssh:git",
                   GIT_OBJECT_DIRECTORY: objects,
-                  SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK,
+                  SSH_AUTH_SOCK: env.SSH_AUTH_SOCK,
                 },
               }),
             );
@@ -104,7 +125,7 @@ export const layer = (options: { readonly person: string }) =>
             const bytes = yield* child.stdout.pipe(Stream.runCollect);
             const code = yield* child.exitCode;
             const stderr = yield* Fiber.join(errors);
-            const size = bytes.reduce((n, part) => n + part.length, 0);
+            const size = Arr.reduce(bytes, 0, (n, part) => n + part.length);
             const output = new Uint8Array(size);
             let offset = 0;
 
@@ -135,7 +156,7 @@ export const layer = (options: { readonly person: string }) =>
 
       const text = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
         // Git adds one newline. Other whitespace can belong to a directory or remote path.
-        return (yield* decode(yield* run(cwd, args))).replace(/\n$/, "");
+        return Function.pipe(yield* decode(yield* run(cwd, args)), Str.replace(/\n$/, ""));
       });
 
       return Repositories.of({
@@ -164,7 +185,11 @@ export const layer = (options: { readonly person: string }) =>
               "remote.origin.url",
             ]).pipe(Effect.mapError((cause) => failure("origin", cause, true)));
 
-            if (destination === "" || destination.startsWith("-") || destination.includes("\n")) {
+            if (
+              destination === "" ||
+              Function.pipe(destination, Str.startsWith("-")) ||
+              Function.pipe(destination, Str.includes("\n"))
+            ) {
               return yield* failure("origin", "invalid destination", true);
             }
 
@@ -201,17 +226,19 @@ export const layer = (options: { readonly person: string }) =>
               Effect.flatMap(decode),
               Effect.mapBoth({
                 onFailure: (cause) => failure("origin", cause, true),
-                onSuccess: (value) => value.replace(/\n$/, ""),
+                onSuccess: Str.replace(/\n$/, ""),
               }),
             );
 
             // Host URL rewrites apply; credentials are authority, never destination identity.
-            const identity = effective
-              .replace(/^(https?:\/\/)[^/@]*@/i, "$1")
-              .replace(/^(ssh:\/\/)[^/@]*@/i, "$1")
-              .replace(/^[^/@:]+@(?=[^/:]+:)/, "");
+            const identity = Function.pipe(
+              effective,
+              Str.replace(/^(https?:\/\/)[^/@]*@/i, "$1"),
+              Str.replace(/^(ssh:\/\/)[^/@]*@/i, "$1"),
+              Str.replace(/^[^/@:]+@(?=[^/:]+:)/, ""),
+            );
 
-            const key = yield* hash(JSON.stringify([common, identity])).pipe(
+            const key = yield* hash(Formatter.formatJson([common, identity])).pipe(
               Effect.flatMap(Schema.decodeUnknownEffect(Hash)),
               Effect.mapError((cause) => failure("fingerprint", cause)),
             );
@@ -221,32 +248,39 @@ export const layer = (options: { readonly person: string }) =>
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
 
-            const lines = advertised.trim().split("\n");
-            const symbolic = lines.filter((line) => line.startsWith("ref: ") && line.endsWith("\tHEAD"));
+            const lines = Str.split(Str.trim(advertised), "\n");
+
+            const symbolic = Arr.filter(
+              lines,
+              (line) => Function.pipe(line, Str.startsWith("ref: ")) && Function.pipe(line, Str.endsWith("\tHEAD")),
+            );
 
             if (symbolic.length !== 1) {
               return yield* failure("default branch", "missing or ambiguous HEAD", true);
             }
 
-            const ref = (symbolic[0] ?? "").slice(5, -5);
+            const ref = Function.pipe(symbolic[0] ?? "", Str.slice(5, -5));
 
-            if (!ref.startsWith("refs/heads/")) {
+            if (!Function.pipe(ref, Str.startsWith("refs/heads/"))) {
               return yield* failure("default branch", "not a branch", true);
             }
 
-            const branch = yield* Schema.decodeEffect(Branch)(ref.slice(11)).pipe(
+            const branch = yield* Schema.decodeEffect(Branch)(Function.pipe(ref, Str.slice(11))).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
 
-            const heads = lines.filter((line) => !line.startsWith("ref: ") && line.endsWith("\tHEAD"));
+            const heads = Arr.filter(
+              lines,
+              (line) => !Function.pipe(line, Str.startsWith("ref: ")) && Function.pipe(line, Str.endsWith("\tHEAD")),
+            );
 
             if (heads.length !== 1) {
               return yield* failure("default branch", "missing HEAD object", true);
             }
 
-            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)((heads[0] ?? "").slice(0, -5)).pipe(
-              Effect.mapError((cause) => failure("default branch", cause, true)),
-            );
+            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)(
+              Function.pipe(heads[0] ?? "", Str.slice(0, -5)),
+            ).pipe(Effect.mapError((cause) => failure("default branch", cause, true)));
 
             // Pin the advertised object. A branch move during fetch is a refusal, never a different selection.
             yield* isolated([
@@ -261,7 +295,7 @@ export const layer = (options: { readonly person: string }) =>
 
             const commit = yield* isolated(["rev-parse", "--verify", `${advertisedCommit}^{commit}`]).pipe(
               Effect.flatMap(decode),
-              Effect.map((value) => value.replace(/\n$/, "")),
+              Effect.map(Str.replace(/\n$/, "")),
               Effect.flatMap(Schema.decodeUnknownEffect(ObjectId)),
               Effect.mapError((cause) => failure("commit", cause, true)),
             );
@@ -275,14 +309,15 @@ export const layer = (options: { readonly person: string }) =>
 
               const [record] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([Schema.NonEmptyString, Schema.Literal("")]),
-              )(listed.split("\0")).pipe(Effect.mapError((cause) => failure("tree", cause)));
+              )(Str.split(listed, "\0")).pipe(Effect.mapError((cause) => failure("tree", cause)));
 
-              const tab = record.indexOf("\t"),
-                fields = record.slice(0, tab).split(" ");
+              const tab = Function.pipe(record, Str.indexOf("\t"));
 
-              if (record.slice(tab + 1) !== file) {
+              if (Option.isNone(tab) || Function.pipe(record, Str.slice(tab.value + 1)) !== file) {
                 return yield* failure("tree", "unexpected path");
               }
+
+              const fields = Function.pipe(record, Str.slice(0, tab.value), Str.split(" "));
 
               const [mode, type, id] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([

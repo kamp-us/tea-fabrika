@@ -18,6 +18,9 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { inputParents, processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -66,13 +69,13 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 /** Texts one slip away from a good parent: none of them may pass. */
 const badParents = (good: string): ReadonlyArray<string> => [
   "",
-  good.toUpperCase(),
+  Str.toUpperCase(good),
   `${good} `,
   ` ${good}`,
   `x${good}`,
   `${good}\n`,
-  good.slice(0, 4) + good.slice(5),
-  good.replace(/-/g, "_"),
+  Str.slice(0, 4)(good) + Str.slice(5)(good),
+  Str.replace(/-/g, "_")(good),
   "in-3f9a0c21-41",
   "in-3f9a0c21-0",
   "in-3f9a0c21-01",
@@ -81,10 +84,10 @@ const badParents = (good: string): ReadonlyArray<string> => [
   `in-${PROCESS}-0`,
   `in-${PROCESS}-01`,
   `in-${PROCESS}-`,
-  ...["i", "l", "o", "u"].map((char) => `in-process_0${char}${"0".repeat(24)}-1`),
-  `in-process_8${"0".repeat(25)}-1`,
-  `in-process_0${"0".repeat(24)}-1`,
-  `in-process_0${"0".repeat(26)}-1`,
+  ...Arr.map(["i", "l", "o", "u"], (char) => `in-process_0${char}${Str.repeat(24)("0")}-1`),
+  `in-process_8${Str.repeat(25)("0")}-1`,
+  `in-process_0${Str.repeat(24)("0")}-1`,
+  `in-process_0${Str.repeat(26)("0")}-1`,
 ];
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The layer's scope closes the
@@ -127,7 +130,7 @@ const full: Line = {
 const json = (): Record<string, unknown> => JSON.parse(JSON.stringify(full));
 
 const without = (key: string): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(json()).filter(([k]) => k !== key));
+  Rec.fromEntries(Arr.filter(Rec.toEntries(json()), ([k]) => k !== key));
 
 const KEYS = ["by", "for", "sentAt", "seen", "parent", "traceId", "build", "_tag", "body"] as const;
 
@@ -179,8 +182,8 @@ describe("p92, every entry has every field: the type", () => {
     const g: Line = noTag;
     // @ts-expect-error `body` is required
     const h: Line = noBody;
-    expect([a, b, c, d, e, f, g, h, i].map((line) => Object.keys(line).length)).toEqual(
-      KEYS.map(() => KEYS.length - 1),
+    expect(Arr.map([a, b, c, d, e, f, g, h, i], (line) => Rec.keys(line).length)).toEqual(
+      Arr.map(KEYS, () => KEYS.length - 1),
     );
   });
 
@@ -209,7 +212,7 @@ describe("p92, every entry has every field: the type", () => {
     }[keyof typeof data];
 
     expectTypeOf<MakesInputId>().toEqualTypeOf<"InputId" | "ParentText">();
-    expect(Object.keys(data).length).toBeGreaterThan(0);
+    expect(Rec.keys(data).length).toBeGreaterThan(0);
   });
 });
 
@@ -219,7 +222,7 @@ describe("p92, every entry has every field: at the referee", () => {
     Effect.gen(function* () {
       const { answers, entries } = yield* handIn([without(key), json()]);
       expect(answers).toEqual([refused("bad_line"), { _tag: "placed", rev: 1, pos: 1 }]);
-      expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
+      expect(Arr.map(entries, (entry) => entry.id)).toEqual(["w-2"]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
 
@@ -237,7 +240,7 @@ describe("p92, every entry has every field: at the referee", () => {
       Effect.gen(function* () {
         const { answers, entries } = yield* handIn([{ ...json(), [key]: 7 }, json()]);
         expect(answers).toEqual([refused("bad_line"), { _tag: "placed", rev: 1, pos: 1 }]);
-        expect(entries.map((entry) => [entry.id, entry.rev, entry.pos])).toEqual([["w-2", 1, 1]]);
+        expect(Arr.map(entries, (entry) => [entry.id, entry.rev, entry.pos])).toEqual([["w-2", 1, 1]]);
       }).pipe(Effect.provide(onReferee(fresh()))),
   );
 
@@ -258,7 +261,7 @@ describe("p92, every entry has every field: at the referee", () => {
       ];
 
       const { answers, entries } = yield* handIn(wrong);
-      expect(answers).toEqual(wrong.map(() => refused("bad_line")));
+      expect(answers).toEqual(Arr.map(wrong, () => refused("bad_line")));
       expect(entries).toEqual([]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
@@ -270,20 +273,20 @@ describe("p92, every entry has every field: at the referee", () => {
       yield* ledger.append("notes:2", "w-2", { ...full, parent: goodParent });
       yield* ledger.append("notes:1", "w-3", { ...full, seen: 2 });
       const entries = yield* Stream.runCollect(ledger.read("notes:1", 0));
-      expect(entries.map((entry) => Object.keys(entry).sort())).toEqual([ENTRY_KEYS, ENTRY_KEYS]);
-      expect(entries.map((entry) => [entry.id, entry.stream, entry.rev, entry.pos])).toEqual([
+      expect(Arr.map(entries, (entry) => Rec.keys(entry).sort())).toEqual([ENTRY_KEYS, ENTRY_KEYS]);
+      expect(Arr.map(entries, (entry) => [entry.id, entry.stream, entry.rev, entry.pos])).toEqual([
         ["w-1", "notes:1", 1, 1],
         ["w-3", "notes:1", 3, 2],
       ]);
-      expect(entries.map((entry) => entry.arrivedAt)).toEqual([expect.any(Number), expect.any(Number)]);
+      expect(Arr.map(entries, (entry) => entry.arrivedAt)).toEqual([expect.any(Number), expect.any(Number)]);
       expect(entries[1]).toMatchObject({ ...full, seen: 2 });
     }).pipe(Effect.provide(onLedger(fresh()))),
   );
 
   it.effect("a line whose row would pass 2,000,000 bytes is refused too_big, as workerd would", () =>
     Effect.gen(function* () {
-      const big = "x".repeat(2_000_001);
-      const near = "x".repeat(1_900_000);
+      const big = Str.repeat(2_000_001)("x");
+      const near = Str.repeat(1_900_000)("x");
 
       const { answers, entries } = yield* handIn([
         { ...json(), body: { note: big } },
@@ -291,7 +294,7 @@ describe("p92, every entry has every field: at the referee", () => {
       ]);
 
       expect(answers).toEqual([refused("too_big"), { _tag: "placed", rev: 1, pos: 1 }]);
-      expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
+      expect(Arr.map(entries, (entry) => entry.id)).toEqual(["w-2"]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
 
@@ -302,26 +305,30 @@ describe("p92, every entry has every field: at the referee", () => {
       const encoder = new TextEncoder();
 
       const rowBytes = (line: Line): number =>
-        [
-          "notes:1",
-          "w-1",
-          line.by,
-          line.for,
-          line.sentAt,
-          line.parent ?? "",
-          line.traceId,
-          line.build,
-          line._tag,
-          JSON.stringify(line.body),
-        ].reduce((n, text) => n + encoder.encode(text).length, 0);
+        Arr.reduce(
+          [
+            "notes:1",
+            "w-1",
+            line.by,
+            line.for,
+            line.sentAt,
+            line.parent ?? "",
+            line.traceId,
+            line.build,
+            line._tag,
+            JSON.stringify(line.body),
+          ],
+          0,
+          (n, text) => n + encoder.encode(text).length,
+        );
 
       // A thousand two-byte letters, so a count of characters instead of bytes misses the limit.
-      const WIDE = "ü".repeat(1_000);
+      const WIDE = Str.repeat(1_000)("ü");
 
       const sized = (total: number): Line => {
         const rest = total - rowBytes({ ...full, body: { note: WIDE } });
 
-        return { ...full, body: { note: WIDE + "x".repeat(rest) } };
+        return { ...full, body: { note: WIDE + Str.repeat(rest)("x") } };
       };
 
       const atLimit = sized(2_000_000);
@@ -329,16 +336,16 @@ describe("p92, every entry has every field: at the referee", () => {
       expect([rowBytes(atLimit), rowBytes(overLimit)]).toEqual([2_000_000, 2_000_001]);
       const { answers, entries } = yield* handIn([overLimit, atLimit]);
       expect(answers).toEqual([refused("too_big"), { _tag: "placed", rev: 1, pos: 1 }]);
-      expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
+      expect(Arr.map(entries, (entry) => entry.id)).toEqual(["w-2"]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
 
   it.effect("sentAt never decides: any text the writer sent is placed and read back as sent", () =>
     Effect.gen(function* () {
       const sent = ["", "yesterday, around nine", "2099-01-01T00:00:00Z", "1970-01-01T00:00:00Z"];
-      const { answers, entries } = yield* handIn(sent.map((sentAt) => ({ ...json(), sentAt })));
-      expect(answers.map((answer) => answer._tag)).toEqual(sent.map(() => "placed"));
-      expect(entries.map((entry) => entry.sentAt)).toEqual(sent);
+      const { answers, entries } = yield* handIn(Arr.map(sent, (sentAt) => ({ ...json(), sentAt })));
+      expect(Arr.map(answers, (answer) => answer._tag)).toEqual(Arr.map(sent, () => "placed"));
+      expect(Arr.map(entries, (entry) => entry.sentAt)).toEqual(sent);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
 });
@@ -348,8 +355,8 @@ describe("p68, an entry keeps its parent", () => {
   it("p68b, ParentText takes a TypeID process and a positive counter, and nothing one slip away", () => {
     expect(ParentText, "the parent text schema is public").toBeDefined();
     const is = Schema.is(ParentText);
-    expect(parents(50).every(is)).toBe(true);
-    expect(badParents(goodParent).filter(is)).toEqual([]);
+    expect(Arr.every(parents(50), is)).toBe(true);
+    expect(Arr.filter(badParents(goodParent), is)).toEqual([]);
   });
 
   it.effect.prop(
@@ -359,7 +366,7 @@ describe("p68, an entry keeps its parent", () => {
       Effect.gen(function* () {
         const { answers, entries } = yield* handIn([{ ...json(), parent }]);
         expect(answers).toEqual([{ _tag: "placed", rev: 1, pos: 1 }]);
-        expect(entries.map((entry) => entry.parent)).toEqual([parent]);
+        expect(Arr.map(entries, (entry) => entry.parent)).toEqual([parent]);
       }).pipe(Effect.provide(onReferee(fresh()))),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 4, full: 40 }) } },
   );
@@ -371,7 +378,7 @@ describe("p68, an entry keeps its parent", () => {
       yield* ledger.append("notes:1", "w-2", { ...full, parent: null });
       yield* ledger.append("notes:1", "w-3", { ...full, parent: otherParent });
       const entries = yield* Stream.runCollect(ledger.read("notes:1", 0));
-      expect(entries.map((entry) => entry.parent)).toEqual([goodParent, null, otherParent]);
+      expect(Arr.map(entries, (entry) => entry.parent)).toEqual([goodParent, null, otherParent]);
     }).pipe(Effect.provide(onLedger(fresh()))),
   );
 
@@ -380,29 +387,35 @@ describe("p68, an entry keeps its parent", () => {
       const bad = badParents(goodParent);
 
       const { answers, entries } = yield* handIn([
-        ...bad.map((parent) => ({ ...json(), parent })),
+        ...Arr.map(bad, (parent) => ({ ...json(), parent })),
         { ...json(), parent: goodParent },
       ]);
 
-      expect(answers).toEqual([...bad.map(() => refused("bad_parent")), { _tag: "placed", rev: 1, pos: 1 }]);
-      expect(entries.map((entry) => entry.parent)).toEqual([goodParent]);
+      expect(answers).toEqual([...Arr.map(bad, () => refused("bad_parent")), { _tag: "placed", rev: 1, pos: 1 }]);
+      expect(Arr.map(entries, (entry) => entry.parent)).toEqual([goodParent]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
 
-  it("for any text, the referee places it as a parent exactly when it has the form (fast-check)", async () => {
+  it("for any text, the referee places it as a parent exactly when it has the form (fast-check)", () => {
     const text = fc.oneof(fc.stringMatching(PARENT), fc.string(), fc.string({ unit: "binary" }));
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(fc.array(text, { minLength: 1, maxLength: 8 }), (texts) =>
         Effect.runPromise(
           Effect.gen(function* () {
-            const { answers, entries } = yield* handIn(texts.map((parent) => ({ ...json(), parent })));
-            expect(answers.map((answer) => answer._tag === "placed")).toEqual(
-              texts.map((parent) => PARENT.test(parent)),
+            const { answers, entries } = yield* handIn(Arr.map(texts, (parent) => ({ ...json(), parent })));
+            expect(Arr.map(answers, (answer) => answer._tag === "placed")).toEqual(
+              Arr.map(texts, (parent) => PARENT.test(parent)),
             );
-            expect(answers.filter((answer) => answer._tag === "refused")).toEqual(
-              texts.filter((parent) => !PARENT.test(parent)).map(() => refused("bad_parent")),
+            expect(Arr.filter(answers, (answer) => answer._tag === "refused")).toEqual(
+              Arr.map(
+                Arr.filter(texts, (parent) => !PARENT.test(parent)),
+                () => refused("bad_parent"),
+              ),
             );
-            expect(entries.map((entry) => entry.parent)).toEqual(texts.filter((parent) => PARENT.test(parent)));
+            expect(Arr.map(entries, (entry) => entry.parent)).toEqual(
+              Arr.filter(texts, (parent) => PARENT.test(parent)),
+            );
           }).pipe(Effect.provide(onReferee(fresh()))),
         ),
       ),
@@ -414,11 +427,11 @@ describe("p68, an entry keeps its parent", () => {
 describe("p68b, an entry keeps a W3C trace id", () => {
   // Plants: drop the all-zeros guard, or allow uppercase hex.
   it.effect.each([
-    ["all zeros", "0".repeat(32)],
-    ["uppercase", TRACE.toUpperCase()],
-    ["31 characters", TRACE.slice(1)],
+    ["all zeros", Str.repeat(32)("0")],
+    ["uppercase", Str.toUpperCase(TRACE)],
+    ["31 characters", Str.slice(1)(TRACE)],
     ["33 characters", `a${TRACE}`],
-    ["not hex", `g${TRACE.slice(1)}`],
+    ["not hex", `g${Str.slice(1)(TRACE)}`],
     ["empty", ""],
     ["leading space", ` ${TRACE}`],
     ["trailing space", `${TRACE} `],
@@ -427,7 +440,7 @@ describe("p68b, an entry keeps a W3C trace id", () => {
     Effect.gen(function* () {
       const { answers, entries } = yield* handIn([{ ...json(), traceId }, json()]);
       expect(answers).toEqual([refused("bad_trace"), { _tag: "placed", rev: 1, pos: 1 }]);
-      expect(entries.map((entry) => [entry.id, entry.traceId])).toEqual([["w-2", TRACE]]);
+      expect(Arr.map(entries, (entry) => [entry.id, entry.traceId])).toEqual([["w-2", TRACE]]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
 });

@@ -24,7 +24,9 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import { handshakeMachine } from "./Handshake.ts";
 
@@ -122,7 +124,7 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
     );
   }
 
-  const past = w.ids.filter((known) => known.id !== id);
+  const past = Arr.filter(w.ids, (known) => known.id !== id);
 
   if (past.length > 0) {
     const old = past[c.pick % past.length]!;
@@ -162,7 +164,7 @@ const fold = (list: ReadonlyArray<Pick>, each: (e: Event) => void): void => {
     const prev = w.s;
     const known = [...w.ids];
     const [next, cmds] = step(prev, m);
-    w.waiting = [...w.waiting.filter((cmd) => !("cmd" in m) || m["cmd"] !== cmd), ...cmds];
+    w.waiting = [...Arr.filter(w.waiting, (cmd) => !("cmd" in m) || m["cmd"] !== cmd), ...cmds];
 
     for (const cmd of cmds) {
       if (Predicate.isString(cmd["id"])) {
@@ -199,9 +201,9 @@ describe("P18 L2: the handshake answers only its own request", () => {
         }
 
         // Each hello goes out on the dial and with the nonce of the challenge or grant just folded.
-        const hellos = cmds.filter((c) => c.type === "hello");
+        const hellos = Arr.filter(cmds, (c) => c.type === "hello");
         expect(
-          hellos.map((h) => [h["dial"], h["nonce"]]),
+          Arr.map(hellos, (h) => [h["dial"], h["nonce"]]),
           `${label} sent a hello that is not this Msg's`,
         ).toEqual(hellos.length === 0 ? [] : [[m["dial"], m["nonce"]]]);
         expect(hellos.length === 0 || ["challenge", "granted"].includes(m.type), `${label} sent a hello`).toBe(true);
@@ -215,9 +217,9 @@ describe("P18 L2: the handshake answers only its own request", () => {
         }
 
         // A request id is never named twice, so an answer to an old one can never match.
-        for (const c of cmds.filter((c) => Predicate.isString(c["id"]))) {
+        for (const c of Arr.filter(cmds, (c) => Predicate.isString(c["id"]))) {
           expect(
-            known.some((k) => k.id === c["id"]),
+            Arr.some(known, (k) => k.id === c["id"]),
             `${c.type} reused ${String(c["id"])}`,
           ).toBe(false);
           expect(liveId(next), `${c.type}'s id is the state's live id`).toBe(c["id"]);
@@ -257,7 +259,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
         // A refused `initialize` knocks once.
         if (matched && prev._tag === "initializing" && m["reason"] === "not_granted") {
           expect(next._tag).toBe("knocking");
-          expect(cmds.filter((c) => c.type === "knock")).toHaveLength(1);
+          expect(Arr.filter(cmds, (c) => c.type === "knock")).toHaveLength(1);
         }
 
         // Any other reason ends the dial's exchange as refused, keeping the door's word when it is
@@ -304,7 +306,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
       }
 
       expect(
-        Object.values(seen).every((n) => n > 0),
+        Arr.every(Rec.values(seen), (n) => n > 0),
         JSON.stringify(seen),
       ).toBe(true);
 

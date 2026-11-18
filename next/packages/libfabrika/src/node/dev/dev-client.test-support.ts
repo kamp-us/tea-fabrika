@@ -1,18 +1,9 @@
-// P12, next/. The HTTP client `startDev`'s laws provide, over each run's own `fetch` stub.
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
+// P12, next/. What `startDev`'s laws read from the calls their `fetch` stand-in answers. Each law
+// sends through the entry's own client, `FetchHttpClient.layer`, and hands its stand-in to the
+// client's `FetchHttpClient.Fetch` reference, so no law patches the global `fetch`.
 import * as Predicate from "effect/Predicate";
 
-/**
- * The entry's own client, `FetchHttpClient.layer`, whose `fetch` is the global one at the moment
- * of each request. A real process reads the global once. A law stubs it anew on every run, and
- * the client would keep the first stub it saw.
- */
-export const fetchClient = FetchHttpClient.layer.pipe(
-  Layer.provide(Layer.succeed(FetchHttpClient.Fetch, (input, init) => globalThis.fetch(input, init))),
-);
-
-/** A stubbed `fetch` call's body as text, sent as a string or as the client's bytes. */
+/** A stand-in `fetch` call's body as text, sent as a string or as the client's bytes. */
 export const bodyText = (options: RequestInit | undefined): string =>
   // SAFETY: the dev client sends a body as a string or as encoded bytes, and the string case is handled first.
   Predicate.isString(options?.body) ? options.body : new TextDecoder().decode(options?.body as Uint8Array);

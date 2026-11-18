@@ -19,7 +19,8 @@ import { MemberEvent } from "@kampus/libfabrika/access/Access";
 import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, Fiber, Predicate, Schema } from "effect";
+import { String as Str, pipe, Array as Arr, Effect, Fiber, Formatter, Predicate, Schema } from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -78,7 +79,7 @@ type Msg = typeof checklistMachine.msg.Type;
 
 /** What a tab must show for `model`: each item's box, checked when the item is. */
 const foldRows = (model: Model): ReadonlyArray<Row> =>
-  model.items.map((i) => ({ name: i.name, checked: i.state._tag === "checked" }));
+  Arr.map(model.items, (i) => ({ name: i.name, checked: i.state._tag === "checked" }));
 
 /** Polls until `check` holds, or fails with the last value it read after 30 s. */
 const settle = <A>(read: Effect.Effect<A>, check: (a: A) => boolean, label: string) =>
@@ -90,7 +91,7 @@ const settle = <A>(read: Effect.Effect<A>, check: (a: A) => boolean, label: stri
       last = yield* read;
     }
 
-    expect(check(last), `${label}: ${JSON.stringify(last)}`).toBe(true);
+    expect(check(last), `${label}: ${Formatter.format(last)}`).toBe(true);
   });
 
 const online = (h: Home, page: import("playwright").Page) =>
@@ -211,7 +212,7 @@ const checklistPid = (r: Effect.Success<ReturnType<typeof reader>>) =>
   Effect.gen(function* () {
     const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
 
-    const pids = (yield* r.read(`processes/${NAME}`)).flatMap((e) => {
+    const pids = Arr.flatMap(yield* r.read(`processes/${NAME}`), (e) => {
       const started = Schema.decodeUnknownOption(Started)(e);
 
       return started._tag === "Some" ? [started.value.body.process] : [];
@@ -260,7 +261,7 @@ const useChecklist = (
 ) =>
   Effect.gen(function* () {
     let model: Model = checklistMachine.init(null, {})[0];
-    const words = tabs.map(() => "");
+    const words = Arr.map(tabs, () => "");
     yield* settle(tile(tabs[0]!.page, REGION).shown, (r) => r.length === 0, "a fresh brain's list is empty");
 
     for (const p of moves) {
@@ -339,7 +340,8 @@ describe("L11: boot", () => {
           const leaves = Effect.map(
             audit.spans(),
             (spans) =>
-              spans.filter((span) => Predicate.hasProperty(span, "name") && span.name === "connections.leave").length,
+              Arr.filter(spans, (span) => Predicate.hasProperty(span, "name") && span.name === "connections.leave")
+                .length,
           );
 
           const before = yield* leaves;
@@ -430,8 +432,8 @@ describe("L15: use in two tabs (W2)", () => {
   it(
     "after any adds, checks, unchecks and removes in either tab, both tabs show the checklist's fold of the accepted letters, each tab shows its own refusals, and no letter lands twice",
     { timeout: LIMIT.L15 },
-    async (context) => {
-      await fc.assert(
+    (context) =>
+      fc.assert(
         fc.asyncProperty(controls, (moves) =>
           suite(
             Effect.gen(function* () {
@@ -450,7 +452,7 @@ describe("L15: use in two tabs (W2)", () => {
                 (t) => Effect.promise(() => tile(t.page, REGION).field.waitFor({ timeout: 30_000 })),
                 { concurrency: 1 },
               );
-              const settled = tabs.map(() => 0);
+              const settled = Arr.map(tabs, () => 0);
               const accepted: Array<string> = [];
               const refused: Array<string> = [];
 
@@ -492,17 +494,17 @@ describe("L15: use in two tabs (W2)", () => {
 
               // No letter id lands twice: a duplicated add could hide as a taken refusal.
               const inbox = yield* r.read(`${NAME}/inbox`);
-              const ids = inbox.map((e) => e.id);
+              const ids = Arr.map(inbox, (e) => e.id);
               expect(new Set(ids).size, "a letter landed twice").toBe(ids.length);
               expect(accepted.length, "the walk accepts a press").toBeGreaterThan(0);
               expect(accepted.length + refused.length, "every press has one terminal answer").toBe(pressed);
               const letters = new Set([...accepted, ...refused]);
               expect(new Set(accepted).size, "each accepted press has its own letter id").toBe(accepted.length);
-              expect(ids.filter((id) => letters.has(id)).sort(), "exactly the accepted presses land once").toEqual(
+              expect(Arr.filter(ids, (id) => letters.has(id)).sort(), "exactly the accepted presses land once").toEqual(
                 [...accepted].sort(),
               );
 
-              for (const entry of inbox.filter((entry) => !letters.has(entry.id))) {
+              for (const entry of Arr.filter(inbox, (entry) => !letters.has(entry.id))) {
                 expect(entry._tag, "inbox entries are mailbox sends").toBe("send");
                 const { m } = Schema.decodeUnknownSync(Schema.Struct({ m: checklist.msg }))(entry.body);
                 expect(m.type, "every remaining inbox entry is a runner timer").toBe("timer");
@@ -513,8 +515,7 @@ describe("L15: use in two tabs (W2)", () => {
           ),
         ),
         { seed: SEED, numRuns: 5, ...RED },
-      );
-    },
+      ),
   );
 });
 
@@ -522,8 +523,8 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
   it(
     "[secrets] for generated sentinel credentials in the instance's env, the page, rows, errors, URLs, console lines and sockets never copy one",
     { timeout: LIMIT.L17 },
-    async (context) => {
-      await fc.assert(
+    (context) =>
+      fc.assert(
         fc.asyncProperty(
           fc.record({
             token: fc.stringMatching(/^[A-Za-z0-9]{24,40}$/),
@@ -586,7 +587,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   if (n === 0) {
                     yield* settle(
                       tile(t.page, REGION).shown,
-                      (shown) => shown.some((row) => row.name === `itm_${item}`),
+                      (shown) => Arr.some(shown, (row) => row.name === `itm_${item}`),
                       "the sentinel item lands",
                     );
                   } else {
@@ -615,40 +616,45 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const pid = resolveName(
                   yield* r.read(`processes/${NAME}`),
                   NAME,
-                  (by) => by === "brain" || by.startsWith("brain:"),
+                  (by) => by === "brain" || pipe(by, Str.startsWith("brain:")),
                 );
 
                 expect(pid, "the checklist's live process has a span chain").not.toBeNull();
                 const spans = [...(yield* r.spans()), ...(yield* r.spans(Chain.cases.job.make({ process: pid! })))];
                 expect(
-                  h.grants.flatMap((g) => g.signatures).length,
+                  Arr.flatMap(h.grants, (g) => g.signatures).length,
                   "the real grant signature was observed",
                 ).toBeGreaterThan(0);
                 const credentials = [`tok_${token}`, `sec_${secret}`, h.credential, stranger.credential];
+                const granted = Arr.flatMap([...h.grants, ...stranger.grants], (g) => g.signatures);
 
                 const signatures = [
-                  ...[...h.grants, ...stranger.grants]
-                    .flatMap((g) => g.signatures)
-                    .flatMap((signature) => [
-                      signature,
-                      ...signature.split("\n").filter((line) => line.length > 20 && !line.startsWith("-----")),
-                    ]),
-                  ...revoked.armored.split("\n").filter((line) => line.length > 20 && !line.startsWith("-----")),
+                  ...Arr.flatMap(granted, (signature) => [
+                    signature,
+                    ...Arr.filter(
+                      Str.split(signature, "\n"),
+                      (line) => line.length > 20 && !pipe(line, Str.startsWith("-----")),
+                    ),
+                  ]),
+                  ...Arr.filter(
+                    Str.split(revoked.armored, "\n"),
+                    (line) => line.length > 20 && !pipe(line, Str.startsWith("-----")),
+                  ),
                 ];
 
                 const access = yield* r.read("gateway/access");
-                const retained = access.filter((entry) => entry._tag === "granted" || entry._tag === "revoked");
+                const retained = Arr.filter(access, (entry) => entry._tag === "granted" || entry._tag === "revoked");
                 expect(
-                  retained.some((entry) => entry._tag === "granted"),
+                  Arr.some(retained, (entry) => entry._tag === "granted"),
                   "the signed grant stays in its history",
                 ).toBe(true);
                 expect(
-                  retained.some((entry) => entry._tag === "revoked"),
+                  Arr.some(retained, (entry) => entry._tag === "revoked"),
                   "the signed removal stays in its history",
                 ).toBe(true);
                 const accessBodies = new Map<string, string>();
 
-                const records = access.map((entry): readonly [string, string] => {
+                const records = Arr.map(access, (entry): readonly [string, string] => {
                   if (entry._tag !== "granted" && entry._tag !== "revoked") {
                     return ["access record", JSON.stringify(entry)];
                   }
@@ -658,7 +664,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   )(valueFor(entry));
 
                   expect(
-                    [...h.grants.flatMap((g) => g.signatures), revoked.armored],
+                    [...Arr.flatMap(h.grants, (g) => g.signatures), revoked.armored],
                     "only the proof actually sent is retained",
                   ).toContain(event.signed.armored);
                   // Access.Signed keeps this proof by design. Check every other field for copies.
@@ -670,7 +676,11 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
                 });
 
-                const proofs = [...[...h.grants, ...stranger.grants].flatMap((g) => g.signatures), revoked.armored];
+                const proofs = [
+                  ...Arr.flatMap([...h.grants, ...stranger.grants], (g) => g.signatures),
+                  revoked.armored,
+                ];
+
                 // The tabs' last look comes while the instance still runs. The scan reads the home once
                 // more while it runs, then stops it and reads a home nothing writes to any more.
                 const last = [...(yield* look(t.page, t.seen)), ...(yield* look(second.page, second.seen))];
@@ -688,25 +698,28 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const outputs: ReadonlyArray<readonly [string, string]> = [
                   ...snapshots,
                   ...last,
-                  ...grantErrors.map((error): readonly [string, string] => ["grant error", error]),
-                  ...[...h.grants, ...stranger.grants].flatMap((g): ReadonlyArray<readonly [string, string]> => [
+                  ...Arr.map(grantErrors, (error): readonly [string, string] => ["grant error", error]),
+                  ...Arr.flatMap([...h.grants, ...stranger.grants], (g): ReadonlyArray<readonly [string, string]> => [
                     ["grant output", g.output],
-                    ["grant urls", g.urls.join("\n")],
+                    ["grant urls", Arr.join(g.urls, "\n")],
                   ]),
                   ["server console", dev.output()],
-                  ["spans", JSON.stringify(spans)],
+                  ["spans", Formatter.formatJson(spans)],
                   ...records,
                   ...disk.outputs,
                 ];
 
-                const checkedOutputs = outputs.flatMap(([output, text]): ReadonlyArray<readonly [string, string]> => [
-                  [output, text],
-                  [output, percentDecoded(text)],
-                ]);
+                const checkedOutputs = Arr.flatMap(
+                  outputs,
+                  ([output, text]): ReadonlyArray<readonly [string, string]> => [
+                    [output, text],
+                    [output, percentDecoded(text)],
+                  ],
+                );
 
                 const credentialOutputs = [
                   ...checkedOutputs,
-                  ...disk.raw.flatMap(([output, text]): ReadonlyArray<readonly [string, string]> => [
+                  ...Arr.flatMap(disk.raw, ([output, text]): ReadonlyArray<readonly [string, string]> => [
                     [output, text],
                     [output, percentDecoded(text)],
                   ]),
@@ -720,8 +733,11 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 }
 
                 for (const form of [`itm_${item}`, encodeURIComponent(`itm_${item}`)]) {
-                  for (const [output, text] of checkedOutputs.filter(([o]) => o !== "page" && !o.startsWith("home"))) {
-                    expect(text.includes(form), `${output} copies an item's name`).toBe(false);
+                  for (const [output, text] of Arr.filter(
+                    checkedOutputs,
+                    ([o]) => o !== "page" && !pipe(o, Str.startsWith("home")),
+                  )) {
+                    expect(pipe(text, Str.includes(form)), `${output} copies an item's name`).toBe(false);
                   }
                 }
 
@@ -729,11 +745,16 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const copies = new Set<string>();
 
                 for (const s of [...credentials, ...signatures]) {
-                  for (const form of [s, encodeURIComponent(s), btoa(s), JSON.stringify(s).slice(1, -1)]) {
+                  for (const form of [
+                    s,
+                    encodeURIComponent(s),
+                    btoa(s),
+                    pipe(Formatter.formatJson(s), Str.slice(1, -1)),
+                  ]) {
                     const checked = signatures.includes(s) ? checkedOutputs : credentialOutputs;
 
                     for (const [output, text] of checked) {
-                      if (text.includes(form)) {
+                      if (pipe(text, Str.includes(form))) {
                         copies.add(`${output} copies a ${signatures.includes(s) ? "signature" : "credential"}`);
                       }
                     }
@@ -747,8 +768,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
           },
         ),
         { seed: SEED, numRuns: 10, ...RED },
-      );
-    },
+      ),
   );
 });
 
@@ -779,11 +799,11 @@ const look = (page: import("playwright").Page, seen: Seen) =>
     const stored = yield* rows(page);
 
     return [
-      ["page", html + JSON.stringify(values)],
-      ["rows", JSON.stringify(stored)],
-      ["console", seen.console.join("\n")],
-      ["errors", seen.errors.join("\n")],
-      ["urls", seen.urls.join("\n")],
-      ["sockets", seen.sockets.join("\n")],
+      ["page", html + Formatter.formatJson(values)],
+      ["rows", Formatter.formatJson(stored)],
+      ["console", Arr.join(seen.console, "\n")],
+      ["errors", Arr.join(seen.errors, "\n")],
+      ["urls", Arr.join(seen.urls, "\n")],
+      ["sockets", Arr.join(seen.sockets, "\n")],
     ] as const;
   });

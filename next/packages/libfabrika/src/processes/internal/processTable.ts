@@ -1,5 +1,6 @@
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Rec from "effect/Record";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { Entry, valueFor } from "../../ledger/Log.ts";
 import { Sender } from "../../permissions/Senders.ts";
@@ -181,7 +182,7 @@ export const processTableFor = (by: string) =>
     ],
     update: {
       recorded: (s, { entry }) => {
-        if (!Object.hasOwn(ProcessEvent.cases, entry._tag) || entry.by !== by) {
+        if (!Rec.has<string, unknown>(ProcessEvent.cases, entry._tag) || entry.by !== by) {
           return [s, []];
         }
 

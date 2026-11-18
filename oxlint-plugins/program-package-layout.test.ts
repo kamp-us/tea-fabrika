@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import { Predicate, Result } from "effect";
+import { Array as Arr, pipe, Predicate, Record as Rec, Result } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterEach, describe, expect, it } from "vitest";
@@ -69,19 +69,19 @@ const tester = new RuleTester();
 // the paths a plant names (`../../../shared`, `<home>`) stay its own. Answers each plant's files that
 // oxlint lints, from the scratch folder.
 const write = (scratch: string, plants: readonly Plant[]): readonly (readonly string[])[] =>
-  plants.map(({ name, exports, sources, package: { manifest = asIs, links = {} } = {} }, i) => {
+  Arr.map(plants, ({ name, exports, sources, package: { manifest = asIs, links = {} } = {} }, i) => {
     const home = join(scratch, `${i}`);
     const pkg = `${i}/next/programs/${name}`;
     mkdirSync(join(scratch, pkg), { recursive: true });
     const written = manifest({ name: `@p16/${name}`, type: "module", exports });
     writeFileSync(join(scratch, pkg, "package.json"), Predicate.isString(written) ? written : JSON.stringify(written));
 
-    for (const [path, text] of Object.entries(sources)) {
+    for (const [path, text] of Rec.toEntries(sources)) {
       mkdirSync(dirname(join(scratch, pkg, path)), { recursive: true });
       writeFileSync(join(scratch, pkg, path), text.replaceAll(HOME, home));
     }
 
-    for (const [path, target] of Object.entries(links)) {
+    for (const [path, target] of Rec.toEntries(links)) {
       const at = join(scratch, pkg, path);
       mkdirSync(dirname(at), { recursive: true });
       symlinkSync(relative(dirname(at), join(scratch, pkg, target)), at);
@@ -89,9 +89,11 @@ const write = (scratch: string, plants: readonly Plant[]): readonly (readonly st
 
     // oxlint lints only JavaScript and TypeScript files, here only the package's own: a file
     // outside it is outside the rule too.
-    return Object.keys(sources)
-      .filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("../"))
-      .map((path) => `${pkg}/${path}`);
+    return pipe(
+      Rec.keys(sources),
+      Arr.filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("../")),
+      Arr.map((path) => `${pkg}/${path}`),
+    );
   });
 
 /**
@@ -119,7 +121,7 @@ const inProcess = (plants: readonly Plant[]): Finding[][] => {
   const scratch = realpathSync(mkdtempSync("/tmp/p16-lint-"));
 
   try {
-    return write(scratch, plants).map((files) => {
+    return Arr.map(write(scratch, plants), (files) => {
       const found: Finding[] = [];
 
       for (const file of files) {
@@ -175,11 +177,11 @@ const cli = (plants: readonly Plant[]): Finding[][] => {
     // oxlint lints each path it is given once and nothing else, so the total says every plant's
     // files were linted.
     expect(report.number_of_files).toBe(linted.length);
-    const findings = report.diagnostics.filter((d) => d.code === CODE);
+    const findings = Arr.filter(report.diagnostics, (d) => d.code === CODE);
     // Every finding sits in one plant's home; the rest of the scratch folder holds no source.
-    expect(findings.filter((d) => !/^\d+\//.test(d.filename))).toEqual([]);
+    expect(Arr.filter(findings, (d) => !/^\d+\//.test(d.filename))).toEqual([]);
 
-    return plants.map((_, i) => findings.filter((d) => d.filename.startsWith(`${i}/`)));
+    return Arr.map(plants, (_, i) => Arr.filter(findings, (d) => d.filename.startsWith(`${i}/`)));
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -190,7 +192,7 @@ let seen: { readonly plant: Plant; readonly found: readonly Finding[] }[] = [];
 
 const lint = (plants: readonly Plant[]): Finding[][] => {
   const found = inProcess(plants);
-  seen.push(...plants.map((plant, i) => ({ plant, found: found[i]! })));
+  seen.push(...Arr.map(plants, (plant, i) => ({ plant, found: found[i]! })));
 
   return found;
 };
@@ -200,9 +202,9 @@ const run = (name: string, exports: unknown, sources: Readonly<Record<string, st
 
 /** A plant's findings as one oxlint run and RuleTester can both say them: its home's number aside. */
 const plain = (found: readonly Finding[]) =>
-  found
-    .map(({ code, message, filename }) => ({ code, message, filename: filename.replace(/^\d+\//, "") }))
-    .sort((a, b) => `${a.filename}\n${a.message}`.localeCompare(`${b.filename}\n${b.message}`));
+  Arr.map(found, ({ code, message, filename }) => ({ code, message, filename: filename.replace(/^\d+\//, "") })).sort(
+    (a, b) => `${a.filename}\n${a.message}`.localeCompare(`${b.filename}\n${b.message}`),
+  );
 
 // One oxlint run per law, through the repo's own config, over every plant the law linted in
 // process: each plant's findings must be the same. The real tree's law plants nothing.
@@ -214,7 +216,9 @@ afterEach(() => {
     return;
   }
 
-  expect(cli(plants.map(({ plant }) => plant)).map(plain)).toEqual(plants.map(({ found }) => plain(found)));
+  expect(Arr.map(cli(Arr.map(plants, ({ plant }) => plant)), plain)).toEqual(
+    Arr.map(plants, ({ found }) => plain(found)),
+  );
 });
 
 describe("fabrika/program-package-layout", () => {
@@ -269,7 +273,7 @@ describe("fabrika/program-package-layout", () => {
         // One oxlint start for the package and each fine line (ticket 558).
         const [plain, ...lines] = lint([
           { name, exports, sources: files },
-          ...fine.map(({ line, manifest }) => ({
+          ...Arr.map(fine, ({ line, manifest }) => ({
             name,
             exports,
             sources: { ...files, "src/helper.ts": `${line}\nexport const helper = 1;` },
@@ -279,7 +283,7 @@ describe("fabrika/program-package-layout", () => {
 
         expect(plain).toEqual([]);
 
-        fine.forEach(({ line }, i) => {
+        Arr.forEach(fine, ({ line }, i) => {
           expect(lines[i], line).toEqual([]);
         });
       }),
@@ -306,8 +310,8 @@ describe("fabrika/program-package-layout", () => {
             exports = {
               ".": {
                 types: { import: "./src/types.ts", default: declaration },
-                ...Object.fromEntries(
-                  conditions.map((condition) => [
+                ...Rec.fromEntries(
+                  Arr.map(conditions, (condition) => [
                     condition,
                     {
                       types: "./src/types.ts",
@@ -530,15 +534,20 @@ describe("fabrika/program-package-layout", () => {
 
         // One oxlint start for every plant of this input (ticket 558).
         const found = lint([
-          ...plain.map((exports) => ({ name, exports, sources: files })),
-          ...cases.map(({ exports, files, package: setup }) => ({ name, exports, sources: files, package: setup })),
+          ...Arr.map(plain, (exports) => ({ name, exports, sources: files })),
+          ...Arr.map(cases, ({ exports, files, package: setup }) => ({
+            name,
+            exports,
+            sources: files,
+            package: setup,
+          })),
         ]);
 
-        plain.forEach((_, i) => {
+        Arr.forEach(plain, (_, i) => {
           expect((found[i] ?? []).length).toBeGreaterThan(0);
         });
 
-        cases.forEach(({ exports }, i) => {
+        Arr.forEach(cases, ({ exports }, i) => {
           expect(found[plain.length + i] ?? [], JSON.stringify(exports)).not.toEqual([]);
         });
       }),
@@ -550,13 +559,13 @@ describe("fabrika/program-package-layout", () => {
 
   const key = fc
     .array(segment, { minLength: 1, maxLength: 2 })
-    .map((parts) => `./${parts.join("/")}`)
+    .map((parts) => `./${Arr.join(parts, "/")}`)
     // Keep libfabrika's own entry names out, so only what an export loads can catch it.
     .filter((key) => key !== "./window" && !/\/(?:worker|workers|workerd|box|brain)(?:\/|$)/.test(key));
 
   const path = fc
     .array(segment, { minLength: 1, maxLength: 2 })
-    .map((parts) => `src/${parts.join("/")}`)
+    .map((parts) => `src/${Arr.join(parts, "/")}`)
     .filter((path) => path !== "src/program");
 
   const three = (values: fc.Arbitrary<string>) =>
@@ -746,7 +755,7 @@ describe("fabrika/program-package-layout", () => {
         fc.constantFrom(...entries),
         fc.constantFrom("workerd", "worker", "browser", "import", "node", "default"),
         // SAFETY: `Object.keys` of the `manifests` table answers exactly its own keys.
-        fc.constantFrom(...(Object.keys(manifests) as (keyof typeof manifests)[])),
+        fc.constantFrom(...(Rec.keys(manifests) as (keyof typeof manifests)[])),
         (
           name,
           [workerKey, windowKey, helperKey],
@@ -830,7 +839,7 @@ describe("fabrika/program-package-layout", () => {
               "array condition": [workerKey, { [workerKey]: { [condition]: [worker] } }],
               "array dot": [".", { ".": { [condition]: [worker], [beside]: "./src/program.ts" } }],
               "fixed pattern": [`${workerKey}/*`, { [`${workerKey}/*`]: worker }],
-              "null pattern": ["./*", { "./*": "./src/*.ts", ...Object.fromEntries(shut.map((key) => [key, null])) }],
+              "null pattern": ["./*", { "./*": "./src/*.ts", ...Rec.fromEntries(Arr.map(shut, (key) => [key, null])) }],
               window: ["./window", { "./window": worker }],
               "window tsx": ["./window", { "./window": worker }],
             },
@@ -856,7 +865,11 @@ describe("fabrika/program-package-layout", () => {
             // A null target exports nothing, though a key named for libfabrika's box is
             // refused by its name alone. With no name to ask the exports by, the pattern
             // keeps the subpath.
-            boxed = shut.filter((key) => box.test(key)).map(entryMessage),
+            boxed = pipe(
+              shut,
+              Arr.filter((key) => box.test(key)),
+              Arr.map(entryMessage),
+            ),
             expected =
               entry === "condition" || entry === "array dot"
                 ? [...(shapes[shape]!.defines ? [workerMessage] : []), ...pure]
@@ -875,27 +888,33 @@ describe("fabrika/program-package-layout", () => {
             },
             { "./window": _, ...moved } = base,
             // One oxlint start for the five packages below, in this order (ticket 558).
-            [atBase, atExported, atWindowKey, atMoved, atBoth] = lint(
-              [
-                base,
-                { ...base, ...exported },
-                { ...moved, [windowKey]: target(view) },
-                moved,
-                { ...moved, ...exported, [windowKey]: target(view) },
-              ].map((exports) => ({
-                name,
-                exports,
-                sources: files,
-                package: {
-                  manifest: (fields) => ({
-                    ...manifests[manifest](fields),
-                    ...declared,
-                    ...(Object.keys(aliases).length === 0 ? {} : { imports: aliases }),
+            [atBase, atExported, atWindowKey, atMoved, atBoth] = Arr.map(
+              lint(
+                Arr.map(
+                  [
+                    base,
+                    { ...base, ...exported },
+                    { ...moved, [windowKey]: target(view) },
+                    moved,
+                    { ...moved, ...exported, [windowKey]: target(view) },
+                  ],
+                  (exports) => ({
+                    name,
+                    exports,
+                    sources: files,
+                    package: {
+                      manifest: (fields) => ({
+                        ...manifests[manifest](fields),
+                        ...declared,
+                        ...(Rec.keys(aliases).length === 0 ? {} : { imports: aliases }),
+                      }),
+                      links: symlinks,
+                    },
                   }),
-                  links: symlinks,
-                },
-              })),
-            ).map((findings) => findings.map((d) => d.message).sort());
+                ),
+              ),
+              (findings) => Arr.map(findings, (d) => d.message).sort(),
+            );
 
           // A pure extra export and a window at './window' are fine; an unexported .ts is not judged.
           expect(atBase).toEqual(stray);
@@ -1209,9 +1228,10 @@ describe("fabrika/program-package-layout", () => {
                     ? { [condition]: path, default: "./src/program.ts" }
                     : { [condition]: [path], default: ["./src/program.ts"] },
             messages = (exports: unknown) =>
-              run(name, exports, files, { manifest: (fields) => ({ ...fields, ...declared }) })
-                .map((d) => d.message)
-                .sort();
+              Arr.map(
+                run(name, exports, files, { manifest: (fields) => ({ ...fields, ...declared }) }),
+                (d) => d.message,
+              ).sort();
 
           expect(messages(as("./src/program.ts"))).toEqual([]);
           expect(messages(as("./src/worker.ts"))).toEqual(
@@ -1436,7 +1456,7 @@ describe("fabrika/program-package-layout", () => {
     } = JSON.parse(result.stdout);
 
     expect(report.number_of_files).toBeGreaterThan(0);
-    const findings = report.diagnostics.filter((d) => d.code === "fabrika(program-package-layout)");
+    const findings = Arr.filter(report.diagnostics, (d) => d.code === "fabrika(program-package-layout)");
     console.log(
       JSON.stringify({
         rule: "fabrika/program-package-layout",

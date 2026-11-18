@@ -1,7 +1,7 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
-import { Predicate } from "effect";
 import { parse } from "yaml";
 import { relatedWorkload } from "./related.ts";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
@@ -57,7 +57,7 @@ const shellCommands = (script: string) =>
 const toolingJobs = (workflow: Record<string, unknown>, automatic = false): string[] => {
   const outer = { ...map(workflow["env"]) };
 
-  return Object.entries(map(workflow["jobs"]))
+  return Rec.toEntries(map(workflow["jobs"]))
     .filter(([, job]) => !DISPATCH_ONLY.test(compact(map(job)["if"])))
     .filter(([name, job]) =>
       steps(map(job)).some((step) => {
@@ -108,7 +108,7 @@ const toolingJobs = (workflow: Record<string, unknown>, automatic = false): stri
 export const lintNoTooling = (path: string, text: string): string[] => {
   const workflow = map(parse(text));
   const on = workflow["on"];
-  const events = Predicate.isString(on) ? [on] : Array.isArray(on) ? on : Object.keys(map(on));
+  const events = Predicate.isString(on) ? [on] : Array.isArray(on) ? on : Rec.keys(map(on));
 
   return events.includes("pull_request") || events.includes("merge_group")
     ? toolingJobs(workflow, path === ".github/workflows/check.yaml").map(
@@ -127,7 +127,7 @@ export const mergeLine: Rule = ({ workflow, jobs }, require) => {
 
   // T2 (0525, 0533). No job runs today's app, end to end or otherwise. T6 (0533): no step runs
   // today's promise checks.
-  for (const [name, job] of Object.entries(jobs)) {
+  for (const [name, job] of Rec.toEntries(jobs)) {
     for (const step of steps(map(job))) {
       require(![step["run"], step["working-directory"]].some(
         (text) => Predicate.isString(text) && TODAYS_APP.test(text),

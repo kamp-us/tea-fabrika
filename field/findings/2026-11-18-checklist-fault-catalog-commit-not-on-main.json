@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-checklist-fault-catalog-commit-not-on-main",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".github/ci/plant-related.ts",
+    "line": 16
+  },
+  "says": "Today's CI: the automatic checklist fault step pinned its catalog to commit 3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db (cases[\"checklist-body\"].source), which was not an ancestor of main, since the pull request that held it was squash-merged. The step checked `git merge-base --is-ancestor <catalog> HEAD`, so it failed for every pull request whose change selected the checklist plants: one that touched the checklist fixture or any .github/ci/plant*.ts file.",
+  "proof": "git merge-base --is-ancestor 3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db origin/main exits 1 at main 87e9b955b79bb973d9e9ef044cb1b909926f71f9, and the step's ancestry check comes before its byte-image check. On PR 1562, run https://github.com/kamp-us/tea-fabrika/actions/runs/44231615108, job related (3), the 'checklist faults' step ran node .github/ci/plant-related.ts, failed in 2 s with no test run, and the leg cancelled the run.",
+  "cost": "No pull request that changed the checklist fixture or the plant tooling could go green or pass the merge queue while the catalog pointed at a commit outside main.",
+  "head": "af16c8e8a3509429c397cdbddf3613f9134167ab",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1562"
+}

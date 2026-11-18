@@ -3,10 +3,10 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { it as laws } from "@effect/vitest";
-import { Schema } from "effect";
+import { beforeAll, it as laws } from "@effect/vitest";
+import { Config, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
-import { beforeAll, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { readers } from "./changes.mjs";
 import {
   budgetOf,
@@ -24,6 +24,15 @@ import {
 } from "./legs.ts";
 import { nextFiles, visualFiles } from "./shard-rows.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // Today's CI, next/. Covers legs.ts, which sizes the next job's matrix on the merge line: a pull
 // request, a merge queue group and a push to main (0534). Paths are the real next/ files Vitest
@@ -60,9 +69,11 @@ let vitest: string[] = [];
 
 let e2e: string[] = [];
 
-beforeAll(async () => {
-  [vitest, e2e] = await Promise.all([nextFiles(ROOT), visualFiles(ROOT)]);
-});
+beforeAll(() =>
+  Effect.gen(function* () {
+    [vitest, e2e] = yield* promised(() => Promise.all([nextFiles(ROOT), visualFiles(ROOT)]));
+  }),
+);
 
 /** Some of the real files, with a scratch table that gives each a row or none. */
 const picked = () =>
@@ -89,10 +100,10 @@ const picked = () =>
 
 /** A file's seconds as legs.ts counts them: its row, else the table's median. */
 const total = (files: readonly string[], table: Readonly<Record<string, number>>) => {
-  const rows = Object.values(table).toSorted((a, b) => a - b);
+  const rows = Rec.values(table).toSorted((a, b) => a - b);
   const unmeasured = rows[Math.floor((rows.length - 1) / 2)] ?? 1;
 
-  return files.reduce((sum, path) => sum + (Object.hasOwn(table, path) ? table[path]! : unmeasured), 0);
+  return files.reduce((sum, path) => sum + (Rec.has(table, path) ? table[path]! : unmeasured), 0);
 };
 
 it("property: no selection gives no legs, so next skips", () => {
@@ -126,7 +137,7 @@ it("property: a selection whose seconds fit the budget gives one leg", () => {
       const most = (kind === "vitest" ? limit.vitest : limit.e2e) / 6;
       const files = Array.from(new Set(Array.from({ length: count }, (_, i) => pool[(at + i * 7) % pool.length]!)));
 
-      const table = Object.fromEntries(
+      const table = Rec.fromEntries(
         files.flatMap((path, i) => (shares[i] === undefined ? [] : [[path, shares[i] * most]])),
       );
 
@@ -298,7 +309,7 @@ const budgeted = () =>
           )
           .map(([at, shares]) => {
             const files = at.map((i) => vitest[i]!);
-            const table = Object.fromEntries(files.map((path, i) => [path, (shares[i]! / 100) * budget.limit]));
+            const table = Rec.fromEntries(files.map((path, i) => [path, (shares[i]! / 100) * budget.limit]));
 
             return { selected: { vitest: files, e2e: [] }, table };
           }),
@@ -420,7 +431,7 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
   const done = spawnSync(process.execPath, [fileURLToPath(new URL("./legs.ts", import.meta.url))], {
     encoding: "utf8",
     env: {
-      PATH: process.env["PATH"],
+      PATH: Effect.runSync(Config.String("PATH")),
       EVENT: "merge_group",
       FILTER: "next/",
       BUDGET: String(budget),

@@ -5,10 +5,9 @@
  * knows no cases, so a line's `_tag` is an open string: the case as the writer's own schema wrote
  * it. `lineFor` and `valueFor` turn a schema's value into a line and an entry back, so no other
  * file writes the key.
- *
- * @stability unstable
  */
 import { DateTime, Effect, Schema } from "effect";
+import * as Str from "effect/String";
 import { ParentText, Rev } from "../Rev.ts";
 
 export {
@@ -17,7 +16,6 @@ export {
    * re-exported from `Id.ts` so a writer of the log can name a line's `parent` without a second
    * import.
    *
-   * @stability unstable
    * @category schemas
    */
   InputId,
@@ -26,12 +24,11 @@ export {
 /**
  * Schema for a W3C trace id: 32 lowercase hex characters, never all zeros.
  *
- * @stability unstable
  * @category schemas
  */
 export const TraceId = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{32}$/),
-  Schema.makeFilter((traceId) => traceId !== "0".repeat(32), { expected: "a nonzero W3C trace id" }),
+  Schema.makeFilter((traceId) => traceId !== Str.repeat(32)("0"), { expected: "a nonzero W3C trace id" }),
 );
 
 const Text = Schema.NonEmptyString;
@@ -40,7 +37,6 @@ const Text = Schema.NonEmptyString;
  * Schema for a line: what a writer hands to `append`. Every key is required, so a writer can
  * leave none out, and the referee refuses a line with a key it does not know.
  *
- * @stability unstable
  * @category schemas
  */
 export const Line = Schema.Struct({
@@ -67,7 +63,6 @@ export const Line = Schema.Struct({
 /**
  * A line: one write as its writer hands it in, before the referee gives it a place.
  *
- * @stability unstable
  * @category models
  */
 export type Line = typeof Line.Type;
@@ -84,7 +79,6 @@ export type Line = typeof Line.Type;
  *
  * It fails with `NoSuchElementError` when no span is open.
  *
- * @stability unstable
  * @category constructors
  */
 export const fromHere = Effect.fn(function* (from: Omit<Line, "_tag" | "body" | "sentAt" | "traceId">) {
@@ -98,7 +92,6 @@ export const fromHere = Effect.fn(function* (from: Omit<Line, "_tag" | "body" | 
  * Builds a line from a value a schema made: the value's `_tag` becomes the line's case, and its
  * other fields the body.
  *
- * @stability unstable
  * @category constructors
  */
 export const lineFor = <A extends { readonly _tag: string } & Schema.JsonObject>(
@@ -110,7 +103,6 @@ export const lineFor = <A extends { readonly _tag: string } & Schema.JsonObject>
  * Returns an entry as the value its schema made, the reverse of `lineFor`: the body's fields with
  * the entry's `_tag` beside them. The result is unchecked, for that schema to decode.
  *
- * @stability unstable
  * @category converting
  */
 export const valueFor = (entry: Entry): Schema.Json => Object.assign({}, entry.body, { _tag: entry._tag });
@@ -119,7 +111,6 @@ export const valueFor = (entry: Entry): Schema.Json => Object.assign({}, entry.b
  * Schema for one entry of the log: a line, with the stream and id it was appended under and the
  * place and time the referee gave it.
  *
- * @stability unstable
  * @category schemas
  */
 export const Entry = Schema.Struct({
@@ -137,7 +128,6 @@ export const Entry = Schema.Struct({
 /**
  * One entry of the log, as `read` gives it back.
  *
- * @stability unstable
  * @category models
  */
 export type Entry = typeof Entry.Type;
@@ -146,7 +136,6 @@ export type Entry = typeof Entry.Type;
  * Returns the bytes an entry is charged for: the UTF-8 length of the whole encoded entry as
  * JSON, its identifiers, clocks and body included.
  *
- * @stability unstable
  * @category encoding
  */
 export const encodedBytes = (entry: Entry): number =>
@@ -155,7 +144,6 @@ export const encodedBytes = (entry: Entry): number =>
 /**
  * Schema for an entry as its SQLite row holds it: the same fields, with the body as JSON text.
  *
- * @stability unstable
  * @category schemas
  */
 export const Row = Schema.Struct({ ...Entry.fields, body: Schema.fromJsonString(Schema.Json) });
@@ -174,7 +162,6 @@ export const Row = Schema.Struct({ ...Entry.fields, body: Schema.fromJsonString(
  * `quota` is not its own answer either: the write policy gives it when the writer's program has
  * used up its room.
  *
- * @stability unstable
  * @category schemas
  */
 export const Appended = Schema.TaggedUnion({
@@ -197,7 +184,6 @@ export const Appended = Schema.TaggedUnion({
 /**
  * An `append`'s answer: `placed` or `refused`.
  *
- * @stability unstable
  * @category models
  */
 export type Appended = typeof Appended.Type;
@@ -206,7 +192,6 @@ export type Appended = typeof Appended.Type;
  * Schema for what `wait` answers, at once: `ready` with the stream's newest rev, or `parked` until
  * a ring.
  *
- * @stability unstable
  * @category schemas
  */
 export const Waited = Schema.TaggedUnion({ ready: { rev: Rev }, parked: {} });
@@ -214,7 +199,6 @@ export const Waited = Schema.TaggedUnion({ ready: { rev: Rev }, parked: {} });
 /**
  * A `wait`'s answer: `ready` or `parked`.
  *
- * @stability unstable
  * @category models
  */
 export type Waited = typeof Waited.Type;
@@ -223,7 +207,6 @@ export type Waited = typeof Waited.Type;
  * The most bytes one entry's row may hold: Cloudflare's row limit. Past it `append` answers
  * `too_big`, on every `Sql`, so a test on Node refuses what the project object would.
  *
- * @stability unstable
  * @category constants
  */
 export const ROW_BYTES = 2_000_000;
@@ -234,7 +217,6 @@ export {
    * same value. `Ledger.read` hides it by pulling page after page; a page shorter than this is the
    * last.
    *
-   * @stability unstable
    * @category constants
    */
   PAGE,

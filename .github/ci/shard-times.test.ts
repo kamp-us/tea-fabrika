@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { LIMIT, reportRows, staleRows, rowLine, type Row } from "./shard-times.ts";
 import { markdown, readFiles, type Timings } from "./time-table.ts";
@@ -24,18 +24,18 @@ it("L10: report times advise exactly for stale rows, including unmeasured files"
         const root = resolve("timing-fixture");
 
         const report = {
-          testResults: Object.entries(entries).map(([path, value]) => ({
+          testResults: Rec.toEntries(entries).map(([path, value]) => ({
             name: resolve(root, path),
             startTime: value.start,
             endTime: value.start + value.real * 1000,
           })),
         };
 
-        const rows: Row[] = Object.entries(entries).map(([path, value]) => ({ path, seconds: value.real }));
+        const rows: Row[] = Rec.toEntries(entries).map(([path, value]) => ({ path, seconds: value.real }));
         expect(reportRows(report, root)).toEqual(rows);
 
-        const table = Object.fromEntries(
-          Object.entries(entries).flatMap(([path, value]) => (value.row === undefined ? [] : [[path, value.row]])),
+        const table = Rec.fromEntries(
+          Rec.toEntries(entries).flatMap(([path, value]) => (value.row === undefined ? [] : [[path, value.row]])),
         );
 
         table["not-run.test.ts"] = 10000;

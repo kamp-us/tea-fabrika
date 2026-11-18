@@ -1,7 +1,6 @@
 // P12, next/. The real Project and Process services, Gateway and runner on SQLite.
 // Only Cloudflare's handles and Worker Loader transport are supplied by this Node fixture.
 // No class from brain.ts, and the only fake is the box's platform base class: the services are what the classes hand off to.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { inspect } from "node:util";
 import { Cmd, Machine } from "@demlik/tea/effect";
@@ -21,6 +20,7 @@ import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import type { ProcessBinding, ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
@@ -35,7 +35,9 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor, Stub } from "@kampus/vitest";
-import { Effect, Exit, Predicate, Schema } from "effect";
+import { Effect, Exit, Schema, DateTime, String as Str, Duration, Fiber, Predicate, Record as Rec } from "effect";
+
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
@@ -149,21 +151,28 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
 
 type ProcessObject = ReturnType<typeof processObject>;
 
-const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+/** A built program's table row: its hash is the SHA-256 of its source, as the builder's is. */
+const built = (source: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(source))).pipe(
+      Effect.map((hash) => ({ hash, source })),
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
 
-const counterCode = built("counter");
+const counterCode = await built("counter");
 
-const checklistCode = built("checklist");
+const checklistCode = await built("checklist");
 
-const tezgahCode = built("tezgah");
+const tezgahCode = await built("tezgah");
 
-const approvalCode = built("approvals");
+const approvalCode = await built("approvals");
 
-const poisonCode = built("poison");
+const poisonCode = await built("poison");
 
-const requesterCode = built("requester");
+const requesterCode = await built("requester");
 
-const responderCode = built("responder");
+const responderCode = await built("responder");
 
 /** A call on a Durable Object stub rejected. */
 class StubFailure extends Schema.TaggedError<StubFailure>()("StubFailure", { cause: Schema.Defect() }) {}
@@ -173,54 +182,6 @@ const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    size = Buffer.alloc(4);
-
-  size.writeUInt32BE(body.length);
-
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    bytes = Buffer.from(pair.publicKey.export({ format: "jwk" }).x!, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw: bytes.toString("base64url"),
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 const Model = Schema.Struct({
   count: Schema.Int,
@@ -338,7 +299,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
   });
 
   return Program.make({
-    name: `p41/requester-${config.self.replaceAll(":", "-")}`,
+    name: `p41/requester-${Str.replaceAll(":", "-")(config.self)}`,
     machine,
     state: { v: 1, upgrades: [] },
     view: (s) => s,
@@ -504,20 +465,28 @@ type Entry = {
   readonly db: DatabaseSync;
   readonly ctx: DurableObjectState;
   readonly values: Map<string, unknown>;
-  timer: ReturnType<typeof setTimeout> | undefined;
+  timer: Fiber.Fiber<void> | undefined;
   alarm: number | null;
   held?: boolean;
 };
 
+/** Cancels a pending alarm the way clearTimeout did: the interrupt lands before this returns. */
+const cancel = (timer: Fiber.Fiber<void> | undefined) => {
+  if (timer !== undefined) {
+    Effect.runFork(Fiber.interrupt(timer));
+  }
+};
+
 type Lost = { readonly at: number; readonly side: "before" | "after" } | null;
 
-const world = (
+const world = async (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
   settingsCounts = { calls: 0, reads: 0, appends: 0 },
   // The quota settings ride in the start's settings snapshot; a law names only the values it changes.
   values: StartsTest.Values = {},
 ) => {
+  const key = await Effect.runPromise(SshsigTest.identity);
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
   table.programs["fabrika/checklist"] = checklistCode;
@@ -527,10 +496,7 @@ const world = (
   table.programs["p34/poison-fixture"] = poisonCode;
   table.programs[requestProgram.name] = requesterCode;
   table.programs[mailResponder.name] = responderCode;
-
-  const key = identity(),
-    db = new DatabaseSync(":memory:");
-
+  const db = new DatabaseSync(":memory:");
   const handles = storage(db);
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
 
@@ -550,7 +516,7 @@ const world = (
           query: string,
           ...args: Parameters<typeof handles.sql.exec> extends [string, ...infer A] ? A : never
         ) => {
-          if (args.some((arg) => Predicate.isString(arg) && arg.startsWith("settings/instance/"))) {
+          if (args.some((arg) => Predicate.isString(arg) && Str.startsWith("settings/instance/")(arg))) {
             if (/SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
               settingsCounts.reads++;
             }
@@ -594,24 +560,31 @@ const world = (
     closed = false;
 
   const schedule = (entry: Entry) => {
-    clearTimeout(entry.timer);
+    cancel(entry.timer);
 
-    if (entry.alarm === null || entry.held || closed) {
+    if (entry.alarm === null || entry.held === true || closed) {
       return;
     }
 
     const fire = (tries: number) => {
-      entry.timer = setTimeout(
-        () => {
-          entry.alarm = null;
-          entry.object.alarm().catch(() => {
-            // workerd retries a failed alarm handler; so does this platform stand-in.
-            if (!closed && tries < 5 && entry.alarm === null) {
-              fire(tries + 1);
-            }
-          });
-        },
-        tries === 0 ? Math.max(0, (entry.alarm ?? 0) - Date.now()) : 100,
+      entry.timer = Effect.runFork(
+        Effect.sleep(
+          Duration.millis(
+            tries === 0 ? Math.max(0, (entry.alarm ?? 0) - DateTime.toEpochMillis(DateTime.nowUnsafe())) : 100,
+          ),
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              entry.alarm = null;
+              entry.object.alarm().catch(() => {
+                // workerd retries a failed alarm handler; so does this platform stand-in.
+                if (!closed && tries < 5 && entry.alarm === null) {
+                  fire(tries + 1);
+                }
+              });
+            }),
+          ),
+        ),
       );
     };
 
@@ -658,16 +631,18 @@ const world = (
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
-      RecordWireTest.settingsFixture({
-        name: "project-test",
-        person: PERSON,
-        founder: key.line,
-        window: key.raw,
-        port: 18787,
-        build: "brain-test",
-        mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
-        values,
-      }),
+      await Effect.runPromise(
+        RecordWireTest.settingsFixture({
+          name: "project-test",
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: 18787,
+          build: "brain-test",
+          mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
+          values,
+        }),
+      ),
     ),
     // Every Project RPC the real class hands off, so new Project calls reach the real service too.
     PROJECT: {
@@ -720,7 +695,7 @@ const world = (
               }
 
               entry.alarm = null;
-              clearTimeout(entry.timer);
+              cancel(entry.timer);
             },
           });
 
@@ -799,10 +774,10 @@ const world = (
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          const requester = id.startsWith(`${requesterCode.hash}/`),
-            responder = id.startsWith(`${responderCode.hash}/`);
+          const requester = Str.startsWith(`${requesterCode.hash}/`)(id),
+            responder = Str.startsWith(`${responderCode.hash}/`)(id);
 
-          if (id.startsWith(`${poisonCode.hash}/`) || requester || responder) {
+          if (Str.startsWith(`${poisonCode.hash}/`)(id) || requester || responder) {
             // The real box: its declaration carries the program's own maxDeliveries.
             const program = requester ? requestProgram : responder ? mailResponder : poisonProgram(flow.limit);
 
@@ -843,13 +818,13 @@ const world = (
             };
           }
 
-          if (id.startsWith(`${checklistCode.hash}/`)) {
+          if (Str.startsWith(`${checklistCode.hash}/`)(id)) {
             const Box = programBox(checklist, checklistCode.hash);
 
             return Reflect.construct(Box, []);
           }
 
-          const approval = id.startsWith(`${approvalCode.hash}/`),
+          const approval = Str.startsWith(`${approvalCode.hash}/`)(id),
             program = approval ? approvals : counter,
             execution = nodeExecution(program);
 
@@ -905,7 +880,7 @@ const world = (
     interrupted.resolve();
 
     for (const { object, db: processDb, timer } of processes.values()) {
-      clearTimeout(timer);
+      cancel(timer);
       await object.runtime.dispose();
       processDb.close();
     }
@@ -1015,7 +990,7 @@ const world = (
     /** Platform restart: every object's runtime ends; storage and saved alarms survive. */
     reopenAll: async () => {
       for (const entry of processes.values()) {
-        clearTimeout(entry.timer);
+        cancel(entry.timer);
         await entry.object.runtime.dispose();
       }
 
@@ -1043,7 +1018,7 @@ const world = (
     },
     reopenProcess: async (pid: string) => {
       const entry = processFor(pid);
-      clearTimeout(entry.timer);
+      cancel(entry.timer);
       await entry.object.runtime.dispose();
       entry.object = processObject(entry.ctx, env);
       schedule(entry);
@@ -1091,7 +1066,7 @@ const world = (
     },
     reopen: async () => {
       await project.runtime.dispose();
-      table.programs["fabrika/counter"] = built("changed counter");
+      table.programs["fabrika/counter"] = await built("changed counter");
       project = projectObject(ctx, env);
 
       return project.info();
@@ -1114,7 +1089,7 @@ const world = (
             platform: "headless",
             os: "linux",
             sentAt: SENT,
-            signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+            signed: await Effect.runPromise(key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`)),
           },
           { url: "http://127.0.0.1:18787", tab, name: key.fingerprint },
         ),
@@ -1196,7 +1171,7 @@ const world = (
           platform: "headless",
           os: "linux",
           sentAt: SENT,
-          signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+          signed: await Effect.runPromise(key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`)),
         }),
       ).toMatchObject({ _tag: "ok" });
 
@@ -1237,7 +1212,7 @@ const world = (
           sentAt: SENT,
         });
 
-        expect(await project.grant({ text, armored: key.proof(text) })).toMatchObject({
+        expect(await project.grant({ text, armored: await Effect.runPromise(key.proof(text)) })).toMatchObject({
           _tag: "applied",
         });
       };
@@ -1254,7 +1229,7 @@ StartsTest.law(
       const costs = { calls: 0, reads: 0, appends: 0 };
 
       const w = yield* Effect.acquireRelease(
-        Effect.sync(() => world("healthy", { limit: null, lost: null }, costs)),
+        Effect.promise(() => world("healthy", { limit: null, lost: null }, costs)),
         (owned) => Effect.promise(() => owned.close()),
       );
 
@@ -1361,7 +1336,7 @@ StartsTest.law(
           pid = successor.process;
           restarts++;
           const view = yield* Effect.promise(() => owner.object.open("settings-audit"));
-          count = Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int }))(view.view).count;
+          count = (yield* Schema.decodeUnknownEffect(Schema.Struct({ count: Schema.Int }))(view.view)).count;
         } else if (move === "alarm") {
           yield* Effect.promise(() => owner.object.due(0));
           yield* Effect.promise(() => owner.object.alarm());
@@ -1381,7 +1356,7 @@ describe("P12 Project configure recovery", () => {
     it(`pinned: ${fault} configure restores the descriptor after an interrupted start`, async () => {
       // A2/A4: the build never waits on its bootstrap's delivery, so it answers whatever the delivery does.
       const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
-      const w = world(fault);
+      const w = await world(fault);
 
       const first = w.project.info().then(
         (value) => ({ value }),
@@ -1407,7 +1382,9 @@ describe("P12 Project configure recovery", () => {
                 spy.mock.calls.some((call) => {
                   const text = inspect(call, { depth: 8 });
 
-                  return text.includes(descriptor.id) && (fault === "interrupted" || text.includes("LedgerError"));
+                  return (
+                    Str.includes(descriptor.id)(text) && (fault === "interrupted" || Str.includes("LedgerError")(text))
+                  );
                 }),
               ),
               `the ${fault} delivery of ${descriptor.id} is logged`,
@@ -1466,7 +1443,7 @@ describe("P12 Project configure recovery", () => {
 describe("P12 Process RPC refusal answers", () => {
   for (const reason of ["person_only", "not_granted"] as const) {
     it(`pinned: ${reason} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
-      const w = world();
+      const w = await world();
       await w.project.info();
 
       const { process: pid } = await w.start(),
@@ -1544,10 +1521,10 @@ const FLOW_WAIT = 15_000;
 const BRAKE = 6;
 
 const until = async <A>(message: string, look: () => Promise<A>, done: (value: A) => boolean) => {
-  const end = Date.now() + FLOW_WAIT;
+  const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + FLOW_WAIT;
   let last: unknown = null;
 
-  while (Date.now() < end) {
+  while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
     try {
       const value = await look();
       last = value;
@@ -1559,7 +1536,7 @@ const until = async <A>(message: string, look: () => Promise<A>, done: (value: A
       last = { error: String(error) };
     }
 
-    await new Promise((done) => setTimeout(done, 20));
+    await Effect.runPromise(Effect.sleep("20 millis"));
   }
 
   throw new Error(`${message}: no answer in ${FLOW_WAIT} ms; last observed ${JSON.stringify(last)}`);
@@ -1569,7 +1546,7 @@ const NAME = "poison:1";
 
 /** Runs one flow and checks what must hold after it. */
 const runFlow = async (flow: RecoveryFlow) => {
-  const w = world("healthy", { limit: flow.limit, lost: flow.lost });
+  const w = await world("healthy", { limit: flow.limit, lost: flow.lost });
   await w.project.info();
   const original = await w.startPoison(NAME);
   const client = await w.admit();
@@ -1648,7 +1625,7 @@ const runFlow = async (flow: RecoveryFlow) => {
     const rows = await until(`restart ${n}`, restarts, (found) => found.length >= n);
 
     if (held !== null) {
-      expect(Date.now()).toBeGreaterThanOrEqual(held);
+      expect(DateTime.toEpochMillis(DateTime.nowUnsafe())).toBeGreaterThanOrEqual(held);
     }
 
     expect(rows).toHaveLength(n);
@@ -1843,7 +1820,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
     const done = new Set<Move>();
     await fc.assert(
       fc.asyncProperty(fc.array(Cell, { minLength: 4, maxLength: 9 }), async (tape) => {
-        const w = world("healthy");
+        const w = await world("healthy");
         await w.project.info();
         const client = await w.admit();
         // The fold's own record: each name's process chain and each ended process's reason.
@@ -1950,8 +1927,8 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
 
           done.add(move);
           const rows = (await Promise.all(names.map(({ name }) => exited(name)))).flat();
-          expect(Object.fromEntries(rows), "each exit reads back as the reason it was given").toEqual(
-            Object.fromEntries(exits),
+          expect(Rec.fromEntries(rows), "each exit reads back as the reason it was given").toEqual(
+            Rec.fromEntries(exits),
           );
         }
       }),
@@ -1961,7 +1938,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
   }, 600_000);
 });
 
-const mailModel = (w: ReturnType<typeof world>, pid: string) => {
+const mailModel = (w: Awaited<ReturnType<typeof world>>, pid: string) => {
   const db = w.process(pid).db;
   const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='process_state'").get();
 
@@ -1982,7 +1959,7 @@ const mailRequest = (pid: string, ref: string) => ({
   seen: 0,
 });
 
-const oneExchange = async (w: ReturnType<typeof world>, requester: string, responder: string, ref: string) => {
+const oneExchange = async (w: Awaited<ReturnType<typeof world>>, requester: string, responder: string, ref: string) => {
   await until(
     "the saved requester answers without a view call",
     async () => mailModel(w, requester),
@@ -2008,7 +1985,7 @@ const oneExchange = async (w: ReturnType<typeof world>, requester: string, respo
 
 // scenario: only a test-owned platform alarm holds eviction strictly before the target's drain.
 it("scenario: W2h, a target reopened before its alarm fires drains the saved letter once", async () => {
-  const w = world();
+  const w = await world();
   const requester = await w.startMail("requester");
   const responder = await w.startMail("responder");
   const client = await w.admit();
@@ -2027,7 +2004,7 @@ it("scenario: W2h, a target reopened before its alarm fires drains the saved let
 
 // scenario: a held Project RPC puts eviction after the receipt save and before queued reaches the sender.
 it("scenario: W3, an evicted sender retries its owed Send from its alarm and adds no receipt or letter", async () => {
-  const w = world();
+  const w = await world();
   const requester = await w.startMail("requester");
   const responder = await w.startMail("responder");
   const client = await w.admit();
@@ -2086,7 +2063,7 @@ describe("P34c live object accounting", () => {
           );
 
           const w = yield* Effect.acquireRelease(
-            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
+            Effect.promise(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
           );
 
@@ -2114,13 +2091,13 @@ describe("P34c live object accounting", () => {
           expect(local.recovery.total).toEqual({ writes: 0, bytes: 0 });
 
           const counts = (db: DatabaseSync) =>
-            Object.fromEntries(
+            Rec.fromEntries(
               db
                 .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
                 .all()
                 .map(({ name }) => [
                   String(name),
-                  db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+                  db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
                 ]),
             );
 
@@ -2227,7 +2204,7 @@ describe("P34c live object accounting", () => {
           );
 
           const w = yield* Effect.acquireRelease(
-            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
+            Effect.promise(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
           );
 
@@ -2286,7 +2263,7 @@ describe("P34c live object accounting", () => {
               // the Project answers it, so that span starts in one hour and ends in the next.
               w.onProjectCall((method) => {
                 if (method === "route" && turned === null) {
-                  turned = Date.now();
+                  turned = DateTime.toEpochMillis(DateTime.nowUnsafe());
                   vi.setSystemTime(hour + late);
                 }
               });

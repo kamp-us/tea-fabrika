@@ -10,7 +10,7 @@
 // - `./program.ts` exports `counterModel`, the model schema the machine holds, and `counterKeys`, the
 //   default key rows, one per input. `./window.tsx` exports `CounterWindow` and `counterWindow`.
 import { defineWindow, type WindowProps } from "@kampus/libfabrika";
-import { Exit, Schema, Predicate } from "effect";
+import { Record as Rec, Array as Arr, String as Str, Exit, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { counter, counterKeys, counterMachine, counterModel } from "./program.ts";
@@ -83,20 +83,18 @@ describe("P14 S1.4: the counter's window accepts its own data and emits only its
   it("the default key rows name exactly the counter's inputs, one non-empty row each", () => {
     expect(counterWindow.keys).toBe(counterKeys);
     fc.assert(
-      fc.property(fc.constantFrom(...Object.keys(counter.inputs)), (input) => {
+      fc.property(fc.constantFrom(...Rec.keys(counter.inputs)), (input) => {
         const row: ReadonlyArray<string> | undefined = (counterKeys as Readonly<Record<string, ReadonlyArray<string>>>)[
           `counter.${input}`
         ];
 
         expect(row?.length, `counter.${input} has a default row`).toBeGreaterThan(0);
-        expect(row!.every((key) => Predicate.isString(key) && key.length > 0)).toBe(true);
+        expect(Arr.every(row!, (key) => Predicate.isString(key) && key.length > 0)).toBe(true);
       }),
       { seed: 119120, numRuns: 100 },
     );
-    expect(
-      Object.keys(counterKeys)
-        .map((command) => command.slice("counter.".length))
-        .sort(),
-    ).toEqual(Object.keys(counter.inputs).sort());
+    expect(Arr.map(Rec.keys(counterKeys), (command) => Str.slice("counter.".length)(command)).sort()).toEqual(
+      Rec.keys(counter.inputs).sort(),
+    );
   });
 });

@@ -4,8 +4,12 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
 import { Doorbell, Ledger, type LedgerCalls, LedgerError } from "../ledger/Ledger.ts";
@@ -127,14 +131,21 @@ const carriers = (text: string): ReadonlyArray<unknown> => [
   new TypeError("outer", { cause: new Error(text) }),
 ];
 
-const forms = (core: string, text: string) => [core, text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
+const forms = (core: string, text: string) => [
+  core,
+  text,
+  Function.pipe(JSON.stringify(text), Str.slice(1, -1)),
+  encodeURIComponent(text),
+];
 
 /** Every row of every table in `sql`, as JSON text. */
 const dump = (sql: Sql): string =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table'")
-    .map((table) => JSON.stringify(sql.exec(`SELECT * FROM "${String(table.name)}"`)))
-    .join("\n");
+  Arr.join(
+    Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (table) =>
+      JSON.stringify(sql.exec(`SELECT * FROM "${String(table.name)}"`)),
+    ),
+    "\n",
+  );
 
 type Flow = "ledger_rejects" | "ledger_decode" | "archive_rejects" | "store_throws";
 
@@ -218,7 +229,10 @@ describe("T695, C7 [secrets]: the span sink stores no input-bearing detail of a 
 
         for (const { word } of steps) {
           for (const form of forms(word, `${decor}${word}${decor}`)) {
-            expect(stored.includes(form), "a stored span row holds a cause's input-bearing text").toBe(false);
+            expect(
+              Function.pipe(stored, Str.includes(form)),
+              "a stored span row holds a cause's input-bearing text",
+            ).toBe(false);
           }
         }
       }),

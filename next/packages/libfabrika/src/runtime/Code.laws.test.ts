@@ -21,7 +21,10 @@
 // or a `loaded` for an entry the ledger holds. The oracle is the walk's own selection, never the reducer.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import type { ProgramName } from "../packs/ProgramName.ts";
@@ -214,12 +217,12 @@ const account = (move: Move, cmds: ReadonlyArray<Cmd>, w: World): void => {
     return;
   }
 
-  if (!w.ids.some((i) => i.id === id)) {
+  if (!Arr.some(w.ids, (i) => i.id === id)) {
     w.ids.push({ id, program, hash });
   }
 
   for (const cmd of cmds) {
-    if (cmd.type === "append" && !w.ledger.some((e) => e.id === id && e.hash === hash)) {
+    if (cmd.type === "append" && !Arr.some(w.ledger, (e) => e.id === id && e.hash === hash)) {
       w.ledger.push({ id, program, hash });
     }
   }
@@ -249,7 +252,7 @@ describe("P15 slice 1: the brain's code per program", () => {
               return;
             }
 
-            expect(cmds.map((c) => c.type)).toEqual(["append"]);
+            expect(Arr.map(cmds, (c) => c.type)).toEqual(["append"]);
             const [append] = cmds;
             const event = Schema.decodeUnknownSync(Code.CodeEvent)(append?.event);
             expect(event).toEqual(
@@ -288,7 +291,7 @@ describe("P15 slice 1: the brain's code per program", () => {
         }
 
         // The machine's model is the walk's selection, whole.
-        expect(w.model).toEqual(Object.fromEntries(w.selected));
+        expect(w.model).toEqual(Rec.fromEntries(w.selected));
       }),
       { seed: SEED, numRuns: RUNS },
     );

@@ -8,7 +8,17 @@
 // never appear whole in the file's bytes. The folder it reads is never changed: a read-only open
 // may still write a `-shm` file, so it opens the copy, with `TestDatabase.open`, which sets nothing in it.
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Path, Predicate, Schema } from "effect";
+import {
+  Array as Arr,
+  Effect,
+  FileSystem,
+  Formatter,
+  Path,
+  Predicate,
+  Schema,
+  String as Str,
+  Record as Rec,
+} from "effect";
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
@@ -52,7 +62,7 @@ const rootForms = Effect.fnUntraced(function* (root: string) {
   const path = yield* Path.Path;
   const url = yield* path.toFileUrl(root);
 
-  return [...new Set([root, JSON.stringify(root).slice(1, -1), url.href])].map((text) => ({
+  return Arr.map([...new Set([root, Str.slice(1, -1)(Formatter.formatJson(root)), url.href])], (text) => ({
     text,
     bytes: encoder.encode(text),
   }));
@@ -66,10 +76,10 @@ type Forms = ReadonlyArray<{
 /** One hit per copy of a root in `bytes`: a copy in one form that holds another form, as a URL
  *  holds the plain path, is one copy, at its first byte. */
 const byteHits = (file: string, bytes: Uint8Array, roots: Forms): Array<typeof Hit.Type> =>
-  roots.flatMap(({ root, forms }) => {
-    const spans = forms
-      .flatMap(({ bytes: form }) => offsets(bytes, form).map((start) => [start, start + form.length] as const))
-      .sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  Arr.flatMap(roots, ({ root, forms }) => {
+    const spans = Arr.flatMap(forms, ({ bytes: form }) =>
+      Arr.map(offsets(bytes, form), (start) => [start, start + form.length] as const),
+    ).sort((a, b) => a[0] - b[0] || b[1] - a[1]);
 
     const merged: Array<[number, number]> = [];
 
@@ -83,7 +93,7 @@ const byteHits = (file: string, bytes: Uint8Array, roots: Forms): Array<typeof H
       }
     }
 
-    return merged.map(([offset]) => ({ file, place: Place.cases.byte.make({ offset }), root }));
+    return Arr.map(merged, ([offset]) => ({ file, place: Place.cases.byte.make({ offset }), root }));
   });
 
 /** Every text and blob cell of every table of the SQLite file at `copy` that holds a root. */
@@ -98,14 +108,14 @@ const cellHits = (file: string, copy: string, roots: Forms) =>
 
           for (const { name } of tables) {
             const table = String(name);
-            const rows = db.prepare(`SELECT * FROM "${table.replaceAll('"', '""')}"`).all();
+            const rows = db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(table)}"`).all();
 
             for (const [row, cells] of rows.entries()) {
-              for (const [column, value] of Object.entries(cells)) {
+              for (const [column, value] of Rec.toEntries(cells)) {
                 for (const { root, forms } of roots) {
                   const holds = Predicate.isString(value)
-                    ? forms.some(({ text }) => value.includes(text))
-                    : value instanceof Uint8Array && forms.some(({ bytes }) => offsets(value, bytes).length > 0);
+                    ? Arr.some(forms, ({ text }) => Str.includes(text)(value))
+                    : value instanceof Uint8Array && Arr.some(forms, ({ bytes }) => offsets(value, bytes).length > 0);
 
                   if (holds) {
                     hits.push({ file, place: Place.cases.cell.make({ table, row, column }), root });
@@ -172,7 +182,7 @@ export const machinePaths = Effect.fn("portHome.machinePaths")(function* (
       }),
     );
 
-    hits.push(...cells, ...raw.filter((hit) => !cells.some((cell) => cell.root === hit.root)));
+    hits.push(...cells, ...Arr.filter(raw, (hit) => !Arr.some(cells, (cell) => cell.root === hit.root)));
   }
 
   return hits;

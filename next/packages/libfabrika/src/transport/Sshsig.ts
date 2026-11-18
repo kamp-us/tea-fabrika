@@ -14,10 +14,14 @@
  * The code is pure but for WebCrypto, so a browser tab runs it as Node does. Base64 goes through
  * Effect's encoding, never Node's `Buffer`.
  */
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 import { checkPasskey, passkeyBlob } from "./Webauthn.ts";
 
@@ -40,7 +44,7 @@ const ed25519 = (blob: Uint8Array, n: number): Option.Option<Bytes> =>
 
 /** A key line's key blob, `string("ssh-ed25519") string(<32 bytes>)`, if it is an Ed25519 line. */
 const keyBlob = (line: string): Option.Option<Uint8Array> => {
-  const [type, base64] = line.split(/\s+/);
+  const [type, base64] = Str.split(/\s+/)(line);
 
   if (type !== ED25519 || base64 === undefined) {
     return Option.none();
@@ -104,9 +108,9 @@ type Sshsig = {
 /** The armor, then the blob: version exactly 1, an Ed25519 key and signature, no byte left over. */
 const read = (armored: string): Option.Option<Sshsig> =>
   Option.gen(function* () {
-    const text = armored.trim();
-    yield* holds(text.startsWith(BEGIN) && text.endsWith(END) && text.length >= BEGIN.length + END.length);
-    const body = text.slice(BEGIN.length, -END.length).replace(/\s+/g, "");
+    const text = Str.trim(armored);
+    yield* holds(Str.startsWith(BEGIN)(text) && Str.endsWith(END)(text) && text.length >= BEGIN.length + END.length);
+    const body = Function.pipe(text, Str.slice(BEGIN.length, -END.length), Str.replace(/\s+/g, ""));
     const blob = yield* Option.getSuccess(Base64.decode(body));
     const fields = reader(blob);
     const magic = yield* fields.take(6);
@@ -187,12 +191,10 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
     Option.gen(function* () {
       const sig = yield* read(a.armored);
 
-      const signer = yield* Option.fromNullishOr(
-        a.signers.find((line) =>
-          Option.exists(
-            Option.orElse(keyBlob(line), () => passkeyBlob(line)),
-            (blob) => same(blob, sig.key),
-          ),
+      const signer = yield* Arr.findFirst(a.signers, (line) =>
+        Option.exists(
+          Option.orElse(keyBlob(line), () => passkeyBlob(line)),
+          (blob) => same(blob, sig.key),
         ),
       );
 
@@ -251,7 +253,7 @@ export const checkSshsig = Effect.fn("transport.checkSshsig")(function* (a: {
 }): Effect.fn.Return<Answer> {
   const checked = yield* verifySshsig({
     ...a,
-    signers: a.signers.filter((line) => Option.isSome(keyBlob(line))),
+    signers: Arr.filter(a.signers, (line) => Option.isSome(keyBlob(line))),
   });
 
   return checked._tag === "key" ? { signer: checked.signer } : refused;

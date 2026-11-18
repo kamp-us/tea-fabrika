@@ -3,6 +3,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -79,7 +80,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
 
   if (attached._tag !== "online" && !(attached._tag === "waiting" && method === "gateway.knock")) {
     return {
-      send: JSON.stringify({
+      send: Formatter.formatJson({
         jsonrpc: "2.0",
         id,
         error: { code: -32000, message: "no_hello", data: { reason: "no_hello" } },

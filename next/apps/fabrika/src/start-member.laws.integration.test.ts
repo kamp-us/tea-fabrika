@@ -7,7 +7,8 @@
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Array as Arr, String as Str, DateTime, Effect, Exit, Option, Schema, Scope, Duration } from "effect";
+
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
@@ -33,14 +34,17 @@ vi.mock("virtual:fabrika-built", () => ({
 /** Bounded waits tied to observable facts. */
 const WAIT = 25_000;
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
+
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {
-  const end = Date.now() + WAIT;
+  const end = now() + WAIT;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -66,7 +70,7 @@ const decodeFrame = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknow
 /** A real WebSocket client at the door, initialized with a signed hello. `close` waits for the close. */
 const client = async (instance: Instance, key: Key, tab: string) => {
   const socket = new WebSocket(
-    `${String(instance.url).replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+    `${Str.replace("http", "ws")(String(instance.url))}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
   );
 
   const frames: any[] = [];
@@ -82,13 +86,13 @@ const client = async (instance: Instance, key: Key, tab: string) => {
   let serial = 0;
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
-      const index = frames.findIndex(match);
+    while (now() < end) {
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closed) {
@@ -120,16 +124,16 @@ const client = async (instance: Instance, key: Key, tab: string) => {
     platform: "headless",
     os: "linux",
     sentAt: SENT,
-    signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+    signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
   });
 
   expect(hello.error).toBeUndefined();
 
   const close = async () => {
     socket.close();
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (!closed && Date.now() < end) {
+    while (!closed && now() < end) {
       await pause(20);
     }
   };
@@ -144,7 +148,9 @@ const rows = async (instance: Instance, stream: string): Promise<Array<any>> =>
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
   // SAFETY: info answers the project's process rows as an array.
-  ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
+  Option.getOrUndefined(
+    Arr.findFirst((await instance.project(PROJECT).info()) as Array<any>, (row) => row.name === name),
+  )?.process;
 
 describe("T953: a start is checked against the member who caused it, end to end", () => {
   // scenario: L17. Only a real instance proves the brain's wiring: the gateway answers who sent the
@@ -158,8 +164,9 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const home = yield* childHome([]);
           const first = yield* Scope.make();
           const instance: Instance = yield* Scope.provide(first)(home.boot);
-          yield* Effect.promise(async () => {
-            const started = await instance.project(PROJECT).start(
+
+          const started = yield* Effect.promise(() =>
+            instance.project(PROJECT).start(
               {
                 _tag: "first",
                 id: "start-starter:1",
@@ -167,9 +174,13 @@ describe("T953: a start is checked against the member who caused it, end to end"
                 code: { program: "p42/starter", hash: home.hashes.starter },
               },
               home.from,
-            );
+            ),
+          );
 
-            const starter = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+          const starter = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started))
+            .process;
+
+          yield* Effect.promise(async () => {
             const window = await client(instance, home.key, "member");
 
             try {
@@ -186,8 +197,11 @@ describe("T953: a start is checked against the member who caused it, end to end"
                 (pid) => pid !== undefined,
               );
 
-              const line = (await rows(instance, "processes/child:1")).find(
-                (row) => row._tag === "started" && row.body.process === child,
+              const line = Option.getOrUndefined(
+                Arr.findFirst(
+                  await rows(instance, "processes/child:1"),
+                  (row) => row._tag === "started" && row.body.process === child,
+                ),
               );
 
               expect(line?.body.member, "L17: the started line names the person whose input caused it").toEqual({
@@ -204,10 +218,14 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const again: Instance = yield* Scope.provide(second)(home.boot);
           yield* Effect.promise(async () => {
             const relations = await rows(again, "permissions/relations");
-            const brain = (await rows(again, "processes/starter:1")).find((row) => row._tag === "started")?.by;
+
+            const brain = Option.getOrUndefined(
+              Arr.findFirst(await rows(again, "processes/starter:1"), (row) => row._tag === "started"),
+            )?.by;
+
             expect(brain, "the brain signed the starter's started line").toBeDefined();
             expect(
-              relations.map((row) => ({ by: row.by, _tag: row._tag, body: row.body })),
+              Arr.map(relations, (row) => ({ by: row.by, _tag: row._tag, body: row.body })),
               "L17: after two boots the stream holds one owner row, by the brain",
             ).toEqual([
               {
@@ -241,32 +259,31 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const person = fixture.from.for;
           const url = "http://127.0.0.1:18787";
           const saw = { label: "agent", location: "test", method: "command", check: "touch" } as const;
-          const signed = (text: string) => ({ text, armored: fixture.founder.proof(text) });
+
+          const signed = (text: string) =>
+            fixture.founder.proof(text).pipe(Effect.map((armored) => ({ text, armored })));
 
           // The founder lets the agent in.
-          const granted = yield* call(
-            ProjectService.use((p) =>
-              p.grant(
-                signed(
-                  grantText({
-                    id: "grant-agent",
-                    key: fixture.agent.raw,
-                    for: person,
-                    to: PROJECT,
-                    as: "agent",
-                    sentAt: SENT,
-                    saw: { ...saw, code: "1234", has: [] },
-                  }),
-                ),
-              ),
-            ),
+          const grant = yield* signed(
+            grantText({
+              id: "grant-agent",
+              key: fixture.agent.raw,
+              for: person,
+              to: PROJECT,
+              as: "agent",
+              sentAt: SENT,
+              saw: { ...saw, code: "1234", has: [] },
+            }),
           );
+
+          const granted = yield* call(ProjectService.use((p) => p.grant(grant)));
 
           expect(granted, "the founder's grant lets the agent in").toMatchObject({ _tag: "applied" });
           // The agent comes online and sends an input to the boot's process.
           const agent = yield* call(ProjectService.use((p) => p.connect()));
           const nonce = yield* call(ProjectService.use((p) => p.challenge(agent)));
           const tab = "agent";
+          const hello = yield* fixture.agent.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`);
 
           const online = yield* call(
             ProjectService.use((p) =>
@@ -282,7 +299,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
                   platform: "headless",
                   os: "linux",
                   sentAt: SENT,
-                  signed: fixture.agent.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+                  signed: hello,
                 },
                 { url, tab, name: fixture.agent.fingerprint },
               ),
@@ -298,27 +315,23 @@ describe("T953: a start is checked against the member who caused it, end to end"
 
           expect(sent, "the door takes the agent's input").toMatchObject({ _tag: "ok" });
 
-          const incoming = Schema.decodeUnknownSync(
+          const incoming = yield* Schema.decodeUnknownEffect(
             Schema.Struct({ id: Schema.String, envelope: Schema.Struct({ id: Schema.String }) }),
           )(fixture.delivered.at(-1));
 
           // The founder removes the agent before the step that the input causes runs.
-          const revoked = yield* call(
-            ProjectService.use((p) =>
-              p.grant(
-                signed(
-                  revokeText({
-                    id: "revoke-agent",
-                    key: fixture.agent.raw,
-                    for: person,
-                    to: PROJECT,
-                    sentAt: SENT,
-                    saw,
-                  }),
-                ),
-              ),
-            ),
+          const revoke = yield* signed(
+            revokeText({
+              id: "revoke-agent",
+              key: fixture.agent.raw,
+              for: person,
+              to: PROJECT,
+              sentAt: SENT,
+              saw,
+            }),
           );
+
+          const revoked = yield* call(ProjectService.use((p) => p.grant(revoke)));
 
           expect(revoked, "the founder's revoke removes the agent").toMatchObject({ _tag: "applied" });
 

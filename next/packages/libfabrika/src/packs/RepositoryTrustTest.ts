@@ -4,14 +4,19 @@ import { describe, expect, it } from "@effect/vitest";
 import * as LoadSnapshot from "@kalfa/config/Snapshot";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -86,6 +91,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
   describe("T878 repository trust history", () => {
     it.effect("L5: reopening preserves exact location/person consent; another clone or destination gets none", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
+
         const property = fc.asyncProperty(
           repository,
           person,
@@ -97,7 +104,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check requires an asynchronous property callback
           async (repoId, operator, selection, request, key, traceId, cells) =>
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
-            Effect.runPromise(
+            Effect.runPromiseWith(context)(
               run((store, trust) =>
                 Effect.gen(function* () {
                   const snapshot = yield* settings;
@@ -117,8 +124,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     key,
                     label: "same-basename",
                     branch: "release",
-                    commit: "a".repeat(40),
-                    hash: "b".repeat(64),
+                    commit: Function.pipe("a", Str.repeat(40)),
+                    hash: Function.pipe("b", Str.repeat(64)),
                     present: true,
                     settings: snapshot,
                     request: selection,
@@ -146,25 +153,27 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     expect(same).toContainEqual(selected);
                     expect(same).toContainEqual(accepted);
                     // Fingerprints distinguish another clone and a changed destination, even with the same safe label.
-                    const otherKey = `${cell.move % 2 === 0 ? "c" : "d"}${key.slice(1)}`;
+                    const otherKey = `${cell.move % 2 === 0 ? "c" : "d"}${Function.pipe(key, Str.slice(1))}`;
 
                     const distinct =
-                      otherKey === key ? `${key.slice(0, -1)}${key.endsWith("0") ? "1" : "0"}` : otherKey;
+                      otherKey === key
+                        ? `${Function.pipe(key, Str.slice(0, -1))}${Function.pipe(key, Str.endsWith("0")) ? "1" : "0"}`
+                        : otherKey;
 
                     const otherLocation = yield* trust.history(distinct, operator);
                     expect(otherLocation).toEqual([]);
 
                     const otherPerson = Schema.decodeSync(Id.make("person"))(
-                      `${operator.slice(0, -1)}${operator.endsWith("0") ? "1" : "0"}`,
+                      `${Function.pipe(operator, Str.slice(0, -1))}${Function.pipe(operator, Str.endsWith("0")) ? "1" : "0"}`,
                     );
 
                     const otherIdentity = yield* trust.history(key, otherPerson);
                     expect(otherIdentity).toEqual([]);
                     // New commits do not change the lookup identity or rewrite the answered commit.
-                    expect(same.filter((event) => event._tag === "decision")).toEqual([accepted]);
+                    expect(Arr.filter(same, (event) => event._tag === "decision")).toEqual([accepted]);
 
                     const reopened = Schema.decodeSync(Id.InputId)(
-                      `${selection.slice(0, -1)}${selection.endsWith("0") ? "1" : "0"}`,
+                      `${Function.pipe(selection, Str.slice(0, -1))}${Function.pipe(selection, Str.endsWith("0")) ? "1" : "0"}`,
                     );
 
                     for (const candidate of [
@@ -186,7 +195,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                           settings: snapshot,
                           key: candidate.key,
                           person: candidate.person,
-                          commit: (cell.pick % 2 === 0 ? "c" : "d").repeat(40),
+                          commit: Function.pipe(cell.pick % 2 === 0 ? "c" : "d", Str.repeat(40)),
                         },
                       });
 
@@ -226,6 +235,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
       "L6: retry and lost acknowledgment keep one decision/opening, and preserve stored parents and trace",
       () =>
         Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
+
           const property = fc.asyncProperty(
             repository,
             person,
@@ -238,7 +249,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check requires an asynchronous property callback
             async (repoId, operator, selection, answer, opening, key, traceId, cells) =>
               // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
-              Effect.runPromise(
+              Effect.runPromiseWith(context)(
                 run((store, trust, ledger) =>
                   Effect.gen(function* () {
                     const snapshot = yield* settings;
@@ -258,8 +269,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       key,
                       label: "repo",
                       branch: "release",
-                      commit: "a".repeat(40),
-                      hash: "b".repeat(64),
+                      commit: Function.pipe("a", Str.repeat(40)),
+                      hash: Function.pipe("b", Str.repeat(64)),
                       present: true,
                       settings: snapshot,
                       request: selection,
@@ -304,8 +315,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       }
 
                       const history = yield* trust.history(key, operator);
-                      expect(history.filter((fact) => fact._tag === "decision")).toEqual([decision]);
-                      expect(history.filter((fact) => fact._tag === "opened")).toEqual([opened]);
+                      expect(Arr.filter(history, (fact) => fact._tag === "decision")).toEqual([decision]);
+                      expect(Arr.filter(history, (fact) => fact._tag === "opened")).toEqual([opened]);
                     }
 
                     // The adapter's actual writes, observed before the real ledger sees them.
@@ -350,6 +361,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
 
     it.effect("L6: failed/refused writes and corrupt known history fail explicitly", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
+
         const property = fc.asyncProperty(
           repository,
           person,
@@ -360,7 +373,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check requires an asynchronous property callback
           async (repoId, operator, selection, key, traceId, cells) =>
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
-            Effect.runPromise(
+            Effect.runPromiseWith(context)(
               run((_store, trust, ledger) =>
                 Effect.gen(function* () {
                   const snapshot = yield* settings;
@@ -370,8 +383,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     key,
                     label: "repo",
                     branch: "release",
-                    commit: "a".repeat(40),
-                    hash: "b".repeat(64),
+                    commit: Function.pipe("a", Str.repeat(40)),
+                    hash: Function.pipe("b", Str.repeat(64)),
                     present: true,
                     settings: snapshot,
                     request: selection,
@@ -382,8 +395,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     key,
                     selection,
                     request: selection,
-                    commit: "a".repeat(40),
-                    hash: "b".repeat(64),
+                    commit: Function.pipe("a", Str.repeat(40)),
+                    hash: Function.pipe("b", Str.repeat(64)),
                     decision: TrustDecision.cases.accepted.make({}),
                     actor: operator,
                     method: "terminal",
@@ -425,7 +438,10 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     expect(Exit.isFailure(result)).toBe(true);
 
                     if (Exit.isFailure(result)) {
-                      const failure = result.cause.reasons.find((reason) => reason._tag === "Fail");
+                      const failure = Option.getOrUndefined(
+                        Arr.findFirst(result.cause.reasons, (reason) => reason._tag === "Fail"),
+                      );
+
                       expect(failure?._tag).toBe("Fail");
 
                       if (failure?._tag === "Fail") {

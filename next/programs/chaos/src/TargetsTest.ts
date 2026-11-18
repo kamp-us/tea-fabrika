@@ -4,7 +4,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, flow, Schema, type Scope } from "effect";
+import { Array as Arr, String as Str, Arbitrary, Effect, flow, Option, Schema } from "effect";
+import type { Scope } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 
 type World = Effect.Success<RunnerOpen>;
@@ -63,7 +64,7 @@ const View = Schema.Struct({
 
 const shown = flow(Schema.decodeUnknownSync(View), (view) => ({
   ...view,
-  items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)),
+  items: [...view.items].sort((a, b) => Str.localeCompare(b.name)(a.name)),
 }));
 
 const Controller = Schema.TaggedStruct("armed", {
@@ -84,10 +85,12 @@ export const suite = (open: Open, checklist: unknown) =>
             let serial = 0;
 
             const expected = () => ({
-              items: [...items]
-                .map(([name, kept]) => ({ name, state: kept === null ? "new" : "checked", note: kept }))
-                .sort((a, b) => a.name.localeCompare(b.name)),
-              left: [...items.values()].filter((kept) => kept === null).length,
+              items: Arr.map([...items], ([name, kept]) => ({
+                name,
+                state: kept === null ? "new" : "checked",
+                note: kept,
+              })).sort((a, b) => Str.localeCompare(b.name)(a.name)),
+              left: Arr.filter([...items.values()], (kept) => kept === null).length,
             });
 
             const send = Effect.fnUntraced(function* (
@@ -112,7 +115,11 @@ export const suite = (open: Open, checklist: unknown) =>
                   (yield* send(runner, { type: "check", name: "first", note: "replacement" }, world.agent)).answer._tag,
                 ).toBe("accepted");
                 expect(shown((yield* runner.open("first-note")).view).items[0]?.note).toBe(note);
-                const kept = (yield* world.letters(NAME)).find((row) => row.id === checked.input.id);
+
+                const kept = Option.getOrUndefined(
+                  Arr.findFirst(yield* world.letters(NAME), (row) => row.id === checked.input.id),
+                );
+
                 expect(kept).toMatchObject({
                   by: world.agent.key,
                   parent: checked.input.envelope.id,
@@ -124,7 +131,11 @@ export const suite = (open: Open, checklist: unknown) =>
                 // This add is now legal, but the same identity must still receive its first refusal.
               }),
             );
-            const refused = replies.find((reply) => Schema.is(Schema.TaggedStruct("refused", {}))(reply.answer));
+
+            const refused = Option.getOrUndefined(
+              Arr.findFirst(replies, (reply) => Schema.is(Schema.TaggedStruct("refused", {}))(reply.answer)),
+            );
+
             expect(refused).toBeDefined();
 
             for (let offset = 0; offset < moves.length; offset += cut + 1) {
@@ -155,12 +166,12 @@ export const suite = (open: Open, checklist: unknown) =>
                     }
 
                     // Choose from the current model: additions need a free name; every other move needs an item.
-                    const free = ["one", "two", "three"].filter((name) => !items.has(name));
+                    const free = Arr.filter(["one", "two", "three"], (name) => !items.has(name));
                     const available = [...items.keys()];
 
                     const legal = [
-                      ...free.map((name) => ({ type: "add", name })),
-                      ...available.flatMap((name) => [
+                      ...Arr.map(free, (name) => ({ type: "add", name })),
+                      ...Arr.flatMap(available, (name) => [
                         { type: "check", name, note },
                         { type: "uncheck", name },
                         { type: "remove", name },
@@ -193,7 +204,7 @@ export const suite = (open: Open, checklist: unknown) =>
             const letters = yield* world.letters(NAME);
 
             for (const reply of replies) {
-              const found = letters.filter((row) => row.id === reply.input.id);
+              const found = Arr.filter(letters, (row) => row.id === reply.input.id);
               const accepted = Schema.is(Schema.TaggedStruct("accepted", {}))(reply.answer);
               expect(found).toHaveLength(accepted ? 1 : 0);
 
@@ -271,17 +282,18 @@ export const suite = (open: Open, checklist: unknown) =>
 
             expect(new Set(processes).size).toBe(times);
             const armed = Schema.decodeUnknownSync(Controller)(yield* world.fault.saved);
-            expect(armed.attempts).toEqual(processes.map((process, n) => ({ process, error: errors[n] })));
+            expect(armed.attempts).toEqual(Arr.map(processes, (process, n) => ({ process, error: errors[n] })));
             const lives = yield* world.history(NAME);
-            const restarts = lives.filter(Schema.is(Schema.TaggedStruct("restarted", { body: Schema.Unknown })));
+            const restarts = Arr.filter(lives, Schema.is(Schema.TaggedStruct("restarted", { body: Schema.Unknown })));
             expect(restarts.length).toBeGreaterThanOrEqual(times);
 
             for (const [n, process] of processes.entries()) {
               expect(
-                restarts.some((row) => Schema.is(Schema.Struct({ after: Schema.Literal(process) }))(row.body)),
+                Arr.some(restarts, (row) => Schema.is(Schema.Struct({ after: Schema.Literal(process) }))(row.body)),
               ).toBe(true);
 
-              const exited = lives.filter(
+              const exited = Arr.filter(
+                lives,
                 Schema.is(
                   Schema.TaggedStruct("exited", {
                     body: Schema.Struct({
@@ -292,7 +304,9 @@ export const suite = (open: Open, checklist: unknown) =>
                 ),
               );
 
-              expect(exited.find((exit) => exit.body.process === process)?.body.reason).toEqual(
+              expect(
+                Option.getOrUndefined(Arr.findFirst(exited, (exit) => exit.body.process === process))?.body.reason,
+              ).toEqual(
                 Schema.TaggedStruct("crashed", { phase: Schema.String, error: Schema.String }).make({
                   phase: "step",
                   error: errors[n] ?? "",
@@ -307,7 +321,9 @@ export const suite = (open: Open, checklist: unknown) =>
                 if (times === 1) {
                   expect((yield* runner.msg(poison))._tag).toBe("accepted");
                   expect(
-                    shown((yield* runner.open("success")).view).items.find((item) => item.name === "kept"),
+                    Option.getOrUndefined(
+                      Arr.findFirst(shown((yield* runner.open("success")).view).items, (item) => item.name === "kept"),
+                    ),
                   ).toMatchObject({ state: "checked", note: "first-agent-note" });
                 } else {
                   for (let n = 0; n < cut + 1; n++) {
@@ -321,7 +337,9 @@ export const suite = (open: Open, checklist: unknown) =>
                   ))._tag,
                 ).toBe("accepted");
                 expect(
-                  shown((yield* runner.open("other")).view).items.find((item) => item.name === "other")?.note,
+                  Option.getOrUndefined(
+                    Arr.findFirst(shown((yield* runner.open("other")).view).items, (item) => item.name === "other"),
+                  )?.note,
                 ).toBe("unrelated-note");
                 expect(Schema.decodeUnknownSync(Controller)(yield* world.fault.saved).attempts).toEqual(armed.attempts);
                 // Rearm an already saved input, then force the real successor to fold it from history.
@@ -340,7 +358,7 @@ export const suite = (open: Open, checklist: unknown) =>
               expect(dead[0]).toMatchObject({ body: { m: poison.id, tries: 3, errors, name: NAME, program: PROGRAM } });
             }
 
-            expect((yield* world.letters(NAME)).filter((row) => row.id === poison.id)).toHaveLength(
+            expect(Arr.filter(yield* world.letters(NAME), (row) => row.id === poison.id)).toHaveLength(
               times === 1 ? 1 : 0,
             );
           }),

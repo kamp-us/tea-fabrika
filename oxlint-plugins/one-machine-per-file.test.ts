@@ -4,11 +4,22 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { it } from "@effect/vitest";
+import { Array as Arr, Effect, Option, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 RuleTester.describe = (_name, fn) => fn();
 
@@ -71,7 +82,7 @@ it("L1: exactly the reached calls after the first fire, in source order", () => 
     fc.property(fc.array(fc.constantFrom(...PIECES), { minLength: 1, maxLength: 6 }), (pieces) => {
       let seen = 0;
 
-      const errors = pieces.flatMap((p, i) => {
+      const errors = Arr.flatMap(pieces, (p, i) => {
         const at: ErrorAt[] = [];
 
         for (let n = 0; n < p.calls; n++) {
@@ -83,7 +94,7 @@ it("L1: exactly the reached calls after the first fire, in source order", () => 
         return at;
       });
 
-      check([TEA, ...pieces.map((p, i) => p.text(i))].join("\n"), errors);
+      check(Arr.join([TEA, ...Arr.map(pieces, (p, i) => p.text(i))], "\n"), errors);
     }),
     { ...RUNS, numRuns: 200 },
   );
@@ -101,7 +112,7 @@ it("L1: default exports and local default bindings count with every generated ne
       fc.constantFrom(...PIECES),
       (main, p) => {
         const errors: ErrorAt[] = Array.from({ length: p.calls }, () => ({ line: 3, message: COUNT }));
-        check([TEA, main, p.text(0)].join("\n"), errors);
+        check(Arr.join([TEA, main, p.text(0)], "\n"), errors);
       },
     ),
     RUNS,
@@ -130,9 +141,9 @@ it("L2: only a part whose value is an import or imported member fires", () => {
         update: fc.constantFrom(...PARTS),
       }),
       (parts) => {
-        const lines = Object.entries(parts).map(([key, value]) => `${key}: ${value},`);
+        const lines = Arr.map(Rec.toEntries(parts), ([key, value]) => `${key}: ${value},`);
 
-        const errors = Object.entries(parts).flatMap(([key, value], i) =>
+        const errors = Arr.flatMap(Rec.toEntries(parts), ([key, value], i) =>
           [
             "Imported",
             "Remote.Model",
@@ -147,14 +158,17 @@ it("L2: only a part whose value is an import or imported member fires", () => {
         );
 
         check(
-          [
-            TEA,
-            'import {Imported, Remote} from "./parts.ts";',
-            'import {Schema} from "effect"; const local = {};',
-            "export const m = Machine.make({",
-            ...lines,
-            "});",
-          ].join("\n"),
+          Arr.join(
+            [
+              TEA,
+              'import {Imported, Remote} from "./parts.ts";',
+              'import {Schema} from "effect"; const local = {};',
+              "export const m = Machine.make({",
+              ...lines,
+              "});",
+            ],
+            "\n",
+          ),
           errors,
         );
       },
@@ -168,45 +182,52 @@ it("L2: only a part whose value is an import or imported member fires", () => {
 });
 
 const IO_IMPORTS = [
-  ...[
-    "Effect",
-    "Layer",
-    "Context",
-    "ManagedRuntime",
-    "Fiber",
-    "Scope",
-    "Clock",
-    "Random",
-    "Schedule",
-    "FileSystem",
-    "Path",
-    "Config",
-    "ConfigProvider",
-    "Console",
-    "Stream",
-    "Queue",
-    "PubSub",
-    "Ref",
-    "Deferred",
-    "Semaphore",
-    "Sink",
-  ].map((n) => `import {${n} as Value} from "effect";`),
-  ...["run", "runIn", "spawn", "stop", "tell", "EffectRun", "EffectInterpret", "EffectSubscribe"].map(
+  ...Arr.map(
+    [
+      "Effect",
+      "Layer",
+      "Context",
+      "ManagedRuntime",
+      "Fiber",
+      "Scope",
+      "Clock",
+      "Random",
+      "Schedule",
+      "FileSystem",
+      "Path",
+      "Config",
+      "ConfigProvider",
+      "Console",
+      "Stream",
+      "Queue",
+      "PubSub",
+      "Ref",
+      "Deferred",
+      "Semaphore",
+      "Sink",
+    ],
+    (n) => `import {${n} as Value} from "effect";`,
+  ),
+  ...Arr.map(
+    ["run", "runIn", "spawn", "stop", "tell", "EffectRun", "EffectInterpret", "EffectSubscribe"],
     (n) => `import {${n} as Value} from "@demlik/tea/effect";`,
   ),
-  ...[
-    "node:fs",
-    "effect/process",
-    "effect/http",
-    "effect/cli",
-    "effect/unstable/sql",
-    "@effect/platform-node",
-    "cloudflare:workers",
-    "miniflare",
-    "workerd",
-    "wrangler",
-    "@cloudflare/workers-types",
-  ].map((n) => `import * as Value from "${n}";`),
+  ...Arr.map(
+    [
+      "node:fs",
+      "effect/process",
+      "effect/http",
+      "effect/cli",
+      "effect/unstable/sql",
+      "@effect/platform-node",
+      "cloudflare:workers",
+      "miniflare",
+      "workerd",
+      "wrangler",
+      "@cloudflare/workers-types",
+    ],
+    (n) => `import * as Value from "${n}";`,
+  ),
 ];
 
 const PURE_IMPORTS = [
@@ -226,28 +247,32 @@ it("L3: each closed-list value import fires only when a machine call exists, inc
       fc.constantFrom(...PURE_IMPORTS),
       (hasCall, exported, imports, pure) => {
         // Every line binds a unique name; the generated set may contain different spellings of Value.
-        const lines = [...imports, pure].map((s, i) => s.replaceAll("Value", `Value${i}`));
-        const errors = hasCall ? imports.map((_, i) => ({ line: i + 2, message: IO })) : [];
+        const lines = Arr.map([...imports, pure], (s, i) => s.replaceAll("Value", `Value${i}`));
+        const errors = hasCall ? Arr.map(imports, (_, i) => ({ line: i + 2, message: IO })) : [];
         check(
-          [TEA, ...lines, hasCall ? `${exported ? "export " : ""}const m = Machine.make({});` : ""].join("\n"),
+          Arr.join([TEA, ...lines, hasCall ? `${exported ? "export " : ""}const m = Machine.make({});` : ""], "\n"),
           errors,
         );
         check(
-          [TEA, ...lines.map((s) => s.replace("import ", "import type ")), "export const m = Machine.make({});"].join(
+          Arr.join(
+            [TEA, ...Arr.map(lines, (s) => s.replace("import ", "import type ")), "export const m = Machine.make({});"],
             "\n",
           ),
           [],
         );
         check(
-          [
-            TEA,
-            ...lines.map((s) =>
-              s.startsWith("import {")
-                ? s.replace("import {", "import {type ").replaceAll(", ", ", type ")
-                : s.replace("import ", "import type "),
-            ),
-            "const m = Machine.make({});",
-          ].join("\n"),
+          Arr.join(
+            [
+              TEA,
+              ...Arr.map(lines, (s) =>
+                s.startsWith("import {")
+                  ? s.replace("import {", "import {type ").replaceAll(", ", ", type ")
+                  : s.replace("import ", "import type "),
+              ),
+              "const m = Machine.make({});",
+            ],
+            "\n",
+          ),
           [],
         );
       },
@@ -256,7 +281,7 @@ it("L3: each closed-list value import fires only when a machine call exists, inc
   );
 });
 
-const file = (...lines: readonly string[]) => [TEA, ...lines].join("\n");
+const file = (...lines: readonly string[]) => Arr.join([TEA, ...lines], "\n");
 
 it("vector: an inline type import or type export is not a value, so it makes no machine, part or I/O hit", () => {
   // vector: `import {type Machine}` has no runtime value, so its two calls are not tea machines.
@@ -385,23 +410,25 @@ it("vector: a machine bound by destructuring is reached through its exported nam
 
 const DOUBLE = `${TEA}\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n`;
 
-it("pinned: L4 the two product blocks enforce the rule; the five test globs leave fixture machines alone", async () => {
-  // These paths exercise the exact globs in the approved scope, including RuntimeCauseTest's form.
-  const paths = [
-    "next/example.ts",
-    ".agents/skills/example.ts",
-    "next/example.test.ts",
-    "next/example.test.tsx",
-    "next/ExampleTest.ts",
-    "next/example.test-support.ts",
-    ".agents/example.test.ts",
-  ];
+it.live("pinned: L4 the two product blocks enforce the rule; the five test globs leave fixture machines alone", () =>
+  Effect.gen(function* () {
+    // These paths exercise the exact globs in the approved scope, including RuntimeCauseTest's form.
+    const paths = [
+      "next/example.ts",
+      ".agents/skills/example.ts",
+      "next/example.test.ts",
+      "next/example.test.tsx",
+      "next/ExampleTest.ts",
+      "next/example.test-support.ts",
+      ".agents/example.test.ts",
+    ];
 
-  const result = await plant(Object.fromEntries(paths.map((p) => [p, DOUBLE])));
-  paths.forEach((p, i) => {
-    expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
-  });
-});
+    const result = yield* promised(() => plant(Rec.fromEntries(Arr.map(paths, (p) => [p, DOUBLE]))));
+    Arr.forEach(paths, (p, i) => {
+      expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
+    });
+  }),
+);
 
 const REAL = [
   "next/packages/libfabrika/src/access/Access.ts",
@@ -419,31 +446,43 @@ const REAL = [
   ".agents/skills/lead/scripts/flow/machine.ts",
 ];
 
-it("scenario: L5 the 13 measured machine file copies have zero hits", async () => {
-  // These are the plan's measured inputs, including both factory forms.
-  const originals = Object.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
-  const clean = await plant(originals);
+it.live("scenario: L5 the 13 measured machine file copies have zero hits", () =>
+  Effect.gen(function* () {
+    // These are the plan's measured inputs, including both factory forms.
+    const originals = Rec.fromEntries(
+      Arr.map(REAL, (p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]),
+    );
 
-  for (const p of REAL) {
-    expect([p, clean(CODE, p)]).toEqual([p, []]);
-  }
-});
+    const clean = yield* promised(() => plant(originals));
 
-it("scenario: L5 each real file copy refuses one added second export", async () => {
-  // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
-  const originals = Object.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
-  const clean = await plant(originals);
+    for (const p of REAL) {
+      expect([p, clean(CODE, p)]).toEqual([p, []]);
+    }
+  }),
+);
 
-  const broken = await plant(
-    Object.fromEntries(
-      Object.entries(originals).map(([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
-    ),
-  );
+it.live("scenario: L5 each real file copy refuses one added second export", () =>
+  Effect.gen(function* () {
+    // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
+    const originals = Rec.fromEntries(
+      Arr.map(REAL, (p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]),
+    );
 
-  for (const [p, s] of Object.entries(originals)) {
-    expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
-  }
-});
+    const clean = yield* promised(() => plant(originals));
+
+    const broken = yield* promised(() =>
+      plant(
+        Rec.fromEntries(
+          Arr.map(Rec.toEntries(originals), ([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
+        ),
+      ),
+    );
+
+    for (const [p, s] of Rec.toEntries(originals)) {
+      expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
+    }
+  }),
+);
 
 const childTextFacts = (value: string) => {
   const sample = value.length > 4096 ? `${value.slice(0, 2048)}\n[omitted]\n${value.slice(-2048)}` : value;
@@ -610,13 +649,16 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
         rules: { "fabrika/one-machine-per-file": "error" },
         overrides: [
           {
-            files: [
-              "next/**/*.test.ts",
-              "next/**/*.test.tsx",
-              "next/**/*Test.ts",
-              "next/**/*.test-support.ts",
-              ".agents/**/*.test.ts",
-            ].map((pattern) => join(root, pattern)),
+            files: Arr.map(
+              [
+                "next/**/*.test.ts",
+                "next/**/*.test.tsx",
+                "next/**/*Test.ts",
+                "next/**/*.test-support.ts",
+                ".agents/**/*.test.ts",
+              ],
+              (pattern) => join(root, pattern),
+            ),
             rules: { "fabrika/one-machine-per-file": "off" },
           },
         ],
@@ -637,13 +679,9 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
       { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30, timeout: 120_000 },
     );
 
-    const parsed: unknown = (() => {
-      try {
-        return JSON.parse(out.stdout);
-      } catch {
-        return null;
-      }
-    })();
+    const parsed: unknown = Option.getOrNull(
+      Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(out.stdout),
+    );
 
     const diagnostics =
       typeof parsed === "object" && parsed !== null && "diagnostics" in parsed && Array.isArray(parsed.diagnostics)
@@ -689,7 +727,7 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
     );
 
     expect(report.number_of_files).toBeGreaterThan(0);
-    const hits = report.diagnostics.filter((d) => d.code === CODE);
+    const hits = Arr.filter(report.diagnostics, (d) => d.code === CODE);
     console.log(JSON.stringify({ rule: CODE, files: report.number_of_files, hits: hits.length }));
     expect(hits).toEqual([]);
   } finally {
