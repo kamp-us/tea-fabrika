@@ -112,7 +112,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         return {
           cause: Redacted.make(answer.failure),
           cmds: yield* send({
-            // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's answer, keyed `_tag` as tea's own; slice 5 (demlik 952) deletes `responses` and this cast
+            // oxlint-disable-next-line fabrika/no-hand-tag -- the host answers a Cmd by hand: its key is the Cmd name plus `_ok` or `_err`, a template string, so the tag is an open string until the cast to `BrainLife.Msg`
             _tag: `${cmd._tag}_err`,
             cmd,
             error: Failed.cases[error].make({}),
@@ -122,7 +122,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       }
 
       const cmds = yield* send({
-        // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's answer, keyed `_tag` as tea's own; slice 5 (demlik 952) deletes `responses` and this cast
+        // oxlint-disable-next-line fabrika/no-hand-tag -- the host answers a Cmd by hand: its key is the Cmd name plus `_ok` or `_err`, a template string, so the tag is an open string until the cast to `BrainLife.Msg`
         _tag: `${cmd._tag}_ok`,
         cmd,
         value: answer.success ?? null,

@@ -1,6 +1,6 @@
 import type { Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { CodeHost, Program, Send, StartChild, Started, type Refusal } from "@kampus/libfabrika";
+import { CodeHost, Malformed, Program, Send, StartChild, Started, type Refusal } from "@kampus/libfabrika";
 import { Array as Arr, Record as Rec, Schema } from "effect";
 import { Abandon, Drop, Enqueue, Land, Reply, Resume } from "./Mail.ts";
 import type { Values } from "./Settings.ts";
@@ -55,13 +55,7 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
     Schema.TaggedStruct(`${name}_ok`, { cmd, value: ok, at: Schema.Finite }),
     Schema.TaggedStruct(`${name}_err`, {
       cmd,
-      error: Schema.Union([
-        ...Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {})),
-        // tea adds malformed_result to every settled error: a reply whose value fails its own schema.
-        Schema.TaggedStruct("malformed_result", {
-          issues: Schema.Array(Schema.Struct({ path: Schema.String, message: Schema.String })),
-        }),
-      ]),
+      error: Schema.Union([...Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {})), Malformed]),
       at: Schema.Finite,
     }),
   ]);

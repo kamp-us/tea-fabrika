@@ -1,6 +1,6 @@
 import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Ci, CodeHost, Program, Send, StartChild } from "@kampus/libfabrika";
+import { Ci, CodeHost, Malformed, Program, Send, StartChild } from "@kampus/libfabrika";
 import { Array as Arr, Match, Schema } from "effect";
 import * as Change from "./Change.ts";
 import { Abandon, Land, Reply } from "./Mail.ts";
@@ -102,11 +102,6 @@ type Command = ReturnType<
 >;
 
 type Cell = readonly [Model, ReadonlyArray<Command>];
-
-// tea adds malformed_result to every settled error: a reply whose value fails its own schema.
-const Malformed = Schema.TaggedStruct("malformed_result", {
-  issues: Schema.Array(Schema.Struct({ path: Schema.String, message: Schema.String })),
-});
 
 // The runner accepts settled letters itself; declaring them here also lets pure clients decode them.
 const answers = <const N extends string, F extends Schema.Struct.Fields, O extends Schema.Top, const T extends string>(

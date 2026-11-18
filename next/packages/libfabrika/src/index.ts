@@ -98,6 +98,8 @@ export * as Chunk from "./runtime/Chunk.ts";
 
 export * as StartChild from "./runtime/StartChild.ts";
 
+export { Malformed } from "./runtime/Malformed.ts";
+
 export { Started } from "./processes/Children.ts";
 
 export * as Monitor from "./runtime/Monitor.ts";
