@@ -4,8 +4,8 @@ import type { Page } from "playwright";
 import { launch as launchWindow, type TestWindow } from "../test-window.ts";
 import { startWorker, type EmailFixture } from "./email-worker.test-support.ts";
 
-class PromiseFailed extends Schema.TaggedErrorClass<PromiseFailed>()("PromiseFailed", {
-  cause: Schema.Defect,
+class PromiseFailed extends Schema.TaggedError<PromiseFailed, { readonly brand: unique symbol }>()("PromiseFailed", {
+  cause: Schema.Defect(),
 }) {}
 
 export const EPOCH = 1_800_000_000_000;

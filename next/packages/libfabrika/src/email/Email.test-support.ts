@@ -12,9 +12,12 @@ import { Add, MemberEvent, Signed } from "../access/Access.ts";
 import { Written } from "../access/ClientManager.ts";
 
 /** A rejected promise in a test helper or law, kept in the error channel with its cause. */
-export class PromiseFailed extends Schema.TaggedErrorClass<PromiseFailed>()("PromiseFailed", {
-  cause: Schema.Defect,
-}) {}
+export class PromiseFailed extends Schema.TaggedError<PromiseFailed, { readonly brand: unique symbol }>()(
+  "PromiseFailed",
+  {
+    cause: Schema.Defect(),
+  },
+) {}
 
 export const EPOCH = 1_800_000_000_000;
 

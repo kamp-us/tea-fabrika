@@ -5,8 +5,8 @@ import { Effect, FileSystem, Path, Schema } from "effect";
 // oxlint-disable-next-line no-restricted-imports -- edge: A3 gives next/ its own quiet Electron test launcher
 import { _electron, type ElectronApplication, type Page } from "playwright";
 
-class WindowFailed extends Schema.TaggedErrorClass<WindowFailed>()("WindowFailed", {
-  cause: Schema.Defect,
+class WindowFailed extends Schema.TaggedError<WindowFailed, { readonly brand: unique symbol }>()("WindowFailed", {
+  cause: Schema.Defect(),
 }) {}
 
 export interface TestWindow {
