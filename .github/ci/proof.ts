@@ -5,6 +5,7 @@
 //   the branch's change against origin/main      the run tests
 //   touches a file in forceRerunTriggers         the full set, on the `tests` job, as main does,
 //                                                less every `.integration.` law (0602)
+//   is started with `scope: full` for a `law`     the full set too, and the record keeps the inputs
 //   reaches some tests                           those, on as many `changed` legs as they need
 //   reaches no test                              nothing: the run is green with no test leg
 //
@@ -32,9 +33,14 @@
 // fewest whose longest share fits half a leg's test step limit less an end-to-end leg's setup, as
 // legs.ts sizes the merge line's, up to the matrix's `max-parallel`. Each leg runs exactly its list.
 //
+// A hand start says what it wants as `scope` (scheduled.yaml's input, `changed` unless a person says
+// `full`) and, for `full`, the `law`: the test file that needs the full set. This script holds both
+// to the rules in `inputsOf` and has no default of its own, so the workflow's input is the one place a
+// default is declared (0069). `scope: changed` does not override a rerun trigger: 0590 stands.
+//
 // The run keeps what it tested as its `proof-set` artifact and in its summary: the base commit, the
-// head, git's changed files, each leg's files and seconds, and when. origin/main moves on, so the set
-// cannot be worked out again later.
+// head, git's changed files, the inputs, each leg's files and seconds, and when. origin/main moves on,
+// so the set cannot be worked out again later.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -75,6 +81,10 @@ export type Proof =
       readonly head: string;
       readonly at: string;
       readonly vitest: string;
+      /** The hand start's inputs: `changed` when a rerun trigger alone made this the full set. */
+      readonly inputs: Inputs;
+      /** git's changed files, base to head: the input of the choice, which a squash merge loses. */
+      readonly changed: readonly string[];
       /** The changed files that match a rerun trigger. */
       readonly triggers: readonly string[];
     }
@@ -84,6 +94,8 @@ export type Proof =
       readonly head: string;
       readonly at: string;
       readonly vitest: string;
+      /** Always `changed`: the inputs `scope: full` make the full set, never a changed set. */
+      readonly inputs: { readonly _tag: "changed" };
       /** git's changed files, base to head. */
       readonly changed: readonly string[];
       /** Each leg's test files, by the leg's name: `"1"` to `"N"`. No leg for a set of zero files. */
@@ -92,13 +104,22 @@ export type Proof =
       readonly seconds: Readonly<Record<string, number>>;
     };
 
-/** What the select step read: the commits, git's changed files, and when. */
+/** The hand start's `scope` input, as scheduled.yaml gives it (0590). */
+const ScopeInput = Schema.Literals(["changed", "full"]);
+
+/** The hand start's inputs, decoded: `full` carries the `law` that needs the full set. */
+export const Inputs = Schema.TaggedUnion({ changed: {}, full: { law: Schema.String } });
+
+export type Inputs = typeof Inputs.Type;
+
+/** What the select step read: the commits, git's changed files, the inputs, and when. */
 export type Seen = {
   readonly base: string;
   readonly head: string;
   readonly at: string;
   readonly vitest: string;
   readonly changed: readonly string[];
+  readonly inputs: Inputs;
 };
 
 /** How a changed set is split: the most legs at once, and the seconds one leg's files may take. */
@@ -120,14 +141,66 @@ export const legsOf = (files: readonly string[], sizing: Sizing): Record<string,
 };
 
 /**
- * What the run tests. `triggers` comes first: a change to a rerun trigger is the full set whatever
- * the import graph says. Else `files`, the set Vitest listed, split by `sizing`, less every
- * `.integration.` law, of next/ or of tooling: only main's full run runs those (0602). PROJECTS
- * already lists none of them; the name holds them out whatever a list gives.
+ * The step's SCOPE and LAW, decoded, or a throw, so the step fails and prints nothing. No default:
+ * scheduled.yaml's input holds the one default, so a missing SCOPE is an error, not `changed`.
+ * `isLaw` says whether a path is a test file a proof run runs; a law that starts with a dash or holds
+ * whitespace is refused before `isLaw` runs, so it can never read as a flag of `vitest list`.
+ */
+export const inputsOf = (
+  scope: string | undefined,
+  law: string | undefined,
+  isLaw: (path: string) => boolean,
+): Inputs => {
+  const decoded = Schema.decodeUnknownResult(ScopeInput)(scope);
+
+  if (Result.isFailure(decoded)) {
+    throw new Error(`proof: SCOPE must be changed or full, not ${JSON.stringify(scope)}`);
+  }
+
+  const given = law ?? "";
+
+  if (decoded.success === "changed") {
+    if (given !== "") {
+      throw new Error(`proof: LAW must be empty when the scope is changed, not ${JSON.stringify(given)}`);
+    }
+
+    return Inputs.cases.changed.make({});
+  }
+
+  if (!/^[^\s-]\S*$/.test(given) || !isLaw(given)) {
+    throw new Error(
+      `proof: LAW must be a test file vitest lists in the projects a proof runs when the scope is full, not ${JSON.stringify(given)}`,
+    );
+  }
+
+  return Inputs.cases.full.make({ law: given });
+};
+
+/** Whether `vitest list` over the proof's projects gives back exactly `path`, by `lister`. */
+export const inProjects =
+  (lister: (args: readonly string[]) => readonly string[]) =>
+  (path: string): boolean =>
+    lister([...PROJECTS.flatMap((project) => ["--project", project]), path]).includes(path);
+
+/**
+ * What the run tests. `triggers` come first, and so does `scope: full`: a change to a rerun trigger or
+ * a hand start for the full set is the full set whatever the import graph says. Else `files`, the set
+ * Vitest listed, split by `sizing`, less every `.integration.` law, of next/ or of tooling: only
+ * main's full run runs those (0602). PROJECTS already lists none of them; the name holds them out
+ * whatever a list gives.
  */
 export const choose = (seen: Seen, triggers: readonly string[], files: readonly string[], sizing: Sizing): Proof => {
-  if (triggers.length > 0) {
-    return { _tag: "full", base: seen.base, head: seen.head, at: seen.at, vitest: seen.vitest, triggers };
+  if (triggers.length > 0 || seen.inputs._tag === "full") {
+    return {
+      _tag: "full",
+      base: seen.base,
+      head: seen.head,
+      at: seen.at,
+      vitest: seen.vitest,
+      inputs: seen.inputs,
+      changed: seen.changed,
+      triggers,
+    };
   }
 
   if (files.some((path) => /\s/.test(path))) {
@@ -145,6 +218,7 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
     head: seen.head,
     at: seen.at,
     vitest: seen.vitest,
+    inputs: seen.inputs,
     changed: seen.changed,
     legs,
     seconds: Object.fromEntries(
@@ -205,14 +279,23 @@ export const summary = (proof: Proof): string => {
   const head = `Proof run at ${proof.head.slice(0, 9)}, against origin/main at ${proof.base.slice(0, 9)} (decision 0590).`;
 
   if (proof._tag === "full") {
-    return [
-      head,
-      "",
-      "The full set: the change touches a rerun trigger, so it runs every test but the `.integration.` laws, which only main's full run runs (decision 0602).",
-      "",
-      ...proof.triggers.map((path) => `- \`${path}\``),
-      "",
-    ].join("\n");
+    const why =
+      proof.inputs._tag === "full"
+        ? [
+            `The full set, chosen by hand (\`scope: full\`) for the law \`${proof.inputs.law}\`: it runs every test but the \`.integration.\` laws, which only main's full run runs (decision 0602).`,
+          ]
+        : [];
+
+    const triggered =
+      proof.triggers.length > 0
+        ? [
+            "The full set: the change touches a rerun trigger, so it runs every test but the `.integration.` laws, which only main's full run runs (decision 0602).",
+            "",
+            ...proof.triggers.map((path) => `- \`${path}\``),
+          ]
+        : [];
+
+    return [head, "", ...why, ...(why.length > 0 && triggered.length > 0 ? [""] : []), ...triggered, ""].join("\n");
   }
 
   const legs = Object.entries(proof.legs);
@@ -262,6 +345,8 @@ if (import.meta.main) {
       limit: Config.String("LIMIT").pipe(Config.withDefault(undefined)),
       run: Config.String("RUN_NUMBER").pipe(Config.withDefault(undefined)),
       record: Config.String("RECORD").pipe(Config.withDefault(undefined)),
+      scope: Config.String("SCOPE").pipe(Config.withDefault(undefined)),
+      law: Config.String("LAW").pipe(Config.withDefault(undefined)),
       ...stepFiles,
     }),
   );
@@ -293,12 +378,18 @@ if (import.meta.main) {
     .filter((path) => path !== "");
 
   const triggers = triggered(changed, isTrigger);
-  const asked = listings(base, changed);
+  const reach = listings(base, changed);
+
+  const inputs = inputsOf(
+    env.scope,
+    env.law,
+    inProjects((args) => list(root, args)),
+  );
 
   const files =
-    triggers.length > 0
+    triggers.length > 0 || inputs._tag === "full"
       ? []
-      : withReaders(list(root, asked.reached), asked.readers === null ? [] : list(root, asked.readers));
+      : withReaders(list(root, reach.reached), reach.readers === null ? [] : list(root, reach.readers));
 
   const sizing: Sizing = {
     most,
@@ -307,7 +398,7 @@ if (import.meta.main) {
   };
 
   const proof = choose(
-    { base, head, at: DateTime.formatIso(DateTime.nowUnsafe()), vitest: vitestPackage.version, changed },
+    { base, head, at: DateTime.formatIso(DateTime.nowUnsafe()), vitest: vitestPackage.version, changed, inputs },
     triggers,
     files,
     sizing,
