@@ -8,8 +8,11 @@ import { resolve } from "node:path";
 import { expect, it } from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "../../../..");
+
 const FIXTURE = ".agents/skills/tests/scripts/fixtures/plant/laws.fixture.ts";
+
 const SHARED = ".agents/skills/tests/scripts/fixtures/plant/shared.fixture.ts";
+
 const RUNS_SHARED = ".agents/skills/tests/scripts/fixtures/plant/runs-shared.fixture.ts";
 
 const plant = (title: string, file = FIXTURE) => {
@@ -18,6 +21,7 @@ const plant = (title: string, file = FIXTURE) => {
     encoding: "utf8",
     timeout: 60_000,
   });
+
   return { status: ran.status, stdout: ran.stdout, said: ran.stdout + ran.stderr };
 };
 

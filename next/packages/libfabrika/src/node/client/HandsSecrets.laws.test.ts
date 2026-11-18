@@ -432,6 +432,7 @@ const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void):
   const seen = new Set<string>();
   reaches.set(ctx.task, seen);
   ctx.onTestFinished(() => covers([...seen]));
+
   return seen;
 };
 
@@ -442,16 +443,20 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
     { flow: Flow },
     ({ flow: f }, ctx) => {
       const done = reach(ctx, (seen) => expect(seen).toEqual(expect.arrayContaining(FLOWS)));
+
       return Effect.gen(function* () {
         const out: Outputs = { frames: [], spans: [], logs: [], errors: [], states: [], rows: [] };
         const secrets = new Set<string>();
+
         const tracer = Tracer.make({
           span: (init) => {
             const span = new Tracer.NativeSpan(init);
             out.spans.push(span);
+
             return span;
           },
         });
+
         const logger = Logger.layer([Logger.map(Logger.formatStructured, (entry) => void out.logs.push(entry))]);
         // What reaches the console or the process's own output outside Effect's logger, tea's
         // own error sink included, is a log line too.
@@ -476,6 +481,7 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
           Effect.provideService(References.MinimumLogLevel, "All"),
           Effect.provide(TestClock.layer()),
         );
+
         const outputs: Record<string, ReadonlyArray<string>> = {
           frames: out.frames,
           spans: out.spans.map(spanText),
@@ -484,6 +490,7 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
           journal: out.rows.map(text),
           states: out.states.map(text),
         };
+
         expect(secrets.size, "S2: the flow stored at least one key to look for").toBeGreaterThan(0);
 
         for (const [name, texts] of Object.entries(outputs)) {

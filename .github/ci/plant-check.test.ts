@@ -10,11 +10,14 @@ import { expect, it } from "vitest";
 import { check, type LawFile, lawsOf, readInputs, type Recorded, type Refusal, report } from "./plant-check.ts";
 
 const options = { seed: 119120 };
+
 const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;
+
 const PLANTS = ["drop the press row", "skip the last append", "answer the old value"] as const;
 
 /** What one law does between the base and the head of a pull request. */
 type Move = "untouched" | "moved" | "new" | "edited" | "deleted";
+
 /** What the added run rows say of a law's plant: nothing, red, green, or a record of a longer plant. */
 type Record = "none" | "red" | "green" | "longer";
 
@@ -50,7 +53,9 @@ const importOf = (ours: boolean) =>
   ours ? 'import { it } from "@kampus/vitest";' : 'import { it } from "@effect/vitest";';
 
 const titleOf = (i: number) => `law ${i} keeps its claim`;
+
 const prefix = (s: Spec) => (s.label === null ? "" : `${s.label}: `);
+
 const bodyOf = (n: number) => `() => { expect(read(${n})).toBe(${n}); }`;
 
 /** The options a head law writes: its plant and its label, moved out of the comment and the title. */
@@ -59,6 +64,7 @@ const optionsOf = (s: Spec) => {
     ...(s.plant === null ? [] : [`plant: "${s.plant}"`]),
     ...(s.label === null ? [] : [`${s.label}: ${s.label === "pinned" ? "1497" : '"why"'}`]),
   ];
+
   return keys.length === 0 ? "" : `, { ${keys.join(", ")} }`;
 };
 
@@ -67,6 +73,7 @@ const sources = (ours: boolean, laws: readonly Spec[]) => {
   const base = laws.flatMap((s, i) =>
     s.move === "new" ? [] : [`// Plant: ${s.plant ?? "none"}`, `it("${prefix(s)}${titleOf(i)}", ${bodyOf(s.n)});`],
   );
+
   const head = laws.flatMap((s, i) =>
     s.move === "deleted"
       ? []
@@ -74,6 +81,7 @@ const sources = (ours: boolean, laws: readonly Spec[]) => {
         ? [`// Plant: ${s.plant ?? "none"}`, `it("${prefix(s)}${titleOf(i)}", ${bodyOf(s.n)});`]
         : [`it("${titleOf(i)}", ${bodyOf(s.move === "edited" ? s.n + 10 : s.n)}${optionsOf(s)});`],
   );
+
   return { base: [importOf(ours), ...base].join("\n"), head: [importOf(ours), ...head].join("\n") };
 };
 
@@ -108,6 +116,7 @@ it("property: the check's refusals equal a model's: no plant, not recorded, gree
         laws.forEach((s, i) => {
           const law = titleOf(i);
           const held = ours && (s.move === "new" || s.move === "edited");
+
           // A record only for a law the change touches, or a ghost below: a record of an untouched law is unclaimed.
           const records =
             s.plant === null || s.record === "none" || !(s.move === "new" || s.move === "edited")
@@ -121,6 +130,7 @@ it("property: the check's refusals equal a model's: no plant, not recorded, gree
                     result: s.record === "green" ? ("green" as const) : ("red" as const),
                   },
                 ];
+
           rows.push(...records);
 
           if (held) {
@@ -166,9 +176,11 @@ it("property: the check's refusals equal a model's: no plant, not recorded, gree
 
       if (outside !== "none") {
         const file = "next/packages/libfabrika/src/Untouched.test.ts";
+
         const kept = sources(outside === "ours", [
           { move: "untouched", label: null, plant: null, record: "none", n: 0 },
         ]);
+
         untouched.push(lawsOf(file, kept.head));
         rows.push({ row, file, law: titleOf(0), plant: PLANTS[0], result: "red" });
 
@@ -226,6 +238,7 @@ it("property: a file still on @effect/vitest or vitest gets one notice and no re
     ['import type { it } from "@kampus/vitest";', false],
     ['import { runsFor } from "@kampus/vitest";\nimport { it } from "@effect/vitest";', false],
   ] as const;
+
   fc.assert(
     fc.property(
       fc.uniqueArray(fc.integer({ min: 0, max: imports.length - 1 }), { minLength: 1, maxLength: imports.length }),
@@ -234,8 +247,10 @@ it("property: a file still on @effect/vitest or vitest gets one notice and no re
         const head = picked.map((at) => {
           const [line] = imports[at] ?? imports[0];
           const laws = Array.from({ length: count }, (_, i) => `it("${titleOf(i)}", ${bodyOf(i)});`);
+
           return lawsOf(`next/a/F${at}.test.ts`, [line, ...laws].join("\n"));
         });
+
         const outcome = check({ base: [], head, untouched: [] }, []);
         const ours = picked.filter((at) => (imports[at] ?? imports[0])[1]);
         expect(outcome.notices).toEqual(
@@ -254,6 +269,7 @@ it("property: a file still on @effect/vitest or vitest gets one notice and no re
 
 /** A statement as tokens, so a printer can lay them out and one edit can change one token. */
 const tokens = (n: number, name: string) => ["const", name, "=", "read", "(", String(n), ",", '"k"', ")", ";"];
+
 const gap = fc.constantFrom(" ", "  ", "\n", "\n    ", " /* note */ ", " // note\n", "\n\n");
 
 // Plant: compare the bodies' source text, not their parsed trees.
@@ -271,10 +287,12 @@ it("property: a law whose body changes only in formatting or comments is no chan
         const all = statements.flatMap(([n, name]) => tokens(n, name));
         const at = edit === null ? -1 : (edit % statements.length) * 10 + 5;
         const changed = all.map((token, i) => (i === at ? String(Number(token) + 1) : token));
+
         const printed = changed
           .map((token) => (single && token === '"k"' ? "'k'" : token))
           .map((token, i) => `${token}${gaps[i % gaps.length] ?? " "}`)
           .join("");
+
         const plain = `it("a law", () => { ${all.join(" ")} });`;
         const laid = `it(\n  "a law",\n  () => {${gaps[0] ?? ""}${printed}\n  },\n);`;
         const before = lawsOf("next/a.test.ts", `import { it } from "@kampus/vitest";\n${plain}`);
@@ -338,6 +356,7 @@ const gitIn = (dir: string) => (args: string[]) => {
     cwd: dir,
     encoding: "utf8",
   });
+
   return { status: ran.status, stdout: ran.stdout };
 };
 
@@ -349,16 +368,20 @@ it("scenario: a law file moved with git mv keeps its laws, and its unchanged bod
 
   try {
     const git = gitIn(dir);
+
     const write = (path: string, text: string) => {
       mkdirSync(dirname(join(dir, path)), { recursive: true });
       writeFileSync(join(dir, path), text);
     };
+
     const old = "next/packages/libfabrika/src/ledger/LedgerTurnReads.test.ts";
     const moved = "next/packages/libfabrika/src/turns/TurnReads.test.ts";
+
     const text = [
       'import { it } from "@kampus/vitest";',
       ...[0, 1, 2].map((i) => `it("${titleOf(i)}", ${bodyOf(i)}, { plant: "${PLANTS[i] ?? ""}" });`),
     ].join("\n");
+
     git(["init", "-q", "-b", "main"]);
     write(old, `${text}\n`);
     git(["add", "."]);
@@ -384,10 +407,12 @@ it("scenario: a row's record of a law file the pull request does not change is r
 
   try {
     const git = gitIn(dir);
+
     const write = (path: string, text: string) => {
       mkdirSync(dirname(join(dir, path)), { recursive: true });
       writeFileSync(join(dir, path), text);
     };
+
     const law = (ours: boolean) => `${importOf(ours)}\nit("${titleOf(0)}", ${bodyOf(0)}, { plant: "${PLANTS[0]}" });\n`;
     git(["init", "-q", "-b", "main"]);
     write("next/a/Untouched.test.ts", law(true));
@@ -395,12 +420,14 @@ it("scenario: a row's record of a law file the pull request does not change is r
     git(["add", "."]);
     git(["commit", "-q", "-m", "base"]);
     const base = git(["rev-parse", "HEAD"]).stdout.trim();
+
     const plants = ["next/a/Untouched.test.ts", "next/a/Other.test.ts", "next/a/Gone.test.ts"].map((file) => ({
       file,
       law: titleOf(0),
       plant: PLANTS[0],
       result: "red",
     }));
+
     write("field/runs/2026-11-16-a-row.json", JSON.stringify({ plants }));
     git(["add", "."]);
     git(["commit", "-q", "-m", "row"]);

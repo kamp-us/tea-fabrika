@@ -45,6 +45,7 @@ const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void):
   const seen = new Set<string>();
   reaches.set(ctx.task, seen);
   ctx.onTestFinished(() => covers([...seen]));
+
   return seen;
 };
 
@@ -247,6 +248,7 @@ describe("P39 slice 4b: the journal file", () => {
           expect.arrayContaining(["write", "overwrite", "read:entry", "read:bad_entry", "read:missing", "garbage"]),
         ),
       );
+
       return Effect.gen(function* () {
         const r: Real = {
           pool,
@@ -254,6 +256,7 @@ describe("P39 slice 4b: the journal file", () => {
           memory: yield* side(KeyValueStore.layerMemory),
           next: null,
         };
+
         const m: Model = { saved: new Map() };
 
         // fast-check's own model walk: a step runs only when the state it reached allows it.

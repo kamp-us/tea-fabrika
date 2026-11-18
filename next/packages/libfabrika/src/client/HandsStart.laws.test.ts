@@ -275,6 +275,7 @@ const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void):
   const seen = new Set<string>();
   reaches.set(ctx.task, seen);
   ctx.onTestFinished(() => covers([...seen]));
+
   return seen;
 };
 
@@ -303,10 +304,12 @@ describe("P39 slice 4b: the host's os in the hello", () => {
     { os: fc.constantFrom(...OSES) },
     ({ os }, ctx) => {
       const reached = reach(ctx, (seen) => expect(seen).toEqual(expect.arrayContaining([...OSES])));
+
       return Effect.gen(function* () {
         const d = door(brain(), KEY);
         const s: Seen = seen();
         const store = yield* Layer.build(KeyValueStore.layerMemory);
+
         const layers = Layer.mergeAll(
           d.socket,
           keys,
@@ -314,9 +317,11 @@ describe("P39 slice 4b: the host's os in the hello", () => {
           JournalStore.layer.pipe(Layer.provide(Layer.succeedContext(store))),
           Id.Generator.layer,
         );
+
         const booting = yield* start({ origin: ORIGIN, build: "hands-build", label: "hands", os }).pipe(
           Effect.provide(layers),
         );
+
         yield* booting.ready;
 
         for (let i = 0; i < 50 && d.state.hellos.length === 0; i++) {

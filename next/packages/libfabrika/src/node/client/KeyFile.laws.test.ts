@@ -224,6 +224,7 @@ const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void):
   const seen = new Set<string>();
   reaches.set(ctx.task, seen);
   ctx.onTestFinished(() => covers([...seen]));
+
   return seen;
 };
 
@@ -266,6 +267,7 @@ describe("P39 slice 4b: the hands key file", () => {
           ]),
         ),
       );
+
       return Effect.gen(function* () {
         const r: Real = { disk: MemoryFiles.disk([FOLDER]), next: null };
         const m: Model = { file: null, fingerprint: null };
@@ -311,12 +313,14 @@ describe("P39 slice 4b: the hands key file", () => {
         }
 
         const key = exit.value;
+
         const signed = yield* writeSshsig({
           text: helloText({ url: ORIGIN, tab, nonce }),
           space: "fabrika-client",
           line: key.line,
           sign: key.sign,
         });
+
         const hello = {
           versions: [1],
           has: ["git"],
@@ -330,6 +334,7 @@ describe("P39 slice 4b: the hands key file", () => {
           sentAt: "2026-11-15T10:00:00.000Z",
           signed,
         };
+
         const checked = yield* checkHello({
           hello,
           url: ORIGIN,
@@ -344,6 +349,7 @@ describe("P39 slice 4b: the hands key file", () => {
               Admission.cases.admitted.make({ identity: { key: fingerprint, person: "person_k2", as: "hands" } }),
             ),
         });
+
         expect(checked._tag, `K2: the door admits the key file's hello: ${JSON.stringify(checked)}`).toBe("online");
       }),
     {

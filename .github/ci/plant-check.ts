@@ -23,8 +23,10 @@ import { Plant } from "./field-schema.ts";
 
 /** The package whose `it` takes the `plant` option: `@kampus/vitest` now, `@kalfa/vitest` once renamed (0585). */
 const OURS = new Set(["@kampus/vitest", "@kalfa/vitest"]);
+
 /** Calls that make a test from their own call, as law-shape.ts reads them. */
 const MAKERS = new Set(["each", "for", "skipIf", "runIf"]);
+
 /** An old label at the head of a title, after one optional id (`R3 format: `), which 0580 moves to an option. */
 const PREFIX = /^((?:[A-Za-z0-9.]+ )?)(?:vector|format|pinned|scenario|type):\s*/;
 
@@ -127,6 +129,7 @@ const text = (node: unknown): string | null => {
 
   if (node.type === "TemplateLiteral" && Array.isArray(expressions) && expressions.length === 0) {
     const cooked = Array.isArray(quasis) && isNode(quasis[0]) ? quasis[0]["value"] : undefined;
+
     return Predicate.hasProperty(cooked, "cooked") && typeof cooked.cooked === "string" ? cooked.cooked : null;
   }
 
@@ -164,6 +167,7 @@ const plantOf = (options: Node | undefined): string | null => {
 /** The laws of one file, and whether its `it` is the package's. A file that does not parse holds none. */
 export const lawsOf = (file: string, source: string): LawFile => {
   const parsed = parseSync(file, source, { sourceType: "module", preserveParens: false });
+
   const ours = parsed.program.body.some(
     (statement) =>
       statement.type === "ImportDeclaration" &&
@@ -177,6 +181,7 @@ export const lawsOf = (file: string, source: string): LawFile => {
           (spec.imported.name === "it" || spec.imported.name === "test"),
       ),
   );
+
   const laws: Law[] = [];
 
   for (const node of parsed.errors.length > 0 ? [] : nodes(parsed.program)) {
@@ -228,6 +233,7 @@ const changedLaws = (base: readonly LawFile[], head: LawFile): readonly Law[] =>
     }
 
     bodies.splice(at, 1);
+
     return false;
   });
 };
@@ -330,6 +336,7 @@ export const report = (outcome: Outcome): { readonly lines: readonly string[]; r
 });
 
 type Runner = (args: string[]) => { status: number | null; stdout: string };
+
 const git: Runner = (args) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 2 ** 28 });
 
 /** A run row's plant records, from its JSON text: none when the row does not parse, which field-check.ts reports. */
@@ -380,18 +387,21 @@ export const readInputs = (base: string, head: string, event: string, run: Runne
   const live = changes.filter((c) => c.status !== "D");
   const laws = live.filter((c) => lawFile(c.path));
   const rows = live.filter((c) => c.status === "A" && /^field\/runs\/[^/]+\.json$/.test(c.path));
+
   const recorded = rows.flatMap((c) =>
     Option.match(decodePlants(read(["show", `${head}:${c.path}`])), {
       onNone: (): Recorded[] => [],
       onSome: ({ plants }) => plants.map((plant) => ({ ...plant, row: c.path })),
     }),
   );
+
   // A record's law file outside the diff is read at head when the head has it, so its `it` is known.
   const outside = new Set(
     recorded.flatMap((r) =>
       r.file === undefined || !lawFile(r.file) || laws.some((c) => c.path === r.file) ? [] : [r.file],
     ),
   );
+
   return {
     base: laws.flatMap((c) => (c.status === "A" ? [] : [lawsOf(c.path, read(["show", `${from}:${c.old ?? c.path}`]))])),
     head: laws.map((c) => lawsOf(c.path, read(["show", `${head}:${c.path}`]))),

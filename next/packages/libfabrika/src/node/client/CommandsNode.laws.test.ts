@@ -204,6 +204,7 @@ const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void):
   const seen = new Set<string>();
   reaches.set(ctx.task, seen);
   ctx.onTestFinished(() => covers([...seen]));
+
   return seen;
 };
 
@@ -219,6 +220,7 @@ describe("P39 slice 4b: the real command layer", () => {
           expect.arrayContaining(["spawn_failed", "output_limit", "exited", "exited:empty", "endless"]),
         ),
       );
+
       return Effect.gen(function* () {
         const seen = fresh();
         const exit = yield* execute(child, seen, { PATH: "/usr/bin" }, withGit());
@@ -269,12 +271,14 @@ describe("P39 slice 4b: the real command layer", () => {
 
         for (const vector of gitVectors) {
           const seen = fresh();
+
           const child: Child = {
             spawn: "ok",
             chunks: [{ to: "out", bytes: encoder.encode(vector.stdout) }],
             code: 0,
             endless: false,
           };
+
           const exit = yield* execute(child, seen, { PATH: "/usr/bin" }, withGit());
           const answer = Exit.isSuccess(exit) && exit.value._tag === "Some" ? exit.value.value : null;
           expect(answer).toEqual({ _tag: "exited", code: 0, version: vector.version });
@@ -314,11 +318,13 @@ describe("P39 slice 4b: the real command layer", () => {
         const childEnv = command.options.env ?? {};
         expect(Object.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
         expect(String(childEnv["PATH"]), "C2: PATH is the hands' own PATH").toBe(PATH);
+
         // Every named output of the spawn: the executable, the argv and every option, in each form a
         // value could be written.
         const text = JSON.stringify({ c: command.command, a: command.args.map(String), o: command.options }, (_k, v) =>
           typeof v === "object" && v !== null && "value" in v ? String(v.value) : v,
         );
+
         const forms = [
           planted,
           encodeURIComponent(planted),
@@ -355,6 +361,7 @@ describe("P39 slice 4b: the real command layer", () => {
       const reached = reach(ctx, (seen) =>
         expect(seen).toEqual(expect.arrayContaining(["git", "none", "file-without-x", "folder"])),
       );
+
       return Effect.gen(function* () {
         const names = folders.map((_, i) => `/opt/p${i}/bin`);
         const d = MemoryFiles.disk(names);
@@ -368,11 +375,13 @@ describe("P39 slice 4b: the real command layer", () => {
           }
         });
         const runnable = folders.some((f) => f.kind === "file" && (f.mode & 0o111) !== 0);
+
         const has = yield* Commands.use((commands) => Effect.succeed(commands.has)).pipe(
           Effect.provide(
             layers({ spawn: "ok", chunks: [], code: 0, endless: false }, fresh(), { PATH: names.join(":") }, d),
           ),
         );
+
         expect(has, "C3: has reads an executable git on PATH, never a folder or a file without an execute bit").toEqual(
           runnable ? ["git"] : [],
         );

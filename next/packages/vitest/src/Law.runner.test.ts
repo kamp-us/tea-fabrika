@@ -59,6 +59,7 @@ const nested = (lawCase: LawCase) =>
   );
 
 const Small = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 50 }));
+
 const runs = runsFor({ fast: 3, full: 10 });
 
 describe("the fast-check path of it.effect.prop (0579)", () => {

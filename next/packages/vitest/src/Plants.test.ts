@@ -16,6 +16,7 @@ import * as fc from "fast-check";
 import * as Plants from "./Plants.ts";
 
 const SEED = 119120;
+
 const ROOT = "/work/repo";
 
 type State = "pass" | "fail" | "skip" | "todo" | "run" | "queued";
@@ -106,6 +107,7 @@ describe("Plants.records (0580)", () => {
             .filter((t) => t.result?.state === "pass" || t.result?.state === "fail")
             .map((t) => ({ file: fromRoot(t.meta.file ?? file.filepath), test: t, ranIn: file.filepath })),
         );
+
         const bare = ran.find(({ test: t }) => t.meta.plant === undefined);
         const answer = Plants.records(given, ROOT);
 
@@ -116,6 +118,7 @@ describe("Plants.records (0580)", () => {
             file: bare.file,
             law: bare.test.name,
           });
+
           return;
         }
 

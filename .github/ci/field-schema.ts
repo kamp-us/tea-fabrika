@@ -61,6 +61,7 @@ export const Plant = Schema.Struct({
   plant: Schema.String,
   result: Schema.Literals(["red", "green"]),
 });
+
 export type Plant = typeof Plant.Type;
 
 const Run = Schema.Struct({

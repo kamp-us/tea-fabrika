@@ -56,6 +56,7 @@ it("toTestOptions puts the plant and the label in meta, with its tag and reason,
         ...(plant === null ? {} : { plant }),
         ...(named === null ? {} : named.name === "pinned" ? { pinned: named.reason } : { [named.name]: named.reason }),
       };
+
       const { meta, ...vitest } = toTestOptions(options);
       expect(vitest).toEqual(rest);
       expect(meta ?? {}).toEqual({
