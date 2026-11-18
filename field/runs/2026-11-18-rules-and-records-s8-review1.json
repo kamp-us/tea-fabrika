@@ -39,7 +39,7 @@
     },
     {
       "law": "L5, kalfa/records/src/Links.test.ts:92",
-      "plant": "kalfa/records/src/Comments.ts:170, quotes and backticks no longer open a string, so strings are read as code",
+      "plant": "kalfa/records/src/Comments.ts:56, quotes and backticks no longer open a string, so strings are read as code",
       "result": "green"
     }
   ]
