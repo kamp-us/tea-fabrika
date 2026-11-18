@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-tests3",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-16T00:29:37-08:00",
+  "ended": "2026-11-16T00:36:37-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The tests step after the plan's amendment of 2026-11-16 (docs/plan/quests/port-typecheck-PLAN.md, 'scripts/typecheck* gets a tsconfig program of its own'), in today's tooling. New lint law L2: an eslint/no-restricted-imports block in .oxlintrc.json, right after the lead-tooling block, for scripts/typecheck.ts, scripts/typecheck/**/*.ts and the two typecheck test files. It bans @demlik/tea and @demlik/tea/** and repeats every path and pattern the lead-tooling block gave those files, since an override replaces the rule's options whole. Changed type law T1: the files that make scripts/ a workspace package, so pnpm -r typecheck reaches it: the scripts glob in pnpm-workspace.yaml after .agents, scripts/package.json (@tea-fabrika/scripts, typecheck: tsc --noEmit -p ., no dependency), the root devDependencies line, the lockfile's workspace-only importer and link, and scripts/node_modules/.cache/tsc in check.yaml's tsc cache after the .agents line (C4). T1 is red now: tsc in scripts/ fails with TS5081, no tsconfig.json, until the build writes scripts/tsconfig.json. pnpm install --offline could not run first, since this box had no node_modules and no offline metadata (ERR_PNPM_NO_OFFLINE_META for vitest 5.0.5); pnpm install --prefer-offline wrote the same workspace-only lockfile lines.",
+  "plants": [
+    { "law": ".oxlintrc.json L2", "plant": "(a) import { Cmd } from @demlik/tea in scripts/typecheck.ts", "result": "red" },
+    { "law": ".oxlintrc.json L2", "plant": "(b) import { Cmd } from @demlik/tea/effect in scripts/typecheck/Look.ts", "result": "red" },
+    {
+      "law": ".oxlintrc.json L2",
+      "plant": "(c) in Look.ts, one import of each earlier ban: @radix-ui/colors and a subpath, @decimalturn/toml-patch and a subpath, toml-eslint-parser and a subpath, react useState, _electron from playwright and @playwright/test, the exam plant, a settings/TomlParser path and @kampus/libfabrika/settings/TomlParser; all 12 fire",
+      "result": "red"
+    },
+    { "law": "scripts/tsconfig.json T1", "plant": "(b) drop the scripts glob from pnpm-workspace.yaml: pnpm -r no longer reaches @tea-fabrika/scripts (No projects matched)", "result": "red" },
+    { "law": ".github/ci/workflow-lint/caches.test.ts C4", "plant": "the scripts glob with no scripts/node_modules/.cache/tsc line in check.yaml: C0 names the tsc cache error", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Each plant ran once and was undone by copy or by edit; no product file is changed. T1's plant (a), a wrong return type in scripts/typecheck/Locks.ts failing the scripts package's tsc, and plant (b)'s full form (the same wrong type passing once the glob is gone) need scripts/tsconfig.json and wait for the build. Tests run at 6a3a9f6 plus this change: caches.test.ts, oxlint-plugins/duplicate-packages.test.ts, .github/ci/changes.test.ts, oxlint-plugins/workspace-reach.test.ts, oxlint-plugins/exact-versions.test.ts and next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts, all green. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed, all 18 parts, lint:reach and lint:dead included. No pnpm typecheck ran, as the brief asks.",
+  "step": "tests"
+}

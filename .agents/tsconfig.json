@@ -1,5 +1,5 @@
 {
-  // The quest scripts (0031, ticket 486): `scripts/typecheck.sh` checks them after the packages, so
+  // The quest scripts (0031, ticket 486): `scripts/typecheck.ts` checks them after the packages, so
   // a change to the Agent interface or to tea fails `pnpm typecheck` here first. `.agents/` is no
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.

@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t766-n6-macos-vectors-tests",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1506",
+  "head": "6182ff36a4c48be7882897100ecd07e90f040f8c",
+  "started": "2026-11-17T02:52:04-08:00",
+  "ended": "2026-11-17T02:55:28-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's tooling, ticket 766, bounded N6 coverage repair. The existing ProcessesPs vector laws now replay saved Darwin stdout and exit codes alongside every Linux case. Pgrep cases increase from five to eight, args from four to five, and readable elapsed-time cases from three to four. The new cases retain the captured pgrep names and pid 12334, args tc_n6_capture with two trailing spaces, and elapsed time 00:01. N1, its coverage checks, seed and 100 fast/300 full counts are unchanged. No product behavior, expected failure or existing control changes.",
+  "capture": {
+    "source": "private archive agents/lanes/1506-n6-macos-capture.json",
+    "system": "Darwin",
+    "at": "2026-11-17T10:49:01.830329+00:00",
+    "childExit": 0,
+    "signalSent": false,
+    "runtimeProof": false,
+    "limits": "The lead supplied one bounded Node child that exited naturally. Pgrep returned 0 with one pid, 1 with no match, and 2 for an invalid regular expression. Ps returned args and elapsed time. This tests saved output parsing through an in-memory ChildProcessSpawner; it does not prove real Mac adapter execution or signal handling. This tests run did not repeat the capture."
+  },
+  "plants": [
+    {
+      "law": "vector: pgrep's exit 0 lists its pids, exit 1 lists none, and 2 or more, or no pgrep, is refused",
+      "plant": "Accept pgrep exit 2 as listed. Failed with expected { _tag: 'listed', pids: [] } to deeply equal { _tag: 'refused' }.",
+      "result": "red"
+    },
+    {
+      "law": "vector: ps -o args= gives the command line trimmed, and an empty one where ps cannot read it",
+      "plant": "Remove only a final newline instead of trimming whitespace. The captured Mac case failed with expected 'tc_n6_capture  ' to deeply equal 'tc_n6_capture'.",
+      "result": "red"
+    },
+    {
+      "law": "vector: a running pid's start is now less ps's etime, none where ps cannot read it, and a gone pid asks ps nothing",
+      "plant": "Reject elapsed times whose minutes field is 00. The captured Mac case failed because the running result lacked startedAt 1799999999000.",
+      "result": "red"
+    }
+  ],
+  "note": "Started records the first saved timestamp after initial reading and worktree creation. Pinned Node 26.13.0 and native pnpm 12.16.1 were verified, including pnpm's child Node. An own offline frozen install with scripts disabled downloaded nothing. Baseline and restored narrow runs of scripts/typecheck.test.ts each passed all five tests under nice 19 and one worker. Each plant ran once, then ProcessesPs.ts was restored byte for byte. All command spawning and cleanup use the in-memory handle; liveness only probes self and an impossible pid with process.kill(pid, 0), which sends no signal. No nonzero signal or real child was started by these laws. Scoped formatter and oxlint passed on the changed test. The final run left no Vitest process for this worktree. No compiler, full lint, integration/caps law, CI, signing or push ran. The lead owns resulting-head proof and final review; this row makes no merge-readiness claim.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "driver_caused": false,
+  "billed": null
+}

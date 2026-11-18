@@ -415,6 +415,9 @@ importers:
       '@tea-fabrika/agents':
         specifier: workspace:*
         version: link:.agents
+      '@tea-fabrika/scripts':
+        specifier: workspace:*
+        version: link:scripts
       '@tea-fabrika/tracker':
         specifier: workspace:*
         version: link:programs/tracker
@@ -1780,6 +1783,8 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+
+  scripts: {}
 
 packages:
 

@@ -33,7 +33,7 @@ const PNPM_STORE = /pnpm[\s\S]*store|store[\s\S]*pnpm/i;
 
 const ON_MAIN = "github.ref=='refs/heads/main'";
 
-// scripts/typecheck.sh's buildinfo path, relative to each package.
+// scripts/typecheck.ts's buildinfo path, relative to each package.
 const BUILDINFO = /"--tsBuildInfoFile",\s*"([^"]+)"/;
 
 const TSC_HASH = "git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin";
@@ -151,7 +151,7 @@ export const lintCaches = (files: CacheFiles): string[] => {
 
   // C4. The typecheck job's buildinfo cache. Its key and restore prefix both hold the lockfile and
   // every tsconfig, so a change to the compiler or its settings never starts from old answers; its
-  // paths are where scripts/typecheck.sh writes, one per workspace package glob.
+  // paths are where scripts/typecheck.ts writes, one per workspace package glob.
   const typecheckSteps = steps(map(jobs["typecheck"]));
   const buildinfo = BUILDINFO.exec(files.typecheck)?.[1];
   const folder = buildinfo?.slice(0, buildinfo.lastIndexOf("/"));
@@ -163,7 +163,7 @@ export const lintCaches = (files: CacheFiles): string[] => {
   const at = (step: Record<string, unknown> | undefined) => (step === undefined ? -1 : typecheckSteps.indexOf(step));
   const install = typecheckSteps.find((s) => s["run"] === "pnpm install --frozen-lockfile");
   const run = typecheckSteps.find((s) => s["run"] === "pnpm typecheck");
-  require(folder !== undefined && folder !== "", "scripts/typecheck.sh passes --tsBuildInfoFile under a folder");
+  require(folder !== undefined && folder !== "", "scripts/typecheck.ts passes --tsBuildInfoFile under a folder");
   require(keyStep?.["run"] ===
     `echo "hash=$(${TSC_HASH})" >> "$GITHUB_OUTPUT"`, `check.yaml: the typecheck job's tsc-key step hashes ${TSC_HASH}`);
   require(restore !== undefined &&
@@ -196,5 +196,5 @@ export const cacheFiles = (read: (path: string) => string): CacheFiles => ({
   ),
   action: read(".github/actions/pnpm/action.yml"),
   workspace: read("pnpm-workspace.yaml"),
-  typecheck: read("scripts/typecheck.sh"),
+  typecheck: read("scripts/typecheck.ts"),
 });

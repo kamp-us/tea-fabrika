@@ -369,7 +369,7 @@ jobs:
       - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      # What each package's last check found (scripts/typecheck.sh's `--incremental`), from main's
+      # What each package's last check found (scripts/typecheck.ts's `--incremental`), from main's
       # latest run. The key holds the lockfile and every tsconfig, so a change to the compiler, the
       # Effect checks or their settings starts cold; inside one key, tsc checks again every file
       # whose text changed and every file that reaches one. On the laptop on 2026-11-14 the whole
@@ -391,6 +391,7 @@ jobs:
             oxlint-plugins/node_modules/.cache/tsc
             .github/ci/node_modules/.cache/tsc
             .agents/node_modules/.cache/tsc
+            scripts/node_modules/.cache/tsc
             next/packages/*/node_modules/.cache/tsc
             next/programs/*/node_modules/.cache/tsc
             next/apps/*/node_modules/.cache/tsc

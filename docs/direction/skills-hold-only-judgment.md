@@ -27,7 +27,7 @@ and the remaining repeated instructions. Slice 1a owns K19, K1 to K4 and K11.
 - K6 uses one `leakgrep.sh` for added push text and plan text. Private words stay outside the repo.
   The script reports the kind and line number without printing the matched text.
 - K9's test config caps workers and refuses broad local runs. Test setup chooses a home whose
-  host socket fits under 103 bytes. `typecheck.sh` uses one fixed OS lock across shells, keeps it
+  host socket fits under 103 bytes. `typecheck.ts` uses one fixed lock across shells, keeps it
   through patching and compiling, and releases it when its last holder exits, including a crash.
 - K20 uses existing Schemas or their own Effect Arbitraries for new properties, with tea's
   machine-law tools kept. Keep fast-check for unsupported data and edge cases. The syntax-based

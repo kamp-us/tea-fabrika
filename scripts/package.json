@@ -1,0 +1,13 @@
+{
+  "name": "@tea-fabrika/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Today's tooling scripts. A package only so `pnpm typecheck` reads the typecheck's port (ticket 766) in a program of its own; its imports resolve from the root's dependencies.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "volta": {
+    "extends": "../package.json"
+  }
+}
