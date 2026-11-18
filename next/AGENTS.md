@@ -38,6 +38,7 @@ libfabrika
 |---|---|
 | Effect all the way: nothing is built on Promises | `fabrika/no-promises` |
 | Effect's platform modules, not `node:` imports | `fabrika/no-node-imports` |
+| libfabrika writes output only through Effect's `Console`: no `console` call and no `process.stdout` or `process.stderr` in `next/packages/libfabrika/src` but its `*.test.ts` files; a real exception takes a disable line with its reason ([0592](../.decisions/0592-libfabrika-writes-output-only-through-effects-console.md)) | `eslint/no-console`, `eslint/no-restricted-properties` |
 | An edge is one line under a marked comment with its reason | `fabrika/edge-comment` |
 | No bare `of` and no `xOf` name; `Lease.of(...)` through its module is fine | `fabrika/no-of` |
 | No hand-written `_tag`: Effect Schema writes it | `fabrika/no-hand-tag` |
