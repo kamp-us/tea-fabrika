@@ -79,7 +79,7 @@ back.**
     Its tryouts stay open only as the small visual ones above. Its build-beside rule and the rule
     that `next/` imports nothing from today's version are kept.
   - [0063](0063-todays-app-lanes-share-the-slots.md): there are no more today's-app lanes, so no
-    slot goes to one. This reverses 0063's why whole.
+    slot goes to one.
   - [0003](0003-a-clean-repo-kept-clean-by-code.md): "today's app passes its tests" is no longer
     a goal CI keeps, since no CI job runs them.
   - [0175](0175-every-run-follows-its-paths.md): today's own checks (its tests, e2e, the promises

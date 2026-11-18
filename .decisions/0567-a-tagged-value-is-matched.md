@@ -227,9 +227,8 @@ already narrowed there: `Model.match` wants a key for every case of the Model, `
 ## Consequences
 
 - **0046's rule of 2026-11-10 is replaced.** An `update` handler no longer picks the next state
-  with a plain conditional on `_tag`. 0046's text says the new rule where it said the old one. The
-  line in [`next/AGENTS.md`](../next/AGENTS.md) that repeated it was changed in the same pull
-  request.
+  with a plain conditional on `_tag`; it matches, as this file says. The line in
+  [`next/AGENTS.md`](../next/AGENTS.md) that repeated it was changed in the same pull request.
 - **The compiler now checks more.** With `Union.match`, a new state does not compile until every
   matcher has a key for it. 0046 had left that to the machine's property tests. `isAnyOf` and
   `matchOrElse` stay silent on a new state, as the plain check did.
@@ -252,8 +251,8 @@ already narrowed there: `Model.match` wants a key for every case of the Model, `
 
 ## Records
 
-- [0046](0046-one-tea-machine-per-file.md): its text edited where it said how an `update` handler
-  picks the next state.
+- [0046](0046-one-tea-machine-per-file.md): its rule of 2026-11-10 on how an `update` handler picks
+  the next state is replaced by this file.
 - [`next/AGENTS.md`](../next/AGENTS.md): the line on how an `update` handler picks the next state.
 - [`.patterns/effect-tagged-value-is-matched.md`](../.patterns/effect-tagged-value-is-matched.md):
   new.

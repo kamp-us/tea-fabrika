@@ -88,8 +88,8 @@ has its own native workflow group.**
   supported new proof start, tooling checks the exact branch HEAD for all shared job locks. Missing
   locks refuse the start. This adds no trusted-main input, dual checkout or artifact schema, and it
   weakens no proof or resource check.
-- Branch proof never advances main's hour limiter or writes main's incident issue. Main runs
-  remain serialized in their own workflow group with the existing one-hour gap, push, hourly
+- Branch proof never advances main's gap limiter or writes main's incident issue. Main runs
+  remain serialized in their own workflow group with the existing gap (`env.GAP_MINUTES`), push,
   catch-up and manual-start rules. Other refs use their own native workflow groups.
 - Historical proof records retain their original meaning and existing acceptance rules. Do not
   relabel them or accept stale proof unconditionally. Direct dispatch of historical workflow code
@@ -98,7 +98,8 @@ has its own native workflow group.**
 **Binding constraints**
 
 - At most ten jobs run across participating versions of `scheduled.yaml`: nine test jobs (main's
-  five and a proof's four, per 0598) and one control job. This does not cap `check`, `host` or other GitHub workflows.
+  `env.MAIN_SLOTS` and a proof's `env.PROOF_SLOTS`, per 0598) and one control job. This does not cap `check`, `host` or
+  other GitHub workflows.
 - Shared job-group names have no source, ref, run or attempt suffix. Such a suffix would remove the
   shared budget. No job holds one group while acquiring another.
 - Do not cancel runs to clear the queue or replace an older entry. Existing fail-fast behavior

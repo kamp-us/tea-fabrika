@@ -1,12 +1,12 @@
 ---
 id: 0571
-title: Runbooks live in a top-level .runbooks/ folder, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
+title: Runbooks live in .runbooks/ today and move to .kalfa/runbooks/ with the other record folders once 0585's move is built, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
 status: accepted
 date: 2026-11-15
 tags: [runbook, operations, checklist, docs, sev, skills, wipe, dev-home]
 ---
 
-# 0571: Runbooks live in a top-level .runbooks/ folder, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
+# 0571: Runbooks live in .runbooks/ today and move to .kalfa/runbooks/ with the other record folders once 0585's move is built, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
 
 **What this decides:** an operation we run by hand, such as a sev or wiping the dev and test homes after a saved shape changes, gets a runbook (a checklist for when that thing happens) in `.runbooks/`, and `docs/` stays for documentation of what fabrika is.
 

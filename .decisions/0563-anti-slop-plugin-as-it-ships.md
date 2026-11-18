@@ -83,8 +83,7 @@ authors already wrote (owner, 2026-11-15).**
   one exact version, which today means one full commit.
 - **How it comes in: as its README says (owner, 2026-11-15).** The fork's `src/` folder is
   brought into this repo whole and unchanged, at one commit, with that commit and the license
-  recorded beside it: the folder is `vendor/anti-slop/`, and `vendor/anti-slop/pin.json` names the
-  commit. It is not a git dependency: that would make every install and CI run depend on one fork
+  recorded beside it. It is not a git dependency: that would make every install and CI run depend on one fork
   staying online, and its `prepare` script could run on install. An update brings in a newer commit
   whole. This is not "our own copy of a rule": that line is about rewriting or hand-copying single
   rules.
@@ -204,8 +203,8 @@ authors already wrote (owner, 2026-11-15).**
   itself was run. Their rules follow type aliases and scopes the script does not. The first run of
   the installed plugin gives the real numbers.
 - **Not decided here:**
-  - What holds that the brought-in folder still matches the commit `vendor/anti-slop/pin.json`
-    names. The plan of the install says.
+  - Which commit is brought in, where the folder lives, and what holds that it still matches
+    that commit. The plan of the install says. Today it put the folder at `vendor/anti-slop/`.
   - Where the plugin's config lives in `.oxlintrc.json`.
   - The order the rules are turned on.
   - Where we already hold the same thing with a built-in rule (the two that 0554 and 0555 name,

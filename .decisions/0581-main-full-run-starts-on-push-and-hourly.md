@@ -53,23 +53,25 @@ to a stand-in and to the real layer.
 
 ## Decision
 
-**A push to main starts a full run when the last one started over an hour ago. An hourly cron starts
-one only when main's head has had none. A law that can run on a stand-in runs on every pull request.**
+**A push to main starts a full run when the last one started longer ago than the gap
+(`env.GAP_MINUTES` in `.github/workflows/scheduled.yaml`). A catch-up cron (that file's `on.schedule`)
+starts one only when main's head has had none. A law that can run on a stand-in runs on every pull
+request.**
 
 ### A. When main's full run starts
 
 - **On every push to main,** a small gate job asks the GitHub API when the last full run on main
-  started. Over an hour ago: it starts the full run. Otherwise it skips.
-- **Hourly catch-up cron** replaces the 3-hour cron and starts at one fixed minute past the hour,
-  never on the hour. Its cron is `on.schedule` in `.github/workflows/scheduled.yaml`. It starts a
+  started. Over the gap (`env.GAP_MINUTES`): it starts the full run. Otherwise it skips.
+- **Catch-up cron** replaces the 3-hour cron and starts at one fixed minute, never on the hour. Its
+  cron is `on.schedule` in `.github/workflows/scheduled.yaml`. It starts a
   full run only if main's head has had none. Otherwise it ends in seconds.
-- **Bounds:** at most one full run an hour on main, and one run of main's at a time. Main's push,
+- **Bounds:** at most one full run per gap on main, and one run of main's at a time. Main's push,
   catch-up and hand starts share one workflow queue, `concurrency` in `scheduled.yaml` with
   `queue: max`, and each branch has its own queue ([0595](0595-scheduled-runs-share-slots.md)).
 - **Hand-started branch runs** (`workflow_dispatch` on a branch) are proof runs: they run the tests
   their change reaches, not the full set
   ([0590](0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)).
-- **The one-hour gap is a setting** ([0069](0069-choices-are-settings.md)). It is `env.GAP_MINUTES`
+- **The gap is a setting** ([0069](0069-choices-are-settings.md)). It is `env.GAP_MINUTES`
   in `.github/workflows/scheduled.yaml`, one named value the gate job reads. Changing it is an edit
   of that file, not a decision.
 
@@ -84,13 +86,13 @@ one only when main's head has had none. A law that can run on a stand-in runs on
 
 **Binding constraints:**
 
-- No full run on main starts within an hour of the last one, except by hand.
+- No full run on main starts within the gap (`env.GAP_MINUTES`) of the last one, except by hand.
 - A pull request or merge queue run starts no law that drives a real resource.
 
 ## Consequences
 
-- A break on main shows within about an hour of a push, not 3, and a quiet main costs one cheap cron
-  run an hour.
+- A break on main shows within about the gap (`env.GAP_MINUTES`) of a push, not 3 hours, and a quiet
+  main costs one cheap cron run per `on.schedule` period.
 - The sev skill's "3-hour run" is now the full run, started by a push or the hourly cron. Its text
   and the other files that say "3-hour" point here.
 - Amends [0534](0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md) in part (its

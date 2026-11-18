@@ -45,7 +45,7 @@ The owner ruled on 2026-11-15, after asking for it several times, that a branch'
    [0580](0580-law-options-carry-plant-and-label.md)
    ([0591](0591-exam-shape-checks-become-lint-rules-and-text-reads-are-declared.md)). The
    changed-set picker treats it like an import, so the import graph cannot miss it. A read is never
-   added to `forceRerunTriggers`. While a law declares no reads, the changed-set run adds the
+   added to `forceRerunTriggers`. Until a law's `reads:` lands, the changed-set run adds the
    reader tests whenever `next/` changes.
 5. **`land.ts arm` accepts a green proof run of the changed set** at the pull request's head. It
    asks for no `.integration.` law, through either of its routes.
@@ -61,7 +61,9 @@ This amends [0534](0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md
 ## Consequences
 
 - A small change waits for its own tests, not every leg. The one-at-a-time line moves faster.
-- A miss in the import graph shows on main's next full run, and its file joins
-  `forceRerunTriggers`.
+- A miss in the import graph shows on main's next full run, and the fix adds the
+  missed read as a `reads:` entry on the law that reads it
+  ([0591](0591-exam-shape-checks-become-lint-rules-and-text-reads-are-declared.md)), never as a
+  `forceRerunTriggers` entry.
 - The build is lead tooling, fast-tracked: the scheduled workflow's dispatch path, the leg split,
   and `land.ts arm`'s check.

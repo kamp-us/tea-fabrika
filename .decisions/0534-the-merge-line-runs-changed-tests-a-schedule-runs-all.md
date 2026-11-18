@@ -69,9 +69,10 @@ scheduled run opens a GitHub issue, and the merge queue builds two groups at onc
   within the gap, and an hourly catch-up starts it on a head that has had none, never a 3-hour
   clock ([0581](0581-main-full-run-starts-on-push-and-hourly.md)). Its times are the file's own:
   `on.push.branches`, the `on.schedule` cron and `env.GAP_MINUTES`, and `gate.mjs` decides. One
-  run per ref at a time, with `queue: max`. Its test jobs sit in job groups that cap them at ten
-  jobs, split between main's full run and branch proofs (`env.MAIN_SLOTS` and `env.PROOF_SLOTS`);
-  the merge line holds none of those groups, so pull requests keep runners
+  run per ref at a time, with `queue: max`. Its jobs sit in job groups that cap them at ten
+  jobs: nine test jobs, in the `scheduled-main-` groups for main's full run and the
+  `scheduled-proof-` groups for a branch's proof, plus one control job in `scheduled-control`, as
+  `scheduled.yaml` holds them; the merge line holds none of those groups, so pull requests keep runners
   ([0595](0595-scheduled-runs-share-slots.md),
   [0598](0598-merge-line-leaves-scheduled-groups.md)).
 - **A red scheduled run opens one GitHub issue** on this repository, labeled `ci-scheduled`, naming

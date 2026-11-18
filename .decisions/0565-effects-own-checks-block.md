@@ -1,12 +1,12 @@
 ---
 id: 0565
-title: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time
+title: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time, with three exceptions: apiStabilityLeak may stay off while hits remain, strictEffectProvide covers source but not test files, and four bare-Node CI scripts are excluded by path
 status: accepted
 date: 2026-11-15
 tags: [effect, tsgo, typecheck, checks, array, string, record, schema, sweep, next, tooling]
 ---
 
-# 0565: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time
+# 0565: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time, with three exceptions: apiStabilityLeak may stay off while hits remain, strictEffectProvide covers source but not test files, and four bare-Node CI scripts are excluded by path
 
 ```mermaid
 flowchart LR
@@ -67,7 +67,9 @@ ruled.
 
 **Every check in the Effect checker, all 135, is on as an error in `next/` and our tooling, at
 zero hits. The Effect team wrote each one for a reason, and the size of the change does not
-matter (owner, 2026-11-15).**
+matter (owner, 2026-11-15). Three exceptions: `apiStabilityLeak` may stay off while hits remain
+([0574](0574-no-stability-tag-and-unstable-api-is-an-error.md)), `strictEffectProvide` covers
+source but not test files, and the four bare-Node CI scripts are excluded by path.**
 
 - **Scope:** `next/`, tests too, and our tooling: the lead and step scripts under `.agents/`,
   `oxlint-plugins/` and `.github/ci/`. Today's app (`packages/`, `programs/`, `apps/`) is not

@@ -46,10 +46,10 @@ run on the schedule.**
   merge line. The same laws run against real git on the schedule, so the in-memory layer is held to
   real git's behavior (a contract test).
 - **Mutation moves to the same schedule.** The mutation workflow (`mutation.yaml`) is started by
-  main's scheduled clock, the same one as main's full run (`.github/workflows/scheduled.yaml`'s
-  `on.push` and `on.schedule`), as well as by hand, over the range since its last run, with the
-  same fixed seed and sample. Its survivors open or update one GitHub issue, the same way a red scheduled run
-  does in 0534. An agent judges the survivors from that issue later.
+  the schedule's cron (`.github/workflows/scheduled.yaml`'s `on.schedule`) and by hand, never by a
+  push ([0067](0067-hourly-mutation-runs-in-ci.md)), over the range since its last run, with the
+  same fixed seed and sample. Its survivors open or update one GitHub issue, the same way a red
+  scheduled run does in 0534. An agent judges the survivors from that issue later.
 - **Any other slow check follows the same rule:** a fast form on the merge line where one exists,
   the full form on the schedule.
 

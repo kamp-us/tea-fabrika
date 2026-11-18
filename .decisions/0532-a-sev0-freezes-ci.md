@@ -19,7 +19,7 @@ flowchart LR
   freeze --> next["allow list: only the pull request being landed now, fixes first"]
   next --> green{"its required checks green at its head?"}
   green -->|"yes"| admin["admin merge, no catch-up with main"]
-  admin --> more{"another ready pull request?"}
+  admin --> more{"another fix still to land?"}
   more -->|"yes"| next
   more -->|"no"| close["close: the script stops canceling; nothing is rerun"]
   close --> catch["lead merges main into each canceled branch, then starts the full run by hand"]
@@ -58,11 +58,12 @@ main first. That changed this record's "fixes only" and "merge main into it firs
 ## Decision
 
 **A sev0 is the owner's call: the merge queue is emptied, every CI run is canceled, and every
-ready pull request lands one at a time by admin merge, the fixes first, until every one has
-merged.**
+ready pull request lands one at a time by admin merge, the fixes first, until every fix has
+merged or the owner calls it off.**
 
 - **Only the owner calls a sev0.** An agent never starts one, on its own word or another agent's. It
-  ends when every ready pull request has merged, or when the owner calls it off.
+  ends when every fix has merged, or when the owner calls it off
+  ([0542](0542-two-sev-levels-one-skill.md)).
 - **The merge queue is emptied.** The owner takes the entries out; an agent does not, and the lead's
   tooling refuses a dequeue.
 - **Every unfinished run is canceled,** pull request runs, push runs on main and dispatched runs
