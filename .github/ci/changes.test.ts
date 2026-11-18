@@ -2104,7 +2104,12 @@ const attributesDiff = (...lines: string[]) =>
 const attributesGit =
   (diff: string, base: string | null, head: string | null): Runner =>
   (args) => {
-    const rev = args[0] === "ls-tree" ? args[2] : args[0] === "show" ? args[1]?.split(":")[0] : undefined;
+    const rev = Match.value(args[0]).pipe(
+      Match.when("ls-tree", () => args[2]),
+      Match.when("show", () => args[1]?.split(":")[0]),
+      Match.orElse(() => undefined),
+    );
+
     const text = rev === sha.head ? head : base;
 
     if (args[0] === "ls-tree") {
