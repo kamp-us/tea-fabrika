@@ -1,7 +1,7 @@
 {
   "date": "2026-11-18",
   "run": "2026-11-18-leakgrep-shallow-fix-build1",
-  "ticket": "1162",
+  "ticket": null,
   "pr": "kamp-us/tea-fabrika#1621",
   "started": "2026-11-18T05:05:00-08:00",
   "ended": "2026-11-18T05:40:00-08:00",
@@ -12,7 +12,7 @@
   "model": "sonnet",
   "effort": "medium",
   "outcome": "pass",
-  "why": "In today's lead tooling, fixed review round 1 of the leakgrep shallow-clone fix. leakgrep.sh now deepens while the range lists a grafted commit or a parentless root, not only until the first merge base, and its refusal names no rev. The per-remote fetch was removed since no law needed it. Laws are one property over generated histories (branch, main and merge steps, clone depth, where the word goes) against the full repo's base..head, plus pinned cases for the finding, an old fork that merged main in, 150 own commits that merged main in, and a history too long to fit.",
+  "why": "For ticket 1162, in today's lead tooling, fixed review round 1 of the leakgrep shallow-clone fix. leakgrep.sh now deepens while the range lists a grafted commit or a parentless root, not only until the first merge base, and its refusal names no rev. The per-remote fetch was removed since no law needed it. Laws are one property over generated histories (branch, main and merge steps, clone depth, where the word goes) against the full repo's base..head, plus pinned cases for the finding, an old fork that merged main in, 150 own commits that merged main in, and a history too long to fit.",
   "note": "Written by the same builder after the review. Times are approximate; usage and cost are not recorded. Local runs used volta run --node 26.13.0 with nice -n 19 and one worker.",
   "driver_caused": false,
   "tokens": null,
