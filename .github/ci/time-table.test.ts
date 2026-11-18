@@ -419,35 +419,37 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
   );
 });
 
-it("TT8: queue wait uses a started job's created and started times, and leaves pending placeholders out", async () => {
-  const actualJob = fc
-    .record({
-      status: fc.constantFrom("in_progress", "completed"),
-      created: fc.integer({ min: 1_790_000_000, max: 1_800_000_000 }),
-      wait: fc.integer({ min: 0, max: 3_600 }),
-    })
-    .map(({ status, created, wait }) => ({
+effectIt.effect.prop(
+  "TT8: queue wait uses a started job's created and started times, and leaves pending placeholders out",
+  {
+    status: Schema.Literals(["in_progress", "completed"]),
+    created: Schema.Int.check(Schema.isBetween({ minimum: 1_790_000_000, maximum: 1_800_000_000 })),
+    wait: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3_600 })),
+  },
+  ({ status, created, wait }) => {
+    const answer = {
       ...job,
       status,
       created_at: iso(created),
       started_at: iso(created + wait),
-    }));
+    };
 
-  await fc.assert(
-    fc.asyncProperty(actualJob, async (answer) => {
-      const timings = await timingsOf(
+    const expected = {
+      created: answer.created_at,
+      started: answer.started_at,
+      seconds: (Date.parse(answer.started_at) - Date.parse(answer.created_at)) / 1000,
+    };
+
+    return Effect.gen(function* () {
+      const timings = yield* collect(
         env,
+        root,
         io(
           () => answer,
           () => "{}",
         ),
+        0,
       );
-
-      const expected = {
-        created: answer.created_at,
-        started: answer.started_at,
-        seconds: (Date.parse(answer.started_at) - Date.parse(answer.created_at)) / 1000,
-      };
 
       const artifact = JSON.stringify(timings);
 
@@ -455,10 +457,12 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
       expect(timings.queueWait).toEqual(expected);
       expect(artifact).toContain(`"queueWait":${JSON.stringify(expected)}`);
       expect(markdown(timings)).toContain(`### Queue wait\n\n${expected.seconds.toFixed(3)} s`);
-    }),
-    options,
-  );
+    });
+  },
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } },
+);
 
+it("TT8: ignores pending placeholders and rejects jobs without valid queue timing", async () => {
   const created = "2026-11-14T09:59:56Z";
   const started = "2026-11-14T10:00:00Z";
   const realRunner = { runner_id: 1_000_332_569 };
