@@ -201,7 +201,7 @@ const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): 
             : drawn
     : drawn;
 
-  return Schema.decodeUnknownSync(p.msg)(
+  return Schema.decodeSync(p.msg)(
     cmd._tag !== "send" && pick % 5 === 0
       ? {
           ...keyed(`${cmd._tag}_err`),
@@ -862,7 +862,7 @@ describe("the merger, next/", () => {
 // This walk answers only the current request. Every update may discover another main.
 const roundWalk = (p: Program, w: World) => {
   const ok = (cmd: Command, value: Schema.Json): Msg =>
-    Schema.decodeUnknownSync(p.msg)({ ...keyed(`${cmd._tag}_ok`), cmd, value, at: w.at });
+    Schema.decodeSync(p.msg)({ ...keyed(`${cmd._tag}_ok`), cmd, value, at: w.at });
 
   return arbGuidedSequence(
     p.machine,

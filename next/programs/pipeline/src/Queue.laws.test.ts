@@ -154,7 +154,7 @@ const reasons = [...StartRefusal.literals, "bad_cmd"] as const;
 const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
   const reason = reasons[cell.pick % reasons.length]!;
 
-  return Schema.decodeUnknownSync(p.msg)({
+  return Schema.decodeSync(p.msg)({
     ...Tag.cases.start_child_err.make({}),
     cmd: Tag.cases.start_child.make({}),
     reason,

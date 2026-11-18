@@ -63,6 +63,9 @@ const declaration = (name: string, ports: ReadonlyArray<Port>, keys?: ReadonlyAr
   ]);
   const machine = Machine.make({
     model: Schema.Null,
+    // Ports drawn at run time: the Msg tags are data, so tea's literal-tag rule (demlik #936) cannot
+    // hold, and `update` is built from the same keys, so no cell name can be misspelled.
+    // @ts-expect-error every msg tag must be a literal, and a drawn port's key is not one
     msg,
     cmds: [],
     init: () => [null, []],
@@ -625,6 +628,9 @@ const makeForm = (form: Declaration & { readonly odd?: OddPart }) => {
   const keys = [...writes, ...Object.keys(asked)];
   const machine = Machine.make({
     model: Schema.Null,
+    // Ports drawn at run time: the Msg tags are data, so tea's literal-tag rule (demlik #936) cannot
+    // hold, and `update` is built from the same keys, so no cell name can be misspelled.
+    // @ts-expect-error every msg tag must be a literal, and a drawn port's key is not one
     msg,
     cmds: [],
     init: () => [null, []],
