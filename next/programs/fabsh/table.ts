@@ -63,6 +63,16 @@ interface Batch {
   readonly markers: boolean[];
 }
 
+const slotForRow = (slots: number[], row: number): number => {
+  const slot = slots.at(row);
+
+  if (slot === undefined) {
+    throw new Error(`table row ${row} has no generated slot`);
+  }
+
+  return slot;
+};
+
 function* batches(answers: Int16Array, widths: boolean): Generator<Batch> {
   let batch: Batch = { texts: [], slots: [], markers: [] };
 
@@ -193,11 +203,7 @@ const generate = Effect.fn("fabsh.table")(function* () {
                 const cells = terminal.getViewport();
 
                 for (let row = 0; row < batch.texts.length; row += 1) {
-                  const slot = batch.slots.at(row);
-
-                  if (slot === undefined) {
-                    throw new Error(`table row ${row} has no generated slot`);
-                  }
+                  const slot = slotForRow(batch.slots, row);
 
                   if (batch.markers[row]) {
                     for (let col = COLS - 1; col >= 0; col -= 1) {
