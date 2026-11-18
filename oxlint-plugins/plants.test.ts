@@ -1129,12 +1129,16 @@ describe("M12 and M13 (decision 0592): libfabrika writes output through Effect's
       lines: [['export const parsed = JSON.parse("{}");', true]],
     };
 
-    const kept = [
+    const kept: ReadonlyArray<{
+      readonly plant: Plant;
+      readonly name: string;
+      readonly folders: ReadonlyArray<string>;
+    }> = [
       { plant: REFLECT, name: "reflect", folders: libfabrikaFolders },
       { plant: TAGGED_ERROR, name: "tagged", folders: libfabrikaFolders },
       { plant: parse, name: "parse", folders: libfabrikaFolders },
       { plant: retries, name: "retries", folders: [`${LIBFABRIKA_SRC}/client`] },
-    ] as const;
+    ];
 
     const planted = Arr.flatMap(libfabrikaFolders, (folder) =>
       Arr.flatMap(libfabrikaKinds, (kind) => [
