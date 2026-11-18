@@ -80,8 +80,8 @@ plant into product code; 11 edit the test file's own fake.
 
 ## Consequences
 
-- 0557, 0579 and 0585 are amended in part: the package name and 0585's count of six. The rest of
-  each holds. 0585's build order changes only in that `/stryker` starts now, beside `@kalfa/config`.
+- 0557, 0579 and 0585 are amended in part: the package name and 0585's count of six.
+  0585's build order changes only in that `/stryker` starts now, beside `@kalfa/config`.
 - A breaking change in one tool bumps the whole package's major version. That matters only once it
   is published, and it stays private until the owner says publish (0556). If release coupling
   hurts, a subpath can split out with almost no import changes.

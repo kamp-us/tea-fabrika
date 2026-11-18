@@ -1,7 +1,8 @@
 ---
 id: 0588
 title: No script or program edits files for a sweep, except the Effect language server's own quick fix, applied one hit at a time exactly as the server sends it
-status: superseded by [0589](0589-agents-edit-files-with-any-tool.md)
+status: superseded
+successor: "0589"
 date: 2026-11-15
 tags: [sweep, edits, scripts, quick-fix, language-server, effect, review]
 ---
@@ -53,19 +54,3 @@ branch `fabrikalfa/twin-tools`.
 - A reviewer that finds a scripted edit sends the slice back to have it redone.
 - Reading tools stay free: running the checker to list hits (`effect-tsgo diagnostics`) edits
   nothing and is fine.
-
-## Amendments
-
-### 2026-11-15: a tested lint autofix through `pnpm format` is the third allowed route
-
-The owner ruled the same day that a lint rule's safe autofix, applied by `pnpm format`, is an
-allowed tool, like oxlint's built-in fixes. That holds as long as the rule has its laws and plants
-and review reads the diff. Effect slices E1 (PR 1426) and E2 (PR 1430) keep their work.
-
-There are now three allowed routes to edit a file:
-
-1. an editor-style edit;
-2. the Effect language server's own quick fix, one hit at a time, exactly as the server sends it;
-3. a tested lint autofix, through `pnpm format`.
-
-Anything else that edits files stays banned.

@@ -1,7 +1,8 @@
 ---
 id: 0129
 title: AGENTS.md becomes a short map, each rule leaving it by one of three moves, in one pull request with a table of every line removed
-status: superseded by [0610](0610-agents-md-follows-memory-guide.md)
+status: superseded
+successor: "0610"
 date: 2026-11-11
 tags: [agents-md, agents, docs, rules, lint, decisions, discovery, map]
 ---
