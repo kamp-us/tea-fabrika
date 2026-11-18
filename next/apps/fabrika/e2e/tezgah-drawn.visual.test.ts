@@ -38,6 +38,16 @@ const LIMIT = 120_000;
  *  own box. */
 type Drawing = { readonly regions: number; readonly strips: number };
 
+/** What one list of the read is held to: the parts the page held, in its order, and what the read gave. */
+type Listed = {
+  readonly label: string;
+  readonly all: ReadonlyArray<string>;
+  readonly back: ReadonlyArray<{
+    readonly name: string;
+    readonly box: { readonly width: number; readonly height: number } | null;
+  }>;
+};
+
 const html = ({ regions, strips }: Drawing) => {
   const tile = (n: number) => ({ program: "fabrika/checklist", n });
 
@@ -166,9 +176,9 @@ describe("T1: the tezgah helpers' reads never wait", () => {
                           seen,
                         );
 
-                        const timed = yield* (read === "drawn" ? drawn(spied) : foldDrawn(spied)).pipe(
-                          Effect.timeoutOption(`${WITHIN} millis`),
-                        );
+                        const timed = yield* (
+                          read === "drawn" ? Effect.map(drawn(spied), (d) => ({ ...d, strips: [] })) : foldDrawn(spied)
+                        ).pipe(Effect.timeoutOption(`${WITHIN} millis`));
 
                         expect(
                           Option.isSome(timed),
@@ -176,13 +186,14 @@ describe("T1: the tezgah helpers' reads never wait", () => {
                         ).toBe(true);
 
                         const got = Option.getOrThrow(timed);
-                        const strips = "strips" in got ? got.strips : [];
                         const kept = (all: ReadonlyArray<string>) => Arr.filter(all, (n) => !gone.has(n));
 
-                        for (const [label, all, back] of [
-                          ["regions", held.regions, got.regions],
-                          ["strips", read === "foldDrawn" ? held.strips : [], strips],
-                        ] as const) {
+                        const lists: ReadonlyArray<Listed> = [
+                          { label: "regions", all: held.regions, back: got.regions },
+                          { label: "strips", all: read === "foldDrawn" ? held.strips : [], back: got.strips },
+                        ];
+
+                        for (const { label, all, back } of lists) {
                           const said = Arr.map(back, (r) => r.name);
                           const at = Arr.map(said, (n) => all.indexOf(n));
                           expect(
