@@ -601,6 +601,10 @@ export const vouches = (found, list, workflow) =>
   found.conclusion === "success" &&
   found.path === `.github/workflows/${workflow}` &&
   found.head_repository?.id === found.repository.id &&
+  list.some((job) => job.name === "select" && ["success", "skipped"].includes(job.conclusion ?? "")) &&
+  list.some(
+    (job) => /^related(?: \([1-9]\))?$/.test(job.name) && ["success", "skipped"].includes(job.conclusion ?? ""),
+  ) &&
   list.some((job) => job.name === "ci-required" && job.conclusion === "success");
 
 /**

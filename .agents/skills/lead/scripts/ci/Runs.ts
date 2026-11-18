@@ -19,6 +19,15 @@ export const Run = Schema.Struct({
   head: Schema.String,
   status: Schema.String,
   conclusion: Schema.NullOr(Schema.String),
+  /** Present when GitHub identifies the event, workflow and both repositories. */
+  source: Schema.optional(
+    Schema.Struct({
+      event: Schema.String,
+      path: Schema.String,
+      repository: Schema.Finite,
+      headRepository: Schema.Finite,
+    }),
+  ),
 });
 
 export type Run = typeof Run.Type;
