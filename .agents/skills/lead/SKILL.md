@@ -16,6 +16,18 @@ When staffing work, follow [0597](../../../.decisions/0597-eight-workers-before-
 actual productive worker counts, fresh verification and immediate replacements. The brief names
 the bounded task and the ticket it serves.
 
+Before you start lanes, split them by files, so two agents never edit the same files at once
+([0604](../../../.decisions/0604-tickets-sharing-files-share-a-lane.md); AGENTS.md's "Keep one file
+owner"):
+
+- List each ticket's likely paths, from its plan's files table, or from a quick `rg` when there is
+  no plan yet. Tickets whose paths overlap become one lane, given to one agent.
+- Each hot shared file has one owning lane at a time: `.oxlintrc.json`, `pnpm-lock.yaml`,
+  `boundary-rules.json`, `vitest.config.ts` and `layer-rules.json` were the ones on 2026-11-18.
+  Another lane that needs one waits, or hands its change to the owning lane.
+- A sweep (format, lint, Effect, mock) runs when few pull requests are open, and lands before new
+  lanes start on the files it touches.
+
 ```text
 plan (read-only) -> lead approves -> box -> tests -> build -> review
   -> fetch, read the diff, e2e -> push as the bot -> pull request -> merge rule -> merge queue
