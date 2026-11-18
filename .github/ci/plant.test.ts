@@ -1,11 +1,11 @@
 // Today's tooling. These laws supply in-memory I/O only; the real adapters remain unexercised.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, RegExp as Regex, Result, Schema } from "effect";
+import { Effect, FileSystem, Match, Option, Path, RegExp as Regex, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { describe } from "vitest";
 import { argv, cases, decodeRequest, derive, prepare, Request } from "./plant-cases.ts";
-import { failure } from "./plant-errors.ts";
+import { failure, Issue, issue } from "./plant-errors.ts";
 import { Model, Observation } from "./plant-machine.ts";
 import PlantReporter from "./plant-reporter.ts";
 import {
@@ -14,6 +14,7 @@ import {
   exercise,
   ExerciseError,
   observation,
+  report as receipt,
   unchanged,
   Workspace,
   type Snapshot,
@@ -53,22 +54,7 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
   const kept = { keep: "fixture child", foreground: true, paid: true };
   const homeRoot = new TextEncoder().encode(`${tmp}/fh-XXXXXX/host/sock`).length < 103 ? tmp : "/tmp";
 
-  const selected = cases[key];
-
-  if ("failures" in selected) {
-    return Result.match(
-      Result.try(() =>
-        expect(undefined, selected.failures[0].diagnostic.slice("AssertionError: ".length)).toBe(content),
-      ),
-      {
-        onSuccess: () => Matcher.make({ name: "Error", message: "" }),
-        onFailure: (error) => Schema.decodeUnknownSync(Matcher)(error),
-      },
-    );
-  }
-
   const matchers: Partial<Record<Request["case"], () => unknown>> = {
-    "checklist-pid": () => expect(undefined, "a notice names its process").toBe("process-id"),
     "watcher-r1": () =>
       expect({ _tag: "same", program: content, hash: content }).toMatchObject(
         syntax ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" },
@@ -99,32 +85,22 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
   });
 };
 
-const position = (key: Request["case"], line = 17, column = 23) => {
-  const selected = cases[key];
-
-  if ("failures" in selected) {
-    const { line, column } = selected.failures[0];
-
-    return { line, column };
-  }
-
-  return key === "host-requested-pin"
-    ? { line: 195, column: 62 }
-    : key === "host-pnpm-path"
-      ? { line: 194, column: 70 }
-      : key === "host-env-order"
-        ? { line: 197, column: 24 }
-        : { line, column };
-};
+const position = (key: Request["case"], line = 17, column = 23) =>
+  Match.value(key).pipe(
+    Match.when("host-requested-pin", () => ({ line: 195, column: 62 })),
+    Match.when("host-pnpm-path", () => ({ line: 194, column: 70 })),
+    Match.when("host-env-order", () => ({ line: 197, column: 24 })),
+    Match.orElse(() => ({ line, column })),
+  );
 
 const message = (key: Request["case"], content = "", syntax = false) => {
   const error = matcher(key, content, syntax);
   const stack = error.stack || error.message;
-  const frame = position(key, 194, 12);
+  const fixture = cases[key].project === "tooling" ? position(key, 194, 12) : null;
 
-  return cases[key].project === "tooling" || "failures" in cases[key]
-    ? `${stack}\n    at fixture (${root}/${cases[key].test}:${frame.line}:${frame.column})`
-    : stack;
+  return fixture === null
+    ? stack
+    : `${stack}\n    at fixture (${root}/${cases[key].test}:${fixture.line}:${fixture.column})`;
 };
 
 const report = (key: Request["case"], status: string, messages: string[] = []) => ({
@@ -168,23 +144,13 @@ const report = (key: Request["case"], status: string, messages: string[] = []) =
 
 const images = <Key extends Request["case"]>(key: Key, content: string) => {
   const selected = cases[key];
-  const edits = "preparation" in selected ? selected.preparation : [];
-  let source = edits.map((edit) => edit.before).join("\n");
-
-  if (!source.includes(selected.before) && !edits.some((edit) => edit.after.includes(selected.before))) {
-    source += `\n${selected.before}`;
-  }
-
-  const original = bytes(`${JSON.stringify(content)}\n${source}\n`);
-
-  const prepared = bytes(
-    edits.reduce((text, edit) => text.replace(edit.before, edit.after), new TextDecoder().decode(original)),
-  );
+  const original = bytes(`${JSON.stringify(content)}\n\n${selected.before}\n`);
+  const prepared = original;
 
   const edited = bytes(new TextDecoder().decode(prepared).replace(selected.before, selected.after));
-  const head = "source" in selected ? selected.source : sha;
+  const head = sha;
 
-  return { selected, original, prepared, edited, head };
+  return { original, prepared, edited, head };
 };
 
 // Plant: accept unknown fields and cases
@@ -194,18 +160,6 @@ it.effect.prop(
   ({ request, junk }) =>
     Effect.gen(function* () {
       expect(yield* decodeRequest(request)).toEqual(request);
-
-      for (const key of Request.fields.case.literals) {
-        const selected = cases[key];
-
-        if ("source" in selected) {
-          expect(yield* decodeRequest({ case: key, sha: selected.source })).toEqual({
-            case: key,
-            sha: selected.source,
-          });
-          expect(Option.isNone(yield* decodeRequest({ case: key, sha }).pipe(Effect.option))).toBe(true);
-        }
-      }
 
       for (const invalid of [
         { ...request, patch: junk },
@@ -288,16 +242,6 @@ it.effect.prop(
 // The suite/leaf pairs were read from each mapped source law. These bodies start no real resource.
 const nested = [
   {
-    key: "checklist-pid",
-    suite: "L13: notices name their process",
-    leaf: "each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
-  },
-  {
-    key: "checklist-early-complete",
-    suite: "L13: notices name their process",
-    leaf: "successive sends land and a client joining after the first send opens the current checklist",
-  },
-  {
     key: "watcher-r1",
     suite: "P15 slice 1: the watcher",
     leaf: "scenario: R1 a held same reply from boot or a preceding save cannot complete a good or broken save",
@@ -322,19 +266,7 @@ for (const { key, suite, leaf } of nested) {
       ({ extra }, context) => {
         for (const selected of key === "host-pin"
           ? ([key, "host-requested-pin", "host-pnpm-path", "host-env-order"] as const)
-          : key === "checklist-pid"
-            ? ([key, "checklist-body", "checklist-drop-notify"] as const)
-            : key === "checklist-early-complete"
-              ? ([
-                  key,
-                  "checklist-held-call",
-                  "checklist-due-reschedule",
-                  "checklist-running-replace",
-                  "checklist-running-delete",
-                  "checklist-alarm-failure",
-                  "checklist-late-failure",
-                ] as const)
-              : [key]) {
+          : [key]) {
           const pattern = new RegExp(argv(selected, "/private/result.json").at(-1) ?? "(?!)");
           expect(pattern.test(context.task.fullTestName)).toBe(true);
           expect(pattern.test(`${context.task.fullTestName}${extra}!`)).toBe(false);
@@ -412,7 +344,112 @@ it.prop(
   options,
 );
 
-// Plant: require formatted minus/plus diff lines absent from JSON failureMessages
+// Plant: copy a raw error name, message, stack or nested cause into the public receipt.
+it.prop(
+  "incomplete phase receipts retain verdict facts and only closed causal error details",
+  {
+    key: Request.fields.case,
+    content: Schema.String,
+    line: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10000 })),
+    column: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+    name: Schema.Literals(["AssertionError", "SyntaxError", "ReferenceError", "TypeError", "RangeError", "Error"]),
+  },
+  ({ key, content, line, column, name }) => {
+    const marker = `private-value-${JSON.stringify(content)}-end`;
+
+    const error = {
+      name,
+      message: marker,
+      stack: `at selected (/private/${encodeURIComponent(marker)}/${cases[key].test}:${line}:${column})`,
+      actual: marker,
+      expected: marker,
+    };
+
+    const detail = issue(key, {
+      name: "Error",
+      message: marker,
+      cause: { name: "Error", message: marker, cause: error },
+    });
+
+    expect(detail).toEqual({ kind: name, frame: { line, column } });
+    expect(Schema.is(Issue)(detail)).toBe(true);
+    expect(issue(key, { ...error, name: marker })).toEqual({ kind: "unknown", frame: { line, column } });
+    expect(
+      issue(key, { ...error, stack: `/private/${encodeURIComponent(marker)}/unrelated.test.ts:${line}:${column}` }),
+    ).toEqual({ kind: name, frame: null });
+    expect(issue(key, { ...error, name: "Error", message: `Test timed out in 60000ms: ${marker}` }).kind).toBe(
+      "timeout",
+    );
+    expect(issue(key, marker)).toEqual({ kind: "unknown", frame: null });
+
+    const cyclic = { name: "Error", message: marker, cause: {} };
+    cyclic.cause = cyclic;
+    expect(issue(key, cyclic)).toEqual({ kind: "unknown", frame: null });
+
+    const raw = report(key, "failed", [marker]);
+
+    const target = raw.testResults[0]!.assertionResults[0]!;
+
+    const extended = {
+      ...raw,
+      testResults: [
+        {
+          ...raw.testResults[0]!,
+          assertionResults: [
+            { ...target, meta: { plant: null, plantErrors: [detail], plantUnhandled: [detail], private: marker } },
+          ],
+        },
+      ],
+    };
+
+    const actual = receipt(key, root, JSON.stringify(extended));
+    expect(actual).toMatchObject({
+      state: "decoded",
+      success: false,
+      counts: { total: 1, passed: 0, failed: 1, pending: 0, todo: 0 },
+      suites: { total: 2, passed: 0, failed: 2, pending: 0, results: 1 },
+      targets: [
+        {
+          status: "failed",
+          message: false,
+          assertions: 1,
+          active: 1,
+          results: [
+            { status: "failed", duration: 12, failures: 1, plant: false, errors: [detail], unhandled: [detail] },
+          ],
+        },
+      ],
+    });
+
+    expect(observation(key, root, JSON.stringify(extended), 1, 12)).toEqual({ _tag: "incomplete", reason: "unclear" });
+    expect(JSON.stringify(actual)).not.toContain(marker);
+    expect(JSON.stringify(actual)).not.toContain("/private/");
+    expect(JSON.stringify(actual)).not.toContain(cases[key].title);
+    expect(JSON.stringify(actual)).not.toContain(cases[key].test);
+
+    const passed = report(key, "passed");
+
+    const malformed = {
+      ...passed,
+      testResults: [
+        {
+          ...passed.testResults[0]!,
+          assertionResults: [
+            { ...passed.testResults[0]!.assertionResults[0]!, meta: { plant: null, plantErrors: [marker] } },
+          ],
+        },
+      ],
+    };
+
+    expect(observation(key, root, JSON.stringify(malformed), 0, 12)).toEqual(
+      observation(key, root, JSON.stringify(passed), 0, 12),
+    );
+    expect(receipt(key, root, "")).toEqual({ state: "missing" });
+    expect(receipt(key, root, marker)).toEqual({ state: "malformed" });
+  },
+  options,
+);
+
 it.prop(
   "watcher observations decode installed matcher stacks and keep ambiguous outcomes incomplete",
   {
@@ -507,55 +544,6 @@ it.prop(
       [{ ...assertion, cause: error }],
     ]) {
       expect(failure(key, errors)).toBeNull();
-    }
-
-    const selected = cases[key];
-
-    if ("failures" in selected) {
-      for (const fixed of selected.failures) {
-        const count = fixed.diagnostic === "AssertionError: checklist notice count differs";
-        const comparison = Result.try(() => expect(0).toBe(1));
-
-        if (Result.isSuccess(comparison)) {
-          throw new Error("missing numeric mismatch control");
-        }
-
-        const positive = {
-          ...(count ? Schema.decodeUnknownSync(Matcher)(comparison.failure) : assertion),
-          message: count
-            ? Schema.decodeUnknownSync(Matcher)(comparison.failure).message
-            : fixed.diagnostic.slice("AssertionError: ".length),
-          stack: `at matcher (/private/${selected.test}:${fixed.line}:${fixed.column})`,
-        };
-
-        expect(failure(key, [positive])).toEqual({
-          diagnostic: fixed.diagnostic,
-          assertion: { line: fixed.line, column: fixed.column },
-        });
-
-        for (const changed of [
-          { ...positive, stack: `at matcher (${selected.test}:${fixed.line + 1}:${fixed.column})` },
-          { ...positive, stack: `at matcher (${selected.test}:${fixed.line}:${fixed.column + 1})` },
-          { ...positive, stack: "no source frame" },
-          { ...positive, message: `unrelated ${positive.message}` },
-          { ...positive, name: "Error" },
-        ]) {
-          expect(failure(key, [changed])).toBeNull();
-        }
-
-        if (count) {
-          for (const changed of [
-            { ...positive, actual: positive.expected },
-            { ...positive, operator: "deepStrictEqual" },
-            { ...positive, actual: "NaN" },
-            { ...positive, expected: -1 },
-            { ...positive, actual: [] },
-            { ...positive, actual: undefined },
-          ]) {
-            expect(failure(key, [changed])).toBeNull();
-          }
-        }
-      }
     }
 
     const unreported = report(key, "failed", [stack]);
@@ -691,20 +679,7 @@ it.prop(
 it.prop(
   "strict diagnostics discard generated matcher values and paths",
   {
-    key: Schema.Literals([
-      "host-requested-pin",
-      "host-pnpm-path",
-      "host-env-order",
-      "checklist-body",
-      "checklist-drop-notify",
-      "checklist-early-complete",
-      "checklist-held-call",
-      "checklist-due-reschedule",
-      "checklist-running-replace",
-      "checklist-running-delete",
-      "checklist-alarm-failure",
-      "checklist-late-failure",
-    ]),
+    key: Schema.Literals(["host-requested-pin", "host-pnpm-path", "host-env-order"]),
     content: Schema.String,
   },
   ({ key, content }) => {
@@ -787,7 +762,6 @@ it.prop(
     expect(output).not.toContain("/private/temp");
 
     const diagnostics = {
-      "checklist-pid": "AssertionError: a notice names its process",
       "watcher-r1": "AssertionError: expected _tag loaded; received _tag same",
       "host-pin": "AssertionError: direct and nested pnpm versions differ from the explicit Node pin",
       "host-discovery-timeout": "AssertionError: runtime discovery exceeded the existing command cleanup bound",
@@ -796,10 +770,7 @@ it.prop(
       "host-env-order": "AssertionError: pinned host environment retained a removed parent value",
     };
 
-    const selected = cases[key];
-    expect(JSON.parse(output).diagnostic).toBe(
-      "failures" in selected ? selected.failures[0].diagnostic : new Map(Object.entries(diagnostics)).get(key),
-    );
+    expect(JSON.parse(output).diagnostic).toBe(new Map(Object.entries(diagnostics)).get(key));
   },
   options,
 );
@@ -843,28 +814,9 @@ it.effect.prop(
   },
   ({ key, content, fault }) =>
     Effect.gen(function* () {
-      const { selected, original, prepared, edited, head } = images(key, content);
+      const { original, prepared, edited, head } = images(key, content);
       expect(yield* prepare(key, original)).toEqual(prepared);
-      const real = yield* Digest.Digest;
-
-      const digest = Digest.Digest.of({
-        ...real,
-        digestHex: (algorithm, data) => {
-          if ("hashes" in selected) {
-            for (const [image, hash] of [
-              [original, selected.hashes.source],
-              [prepared, selected.hashes.prepared],
-              [edited, selected.hashes.edited],
-            ] as const) {
-              if (data.length === image.length && data.every((value, index) => value === image[index])) {
-                return Effect.succeed(hash);
-              }
-            }
-          }
-
-          return real.digestHex(algorithm, data);
-        },
-      });
+      const digest = yield* Digest.Digest;
 
       for (const brokenAt of [fault, 35]) {
         let current = original;
@@ -913,7 +865,6 @@ it.effect.prop(
 
         const answer = yield* exercise({ case: key, sha: head }).pipe(
           Effect.provideService(Workspace, workspace),
-          Effect.provideService(Digest.Digest, digest),
           Effect.option,
         );
 
@@ -960,88 +911,6 @@ it.effect.prop(
         }
 
         expect(tested).toEqual(["baseline", "broken", "restored"].slice(0, tested.length));
-      }
-    }).pipe(Effect.provide(Digest.layerWebCrypto)),
-  options,
-);
-
-// Plant: ignore a fixed source, prepared or edited hash and write anyway.
-it.effect.prop(
-  "fixed checklist hashes reject unsupported bytes before any write or child",
-  {
-    key: Schema.Literals([
-      "checklist-body",
-      "checklist-drop-notify",
-      "checklist-early-complete",
-      "checklist-held-call",
-      "checklist-due-reschedule",
-      "checklist-running-replace",
-      "checklist-running-delete",
-      "checklist-alarm-failure",
-      "checklist-late-failure",
-    ]),
-    content: Schema.String,
-  },
-  ({ key, content }) =>
-    Effect.gen(function* () {
-      const { selected, original, prepared, edited, head } = images(key, content);
-
-      const faults =
-        selected.preparation.length === 0
-          ? (["mode", "source", "edited"] as const)
-          : (["mode", "source", "prepared", "edited"] as const);
-
-      for (const fault of faults) {
-        let touched = false;
-        const real = yield* Digest.Digest;
-
-        const digest = Digest.Digest.of({
-          ...real,
-          digestHex: (algorithm, data) => {
-            for (const [image, name] of [
-              [original, "source"],
-              [prepared, "prepared"],
-              [edited, "edited"],
-            ] as const) {
-              if (data.length === image.length && data.every((value, index) => value === image[index])) {
-                return Effect.succeed(name === fault ? "0".repeat(64) : selected.hashes[name]);
-              }
-            }
-
-            return real.digestHex(algorithm, data);
-          },
-        });
-
-        const workspace = Workspace.of({
-          inspect: Effect.succeed({
-            bytes: original,
-            mode: fault === "mode" ? 0o100755 : 0o100644,
-            head,
-            index: sha,
-            status: "",
-            summary: "",
-          }),
-          write: () =>
-            Effect.sync(() => {
-              touched = true;
-            }),
-          diff: Effect.succeed(bytes("private-diff")),
-          test: () =>
-            Effect.sync(() => {
-              touched = true;
-
-              return Observation.cases.incomplete.make({ reason: "must_not_run" });
-            }),
-        });
-
-        const result = yield* exercise({ case: key, sha: head }).pipe(
-          Effect.provideService(Workspace, workspace),
-          Effect.provideService(Digest.Digest, digest),
-          Effect.option,
-        );
-
-        expect(Option.isNone(result)).toBe(true);
-        expect(touched).toBe(false);
       }
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
   options,

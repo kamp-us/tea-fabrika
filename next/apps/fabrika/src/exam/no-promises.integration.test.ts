@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { NodePath } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Path } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Path } from "effect";
+
 import * as fc from "fast-check";
 import { API } from "typescript/unstable/sync";
 // `no-promises` (exam item 1): every Promise shape fires in next/, Effect's own Promise calls with
@@ -27,7 +28,7 @@ const typed = (files: Readonly<Record<string, string>>, workers = false) => {
   const api = new API({ cwd: root });
 
   try {
-    for (const [file, body] of Object.entries(files)) {
+    for (const [file, body] of Rec.toEntries(files)) {
       mkdirSync(dirname(join(root, file)), { recursive: true });
       writeFileSync(join(root, file), body);
     }
@@ -74,24 +75,27 @@ const typed = (files: Readonly<Record<string, string>>, workers = false) => {
 };
 
 const wrappedEdge = (method: string, rule: string, indent: string, gap = 0) =>
-  [
-    "declare const platform: {read(): Promise<number>};",
-    "declare const Effect: {",
-    "  tryPromise(options: {try: () => Promise<number>; catch: () => Error}): number;",
-    "  runPromise(value: number): Promise<number>;",
-    "};",
-    `// oxlint-disable-next-line ${rule} -- edge: the platform call enters or leaves Effect`,
-    `export const edge = Effect.${method}(`,
-    ...(method === "runPromise" ? [`${indent}Effect.tryPromise(`] : []),
-    `${indent}{`,
-    `${indent}  try: () =>`,
-    ...Array.from({ length: gap }, () => ""),
-    `${indent}    platform.read(),`,
-    `${indent}  catch: () => new Error("platform"),`,
-    `${indent}}`,
-    ...(method === "runPromise" ? [`${indent})`] : []),
-    ");",
-  ].join("\n");
+  Arr.join(
+    [
+      "declare const platform: {read(): Promise<number>};",
+      "declare const Effect: {",
+      "  tryPromise(options: {try: () => Promise<number>; catch: () => Error}): number;",
+      "  runPromise(value: number): Promise<number>;",
+      "};",
+      `// oxlint-disable-next-line ${rule} -- edge: the platform call enters or leaves Effect`,
+      `export const edge = Effect.${method}(`,
+      ...(method === "runPromise" ? [`${indent}Effect.tryPromise(`] : []),
+      `${indent}{`,
+      `${indent}  try: () =>`,
+      ...Array.from({ length: gap }, () => ""),
+      `${indent}    platform.read(),`,
+      `${indent}  catch: () => new Error("platform"),`,
+      `${indent}}`,
+      ...(method === "runPromise" ? [`${indent})`] : []),
+      ");",
+    ],
+    "\n",
+  );
 
 const markedEdge = fc.tuple(
   fc.constantFrom("tryPromise", "runPromise"),
@@ -164,7 +168,7 @@ const rpcSource = (
   // Installed workers-types: WorkerStub -> Fetcher<T> -> Rpc.Provider<T> ->
   // MethodOrProperty<V> -> Result<Awaited<R>> turns Promise<unknown> into never.
   const before = [
-    ...setup.split("\n"),
+    ...Str.split(setup, "\n"),
     `type Calls = Rpc.WorkerEntrypointBranded & {describe${suffix}(): Promise<unknown>};`,
     "declare const worker: WorkerStub;",
     "const rpc = worker.getEntrypoint<Calls>();",
@@ -182,79 +186,99 @@ const rpcSource = (
   return {
     file: "next/rpc.ts",
     line: before.length + 1,
-    source: [
-      ...before,
-      `    rpc.describe${suffix}()${inBridge ? (method === "tryPromise" ? "," : "") : ";"}`,
-      ...(inBridge ? (method === "tryPromise" ? ['  catch: () => new Error("rpc"),', "});"] : [");"]) : []),
-    ].join("\n"),
+    source: Arr.join(
+      [
+        ...before,
+        `    rpc.describe${suffix}()${inBridge ? (method === "tryPromise" ? "," : "") : ";"}`,
+        ...(inBridge ? (method === "tryPromise" ? ['  catch: () => new Error("rpc"),', "});"] : [");"]) : []),
+      ],
+      "\n",
+    ),
   };
 };
 
-const fires = [
-  'import {Effect, Schema, Stream} from "effect";', // 1
-  "declare const p: Promise<number>;", // 2
-  "export const a = async () => 1;", // 3
-  "export async function b() { return 1; }", // 4
-  "export const c = function* () { return 1; };", // 5: passes, a generator
-  "export const d = async function () { await p; };", // 6: twice, async and await
-  "export const e = new Promise<number>(() => undefined);", // 7
-  "export const f = Promise.resolve(1);", // 8
-  "export const g = Promise.all([p]);", // 9
-  "export const h = p.then((x) => x);", // 10
-  "export const i = p.catch(() => 0);", // 11
-  "export const j = Effect.promise(() => p);", // 12
-  'export const k = import("./passes.ts");', // 13
-  "export const l = async () => { for await (const x of [p]) void x; };", // 14: twice
-  "export const m = Stream.make(1);", // 15: passes
-  "declare const S: typeof Schema.Number, it: AsyncIterable<number>, s: Stream.Stream<number>;", // 16
-  "export const n = Effect.tryPromise(() => p);", // 17
-  'export const o = Effect.tryPromise({try: () => p, catch: () => new Error("x")});', // 18
-  "export const q = Effect.promise<number>(() => p);", // 19: a typed call counts
-  'export const r = Effect.tryPromise<number, Error>({try: () => p, catch: () => new Error("x")});', // 20
-  "export const s1 = Schema.decodePromise(S);", // 21
-  "export const s2 = Schema.encodePromise(S);", // 22
-  "export const s3 = Schema.decodeUnknownPromise(S);", // 23
-  "export const s4 = Schema.encodeUnknownPromise(S);", // 24
-  'export const s5 = Stream.fromAsyncIterable(it, () => new Error("x"));', // 25
-  "export const s6 = Stream.toAsyncIterable(s);", // 26
-  "export const s7 = Stream.toAsyncIterableWith(s, S);", // 27
-  "export const s8 = Stream.toAsyncIterableEffect(s);", // 28
-  'import {tryPromise} from "effect/Effect";', // 29
-  "export const t = tryPromise(() => p);", // 30: imported by its own name
-].join("\n");
+const fires = Arr.join(
+  [
+    'import {Effect, Schema, Stream} from "effect";', // 1
+    "declare const p: Promise<number>;", // 2
+    "export const a = async () => 1;", // 3
+    "export async function b() { return 1; }", // 4
+    "export const c = function* () { return 1; };", // 5: passes, a generator
+    "export const d = async function () { await p; };", // 6: twice, async and await
+    "export const e = new Promise<number>(() => undefined);", // 7
+    "export const f = Promise.resolve(1);", // 8
+    "export const g = Promise.all([p]);", // 9
+    "export const h = p.then((x) => x);", // 10
+    "export const i = p.catch(() => 0);", // 11
+    "export const j = Effect.promise(() => p);", // 12
+    'export const k = import("./passes.ts");', // 13
+    "export const l = async () => { for await (const x of [p]) void x; };", // 14: twice
+    "export const m = Stream.make(1);", // 15: passes
+    "declare const S: typeof Schema.Number, it: AsyncIterable<number>, s: Stream.Stream<number>;", // 16
+    "export const n = Effect.tryPromise(() => p);", // 17
+    'export const o = Effect.tryPromise({try: () => p, catch: () => new Error("x")});', // 18
+    "export const q = Effect.promise<number>(() => p);", // 19: a typed call counts
+    'export const r = Effect.tryPromise<number, Error>({try: () => p, catch: () => new Error("x")});', // 20
+    "export const s1 = Schema.decodePromise(S);", // 21
+    "export const s2 = Schema.encodePromise(S);", // 22
+    "export const s3 = Schema.decodeUnknownPromise(S);", // 23
+    "export const s4 = Schema.encodeUnknownPromise(S);", // 24
+    'export const s5 = Stream.fromAsyncIterable(it, () => new Error("x"));', // 25
+    "export const s6 = Stream.toAsyncIterable(s);", // 26
+    "export const s7 = Stream.toAsyncIterableWith(s, S);", // 27
+    "export const s8 = Stream.toAsyncIterableEffect(s);", // 28
+    'import {tryPromise} from "effect/Effect";', // 29
+    "export const t = tryPromise(() => p);", // 30: imported by its own name
+  ],
+  "\n",
+);
 
-const passes = [
-  'import {Effect, Option} from "effect";',
-  'import * as Stream from "effect/Stream";',
-  "declare const thing: Effect.Effect<number, Error>;",
-  "export const a = Effect.catch(thing, () => Effect.succeed(0));",
-  "export const b = thing.pipe(Effect.catch(() => Effect.succeed(0)));",
-  "export const c = Stream.catch(Stream.make(1), () => Stream.make(2));",
-  "export const d = Option.some(1);",
-  "export const e = Effect.gen(function* () { return yield* thing; });",
-  "declare const other: {promise: () => number; tryPromise: () => number};",
-  "export const f = other.promise() + other.tryPromise();",
-].join("\n");
+const passes = Arr.join(
+  [
+    'import {Effect, Option} from "effect";',
+    'import * as Stream from "effect/Stream";',
+    "declare const thing: Effect.Effect<number, Error>;",
+    "export const a = Effect.catch(thing, () => Effect.succeed(0));",
+    "export const b = thing.pipe(Effect.catch(() => Effect.succeed(0)));",
+    "export const c = Stream.catch(Stream.make(1), () => Stream.make(2));",
+    "export const d = Option.some(1);",
+    "export const e = Effect.gen(function* () { return yield* thing; });",
+    "declare const other: {promise: () => number; tryPromise: () => number};",
+    "export const f = other.promise() + other.tryPromise();",
+  ],
+  "\n",
+);
 
 // Oxlint's syntax-only edge comment covers the next physical line.
-const edges = [
-  'import {Effect} from "effect";', // 1
-  "declare const p: Promise<number>;", // 2
-  "// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object method must answer a Promise", // 3
-  "export const a = Effect.tryPromise(() => p);", // 4: passes
-  "// oxlint-disable-next-line fabrika/no-promises -- edge: the highlighter loads once, on first use", // 5
-  'export const b = Effect.cached(Effect.tryPromise(() => import("./x.ts")));', // 6: two fires, one comment
-  "// oxlint-disable-next-line fabrika/no-promises -- edge: a blank line comes between", // 7: unused
-  "", // 8
-  "export const c = Effect.tryPromise(() => p);", // 9: fires
-  "// oxlint-disable-next-line fabrika/no-promises -- edge: a call over two lines", // 10
-  "export const d = Effect.tryPromise({", // 11: passes
-  "\ttry: async () => 1,", // 12: fires, the comment does not reach it
-  '\tcatch: () => new Error("x"),', // 13
-  "});", // 14
-].join("\n");
+const edges = Arr.join(
+  [
+    'import {Effect} from "effect";', // 1
+    "declare const p: Promise<number>;", // 2
+    "// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object method must answer a Promise", // 3
+    "export const a = Effect.tryPromise(() => p);", // 4: passes
+    "// oxlint-disable-next-line fabrika/no-promises -- edge: the highlighter loads once, on first use", // 5
+    'export const b = Effect.cached(Effect.tryPromise(() => import("./x.ts")));', // 6: two fires, one comment
+    "// oxlint-disable-next-line fabrika/no-promises -- edge: a blank line comes between", // 7: unused
+    "", // 8
+    "export const c = Effect.tryPromise(() => p);", // 9: fires
+    "// oxlint-disable-next-line fabrika/no-promises -- edge: a call over two lines", // 10
+    "export const d = Effect.tryPromise({", // 11: passes
+    "\ttry: async () => 1,", // 12: fires, the comment does not reach it
+    '\tcatch: () => new Error("x"),', // 13
+    "});", // 14
+  ],
+  "\n",
+);
 
-describe("no-promises", async () => {
+const all = await plant({
+  [FIRES]: fires,
+  [PASSES]: passes,
+  [EDGE]: edges,
+  "next/packages/libfabrika/src/app/fires.test.ts": "export const t = async () => await 1;",
+  "packages/today/src/old.ts": "export const t = async () => 1;",
+});
+
+describe("no-promises", () => {
   it("refuses an unmarked mapped Workers RPC call in every resolved Effect bridge spelling", () => {
     fc.assert(
       fc.property(
@@ -265,7 +289,7 @@ describe("no-promises", async () => {
         fc.constantFrom(...bridgeSpellings),
         (suffix, method, gap, marked, spelling) => {
           const { file, source, line } = rpcSource(suffix, method, gap, marked, spelling);
-          expect(typed({ [file]: source }, true).map((f) => ({ file: f.file, line: f.line }))).toEqual(
+          expect(Arr.map(typed({ [file]: source }, true), (f) => ({ file: f.file, line: f.line }))).toEqual(
             marked ? [] : [{ file, line }],
           );
         },
@@ -277,14 +301,17 @@ describe("no-promises", async () => {
         // P12 review 7: the marker covered Effect.tryPromise, but not rpc.describe below it.
         // P12 review 8: renamed imports and computed access hid the same RPC call.
         // P12 review 9: wrappers and local aliases bypassed bridge recognition.
-        examples: (["tryPromise", "promise"] as const).flatMap((method) =>
-          bridgeSpellings.map((spelling): [string, typeof method, number, boolean, typeof spelling] => [
-            "",
-            method,
-            0,
-            false,
-            spelling,
-          ]),
+        examples: Arr.flatMap(["tryPromise", "promise"] as const, (method) =>
+          Arr.map(
+            bridgeSpellings,
+            (spelling): [string, typeof method, number, boolean, (typeof bridgeSpellings)[number]] => [
+              "",
+              method,
+              0,
+              false,
+              spelling,
+            ],
+          ),
         ),
       },
     );
@@ -308,7 +335,7 @@ describe("no-promises", async () => {
     fc.assert(
       fc.property(fc.stringMatching(/^[a-z]{1,8}$/), (suffix) => {
         const file = "next/throw.ts";
-        const source = [`declare function fail${suffix}(): never;`, `fail${suffix}();`].join("\n");
+        const source = Arr.join([`declare function fail${suffix}(): never;`, `fail${suffix}();`], "\n");
         expect(typed({ [file]: source })).toEqual([]);
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 12 }) },
@@ -320,15 +347,18 @@ describe("no-promises", async () => {
         const file = "next/sync.ts";
         expect(
           typed({
-            [file]: [
-              `declare function any${suffix}(): any;`,
-              `declare function unknown${suffix}(): unknown;`,
-              `declare function identity${suffix}<A>(value: A): A;`,
-              `any${suffix}(); unknown${suffix}();`,
-              `export function generic${suffix}<A>(value: A) { return identity${suffix}(value); }`,
-              "// @ts-ignore -- plant: an unresolved name gives the checker an error type",
-              `missing${suffix}();`,
-            ].join("\n"),
+            [file]: Arr.join(
+              [
+                `declare function any${suffix}(): any;`,
+                `declare function unknown${suffix}(): unknown;`,
+                `declare function identity${suffix}<A>(value: A): A;`,
+                `any${suffix}(); unknown${suffix}();`,
+                `export function generic${suffix}<A>(value: A) { return identity${suffix}(value); }`,
+                "// @ts-ignore -- plant: an unresolved name gives the checker an error type",
+                `missing${suffix}();`,
+              ],
+              "\n",
+            ),
           }),
         ).toEqual([]);
       }),
@@ -346,14 +376,19 @@ describe("no-promises", async () => {
           expect(
             typed(
               {
-                [file]: source
-                  .replaceAll('"effect/Effect"', '"./lookalike-functions"')
-                  .replaceAll('"effect"', '"./lookalike"'),
+                [file]: pipe(
+                  source,
+                  Str.replaceAll('"effect/Effect"', '"./lookalike-functions"'),
+                  Str.replaceAll('"effect"', '"./lookalike"'),
+                ),
                 "next/lookalike.ts": 'export * as Effect from "./lookalike-functions";',
-                "next/lookalike-functions.ts": [
-                  "export declare const tryPromise: <A>(options: {try: () => PromiseLike<A>; catch: () => Error}) => number;",
-                  "export declare const promise: <A>(fn: () => PromiseLike<A>) => number;",
-                ].join("\n"),
+                "next/lookalike-functions.ts": Arr.join(
+                  [
+                    "export declare const tryPromise: <A>(options: {try: () => PromiseLike<A>; catch: () => Error}) => number;",
+                    "export declare const promise: <A>(fn: () => PromiseLike<A>) => number;",
+                  ],
+                  "\n",
+                ),
               },
               true,
             ),
@@ -368,7 +403,7 @@ describe("no-promises", async () => {
       fc.property(markedEdge, fc.nat({ max: 8 }), ([method, rule, indent], gap) => {
         const file = "next/wrapped.ts";
         expect(
-          typed({ [file]: wrappedEdge(method, rule, indent, gap) }).map((f) => ({
+          Arr.map(typed({ [file]: wrappedEdge(method, rule, indent, gap) }), (f) => ({
             file: f.file,
             line: f.line,
           })),
@@ -387,9 +422,9 @@ describe("no-promises", async () => {
       fc.property(markedEdge, fc.boolean(), ([method, rule, indent], sameLine) => {
         const file = "next/wrapped.ts";
         const before = wrappedEdge(method, rule, indent);
-        const line = before.split("\n").length + (sameLine ? 0 : 1);
+        const line = Str.split(before, "\n").length + (sameLine ? 0 : 1);
         const source = `${before}${sameLine ? " " : "\n"}platform.read();`;
-        expect(typed({ [file]: source }).map((f) => ({ file: f.file, line: f.line }))).toEqual([
+        expect(Arr.map(typed({ [file]: source }), (f) => ({ file: f.file, line: f.line }))).toEqual([
           { file, line: method === "runPromise" ? 11 : 10 },
           { file, line },
         ]);
@@ -401,15 +436,24 @@ describe("no-promises", async () => {
     const file = "next/apps/fabrika/src/storage-method.ts";
 
     const findings = typed({
-      [file]: [
-        "declare const storage: {put(key: string, value: unknown): Promise<void>};",
-        "export class Process {",
-        '  configure(value: unknown) { return storage.put("descriptor", value); }',
-        "}",
-      ].join("\n"),
+      [file]: Arr.join(
+        [
+          "declare const storage: {put(key: string, value: unknown): Promise<void>};",
+          "export class Process {",
+          '  configure(value: unknown) { return storage.put("descriptor", value); }',
+          "}",
+        ],
+        "\n",
+      ),
     });
 
-    expect(findings.filter((f) => f.file === file).map((f) => f.line)).toContain(3);
+    expect(
+      pipe(
+        findings,
+        Arr.filter((f) => f.file === file),
+        Arr.map((f) => f.line),
+      ),
+    ).toContain(3);
   });
   it("refuses Promise values, inferred returns, imported aliases and thunks outside one marked line", () => {
     fc.assert(
@@ -419,50 +463,54 @@ describe("no-promises", async () => {
         const findings = typed({
           "next/binding.ts":
             "export type Later<T> = Promise<T>; export declare const platform: {read(): Later<number>};",
-          [file]: [
-            'import {platform, type Later} from "./binding";',
-            "declare const p: Later<number>;",
-            "const identity = (value: Later<number>) => value;",
-            "const thunk = (send: () => Later<number>) => send;",
-            "const inferred = () => platform.read();",
-            "const take = <A>(send: () => Promise<A>) => send;",
-            "identity(p);",
-            "take(() => platform.read());",
-            "thunk(platform.read);",
-            "// oxlint-disable-next-line fabrika/no-promises -- edge: platform read enters Effect",
-            "const edge = () => platform.read();",
-            "const afterEdge = () => platform.read();",
-            "// oxlint-disable-next-line fabrika/no-promises -- edge: covers only the next line",
-            "const twoLines = () => {",
-            "  return platform.read();",
-            "};",
-            "void [inferred, edge, afterEdge, twoLines];",
-          ].join("\n"),
+          [file]: Arr.join(
+            [
+              'import {platform, type Later} from "./binding";',
+              "declare const p: Later<number>;",
+              "const identity = (value: Later<number>) => value;",
+              "const thunk = (send: () => Later<number>) => send;",
+              "const inferred = () => platform.read();",
+              "const take = <A>(send: () => Promise<A>) => send;",
+              "identity(p);",
+              "take(() => platform.read());",
+              "thunk(platform.read);",
+              "// oxlint-disable-next-line fabrika/no-promises -- edge: platform read enters Effect",
+              "const edge = () => platform.read();",
+              "const afterEdge = () => platform.read();",
+              "// oxlint-disable-next-line fabrika/no-promises -- edge: covers only the next line",
+              "const twoLines = () => {",
+              "  return platform.read();",
+              "};",
+              "void [inferred, edge, afterEdge, twoLines];",
+            ],
+            "\n",
+          ),
           "next/allowed.ts":
             "export const read = (n: number) => n; export const f = () => read(1); export const domain = () => ({then: 1});",
-          "next/runner.ts": [
-            "declare const runner: {runPromise(n: number): Promise<number>};",
-            "// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: platform method returns a Promise",
-            "export const run = () => runner.runPromise(1);",
-          ].join("\n"),
+          "next/runner.ts": Arr.join(
+            [
+              "declare const runner: {runPromise(n: number): Promise<number>};",
+              "// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: platform method returns a Promise",
+              "export const run = () => runner.runPromise(1);",
+            ],
+            "\n",
+          ),
           "next/allowed.test.ts": "declare const p: Promise<number>; export const f = () => p;",
           "next/helper.test-support.ts": "declare const p: Promise<number>; export const f = () => p;",
           "packages/today.ts": "declare const p: Promise<number>; export const f = () => p;",
         });
 
-        expect(findings.filter((f) => f.file === file).map((f) => f.line)).toEqual([3, 4, 5, 6, 7, 8, 9, 12, 15]);
-        expect(findings.filter((f) => f.file !== file)).toEqual([]);
+        expect(
+          pipe(
+            findings,
+            Arr.filter((f) => f.file === file),
+            Arr.map((f) => f.line),
+          ),
+        ).toEqual([3, 4, 5, 6, 7, 8, 9, 12, 15]);
+        expect(Arr.filter(findings, (f) => f.file !== file)).toEqual([]);
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
     );
-  });
-
-  const all = await plant({
-    [FIRES]: fires,
-    [PASSES]: passes,
-    [EDGE]: edges,
-    "next/packages/libfabrika/src/app/fires.test.ts": "export const t = async () => await 1;",
-    "packages/today/src/old.ts": "export const t = async () => 1;",
   });
 
   it("fires on every Promise shape", () => {

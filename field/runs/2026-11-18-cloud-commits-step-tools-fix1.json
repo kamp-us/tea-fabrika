@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-cloud-commits-step-tools-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1610",
+  "started": "2026-11-18T00:00:00-08:00",
+  "ended": "2026-11-18T00:19:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Fix round 1 for the ticket text 'botpush.mjs and stepcommit.sh refuse plain cloud commits and 0177 fix rounds', in the review's six faults. T390's case list now runs fix; the botpush leak law has a 'held' range that only the net-diff grep catches; F4's unknown-step half is a property over generated names with the four old names pinned and numRuns covering them; F5's push-failure law is labeled scenario:; F3 is folded into F1, which now also holds an unlisted exam path; the edge comment in botpush.mjs counts eight try blocks. Both test files are green, and the two plants the review named, which were green, are now red.",
+  "note": "The build row's plant law titles were left alone: F3 is gone and F1, F4 and F5 carry new titles, but no check reads those titles against the tests. F3's case lives in F1 and in the K4 exam-path law's pinned example for fix. Start and end times are rounded. Node 26.13.0 came from npm, as for the build row. Usage and cost are not recorded.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "driver_caused": false,
+  "billed": null,
+  "costUsd": null,
+  "listUsd": null,
+  "plants": [
+    {
+      "law": "T390 a lead link never lands on another branch's open PR ticket > T390 refuses a signed lead commit exactly when another branch's open PR holds the ticket",
+      "plant": "the lead-link check also runs for fix (before the fix: green)",
+      "result": "green"
+    },
+    {
+      "law": "T390 a lead link never lands on another branch's open PR ticket > T390 refuses a signed lead commit exactly when another branch's open PR holds the ticket",
+      "plant": "the lead-link check also runs for fix",
+      "result": "red"
+    },
+    {
+      "law": "T325 K6 botpush, today's tooling > scans every submitted commit from the merge base at the requested source",
+      "plant": "the net-diff leak grep is dropped (before the fix: green)",
+      "result": "green"
+    },
+    {
+      "law": "T325 K6 botpush, today's tooling > scans every submitted commit from the merge base at the requested source",
+      "plant": "the net-diff leak grep is dropped",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F1 scenario: one fix commit holds a tests-owned exam path, a build-owned path and an unlisted exam path, unsigned and pushed",
+      "plant": "drop fix from the unlisted-exam exception",
+      "result": "red"
+    },
+    {
+      "law": "T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed > F4 an unknown step exits 2 and commits nothing",
+      "plant": "let any step name through",
+      "result": "red"
+    }
+  ]
+}

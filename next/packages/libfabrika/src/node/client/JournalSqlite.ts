@@ -3,6 +3,7 @@
  * commits each write whole or not at all, so a crash or a power cut never leaves a torn entry.
  */
 import { DatabaseSync } from "node:sqlite"; // edge: no Effect SQL client for Node's SQLite is installed; the repo's node:sqlite handle is the existing one
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
@@ -46,7 +47,12 @@ const store = (sql: Sql) => {
       Effect.map(([row]) => Number(row?.["total"] ?? 0)),
     ),
     keys: exec("keys", undefined, "SELECT key FROM journal").pipe(
-      Effect.map((rows) => rows.map((row) => row["key"]).filter(Predicate.isString)),
+      Effect.map((rows) =>
+        Arr.filter(
+          Arr.map(rows, (row) => row["key"]),
+          Predicate.isString,
+        ),
+      ),
     ),
   });
 };

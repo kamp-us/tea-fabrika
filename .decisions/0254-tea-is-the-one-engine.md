@@ -1,7 +1,7 @@
 ---
 id: 0254
 title: In next/, tea is the one engine that holds state that moves, so no Effect Workflow, replay engine or actor runtime replaces a tea machine, and a Cmd is one bounded Effect whose answer is a Msg
-status: accepted
+status: amended-in-part by [0601](0601-program-make-with-optional-pipes.md)
 date: 2026-11-02
 tags: [tea, effect, workflow, cluster, state, engine, next]
 ---

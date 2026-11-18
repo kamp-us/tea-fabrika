@@ -48,24 +48,31 @@
 // The repo had no laptop timer before this: the hourly mutation run is a CI workflow a person or a
 // session dispatches by hand (.github/workflows/mutation.yaml).
 
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
+  String as Str,
+  pipe,
+  Option,
   Config,
   Console,
+  Array as Arr,
   DateTime,
   Duration,
   Effect,
   Exit,
   FileSystem,
-  Option,
   Path,
   Predicate,
   Result,
   Schema,
   Stream,
+  Record as Rec,
 } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+
+import { variable } from "./drive.ts";
 import { spoken } from "./flow/Beat.ts";
 
 // ---------------------------------------------------------------- the setting
@@ -138,14 +145,14 @@ export const readOutput = (text: string) => {
   let freedMb = 0;
   let mutbox: string | null = null;
 
-  for (const line of text.split("\n")) {
+  for (const line of pipe(text, Str.split("\n"))) {
     const fact = /^removed state\/(.+): its box is gone$/.exec(line);
     const tree = /^removed worktree (.+): [a-z_]+, (\d+) MB$/.exec(line);
     const box = /^removed ([^\s:/]+): .+, (\d+) MB$/.exec(line);
 
-    if (line.startsWith("keep ")) {
-      kept.push(line.slice("keep ".length));
-    } else if (line.startsWith("mutbox gc: stopped")) {
+    if (pipe(line, Str.startsWith("keep "))) {
+      kept.push(pipe(line, Str.slice("keep ".length)));
+    } else if (pipe(line, Str.startsWith("mutbox gc: stopped"))) {
       mutbox = line;
     } else if (fact?.[1] !== undefined) {
       facts.push(fact[1]);
@@ -172,11 +179,14 @@ const NOTHING = readOutput("");
 // ---------------------------------------------------------------- the status line
 
 /** The newest sweep that ran, and how many were skipped after it. */
-export const newest = (sweeps: ReadonlyArray<Sweep>) => {
-  const at = sweeps.findLastIndex((s) => s.outcome._tag !== "skipped");
-
-  return { last: at < 0 ? null : (sweeps[at] ?? null), skipped: sweeps.length - 1 - at };
-};
+export const newest = (sweeps: ReadonlyArray<Sweep>) =>
+  Option.match(
+    Arr.findLastIndex(sweeps, (s) => s.outcome._tag !== "skipped"),
+    {
+      onNone: () => ({ last: null, skipped: sweeps.length }),
+      onSome: (at) => ({ last: sweeps[at] ?? null, skipped: sweeps.length - 1 - at }),
+    },
+  );
 
 /** Late: no sweep ran yet, or the newest one started more than two periods before `now`. */
 export const late = (last: Sweep | null, now: number, minutes: number): boolean =>
@@ -224,34 +234,49 @@ export const says = (
     ...(going === null ? [] : [`one going for ${spoken(now - Date.parse(going.startedAt))} (pid ${going.pid})`]),
   ];
 
-  return { late: isLate, text: `${head}${body}; ${tail.join("; ")}` };
+  return { late: isLate, text: `${head}${body}; ${Arr.join(tail, "; ")}` };
 };
 
 // ---------------------------------------------------------------- the timer's unit
 
 const xml = (text: string) =>
-  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+  pipe(
+    text,
+    Str.replaceAll("&", "&amp;"),
+    Str.replaceAll("<", "&lt;"),
+    Str.replaceAll(">", "&gt;"),
+    Str.replaceAll('"', "&quot;"),
+  );
 
 /** The unit file with this laptop's values, XML-escaped, in place of its `{{name}}` marks; a mark
  * with no value is a failure that names it. */
 export const fill = (template: string, values: Readonly<Record<string, string>>): Result.Result<string, string> => {
   const missing = new Set<string>();
 
-  const filled = template.replaceAll(/\{\{([a-z]+)\}\}/g, (mark, name: string) => {
-    const value = Object.hasOwn(values, name) ? values[name] : undefined;
+  const filled = pipe(
+    Str.split(template, /\{\{([a-z]+)\}\}/g),
+    Arr.map((part, index) => {
+      if (index % 2 === 0) {
+        return part;
+      }
 
-    if (value === undefined) {
-      missing.add(mark);
+      const value = Rec.has(values, part) ? values[part] : undefined;
 
-      return mark;
-    }
+      if (value === undefined) {
+        const mark = `{{${part}}}`;
+        missing.add(mark);
 
-    return xml(value);
-  });
+        return mark;
+      }
+
+      return xml(value);
+    }),
+    Arr.join(""),
+  );
 
   return missing.size === 0
     ? Result.succeed(filled)
-    : Result.fail(`the unit file has no value for ${[...missing].join(", ")}`);
+    : Result.fail(`the unit file has no value for ${Arr.join([...missing], ", ")}`);
 };
 
 // ---------------------------------------------------------------- the world
@@ -283,11 +308,11 @@ export const paths = Effect.fn("gcloop.paths")(
     const path = yield* Path.Path;
     const env = path.join(import.meta.dirname, "env.sh");
     const r = yield* exec("sh", ["-c", '. "$0" && printf "%s\\n%s" "$MAIN" "$BOXES"', env]);
-    const [main = "", boxes = ""] = r.out.split("\n");
+    const [main = "", boxes = ""] = pipe(r.out, Str.split("\n"));
 
     return r.code === 0 && main !== "" && boxes !== ""
       ? { main, boxes, state: path.join(boxes, "state") }
-      : yield* Broken.make({ reason: `env.sh gave no MAIN or BOXES: ${r.err.trim()}` });
+      : yield* Broken.make({ reason: `env.sh gave no MAIN or BOXES: ${Str.trim(r.err)}` });
   },
   Effect.catchTag("PlatformError", () => Effect.fail(Broken.make({ reason: "env.sh could not run" }))),
 );
@@ -296,7 +321,14 @@ export const paths = Effect.fn("gcloop.paths")(
 const freeKb = Effect.fn("gcloop.freeKb")(
   function* (path: string) {
     const r = yield* exec("df", ["-k", path]);
-    const kb = Number(r.out.trim().split("\n").at(-1)?.trim().split(/\s+/)[3]);
+    const last = Arr.last(Str.split(Str.trim(r.out), "\n"));
+
+    const kb = Number(
+      Option.match(last, {
+        onNone: () => undefined,
+        onSome: (line) => Str.split(Str.trim(line), /\s+/)[3],
+      }),
+    );
 
     return r.code === 0 && Number.isFinite(kb) ? kb : null;
   },
@@ -491,7 +523,14 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
 
       const { code, out, err } = ran.value.value;
       const read = readOutput(out);
-      const said = err.trim().split("\n").at(-1)?.slice(-300) ?? "";
+
+      const said =
+        pipe(
+          pipe(Str.trim(err), Str.split("\n")).at(-1),
+          Option.fromNullishOr,
+          Option.map(Str.slice(-300)),
+          Option.getOrUndefined,
+        ) ?? "";
 
       const outcome =
         code === 0
@@ -508,7 +547,7 @@ export const sweeps = Effect.fn("gcloop.sweeps")(function* (state: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(`${state}/gc.jsonl`).pipe(Effect.orElseSucceed(() => ""));
 
-  return text.split("\n").flatMap((line) => Option.toArray(Schema.decodeOption(SweepLine)(line)));
+  return Arr.flatMap(pipe(text, Str.split("\n")), (line) => Option.toArray(Schema.decodeOption(SweepLine)(line)));
 });
 
 /** The status line now, with the live holder of the lock if a sweep is going. */
@@ -556,7 +595,7 @@ const kickCommand = Command.make("kick", { trigger }, ({ trigger }) =>
       trigger,
     ]);
 
-    yield* Console.log(r.code === 0 ? `gc: sweep started (${trigger})` : `gc: no sweep started: ${r.err.trim()}`);
+    yield* Console.log(r.code === 0 ? `gc: sweep started (${trigger})` : `gc: no sweep started: ${Str.trim(r.err)}`);
   }),
 );
 
@@ -568,7 +607,7 @@ const statusCommand = Command.make(
       const folders = yield* paths();
       const line = yield* status(folders.state, yield* MINUTES);
       const last = newest(yield* sweeps(folders.state)).last;
-      const kept = keeps && last !== null && last.kept.length > 0 ? `; it kept ${last.kept.join("; ")}` : "";
+      const kept = keeps && last !== null && last.kept.length > 0 ? `; it kept ${Arr.join(last.kept, "; ")}` : "";
       yield* Console.log(`${line.text}${kept}`);
     }),
 );
@@ -588,7 +627,7 @@ const plistCommand = Command.make("plist", {}, () =>
       main: folders.main,
       minutes: String(minutes),
       seconds: String(minutes * 60),
-      path: process.env.PATH ?? "/usr/bin:/bin",
+      path: (yield* variable("PATH")) ?? "/usr/bin:/bin",
       log: path.join(folders.state, "gc-timer.log"),
     });
 
@@ -596,7 +635,7 @@ const plistCommand = Command.make("plist", {}, () =>
       return yield* Broken.make({ reason: filled.failure });
     }
 
-    yield* Console.log(filled.success.trimEnd());
+    yield* Console.log(Str.trimEnd(filled.success));
   }),
 );
 

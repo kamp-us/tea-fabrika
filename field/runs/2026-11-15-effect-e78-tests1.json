@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e78-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:46:36-08:00",
+  "ended": "2026-11-15T20:57:17-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E78 of the Effect-check sweep (asyncFunction), a judgment slice in next/ that adds no lock line, started before pull request 1366 by owner ruling. Counted with only asyncFunction at error through --lspconfig over next/apps/fabrika and next/packages/libfabrika: 782 hits in the slice's folders (app:src 424, lib:runtime 209, lib:cloudflare 149), the plan's numbers. 128 sit in five of pull request 1366's 58 files and wait on 1366 (runtime/Runner.integration.test.ts 65, app runtime-recovery.laws.integration.test.ts 49, cloudflare/alarm.laws.test.ts 10, app local-instance.integration.test.ts 2, cloudflare/ObjectService.test.ts 2). The other 654 are all in exam paths (test files and shared suites); no product file has a hit, since fabrika/no-promises already refuses async in next/ product code. Fixed 28 by a scratchpad script plus a read of the whole diff: async callbacks whose only awaits were dynamic imports of modules that exist and are loaded anyway, or that awaited nothing. runtime/Patch.test.ts 8 (static import of apply and diff; the file's own independent applicator renamed independentApply so the import does not shadow it), runtime/Program.test.ts 13 (5 it callbacks lose async and their dynamic imports; 8 Effect.promise(async () => ...) with nothing asynchronous become Effect.sync; ProgramDown and Write join the static import; the header line about imports inside each law is gone, since the file already imported Program statically), runtime/State.test.ts 4, runtime/BrainLife.laws.test.ts 3. Left 626, counted by class for the owner, not bulk-fixed (0565, owner ruling): A, 265 test-runner callbacks that vitest or fast-check wants async (it, law, fc.asyncProperty, beforeEach, afterEach), 186 of them wrapping Effect.runPromise and so convertible to it.effect one by one, 160 in .integration. files (e.g. cloudflare/fetch.test.ts:25, runtime/EffectFunctions.test.ts, app brain-life.integration.test.ts:33); B, 210 stand-ins for a Promise-returning platform interface (Durable Object storage and RPC stubs, fetch, vi.mock factories, vi.fn) whose type demands a Promise (e.g. cloudflare/mail.test.ts:82, cloudflare/entry-flows.laws.test.ts:70, runtime/Execution.test.ts:23, app checklist-instance.laws.integration.test.ts:161); C, 132 Promise helpers of real-instance harnesses (WebSocket clients, poll-until loops, world builders), 130 in .integration. files (e.g. app instance-records.integration.test.ts:104, app worker-mail.integration.test.ts:381, app build.integration.test.ts:342, whose static form would be a node:crypto import for E88); D, 18 async callbacks inside Effect.promise around a real-instance or platform Promise, all in .integration. files (e.g. app instance-wire.integration.test.ts:615, runtime/RecoveryStore.integration.test.ts:166); E, 1 async function that is the law's input on purpose, runtime/Program.test.ts:1016 (an async function a program declaration must refuse). Recount: lib:runtime outside 1366 files 144 to 116, of which 1 is class E; lib:cloudflare and app:src unchanged. No law was added, removed or changed in what it asserts.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Tests ran at base 37db01aa80de21d81ecb909cacaa2182a0db51d2 with the change in the worktree: the four touched files one at a time (Patch 14, State 11, Program 44, BrainLife.laws 3, all passed) and vitest --changed origin/main (4 files, 72 tests, passed). pnpm lint passed with NODE_OPTIONS=--max-old-space-size=6144, the list ratchet exited 0, and one pnpm typecheck passed. Side effect for E1: the static imports make the checker see 39 more unstableApiUsage uses in these four files (the @stability unstable tags on Patch, Program, State and BrainLife exports), a check that is off in tsconfig.base.json today and that E1 sweeps by deleting our tags. The checker's quick-fix client was not used. No product file has a hit, so no build step is needed. By owner ruling no pull request is opened: the work stays on branch fabrikalfa/effect-e78 for an integrator to fold in, and this row carries what a body would say. The first Program.ts plant missed (the law stayed green) and is recorded as such; the second one went red.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "runtime/State.test.ts: plant, accept duplicate: failed upgrades leave the original saved bytes intact (now Effect.sync)",
+      "plant": "State.ts Saved.upgrade drops its repeated-from check; expected function to throw an error, but it didn't",
+      "result": "red"
+    },
+    {
+      "law": "runtime/Program.test.ts: p25 plant, turn a thrown step into a refusal: ProgramDown retains its failure class (now Effect.sync)",
+      "plant": "Program.ts checked() maps a foreign throw to reason load in place of step; the law stayed green because the step's own guard already throws ProgramDown step, so this plant missed",
+      "result": "green"
+    },
+    {
+      "law": "runtime/Program.test.ts: plant, treat a saved poison letter as fresh bad_msg: folding fails closed (now Effect.sync)",
+      "plant": "Program.ts fold returns an unchanged step for an undecodable saved letter in place of throwing ProgramDown saved_letter; expected function to throw an error, but it didn't",
+      "result": "red"
+    },
+    {
+      "law": "runtime/Patch.test.ts: applying diff(before, after) to before gives after, for after derived from before by generated edits (static import)",
+      "plant": "Patch.ts diff drops its first operation; expected false to deeply equal []",
+      "result": "red"
+    },
+    {
+      "law": "runtime/BrainLife.laws.test.ts: p88 plant: missing start or stop transition cannot finish a normal life (static import)",
+      "plant": "BrainLife.ts lets started leave stopping; expected { _tag: 'online' } to deeply equal { _tag: 'stopping' }",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

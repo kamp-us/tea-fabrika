@@ -19,6 +19,7 @@ const plants: Plant[] = [
   [
     "changes hides the build flag",
     (w) => {
+      // SAFETY: `valid` in wiring.test-support.ts writes the changes job's outputs as a map of strings.
       delete (w.jobs.changes.outputs as Record<string, string>)["build"];
     },
   ],
@@ -31,6 +32,7 @@ const plants: Plant[] = [
   [
     "changes' size step is not told the visual label",
     (w) => {
+      // SAFETY: `valid` gives the size step an `env` map of its own; `step` hands steps back untyped.
       Reflect.deleteProperty(step(w, "changes", "size")["env"] as Record<string, string>, "VISUAL");
     },
   ],
@@ -39,6 +41,7 @@ const plants: Plant[] = [
   // merge queue and main. Source plants, each run once on workflow-lint.ts and restored: drop the
   // rule that the size step follows the parser's pass (red: sizing, install and all, before it);
   // each gated job on its own flag alone (red: every generated workflow).
+  // SAFETY: each row below is a plant's name and the function that applies it, as `Plant` holds them.
   ...(
     [
       ["next needs legs too", (w) => (w.jobs.next.needs = ["changes", "legs"])],
@@ -89,12 +92,14 @@ const plants: Plant[] = [
       ],
       [
         "the size step's base is a pull request's alone",
+        // SAFETY: the size step that `valid` builds carries an `env` map, where this plant swaps BASE.
         (w) =>
           ((step(w, "changes", "size").env as Record<string, string>)["BASE"] =
             `\${{ github.event.pull_request.base.sha }}`),
       ],
       [
         "the size step's base skips the merge queue's group",
+        // SAFETY: this plant rewrites BASE in the same `env` map that `valid` gives the size step.
         (w) =>
           ((step(w, "changes", "size").env as Record<string, string>)["BASE"] =
             `\${{ github.event.pull_request.base.sha || github.event.before }}`),
@@ -106,16 +111,19 @@ const plants: Plant[] = [
       ],
       [
         "the end-to-end legs narrow on pull requests alone, so the queue and main run every end-to-end file",
+        // SAFETY: the end-to-end step in `valid`'s next job has an `env` map with CHANGED in it.
         (w) => ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] = changedOnPullRequests),
       ],
       [
         "the end-to-end legs narrow from the event's base, even when the size step did not size them",
+        // SAFETY: the plant sets CHANGED in the end-to-end step's `env`, which `valid` writes as a map.
         (w) =>
           ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] =
             `\${{ format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before) }}`),
       ],
       [
         "the end-to-end legs never narrow",
+        // SAFETY: blanking CHANGED edits the end-to-end step's `env` map from `valid`, read untyped through `step`.
         (w) => ((step(w, "next", "end to end").env as Record<string, string>)["CHANGED"] = ""),
       ],
       // Ticket 997: a run of the reader tests alone is sized too, so a queue group of 11 reader
@@ -140,14 +148,17 @@ const plants: Plant[] = [
       ],
       [
         "the size step has no budget",
+        // SAFETY: the size step's `env` from `valid` is a map that holds BUDGET, which this plant deletes.
         (w) => Reflect.deleteProperty(step(w, "changes", "size")["env"] as Record<string, unknown>, "BUDGET"),
       ],
       [
         "the size step's budget is text",
+        // SAFETY: BUDGET sits in the size step's `env` map from `valid`; the plant writes it as text.
         (w) => Object.assign(step(w, "changes", "size")["env"] as Record<string, unknown>, { BUDGET: "240" }),
       ],
       [
         "the size step's budget is zero",
+        // SAFETY: the size step's `env` map from `valid`, given a zero BUDGET by this plant.
         (w) => Object.assign(step(w, "changes", "size")["env"] as Record<string, unknown>, { BUDGET: 0 }),
       ],
       [
@@ -189,6 +200,7 @@ const plants: Plant[] = [
       ],
       [
         "the size step on the merge queue's base",
+        // SAFETY: the plant moves BASE in the size step's `env`, which `valid` writes as a map of strings.
         (w) =>
           Object.assign(step(w, "changes", "size")["env"] as Record<string, string>, {
             BASE: `\${{ github.event.merge_group.base_sha }}`,
@@ -196,10 +208,12 @@ const plants: Plant[] = [
       ],
       [
         "the size step without its filter",
+        // SAFETY: FILTER is a key of the size step's `env` map in `valid`, and this plant drops it.
         (w) => Reflect.deleteProperty(step(w, "changes", "size")["env"] as Record<string, string>, "FILTER"),
       ],
       [
         "the size step on the first pass's filter",
+        // SAFETY: the plant swaps FILTER in the size step's `env` map, as `valid` writes it.
         (w) =>
           Object.assign(step(w, "changes", "size")["env"] as Record<string, string>, {
             FILTER: `\${{ steps.diff.outputs.filter || 'next/' }}`,
@@ -215,7 +229,7 @@ const plants: Plant[] = [
           w.jobs["ci-required"].needs.push("legs");
         },
       ],
-    ] as [string, (w: Workflow) => unknown][]
+    ] as [string, (w: Workflow) => void][]
   ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
     fault,
     (w) => {

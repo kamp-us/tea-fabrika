@@ -7,31 +7,21 @@
 // box.sh sources first: MAIN, BOXES. One result line on stdout; exit 0, 1 (kept) or 2 (bad name or
 // usage), as box.sh's Python gave.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer } from "effect";
+import { Config, ConfigProvider, Console, Effect, Layer, Option } from "effect";
 import * as BoxGitProcess from "./box/BoxGitProcess.ts";
 import * as Remove from "./box/Remove.ts";
 import * as RunsFs from "./box/RunsFs.ts";
+
+/** One variable of this process's environment, read through Config; unset is `undefined`. */
+const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
 
 const setExit = (code: number) =>
   Effect.sync(() => {
     process.exitCode = code;
   });
 
-const rm = Effect.fn("box.rm")(function* (name: string) {
-  const main = process.env.MAIN;
-  const boxes = process.env.BOXES;
-
-  if (main === undefined || boxes === undefined) {
-    yield* Console.log(`kept box ${name}: inspection or removal failed`);
-
-    return yield* setExit(1);
-  }
-
-  const services = Layer.mergeAll(BoxGitProcess.layer(main, process.env), RunsFs.layer(main)).pipe(
-    Layer.provide(NodeServices.layer),
-  );
-
-  const removal = yield* Remove.remove(name, { boxes, main }).pipe(Effect.provide(services));
+const rm = Effect.fn("box.rm")(function* (name: string, places: { readonly boxes: string; readonly main: string }) {
+  const removal = yield* Remove.remove(name, places);
 
   if (removal.runs !== "") {
     yield* Console.log(removal.runs);
@@ -41,13 +31,36 @@ const rm = Effect.fn("box.rm")(function* (name: string) {
   yield* setExit(Remove.exitCode(removal.verdict));
 });
 
+/** What `rm` calls: git from MAIN and the move that keeps a box's runs, on Node. */
+const services = (main: string) =>
+  Layer.mergeAll(BoxGitProcess.layer(main, process.env), RunsFs.layer(main)).pipe(
+    Layer.provideMerge(NodeServices.layer),
+  );
+
 // A box name is read as the exact argument, never through a flag parser: a name such as "", "-h"
 // or "--x" must reach the name check, which answers it with exit 2.
 const [command, ...rest] = process.argv.slice(2);
 
-const program =
-  command === "rm" && rest.length === 1
-    ? rm(rest[0] ?? "")
-    : Effect.andThen(Console.error("usage: box.sh rm <name>"), setExit(2));
+const name = rest[0] ?? "";
 
-NodeRuntime.runMain(program.pipe(Effect.provide(NodeServices.layer)), { disableErrorReporting: true });
+const program = Effect.gen(function* () {
+  if (command !== "rm" || rest.length !== 1) {
+    yield* Console.error("usage: box.sh rm <name>");
+
+    return yield* setExit(2);
+  }
+
+  const { main, boxes } = yield* Config.all({ main: text("MAIN"), boxes: text("BOXES") }).parse(
+    ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
+  );
+
+  if (main === undefined || boxes === undefined) {
+    yield* Console.log(`kept box ${name}: inspection or removal failed`);
+
+    return yield* setExit(1);
+  }
+
+  yield* rm(name, { boxes, main }).pipe(Effect.provide(services(main)));
+}).pipe(Effect.provide(NodeServices.layer));
+
+NodeRuntime.runMain(program, { disableErrorReporting: true });

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import {
   Change,
@@ -66,7 +69,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
       const merges = new Map<string, typeof Merged.cases.merged.Type>();
       const faults: Record<Method, Array<Fault>> = { change: [], update: [], merge: [] };
       const calls: Array<Call> = [];
-      let main = commit("0".repeat(40));
+      let main = commit(Str.repeat(40)("0"));
       let serial = 1;
       const used = new Set<string>([main]);
       let crash = false;
@@ -75,7 +78,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
         let id: string;
 
         do {
-          id = (serial++).toString(16).padStart(size, "f");
+          id = Str.padStart(size, "f")((serial++).toString(16));
         } while (used.has(id));
 
         used.add(id);
@@ -134,7 +137,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                   return Effect.succeed(Updated.cases.closed.make({ state: found.state }));
                 }
 
-                const previous = updates.get(JSON.stringify([change, head]));
+                const previous = updates.get(Formatter.formatJson([change, head]));
 
                 if (previous !== undefined && found.head === previous.head) {
                   return Effect.succeed(previous);
@@ -159,7 +162,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 });
 
                 changes.set(change, { ...found, head: updated.head, tree: updated.tree, base: main });
-                updates.set(JSON.stringify([change, head]), updated);
+                updates.set(Formatter.formatJson([change, head]), updated);
 
                 return Effect.succeed(updated);
               }),
@@ -169,7 +172,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           failure({ method: "merge", change, head }).pipe(
             Effect.andThen(
               Effect.suspend((): Effect.Effect<typeof Merged.Type, CodeHostError> => {
-                const previous = merges.get(JSON.stringify([change, head]));
+                const previous = merges.get(Formatter.formatJson([change, head]));
 
                 if (previous !== undefined) {
                   return Effect.succeed(previous);
@@ -196,7 +199,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const merged = Merged.cases.merged.make({ commit: commit(fresh(head.length)), tree: found.tree });
                 changes.set(change, { ...found, state: "merged" });
                 main = merged.commit;
-                merges.set(JSON.stringify([change, head]), merged);
+                merges.set(Formatter.formatJson([change, head]), merged);
 
                 if (crash) {
                   crash = false;
@@ -266,13 +269,13 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
           const id = (cell.pick % 4) + 1;
           const found = m.changes.get(id);
           m.serial++;
-          const hex = (salt: number) => (m.serial * 16 + salt + 10).toString(16).padStart(m.size, "0");
+          const hex = (salt: number) => Str.padStart(m.size, "0")((m.serial * 16 + salt + 10).toString(16));
 
           if (found === undefined || cell.move % 7 === 0) {
             const data: ChangeData = {
               ...Change.cases.found.make({
                 change: id,
-                head: commit(found === undefined ? cell.head.slice(-m.size) : hex(1)),
+                head: commit(found === undefined ? Str.slice(-m.size)(cell.head) : hex(1)),
                 state: cell.state,
                 paths: ["src/a.ts"],
               }),
@@ -381,36 +384,32 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
           head: fc.oneof(
             fc
               .array(fc.constantFrom(..."0123456789abcdef"), { minLength: 64, maxLength: 64 })
-              .map((digits) => digits.join("")),
-            fc.integer({ min: 1, max: 32 }).map((n) => n.toString(16).padStart(64, "f")),
+              .map((digits) => Arr.join(digits, "")),
+            fc.integer({ min: 1, max: 32 }).map((n) => Str.padStart(64, "f")(n.toString(16))),
           ),
           conflict: fc.option(fc.array(fc.constantFrom("a b", "dir/[x]", ".dot")), { nil: null }),
         })
         .map(command);
 
       // pinned: the host's first generated head used to equal an f-padded input in either hash format.
-      const collision = { move: 0, pick: 1, state: "open", head: "1".padStart(64, "f"), conflict: null } as const;
+      const collision = { move: 0, pick: 1, state: "open", head: Str.padStart(64, "f")("1"), conflict: null } as const;
       const collisionWalk = [command(collision), command({ ...collision, move: 5 })];
       fc.assert(
         fc.property(fc.commands([commandArb], { maxCommands: 70, size: "max" }), (commands) => {
-          sync(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const context = yield* Layer.build(testLayer);
-                const real = { host: Context.get(context, CodeHost), control: Context.get(context, Control) };
-                expect(yield* real.host.change(1)).toEqual(Change.cases.missing.make({ change: 1 }));
-                const main = commit("0".repeat(size));
-                yield* real.control.main(main);
-                fc.modelRun(
-                  () => ({
-                    model: { changes: new Map(), updates: new Map(), merges: new Map(), main, size, serial: 0 },
-                    real,
-                  }),
-                  commands,
-                );
+          Effect.gen(function* () {
+            const context = yield* Layer.build(testLayer);
+            const real = { host: Context.get(context, CodeHost), control: Context.get(context, Control) };
+            expect(yield* real.host.change(1)).toEqual(Change.cases.missing.make({ change: 1 }));
+            const main = commit(Str.repeat(size)("0"));
+            yield* real.control.main(main);
+            fc.modelRun(
+              () => ({
+                model: { changes: new Map(), updates: new Map(), merges: new Map(), main, size, serial: 0 },
+                real,
               }),
-            ),
-          );
+              commands,
+            );
+          }).pipe(Effect.scoped, sync);
         }),
         { seed: 119120, numRuns: 100, examples: [[collisionWalk]] },
       );

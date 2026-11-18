@@ -20,7 +20,8 @@ import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Layer, Path, type Scope, Stream } from "effect";
+import { Effect, FileSystem, Layer, Path, Stream } from "effect";
+import type { Scope } from "effect";
 
 const NAME = "checklist:1";
 
@@ -179,6 +180,7 @@ let restarts = 0;
  *  loads it: whatever its module kept in memory is gone. */
 const fresh = Effect.promise(
   () =>
+    // SAFETY: the URL is @kampus/checklist's own module, with only a query added to load it fresh.
     import(/* @vite-ignore */ `${import.meta.resolve("@kampus/checklist")}?restart=${++restarts}`) as Promise<
       typeof import("@kampus/checklist")
     >,

@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-padding-child-ci-merge-spacing",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": "kamp-us/tea-fabrika#1525",
+  "started": "2026-11-16T23:51:50-08:00",
+  "ended": "2026-11-16T23:53:48-08:00",
+  "parent": null,
+  "active": null,
+  "role": "lead",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Same-owner bounded mechanical repair in next/ after ordinary main merge 110ee27b33af27f4db61964cf2f72f952852511e. The previous child head 31730e25b182d4ac2688f97aae1546630076f705 has historical full proof 44030915373 recorded successful; ordinary check 44039895113 failed on synthetic merge d089, which included new main code. Lead diagnosis and the local raw-lint baseline both identify exactly 17 anti-slop/require-readable-spacing errors: one in node-kinds.test.ts and 16 in unreachable.integration.test.ts. Those errors belong to the new-main files, not the prior child source. The trusted vendored fixer added only those 17 blank lines. No assertion, count, string, generator, option, control flow, scope, permission or ledger changed. The approved anti-slop-install-PLAN.md body 8b4b73b90ad6 and the mechanical-sweep exception in https://github.com/kamp-us/tea-fabrika/pull/1507 govern this spacing-only repair.",
+  "note": "Actual safe checks under nice 19 and Node 26.13.0: raw oxlint on only the two named files reproduced 17 spacing diagnostics, then the trusted --fix pass and a fresh raw lint returned zero diagnostics on two files. The pinned formatter ran only those paths before and after the fix; its final --check passed. Oxc parser 0.157.0 parsed both before/after versions without error. Complete ASTs excluding only start/end/loc/range positions are identical, preserving raw literals; all raw comments and all nonblank source lines are identical. Independent diff confirms node-kinds +1/-0 and unreachable +16/-0, blank lines only. git diff --ignore-blank-lines and git diff --check passed. Complete parent 10f784ecb63d90683a787d8406490f66d3809820 and merged main 167beca93449c51bb6f0c1a54fb2f4c44fa006ff remain ancestors. Parent App.test.ts, shared seed setup, vitest config, four whole-scope globs, the L8 fixture repair, layer rules and all three ledgers match the merged base byte-for-byte. No test file was executed, including unreachable.integration.test.ts; no broad --changed, real Git cleanup/process law, full pnpm lint, TypeScript compiler API, code-graph, promise-types, compiler, CI dispatch or wait, subagent or push ran. Only the two files and this run row are committed with MAIN repaired stepcommit --commit-only lead1057. Existing successful proof and failed synthetic CI are retained as historical facts; proof/checks at the new final head remain pending. The same semantics reader and lead own final read, proof and push. Authoritative ledger contained eight active tickets, with 1057 already included; no new ticket or worker was added. Model, usage and cost are unknown.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 1.9666666666666666,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}

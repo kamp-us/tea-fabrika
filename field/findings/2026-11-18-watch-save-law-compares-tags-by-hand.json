@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-watch-save-law-compares-tags-by-hand",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": null,
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts",
+    "line": 893
+  },
+  "says": "The repaired next/ watcher save law compares _tag by hand in four new lines, which decision 0567 rules out in next/ test files, while the same law matches the reply union with Match.tag elsewhere.",
+  "proof": "0567's decision covers next/ 'test files included' and says code 'matches it, and never compares _tag by hand'. The diff adds line 893 `replies.filter((reply) => reply._tag !== \"same\")`, line 670 `assert(span.status._tag === \"Ended\", ...)`, line 879 `status._tag === \"Ended\"` and line 884 `span.status._tag === \"Ended\"`; lines 690 to 694 of the same file match the reply union with Match.tag. pnpm lint passed at this head because the rule is not yet on for this folder, which already holds main's hits at lines 405 and 568.",
+  "cost": "Four more hits stand between this folder and the zero that turns anti-slop-effect/no-manual-tag-comparison on there (0563), and the file shows both forms side by side.",
+  "head": "742954e3d938850d2837d3de25db7a2e2613c75c",
+  "ticket": "kamp-us/tea-fabrika#1122",
+  "pr": "kamp-us/tea-fabrika#1542"
+}

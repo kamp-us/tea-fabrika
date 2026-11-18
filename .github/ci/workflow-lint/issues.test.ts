@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -50,7 +51,7 @@ const other = fc.constantFrom(
 );
 
 const realWorkflows = () =>
-  Object.fromEntries(
+  Rec.fromEntries(
     ["check.yaml", "host.yaml", "mutation.yaml", "scheduled.yaml", "ci-speed.yaml"].map((name) => [
       `.github/workflows/${name}`,
       read(name),
@@ -101,6 +102,7 @@ for (const [label, plant, error] of [
   [
     "a second job inside ci-speed.yaml asks for issues",
     (files: Record<string, string>) => {
+      // SAFETY: ci-speed.yaml is a workflow with a `jobs` map, read from the real file; the YAML parse answers unknown.
       const speed = parse(files[SPEED]!) as Workflow;
       speed.jobs["again"] = { ...speed.jobs["measure"]!, steps: [] };
       files[SPEED] = JSON.stringify(speed);
@@ -110,6 +112,7 @@ for (const [label, plant, error] of [
   [
     "check.yaml's typecheck job asks for issues",
     (files: Record<string, string>) => {
+      // SAFETY: check.yaml is a real workflow with a `jobs` map, so the parsed value has the `Workflow` shape.
       const check = parse(files[".github/workflows/check.yaml"]!) as Workflow;
       check.jobs["typecheck"]!.permissions = { contents: "read", issues: "write" };
       files[".github/workflows/check.yaml"] = JSON.stringify(check);
@@ -134,6 +137,7 @@ it("property: any other workflow that grants issues, at the top or on a job, is 
       };
 
       if (onJob) {
+        // SAFETY: `workflow` was written just above with a `jobs` map whose job `a` is a map.
         (workflow["jobs"] as Record<string, Record<string, unknown>>)["a"]!["permissions"] = given;
       } else {
         workflow["permissions"] = given;
@@ -145,6 +149,7 @@ it("property: any other workflow that grants issues, at the top or on a job, is 
       const clean = structuredClone(workflow);
 
       if (onJob) {
+        // SAFETY: `clean` is a deep copy of the workflow built above, so its `jobs.a` is a map too.
         (clean["jobs"] as Record<string, Record<string, unknown>>)["a"]!["permissions"] = { contents: "read" };
       } else {
         clean["permissions"] = { contents: "read" };

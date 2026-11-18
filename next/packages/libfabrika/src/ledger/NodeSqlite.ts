@@ -4,15 +4,19 @@
  * lives in the project object.
  */
 import type { DatabaseSync, SQLOutputValue, StatementSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import type { Sql, SqlValue } from "../Sql.ts";
 
 /** The ledger writes text, integers and nulls only. A blob or a big integer is a row it never wrote. */
 const value = (column: SQLOutputValue): SqlValue => {
-  if (typeof column === "string" || typeof column === "number" || column === null) {
+  if (Predicate.isString(column) || Predicate.isNumber(column) || column === null) {
     return column;
   }
 
-  throw new TypeError(`a ${typeof column} column, which the ledger never writes`);
+  throw new TypeError(`a ${Predicate.isBigInt(column) ? "big integer" : "blob"} column, which the ledger never writes`);
 };
 
 /**
@@ -49,26 +53,30 @@ export const nodeSql = (db: DatabaseSync): Sql => {
 
   return {
     exec: (query, ...params) =>
-      prepared(query)
-        .all(...params)
-        .map((row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, value(v)]))),
+      Arr.map(prepared(query).all(...params), (row) =>
+        Rec.fromEntries(Arr.map(Rec.toEntries(row), ([k, v]) => [k, value(v)])),
+      ),
     transaction: (step) => {
       db.exec("BEGIN IMMEDIATE");
 
-      try {
-        const done = step();
+      const done = Result.try(() => {
+        const answer = step();
         db.exec("COMMIT");
 
-        return done;
-      } catch (error) {
-        // SQLite rolls some failures back by itself, SQLITE_FULL among them; then there is none to
-        // roll back, and a ROLLBACK would throw over the real error.
-        if (db.isTransaction) {
-          db.exec("ROLLBACK");
-        }
+        return answer;
+      });
 
-        throw error;
+      if (Result.isSuccess(done)) {
+        return done.success;
       }
+
+      // SQLite rolls some failures back by itself, SQLITE_FULL among them; then there is none to
+      // roll back, and a ROLLBACK would throw over the real error.
+      if (db.isTransaction) {
+        db.exec("ROLLBACK");
+      }
+
+      throw done.failure;
     },
     size: () => {
       const [count] = prepared("PRAGMA page_count").all();

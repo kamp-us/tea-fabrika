@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-dev-watch-rebuild-fix-tests5",
+  "ticket": "kamp-us/tea-fabrika#1122",
+  "pr": "kamp-us/tea-fabrika#1542",
+  "started": "2026-11-18T12:00:40Z",
+  "ended": "2026-11-18T12:10:05Z",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Merge of origin/main e693fe82 into next/ ticket 1122 at 85246a12, made as merge commit 47b4d134. The only conflict was the watcher law file, where main had restyled the old save-driven law. The PR's saveWalk, receiveChange, both repaired laws and fixtureValue were kept byte-identical; main's first L17/L18 law, L10, interruption law and rolldown mock were kept as main has them. No PR law code needed a change for main's lint rules. pnpm format ran; pnpm lint gave 0 blocking in the law file and passed 17 of 18 parts, the 18th (lint:promise-types) killed by the box memory limit and then passing alone with 0 findings. No tests or typecheck by design.",
+  "note": "Claude subagent (step-tests) started by the lead session. Its lint overlapped the lead's repeat runs 2 and 3 at 85246a12 and drove the box out of memory, which killed run 3's vitest worker; the lead stopped that series and repeated it on the merged head. Agent report: 167551 tokens at its last turn, 35 tool uses, 9.4 minutes. List price not computed.",
+  "tokens": 167551,
+  "tools": 35,
+  "minutes": 9.4,
+  "costUsd": null,
+  "billed": null
+}

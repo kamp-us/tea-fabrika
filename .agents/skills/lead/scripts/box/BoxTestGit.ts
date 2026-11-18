@@ -2,8 +2,10 @@
 // disk), in the case's own temp folder with its own HOME and no global or system Git config (0052).
 // It keeps the memory world honest: the same plans, with real index flags, real changes and real
 // retention.
-import { Effect, FileSystem, Layer, Path, Stream } from "effect";
+
+import { Array as Arr, String as Str, Effect, FileSystem, Layer, Path, Stream, Config, ConfigProvider } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+
 import * as BoxGitProcess from "./BoxGitProcess.ts";
 import type { Plan, World } from "./BoxTest.ts";
 import * as RunsFs from "./RunsFs.ts";
@@ -18,7 +20,12 @@ export const world: World = {
     const boxes = `${dir}/boxes`;
     const work = `${boxes}/${plan.name}`;
     const data = `${work}-gitdata`;
-    const path = process.env.PATH ?? "/usr/bin:/bin";
+
+    // This process's PATH, read through Config; an empty one stays empty, and only an unset one
+    // falls back.
+    const path = yield* Config.String("PATH")
+      .pipe(Config.withDefault("/usr/bin:/bin"))
+      .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
 
     const env = {
       PATH: path,
@@ -42,10 +49,10 @@ export const world: World = {
       );
 
       if (Number(code) !== 0) {
-        return yield* Effect.fail(`${command} ${args.join(" ")}: ${err}`);
+        return yield* Effect.fail(`${command} ${Arr.join(args, " ")}: ${err}`);
       }
 
-      return out.trim();
+      return Str.trim(out);
     }, Effect.scoped);
 
     const git = (at: string, ...args: ReadonlyArray<string>) => run("git", ["-C", at, ...args]);

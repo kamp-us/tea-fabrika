@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t753-l16-full-depth-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1591",
+  "started": "2026-11-17T19:13:00-08:00",
+  "ended": "2026-11-17T19:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In next/, the one fix round for the review of 7f6ed9c1f. A6 now checks that each Process call's own flush ships every span the call ended before it (the span rows the Process database still holds are only those that ended after the flush), that the Record stub received them, and that each shipped span carries fab.settings and fab.build. B3 now walks stop_child through the real ChildrenLedger in the runner world. The B2 comment says what B2 sees. The batch around the Project's publish is removed, so publish records what it did on main, and a new A6 law pins it. A4 holds the collecting tracer's ownership check. B1 walks the exit Cmd, a crash, a restart, start_child and stop_child, each with its step count, at the same budget of 3 reads per step. Every plant named in the brief was shown red once and restored byte for byte.",
+  "note": "Started time is an estimate: it follows the review row's end, since no shell timestamp was taken at the start. Usage and cost are not recorded. Measured whole-call lifecycle reads at full depth on the build's Runner.ts: inc 3, due 1, open 1, work 6, stop 6, start_child 6, stop_child 6, crash 4, restart 5 to 8, from a live and from a crashed process alike (why it varies was not investigated). B1 counts a crash's and a restart's three journal steps (writing_exit, waiting_start, checkpointing) as steps, each reading status once for at, so STEPS has crash 4 and restart 4 against BUDGET_PER_STEP 3: 12 reads allowed, 8 seen at most. The driver sees only a call's total, so these two budgets are looser per step than inc's. The --changed run was limited to the next project, because the default selection reaches next/apps/fabrika/e2e/resources.laws.visual.test.ts, which starts Electron; that file ran for a short time before it was stopped, and no test process of it is left.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "9b2fa466d",
+  "plants": [
+    { "law": "A6 every Process call commits its spans in one transaction, and its own flush ships them", "plant": "delete the commitOpen call at the top of flush in Sink.ts", "result": "red" },
+    { "law": "A6 a Project publish adds no span row and no commit to the Project's database", "plant": "the batch around publish put back", "result": "red" },
+    { "law": "A4 a batch belongs to its sink, and a span that ends after its batch closed lands at once", "plant": "drop && made.owner === self in the collecting tracer", "result": "red" },
+    { "law": "B3 a process's normal exit is written only by its own runner's built-in exit", "plant": "ChildrenLedger stop writes normal at line 484", "result": "red" },
+    { "law": "B1 each serial step of a runner call makes at most one lifecycle read beyond the reads for at", "plant": "every check reads fresh", "result": "red" }
+  ]
+}

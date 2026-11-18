@@ -2,13 +2,14 @@ import { readFileSync } from "node:fs";
 import { compileFunction } from "node:vm";
 import { it, expect } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Effect, Exit, FileSystem, Option, Path, Ref, Result, Schema, Sink, Stream } from "effect";
+import { ByteSize, Effect, Exit, FileSystem, Match, Option, Path, Ref, Result, Schema, Sink, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { HttpClient } from "effect/http";
 import { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { assert, describe, TestRunner } from "vitest";
+import { parseCLI } from "vitest/node";
 import * as Cases from "./l11-cases.ts";
 import * as Exercise from "./l11-exercise.ts";
 import L11Reporter, { Attribution, Metadata, causal } from "./l11-reporter.ts";
@@ -140,6 +141,13 @@ it.prop(
 
     expect(Result.isSuccess(Cases.decode({ case: name, sha: Cases.cached }))).toBe(true);
     const chosen = Cases.Request.make({ case: name, sha: Cases.cached });
+    // Plant: omit runtime collection. Vitest's default static parser cannot expand looped registrations.
+    const listed = parseCLI(Cases.argv(chosen, "private.json", true).slice(1));
+    const executed = parseCLI(Cases.argv(chosen, "private.json").slice(1));
+    expect(listed.options.staticParse).toBe(false);
+    expect(executed.options.staticParse).toBeUndefined();
+    expect(listed.filter).toEqual([Cases.file]);
+    expect(listed.options.json).toBe("private.json");
     const pattern = Cases.argv(chosen, "private.json").find((arg) => arg.startsWith("--testNamePattern="));
     expect(Cases.argv(chosen, "private.json").includes("--disableConsoleIntercept")).toBe(name === "l11-inputs");
     expect(
@@ -357,7 +365,18 @@ it.prop(
 
     const before = trace(secret);
     const after = structuredClone(before);
-    expect(Result.isSuccess(Exercise.equality(stdout(before), stdout(after)))).toBe(true);
+    const input = stdout(before);
+    expect(Result.isSuccess(Exercise.equality(input, stdout(after)))).toBe(true);
+    // Plant: accept identical text before validation. Equal inputs may both be invalid or incomplete.
+
+    for (const invalid of [
+      Cases.tracePrefix + JSON.stringify({ ...before[0], extra: secret }),
+      Cases.tracePrefix + JSON.stringify(secret),
+      stdout(before.slice(0, 1)),
+    ]) {
+      expect(Exercise.equality(invalid, invalid)).toEqual(Result.fail("trace_incomplete"));
+    }
+
     const at = after.findIndex((event) => event._tag === "pick");
     const pick = after[at];
 
@@ -386,8 +405,8 @@ it.prop(
         break;
     }
 
-    expect(Result.isFailure(Exercise.equality(stdout(before), stdout(after)))).toBe(true);
-    expect(Result.isFailure(Exercise.equality(stdout(before), ""))).toBe(true);
+    expect(Result.isFailure(Exercise.equality(input, stdout(after)))).toBe(true);
+    expect(Result.isFailure(Exercise.equality(input, ""))).toBe(true);
   },
   options,
 );
@@ -735,14 +754,12 @@ it.effect.prop(
 
       const request = Cases.Request.make({ case: name, sha: Cases.cached });
 
-      const mode =
-        name === "l11-compare"
-          ? Exercise.Internal.cases.compare.make({ variant: "cached" })
-          : name === "l11-batch"
-            ? Exercise.Internal.cases.batch.make({ slot: 1 })
-            : name === "l11-inputs"
-              ? Exercise.Internal.cases.inputs.make({})
-              : Exercise.Internal.cases.output.make({});
+      const mode = Match.value(name).pipe(
+        Match.when("l11-compare", () => Exercise.Internal.cases.compare.make({ variant: "cached" })),
+        Match.when("l11-batch", () => Exercise.Internal.cases.batch.make({ slot: 1 })),
+        Match.when("l11-inputs", () => Exercise.Internal.cases.inputs.make({})),
+        Match.orElse(() => Exercise.Internal.cases.output.make({})),
+      );
 
       const points = [
         "none",
@@ -762,13 +779,12 @@ it.effect.prop(
         request,
         mode,
         identity(
-          name === "l11-compare"
-            ? "compare"
-            : name === "l11-batch"
-              ? "slot-1"
-              : name === "l11-inputs"
-                ? "inputs"
-                : "output",
+          Match.value(name).pipe(
+            Match.when("l11-compare", () => "compare" as const),
+            Match.when("l11-batch", () => "slot-1" as const),
+            Match.when("l11-inputs", () => "inputs" as const),
+            Match.orElse(() => "output" as const),
+          ),
         ),
         mock.io,
       );
@@ -985,20 +1001,14 @@ it.effect.prop(
           const args = command.args.join(" ");
           gitCalls.push(args);
 
-          const output =
-            args === "rev-parse HEAD"
-              ? Cases.cached
-              : args === "write-tree"
-                ? changedIndex
-                  ? "c".repeat(40)
-                  : "b".repeat(40)
-                : args === "rev-parse HEAD:next/packages/libfabrika"
-                  ? Cases.hashes.product
-                  : args === "rev-parse HEAD^{tree}"
-                    ? "b".repeat(40)
-                    : args === "--version"
-                      ? "git version 2.50.0"
-                      : "";
+          const output = Match.value(args).pipe(
+            Match.when("rev-parse HEAD", () => Cases.cached),
+            Match.when("write-tree", () => (changedIndex ? "c".repeat(40) : "b".repeat(40))),
+            Match.when("rev-parse HEAD:next/packages/libfabrika", () => Cases.hashes.product),
+            Match.when("rev-parse HEAD^{tree}", () => "b".repeat(40)),
+            Match.when("--version", () => "git version 2.50.0"),
+            Match.orElse(() => ""),
+          );
 
           return ChildProcessSpawner.makeHandle({
             pid: ChildProcessSpawner.ProcessId(10),
@@ -1395,7 +1405,14 @@ const verifySpan = Effect.fnUntraced(function* ({ name, encoding, kind, word }: 
   // Only the fixed observation helper runs, with memory-only SpanRow/TestRunner stand-ins. The protected law never runs.
 
   const request = Cases.Request.make({ case: name, sha: Cases.cached });
-  const field = name === "l11-span-name" ? "name" : name === "l11-span-code" ? "code" : "errcode";
+
+  const field = Match.value(name).pipe(
+    Match.when("l11-span-name", () => "name" as const),
+    Match.when("l11-span-code", () => "code" as const),
+    Match.when("l11-span-errcode", () => "errcode" as const),
+    Match.exhaustive,
+  );
+
   const key = field === "name" ? "error.type" : "fab.ledger.code";
   const secret = `private-${word}\n/%☃`;
   const marker = [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)][encoding]!;

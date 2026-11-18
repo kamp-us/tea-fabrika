@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Match } from "effect";
 import { transformSync } from "esbuild";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -143,7 +144,11 @@ it("property: comments added, removed or rewritten between tokens give the same 
 const swap = (token: Token): string => {
   switch (token.kind) {
     case "word":
-      return token.text === "const" ? "let" : token.text === "let" ? "var" : token.text;
+      return Match.value(token.text).pipe(
+        Match.when("const", () => "let"),
+        Match.when("let", () => "var"),
+        Match.orElse(() => token.text),
+      );
     case "name":
       return `${token.text}x`;
     case "type":
@@ -296,10 +301,18 @@ it("property: a tool comment that was added, removed or changed is refused, in a
       ([head, list, before], [body, form], how, at, file) => {
         const place = at % list.length;
         const put = (text: string) => before.map((g, i) => (i === place ? `${text}${g}` : g));
-        const old = how === "added" ? before : how === "removed" ? put(write(form, body)) : put(write(form, body));
 
-        const fresh =
-          how === "added" ? put(write(form, body)) : how === "removed" ? before : put(write(form, `${body} b`));
+        const old = Match.value(how).pipe(
+          Match.when("added", () => before),
+          Match.when("removed", () => put(write(form, body))),
+          Match.orElse(() => put(write(form, body))),
+        );
+
+        const fresh = Match.value(how).pipe(
+          Match.when("added", () => put(write(form, body))),
+          Match.when("removed", () => before),
+          Match.orElse(() => put(write(form, `${body} b`))),
+        );
 
         expect(sameProgram(file, join(head, list, old), join(head, list, fresh))).toBe(false);
       },

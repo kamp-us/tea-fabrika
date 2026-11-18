@@ -6,9 +6,10 @@
 // Ticket 839, slice 1 (0137): L9 sends `check` with and without a note, L16 resends a letter by its
 // id (p53's checklist form), L17 reads the saved letter's note and writer back (p52's checklist form).
 import { describe, expect, it } from "@effect/vitest";
-import type { ProgramRunner } from "@kampus/libfabrika";
+import type { Incoming, ProgramRunner } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
+import { Array as Arr, String as Str, Arbitrary, DateTime, Effect, flow, Formatter, Option, Schema } from "effect";
+import type { Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
@@ -24,9 +25,10 @@ const MOST = 256;
 
 type Runner = ProgramRunner["Service"];
 
-/** A writer as the door stamps it on a letter, made by the part that supplies it: the suite only
- *  carries it, and knows a person's from an agent's by which one it was given. */
-export type Writer = unknown;
+/** A writer as the door stamps it on a letter, the type the runner's `Incoming` decodes, made by the
+ *  part that supplies it: the suite only carries it, and knows a person's from an agent's by which
+ *  one it was given. */
+export type Writer = Incoming["envelope"]["by"];
 
 /** A letter as the process's inbox saved it: its id, its input, its writer's checked key and clock. */
 export type Saved = { readonly id: string; readonly m: unknown; readonly by: string; readonly sentAt: string };
@@ -58,7 +60,7 @@ export type Fresh = Effect.Effect<typeof checklist>;
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 /** A delivered input with a fresh id: the `n`th of its run, sent on the writer's own clock. */
-const letter = (n: number, by: Writer, input: unknown, sentAt = "writer clock") => ({
+const letter = (n: number, by: Writer, input: Readonly<Record<string, string>>, sentAt = "writer clock") => ({
   id: `checklist-${n}`,
   envelope: {
     id: `input_0000000000e0080000000000${ALPHABET[(n >> 5) % 32]}${ALPHABET[n % 32]}`,
@@ -77,19 +79,15 @@ const View = Schema.Struct({
   left: Schema.Int,
 });
 
-const shown = (view: unknown) => {
-  const v = Schema.decodeUnknownSync(View)(view);
-
-  return {
-    items: v.items
-      .map((i) => ({ name: i.name, state: i.state, note: i.note }))
-      .sort((a, b) => (a.name < b.name ? -1 : 1)),
-    left: v.left,
-  };
-};
+const shown = flow(Schema.decodeUnknownSync(View), (v) => ({
+  items: Arr.map(v.items, (i) => ({ name: i.name, state: i.state, note: i.note })).sort((a, b) =>
+    a.name < b.name ? -1 : 1,
+  ),
+  left: v.left,
+}));
 
 /** Only the letters this suite sent: the runner's own timers are not a writer's. */
-const sent = (letters: ReadonlyArray<Saved>) => letters.filter((l) => l.id.startsWith("checklist-"));
+const sent = (letters: ReadonlyArray<Saved>) => Arr.filter(letters, (l) => Str.startsWith("checklist-")(l.id));
 
 const NAMES = ["git", "node", "pnpm", "volta"] as const;
 
@@ -99,7 +97,7 @@ const INPUTS = ["add", "rename", "remove", "check", "uncheck"] as const;
 const PERSON_ONLY: ReadonlySet<string> = new Set(["add", "rename", "remove"]);
 
 /** A `check`'s note: none, 1 character, exactly `MOST`, or one past it, which no writer may send. */
-const NOTES = { none: undefined, one: "n", most: "m".repeat(MOST), over: "o".repeat(MOST + 1) } as const;
+const NOTES = { none: undefined, one: "n", most: Str.repeat(MOST)("m"), over: Str.repeat(MOST + 1)("o") } as const;
 
 /** One move's entropy: which input, whose, which item, and a `check`'s note. What it names is read
  *  off the record. */
@@ -119,17 +117,19 @@ type Kept = { readonly done: boolean; readonly note: string | null };
 
 /** The record's view: no timer fires in L9 or L16, so an item is `new` until it is checked. */
 const recorded = (items: ReadonlyMap<string, Kept>) => ({
-  items: [...items]
-    .map(([name, { done, note }]) => ({ name, state: done ? "checked" : "new", note: done ? note : null }))
-    .sort((a, b) => (a.name < b.name ? -1 : 1)),
-  left: [...items.values()].filter((i) => !i.done).length,
+  items: Arr.map([...items], ([name, { done, note }]) => ({
+    name,
+    state: done ? "checked" : "new",
+    note: done ? note : null,
+  })).sort((a, b) => (a.name < b.name ? -1 : 1)),
+  left: Arr.filter([...items.values()], (i) => !i.done).length,
 });
 
 /** The input a step sends, named from what the record holds; `null` when nothing fits it. A `check`
  *  may name a checked item: it is accepted and changes nothing. */
 const named = (items: ReadonlyMap<string, Kept>, step: Step): Record<string, string> | null => {
   const here = [...items.keys()];
-  const free = NAMES.filter((n) => !items.has(n));
+  const free = Arr.filter(NAMES, (n) => !items.has(n));
   const name = here[step.pick % Math.max(here.length, 1)];
   const fresh = free[(step.pick >> 2) % Math.max(free.length, 1)];
 
@@ -189,7 +189,7 @@ const Retried = Arbitrary.array(
 /** L17's note: any text of 1 to `MOST` characters, or `MOST` characters of four UTF-8 bytes each. */
 const AnyNote = Arbitrary.flatMap(Arbitrary.schema(Schema.Literals(["any", "any", "wide"])), (kind) =>
   kind === "wide"
-    ? Arbitrary.Constant("\u{1F642}".repeat(MOST / 2))
+    ? Arbitrary.Constant(Str.repeat(MOST / 2)("\u{1F642}"))
     : Arbitrary.schema(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(MOST))),
 );
 
@@ -231,7 +231,7 @@ export const suite = (open: Open, fresh: Fresh) =>
               const walled = step.by === "agent" && PERSON_ONLY.has(input["type"] ?? "");
               const bad = malformed(input);
               // Until the 0125 code batch names its reason, a walled input is `refused` (bad_msg today).
-              expect(answer._tag, `${step.by} ${JSON.stringify(input)}`).toBe(
+              expect(answer._tag, `${step.by} ${Formatter.format(input)}`).toBe(
                 walled || refusable || bad ? "refused" : "accepted",
               );
 
@@ -306,7 +306,7 @@ export const suite = (open: Open, fresh: Fresh) =>
                 !(items.has(input["name"] ?? "") && input["type"] === "add") &&
                 !malformed(input);
 
-              expect(answer._tag, `${step.by} ${JSON.stringify(input)}`).toBe(ok ? "accepted" : "refused");
+              expect(answer._tag, `${step.by} ${Formatter.format(input)}`).toBe(ok ? "accepted" : "refused");
 
               if (ok) {
                 accepted.push({ sent: fresh, answer });
@@ -318,9 +318,9 @@ export const suite = (open: Open, fresh: Fresh) =>
             }
 
             // Every accepted id is in the inbox exactly once, holding the body it was first sent with.
-            const ids = sent(yield* letters).map((l) => l.id);
-            expect([...ids].sort()).toEqual(accepted.map((a) => a.sent.id).sort());
-            const saved = new Map(sent(yield* letters).map((l) => [l.id, l.m]));
+            const ids = Arr.map(sent(yield* letters), (l) => l.id);
+            expect([...ids].sort()).toEqual(Arr.map(accepted, (a) => a.sent.id).sort());
+            const saved = new Map(Arr.map(sent(yield* letters), (l) => [l.id, l.m]));
 
             for (const { sent: first } of accepted) {
               expect(saved.get(first.id), first.id).toEqual(first.envelope.input);
@@ -353,7 +353,9 @@ export const suite = (open: Open, fresh: Fresh) =>
             yield* r.due(0);
             expect(yield* view, "the referee's time stamps it, not the writer's").toEqual(one("open", null));
             expect(alarms.at(-1), "since is the timer's arrivedAt").toBe(1000 + DAY);
-            expect((yield* letters).find((l) => !l.id.startsWith("checklist-"))?.m).toEqual({
+            expect(
+              Option.getOrUndefined(Arr.findFirst(yield* letters, (l) => !Str.startsWith("checklist-")(l.id)))?.m,
+            ).toEqual({
               type: "timer",
               at: 0,
               arrivedAt: 1000,
@@ -364,7 +366,7 @@ export const suite = (open: Open, fresh: Fresh) =>
             expect(yield* view).toEqual(one("checked", note));
             expect(alarms.at(-1), "nothing is left to wake for").toBeNull();
 
-            const saved = (yield* letters).find((l) => l.id === check.id);
+            const saved = Option.getOrUndefined(Arr.findFirst(yield* letters, (l) => l.id === check.id));
             const m = Schema.decodeUnknownSync(Schema.Struct({ note: Schema.String }))(saved?.m);
             expect(new TextEncoder().encode(m.note), "the note's exact bytes").toEqual(new TextEncoder().encode(note));
             expect(saved?.by, "the writer's checked key").toBe(key(writer));

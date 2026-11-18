@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tt8-valid-times-skip-leap-days",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": null,
+  "rule": "missing_test",
+  "location": {
+    "path": ".github/ci/time-table.test.ts",
+    "line": 605
+  },
+  "says": "In today's CI, TT8 draws valid job times only from 2026-09-21 to 2027-01-15, so no valid leap day or February to August month-end is ever drawn, and a readQueueWait calendar check that rejects real dates is not caught.",
+  "proof": "Planting `if (month === 2 && day === 29) { return undefined; }` before Date.parse in .github/ci/time-table.ts timestamp, then `nice -n 15 pnpm exec vitest run --maxWorkers=1 .github/ci/time-table.test.ts` printed `Tests 11 passed (11)`; restored by sha256.",
+  "cost": "A wrong calendar rule would silently drop queue wait for real jobs on those dates, starting 2028-02-29.",
+  "head": "108ea8e8fca4b9fe2bd5ed706b24f4dc80bea31d",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567"
+}

@@ -4,8 +4,12 @@
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import { createHash } from "node:crypto";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
@@ -24,7 +28,7 @@ const u32 = (n: number) => {
 };
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
 
   return Buffer.concat([u32(b.length), b]);
 };
@@ -36,7 +40,7 @@ const armor = (bytes: Uint8Array) =>
     ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`;
 
 const signedBytes = (text: string, space: string = SPACE) =>
   Buffer.concat([
@@ -60,8 +64,12 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
     ]),
   );
 
-const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: call, catch: () => new Error("test WebCrypto failed") });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
+const web = <A>(call: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
+  Effect.tryPromise({ try: call, catch: () => WebCryptoError.make({ message: "test WebCrypto failed" }) });
 
 const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
@@ -139,8 +147,8 @@ describe("P10 hello", () => {
   // d2: for any signed hello (a fresh key, any url, tab and nonce) that admission refuses
   // (not_granted, its one refusal), the refusal carries that caller's own checked fingerprint and spends no nonce.
   // Plant: return the refusal without the fingerprint.
-  it("d2: any refused signed hello names its own checked fingerprint", async () => {
-    await fc.assert(
+  it("d2: any refused signed hello names its own checked fingerprint", () =>
+    fc.assert(
       fc.asyncProperty(fc.webUrl(), fc.string(), fc.string(), (url, tab, nonce) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -188,8 +196,7 @@ describe("P10 hello", () => {
         ),
       ),
       { seed: 119120, endOnFailure: true, numRuns: 40 },
-    );
-  });
+    ));
 
   for (const binding of ["tab", "nonce"] as const) {
     it.effect.prop(
@@ -250,8 +257,8 @@ describe("P10 hello", () => {
         fc.array(fc.integer({ min: 1, max: 9 })),
         fc.array(fc.integer({ min: 1, max: 9 })),
         (client, server) => {
-          const common = [...new Set(client)].filter((v) => server.includes(v));
-          expect(selectVersion(client, server)).toEqual(common.length ? Math.max(...common) : null);
+          const common = Arr.filter([...new Set(client)], (v) => server.includes(v));
+          expect(selectVersion(client, server)).toEqual(common.length > 0 ? Math.max(...common) : null);
         },
       ),
       { seed: 119120, numRuns: 100 },
@@ -300,13 +307,12 @@ describe("P10 hello", () => {
 
               const hello = {
                 ...x.hello,
-                ...(kind === "signature"
-                  ? { signed: "broken" }
-                  : kind === "key"
-                    ? { key: `${x.hello.key}=` }
-                    : kind === "version"
-                      ? { versions: [8] }
-                      : {}),
+                ...Match.value(kind).pipe(
+                  Match.when("signature", () => ({ signed: "broken" })),
+                  Match.when("key", () => ({ key: `${x.hello.key}=` })),
+                  Match.when("version", () => ({ versions: [8] })),
+                  Match.orElse(() => ({})),
+                ),
               };
 
               const admit = kind === "unknown" ? vi.fn(() => Effect.succeed(value)) : x.admit;
@@ -314,7 +320,11 @@ describe("P10 hello", () => {
               const result = yield* checked;
               expect(result).toMatchObject({
                 _tag: "refused",
-                ...(kind === "version" ? { reason: "no_version" } : kind === "unknown" ? { reason: value.reason } : {}),
+                ...Match.value(kind).pipe(
+                  Match.when("version", () => ({ reason: "no_version" })),
+                  Match.when("unknown", () => ({ reason: value.reason })),
+                  Match.orElse(() => ({})),
+                ),
               });
               expect(x.consume).not.toHaveBeenCalled();
               expect(admit.mock.calls.length).toBe(kind === "unknown" ? 1 : 0);
@@ -405,9 +415,9 @@ const Origin = fc.oneof(
   fc
     .tuple(Canonical, fc.constantFrom("/", "/path", "?q", "#h", ":80", ":443", ":", " ", "\n", "%2e"))
     .map(([origin, tail]) => `${origin}${tail}`),
-  Canonical.map((origin) => origin.toUpperCase()),
-  Canonical.map((origin) => origin.replace("://", "://user:pass@")),
-  Canonical.map((origin) => origin.replace("://", ":")),
+  Canonical.map((origin) => Str.toUpperCase(origin)),
+  Canonical.map((origin) => Str.replace("://", "://user:pass@")(origin)),
+  Canonical.map((origin) => Str.replace("://", ":")(origin)),
   Canonical.map((origin) => ` ${origin}`),
   fc.constantFrom("", "null", "/", "/relative", "//fabrika.test", "fabrika.test", "https:", "https://", "not a URL"),
   fc.string(),

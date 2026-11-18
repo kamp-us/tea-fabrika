@@ -15,6 +15,7 @@ import type { ProjectDoorOptions, ProjectService } from "./runtime.ts";
 
 /** The send function `Publish.make` is given, and the two fronts it gives back. */
 type Send = Parameters<typeof Publish.make>[1];
+
 type Fronts = ReturnType<typeof Publish.make>;
 
 it("type: L4 every cloud hop's news parameter is News and every hop's update parameter is Published", () => {

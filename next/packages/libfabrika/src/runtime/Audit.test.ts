@@ -2,6 +2,8 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Effect, Exit, Schema } from "effect";
+import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import * as Audit from "./Audit.ts";
 import { nodeExecution, workerExecution } from "./Execution.ts";
@@ -32,7 +34,7 @@ const Tape = fc.array(fc.record({ pick: fc.noBias(fc.nat()), move: fc.noBias(fc.
 
 const Samples = Arbitrary.array(Arbitrary.schema(Save), { minLength: 8, maxLength: 32 });
 
-const declared = (select: (msg: typeof Save.Type) => unknown, data: Schema.Codec<unknown, unknown> = Metadata) => ({
+const declared = <A>(select: (msg: typeof Save.Type) => A, data: Schema.Codec<unknown, unknown> = Metadata) => ({
   name: "audit-fixture",
   machine: Machine.make({
     model: Model,
@@ -107,6 +109,7 @@ describe("P13 safe audit", () => {
         Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
               const bodies: Array<string> = [];
               const outputs: Array<string> = [];
               const spans = capture();
@@ -115,21 +118,19 @@ describe("P13 safe audit", () => {
               for (const [n, cell] of tape.entries()) {
                 const note = `note-${cell.pick % 3}`;
                 const base = versions.get(note) ?? 0;
-                const body = JSON.stringify({ private: cell.pick, line: `"/雪\n${n}` });
+                const body = Formatter.formatJson({ private: cell.pick, line: `"/雪\n${n}` });
                 const input = Save.make({ type: "save", note, base, body });
                 bodies.push(body);
                 const modes = ["decode", "selector", "output", "json", "rpc", "reply"] as const;
                 const mode = modes[cell.move % modes.length]!;
                 reached.add(mode);
 
-                const program =
-                  mode === "selector"
-                    ? declared(() => raised(body))
-                    : mode === "output"
-                      ? declared(() => ({ type: "save", note, base: body }))
-                      : mode === "json"
-                        ? declared(() => ({ hidden: 1n }), Schema.Unknown)
-                        : declared(metadata);
+                const program = Match.value(mode).pipe(
+                  Match.when("selector", () => declared(() => raised(body))),
+                  Match.when("output", () => declared(() => ({ type: "save", note, base: body }))),
+                  Match.when("json", () => declared(() => ({ hidden: 1n }), Schema.Unknown)),
+                  Match.orElse(() => declared(metadata)),
+                );
 
                 const node = nodeExecution(program);
 
@@ -141,18 +142,18 @@ describe("P13 safe audit", () => {
                     expect(Cause.hasDies(direct.cause)).toBe(false);
                     const error = Cause.squash(direct.cause);
                     expect(error).toBeInstanceOf(Audit.AuditError);
-                    outputs.push(String(error), JSON.stringify(error), Cause.pretty(direct.cause));
+                    outputs.push(String(error), Formatter.formatJson(error), Cause.pretty(direct.cause));
                   }
                 }
 
                 const execution = workerExecution({
-                  init: async (saved) => Effect.runPromise(node.init(saved)),
-                  step: async (model, msg) => Effect.runPromise(node.step(model, msg)),
-                  fresh: async (model, msg) => Effect.runPromise(node.fresh(model, msg)),
-                  update: async (model, msg) => Effect.runPromise(node.update(model, msg)),
-                  fold: async (model, msg) => Effect.runPromise(node.fold(model, msg)),
-                  upgrade: async (saved) => Effect.runPromise(node.upgrade(saved)),
-                  reply: async (cmd, result) => Effect.runPromise(node.reply(cmd, result)),
+                  init: async (saved) => Effect.runPromiseWith(context)(node.init(saved)),
+                  step: async (model, msg) => Effect.runPromiseWith(context)(node.step(model, msg)),
+                  fresh: async (model, msg) => Effect.runPromiseWith(context)(node.fresh(model, msg)),
+                  update: async (model, msg) => Effect.runPromiseWith(context)(node.update(model, msg)),
+                  fold: async (model, msg) => Effect.runPromiseWith(context)(node.fold(model, msg)),
+                  upgrade: async (saved) => Effect.runPromiseWith(context)(node.upgrade(saved)),
+                  reply: async (cmd, result) => Effect.runPromiseWith(context)(node.reply(cmd, result)),
                   audit: async (msg) => {
                     if (mode === "rpc") {
                       return raised(body);
@@ -162,7 +163,7 @@ describe("P13 safe audit", () => {
                       return { private: body, url: `https://audit.test/?body=${encodeURIComponent(body)}` };
                     }
 
-                    const answer = await Effect.runPromise(
+                    const answer = await Effect.runPromiseWith(context)(
                       node.audit(msg).pipe(
                         Effect.match({
                           onSuccess: (value) => Audit.Answer.cases.ok.make({ value }),
@@ -188,7 +189,7 @@ describe("P13 safe audit", () => {
                   expect(Cause.hasDies(exit.cause)).toBe(false);
                   const error = Cause.squash(exit.cause);
                   expect(error).toMatchObject({ _tag: "AuditError", reason: { _tag: expect.any(String) } });
-                  outputs.push(String(error), JSON.stringify(error), Cause.pretty(exit.cause));
+                  outputs.push(String(error), Formatter.formatJson(error), Cause.pretty(exit.cause));
                 }
 
                 // Repair on the same input is the positive control for every failure edge.

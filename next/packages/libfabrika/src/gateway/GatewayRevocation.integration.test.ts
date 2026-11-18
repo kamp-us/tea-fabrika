@@ -12,8 +12,19 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as RateLimiter from "effect/persistence/RateLimiter";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -41,14 +52,25 @@ import { Answer } from "../transport/Wire.ts";
 import type { GatewayError } from "./GatewayError.ts";
 import * as RateLimiterSql from "./RateLimiterSql.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
+
 let Gateway: typeof import("./Gateway.ts").Gateway;
 
 let Id: typeof import("../Id.ts");
 
-beforeEach(async () => {
-  ({ Gateway } = await vi.importActual<typeof import("./Gateway.ts")>("./Gateway.ts"));
-  Id = await vi.importActual<typeof Id>("../Id.ts");
-});
+beforeEach(() =>
+  Effect.gen(function* () {
+    ({ Gateway } = yield* promised(() => vi.importActual<typeof import("./Gateway.ts")>("./Gateway.ts")));
+    Id = yield* promised(() => vi.importActual<typeof Id>("../Id.ts"));
+  }),
+);
 
 const checks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) };
 
@@ -97,14 +119,18 @@ const field = (value: string | Uint8Array) => {
   return Buffer.concat([u32(bytes.length), bytes]);
 };
 
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
 const web = <A>(call: () => Promise<A>) =>
-  Effect.tryPromise({ try: call, catch: () => new Error("test crypto failed") });
+  Effect.tryPromise({ try: call, catch: () => WebCryptoError.make({ message: "test crypto failed" }) });
 
 const key = Effect.fnUntraced(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  const fp = (raw: Uint8Array) => `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+  const fp = (raw: Uint8Array) => `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(raw).digest("base64"))}`;
 
   return {
     raw: Buffer.from(bytes).toString("base64url"),
@@ -163,12 +189,14 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 
   const deliveries: Incoming[] = [],
     notices: Array<{ client: string; news: News }> = [];
+
   const controls = {
     letter: "",
     open: (_process: string, _client: string): Effect.Effect<Schema.Json> => Effect.succeed(null),
     deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError | GatewayError> =>
       Effect.void,
   };
+
   // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
   // journal in memory. Every byte a law reads stays in the file and survives reopen.
   const storage = () => TestDatabase.make(path).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
@@ -369,7 +397,7 @@ const rows = (w: World, stream: string, saved = w.first) =>
 const last = (w: World) => {
   const incoming = w.deliveries.at(-1);
 
-  if (!incoming) {
+  if (incoming === undefined) {
     throw new Error("door did not deliver an input");
   }
 
@@ -410,14 +438,15 @@ describe("P12, door laws retained after the library move", () => {
         ),
     );
 
-  it("view.open refuses any bad pid before invoking the program, and opens a valid pid", async () => {
-    await fc.assert(viewOpen(), checks);
-  });
-  it("the view.open law catches a bypassed pid check", async () => {
-    const result = await fc.check(viewOpen(true), { ...checks, endOnFailure: true });
-    expect(result.failed).toBe(true);
-    expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
-  });
+  it("view.open refuses any bad pid before invoking the program, and opens a valid pid", () =>
+    fc.assert(viewOpen(), checks));
+  it.live("the view.open law catches a bypassed pid check", () =>
+    Effect.gen(function* () {
+      const result = yield* promised(() => fc.check(viewOpen(true), { ...checks, endOnFailure: true }));
+      expect(result.failed).toBe(true);
+      expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
+    }),
+  );
 
   const grantTarget = (plant?: "fingerprint" | "code") =>
     fc.asyncProperty(
@@ -456,24 +485,24 @@ describe("P12, door laws retained after the library move", () => {
         ),
     );
 
-  it("a grant target matches both the waiting fingerprint and its code", async () => {
-    await fc.assert(grantTarget(), checks);
-  });
+  it("a grant target matches both the waiting fingerprint and its code", () => fc.assert(grantTarget(), checks));
 
   for (const field of ["fingerprint", "code"] as const)
   // Pin each P12 grant-target bypass plant, retaining the generated law and both fields.
   {
-    it(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, async () => {
-      const result = await fc.check(grantTarget(field), { ...checks, endOnFailure: true });
-      expect(result.failed).toBe(true);
-      expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
-    });
+    it.live(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, () =>
+      Effect.gen(function* () {
+        const result = yield* promised(() => fc.check(grantTarget(field), { ...checks, endOnFailure: true }));
+        expect(result.failed).toBe(true);
+        expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
+      }),
+    );
   }
 });
 
 describe("P17a, revoke stops writes at the final door", () => {
-  it("current inputs keep their fields and a retry with missing metadata fails as a bad row", async () => {
-    await fc.assert(
+  it("current inputs keep their fields and a retry with missing metadata fails as a bad row", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.constantFrom("door", "n"),
@@ -513,8 +542,19 @@ describe("P17a, revoke stops writes at the final door", () => {
               });
               const [saved] = w.first.sql.exec("SELECT id,value FROM gateway_bindings");
               assert(saved?.id !== undefined, "input binding must have a saved id");
-              const binding = { ...JSON.parse(String(saved.value)), [missing]: undefined };
-              w.first.sql.exec("UPDATE gateway_bindings SET value=? WHERE id=?", JSON.stringify(binding), saved.id);
+
+              const binding = {
+                ...(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+                  String(saved.value),
+                )),
+                [missing]: undefined,
+              };
+
+              w.first.sql.exec(
+                "UPDATE gateway_bindings SET value=? WHERE id=?",
+                Formatter.formatJson(binding),
+                saved.id,
+              );
               const before = w.first.sql.exec("SELECT * FROM entries ORDER BY rev");
               expect(yield* Effect.result(door.route(client.client, "process.send", params))).toMatchObject({
                 _tag: "Failure",
@@ -527,17 +567,16 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a hello paused before its final write cannot land after revoke", async () => {
-    await fc.assert(
+    ));
+  it("a hello paused before its final write cannot land after revoke", () =>
+    fc.assert(
       fc.asyncProperty(fc.boolean(), fc.uuid(), async (revokeFirst, tab) => {
         await Effect.runPromise(
           Effect.gen(function* () {
             const w = yield* world(),
               d = yield* setup(w);
 
-            const before = (yield* rows(w, "gateway/hellos")).filter((row) => row.by === w.old.fingerprint).length;
+            const before = Arr.filter(yield* rows(w, "gateway/hellos"), (row) => row.by === w.old.fingerprint).length;
 
             const entered = yield* Deferred.make<void>(),
               release = yield* Deferred.make<void>();
@@ -562,7 +601,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
             const revoke = (yield* rows(w, "gateway/access")).at(-1);
             expect(revoke?._tag).toBe("revoked");
-            const hellos = (yield* rows(w, "gateway/hellos")).filter((row) => row.by === w.old.fingerprint);
+            const hellos = Arr.filter(yield* rows(w, "gateway/hellos"), (row) => row.by === w.old.fingerprint);
 
             const answer = Result.isFailure(result)
               ? Schema.is(NotGranted)(result.failure)
@@ -576,7 +615,7 @@ describe("P17a, revoke stops writes at the final door", () => {
             expect({
               answer,
               hellos: hellos.length - before,
-              afterRevoke: hellos.filter((row) => row.rev > (revoke?.rev ?? 0)).length,
+              afterRevoke: Arr.filter(hellos, (row) => row.rev > (revoke?.rev ?? 0)).length,
             }).toEqual({
               answer: revokeFirst ? "not_granted" : "online",
               hellos: revokeFirst ? 0 : 1,
@@ -590,10 +629,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         // Review regression: revoke lands while this hello's final write is paused.
         examples: [[true, "paused-hello"]],
       },
-    );
-  });
-  it("a transforming program input is decoded once and delivered with its decoded value", async () => {
-    await fc.assert(
+    ));
+  it("a transforming program input is decoded once and delivered with its decoded value", () =>
+    fc.assert(
       fc.asyncProperty(fc.integer(), fc.uuid(), async (n, letter) => {
         await Effect.runPromise(
           Effect.gen(function* () {
@@ -616,8 +654,12 @@ describe("P17a, revoke stops writes at the final door", () => {
             expect(w.deliveries).toHaveLength(1);
             const incoming = last(w);
             expect(incoming.envelope.input).toEqual({ _tag: "add", n });
+
             // Mutation regression: safe transformed input must stay in the authenticated log.
-            const recorded = (yield* rows(w, "gateway/inputs")).find((row) => row.id === incoming.envelope.id);
+            const recorded = Option.getOrUndefined(
+              Arr.findFirst(yield* rows(w, "gateway/inputs"), (row) => row.id === incoming.envelope.id),
+            );
+
             expect(recorded).toMatchObject({
               _tag: "received",
               body: { input: { _tag: "add", n: String(n) } },
@@ -638,10 +680,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         // Review regression: NumberFromString turns "7" into 7 before accept.
         examples: [[7, "transformed-input"]],
       },
-    );
-  });
-  it("a route paused after its online check cannot record authenticated input after revoke", async () => {
-    await fc.assert(
+    ));
+  it("a route paused after its online check cannot record authenticated input after revoke", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -649,6 +690,8 @@ describe("P17a, revoke stops writes at the final door", () => {
         async (target, revokeFirst, token) => {
           await Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
+
               const w = yield* world(),
                 d = yield* setup(w);
 
@@ -665,10 +708,10 @@ describe("P17a, revoke stops writes at the final door", () => {
                   ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
                   : new Uint8Array(data);
 
-                if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
+                if (!paused && Str.includes(marker)(new TextDecoder().decode(bytes))) {
                   paused = true;
 
-                  return Effect.runPromise(
+                  return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
                       Effect.andThen(web(() => digest(algorithm, data))),
@@ -705,10 +748,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a settled retry paused after online rechecks revoke before answering its cached placing", async () => {
-    await fc.assert(
+    ));
+  it("a settled retry paused after online rechecks revoke before answering its cached placing", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -717,6 +759,8 @@ describe("P17a, revoke stops writes at the final door", () => {
         async (target, revokeFirst, token, text) => {
           await Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
+
               const w = yield* world(),
                 d = yield* setup(w);
 
@@ -747,10 +791,10 @@ describe("P17a, revoke stops writes at the final door", () => {
                   ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
                   : new Uint8Array(data);
 
-                if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
+                if (!paused && Str.includes(marker)(new TextDecoder().decode(bytes))) {
                   paused = true;
 
-                  return Effect.runPromise(
+                  return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
                       Effect.andThen(web(() => digest(algorithm, data))),
@@ -805,10 +849,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("an admitted client gets its pre-P17 settled answer after reopen without appending", async () => {
-    await fc.assert(
+    ));
+  it("an admitted client gets its pre-P17 settled answer after reopen without appending", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.uuid(),
@@ -825,8 +868,8 @@ describe("P17a, revoke stops writes at the final door", () => {
               const params = request(target, letter, text);
               const by = Writer.cases.person.make({ key: w.old.fingerprint, for: person });
 
-              const traceId = letter.replaceAll("-", ""),
-                spanId = traceId.slice(0, 16);
+              const traceId = Str.replaceAll("-", "")(letter),
+                spanId = Str.slice(0, 16)(traceId);
 
               const oldProcess = yield* ProcessIdGenerator.use((g) => g.next).pipe(Effect.provide(w.layers().env));
               const id = `in-${oldProcess}-${n}`;
@@ -888,7 +931,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 process: params.pid,
                 name: params.m._tag,
                 personOnly: false,
-                digest: createHash("sha256").update(JSON.stringify(params)).digest("base64url"),
+                digest: createHash("sha256").update(Formatter.formatJson(params)).digest("base64url"),
                 arrivedAt,
                 span: { traceId, spanId },
                 sentAt,
@@ -899,7 +942,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 "INSERT INTO gateway_bindings (id,letter,value) VALUES (?,?,?)",
                 id,
                 `${params.pid}/${letter}`,
-                JSON.stringify(binding),
+                Formatter.formatJson(binding),
               );
               w.first.db.close();
               const saved = yield* w.storage();
@@ -929,10 +972,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("two Gateway layers on one ledger stop the open old client, even when it ignores close", async () => {
-    await fc.assert(
+    ));
+  it("two Gateway layers on one ledger stop the open old client, even when it ignores close", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.integer({ min: 1, max: 5 }),
@@ -964,7 +1006,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 });
               }
 
-              expect((yield* rows(w, `${processes[target]}/inbox`)).map((row) => row.id)).toEqual(
+              expect(Arr.map(yield* rows(w, `${processes[target]}/inbox`), (row) => row.id)).toEqual(
                 Array.from({ length: before }, (_, n) => `before-${n}`),
               );
               expect((yield* send(d.b, d.other, w, target, "other-live", text))._tag).toBe("ok");
@@ -974,10 +1016,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a delayed inbox append, including an exact duplicate, rechecks after revoke and reopen", async () => {
-    await fc.assert(
+    ));
+  it("a delayed inbox append, including an exact duplicate, rechecks after revoke and reopen", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -1029,10 +1070,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a caused event paused after receipt checking cannot cross a revoke on another Gateway", async () => {
-    await fc.assert(
+    ));
+  it("a caused event paused after receipt checking cannot cross a revoke on another Gateway", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -1041,6 +1081,8 @@ describe("P17a, revoke stops writes at the final door", () => {
         async (target, revokeFirst, reopen, text) => {
           await Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
+
               const w = yield* world(),
                 d = yield* setup(w);
 
@@ -1065,7 +1107,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
               const digest = crypto.subtle.digest.bind(crypto.subtle),
                 marker = `p17-queued-${text}`,
-                encodedMarker = JSON.stringify(marker);
+                encodedMarker = Formatter.formatJson(marker);
 
               let paused = false;
 
@@ -1074,10 +1116,10 @@ describe("P17a, revoke stops writes at the final door", () => {
                   ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
                   : new Uint8Array(data);
 
-                if (!paused && new TextDecoder().decode(bytes).includes(encodedMarker)) {
+                if (!paused && Str.includes(encodedMarker)(new TextDecoder().decode(bytes))) {
                   paused = true;
 
-                  return Effect.runPromise(
+                  return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
                       Effect.andThen(web(() => digest(algorithm, data))),
@@ -1129,10 +1171,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         // P17a regression: JSON-escaped text used to miss the pause after receipt checking.
         examples: [["notes", true, false, '"\n\\']],
       },
-    );
-  });
-  it("old-key challenges cannot reconnect or regrant it; a separate admitted client keeps writing", async () => {
-    await fc.assert(
+    ));
+  it("old-key challenges cannot reconnect or regrant it; a separate admitted client keeps writing", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -1189,10 +1230,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("the internal inbox operation refuses changed bindings and bodies before any append", async () => {
-    await fc.assert(
+    ));
+  it("the internal inbox operation refuses changed bindings and bodies before any append", () =>
+    fc.assert(
       fc.asyncProperty(fc.constantFrom("counter", "notes"), fc.string({ maxLength: 30 }), async (target, text) => {
         await Effect.runPromise(
           Effect.gen(function* () {
@@ -1240,6 +1280,5 @@ describe("P17a, revoke stops writes at the final door", () => {
         );
       }),
       checks,
-    );
-  });
+    ));
 });

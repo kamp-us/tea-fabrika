@@ -4,7 +4,7 @@
 import { expect, it } from "@effect/vitest";
 import { ProgramDown, stepper, type Incoming, type ProgramRunner, type Refusal } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
-import { Arbitrary, Cause, Effect, Exit, Result, Schema } from "effect";
+import { Arbitrary, Array as Arr, Cause, Effect, Exit, Predicate, Result, Schema } from "effect";
 import {
   Body,
   build,
@@ -50,7 +50,7 @@ it.effect.prop(
       refusal(yield* runner.msg(incoming(1, body, 0, true)), want);
       unchanged(before, yield* runner.open("watcher-1"));
       expect(yield* w.rows()).toEqual([]);
-      expect(w.updates.filter((u) => u.type === "patch")).toEqual([]);
+      expect(Arr.filter(w.updates, (u) => u.type === "patch")).toEqual([]);
       expect(w.calls).toEqual([]);
     }),
   opts,
@@ -104,18 +104,18 @@ type BadMsgCase = typeof BadMsgCases extends Arbitrary.Arbitrary<infer C> ? C : 
 // A value of the wrong type for the field, whatever Wrong drew.
 const wrongFor = (field: BadMsgCase["field"], wrong: BadMsgCase["wrong"]) =>
   field === "body"
-    ? typeof wrong === "string"
+    ? Predicate.isString(wrong)
       ? wrong.length
       : wrong
     : field === "base"
-      ? typeof wrong === "number"
+      ? Predicate.isNumber(wrong)
         ? String(wrong)
         : wrong
-      : typeof wrong === "boolean"
+      : Predicate.isBoolean(wrong)
         ? Number(wrong)
         : wrong;
 
-const badInput = (c: BadMsgCase, kind: Bad): unknown => {
+const badInput = (c: BadMsgCase, kind: Bad): BadMsgCase["wrong"] | object => {
   // work is true, so a bad input that got through would also run a Cmd.
   const save = { type: "save", body: c.body, base: c.base, work: true };
 
@@ -157,7 +157,7 @@ type World = Effect.Success<ReturnType<typeof world>>;
 
 type Runner = typeof ProgramRunner.Service;
 
-const patches = (w: World) => w.updates.filter((u) => u.type === "patch");
+const patches = (w: World) => Arr.filter(w.updates, (u) => u.type === "patch");
 
 // p22: a bad fresh shape returns bad_msg, writes no accepted input, changes no view, publishes no patch, runs no Cmd.
 const freshBadMsg = Effect.fnUntraced(function* (
@@ -262,7 +262,7 @@ it.effect.prop(
       unchanged(before, (yield* runner.open("watcher-2")).view);
       unchanged(kept, yield* w.rows());
       // Watchers only see the read position move past the mail: a patch with no change to the view.
-      expect(patches(w).flatMap((u) => (u.type === "patch" ? u.patch : []))).toEqual([]);
+      expect(Arr.flatMap(patches(w), (u) => (u.type === "patch" ? u.patch : []))).toEqual([]);
       expect(w.calls).toEqual([]);
       expect(w.dead()).toEqual([]);
       expect(spy.calls).toBe(0);
@@ -324,7 +324,7 @@ it.effect.prop(
       refusal(yield* runner.msg(incoming(1, body, 0, true)), { reason: "seen_ahead" });
       unchanged(before, yield* runner.open("watcher"));
       expect(yield* w.rows()).toEqual([]);
-      expect(w.updates.filter((u) => u.type === "patch")).toEqual([]);
+      expect(Arr.filter(w.updates, (u) => u.type === "patch")).toEqual([]);
       expect(w.calls).toEqual(["append"]);
     }),
   opts,

@@ -1,3 +1,4 @@
+import { Array as Arr, String as Str, DateTime, Effect, FileSystem, Path, Result, Schema } from "effect";
 // Level: the level CI is in, as data (decision 0532 for sev0, 0542 for the two levels and sev1).
 // Today's lead tooling, run on our own laptop; it is not product.
 //
@@ -9,7 +10,6 @@
 // The log is `runs/sev/log.jsonl` in the checkout (git ignores `runs/`): one line per fact, never
 // rewritten. The sev0 is folded from it, so two sev0s open at once cannot be written: `open` is
 // refused while one is open, and a log that holds two fails to fold.
-import { DateTime, Effect, FileSystem, Path, Result, Schema } from "effect";
 import { Run } from "./WorkflowRuns.ts";
 
 /** A command was refused: the level does not stand the way it needs. The reason says how it does. */
@@ -40,11 +40,25 @@ export const Entry = Schema.TaggedUnion({
   /** A cancel loop started, in process `pid`. */
   looping: { at: Schema.String, pid: Schema.Finite },
   canceled: { at: Schema.String, run: Run },
-  /** A call to GitHub that failed; `id` is the run it was for, `null` for a list. */
+  /**
+   * A call to GitHub that failed, and is asked again next beat: no answer came, GitHub answered a
+   * 5xx, or its answer was not one we read. `id` is the run it was for, `null` for a list. Lines
+   * written before `refused` and `limited` existed read the same way, whatever their reason says.
+   */
   failed: {
     at: Schema.String,
     call: Schema.Literals(["unfinished", "cancel"]),
     id: Schema.NullOr(Schema.Finite),
+    reason: Schema.String,
+  },
+  /** GitHub answered the cancel of run `id` with `status`, a 4xx that is not its rate limit: not asked again in this sev0. */
+  refused: { at: Schema.String, id: Schema.Finite, status: Schema.Int, reason: Schema.String },
+  /** GitHub refused a call for its rate limit, so the loop asks it nothing until `until`. */
+  limited: {
+    at: Schema.String,
+    call: Schema.Literals(["unfinished", "cancel"]),
+    id: Schema.NullOr(Schema.Finite),
+    until: Schema.DateTimeUtcFromString,
     reason: Schema.String,
   },
   /** The loop ended: it saw the close (`loop`), or no loop answered the close in time (`close`). */
@@ -113,6 +127,8 @@ export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev
     case "looping":
     case "canceled":
     case "failed":
+    case "refused":
+    case "limited":
     case "ended":
       return Result.succeed(sev0);
   }
@@ -153,7 +169,7 @@ export const log = Effect.fn("Level.log")(function* (home: string) {
     return [];
   }
 
-  const lines = (yield* fs.readFileString(at)).split("\n").filter((line) => line !== "");
+  const lines = Arr.filter(Str.split(yield* fs.readFileString(at), "\n"), (line) => line !== "");
 
   return yield* Effect.forEach(
     lines,

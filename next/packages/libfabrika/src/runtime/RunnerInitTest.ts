@@ -6,6 +6,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Mailbox, ProcessStore, SessionManager, Writer } from "../coordination/index.ts";
@@ -59,7 +60,7 @@ export const suite = (
     const authority = yield* database("authority");
     const next = ids(...PIDS);
     // `throws`: the program's init throws, as a program bug would; `loaded`: what each init was given.
-    const controls = { build: BUILD, throws: false, loaded: [] as Array<Model | null> };
+    const controls = { build: BUILD, throws: false, loaded: Array.of<Model | null>() };
     const alarms: Array<number | null> = [];
 
     const machine = Machine.make({
@@ -254,17 +255,17 @@ export const suite = (
             const started = yield* Effect.exit(r.init());
             expect(w.controls.loaded.length, "the program's init ran").toBeGreaterThan(0);
             expect(
-              w.controls.loaded.every((m) => (m !== null) === restored),
+              Arr.every(w.controls.loaded, (m) => (m !== null) === restored),
               restored ? "init was given the saved model" : "init was given no model",
             ).toBe(true);
             expect(Exit.isSuccess(started), "a start answers although its program's init threw").toBe(true);
             const deadline = lastAlarm(w.alarms);
             expect(deadline, "the crash is observed: supervision's wait is armed").toBeTypeOf("number");
-            const at = Schema.decodeUnknownSync(Schema.Number)(deadline);
+            const at = yield* Schema.decodeUnknownEffect(Schema.Number)(deadline);
             w.controls.throws = false;
             yield* TestClock.setTime(at);
             yield* r.due(at);
-            expect((yield* lives).filter((row) => row._tag === "restarted")).toMatchObject([{ body: { after: A } }]);
+            expect(Arr.filter(yield* lives, (row) => row._tag === "restarted")).toMatchObject([{ body: { after: A } }]);
           }).pipe(Effect.provide(w.layer()));
         }).pipe(Effect.scoped),
       { arbitrary: { seed: SEED, runs: 50 } },

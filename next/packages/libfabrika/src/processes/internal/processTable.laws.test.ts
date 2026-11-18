@@ -4,7 +4,7 @@
 // reading of the plan's transition table, never the machine or its driver.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Option, Result, Schema } from "effect";
+import { Option, Result, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../../ledger/Log.ts";
@@ -346,7 +346,7 @@ const init = (machine: Machine): Model => machine.init(null, undefined)[0];
 const record = (machine: Machine, model: Model, entry: Entry): Model =>
   applyCell(machine, model, { type: "recorded", entry })[0];
 
-const thrown = (run: () => unknown): unknown => {
+const thrown = <A>(run: () => A): unknown => {
   const result = Result.try(run);
 
   return Result.isFailure(result) ? result.failure : undefined;
@@ -449,6 +449,7 @@ const deliveries = (w: Watch) =>
             receiver,
             target: process,
             m: Down.make({ ref: w.ref, process, reason: CRASHED, to: w.to }),
+            // SAFETY: the spread line gives every Entry field but the five set here, so the object is a whole Entry.
             entry: {
               ...lineFor(from({ by }), Down.make({ ref: w.ref, process, reason: CRASHED, to: w.to })),
               id: signalId(w.to, w.ref, n),
@@ -476,13 +477,13 @@ const expected = (s: Folded) => {
       collision: s.lives.has(p),
       parents: OWNERS.map((owner) => parent(s, p, owner)),
       exits: REASONS.map((reason) =>
-        typeof owned === "string"
+        Predicate.isString(owned)
           ? owned
           : owned.state._tag !== "live" && (owned.exited === undefined || !sameExit(owned.exited, EXITS[reason]))
             ? "ended"
             : owned,
       ),
-      downs: typeof owned === "string" ? owned : owned.state._tag === "live" ? "alive" : owned,
+      downs: Predicate.isString(owned) ? owned : owned.state._tag === "live" ? "alive" : owned,
       inbound: liveWatches.filter((w) => w.process === p).map(shown),
       outbound: liveWatches.filter((w) => w.to._tag === "process" && w.to.process === p).map(shown),
     };
@@ -493,7 +494,7 @@ const expected = (s: Folded) => {
       const process = s.current.get(name);
       const owned = process === undefined ? "ended" : parent(s, process, owner);
 
-      return typeof owned === "string" ? owned : { name, state: owned.state, restarts: s.restarts.get(name) ?? [] };
+      return Predicate.isString(owned) ? owned : { name, state: owned.state, restarts: s.restarts.get(name) ?? [] };
     }),
   );
 
@@ -504,7 +505,7 @@ const expected = (s: Folded) => {
   const starts = lives.flatMap((life) => {
     const retry = parent(s, life.state.process, s.names.get(life.name)?.owner ?? BRAIN_OWNER);
 
-    return [typeof retry === "string" ? retry : { process: life.state.process, rev: life.rev }, "id_reused"];
+    return [Predicate.isString(retry) ? retry : { process: life.state.process, rev: life.rev }, "id_reused"];
   });
 
   const fresh = NAMES.flatMap((name) => {

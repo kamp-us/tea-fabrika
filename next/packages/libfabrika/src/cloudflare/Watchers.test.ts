@@ -15,6 +15,11 @@ import type { Sql } from "../Sql.ts";
 import * as Publish from "./Publish.ts";
 import * as WatcherManagerRemote from "./WatcherManagerRemote.ts";
 
+/** A failure the stand-in send or RPC answers with, which the remote reads as unreachable. */
+class Fault extends Schema.TaggedError<Fault, { readonly brand: unique symbol }>()("Fault", {
+  message: Schema.String,
+}) {}
+
 const Step = Arbitrary.all({
   pick: Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   client: Arbitrary.schema(Schema.NonEmptyString.check(Schema.isMaxLength(240))),
@@ -23,14 +28,17 @@ const Step = Arbitrary.all({
 const Walk = Arbitrary.array(Step, { minLength: 6, maxLength: 30 });
 
 const patch = { type: "patch", base: 4, rev: 5, patch: [] } as const;
+
 /** The same update as the Project is handed it: with the pid of the process it came from. */
 const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
 const published = { ...patch, pid: PID };
 
 /** The route port `Publish.make` reads: one Connection object's name per client. */
 const routed = (routes: ReadonlyMap<string, string>): Sql => ({
   exec: (_query, client) => {
     const connection = routes.get(String(client));
+
     return connection === undefined ? [] : [{ connection }];
   },
   transaction: (f) => f(),
@@ -54,7 +62,7 @@ describe("watcher delivery evidence, next/", () => {
           const { publish } = Publish.make(routed(routes), (connection: string, client: string, news: News) =>
             Effect.suspend(() => {
               if (failSend) {
-                return Effect.fail(new Error("unknown send failure"));
+                return Effect.fail(Fault.make({ message: "unknown send failure" }));
               }
 
               delivered.push({ connection, client, news });
@@ -68,9 +76,9 @@ describe("watcher delivery evidence, next/", () => {
 
           const context = yield* Layer.build(
             WatcherManagerRemote.layer((client, update) =>
-              Effect.suspend((): Effect.Effect<unknown, Error> => {
+              Effect.suspend((): Effect.Effect<unknown, Fault> => {
                 if (rpc === "throw") {
-                  return Effect.fail(new Error("RPC unreachable"));
+                  return Effect.fail(Fault.make({ message: "RPC unreachable" }));
                 }
 
                 if (rpc === "malformed") {
@@ -94,7 +102,11 @@ describe("watcher delivery evidence, next/", () => {
             }
 
             expect(Cause.hasFails(exit.cause)).toBe(true);
-            const error = Schema.decodeUnknownSync(Schema.toType(WatcherManagerError))(Cause.squash(exit.cause));
+
+            const error = yield* Schema.decodeUnknownEffect(Schema.toType(WatcherManagerError))(
+              Cause.squash(exit.cause),
+            );
+
             expect(error._tag).toBe("WatcherManagerError");
             expect(error.reason.cause).toBeDefined();
 
@@ -103,7 +115,7 @@ describe("watcher delivery evidence, next/", () => {
 
           for (const step of steps) {
             const held = [...routes.keys()];
-            const client = held.length && step.pick % 2 ? nth(held, step.pick) : step.client;
+            const client = held.length > 0 && step.pick % 2 !== 0 ? nth(held, step.pick) : step.client;
             routes.delete(client);
             expect(yield* publish(client, published)).toEqual(Publication.cases.gone.make({}));
             expect(yield* reason(client)).toBe("Gone");
@@ -150,11 +162,13 @@ describe("watcher delivery evidence, next/", () => {
       Effect.gen(function* () {
         const routes = new Map<string, string>();
         const delivered: Array<{ connection: string; client: string; news: News }> = [];
+
         const told = Publish.make(routed(routes), (connection: string, client: string, news: News) =>
           Effect.sync(() => {
             delivered.push({ connection, client, news });
           }),
         );
+
         const updates = [whole, patch];
         const all = [close, granted, ...updates.map((update) => News.cases.view.make({ update }))];
 

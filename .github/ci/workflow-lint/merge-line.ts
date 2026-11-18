@@ -1,7 +1,9 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
 import { parse } from "yaml";
+import { relatedWorkload } from "./related.ts";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
 
 // Today's app: its package name, or its folder outside next/. No command in check.yaml runs it.
@@ -22,7 +24,7 @@ const VITEST_CALL =
 // changes' outputs. Any other value could carry a `--project` the lint cannot see.
 const VITEST_VARS: Record<string, (value: unknown) => boolean> = {
   SHARD: (value) =>
-    typeof value === "string" &&
+    Predicate.isString(value) &&
     new RegExp(
       `^${SHARD_OF}/(?:${denominator("vitest", String.raw`\d+`)}|${denominator("e2e", String.raw`\d+`)})$`,
     ).test(value),
@@ -52,21 +54,25 @@ const shellCommands = (script: string) =>
  * argument leaves that folder. Either way it reads no shell value but RUNNER_TEMP, untouched, and
  * the step's own pinned `VITEST_VARS`, and no `${{ }}` or command substitution.
  */
-const toolingJobs = (workflow: Record<string, unknown>): string[] => {
+const toolingJobs = (workflow: Record<string, unknown>, automatic = false): string[] => {
   const outer = { ...map(workflow["env"]) };
 
-  return Object.entries(map(workflow["jobs"]))
+  return Rec.toEntries(map(workflow["jobs"]))
     .filter(([, job]) => !DISPATCH_ONLY.test(compact(map(job)["if"])))
-    .filter(([, job]) =>
+    .filter(([name, job]) =>
       steps(map(job)).some((step) => {
-        if (typeof step["run"] !== "string") {
+        if (!Predicate.isString(step["run"])) {
+          return false;
+        }
+
+        if (automatic && relatedWorkload(workflow, name, map(job), step)) {
           return false;
         }
 
         const env = map(step["env"]);
         const set = { ...outer, ...map(map(job)["env"]), ...env };
         const parts = shellCommands(step["run"]);
-        const folder = typeof step["working-directory"] === "string" ? step["working-directory"] : "";
+        const folder = Predicate.isString(step["working-directory"]) ? step["working-directory"] : "";
 
         const inside =
           /^next\//.test(folder) &&
@@ -102,10 +108,12 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
 export const lintNoTooling = (path: string, text: string): string[] => {
   const workflow = map(parse(text));
   const on = workflow["on"];
-  const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(map(on));
+  const events = Predicate.isString(on) ? [on] : Array.isArray(on) ? on : Rec.keys(map(on));
 
   return events.includes("pull_request") || events.includes("merge_group")
-    ? toolingJobs(workflow).map((job) => `${path}: T1: ${job} runs no tooling test (0539)`)
+    ? toolingJobs(workflow, path === ".github/workflows/check.yaml").map(
+        (job) => `${path}: T1: ${job} runs no tooling test (0539)`,
+      )
     : [];
 };
 
@@ -113,19 +121,19 @@ export const mergeLine: Rule = ({ workflow, jobs }, require) => {
   // T1 (0539). No event here runs a tooling test: their author runs the narrow ones on the laptop,
   // and the schedule runs them all (scheduled.yaml's tooling job, SC8). Today's version is frozen
   // (0525, 0533), so its tests run on no event either. `toolingJobs` says how a vitest call passes.
-  for (const name of toolingJobs(workflow)) {
+  for (const name of toolingJobs(workflow, true)) {
     require(false, `T1: ${name} runs no tooling test (0539)`);
   }
 
   // T2 (0525, 0533). No job runs today's app, end to end or otherwise. T6 (0533): no step runs
   // today's promise checks.
-  for (const [name, job] of Object.entries(jobs)) {
+  for (const [name, job] of Rec.toEntries(jobs)) {
     for (const step of steps(map(job))) {
       require(![step["run"], step["working-directory"]].some(
-        (text) => typeof text === "string" && TODAYS_APP.test(text),
+        (text) => Predicate.isString(text) && TODAYS_APP.test(text),
       ), `T2: ${name} runs nothing of today's app`);
       require(!(
-        typeof step["run"] === "string" && TODAYS_PROMISES.test(step["run"])
+        Predicate.isString(step["run"]) && TODAYS_PROMISES.test(step["run"])
       ), `T6: ${name} runs no promise check of today's version`);
     }
   }

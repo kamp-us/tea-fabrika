@@ -1,3 +1,4 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's jobs: what each gated job waits on and when it
 // skips, which jobs may not come back (F3, ticket 985), and every job's time limit (ticket 496).
 import { gated, gates } from "../required.mjs";
@@ -8,6 +9,10 @@ export const jobLaws: Rule = ({ jobs }, require) => {
   // (required.mjs's `gates`): check on check or field rows, next on next, which already holds the
   // sizing.
   for (const name of gated) {
+    if (name === "related") {
+      continue;
+    }
+
     const job = map(jobs[name]);
     const flags = gates[name].map((flag) => `needs.changes.outputs.${flag} != 'false'`).join(" || ");
     require(job["needs"] === "changes", `${name} needs changes`);
@@ -22,8 +27,11 @@ export const jobLaws: Rule = ({ jobs }, require) => {
     !("field" in jobs), "F3: no legs or field job: changes sizes next, and check checks the rows");
 
   // A job with no limit runs for GitHub's 360 minute default when a step hangs (ticket 496).
-  for (const [name, job] of Object.entries(jobs)) {
+  for (const [name, job] of Rec.toEntries(jobs)) {
     const limit = map(job)["timeout-minutes"];
-    require(typeof limit === "number" && limit > 0 && limit < 360, `${name} sets timeout-minutes`);
+    require((Predicate.isNumber(limit) && limit > 0 && limit < 360) ||
+      (name === "related" &&
+        compact(limit) ===
+          "fromJSON(needs.select.outputs.projects)[matrix.shard]=='tooling'&&33||20"), `${name} sets timeout-minutes`);
   }
 };

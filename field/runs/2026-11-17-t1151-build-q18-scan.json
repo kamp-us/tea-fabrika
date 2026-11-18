@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1151-build-q18-scan",
+  "ticket": "kamp-us/tea-fabrika#1151",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-17T17:04:19.044Z",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "step": "build",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Read-only check matched the committed one-file diff and all 24 saved proof files to actual extracted source. The 11 fixed and 40 generated cases preserve 231 message outcomes per block; all three deliberate faults fail. No product or exam edits were assigned or made. This is not SQL runtime proof or final review.",
+  "note": null,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

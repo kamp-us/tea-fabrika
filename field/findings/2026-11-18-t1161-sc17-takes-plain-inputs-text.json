@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-t1161-sc17-takes-plain-inputs-text",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "opus",
+  "rule": "bug",
+  "location": {
+    "path": ".github/ci/workflow-lint/scheduled.ts",
+    "line": 656
+  },
+  "says": "In today's CI, SC17 compares select's SCOPE through compact, which passes a value that is not an expression unchanged, so SCOPE: inputs.scope (the plain text, with no ${{ }}) passes the lint and the step would get the literal text.",
+  "proof": "A scratch node script ran lintScheduled on the real scheduled.yaml with select's set step env SCOPE set to each value. It printed `SCOPE= inputs.scope []` (no error) and `SCOPE= ${{ github.event.inputs.scope }} [\"scheduled.yaml: SC17: ...\"]`. shared.ts compact only strips ${{ }} when both ends are present.",
+  "cost": "It fails closed: askOf throws on the text inputs.scope, so every branch proof is red at select until someone reads the log. The lint should have named it.",
+  "head": "a2217352223acf0e6754240e1dd2a07dfbdd0e3f",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623"
+}

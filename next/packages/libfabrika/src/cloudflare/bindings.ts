@@ -10,7 +10,7 @@ import type { Connections } from "../presence/Connections.ts";
 import { type Child, ChildrenError, type ChildStop, Started } from "../processes/Children.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
 import { MonitorsError, type Unwatch, type Watch, Watched } from "../processes/Monitors.ts";
-import { ProcessError, State, type Activity, type Start } from "../processes/Process.ts";
+import { ProcessError, State, type Start } from "../processes/Process.ts";
 import type { ProcessCalls } from "../processes/ProcessManager.ts";
 import { type Delivery, MailRefusal } from "../processes/ProgramMail.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
@@ -18,9 +18,8 @@ import type { BuiltProgram } from "../runtime/Built.ts";
 import type { CodeEvent, Install, Installed } from "../runtime/Code.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import type { Ask, Reply as HandsReply } from "../runtime/HandsTasks.ts";
-import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { News, Published } from "../runtime/News.ts";
-import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
+import type { ProcessObjectCalls, Remote, RemoteCall } from "../runtime/ObjectCalls.ts";
 import type { Publication } from "../runtime/WatcherManager.ts";
 import type * as SettingsStart from "../settings/Start.ts";
 import type { RecordCalls } from "../telemetry/Records.ts";
@@ -59,6 +58,13 @@ export const MailReplies = Schema.TaggedUnion({
  * @category models
  */
 export type MailReply = typeof MailReplies.Type;
+
+/**
+ * Schema for the branded string that names one client's connection at the door.
+ *
+ * @category schemas
+ */
+export const ConnectionId = Schema.String.pipe(Schema.brand("ConnectionId"));
 
 /**
  * The branded string that names one client's connection at the door.
@@ -158,7 +164,7 @@ export interface GatewayCalls {
   readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
   readonly initialize: (
     client: ConnectionId,
-    input: unknown,
+    input: Schema.Json | undefined,
     trusted: { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string },
   ) => Effect.Effect<Effect.Success<ReturnType<typeof checkHello>>, unknown>;
   readonly target: (
@@ -177,7 +183,7 @@ export interface GatewayCalls {
   readonly route: (
     client: ConnectionId,
     method: string,
-    params: unknown,
+    params: Schema.Json | undefined,
     reader?: string,
   ) => Effect.Effect<typeof Answer.Type, unknown>;
   readonly knock: (
@@ -201,18 +207,12 @@ export interface GatewayCalls {
   readonly checkDelivery: (process: string, incoming: Incoming) => Effect.Effect<void, unknown>;
 }
 
-type RemoteCall<F> = F extends (...args: infer A) => infer B ? (...args: A) => Promise<Effect.Success<B>> : never;
-
-type Remote<S> = { [K in keyof S]: RemoteCall<S[K]> };
-
 type DoorService = GatewayCalls;
 
 /** The manager's calls an object may make over RPC: no guard, and no trusted watcher. */
 type Processes = ProcessCalls;
 
 type Gateways = (typeof Connections)["Service"];
-
-type Runner = (typeof ProgramRunner)["Service"];
 
 /** One ProcessManager call over Project RPC: a refusal comes back as reply data. */
 type ProcessCall<F> = F extends (...args: infer A) => Effect.Effect<infer B, unknown>
@@ -297,17 +297,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
  *
  * @category models
  */
-export type ProcessBinding = Rpc.DurableObjectBranded &
-  Remote<Pick<Runner, "msg" | "open" | "due" | "restart" | "swap">> & {
-    mailed: RemoteCall<(trace?: { traceId: string; spanId: string }) => Runner["mailed"]>;
-    configure: RemoteCall<(descriptor: Descriptor, drain?: boolean) => Effect.Effect<void>>;
-    usage: RemoteCall<typeof IsolateUsage.record>;
-    descriptor: RemoteCall<(process?: string) => Effect.Effect<Descriptor>>;
-    activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;
-    recover: RemoteCall<() => Effect.Effect<unknown>>;
-    savedAlarm: RemoteCall<() => Effect.Effect<number | null>>;
-    abort: RemoteCall<() => Effect.Effect<void>>;
-  };
+export type ProcessBinding = Rpc.DurableObjectBranded & ProcessObjectCalls;
 
 /**
  * A Connection Durable Object's RPC binding: `fetch`, `ring`, `notify` and `probe`.

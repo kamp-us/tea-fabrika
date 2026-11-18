@@ -108,6 +108,29 @@
 // origin/main to the reviewed head and is given no mapping table, so a renamed law is a hit too; a
 // loosening comment that does not post is stuck.
 
+import {
+  Cause,
+  Array as Arr,
+  pipe,
+  String as Str,
+  Clock,
+  Context,
+  DateTime,
+  Duration,
+  Effect,
+  Formatter,
+  Layer,
+  Match,
+  Option,
+  Predicate,
+  Record as Rec,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
+import type { Config } from "effect";
+import { Digest } from "effect/crypto";
+
 // The chain's record, logs and brief are sync file calls: a debt agents-ledger.json named for this
 // import until three names left it and its line changed. The ledger only shrinks, so it is marked here.
 // oxlint-disable-next-line fabrika/no-node-imports -- edge: sync file calls not yet moved to Effect's FileSystem (0033)
@@ -116,7 +139,6 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -136,6 +158,9 @@ import {
   prepare,
   runNames,
   sh,
+  StepMinutes,
+  variable,
+  withDriveMinutes,
 } from "./drive.ts";
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
@@ -146,7 +171,7 @@ import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
-import { pinFolder, stepOf, wipOf } from "./quest.ts";
+import { pinFolder, stepOf, wipBranch } from "./quest.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -156,6 +181,8 @@ export const STEPS = ["tests", "build", "mutation", "review"] as const;
 
 export type StepName = (typeof STEPS)[number];
 
+// SAFETY: widening STEPS' literal tuple to readonly strings only lets `includes` take any
+// string; the array is only read.
 const isStep = (s: string): s is StepName => (STEPS as readonly string[]).includes(s);
 
 /** A quest's name, as its state files and its pin folder carry it. */
@@ -166,6 +193,8 @@ export const QUEST_STEPS = ["tests", "build", "review"] as const;
 
 export type QuestStep = (typeof QUEST_STEPS)[number];
 
+// SAFETY: widening QUEST_STEPS to readonly strings only lets `includes` take any string, and
+// the guard's own check is what narrows `s`.
 const isQuestStep = (s: string): s is QuestStep => (QUEST_STEPS as readonly string[]).includes(s);
 
 // ---------------------------------------------------------------- the limits
@@ -230,7 +259,7 @@ export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted, { rea
 
 /** Whether a drive outcome is a slot refusal, the one kind the schedule retries. */
 export const slotRefusal = (outcome: string): string | null => {
-  const [verb, check = ""] = outcome.split(":");
+  const [verb, check = ""] = Str.split(outcome, ":");
 
   return verb === "refused" && (check === "agent_cap" || check === "low_disk") ? check : null;
 };
@@ -251,7 +280,7 @@ export type Line = {
   readonly listUsd: number | null;
 };
 
-const str = (v: unknown, or = ""): string => (typeof v === "string" ? v : or);
+const str = (v: Schema.Json | undefined, or = ""): string => (Predicate.isString(v) ? v : or);
 
 const FaultS = Schema.Literals(FAULTS);
 
@@ -259,8 +288,8 @@ const isFault = Schema.is(FaultS);
 
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
 export const lineOf = (out: string, exit: number): Line | null => {
-  for (const raw of out.trim().split("\n").toReversed()) {
-    const parsed = Result.try((): unknown => JSON.parse(raw));
+  for (const raw of Arr.reverse(pipe(out, Str.trim, Str.split("\n")))) {
+    const parsed = Result.try((): Schema.Json => JSON.parse(raw));
 
     if (Result.isFailure(parsed)) {
       continue;
@@ -268,11 +297,13 @@ export const lineOf = (out: string, exit: number): Line | null => {
 
     const d = parsed.success;
 
-    if (d === null || typeof d !== "object" || !("outcome" in d)) {
+    if (!Predicate.isObjectOrArray(d) || !("outcome" in d)) {
       continue;
     }
 
-    const o = d as Record<string, unknown>;
+    // SAFETY: `d` is a non-null object, checked above, and each field is read as JSON and
+    // checked by `str`, `isFault` or a Predicate guard before use.
+    const o = d as Record<string, Schema.Json>;
     const outcome = str(o.outcome);
     const reason = str(o.reason);
 
@@ -281,10 +312,10 @@ export const lineOf = (out: string, exit: number): Line | null => {
       head: str(o.head),
       reason,
       fault: isFault(o.fault) ? o.fault : faultFrom(outcome, reason),
-      report: typeof o.report === "string" ? o.report : null,
+      report: Predicate.isString(o.report) ? o.report : null,
       box: str(o.box),
-      exit: typeof o.exit === "number" ? o.exit : exit,
-      listUsd: typeof o.listUsd === "number" ? o.listUsd : null,
+      exit: Predicate.isNumber(o.exit) ? o.exit : exit,
+      listUsd: Predicate.isNumber(o.listUsd) ? o.listUsd : null,
     };
   }
 
@@ -328,7 +359,7 @@ const after: Record<StepName, QuestStep | null> = {
  * retries it on `slotSchedule`, and running out is a `RetriesExhausted` on the err channel.
  */
 export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {
-  const [verb, to = "", reason = ""] = line.outcome.split(":");
+  const [verb, to = "", reason = ""] = Str.split(line.outcome, ":");
 
   switch (verb) {
     case "done":
@@ -377,6 +408,8 @@ export const judgedMove = (j: Judgment): Judged =>
 export const moveFrom = (text: string): Judged => {
   // A text that is not such JSON, or reads as neither move, falls back to its `answer:` line.
   const move = Result.try((): Judged | undefined => {
+    // SAFETY: JSON.parse gives `any`; only `_tag` and `step` decide below, `step` through isQuestStep,
+    // and a text that parses to null throws inside Result.try, which falls back to the answer line.
     const d = JSON.parse(text) as Judged;
 
     if (d._tag === "step" && isQuestStep(d.step)) {
@@ -395,15 +428,15 @@ export const moveFrom = (text: string): Judged => {
 
 /** What the judgment agent said on its last `answer:` line; none is a park. */
 export const judgedOf = (text: string): Judged => {
-  for (const line of text.split("\n").toReversed()) {
-    const m = JUDGED.exec(line.trim());
+  for (const line of Arr.reverse(Str.split(text, "\n"))) {
+    const m = JUDGED.exec(Str.trim(line));
 
     if (m === null) {
       continue;
     }
 
-    const note = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
-    const to = m[2]?.toLowerCase() ?? "";
+    const note = pipe(m[3] ?? "", Str.replace(/^[`*\s]+|[`*\s]+$/g, ""));
+    const to = Str.toLowerCase(m[2] ?? "");
 
     if (isQuestStep(to)) {
       return toStep(to, `the lead's judgment: ${note}`);
@@ -424,11 +457,11 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
   const head: string[] = [];
   const bodies: Record<string, string[]> = {};
 
-  for (const line of text.split("\n")) {
+  for (const line of Str.split(text, "\n")) {
     const m = /^## (\S+)\s*$/.exec(line);
 
-    if (m) {
-      name = (m[1] ?? "").toLowerCase();
+    if (m !== null) {
+      name = Str.toLowerCase(m[1] ?? "");
       bodies[name] ??= [];
       continue;
     }
@@ -440,11 +473,11 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
     }
   }
 
-  for (const [k, v] of Object.entries(bodies)) {
-    sections[k] = v.join("\n").trim();
+  for (const [k, v] of Rec.toEntries(bodies)) {
+    sections[k] = Str.trim(Arr.join(v, "\n"));
   }
 
-  return { head: head.join("\n").trim(), sections };
+  return { head: Str.trim(Arr.join(head, "\n")), sections };
 };
 
 /**
@@ -452,7 +485,10 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
  * `## mutation` is needed only to start at mutation; an older brief that has one is still accepted.
  */
 export const lacks = (quest: ReturnType<typeof sectionsOf>, start: StepName): string[] =>
-  [...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"].filter((k) => !quest.sections[k]);
+  Arr.filter(
+    [...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"],
+    (k) => (quest.sections[k] ?? "") === "",
+  );
 
 /** What one step is told about the quest: the brief's shared head, its section and the facts. */
 export type Facts = {
@@ -490,23 +526,31 @@ export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string
     return "No step has committed yet.";
   }
 
-  const steps = [...new Set(commits.map((c) => c.step))];
+  const steps = [...new Set(Arr.map(commits, (c) => c.step))];
 
-  const by = steps.map(
+  const by = Arr.map(
+    steps,
     (s) =>
-      `${s} ${commits
-        .filter((c) => c.step === s)
-        .map((c) => c.sha.slice(0, 8))
-        .join(" ")}`,
+      `${s} ${pipe(
+        commits,
+        Arr.filter((c) => c.step === s),
+        Arr.map((c) => pipe(c.sha, Str.slice(0, 8))),
+        Arr.join(" "),
+      )}`,
   );
 
-  return `Step commits since the quest left main, oldest first: ${by.join("; ")}.`;
+  return `Step commits since the quest left main, oldest first: ${Arr.join(by, "; ")}.`;
 };
 
 // The parameter keeps the name `lane`: agents-ledger.json holds this line word for word.
 export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
-  const short = (s: string) => s.slice(0, 8);
-  const heads = STEPS.filter((s) => f.heads[s]).map((s) => `${s} ${short(f.heads[s] ?? "")}`);
+  const short = (s: string) => pipe(s, Str.slice(0, 8));
+
+  const heads = pipe(
+    STEPS,
+    Arr.filter((s) => (f.heads[s] ?? "") !== ""),
+    Arr.map((s) => `${s} ${short(f.heads[s] ?? "")}`),
+  );
 
   const lines = [
     lane.head,
@@ -517,12 +561,12 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     `Quest facts, written by chain.ts, round ${f.round}: ticket ${f.ticket}, branch ${f.branch}, approved plan ${f.plan}.`,
     `This step starts at ${short(f.head)}; the quest left main at ${short(f.root)}.`,
     committedLine(f.commits),
-    ...(heads.length > 0 ? [`Heads so far: ${heads.join(", ")}.`] : []),
-    ...(f.note ? [`Last round: ${f.note}`] : []),
+    ...(heads.length > 0 ? [`Heads so far: ${Arr.join(heads, ", ")}.`] : []),
+    ...(f.note !== "" ? [`Last round: ${f.note}`] : []),
   ];
 
   if (step === "review") {
-    lines.push(`Parent base: origin/main at ${f.root}`, `Reviewed head: ${wipOf(f.branch)} at ${f.head}`);
+    lines.push(`Parent base: origin/main at ${f.root}`, `Reviewed head: ${wipBranch(f.branch)} at ${f.head}`);
   }
 
   if (step === "review" && f.host !== null) {
@@ -542,7 +586,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     );
   }
 
-  return `${lines.join("\n")}\n`;
+  return `${Arr.join(lines, "\n")}\n`;
 };
 
 // ---------------------------------------------------------------- the budget
@@ -556,15 +600,19 @@ export const MARKS = ["pass", "send", "work", "tool"] as const;
 export type Mark = (typeof MARKS)[number];
 
 export const markFrom = (line: Line): Mark => {
-  const [verb] = line.outcome.split(":");
+  const [verb] = Str.split(line.outcome, ":");
 
-  return verb === "send" ? "send" : verb === "stuck" ? (line.fault ?? "work") : "pass";
+  return Match.value(verb).pipe(
+    Match.when("send", (): Mark => "send"),
+    Match.when("stuck", (): Mark => line.fault ?? "work"),
+    Match.orElse((): Mark => "pass"),
+  );
 };
 
 /** The marks the intensity counts against the quest: sends and work stucks. */
 const counted = (window: readonly Mark[]) => ({
-  sends: window.filter((m) => m === "send").length,
-  work: window.filter((m) => m === "work").length,
+  sends: Arr.filter(window, (m) => m === "send").length,
+  work: Arr.filter(window, (m) => m === "work").length,
 });
 
 /** A quest's size in steps and dollars: the estimate a plan or brief gives, or the backstop from it. */
@@ -577,7 +625,7 @@ export type Budget = typeof Budget.Type;
  * and `$<d>`, as in `Estimate: 12 steps, $15`. An estimate in agent hours alone is none.
  */
 export const estimateIn = (text: string): Budget | null => {
-  for (const line of text.split("\n")) {
+  for (const line of Str.split(text, "\n")) {
     const m = /\bestimate\b.*?\b(\d+)\s+steps?\b.*?\$\s?(\d+(?:\.\d+)?)/i.exec(line);
     const steps = Number(m?.[1]);
     const dollars = Number(m?.[2]);
@@ -622,7 +670,7 @@ export const stopReason = (stop: Stop): string => {
 
   if (stop._tag === "intensity") {
     const { sends, work } = counted(stop.window);
-    const tools = stop.window.filter((m) => m === "tool").length;
+    const tools = Arr.filter(stop.window, (m) => m === "tool").length;
 
     return `intensity: ${sends + work} of the last ${stop.window.length} steps were sent back or stuck on the work (${sends} sent back, ${work} stuck on the work; ${tools} stuck on a tool, not counted; the limit is ${stop.count} in ${stop.within}). ${spent} ${ask}`;
   }
@@ -706,7 +754,8 @@ export type ChainRecord = typeof ChainRecord.Type;
  * The rounds a quest's record already holds. A quest started again (`--start`) counts on from here,
  * so a new round never takes an older round's record.
  */
-export const roundsIn = (record: ChainRecord): number => record.steps.reduce((most, e) => Math.max(most, e.round), 0);
+export const roundsIn = (record: ChainRecord): number =>
+  Arr.reduce(record.steps, 0, (most, e) => Math.max(most, e.round));
 
 const judge = Cmd.make("judge", {
   input: Schema.Struct({ step: Schema.Literals(STEPS), line: LineS, round: Schema.Finite }),
@@ -770,7 +819,7 @@ export const exitOf = (e: End): number => (e.kind === "done" ? 0 : e.kind === "a
  * operating error or an output that never reached the PR: the check fails closed, so it is stuck.
  */
 export const looseningEnd = (pr: number, ran: { readonly code: number; readonly text: string }): End | null => {
-  const text = ran.text.trim();
+  const text = Str.trim(ran.text);
 
   if (ran.code === 0) {
     return null;
@@ -920,6 +969,8 @@ const take = (quest: Quest, step: StepName, line: Line, move: Move, limits: Limi
 
 export const makeMachine = (limits: Limits) =>
   defineMachine({
+    // SAFETY: tea's `types` slot only carries the Model and Msg types; tea never reads these empty
+    // values (0561).
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
     cmds: [stepRun, judge, prOpen, typecheckRead, loosen, land, hostRun],
     init: (): Step => [
@@ -945,9 +996,15 @@ export const makeMachine = (limits: Limits) =>
         }
 
         const { outcome, head, reason } = m.value;
+
         // 0076: the host step's mark joins the window like any step's. A send to build is a send
         // back; a stuck is the tool's (git, the signer, the push), never counted against the quest.
-        const mark: Mark = outcome === "send" ? "send" : outcome === "stuck" ? "tool" : "pass";
+        const mark = Match.value(outcome).pipe(
+          Match.when("send", (): Mark => "send"),
+          Match.when("stuck", (): Mark => "tool"),
+          Match.orElse((): Mark => "pass"),
+        );
+
         const quest: Quest = { ...s.quest, window: [...s.quest.window, mark].slice(-limits.intensity.within) };
         const intensity = intensityStop(quest, limits.intensity);
 
@@ -975,13 +1032,13 @@ export const makeMachine = (limits: Limits) =>
         }
 
         const line = m.value;
-        const [verb] = line.outcome.split(":");
+        const [verb] = Str.split(line.outcome, ":");
         const accepted = verb === "done" || verb === "send" || verb === "skip";
 
         const quest: Quest = {
           ...s.quest,
-          head: accepted && line.head ? line.head : s.quest.head,
-          heads: verb === "done" && line.head ? { ...s.quest.heads, [s.step]: line.head } : s.quest.heads,
+          head: accepted && line.head !== "" ? line.head : s.quest.head,
+          heads: verb === "done" && line.head !== "" ? { ...s.quest.heads, [s.step]: line.head } : s.quest.heads,
           stucks: verb === "stuck" ? s.quest.stucks + 1 : 0,
           window: [...s.quest.window, markFrom(line)].slice(-limits.intensity.within),
           dollars: s.quest.dollars + (line.listUsd ?? 0),
@@ -1062,9 +1119,9 @@ export const makeMachine = (limits: Limits) =>
           return stopped(quest, intensity);
         }
 
-        const said = `CI's typecheck job at ${quest.head.slice(0, 8)} (PR ${s.pr}) answered send:${verdict.to}`;
+        const said = `CI's typecheck job at ${pipe(quest.head, Str.slice(0, 8))} (PR ${s.pr}) answered send:${verdict.to}`;
 
-        return next(quest, verdict.to, `${said}:\n${verdict.lines.join("\n")}`, limits);
+        return next(quest, verdict.to, `${said}:\n${Arr.join(verdict.lines, "\n")}`, limits);
       },
       typecheck_read_err: (s): Step =>
         s.phase === "typechecking"
@@ -1123,7 +1180,9 @@ type Setup = {
 
 /** The last `n` lines of a file, or a line saying it is not there. */
 const lastLines = (path: string | null, n: number): string =>
-  path !== null && existsSync(path) ? readFileSync(path, "utf8").trim().split("\n").slice(-n).join("\n") : "(none)";
+  path !== null && existsSync(path)
+    ? Arr.join(pipe(readFileSync(path, "utf8"), Str.trim, Str.split("\n")).slice(-n), "\n")
+    : "(none)";
 
 const JUDGE_TAIL = (quest: string, step: StepName, line: Line, state: string, report: string) => `
 You are the lead's judgment for quest ${quest}, started by chain.ts because the ${step} step
@@ -1137,7 +1196,7 @@ why the lead has to look, in one sentence.
 Send a step again when the fix is clear and that step owns it (a tests step owns test files, a
 build step product code). Park when a plan would change, a decision is needed, a secret or a
 person is involved, or the same step already failed the same way.${
-  line.outcome.startsWith(`send:${step}:`)
+  pipe(line.outcome, Str.startsWith(`send:${step}:`))
     ? `
 The ${step} step sent the quest to itself, which chain.ts never runs as one more round. When what it
 lists as left needs another step's code, a typecheck or --changed, send the next step with that
@@ -1198,7 +1257,7 @@ const beating = (file: ReturnType<typeof chainFile>) => {
 
   const enter = (phase: Beat.Phase, log: string | null) => {
     events = log;
-    const now = new Date();
+    const now = DateTime.toDateUtc(DateTime.nowUnsafe());
     const entered = Beat.enter(file.readRecord().beat ?? null, phase, now);
     write(Beat.tick(entered, now, writtenAt(events)));
   };
@@ -1207,7 +1266,7 @@ const beating = (file: ReturnType<typeof chainFile>) => {
     const beat = file.readRecord().beat;
 
     if (beat !== undefined) {
-      write(Beat.tick(beat, new Date(), writtenAt(events)));
+      write(Beat.tick(beat, DateTime.toDateUtc(DateTime.nowUnsafe()), writtenAt(events)));
     }
   };
 
@@ -1226,7 +1285,7 @@ const handlers = (s: Setup) => {
   const state = join(env.BOXES, "state", `${s.quest}.json`);
   const md = join(env.BOXES, "state", `${s.quest}.md`);
   const chainState = join(env.BOXES, "state", `${s.quest}-chain.json`);
-  const note = (text: string) => appendFileSync(md, `- ${new Date().toISOString()} chain: ${text}\n`);
+  const note = (text: string) => appendFileSync(md, `- ${DateTime.formatIso(DateTime.nowUnsafe())} chain: ${text}\n`);
 
   const saved = (): {
     head?: string;
@@ -1242,8 +1301,8 @@ const handlers = (s: Setup) => {
   const saveStep = (entry: StepRecord) => {
     const r = readRecord();
 
-    const steps = r.steps.some((e) => e.round === entry.round)
-      ? r.steps.map((e) => (e.round === entry.round ? entry : e))
+    const steps = Arr.some(r.steps, (e) => e.round === entry.round)
+      ? Arr.map(r.steps, (e) => (e.round === entry.round ? entry : e))
       : [...r.steps, entry];
 
     writeRecord({ ...r, steps });
@@ -1275,14 +1334,15 @@ const handlers = (s: Setup) => {
 
     return listed.code !== 0
       ? null
-      : listed.out
-          .split("\n")
-          .filter(Boolean)
-          .map((sha) => {
+      : pipe(
+          Str.split(listed.out, "\n"),
+          Arr.filter(Boolean),
+          Arr.map((sha) => {
             const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
 
             return { sha, step: (r.code === 0 ? stepOf(r.out)[0] : undefined) ?? "unsigned" };
-          });
+          }),
+        );
   };
 
   return {
@@ -1319,14 +1379,14 @@ const handlers = (s: Setup) => {
           round,
           step: cmd.step,
           note: cmd.note,
-          startedAt: new Date().toISOString(),
+          startedAt: DateTime.formatIso(yield* DateTime.now),
           endedAt: null,
           line: null,
           judged: null,
         };
 
         saveStep(entry);
-        note(`round ${round}: starting ${cmd.step} on ${agent}${cmd.note ? ` (${cmd.note})` : ""}`);
+        note(`round ${round}: starting ${cmd.step} on ${agent}${cmd.note !== "" ? ` (${cmd.note})` : ""}`);
         const minutes = yield* WaitMinutes;
         const times = yield* MaxWaits;
 
@@ -1347,6 +1407,7 @@ const handlers = (s: Setup) => {
             ticket: s.ticket,
             branch: s.branch,
             plan: s.plan,
+            minutes: yield* StepMinutes,
           });
 
           if (prepared._tag === "refused") {
@@ -1406,10 +1467,10 @@ const handlers = (s: Setup) => {
             ),
           ),
           Effect.tapError((e) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               saveStep({
                 ...entry,
-                endedAt: new Date().toISOString(),
+                endedAt: DateTime.formatIso(yield* DateTime.now),
                 line: {
                   outcome: `stuck:${e._tag}`,
                   head: "",
@@ -1421,7 +1482,7 @@ const handlers = (s: Setup) => {
                   listUsd: null,
                 },
               });
-              note(`round ${round}: ${cmd.step} ${e._tag}: ${e.reason.slice(0, 200)}`);
+              note(`round ${round}: ${cmd.step} ${e._tag}: ${pipe(e.reason, Str.slice(0, 200))}`);
             }),
           ),
           // tea's err channel takes a plain tagged record; the class stays inside the handler.
@@ -1433,7 +1494,7 @@ const handlers = (s: Setup) => {
           })),
         );
 
-        saveStep({ ...entry, endedAt: new Date().toISOString(), line });
+        saveStep({ ...entry, endedAt: DateTime.formatIso(yield* DateTime.now), line });
 
         return line;
       }),
@@ -1443,7 +1504,7 @@ const handlers = (s: Setup) => {
         const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
         note(`round ${earlier + cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`);
         s.beats.enter("judge", at(".jsonl"));
-        const started = new Date();
+        const started = yield* DateTime.nowAsDate;
 
         // One turn in the main checkout on the row that only reads (Codex's read-only profile):
         // the judgment cannot change the checkout, by the harness and not by a promise. That row
@@ -1476,23 +1537,23 @@ const handlers = (s: Setup) => {
             model: env.CODEX_MODEL,
             effort: env.CODEX_EFFORT,
             outcome: move._tag === "step" ? "pass" : "parked",
-            reason: `chain.ts judgment for ${s.quest} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}`,
+            reason: `chain.ts judgment for ${s.quest} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}. Requested coordination profile: model ${env.CODEX_MODEL}, effort ${env.CODEX_EFFORT}; effective API context unknown.`,
             started,
-            ended: new Date(),
+            ended: yield* DateTime.nowAsDate,
             spent: turned.spent,
-            redacted: scrubbed.code === 0 ? Number(scrubbed.out.trim()) : null,
+            redacted: scrubbed.code === 0 ? Number(Str.trim(scrubbed.out)) : null,
           }),
         );
         const answer = move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`;
         note(`judgment: ${answer}`);
         const r = readRecord();
-        const last = r.steps.find((e) => e.round === earlier + cmd.round);
+        const last = Arr.findFirst(r.steps, (e) => e.round === earlier + cmd.round);
 
-        if (last) {
-          saveStep({ ...last, judged: { box, answer } });
+        if (Option.isSome(last)) {
+          saveStep({ ...last.value, judged: { box, answer } });
         }
 
-        return { text: JSON.stringify(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
+        return { text: Formatter.formatJson(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
       }),
     // CI's typecheck job alone, polled until it ends: never the whole run or ci-required (0133).
     typecheck_read: (cmd: { pr: number; head: string }) =>
@@ -1500,45 +1561,45 @@ const handlers = (s: Setup) => {
         s.beats.enter("typecheck", null);
         const minutes = yield* TypecheckMinutes;
         const every = yield* TypecheckEvery;
-        note(`typecheck: waiting for CI's ${Typecheck.JOB} job at ${cmd.head.slice(0, 8)} (PR ${cmd.pr})`);
-        const pushed = Date.now();
+        note(`typecheck: waiting for CI's ${Typecheck.JOB} job at ${pipe(cmd.head, Str.slice(0, 8))} (PR ${cmd.pr})`);
+        const pushed = yield* Clock.currentTimeMillis;
         const verdict = yield* Typecheck.wait({ main: env.MAIN, head: cmd.head, minutes, every });
-        const took = Math.round((Date.now() - pushed) / 1000);
+        const took = Math.round(((yield* Clock.currentTimeMillis) - pushed) / 1000);
         note(`typecheck: ${Typecheck.summary(verdict)} (${took} s after the push)`);
 
         return verdict;
-      }).pipe(Effect.provide(Layer.provideMerge(ChecksGh.layer(env.GH_REPO), NodeServices.layer))),
+      }),
     pr_open: (cmd: { head: string }) =>
       Effect.gen(function* () {
         s.beats.enter("pr", null);
+        const title = pipe(Str.split(s.brief.sections.pr ?? "", "\n")[0], Str.replace(/^#+\s*/, ""), Str.trim);
 
-        const title = (s.brief.sections.pr ?? "")
-          .split("\n")[0]
-          ?.replace(/^#+\s*/, "")
-          .trim();
-
-        if (!title) {
+        if (title === undefined || title === "") {
           return { pr: null, detail: "the quest brief has no `## pr` section with a title line" };
         }
 
-        const body = [
-          (s.brief.sections.pr ?? "").split("\n").slice(1).join("\n").trim(),
-          "",
-          "## Steps",
-          "",
-          `Ran end to end by \`chain.ts ${s.quest}\`: no lead agent held the quest. Each step was its own agent through the fabrika agents package on ACP (${providers(
-            saved().steps.map((e) => e.step),
-            s.claude,
-            s.exec,
-          )}); the lead agent wrote no step's work. Steps and dollars:`,
-          "",
-          ...stepsTable(join(env.BOXES, `${s.quest}-rows.jsonl`), saved().steps),
-        ].join("\n");
+        const body = Arr.join(
+          [
+            Str.trim(Arr.join(Str.split(s.brief.sections.pr ?? "", "\n").slice(1), "\n")),
+            "",
+            "## Steps",
+            "",
+            `Ran end to end by \`chain.ts ${s.quest}\`: no lead agent held the quest. Each step was its own agent through the fabrika agents package on ACP (${providers(
+              Arr.map(saved().steps, (e) => e.step),
+              s.claude,
+              s.exec,
+            )}); the lead agent wrote no step's work. Steps and dollars:`,
+            "",
+            ...stepsTable(join(env.BOXES, `${s.quest}-rows.jsonl`), saved().steps),
+          ],
+          "\n",
+        );
 
         // The draft opened at the quest's first commit (drive's pushing phase, 0134) takes the brief's
         // words and is marked ready; a quest started before that gets its pull request here.
-        note(`review said merge-ready at ${cmd.head.slice(0, 8)}; pushing ${s.branch} and marking its PR ready`);
-        const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
+        note(
+          `review said merge-ready at ${pipe(cmd.head, Str.slice(0, 8))}; pushing ${s.branch} and marking its PR ready`,
+        );
 
         const readied = yield* Publish.ready({
           dir: env.MAIN,
@@ -1548,7 +1609,6 @@ const handlers = (s: Setup) => {
         }).pipe(
           Effect.map((p) => ({ pr: p.pr, detail: p.opened ? "opened" : "existing" })),
           Effect.catch((e) => Effect.succeed({ pr: null, detail: `${s.branch} not marked ready: ${e.reason}` })),
-          Effect.provide(Layer.provide(services, NodeServices.layer)),
         );
 
         if (readied.pr === null) {
@@ -1569,27 +1629,30 @@ const handlers = (s: Setup) => {
         sh("git", ["-C", env.MAIN, "fetch", "-q", "origin", "main"]);
         const base = sh("git", ["-C", env.MAIN, "merge-base", "origin/main", cmd.head]);
 
-        if (base.code !== 0 || !base.out.trim()) {
-          return { code: 2, text: `no merge-base of origin/main and ${cmd.head.slice(0, 8)}` };
+        if (base.code !== 0 || Str.trim(base.out) === "") {
+          return { code: 2, text: `no merge-base of origin/main and ${pipe(cmd.head, Str.slice(0, 8))}` };
         }
 
-        const from = base.out.trim();
+        const from = Str.trim(base.out);
         const ran = sh("sh", [join(HERE, "loosening.sh"), from, cmd.head], env.MAIN);
-        const text = [ran.out.trim(), ran.err.trim()].filter(Boolean).join("\n");
+        const text = pipe([Str.trim(ran.out), Str.trim(ran.err)], Arr.filter(Boolean), Arr.join("\n"));
         note(
-          `loosening.sh ${from.slice(0, 8)} ${cmd.head.slice(0, 8)} exited ${ran.code}: ${text.split("\n")[0] ?? ""}`,
+          `loosening.sh ${pipe(from, Str.slice(0, 8))} ${pipe(cmd.head, Str.slice(0, 8))} exited ${ran.code}: ${Str.split(text, "\n")[0] ?? ""}`,
         );
         const bodyFile = join(env.BOXES, `${s.quest}-loosening.md`);
         writeFileSync(
           bodyFile,
-          [
-            `\`loosening.sh ${from} ${cmd.head}\`, run by \`chain.ts ${s.quest}\` after review and before the merge queue (exit ${ran.code}):`,
-            "",
-            "```text",
-            text || "(no output)",
-            "```",
-            "",
-          ].join("\n"),
+          Arr.join(
+            [
+              `\`loosening.sh ${from} ${cmd.head}\`, run by \`chain.ts ${s.quest}\` after review and before the merge queue (exit ${ran.code}):`,
+              "",
+              "```text",
+              text || "(no output)",
+              "```",
+              "",
+            ],
+            "\n",
+          ),
         );
         const posted = sh("gh", ["pr", "comment", String(cmd.pr), "-R", env.GH_REPO, "--body-file", bodyFile]);
 
@@ -1608,7 +1671,7 @@ const handlers = (s: Setup) => {
           round,
           step: "host",
           note: "",
-          startedAt: new Date().toISOString(),
+          startedAt: DateTime.formatIso(yield* DateTime.now),
           endedAt: null,
           line: null,
           judged: null,
@@ -1617,7 +1680,7 @@ const handlers = (s: Setup) => {
         saveStep(entry);
         s.beats.enter("host", null);
         const name = RunId.next(s.quest, "host", runNames(env.BOXES, s.quest));
-        note(`round ${round}: starting host ${name} at ${head.slice(0, 8)} (${s.host.length} commands)`);
+        note(`round ${round}: starting host ${name} at ${pipe(head, Str.slice(0, 8))} (${s.host.length} commands)`);
 
         const args = {
           main: env.MAIN,
@@ -1638,7 +1701,7 @@ const handlers = (s: Setup) => {
           ),
         );
 
-        const ended = new Date().toISOString();
+        const ended = DateTime.formatIso(yield* DateTime.now);
         yield* Host.recordInQuest(args, hosted, ended).pipe(
           Effect.catch((e) => Effect.sync(() => note(`round ${round}: host could not write the state file: ${e}`))),
         );
@@ -1656,10 +1719,12 @@ const handlers = (s: Setup) => {
         };
 
         saveStep({ ...entry, endedAt: ended, line });
-        note(`round ${round}: host ${line.outcome}, head ${hosted.head.slice(0, 8)}: ${line.reason.slice(0, 200)}`);
+        note(
+          `round ${round}: host ${line.outcome}, head ${pipe(hosted.head, Str.slice(0, 8))}: ${pipe(line.reason, Str.slice(0, 200))}`,
+        );
 
         return { outcome: hosted.outcome._tag, head: hosted.head, reason: hosted.outcome.reason };
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }),
     // The reviewed head enters GitHub's merge queue (./pr/Queue.ts, 0162). The wait is for
     // `ci-required` at that head only; the merge is GitHub's, later, and nothing here waits for it.
     land: (cmd: { pr: number }) =>
@@ -1668,12 +1733,6 @@ const handlers = (s: Setup) => {
         note(`queue: PR ${cmd.pr}, waiting up to ${minutes} minutes for ${Queue.REQUIRED}`);
         s.beats.enter("land", null);
 
-        const services = Layer.mergeAll(
-          PushesProcess.layer(HERE),
-          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
-          ChecksGh.layer(env.GH_REPO),
-        );
-
         const added = yield* Queue.add({
           dir: env.MAIN,
           pr: cmd.pr,
@@ -1681,11 +1740,10 @@ const handlers = (s: Setup) => {
         }).pipe(
           Effect.map((a) => ({ ok: true, detail: Queue.line(a), at: a._tag })),
           Effect.catch((e) => Effect.succeed({ ok: false, detail: e.reason, at: null })),
-          Effect.provide(Layer.provide(services, NodeServices.layer)),
         );
 
         note(`queue: ${added.detail}`);
-        const now = new Date().toISOString();
+        const now = DateTime.formatIso(yield* DateTime.now);
         writeRecord({
           ...readRecord(),
           ...(added.at === "queued" ? { queued: now } : {}),
@@ -1706,15 +1764,18 @@ export const providers = (
   claude: ReadonlySet<StepName>,
   exec: ReadonlySet<StepName> = new Set(),
 ): string => {
-  const on = (agent: AgentName) => STEPS.filter((s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
+  const on = (agent: AgentName) => Arr.filter(STEPS, (s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
   const onExec = on("codex-exec");
   const onClaude = on("claude");
 
-  return [
-    "Codex in a box",
-    ...(onExec.length === 0 ? [] : [`plain codex exec for ${onExec.join(", ")}`]),
-    ...(onClaude.length === 0 ? [] : [`or Claude for ${onClaude.join(", ")}`]),
-  ].join(", ");
+  return Arr.join(
+    [
+      "Codex in a box",
+      ...(onExec.length === 0 ? [] : [`plain codex exec for ${Arr.join(onExec, ", ")}`]),
+      ...(onClaude.length === 0 ? [] : [`or Claude for ${Arr.join(onClaude, ", ")}`]),
+    ],
+    ", ",
+  );
 };
 
 /**
@@ -1733,22 +1794,25 @@ export const stepsTable = (
   const dollars = new Map<string, number>();
 
   if (existsSync(rowsFile)) {
-    for (const raw of readFileSync(rowsFile, "utf8").split("\n")) {
+    for (const raw of Str.split(readFileSync(rowsFile, "utf8"), "\n")) {
       // A line that is not JSON, or is JSON null, holds no row.
+      // SAFETY: `run` is read only when truthy, as a map key, and `listUsd` only after typeof says it
+      // is a number; a JSON null or a non-object has neither.
       const r = Result.getOrUndefined(Result.try(() => JSON.parse(raw) as { run?: string; listUsd?: number } | null));
 
-      if (r?.run && typeof r.listUsd === "number") {
+      if (Predicate.isString(r?.run) && r.run !== "" && Predicate.isNumber(r.listUsd)) {
         dollars.set(r.run, r.listUsd);
       }
     }
   }
 
-  const total = steps.reduce((sum, e) => sum + (dollars.get(e.run ?? "") ?? 0), 0);
+  const total = Arr.reduce(steps, 0, (sum, e) => sum + (dollars.get(e.run ?? "") ?? 0));
 
   return [
     "| Step | Box | Outcome | List $ |",
     "|---|---|---|---|",
-    ...steps.map(
+    ...Arr.map(
+      steps,
       (e) =>
         `| ${e.step} | ${e.box ?? ""} | ${e.outcome} | ${dollars.has(e.run ?? "") ? (dollars.get(e.run ?? "") ?? 0).toFixed(2) : ""} |`,
     ),
@@ -1758,6 +1822,15 @@ export const stepsTable = (
 
 // ---------------------------------------------------------------- the command
 
+/** What a restart takes from the quest's state file: drive.ts writes these, and the rest stays drive's. */
+const SavedQuest = Schema.fromJsonString(
+  Schema.Struct({
+    ticket: Schema.optional(Schema.String),
+    branch: Schema.optional(Schema.String),
+    plan: Schema.optional(Schema.String),
+  }),
+);
+
 const flag = (args: string[], name: string) => {
   const i = args.indexOf(name);
 
@@ -1766,10 +1839,11 @@ const flag = (args: string[], name: string) => {
 
 const stepSet = (text: string | undefined): Set<StepName> =>
   new Set(
-    (text ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(isStep),
+    pipe(
+      Str.split(text ?? "", ","),
+      Arr.map((s) => Str.trim(s)),
+      Arr.filter(isStep),
+    ),
   );
 
 export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
@@ -1797,13 +1871,21 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
 
     const statePath = join(env.BOXES, "state", `${quest}.json`);
 
-    const saved: { ticket?: string; branch?: string; plan?: string } = existsSync(statePath)
-      ? JSON.parse(readFileSync(statePath, "utf8"))
+    const saved: typeof SavedQuest.Type = existsSync(statePath)
+      ? yield* Schema.decodeEffect(SavedQuest)(readFileSync(statePath, "utf8")).pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              console.error(`chain.ts: the quest's state file ${statePath} does not read: ${error.message}`);
+
+              return process.exit(2);
+            }),
+          ),
+        )
       : {};
 
     const ticket = flag(args, "--ticket") ?? saved.ticket;
 
-    if (!ticket) {
+    if (ticket === undefined || ticket === "") {
       console.error(`chain.ts: no ticket for quest ${quest} yet; pass --ticket`);
       process.exit(2);
     }
@@ -1813,7 +1895,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const start = flag(args, "--start") ?? "tests";
 
     if (!isStep(start)) {
-      console.error(`chain.ts: --start takes one of ${STEPS.join(", ")}`);
+      console.error(`chain.ts: --start takes one of ${Arr.join(STEPS, ", ")}`);
       process.exit(2);
     }
 
@@ -1821,7 +1903,13 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const missing = lacks(brief, start);
 
     if (missing.length > 0) {
-      console.error(`chain.ts: the quest brief lacks sections: ${missing.map((m) => `## ${m}`).join(", ")}`);
+      console.error(
+        `chain.ts: the quest brief lacks sections: ${pipe(
+          missing,
+          Arr.map((m) => `## ${m}`),
+          Arr.join(", "),
+        )}`,
+      );
       process.exit(2);
     }
 
@@ -1897,7 +1985,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     }
 
     console.log(
-      JSON.stringify({
+      Formatter.formatJson({
         outcome: end.end.kind,
         quest,
         rounds: end.quest.round,
@@ -1924,7 +2012,7 @@ const backstopFor = (plan: string, brief: string) =>
     const times = yield* BackstopTimes;
     const maxSteps = yield* MaxSteps;
 
-    const found = [plan, brief].flatMap((path) => {
+    const found = Arr.flatMap([plan, brief], (path) => {
       const estimate = existsSync(path) ? estimateIn(readFileSync(path, "utf8")) : null;
 
       return estimate === null ? [] : [{ path, estimate }];
@@ -1949,17 +2037,26 @@ const backstopFor = (plan: string, brief: string) =>
 /** A limit's override from the environment, when set and a number. */
 const overridden =
   (ref: Context.Reference<number>, name: string) =>
-  <E>(self: Effect.Effect<void, E, never>): Effect.Effect<void, E, never> => {
-    const v = Number(process.env[name]);
+  <E, R>(self: Effect.Effect<void, E, R>): Effect.Effect<void, E | Config.ConfigError, R> =>
+    Effect.flatMap(variable(name), (set) => {
+      const v = Number(set);
 
-    return process.env[name] !== undefined && Number.isFinite(v) ? Effect.provideService(self, ref, v) : self;
-  };
+      return set !== undefined && Number.isFinite(v) ? Effect.provideService(self, ref, v) : self;
+    });
 
 /** The last line of a quest that never started: its pin could not be made or read. */
 const unpinned = (reason: string, quest?: string) => {
   console.log(JSON.stringify({ outcome: "stuck", ...(quest === undefined ? {} : { quest }), reason, exit: 30 }));
   process.exitCode = 30;
 };
+
+/** Every service the quest's steps call (git and GitHub, on Node), composed once at the entry point. */
+const services = (env: Env) =>
+  Layer.mergeAll(
+    PushesProcess.layer(HERE),
+    PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+    ChecksGh.layer(env.GH_REPO),
+  ).pipe(Layer.provideMerge(Layer.merge(NodeServices.layer, Digest.layerWebCrypto)));
 
 /**
  * A quest started from a checkout pins its scripts first and runs chain.ts again from the pin, with
@@ -1968,65 +2065,67 @@ const unpinned = (reason: string, quest?: string) => {
  * process first.
  */
 const launch = (env: Env, quest: string, args: ReadonlyArray<string>) =>
-  NodeRuntime.runMain(
-    Effect.gen(function* () {
-      const folder = pinFolder(env.BOXES, quest, process.pid);
-      const pin = yield* Pin.acquire({ main: env.MAIN, folder, script: "chain.ts" });
-      const code = yield* Pin.runPinned(pin, env, "chain.ts", args);
-      yield* Effect.sync(() => {
-        process.exitCode = code;
-      });
-    }).pipe(
-      Effect.scoped,
-      Effect.catchTag("PinFailed", (e) => Effect.sync(() => unpinned(`scripts not pinned: ${e.reason}`, quest))),
-      Effect.provide(NodeServices.layer),
-    ),
-    { disableErrorReporting: true },
+  Effect.gen(function* () {
+    const folder = pinFolder(env.BOXES, quest, process.pid);
+    const pin = yield* Pin.acquire({ main: env.MAIN, folder, script: "chain.ts" });
+    const code = yield* Pin.runPinned(pin, env, "chain.ts", args);
+    yield* Effect.sync(() => {
+      process.exitCode = code;
+    });
+  }).pipe(
+    Effect.scoped,
+    Effect.catchTag("PinFailed", (e) => Effect.sync(() => unpinned(`scripts not pinned: ${e.reason}`, quest))),
   );
 
 const main = () => {
   const env = loadEnv();
   const args = process.argv.slice(2);
-  const state = Pin.pinState(process.env[Pin.PIN_ENV]);
   const [quest = ""] = args;
 
-  if (state._tag === "malformed") {
-    unpinned(`${Pin.PIN_ENV} does not parse: ${state.value}`);
+  NodeRuntime.runMain(
+    Effect.gen(function* () {
+      const state = Pin.pinState(yield* variable(Pin.PIN_ENV));
 
-    return;
-  }
+      if (state._tag === "malformed") {
+        return yield* Effect.sync(() => unpinned(`${Pin.PIN_ENV} does not parse: ${state.value}`));
+      }
 
-  // A usage error needs no pin: it is printed here, from the checkout.
-  if (state._tag === "unpinned" && QUEST_NAME.test(quest)) {
-    launch(env, quest, args);
+      // A usage error needs no pin: it is printed here, from the checkout.
+      if (state._tag === "unpinned" && QUEST_NAME.test(quest)) {
+        return yield* launch(env, quest, args);
+      }
 
-    return;
-  }
-
-  const pin = state._tag === "pinned" ? state.pin : null;
-  Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const end = yield* chainMain(args, env, pin);
-        process.exitCode = exitOf(end);
-      }),
-    ).pipe(
-      overridden(WaitMinutes, "CHAIN_WAIT_MINUTES"),
-      overridden(MaxWaits, "CHAIN_WAITS"),
-      overridden(MaxStucks, "CHAIN_STUCKS"),
-      overridden(MaxSteps, "CHAIN_STEPS"),
-      overridden(IntensityCount, "CHAIN_INTENSITY"),
-      overridden(IntensityWithin, "CHAIN_WITHIN"),
-      overridden(BackstopTimes, "CHAIN_BACKSTOP"),
-      overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
-      overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
-      overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
-      overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
+      const pin = state._tag === "pinned" ? state.pin : null;
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const end = yield* chainMain(args, env, pin);
+          process.exitCode = exitOf(end);
+        }),
+      ).pipe(
+        overridden(WaitMinutes, "CHAIN_WAIT_MINUTES"),
+        overridden(MaxWaits, "CHAIN_WAITS"),
+        overridden(MaxStucks, "CHAIN_STUCKS"),
+        overridden(MaxSteps, "CHAIN_STEPS"),
+        overridden(IntensityCount, "CHAIN_INTENSITY"),
+        overridden(IntensityWithin, "CHAIN_WITHIN"),
+        overridden(BackstopTimes, "CHAIN_BACKSTOP"),
+        overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
+        overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
+        overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
+        overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
+        withDriveMinutes,
+      );
+    }).pipe(
+      Effect.provide(services(env)),
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          console.log(Formatter.formatJson({ outcome: "stuck", reason: Cause.pretty(cause), exit: 30 }));
+          process.exitCode = 30;
+        }),
+      ),
     ),
-  ).catch((e: unknown) => {
-    console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));
-    process.exitCode = 30;
-  });
+    { disableErrorReporting: true },
+  );
 };
 
 if (import.meta.main) {

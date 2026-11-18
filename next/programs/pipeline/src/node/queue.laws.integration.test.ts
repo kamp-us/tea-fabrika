@@ -49,9 +49,12 @@ import {
   Schema,
   Scope,
   Stream,
+  Array as Arr,
+  String as Str,
 } from "effect";
 import { TestClock } from "effect/testing";
 import { handlers } from "../handlers.ts";
+import type * as Mail from "../Mail.ts";
 import { merger } from "../Merger.ts";
 import { queue } from "../Queue.ts";
 import * as QueueRunnerTest from "../QueueRunnerTest.ts";
@@ -78,9 +81,9 @@ const from = {
   build: BUILD,
 };
 
-const base = CodeHostTest.commit("d".repeat(40));
+const base = CodeHostTest.commit(Str.repeat(40)("d"));
 
-const moved = CodeHostTest.commit("c".repeat(40));
+const moved = CodeHostTest.commit(Str.repeat(40)("c"));
 
 const settings = Effect.runSync(
   Settings.all.parse(
@@ -173,9 +176,10 @@ const stores = Effect.gen(function* () {
         }
       }),
     alarms: Effect.sync(() =>
-      table()
-        .exec("SELECT name, at FROM alarms ORDER BY at, name")
-        .map((row) => ({ name: String(row.name), at: Number(row.at) })),
+      Arr.map(table().exec("SELECT name, at FROM alarms ORDER BY at, name"), (row) => ({
+        name: String(row.name),
+        at: Number(row.at),
+      })),
     ),
   };
 }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)), Effect.orDie);
@@ -335,7 +339,7 @@ const open = Effect.fnUntraced(function* (
             const found = yield* host.read(change);
 
             if (found !== undefined) {
-              yield* host.put({ ...found, tree: CodeHostTest.tree("9".repeat(40)) });
+              yield* host.put({ ...found, tree: CodeHostTest.tree(Str.repeat(40)("9")) });
             }
           }
 
@@ -350,31 +354,33 @@ const open = Effect.fnUntraced(function* (
     yield* host.put({
       ...Schema.TaggedStruct("found", {}).make({}),
       change,
-      head: CodeHostTest.commit(change.toString(16).repeat(40)),
+      head: CodeHostTest.commit(Str.repeat(40)(change.toString(16))),
       state: "open",
       paths: ["src/a.ts"],
       base,
-      tree: CodeHostTest.tree((change + 6).toString(16).repeat(40)),
+      tree: CodeHostTest.tree(Str.repeat(40)((change + 6).toString(16))),
       conflict: null,
     });
   }
 
   let serial = 0;
-  const ids = Effect.sync(() => `process_0000000000e008${(++serial).toString(16).padStart(12, "0")}`);
+  const ids = Effect.sync(() => `process_0000000000e008${Str.padStart(12, "0")((++serial).toString(16))}`);
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   const grants: Array<typeof StartGrant.Type> = [{ source: "pipeline/queue", to: "pipeline/merger" }];
   let current = yield* life(store, wrapped, ids, scope, grants);
   let letter = 0;
 
-  const deliver = Effect.fnUntraced(function* (input: unknown) {
+  const deliver = Effect.fnUntraced(function* (
+    input: typeof Mail.Enqueue.Type | typeof Mail.Drop.Type | typeof Mail.Resume.Type,
+  ) {
     const runner = yield* current.runner(NAME);
     const n = ++letter;
 
     return yield* runner.msg({
       id: `incoming:${n}`,
       envelope: {
-        id: Schema.decodeSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`),
         by: owner,
         arrivedAt: n,
         input,
@@ -390,9 +396,10 @@ const open = Effect.fnUntraced(function* (
   const statuses = Effect.gen(function* () {
     const rows = yield* Ledger.use((ledger) => Stream.runCollect(ledger.read("processes", 0)));
 
-    const registrations = rows
-      .filter((row) => row._tag === "registered")
-      .map((row) => Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, program: Schema.String }))(row.body));
+    const registrations = Arr.map(
+      Arr.filter(rows, (row) => row._tag === "registered"),
+      (row) => Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, program: Schema.String }))(row.body),
+    );
 
     const processes = yield* ProcessManager;
 
@@ -400,7 +407,7 @@ const open = Effect.fnUntraced(function* (
       tx.transact((turn) => {
         const table = processes.table(turn);
 
-        return registrations.map((entry) => ({ entry, status: table.status(entry.name, brain) }));
+        return Arr.map(registrations, (entry) => ({ entry, status: table.status(entry.name, brain) }));
       }),
     );
 
@@ -417,7 +424,10 @@ const open = Effect.fnUntraced(function* (
     const names = [
       NAME,
       ...Array.from({ length: 6 }, (_, i) => `quest:${i + 1}`),
-      ...info.filter((i) => i.program === "pipeline/merger").map((i) => i.name),
+      ...Arr.map(
+        Arr.filter(info, (i) => i.program === "pipeline/merger"),
+        (i) => i.name,
+      ),
     ];
 
     const letters = yield* Effect.forEach(
@@ -425,13 +435,13 @@ const open = Effect.fnUntraced(function* (
       (name) =>
         Mailbox.use((m) => Stream.runCollect(m.read(name, 0))).pipe(
           Effect.provide(current.context),
-          Effect.map((all) => all.map((l) => ({ name, id: l.id, pos: l.pos, m: l.m }))),
+          Effect.map((all) => Arr.map(all, (l) => ({ name, id: l.id, pos: l.pos, m: l.m }))),
         ),
       { concurrency: 1 },
     );
 
     const saved = yield* Effect.forEach(
-      info.filter((i) => i.program === "pipeline/queue" || i.program === "pipeline/merger"),
+      Arr.filter(info, (i) => i.program === "pipeline/queue" || i.program === "pipeline/merger"),
       (i) =>
         Effect.gen(function* () {
           yield* store.connect(`model:${i.state.process}`);
@@ -445,7 +455,7 @@ const open = Effect.fnUntraced(function* (
     );
 
     // Read the queue checkpoint by its process, including its last model after exit.
-    const queueInfo = info.find((i) => i.name === NAME)!;
+    const queueInfo = Option.getOrThrow(Arr.findFirst(info, (i) => i.name === NAME));
 
     const checkpoint = yield* ProcessStore.use((s) => s.load).pipe(
       Effect.provide(
@@ -460,7 +470,7 @@ const open = Effect.fnUntraced(function* (
     return {
       model,
       view: model === null ? null : programs["pipeline/queue"].view.select(model),
-      starts: info.map((i) => ({
+      starts: Arr.map(info, (i) => ({
         name: i.name,
         process: i.state.process,
         program: i.program,
@@ -494,7 +504,7 @@ const open = Effect.fnUntraced(function* (
     yield* notify(NAME);
     const info = yield* statuses.pipe(Effect.provide(current.context));
 
-    for (const child of info.filter((i) => i.program === "pipeline/merger" && i.state._tag === "live")) {
+    for (const child of Arr.filter(info, (i) => i.program === "pipeline/merger" && i.state._tag === "live")) {
       yield* notify(child.name);
     }
 

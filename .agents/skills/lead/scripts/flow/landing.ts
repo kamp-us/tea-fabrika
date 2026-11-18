@@ -15,11 +15,15 @@
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
-import { Effect, Layer, Path, Schema, Stream } from "effect";
-import { ChildProcess, type ChildProcessSpawner } from "effect/process";
+import { Array as Arr, String as Str, pipe, Effect, Match, Path, Schema, Stream } from "effect";
+import { ChildProcess } from "effect/process";
+import type { ChildProcessSpawner } from "effect/process";
+
+import { Checks } from "../ci/Checks.ts";
 import * as ChecksGh from "../ci/ChecksGh.ts";
+import { PullRequests } from "../pr/PullRequests.ts";
 import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
-import { LeakGrepRefused } from "../pr/Pushes.ts";
+import { LeakGrepRefused, Pushes } from "../pr/Pushes.ts";
 import * as PushesProcess from "../pr/PushesProcess.ts";
 import * as Queue from "../pr/Queue.ts";
 import * as Outcome from "./Outcome.ts";
@@ -30,7 +34,8 @@ import type { Step } from "./Step.ts";
 export type Ran = { readonly code: number; readonly output: string };
 
 /** The last lines of a command's output, for a reason. */
-export const tail = (output: string, n = 5): string => output.trimEnd().split("\n").slice(-n).join(" | ");
+export const tail = (output: string, n = 5): string =>
+  Arr.join(pipe(output, Str.trimEnd, Str.split("\n")).slice(-n), " | ");
 
 const run = Effect.fn("landing.run")(
   function* (dir: string, command: string, args: ReadonlyArray<string>) {
@@ -87,19 +92,19 @@ export const governanceOutcome = (ran: Ran): Outcome.Outcome =>
 
 /** stepcommit.sh: 5 is a ticket the lead must pick again (an open PR holds it, or PRs cannot be read). */
 export const commitOutcome = (ran: Ran): Outcome.Outcome =>
-  ran.code === 0
-    ? Outcome.done(`committed and signed: ${tail(ran.output, 1)}`)
-    : ran.code === 5
-      ? Outcome.ask(`stepcommit.sh refused the lead link: ${tail(ran.output)}`)
-      : Outcome.stuck(`stepcommit.sh exited ${ran.code}: ${tail(ran.output)}`);
+  Match.value(ran.code).pipe(
+    Match.when(0, () => Outcome.done(`committed and signed: ${tail(ran.output, 1)}`)),
+    Match.when(5, () => Outcome.ask(`stepcommit.sh refused the lead link: ${tail(ran.output)}`)),
+    Match.orElse(() => Outcome.stuck(`stepcommit.sh exited ${ran.code}: ${tail(ran.output)}`)),
+  );
 
 /** leakgrep.sh fails closed: 1 is a hit for the lead's hand check, anything else but 0 is stuck. */
 export const leakOutcome = (ran: Ran): Outcome.Outcome =>
-  ran.code === 0
-    ? Outcome.done("the leak grep is clean on each commit not on origin")
-    : ran.code === 1
-      ? Outcome.ask(`the leak grep has a hit for the lead's hand check: ${tail(ran.output)}`)
-      : Outcome.stuck(`leakgrep.sh could not check (exit ${ran.code}): ${tail(ran.output)}`);
+  Match.value(ran.code).pipe(
+    Match.when(0, () => Outcome.done("the leak grep is clean on each commit not on origin")),
+    Match.when(1, () => Outcome.ask(`the leak grep has a hit for the lead's hand check: ${tail(ran.output)}`)),
+    Match.orElse(() => Outcome.stuck(`leakgrep.sh could not check (exit ${ran.code}): ${tail(ran.output)}`)),
+  );
 
 /** A refused add: a leak hit asks for the lead's hand check, as leak-grep does; anything else is stuck. */
 export const queueRefused = (e: { readonly reason: string }): Outcome.Outcome =>
@@ -109,7 +114,7 @@ export const queueRefused = (e: { readonly reason: string }): Outcome.Outcome =>
 
 /** The pull request number in `gh pr list --json number -q .[0].number`'s answer, or `null`. */
 export const listedPr = (ran: Ran): number | null => {
-  const n = Number(ran.output.trim());
+  const n = Number(Str.trim(ran.output));
 
   return ran.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
 };
@@ -215,16 +220,15 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
       return yield* StepFailed.make({ reason: `${dir}'s origin is not a GitHub repo` });
     }
 
-    const services = Layer.mergeAll(
-      PullRequestsGh.layer(repo, dir),
-      PushesProcess.layer(yield* script()),
-      ChecksGh.layer(repo),
-    );
+    const scripts = yield* script();
 
     // The `ci` step before this one waited for the checks, so the required one is read once here.
+    // Each service is built for this one call, so ChecksGh's ETag cache lives only as long as it.
     return Outcome.answer(
       yield* Queue.add({ dir, pr }).pipe(
-        Effect.provide(services),
+        Effect.provideServiceEffect(PullRequests, PullRequestsGh.make(repo, dir)),
+        Effect.provideServiceEffect(Pushes, PushesProcess.make(scripts)),
+        Effect.provideServiceEffect(Checks, ChecksGh.make(repo)),
         Effect.match({ onFailure: queueRefused, onSuccess: (added) => Outcome.done(Queue.line(added)) }),
       ),
     );

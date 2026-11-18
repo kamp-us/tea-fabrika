@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-time-table-drops-jobs-api-failure-cause",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": null,
+  "rule": "rule_break",
+  "location": {
+    "path": ".github/ci/time-table.ts",
+    "line": 335
+  },
+  "says": "In today's CI, PR 1567 replaces the time table's jobs API and report failure reasons with fixed strings, so the timing artifact no longer records why the jobs API could not be read (HTTP status, timeout or network), a safe fact AGENTS.md's data-shape rule says to keep, which a closed reason such as the status code could hold without machine paths.",
+  "proof": "origin/main 84f51f8 .github/ci/time-table.ts: unavailable<Step>(`the jobs API could not be read: ${reasonOf(error.cause)}`); head d31a87c line 335: Effect.catch(() => Effect.succeed({ steps: unavailable<Step>(\"the jobs API could not be read\") }))",
+  "cost": "A leg whose steps section is unavailable can no longer tell a 403 token grant from a timeout, so that cause is lost for every run after merge.",
+  "head": "d31a87c4f8fedb227e31123faa87b8d2c4932cf8",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567"
+}

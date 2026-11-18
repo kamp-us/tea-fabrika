@@ -15,7 +15,12 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -104,7 +109,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
     const context = yield* Effect.context<R>();
     yield* Effect.promise(() =>
       fc.assert(
-        fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
+        fc.asyncProperty(arb, (a) => Effect.runPromiseWith(context)(law(a))),
         {
           seed: SEED,
           numRuns: runsFor({ fast: 4, full: 40 }),
@@ -125,8 +130,8 @@ describe("P33, only the owning runner writes its answers", () => {
       Effect.gen(function* () {
         // JSON whitespace changes the spelling, never ownership of the id space.
         for (const id of [
-          JSON.stringify(["notice", key]),
-          `${space}[${space}"notice",${JSON.stringify(key)}]${space}`,
+          Formatter.formatJson(["notice", key]),
+          `${space}[${space}"notice",${Formatter.formatJson(key)}]${space}`,
           '["notice"',
         ]) {
           expect(brainOnly({ stream: "notes:1/inbox", id, tag: "send" })).toBe(true);
@@ -291,7 +296,7 @@ describe("p21, send", () => {
           _tag: "refused",
           reason: "bad_parent",
         });
-        expect(yield* send("notes:1", LETTER, m, { traceId: "0".repeat(32) })).toEqual({
+        expect(yield* send("notes:1", LETTER, m, { traceId: Str.repeat(32)("0") })).toEqual({
           _tag: "refused",
           reason: "bad_trace",
         });
@@ -398,7 +403,7 @@ describe("p21, receive", () => {
           yield* send("notes:1", "letter_a", 1);
           yield* raw("notes:1/inbox", "x-1", {
             _tag: "send",
-            body: Schema.decodeUnknownSync(Schema.Json)(body),
+            body: yield* Schema.decodeUnknownEffect(Schema.Json)(body),
           });
           const failed = yield* Effect.flip(receive("notes:1"));
           expect(failed).toBeInstanceOf(LedgerError);
@@ -421,14 +426,14 @@ describe("p21, receive", () => {
     ),
   );
 
-  it("over any sends with resends: each id comes out once, in first-send order, with its first m", async () => {
+  it("over any sends with resends: each id comes out once, in first-send order, with its first m", () => {
     const sendArb = fc.record({
       to: fc.constantFrom("notes:1", "notes:2"),
       id: fc.constantFrom("letter_a", "letter_b", "letter_c", "letter_d", "letter_e"),
       m: fc.oneof(fc.integer(), fc.string({ maxLength: 5 }), fc.constant(null), fc.record({ n: fc.nat() })),
     });
 
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.array(sendArb, { maxLength: 30 }), (sends) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -438,7 +443,7 @@ describe("p21, receive", () => {
               const answer = yield* send(to, id, m);
               const box = want.get(to) ?? [];
               const known = box.find((l) => l.id === id);
-              const same = known !== undefined && JSON.stringify(known.m) === JSON.stringify(m);
+              const same = known !== undefined && Formatter.formatJson(known.m) === Formatter.formatJson(m);
               expect(answer._tag, `${to} ${id}`).toBe(known === undefined || same ? "placed" : "refused");
 
               if (known === undefined) {

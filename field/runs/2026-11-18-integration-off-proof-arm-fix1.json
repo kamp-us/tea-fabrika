@@ -1,0 +1,92 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-integration-off-proof-arm-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1618",
+  "started": null,
+  "ended": null,
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's CI and lead tooling, the one fix round (0177) for the review of pull request 1618 at d029d2f6e. A branch's proof run still reached tooling's three .integration. laws (records-readonly, workflow-lint/scheduled, typecheck) through the tooling project, on its changed set and its full set. They move to a new Vitest project, tooling-integration, beside next-integration; scheduled.yaml's tooling legs read PROJECTS from the ref, so main runs both tooling projects and a branch's full set runs tooling alone; SC8 holds it as SC7 holds the vitest legs. One name predicate, isIntegration in oxlint-plugins/test-names.ts, replaces test-kind.ts's INTEGRATION and related.ts's reachesReal, and proof.ts's choose drops any .integration. name a list gives. proof.test.ts's list law is now it.prop with Schema inputs (0579). The glossary's changed set row says the merge line runs the next and next-visual tests and the plain tooling laws a change reaches, at full depth. The pull request body, which held another pull request's words, was rewritten with the pr skill.",
+  "note": "The start time was not taken: the fix round began when the lead's message arrived, after 02:40 PT. The end time is the push. Usage was not recorded. The body was lost because the shared scratch folder's pr-body.md was overwritten by another session before gh pr create read it; this round wrote its body to a file of its own. None of the three tooling .integration. files has a shard-table row, so no row or pin changed. Ran under the laptop's caps (nice 19, one worker, Node 26.13.0 through volta, TYPESAFE_API_KEY unset).",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "proof.test.ts: property: a changed set runs no .integration. law, of next/ or of tooling, whatever its lists hold",
+      "plant": "proof.ts choose keeps every listed file",
+      "result": "red"
+    },
+    {
+      "law": "proof.test.ts: property: a proof run's vitest list calls name no integration project, for any change",
+      "plant": "proof.ts PROJECTS gains tooling-integration",
+      "result": "red"
+    },
+    {
+      "law": "proof.test.ts: property: a proof run's vitest list calls name no integration project, for any change",
+      "plant": "proof.ts PROJECTS gains next-integration",
+      "result": "red"
+    },
+    {
+      "law": "proof.test.ts: property: a proof run's vitest list calls name no integration project, for any change",
+      "plant": "proof.ts readers call names next-integration again",
+      "result": "red"
+    },
+    {
+      "law": "scheduled.test.ts: rejects the schedule's plant, SC8's PROJECTS plants",
+      "plant": "scheduled.ts SC8's PROJECTS check dropped",
+      "result": "red"
+    },
+    {
+      "law": "scheduled.test.ts SC8 on the real scheduled.yaml",
+      "plant": "scheduled.yaml tooling PROJECTS gives a branch's full set tooling-integration",
+      "result": "red"
+    },
+    {
+      "law": "scheduled.test.ts SC8 on the real scheduled.yaml",
+      "plant": "scheduled.yaml tooling PROJECTS drops tooling-integration on main",
+      "result": "red"
+    },
+    {
+      "law": "merge-line.test.ts: 0602: tooling-integration holds the tooling laws that start a process, and tooling none of them",
+      "plant": "vitest.config.ts tooling keeps TOOLING_INTEGRATION's files",
+      "result": "red"
+    },
+    {
+      "law": "merge-line.test.ts: 0602: tooling-integration holds the tooling laws that start a process, and tooling none of them",
+      "plant": "vitest.config.ts TOOLING_INTEGRATION maps to plain names",
+      "result": "red"
+    },
+    {
+      "law": "merge-line.test.ts: T1 (0536): the tooling projects hold no glob of today's trees or of next/",
+      "plant": "vitest.config.ts TOOLING gains apps/*/src/**/*.test.ts",
+      "result": "red"
+    },
+    {
+      "law": "related-selection.test.ts: a pull request or queue group drops every .integration. name from tooling's list",
+      "plant": "related.ts merge line keeps .integration. names",
+      "result": "red"
+    },
+    {
+      "law": "related-selection.test.ts: a pull request or queue group drops every .integration. name from tooling's list",
+      "plant": "related.ts every event drops .integration. names",
+      "result": "red"
+    },
+    {
+      "law": "related-selection.test.ts: the select step picks by the event the runner set in GITHUB_EVENT_NAME",
+      "plant": "related.ts run reads env[\"EVENT\"]",
+      "result": "red"
+    }
+  ]
+}

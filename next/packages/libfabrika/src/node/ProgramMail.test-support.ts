@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
 import * as ScopedRef from "effect/ScopedRef";
@@ -71,7 +72,7 @@ const databases = Effect.gen(function* () {
     concurrency: 1,
   });
 
-  const open = () => [...held.values()].filter((ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
+  const open = () => Arr.filter([...held.values()], (ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
 
   return { sql, reopen, open };
 });
@@ -124,12 +125,10 @@ export const runtime = Effect.gen(function* () {
       }, undefined),
     saved: guard(
       () =>
-        table()
-          .exec("SELECT name, at FROM alarms ORDER BY at, name")
-          .map((row) => ({
-            name: String(row.name),
-            at: Number(row.at),
-          })),
+        Arr.map(table().exec("SELECT name, at FROM alarms ORDER BY at, name"), (row) => ({
+          name: String(row.name),
+          at: Number(row.at),
+        })),
       [],
     ),
     take: (alarm) =>

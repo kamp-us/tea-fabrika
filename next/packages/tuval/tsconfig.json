@@ -23,6 +23,10 @@
                 "runOfExitToRunExit": "error"
               }
             }
+          },
+          {
+            "include": ["src/**/*.ts", "src/**/*.tsx"],
+            "options": { "diagnosticSeverity": { "newPromise": "error" } }
           }
         ]
       }
