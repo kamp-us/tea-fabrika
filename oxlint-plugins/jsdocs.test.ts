@@ -14,11 +14,14 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { jsdocs } from "./jsdocs.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const RUNS = { seed: 119120, numRuns: 100 };
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: import.meta.dirname });
 
 type Since = "absent" | "required";
@@ -45,45 +48,52 @@ const expectFires = (code: string, lines: ReadonlyArray<number>, since: Since = 
 const doc = (...lines: ReadonlyArray<string>): string =>
   ["/**", ...lines.map((line) => (line === "" ? " *" : ` * ${line}`)), " */"].join("\n");
 
-const MODULE = doc("A planted module.", "", "@stability unstable");
+// 0574: no block asks for `@stability`, and a block that still holds one passes until E60 refuses it.
+const MODULE = doc("A planted module.");
+
+/** The module block of a file the sweep has not reached: it still holds the tag. */
+const MODULE_TAGGED = doc("A planted module.", "", "@stability unstable");
 
 /** An import under the module block, so the block is the module's whatever the first export is (case 21). */
 const IMPORT = 'import { z } from "./z.ts";';
 
 /** A block in Effect's shape for an export of any kind here. */
-const RIGHT = doc("A planted export.", "", "@stability unstable", "@category models");
+const RIGHT = doc("A planted export.", "", "@category models");
+
+/** The same block with the tag the sweep has not yet removed. */
+const RIGHT_TAGGED = doc("A planted export.", "", "@stability unstable", "@category models");
 
 /**
  * Each a block wrong in one named way, wrong on every kind of export: a re-export's tag-only pass
  * needs its first line to be a tag, which none of these has.
  */
 const WRONG = {
-  "no blank line before the tags": doc("A planted export.", "@stability unstable", "@category models"),
-  "two description paragraphs": doc("A planted export.", "", "More.", "", "@stability unstable", "@category models"),
-  "no @stability": doc("A planted export.", "", "@category models"),
+  "no blank line before the tags": doc("A planted export.", "@category models"),
+  "two description paragraphs": doc("A planted export.", "", "More.", "", "@category models"),
   "a @stability outside the three": doc("A planted export.", "", "@stability solid", "@category models"),
   "tags out of order": doc("A planted export.", "", "@category models", "@stability unstable"),
-  "an @example tag": doc("A planted export.", "", "@example x", "@stability unstable", "@category models"),
-  "a Markdown heading": doc("A planted export.", "", "# Heading", "", "@stability unstable", "@category models"),
-  "a @since before a release": doc("A planted export.", "", "@stability unstable", "@category models", "@since 1.0.0"),
-  "two blocks, the last wrong": `${RIGHT}\n${doc("A planted export.")}`,
+  "an @example tag": doc("A planted export.", "", "@example x", "@category models"),
+  "a Markdown heading": doc("A planted export.", "", "# Heading", "", "@category models"),
+  "a @since before a release": doc("A planted export.", "", "@category models", "@since 1.0.0"),
+  "two blocks, the last wrong": `${RIGHT}\n${doc("A planted export.", "", "More.", "", "@category models")}`,
 } as const;
 
 type Wrong = keyof typeof WRONG;
 
 /** What stands above one export: Effect's shape, nothing, or a block wrong in one named way. */
 type State =
-  | { readonly _tag: "right" }
+  | { readonly _tag: "right"; readonly tagged: boolean }
   | { readonly _tag: "missing" }
   | { readonly _tag: "wrong"; readonly way: Wrong };
 
 const state: fc.Arbitrary<State> = fc.oneof(
-  fc.constant({ _tag: "right" } as const),
+  fc.boolean().map((tagged) => ({ _tag: "right", tagged }) as const),
   fc.constant({ _tag: "missing" } as const),
   fc.constantFrom(...(Object.keys(WRONG) as Wrong[])).map((way) => ({ _tag: "wrong", way }) as const),
 );
 
-const blockFor = (s: State): string | null => (s._tag === "right" ? RIGHT : s._tag === "missing" ? null : WRONG[s.way]);
+const blockFor = (s: State): string | null =>
+  s._tag === "right" ? (s.tagged ? RIGHT_TAGGED : RIGHT) : s._tag === "missing" ? null : WRONG[s.way];
 
 /**
  * One piece of a file. `text` writes it with the block (or `null`) where its export takes one, and
@@ -151,7 +161,7 @@ const KINDS = Object.keys(PIECES) as Kind[];
 /** A `//` line between a block and its export is skipped (case 16). */
 const GAPS = ["", "// @ts-expect-error planted\n", "// a planted note\n"] as const;
 
-describe("law 3: the rule reports exactly the exports whose block is missing or wrong, once each, at the export's first line", () => {
+describe("law 3: the rule reports exactly the exports whose block is missing or wrong, with or without @stability, once each, at the export's first line", () => {
   it("for any generated public file", () => {
     fc.assert(
       fc.property(
@@ -195,7 +205,7 @@ describe("law 3: the rule reports exactly the exports whose block is missing or 
     [
       "scenario: a member's own block is judged once its export passes, and fires at the export",
       `${MODULE}\n${RIGHT}\nexport interface A {\n  /** A field.\n   * @category models */\n  readonly a: string;\n}\n`,
-      [12],
+      [lineCount(`${MODULE}\n${RIGHT}`) + 1],
     ],
     [
       "scenario: a member block with @default and no @category passes",
@@ -211,17 +221,20 @@ describe("law 3: the rule reports exactly the exports whose block is missing or 
     [
       "pinned: the same answer, a type not directly under its schema takes its own block",
       `${MODULE}\n${IMPORT}\n${RIGHT}\nexport const Sent = { a: 1 };\n${RIGHT}\nexport const other = 1;\nexport type Sent = typeof Sent;\n`,
-      [21],
+      [
+        lineCount(`${MODULE}\n${IMPORT}\n${RIGHT}\nexport const Sent = { a: 1 };\n${RIGHT}\nexport const other = 1;`) +
+          1,
+      ],
     ],
     [
       "scenario: a pair's type that carries its own block is judged by it",
       `${MODULE}\n${RIGHT}\nexport const S = { a: 1 };\n${doc("No tags.")}\nexport type S = typeof S;\n`,
-      [16],
+      [lineCount(`${MODULE}\n${RIGHT}\nexport const S = { a: 1 };\n${doc("No tags.")}`) + 1],
     ],
     [
       "scenario: a type under a same-name schema that is not exported is not a pair",
       `${MODULE}\n${IMPORT}\nconst S = { a: 1 };\nexport type S = typeof S;\n`,
-      [8],
+      [lineCount(`${MODULE}\n${IMPORT}\nconst S = { a: 1 };`) + 1],
     ],
     [
       "scenario: two blocks, the last right, pass (case 17)",
@@ -237,7 +250,7 @@ const TAGS = ["deprecated", "see", "stability", "category"] as const;
 
 const VALUE = { deprecated: "use b", see: "b", stability: "unstable", category: "models" } as const;
 
-describe("law 4: tags pass only in the order of case 29, with @stability one of three, and any tag from outside the list fires", () => {
+describe("law 4: tags pass only in the order of case 29, with @stability optional and one of three when written, and any tag from outside the list fires", () => {
   it("for any subset of the allowed tags, in any order, with or without one from outside", () => {
     fc.assert(
       fc.property(
@@ -254,12 +267,13 @@ describe("law 4: tags pass only in the order of case 29, with @stability one of 
 
           const order = tags.map((tag) => TAGS.indexOf(tag));
           const ordered = order.every((rank, i) => i === 0 || (order[i - 1] ?? rank) < rank);
+
           const passes =
             ordered &&
-            tags.includes("stability") &&
             tags.includes("category") &&
-            stability !== "solid" &&
+            (!tags.includes("stability") || stability !== "solid") &&
             outside === undefined;
+
           const block = doc("A planted export.", ...(lines.length > 0 ? ["", ...lines] : []));
           const code = `${MODULE}\n${block}\nexport const v = 1;\n`;
           expectFires(code, passes ? [] : [lineCount(`${MODULE}\n${block}`) + 1]);
@@ -277,13 +291,14 @@ describe("law 5: a file with a checked export fires for its module block unless 
         fc.record({
           header: fc.boolean(),
           imports: fc.boolean(),
-          module: fc.constantFrom("none", "right", "with @category", "a plain /* */ first"),
+          module: fc.constantFrom("none", "right", "right with @stability", "with @category", "a plain /* */ first"),
           first: fc.boolean(),
           exported: fc.boolean(),
         }),
         ({ header, imports, module, first, exported }) => {
           const parts: string[] = [];
           let line = 1;
+
           const push = (text: string) => {
             parts.push(text);
             line += lineCount(text);
@@ -297,8 +312,10 @@ describe("law 5: a file with a checked export fires for its module block unless 
 
           if (module === "right") {
             push(MODULE);
+          } else if (module === "right with @stability") {
+            push(MODULE_TAGGED);
           } else if (module === "with @category") {
-            push(doc("A planted module.", "", "@stability unstable", "@category models"));
+            push(doc("A planted module.", "", "@category models"));
           } else if (module === "a plain /* */ first") {
             push(`/* not a doc block */\n${MODULE}`);
           }
@@ -346,14 +363,24 @@ const RE_EXPORTS: ReadonlySet<string> = new Set(["star as", "list", "from"]);
 describe("law 6: a block with @internal takes its export out, and tags alone pass on a re-export and on no other export", () => {
   it("for each export form with each of the two block kinds", () => {
     fc.assert(
-      fc.property(fc.constantFrom(...FORMS), fc.constantFrom("internal", "tags alone"), (form, kind) => {
-        const block = kind === "internal" ? "/** @internal */" : doc("@stability unstable", "@category models");
-        const piece: Piece = PIECES[form];
-        const text = piece.text(0, block);
-        const at = piece.at(0, block) ?? 0;
-        const fires = kind === "tags alone" && !RE_EXPORTS.has(form) ? [lineCount(MODULE) + 2 + at] : [];
-        expectFires(`${MODULE}\n${IMPORT}\n${text}\n`, fires);
-      }),
+      fc.property(
+        fc.constantFrom(...FORMS),
+        fc.constantFrom("internal", "tags alone", "tags alone with @stability"),
+        (form, kind) => {
+          const block =
+            kind === "internal"
+              ? "/** @internal */"
+              : kind === "tags alone"
+                ? doc("@category models")
+                : doc("@stability unstable", "@category models");
+
+          const piece: Piece = PIECES[form];
+          const text = piece.text(0, block);
+          const at = piece.at(0, block) ?? 0;
+          const fires = kind !== "internal" && !RE_EXPORTS.has(form) ? [lineCount(MODULE) + 2 + at] : [];
+          expectFires(`${MODULE}\n${IMPORT}\n${text}\n`, fires);
+        },
+      ),
       RUNS,
     );
   });
@@ -373,8 +400,8 @@ describe("law 7: with since absent a @since tag fires, with since required its a
         fc.constantFrom(...FORMS.filter((form) => form !== "namespace")),
         (since, tagged, form) => {
           const tag = tagged ? ["@since 1.0.0"] : [];
-          const module = doc("A planted module.", "", "@stability unstable", ...tag);
-          const block = doc("A planted export.", "", "@stability unstable", "@category models", ...tag);
+          const module = doc("A planted module.", ...(tag.length > 0 ? ["", ...tag] : []));
+          const block = doc("A planted export.", "", "@category models", ...tag);
           const piece: Piece = PIECES[form];
           const text = piece.text(0, block);
           const at = piece.at(0, block) ?? 0;
@@ -424,11 +451,13 @@ describe("law 8: on Effect 4.1.3's own source, with since required", () => {
         rules: { "fabrika/jsdocs": ["error", { since: "required" }] },
       }),
     );
+
     const ran = spawnSync(
       join(ROOT, "node_modules", ".bin", "oxlint"),
       [`--config=${config}`, "--disable-nested-config", "--no-ignore", "--format=json", ...files],
       { cwd: src, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
     );
+
     const report = JSON.parse(ran.stdout) as Report;
     const fired = new Map<string, number>();
 
@@ -453,6 +482,7 @@ describe("law 8: on Effect 4.1.3's own source, with since required", () => {
 describe("law 9: the real config turns the rule on for every next/packages folder's public files only", async () => {
   const SRC = "next/packages/libfabrika/src";
   const body = "export const planted = 1;\n";
+
   // Each jsdocs warn line of the config today, read from oxlint's own `--print-config`, so a fill
   // that deletes its line changes nothing here. A `/**` line covers its subfolders too.
   const printed = spawnSync(
@@ -460,16 +490,20 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"],
     { cwd: ROOT, encoding: "utf8", timeout: 60_000 },
   );
+
   const config = JSON.parse(printed.stdout) as {
     readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: Record<string, unknown> }>;
   };
+
   const warn = config.overrides
     .filter(({ rules }) => {
       const setting = rules["fabrika/jsdocs"];
+
       return (Array.isArray(setting) ? setting[0] : setting) === "warn";
     })
     .flatMap(({ files }) => files)
     .map((glob) => ({ folder: glob.replace(/\/\*\*?$/, ""), deep: glob.endsWith("/**") }));
+
   const on = [
     `${SRC}/ci/Planted.ts`,
     `${SRC}/codehost/Planted.ts`,
@@ -478,6 +512,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     ...warn.map(({ folder }) => `${folder}/Planted.ts`),
     "next/packages/planted/src/Planted.ts",
   ];
+
   const off = [
     // Five of the six kinds that are not public. The sixth, `fixtures/`, is also in the config's
     // `ignorePatterns`, which oxlint obeys even with `--no-ignore`, so no file there is ever linted.
@@ -498,6 +533,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     // An app (case 4).
     "next/apps/fabrika/src/Planted.ts",
   ];
+
   const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, body])));
 
   // scenario: one real lint run over one planted file per kind, since only the real config holds the scope.

@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e18-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": null,
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E18 (flatMapConditionalToFilterOrFail), in next/. Recounted on origin/main with only this check at error across the 13 tsconfigs: 5 hits in 5 files (libfabrika: src/processes/ChildrenLedger.ts, 2 in src/telemetry/Sink.integration.test.ts; next/apps/fabrika: src/settings-start.integration.test.ts, src/worker-usage.integration.test.ts). None is in a file of pull request 1366. Locked src/processes/** and src/telemetry/** in libfabrika's tsconfig and src/*.ts in the app's tsconfig. Fixed the 4 test-file hits by hand with Edit (Effect.filterOrFail); the die in worker-usage keeps its meaning through Effect.orDie.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "After the fix: libfabrika typecheck has 1 effect(flatMapConditionalToFilterOrFail) error, in the product file ChildrenLedger.ts line 405, and the app has 0. 4 hand edits, 0 by the quick-fix tool, 1 left for the build.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "a flatMap with a conditional added to next/apps/fabrika/src/plant-e18.ts, then removed",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/processes/** dropped from the libfabrika entry: the ChildrenLedger.ts hit vanished, then the glob was put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

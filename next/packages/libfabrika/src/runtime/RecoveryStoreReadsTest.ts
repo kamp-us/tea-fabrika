@@ -17,14 +17,18 @@ import { Receipt } from "./internal/recovery.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 
 const NAME = "writer:1";
+
 const PROCESS = "process_0000000000e008000000000001";
+
 /** Far above what a tape writes, so only a save that adds the huge receipt passes it. */
 const CAPACITY = 1024 ** 2;
+
 /** The largest number of receipts L5 keeps before its tape. */
 const TOP = 1000;
 
 /** A journal as the runner saves it: its own fields beside every receipt it holds. */
 const Journal = Schema.Struct({ name: Schema.String, n: Schema.Int, receipts: Schema.Array(Receipt) });
+
 type Journal = typeof Journal.Type;
 
 const receipt = (letter: string, value: number, pad = ""): Receipt => ({
@@ -52,21 +56,25 @@ const store = (sql: Sql) => recoveryStore(sql, { name: NAME, capacity: CAPACITY,
 /** The store's Sql, counting every row `exec` returns. */
 const counted = (sql: Sql) => {
   const count = { rows: 0 };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       const rows = sql.exec(query, ...params);
       count.rows += rows.length;
+
       return rows;
     },
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, count };
 };
 
 /** The store's Sql, recording every statement it is sent that writes a row. */
 const writing = (sql: Sql) => {
   const writes: Array<string> = [];
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i.test(query)) {
@@ -78,12 +86,14 @@ const writing = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, writes };
 };
 
 /** The store's Sql, with a cut that throws on the `after`-th INSERT once armed. */
 const cutting = (sql: Sql) => {
   const fault: { after: number | null; hit: boolean } = { after: null, hit: false };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\b/i.test(query) && fault.after !== null) {
@@ -101,6 +111,7 @@ const cutting = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, fault };
 };
 
@@ -145,7 +156,9 @@ const Cell = fc.record({
   drop: fc.nat(),
   k: fc.integer({ min: 0, max: 2 }),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
 const Tape = fc.array(Cell, { minLength: 5, maxLength: 40, size: "max" });
 
 /** One L7 case: a journal, and who sends it again unchanged. */
@@ -156,6 +169,7 @@ const Same = fc.record({
 });
 
 const MOVES = ["save", "big", "cut", "retry", "other", "again", "load", "receipt", "input"] as const;
+
 type Move = (typeof MOVES)[number];
 
 /** What each law's cases reached so far, by the law's own task, so each run of a law starts empty. */

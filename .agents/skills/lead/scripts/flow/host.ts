@@ -9,8 +9,8 @@
 //   cd apps/fabrika && SHOTS=../../programs/ticket/docs/ask-desk nice -n 15 node e2e.ts --ask-desk
 //   ```
 //
-// Write the commands with a plain `node` and `pnpm`: the step runs each one under the repo's own
-// Node (`volta run --node <version>`, the version from the root package.json; `commandArgv`).
+// Write plain `node` and `pnpm`: `boxEnv` puts their real bins first when discovery succeeds,
+// using the root package.json's pin. If discovery fails, it reports why and keeps the caller's PATH.
 //
 // chain.ts runs this step between build and review, and the flow runner can run it too
 // (`Step.act("host", args)`). It answers in the five verbs:
@@ -31,7 +31,7 @@
 import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
-import { repoNode } from "../boxnode.ts";
+import { boxEnv, repoNode } from "../boxnode.ts";
 import { questKeyed, wipOf } from "../quest.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
@@ -106,7 +106,7 @@ const HostFields = Schema.Struct({
   /** The run's id, `<quest>-host<n>`: chain.ts takes it from `RunId.next`, and it names the worktree and log. */
   name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*-host[1-9][0-9]*$/)),
   commands: Schema.Array(Schema.String),
-  minutes: Schema.Number.check(Schema.isGreaterThan(0)),
+  minutes: Schema.Finite.check(Schema.isGreaterThan(0)),
 });
 
 /**
@@ -114,13 +114,14 @@ const HostFields = Schema.Struct({
  * `lane`: it reads as `quest`, and a new flow saves `quest`.
  */
 export const HostArgs = Schema.Union([HostFields, HostFields.pipe(Schema.encodeKeys({ quest: "lane" }))]);
+
 export type HostArgs = typeof HostArgs.Type;
 
 /** What the host step hands back: its outcome, the head after it, and its log. */
 export type Hosted = { readonly outcome: Outcome.Outcome; readonly head: string; readonly log: string | null };
 
 /** Another live process holds the lock; the take is tried again on its schedule. */
-class Held extends Schema.TaggedError<Held>()("Held", { pid: Schema.Number }) {}
+class Held extends Schema.TaggedError<Held, { readonly brand: unique symbol }>()("Held", { pid: Schema.Finite }) {}
 
 const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
@@ -135,10 +136,12 @@ const alive = (pid: number) =>
  */
 export const electronLock = Effect.fn("host.electronLock")(function* (lock: string, every: Duration.Input) {
   const fs = yield* FileSystem.FileSystem;
+
   const write = fs.writeFileString(lock, String(process.pid), { flag: "wx" }).pipe(
     Effect.as(true),
     Effect.orElseSucceed(() => false),
   );
+
   const take = Effect.gen(function* () {
     if (yield* write) {
       return;
@@ -147,15 +150,16 @@ export const electronLock = Effect.fn("host.electronLock")(function* (lock: stri
     const owner = Number((yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => ""))).trim());
 
     if (Number.isInteger(owner) && owner > 0 && (yield* alive(owner))) {
-      return yield* new Held({ pid: owner });
+      return yield* Held.make({ pid: owner });
     }
 
     yield* fs.remove(lock, { force: true }).pipe(Effect.ignore);
 
     if (!(yield* write)) {
-      return yield* new Held({ pid: 0 });
+      return yield* Held.make({ pid: 0 });
     }
   });
+
   // `Schedule.spaced` never ends, so a held lock is waited on for as long as it is held, and `Held`
   // never leaves the retry.
   const waited = take.pipe(Effect.retry({ schedule: Schedule.spaced(every) }), Effect.orDie);
@@ -174,37 +178,28 @@ export const exec = Effect.fn("host.exec")(
     env: Readonly<Record<string, string | undefined>> = {},
   ) {
     const handle = yield* ChildProcess.make(command, args, { cwd: dir, env: { ...SAFE_GIT, ...env }, extendEnv: true });
+
     const [output, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.all)), handle.exitCode], {
       concurrency: 2,
     });
+
     return { code: Number(code), output } satisfies Ran;
   },
   Effect.scoped,
   (effect, dir, command) =>
-    Effect.mapError(effect, () => new StepFailed({ reason: `${command} could not start in ${dir}` })),
+    Effect.mapError(effect, () => StepFailed.make({ reason: `${command} could not start in ${dir}` })),
 );
 
-/**
- * How one host command starts: through `sh -c`, under `volta run --node <node>` when the repo names
- * its Node. Volta takes a folder's Node from its nearest package.json, and `apps/fabrika`'s names
- * none, so a command there ran the laptop's default Node (22 on askdesk7's hand run, where the repo
- * pins 26.13.0). Under `volta run`, every `node` and `pnpm` the line starts is the repo's.
- */
-export const commandArgv = (line: string, node: string | null): readonly [string, ...string[]] =>
-  node === null ? ["sh", "-c", line] : ["volta", "run", "--node", node, "sh", "-c", line];
+/** A nonlogin shell keeps the runtime PATH prepared by `runCommands`. */
+export const commandArgv = (line: string): readonly [string, ...string[]] => ["sh", "-c", line];
 
 /** One host command in `dir` (`commandArgv` says how), its output appended to `log`; its exit code. */
 const runLine = Effect.fn("host.runLine")(
-  function* (
-    dir: string,
-    line: string,
-    env: Readonly<Record<string, string | undefined>>,
-    log: string,
-    node: string | null,
-  ) {
+  function* (dir: string, line: string, env: Readonly<Record<string, string | undefined>>, log: string) {
     const fs = yield* FileSystem.FileSystem;
     yield* fs.writeFileString(log, `$ ${line}\n`, { flag: "a" });
-    const [command, ...args] = commandArgv(line, node);
+    const [command, ...args] = commandArgv(line);
+
     // Its own process group (the spawner's default), so the scope's end stops everything it started.
     const handle = yield* ChildProcess.make(command, args, {
       cwd: dir,
@@ -212,19 +207,22 @@ const runLine = Effect.fn("host.runLine")(
       extendEnv: true,
       forceKillAfter: "10 seconds",
     });
+
     const [, code] = yield* Effect.all([Stream.run(handle.all, fs.sink(log, { flag: "a" })), handle.exitCode], {
       concurrency: 2,
     });
+
     return Number(code);
   },
   Effect.scoped,
-  (effect, _dir, line) => Effect.mapError(effect, () => new StepFailed({ reason: `\`${line}\` could not start` })),
+  (effect, _dir, line) => Effect.mapError(effect, () => StepFailed.make({ reason: `\`${line}\` could not start` })),
 );
 
 /** The last lines of the log, for a reason. */
 const logTail = Effect.fn("host.logTail")(function* (log: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(log).pipe(Effect.orElseSucceed(() => ""));
+
   return text.trimEnd().split("\n").slice(-TAIL).join("\n");
 });
 
@@ -241,16 +239,29 @@ export const runCommands = Effect.fn("host.runCommands")(function* (
   minutes: number,
   node: string | null = null,
 ) {
+  if (lines.length === 0) {
+    return null;
+  }
+
+  const childEnv = yield* Effect.cached(
+    node === null ? Effect.succeed(env) : boxEnv(dir, { ...process.env, ...env }, node),
+  );
+
   for (const line of lines) {
-    const ended = yield* runLine(dir, line, env, log, node).pipe(Effect.timeoutOption(Duration.minutes(minutes)));
+    const ended = yield* childEnv.pipe(
+      Effect.flatMap((prepared) => runLine(dir, line, prepared, log)),
+      Effect.timeoutOption(Duration.minutes(minutes)),
+    );
 
     if (Option.isNone(ended)) {
       const tail = yield* logTail(log);
+
       return Outcome.send("build", `host: \`${line}\` ran past its ${minutes}-minute limit and was stopped:\n${tail}`);
     }
 
     if (ended.value !== 0) {
       const tail = yield* logTail(log);
+
       return Outcome.send("build", `host: \`${line}\` exited ${ended.value}:\n${tail}`);
     }
   }
@@ -266,11 +277,12 @@ export const worktree = Effect.fn("host.worktree")(function* (main: string, dir:
   yield* Effect.acquireRelease(
     git("worktree", "add", "-q", "--detach", dir, head).pipe(
       Effect.flatMap((r) =>
-        r.code === 0 ? Effect.void : Effect.fail(new StepFailed({ reason: `git worktree add failed: ${r.output}` })),
+        r.code === 0 ? Effect.void : Effect.fail(StepFailed.make({ reason: `git worktree add failed: ${r.output}` })),
       ),
     ),
     () => git("worktree", "remove", "--force", dir).pipe(Effect.ignore),
   );
+
   return dir;
 });
 
@@ -289,15 +301,18 @@ export const changedPaths = (porcelain: string): ReadonlyArray<string> =>
 const boxFacts = Effect.fn("host.boxFacts")(function* (a: HostArgs, name: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const plan = yield* fs
     .readFile(a.plan)
-    .pipe(Effect.mapError(() => new StepFailed({ reason: `the plan ${a.plan} cannot be read` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: `the plan ${a.plan} cannot be read` })));
+
   const first = plan.indexOf(10);
   const second = first === -1 ? -1 : plan.indexOf(10, first + 1);
   const body = second === -1 ? new Uint8Array() : plan.subarray(second + 1);
   const digest = yield* Digest.Digest;
   const sha = yield* digest.digestHex(Digest.sha256, body);
   const facts = path.join(a.boxes, "state", `${name}.box`);
+
   const text = [
     `ticket: ${a.ticket}`,
     `branch: ${a.branch}`,
@@ -305,10 +320,11 @@ const boxFacts = Effect.fn("host.boxFacts")(function* (a: HostArgs, name: string
     `plan: ${a.plan}`,
     `plan-sha256: ${sha}`,
   ];
+
   yield* Effect.acquireRelease(
     fs
       .writeFileString(facts, `${text.join("\n")}\n`)
-      .pipe(Effect.mapError(() => new StepFailed({ reason: `${facts} cannot be written` }))),
+      .pipe(Effect.mapError(() => StepFailed.make({ reason: `${facts} cannot be written` }))),
     () => fs.remove(facts, { force: true }).pipe(Effect.ignore),
   );
 }, Effect.provide(Digest.layerWebCrypto));
@@ -332,17 +348,19 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
   const scripts = path.join(import.meta.dirname, "..");
   yield* fs
     .writeFileString(log, `host ${name} at ${a.head}\n`)
-    .pipe(Effect.mapError(() => new StepFailed({ reason: `${log} cannot be written` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: `${log} cannot be written` })));
   yield* electronLock(path.join(a.boxes, "state", "electron.lock"), "20 seconds");
   const dir = yield* worktree(a.main, path.join(a.boxes, name), a.head);
+
   const tmp = yield* fs
     .makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh" })
-    .pipe(Effect.mapError(() => new StepFailed({ reason: "no temp folder in /tmp" })));
-  yield* fs.makeDirectory(`${tmp}/home`).pipe(Effect.mapError(() => new StepFailed({ reason: `${tmp}/home` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: "no temp folder in /tmp" })));
+
+  yield* fs.makeDirectory(`${tmp}/home`).pipe(Effect.mapError(() => StepFailed.make({ reason: `${tmp}/home` })));
   const node = yield* repoNode(dir);
   yield* fs
     .writeFileString(log, `node: ${node ?? "the laptop's own (the repo names none)"}\n`, { flag: "a" })
-    .pipe(Effect.mapError(() => new StepFailed({ reason: `${log} cannot be written` })));
+    .pipe(Effect.mapError(() => StepFailed.make({ reason: `${log} cannot be written` })));
   const failed = yield* runCommands(dir, [INSTALL, ...a.commands], hostEnv(tmp), log, a.minutes, node);
   const ran = `${a.commands.length} host commands`;
 
@@ -370,6 +388,7 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
   yield* boxFacts(a, name);
   const subject = `T${a.ticket} build: the host run retook ${paths.length} files at ${short(a.head)}`;
   const stepcommit = path.join(scripts, "..", "..", "step-commit", "scripts", "stepcommit.sh");
+
   const committed = yield* exec(dir, "sh", [stepcommit, "build", a.ticket, subject, ...paths], {
     BOXES: a.boxes,
     STEPCOMMIT_BOX: name,
@@ -431,12 +450,15 @@ export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
   const path = yield* Path.Path;
   const state = path.join(a.boxes, "state", `${a.quest}.json`);
   const text = yield* fs.readFileString(state).pipe(Effect.orElseSucceed(() => ""));
-  const saved: typeof QuestFile.Type = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+
+  const saved: typeof QuestFile.Type = Schema.decodeOption(Schema.fromJsonString(Schema.Unknown))(text).pipe(
     Option.map(questKeyed),
     Option.flatMap(Schema.decodeUnknownOption(QuestFile)),
     Option.getOrElse(() => ({ quest: a.quest, steps: [] })),
   );
+
   const done = hosted.outcome._tag === "done";
+
   const entry = {
     step: "host",
     box: a.name,
@@ -451,6 +473,7 @@ export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
     kept: false,
     ended,
   };
+
   const quest = { ...saved, head: done ? hosted.head : saved.head, steps: [...saved.steps, entry] };
   yield* fs.writeFileString(`${state}.tmp`, `${JSON.stringify(quest, null, "\t")}\n`);
   yield* fs.rename(`${state}.tmp`, state);
@@ -468,6 +491,7 @@ const HostEntry = Schema.Struct({
 /** The last host entry among the quest's state file's steps, as a review is told it; `null` when none ran. */
 export const lastHost = (steps: ReadonlyArray<unknown>): string | null => {
   const last = steps.findLast(Schema.is(HostEntry));
+
   return last === undefined ? null : `${last.outcome} at ${last.head}: ${last.why}`;
 };
 
@@ -486,8 +510,9 @@ type Spawns = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | 
 export const runners: Readonly<Record<string, Runner<Spawns>>> = {
   host: Effect.fn("host.runner")(function* (step) {
     const args = yield* Schema.decodeUnknownEffect(HostArgs)(step.args).pipe(
-      Effect.mapError((e) => new StepFailed({ reason: `${step.name}'s args do not parse: ${e.message}` })),
+      Effect.mapError((e) => StepFailed.make({ reason: `${step.name}'s args do not parse: ${e.message}` })),
     );
+
     return Outcome.answer((yield* host(args)).outcome);
   }),
 };

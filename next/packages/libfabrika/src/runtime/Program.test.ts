@@ -6,10 +6,12 @@ import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue } f
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
-import { Declaration } from "./Execution.ts";
-import { Input, Program, Refusal, stepper } from "./Program.ts";
+import { Declaration, nodeExecution } from "./Execution.ts";
+import { Input, Program, Refusal, Step, stepper } from "./Program.ts";
+import * as Wire from "./WireTest.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
+
 type Model = typeof Model.Type;
 
 const Msg = Schema.Union([
@@ -52,7 +54,9 @@ const authoring = () => ({
 });
 
 const spec = () => Program.make(authoring());
+
 const SEED = 119120;
+
 const parameters = { seed: SEED, numRuns: 100 };
 
 describe("P13 A7 split checking and update", () => {
@@ -65,6 +69,7 @@ describe("P13 A7 split checking and update", () => {
         let views = 0;
         let wakes = 0;
         let refuseAll = false;
+
         const p = Program.make({
           ...authoring(),
           machine: Machine.make({
@@ -74,25 +79,30 @@ describe("P13 A7 split checking and update", () => {
               ...machine.update,
               add: (s, m) => {
                 updates++;
+
                 return [{ ...s, count: s.count + m.n }, [save({ n: m.n })]];
               },
             },
           }),
           refuse: (s, m) => {
             checks++;
+
             return refuseAll || (m.type === "add" && s.count + m.n > 10)
               ? { reason: "limit", now: s.count, most: 10 }
               : null;
           },
           view: (s) => {
             views++;
+
             return { count: s.count };
           },
           wake: () => {
             wakes++;
+
             return null;
           },
         });
+
         const pure = Result.getOrThrow(stepper(p));
         let current: Model = { count: 0, replies: 0 };
         const accepted: Array<typeof Msg.Type> = [];
@@ -182,6 +192,7 @@ const policies = fc
   }));
 
 type PolicyModel = { valid: boolean; checked: boolean; policy: Policy | undefined };
+
 type PolicyReal = { raw: Record<string, unknown>; checked: unknown; described: unknown | null; calls: string[] };
 
 const policyCheck = (value: unknown, policy: Policy | undefined) => {
@@ -193,6 +204,7 @@ const corruptPolicy = (policy: Policy, field: number, n: number): unknown => {
   if (field < 18) {
     const key = ["maxDeliveries", "intensity", "periodMs", "minMs", "maxMs", "resetAfterMs"][Math.floor(field / 3)]!;
     const value = field % 3 === 0 ? 0 : field % 3 === 1 ? -n - 1 : n + 0.5;
+
     return field < 9 ? { ...policy, [key]: value } : { ...policy, backoff: { ...policy.backoff, [key]: value } };
   }
 
@@ -271,6 +283,7 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
                 machine: r.raw.machine,
                 ...(Object.hasOwn(r.raw, "policy") ? { policy: r.raw.policy } : {}),
               };
+
               const decoded = Schema.decodeUnknownResult(Program.schema)(m.checked ? r.checked : raw);
               expect(Result.isSuccess(decoded)).toBe(m.valid);
 
@@ -289,6 +302,7 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
                   Effect.provide(ProgramLoader.layer({ test: r.checked }, {})),
                 ),
               ).declaration;
+
               policyCheck(described, m.policy);
               policyCheck(Schema.decodeUnknownSync(Declaration)(described), m.policy);
               r.described = described;
@@ -301,10 +315,12 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
     ],
     { maxCommands: 80, size: "max" },
   );
+
   fc.assert(
     fc.property(commands, (moves) => {
       const calls: string[] = [];
       const fields = authoring();
+
       const raw = {
         ...fields,
         machine: Machine.make({
@@ -312,10 +328,12 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
           cmds: [save],
           init: () => {
             calls.push("init");
+
             return [{ count: 0, replies: 0 }, []];
           },
         }),
       };
+
       fc.modelRun(
         () => ({
           model: { valid: true, checked: false, policy: undefined },
@@ -342,6 +360,7 @@ const declarations = fc
   .map(({ name, v, initial, ...data }) => {
     const modelSchema = Schema.Struct(Model.fields);
     const msgSchema = Schema.Union(Msg.members);
+
     return {
       ...data,
       initial,
@@ -378,6 +397,7 @@ describe("Program.make authoring laws, next/", () => {
           ...fields,
           inputs: { add: description, throw: { description: personDescription, personOnly: true } },
         });
+
         expect(p.machine).toBe(fields.machine);
         expect(fields.machine.model).toBe(modelSchema);
         expect(fields.machine.msg).toBe(msgSchema);
@@ -402,10 +422,12 @@ describe("Program.make authoring laws, next/", () => {
     fc.assert(
       fc.property(declarations, ({ fields, description, query }) => {
         const calls: string[] = [];
+
         const never = (name: string): never => {
           calls.push(name);
           throw new Error(name);
         };
+
         const untouched = Machine.make({
           model: fields.machine.model,
           msg: fields.machine.msg,
@@ -418,6 +440,7 @@ describe("Program.make authoring laws, next/", () => {
             save_err: () => never("update"),
           },
         });
+
         const p = Program.make({
           ...fields,
           machine: untouched,
@@ -432,6 +455,7 @@ describe("Program.make authoring laws, next/", () => {
             }),
           },
         });
+
         expect(p.machine).toBe(untouched);
         expect(calls).toEqual([]);
         expect(p.inputs.read._tag).toBe("read");
@@ -516,6 +540,7 @@ describe("Program.make authoring laws, next/", () => {
     fc.assert(
       fc.property(declarations, fc.integer(), ({ fields, initial }, n) => {
         const NonJson = Schema.Struct({ count: Schema.Int, body: Schema.Unknown });
+
         const nonJson = Machine.make({
           model: NonJson,
           msg: Msg,
@@ -523,12 +548,14 @@ describe("Program.make authoring laws, next/", () => {
           init: () => [{ count: initial.count, body: () => n }, []],
           update: { add: (s) => [s, []], throw: (s) => [s, []] },
         });
+
         const p = Program.make({
           ...fields,
           machine: nonJson,
           view: (s) => ({ count: s.count }),
           refuse: () => null,
         });
+
         expect(() => load(p).init(null)).toThrowError(expect.objectContaining({ reason: "load" }));
       }),
       parameters,
@@ -547,18 +574,21 @@ describe("Program.make authoring laws, next/", () => {
       "writes",
       "wake",
     );
+
     const malformed = fc
       .option(
         fc.oneof(
           fc.tuple(declarations, missing).map(([{ fields }, field]) => {
             const raw: Record<string, unknown> = { ...Program.make(fields) };
             delete raw[field];
+
             return raw;
           }),
           fc
             .tuple(declarations, fc.jsonValue(), fc.constantFrom("msg", "state", "view", "outputs"))
             .map(([{ fields }, bad, field]) => {
               const p = Program.make(fields);
+
               return {
                 ...p,
                 ...(field === "state"
@@ -574,6 +604,7 @@ describe("Program.make authoring laws, next/", () => {
             .tuple(declarations, fc.jsonValue(), fc.constantFrom("refuse", "wake", "view", "init"))
             .map(([{ fields }, bad, field]) => {
               const p = Program.make(fields);
+
               return {
                 ...p,
                 ...(field === "init"
@@ -587,6 +618,7 @@ describe("Program.make authoring laws, next/", () => {
         { nil: null },
       )
       .map((raw) => ({ bug: "generated broken declaration", raw }));
+
     fc.assert(
       fc.property(malformed, ({ raw }) => {
         // Expect Result<Stepper, SchemaError> or Effect<Stepper, SchemaIssue.Issue>.
@@ -710,6 +742,7 @@ describe("P11 program contract and p22 refusal", () => {
                 ok: { "~standard": { validate: (value: unknown) => Promise.resolve({ value }) } },
               },
             };
+
             const broken: unknown = { ...spec(), machine: { ...machine, cmds: [asyncSave] } };
             const p = load(broken);
             expect(
@@ -843,6 +876,7 @@ describe("P11 program contract and p22 refusal", () => {
                 },
                 view: part === "view" ? { data: Model, select: () => ({ count: "bad" }) } : spec().view,
               };
+
               expect(() => load(broken).step(value, { type: "add", n: 1 })).toThrowError(
                 expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
               );
@@ -923,6 +957,7 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
     ...fields,
     maxDeliveries,
   });
+
   const refused = (raw: unknown) => {
     const make = Reflect.get(Program, "make");
     const makeEffect = Reflect.get(Program, "makeEffect");
@@ -935,10 +970,12 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
     fc.assert(
       fc.property(declarations, fc.option(fc.integer({ min: 1, max: 32 }), { nil: undefined }), ({ fields }, limit) => {
         const raw = limit === undefined ? fields : withLimit(fields, limit);
+
         const own = (u: unknown) =>
           typeof u === "object" && u !== null && Object.hasOwn(u, "maxDeliveries")
             ? Reflect.get(u, "maxDeliveries")
             : undefined;
+
         const p: unknown = Reflect.apply(Reflect.get(Program, "make"), Program, [raw]);
         expect(own(p)).toBe(limit);
         const decoded = Schema.decodeUnknownResult(Program.schema)(p);
@@ -1006,6 +1043,7 @@ const oldCode = (u: unknown) => typeof u === "function";
 /** A made program's `machine`. A value Reflect.get cannot read fails the law, as its throw did. */
 const madeMachine = (made: unknown): unknown => {
   expect(Predicate.isObjectKeyword(made)).toBe(true);
+
   return Predicate.isObjectKeyword(made) ? Reflect.get(made, "machine") : undefined;
 };
 
@@ -1050,6 +1088,7 @@ const MachineRecipe = fc.record({
     nil: undefined,
   }),
 });
+
 type MachineRecipe = typeof MachineRecipe extends fc.Arbitrary<infer A> ? A : never;
 
 const built = (r: MachineRecipe, base: typeof machine): unknown => {
@@ -1120,6 +1159,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         const m = built(recipe, fields.machine);
         const p = Program.make(fields);
         const upgrades = fns.run === undefined ? [] : [{ name: "up", from: 1, run: callables[fns.run]() }];
+
         const raw: unknown = {
           ...p,
           machine: m,
@@ -1128,11 +1168,13 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           refuse: callables[fns.refuse](),
           wake: callables[fns.wake](),
         };
+
         const codeOk =
           oldCode(callables[fns.select]()) &&
           oldCode(callables[fns.refuse]()) &&
           oldCode(callables[fns.wake]()) &&
           upgrades.every((u) => oldCode(u.run));
+
         const ok = oldIsSteps(m) && codeOk;
         const decoded = Schema.decodeUnknownResult(Program.schema)(raw);
         expect(Result.isSuccess(decoded)).toBe(ok);
@@ -1163,6 +1205,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           refuse: callables[fns.refuse](),
           wake: callables[fns.wake](),
         };
+
         const schemasOk =
           typeof m === "object" &&
           m !== null &&
@@ -1170,6 +1213,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           Schema.isSchema(m.model) &&
           "msg" in m &&
           Schema.isSchema(m.msg);
+
         const made = Effect.runSyncExit(Reflect.apply(Program.makeEffect, Program, [authored]));
         expect(Exit.isSuccess(made)).toBe(ok && schemasOk);
 
@@ -1207,6 +1251,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
   it("D4: a getter- or proxy-backed machine sees the same reads, in order, and the same answer as the old guard", () => {
     const Read = fc.constantFrom("table", "table", "array", "null", "function", "string", "throw");
     const Field = fc.record({ present: fc.boolean(), reads: fc.array(Read, { minLength: 1, maxLength: 3 }) });
+
     const Backed = fc.record({
       kind: fc.constantFrom("proxy", "proxy", "getters"),
       target: fc.constantFrom("object", "object", "array", "function"),
@@ -1214,7 +1259,9 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
       init: Field,
       throwOnHas: fc.option(fc.constantFrom("update", "init"), { nil: undefined }),
     });
+
     type Backed = typeof Backed extends fc.Arbitrary<infer A> ? A : never;
+
     type Field = Backed["update"];
 
     const value = (read: string): unknown => {
@@ -1238,14 +1285,17 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     const backed = (b: Backed, trace: Array<string>): unknown => {
       const count = new Map<string, number>();
       const fields: Record<string, Field> = { update: b.update, init: b.init };
+
       const next = (key: string) => {
         const field = fields[key]!;
         const n = count.get(key) ?? 0;
         count.set(key, n + 1);
         const read = field.reads[Math.min(n, field.reads.length - 1)]!;
+
         // An init that reads as a table or array is given a callable instead, so init varies too.
         return key === "init" && read === "table" ? () => 0 : value(read);
       };
+
       const target: object = b.target === "array" ? [] : b.target === "function" ? () => 0 : {};
 
       if (b.kind === "getters") {
@@ -1253,6 +1303,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           Object.defineProperty(target, key, {
             get: () => {
               trace.push(`get:${key}`);
+
               return next(key);
             },
           });
@@ -1273,6 +1324,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         },
         get: (t, key, receiver) => {
           trace.push(`get:${String(key)}`);
+
           return typeof key === "string" && key in fields ? next(key) : Reflect.get(t, key, receiver);
         },
       });
@@ -1280,6 +1332,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
 
     const outcome = (run: () => Result.Result<unknown, unknown>) => {
       const ran = Result.try({ try: run, catch: () => "thrown" as const });
+
       return Result.isFailure(ran) ? "thrown" : Result.isSuccess(ran.success) ? "accepted" : "refused";
     };
 
@@ -1327,9 +1380,11 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         let reads = 0;
         const spec: Record<string, unknown> = { ...fields };
         Object.defineProperty(spec, "machine", { enumerable: true, get: () => copies[reads++ % cycle] });
+
         const made = effect
           ? Effect.runSyncExit(Reflect.apply(Program.makeEffect, Program, [spec]))
           : Result.try({ try: (): unknown => Reflect.apply(Program.make, Program, [spec]), catch: () => null });
+
         const value = Exit.isExit(made)
           ? Exit.isSuccess(made)
             ? made.value
@@ -1337,6 +1392,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           : Result.isSuccess(made)
             ? made.success
             : undefined;
+
         expect(value !== undefined).toBe(cycle === 1);
 
         if (value !== undefined) {
@@ -1366,6 +1422,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     }
 
     const error = "error" in msg ? msg.error : undefined;
+
     return typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string";
   };
 
@@ -1389,6 +1446,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     extra: fc.option(fc.string({ maxLength: 3 }), { nil: undefined }),
     saved: fc.boolean(),
   });
+
   type Answer = typeof Answer extends fc.Arbitrary<infer A> ? A : never;
 
   /** One generated answer to a Cmd the walk saw the machine return. */
@@ -1465,6 +1523,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     fc.assert(
       fc.property(fc.array(Move, { minLength: 1, maxLength: 30, size: "max" }), (moves) => {
         const received: Array<unknown> = [];
+
         const recorded = Machine.make({
           model: Model,
           msg: Msg,
@@ -1473,19 +1532,23 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           update: {
             add: (s, m) => {
               received.push(m);
+
               return [{ ...s, count: s.count + m.n }, [save({ n: m.n })]];
             },
             throw: (s) => [s, []],
             save_ok: (s, m) => {
               received.push(m);
+
               return [{ ...s, replies: s.replies + 1 }, []];
             },
             save_err: (s, m) => {
               received.push(m);
+
               return [{ ...s, replies: s.replies + 1 }, []];
             },
           },
         });
+
         const loaded = stepper(Program.make({ ...authoring(), machine: recorded, refuse: () => null }));
         expect(Result.isSuccess(loaded)).toBe(true);
 
@@ -1526,12 +1589,14 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
 
           const typed = oldTyped(msg);
           const settled = oldSettled(msg);
+
           const expected =
             typed && !["add", "throw", "save_ok", "save_err"].includes(msg.type)
               ? "skipped"
               : settled === true
                 ? "applied"
                 : "down";
+
           const folded = Result.try({ try: () => p.fold(model, msg), catch: (e) => e });
 
           if (expected === "down") {
@@ -1588,6 +1653,75 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
   });
 });
 
+// Ticket 888, Amendment A-Wire, next/: one JSON codec at every boundary. These two are the runner's
+// half, the path a person's window takes: the letter is the Msg's JSON form, and the only decode is
+// the runner's.
+describe("A-Wire: the runner reads a letter with the Msg's JSON codec, next/", () => {
+  const wire = { arbitrary: { seed: SEED, runs: 300, size: 4096 } };
+
+  it.effect.prop(
+    "W1: any Msg sent as its JSON form is admitted, and step and fold hand update an equal Msg",
+    { sample: Wire.Sent },
+    ({ sample }) =>
+      Effect.gen(function* () {
+        const same = Schema.toEquivalence(Wire.Msg);
+
+        for (const x of [sample.drawn, sample.edge]) {
+          const { program, taken } = Wire.make();
+          const execution = nodeExecution(program);
+          const letter = Wire.letter(x);
+          expect(yield* execution.admit(letter), "admit").toBe(true);
+          const start = yield* execution.init(null);
+          expect(start._tag).toBe("stepped");
+
+          if (!Step.isAnyOf(["stepped"])(start)) {
+            continue;
+          }
+
+          expect((yield* execution.step(start.model, letter))._tag, "step").toBe("stepped");
+          expect(taken, "step hands update one Msg").toHaveLength(1);
+          expect((yield* execution.fold(start.model, letter))._tag, "fold").toBe("stepped");
+          expect(taken, "fold hands update one Msg").toHaveLength(2);
+
+          for (const got of taken) {
+            expect(same(got, x), "update takes a Msg equal to the one sent").toBe(true);
+          }
+        }
+      }),
+    wire,
+  );
+
+  it.effect.prop(
+    "W3: a letter main wrote for a Msg whose two sides are equal still steps and folds to an equal Msg",
+    { x: Wire.Plain },
+    ({ x }) =>
+      Effect.gen(function* () {
+        const same = Schema.toEquivalence(Wire.PlainMsg);
+        const { program, taken } = Wire.plain();
+        const execution = nodeExecution(program);
+        const letter = Wire.old(x);
+        const raw = Schema.decodeUnknownResult(Wire.PlainMsg)(letter);
+        expect(Result.isSuccess(raw) && same(raw.success, x), "the raw Msg decodes its own old letter").toBe(true);
+        expect(yield* execution.admit(letter), "admit").toBe(true);
+        const start = yield* execution.init(null);
+        expect(start._tag).toBe("stepped");
+
+        if (!Step.isAnyOf(["stepped"])(start)) {
+          return;
+        }
+
+        expect((yield* execution.step(start.model, letter))._tag, "step").toBe("stepped");
+        expect((yield* execution.fold(start.model, letter))._tag, "fold").toBe("stepped");
+        expect(taken).toHaveLength(2);
+
+        for (const got of taken) {
+          expect(same(got, x), "update takes a Msg equal to the old letter's").toBe(true);
+        }
+      }),
+    wire,
+  );
+});
+
 // Program watch (docs/plan/quests/watch-PLAN.md), next/: law M11. A program that may `monitor` gets a
 // `DOWN` message when a watched process ends, so it must declare the port that message arrives on.
 // The loader checks it: a program whose `cmds` hold `monitor` and whose inputs have no `DOWN` port does
@@ -1600,18 +1734,23 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
   const DownMsg = Schema.Struct({ type: Schema.Literal("DOWN"), ref: Schema.String, process: Schema.String });
   const watchMsg = Schema.Union([Watched, DownMsg]);
   const watchModel = Schema.Struct({ downs: Schema.Int });
+
   /** Cmds a program may declare beside the watch: `monitor` and `demonitor` by their built-in names. */
   const named = (name: string) =>
     Cmd.make(name, { input: Schema.Struct({ name: Schema.String }), ok: Schema.Json, err: ["refused"] });
+
   const CMDS = ["monitor", "demonitor", "send", "save"] as const;
+
   const watcher = (cmds: ReadonlyArray<string>, port: "DOWN" | "other" | "both") => {
     const defs = cmds.map(named);
+
     const answers = Object.fromEntries(
       defs.flatMap((d) => [
         [d.okType, (s: typeof watchModel.Type) => [s, []]],
         [d.errType, (s: typeof watchModel.Type) => [s, []]],
       ]),
     );
+
     const made = Program.make({
       name: "watcher",
       machine: Machine.make({
@@ -1633,10 +1772,13 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
       writes: {},
       wake: () => null,
     });
+
     const { DOWN, ...rest } = made.inputs;
     const inputs = port === "both" ? made.inputs : port === "DOWN" ? { DOWN } : rest;
+
     return { ...made, inputs };
   };
+
   const loaded = (raw: unknown) =>
     Effect.runSync(
       ProgramLoader.use((loader) => loader.load("watcher")).pipe(
@@ -1660,6 +1802,7 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
 
           // The refusal a load gives, or none when it loads: ProgramDown `load`, with a cause naming the port.
           const down = Exit.isFailure(exit) ? Option.getOrUndefined(Cause.findErrorOption(exit.cause)) : undefined;
+
           const refusal = Exit.isSuccess(exit)
             ? "loads"
             : {
@@ -1667,6 +1810,7 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
                 reason: Predicate.hasProperty(down, "reason") ? down.reason : "none",
                 names: String(Predicate.hasProperty(down, "cause") ? down.cause : down).includes("DOWN"),
               };
+
           expect(refusal, `M11: ${label}`).toEqual(
             monitors && !declared ? { error: "ProgramDown", reason: "load", names: true } : "loads",
           );

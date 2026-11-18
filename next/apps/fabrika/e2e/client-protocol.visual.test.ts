@@ -28,13 +28,14 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
   Effect.gen(function* () {
     const { page, seen } = yield* tab(context, dev.url);
     const t = tile(page, NAME);
+
     const backend: Backend = {
       name: "browser",
       waiting: waiting(page),
       online: t.live,
       live: Effect.tryPromise({
         try: () => page.getByRole("status").innerText(),
-        catch: () => new SuiteError({ waited: "browser: the status line" }),
+        catch: () => SuiteError.make({ waited: "browser: the status line" }),
       }).pipe(
         Effect.map((text) => text.startsWith("Online")),
         Effect.orDie,
@@ -42,7 +43,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       add: (name) =>
         Effect.tryPromise({
           try: () => t.field.fill(name).then(() => t.field.press("Enter")),
-          catch: () => new SuiteError({ waited: "browser: the add field" }),
+          catch: () => SuiteError.make({ waited: "browser: the add field" }),
         }).pipe(Effect.orDie),
       shown: t.shown,
       dials: () => seen.sockets.length,
@@ -53,40 +54,46 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       pid: Effect.succeed(null),
       close: Effect.tryPromise({
         try: () => page.close(),
-        catch: () => new SuiteError({ waited: "browser: the tab's close" }),
+        catch: () => SuiteError.make({ waited: "browser: the tab's close" }),
       }).pipe(Effect.orDie),
     };
+
     return backend;
   });
 
 /** A key of the headless client's own, made in WebCrypto as a browser makes one. */
 const headlessKey = Effect.gen(function* () {
-  const failed = () => new ClientKeyError({ op: "make", error: "OperationError" });
+  const failed = () => ClientKeyError.make({ op: "make", error: "OperationError" });
+
   const pair = yield* Effect.tryPromise({
     try: () => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]),
     catch: failed,
   });
+
   const raw = new Uint8Array(
     yield* Effect.tryPromise({ try: () => crypto.subtle.exportKey("raw", pair.publicKey), catch: failed }),
   );
+
   const field = (bytes: Uint8Array) => [...new Uint8Array(new Uint32Array([bytes.length]).buffer).reverse(), ...bytes];
   const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
+
   // The door hashes the 32 raw key bytes, as the browser key and the P14 client do; the line keeps the blob.
   const digest = new Uint8Array(
     yield* Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", raw), catch: failed }),
   );
+
   return {
     fingerprint: `SHA256:${btoa(String.fromCharCode(...digest)).replace(/=+$/, "")}`,
     raw: btoa(String.fromCharCode(...raw))
       .replaceAll("+", "-")
       .replaceAll("/", "_")
       .replace(/=+$/, ""),
-    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
+    line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "created" as const,
     sign: (bytes: Uint8Array) =>
       Effect.tryPromise({
         try: () => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes)),
-        catch: () => new ClientKeyError({ op: "sign", error: "OperationError" }),
+        catch: () => ClientKeyError.make({ op: "sign", error: "OperationError" }),
       }).pipe(Effect.map((b) => new Uint8Array(b))),
   };
 });
@@ -95,6 +102,7 @@ const backends = {
   browser: (dev: Dev) =>
     Effect.gen(function* () {
       const b = yield* browser;
+
       return yield* browserBackend(yield* profile(b), dev);
     }),
   headless: (dev: Dev) => Effect.flatMap(headlessKey, (key) => headlessBackend(dev, key)),

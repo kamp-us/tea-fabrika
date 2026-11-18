@@ -9,8 +9,11 @@ import { describe, expect, it } from "vitest";
 // Today's tooling. Git and oxfmt are real. Signing is recorded by a local stub: K1's real-key
 // properties test the signatures; K4 tests which changes may reach a commit at all.
 const root = resolve(import.meta.dirname, "../../../..");
+
 const script = join(import.meta.dirname, "stepcommit.sh");
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
+
 const options = { seed: 321, numRuns: 3, endOnFailure: true };
 
 const each = <A>(values: readonly A[], check: (value: A) => void) => {
@@ -34,9 +37,37 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
 type Owner = "tests" | "build" | "lead" | "mutation";
 
 /** gh's answer to stepcommit's open-PR query. */
-const open = (nodes: unknown[], totalCount = nodes.length) => ({
+const open = <A>(nodes: A[], totalCount = nodes.length) => ({
   data: { repository: { pullRequests: { totalCount, nodes } } },
 });
+
+const sha = (value: number) => value.toString(16).padStart(40, "0");
+
+type ComparePage = {
+  ahead_by: number;
+  total_commits: number;
+  base_commit: { sha: string };
+  commits: Array<{ sha: string }>;
+};
+
+const comparePages = (oids: string[], base: string): ComparePage[] =>
+  Array.from({ length: Math.ceil(oids.length / 100) }, (_, page) => ({
+    ahead_by: oids.length,
+    total_commits: oids.length,
+    base_commit: { sha: base },
+    commits: oids.slice(page * 100, (page + 1) * 100).map((oid) => ({ sha: oid })),
+  }));
+
+const truncatedPr = (branch: string, base: string, oids: string[]) =>
+  open([
+    {
+      number: 609,
+      headRefName: branch,
+      baseRefOid: base,
+      headRefOid: oids[oids.length - 1],
+      commits: { totalCount: oids.length, nodes: oids.slice(0, 100).map((oid) => ({ commit: { oid } })) },
+    },
+  ]);
 
 const put = (path: string, value: string) => {
   mkdirSync(dirname(path), { recursive: true });
@@ -80,7 +111,9 @@ class Repo {
       T321_CALLS: join(this.dir, "calls"),
       T321_OXFMT: join(root, "node_modules/.bin/oxfmt"),
       T390_PRS: join(this.dir, "prs.json"),
+      T390_COMPARE: join(this.dir, "compare.json"),
     };
+
     const stub = String.raw`
 const fs=require("node:fs"),cp=require("node:child_process");
 const args=process.argv.slice(2);
@@ -92,17 +125,34 @@ if(args[0]==="exec"&&args[1]==="oxfmt") {
 }
 console.error("fixture refuses package or network command"); process.exit(97);
 `;
+
     writeFileSync(join(bin, "pnpm"), `#!${process.execPath}\n${stub}`, { mode: 0o755 });
+
     // gh answers the open-PR query from T390_PRS, a JSON file (no file: no open PRs; "fail": exit 1).
     const gh = String.raw`
 const fs=require("node:fs");
-fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["gh",...process.argv.slice(2)])+"\n");
+const args=process.argv.slice(2);
+fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["gh",...args])+"\n");
+if(args.includes("--paginate")) {
+ const compared=fs.existsSync(process.env.T390_COMPARE)?fs.readFileSync(process.env.T390_COMPARE,"utf8"):"fail";
+ if(compared.trim()==="fail"){console.error("gh: compare unavailable");process.exit(1);}
+ process.stdout.write(compared);process.exit(0);
+}
 const f=process.env.T390_PRS;
 const prs=f&&fs.existsSync(f)?fs.readFileSync(f,"utf8"):JSON.stringify({data:{repository:{pullRequests:{totalCount:0,nodes:[]}}}});
 if(prs.trim()==="fail"){console.error("gh: offline");process.exit(1);}
-process.stdout.write(prs);
+let answer;
+try{answer=JSON.parse(prs);}catch{process.stdout.write(prs);process.exit(0);}
+if(Array.isArray(answer)) {
+ const calls=fs.readFileSync(process.env.T321_CALLS,"utf8").trim().split("\n").map(line=>JSON.parse(line));
+ const used=calls.filter(call=>call[0]==="gh"&&call[1]==="api"&&call[2]==="graphql").length;
+ answer=answer[used-1];
+}
+process.stdout.write(JSON.stringify(answer));
 `;
+
     writeFileSync(join(bin, "gh"), `#!${process.execPath}\n${gh}`, { mode: 0o755 });
+
     // The publisher (0134) records its arguments, and fails when T134_PUBLISH says "fail".
     const publish = String.raw`
 const fs=require("node:fs");
@@ -110,10 +160,14 @@ fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(["publish",...process.ar
 if(process.env.T134_PUBLISH==="fail"){console.log("publish: refused: push rejected");process.exit(1);}
 console.log("publish: pushed");
 `;
+
     writeFileSync(join(bin, "publish"), `#!${process.execPath}\n${publish}`, { mode: 0o755 });
     this.env.STEPCOMMIT_PUBLISHER = join(bin, "publish");
     symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(bin, "oxfmt"));
     this.git("init", "-q", "-b", "fabrikalfa/one", `--separate-git-dir=${join(this.dir, "gitdata")}`);
+    put(join(this.dir, "gitdata/info/exclude"), "node_modules/\n");
+    mkdirSync(join(this.repo, "node_modules/.bin"), { recursive: true });
+    symlinkSync(join(root, "node_modules/.bin/oxfmt"), join(this.repo, "node_modules/.bin/oxfmt"));
     put(join(this.repo, "exam-paths.json"), readFileSync(join(root, "exam-paths.json"), "utf8"));
     put(join(this.repo, ".oxfmtrc.json"), '{"useTabs":true,"printWidth":100}\n');
 
@@ -150,13 +204,16 @@ console.log("publish: pushed");
       encoding: "utf8",
       timeout: 10_000,
     });
+
     expect(r.error).toBeUndefined();
+
     return { code: r.status, text: r.stdout + r.stderr, stdout: r.stdout };
   }
 
   git(...args: string[]) {
     const r = this.call("/usr/bin/git", args);
     expect(r.code, r.text).toBe(0);
+
     return r.stdout;
   }
 
@@ -193,6 +250,19 @@ console.log("publish: pushed");
           .map((s) => JSON.parse(s))
           .filter((a: string[]) => a[0] === "publish")
       : [];
+  }
+
+  calls(): string[][] {
+    return existsSync(join(this.dir, "calls"))
+      ? readFileSync(join(this.dir, "calls"), "utf8")
+          .trim()
+          .split("\n")
+          .map((s) => JSON.parse(s))
+      : [];
+  }
+
+  compareCalls(): string[][] {
+    return this.calls().filter((call) => call[0] === "gh" && call.includes("--paginate"));
   }
 
   asked(): boolean {
@@ -328,6 +398,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
                       : kind === "prefix"
                         ? "src/owned.tsx"
                         : `src/${name}-unknown.ts`;
+
                 r.changed(path);
                 const got = r.commit(step, [(dot ? "./" : "") + path]);
                 expect(got.code).not.toBeNull();
@@ -370,6 +441,7 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
                     : kind === "beside"
                       ? `docs/shotsx/${name}.png`
                       : "docs/shots/../src/foreign.ts";
+
               r.changed(kind === "escape" ? "src/foreign.ts" : path);
               const got = r.commit(step, [path]);
               expect(got.code).not.toBeNull();
@@ -402,8 +474,11 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
       (name: string) => `fixtures/next/${name}.json`,
       () => ".oxlintrc.json",
     ];
+
     const plain = [(name: string) => `src/${name}-unknown.ts`, (name: string) => `next/${name}/${name}.ts`];
+
     type Row = "none" | "tests" | "build" | "lead" | "build-folder";
+
     fc.assert(
       fc.property(
         word,
@@ -425,10 +500,12 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
             r.changed(path, path.endsWith(".json") ? "[]\n" : 'export const value = "changed";\n');
             const got = r.commit(step, [path]);
             const owner = row === "build-folder" && path.includes("/") ? "build" : row;
+
             const allowed =
               owner === step ||
               (step === "mutation" && owner === "tests") ||
               (step === "tests" && owner === "none" && isExam);
+
             // The build's exam refusal (exit 3) comes before any owner check.
             const code = step === "build" && isExam ? 3 : allowed ? 0 : 1;
             expect(
@@ -471,10 +548,12 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
   // takes no product path. Plants: skip deletions; read the checkout's or HEAD's exam-paths.json.
   it("scenario: a deleted unlisted exam path commits as tests, and a widened exam list takes nothing", () => {
     const fixture = ".agents/skills/lead/scripts/fixture.test.ts";
+
     const widened = (r: Repo) => {
       const list = JSON.parse(readFileSync(join(r.repo, "exam-paths.json"), "utf8"));
       r.changed("exam-paths.json", `${JSON.stringify([...list, { ...list[0], glob: "src/**" }])}\n`);
     };
+
     each(["delete", "delete-build", "widened-before", "widened-same"] as const, (kind) =>
       withRepo(kind === "delete-build" ? [[fixture, "build"]] : [["src/owned.ts", "tests"]], (r) => {
         let paths = [fixture];
@@ -609,6 +688,63 @@ describe("T321 K4 named paths, ownership and format, today's tooling", () => {
         );
       }),
       options,
+    );
+  });
+
+  // scenario: package-manager startup is unavailable; the installed formatter still works.
+  it("scenario: staged formatting uses the installed formatter in a folder without a package", () => {
+    withRepo(
+      [
+        ["src/owned.ts", "tests"],
+        ["field/one.json", "tests"],
+      ],
+      (r) => {
+        writeFileSync(
+          join(r.dir, "bin/pnpm"),
+          `#!${process.execPath}\nconsole.error("fixture refuses pnpm exec startup"); process.exit(97);\n`,
+          { mode: 0o755 },
+        );
+        const unavailable = r.call("pnpm", ["exec", "oxfmt", "--version"]);
+        expect(unavailable.code, unavailable.text).toBe(97);
+
+        r.changed(".oxfmtrc.json", '{"useTabs":true,"printWidth":100,"ignorePatterns":["field/**"]}\n');
+        const source = 'export const value = () => {\n\treturn "changed";\n};\n';
+        r.changed("src/owned.ts", source);
+        r.changed("field/one.json", '{"value":1}');
+        const got = r.commit("tests", ["src/owned.ts", "field/one.json"], true);
+        expect(got.code, got.text).toBe(0);
+        expect(r.git("show", "HEAD:src/owned.ts")).toBe(source);
+        expect(r.git("show", "HEAD:field/one.json")).toBe('{"value":1}');
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([]);
+      },
+    );
+  });
+
+  // scenario: missing tools and failed starts must not be reported as bad staged formatting.
+  it("scenario: formatter startup failures commit nothing and keep diagnostics free of tool output", () => {
+    each(["missing", "not-executable", "failed"] as const, (kind) =>
+      withRepo([["src/owned.ts", "tests"]], (r) => {
+        const formatter = join(r.repo, "node_modules/.bin/oxfmt");
+        rmSync(formatter);
+
+        if (kind !== "missing") {
+          writeFileSync(formatter, "#!/bin/sh\necho private-staged-text >&2\nexit 23\n", {
+            mode: kind === "failed" ? 0o755 : 0o644,
+          });
+        }
+
+        r.changed("src/owned.ts");
+        const got = r.commit("tests", ["src/owned.ts"]);
+        expect(got.code, got.text).toBe(2);
+        expect(got.text).toContain("formatter_failed:");
+        expect(got.text).not.toContain("not_formatted:");
+        expect(got.text).not.toContain("private-staged-text");
+        expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+        expect(r.git("diff", "--cached", "--name-only")).toBe("");
+        expect(r.signs()).toEqual([]);
+        expect(r.published()).toEqual([]);
+      }),
     );
   });
 
@@ -756,13 +892,16 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
       step: Owner;
       only: boolean;
     };
+
     const lead = { ticket: "321", step: "lead" as Owner, only: false };
+
     const cases: Case[] = [
       ...(["other", "same", "own-wip", "none"] as const).map((location) => ({ ...lead, location })),
       { ...lead, location: "other", ticket: "999" },
       { ...lead, location: "other", step: "build" },
       { ...lead, location: "other", only: true },
     ];
+
     each(cases, ({ location, ticket, step, only }) =>
       withRepo([["src/owned.ts", step]], (r) => {
         const head = {
@@ -792,11 +931,12 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
         }
 
         expect(r.asked()).toBe(step === "lead" && !only);
+        expect(r.compareCalls()).toEqual([]);
       }),
     );
   }, 180_000);
 
-  // scenario: gh fails, more than 100 open PRs, or a PR with more than 250 commits.
+  // scenario: gh fails, more than 100 open PRs, or a truncated PR lacks frozen compare refs.
   it("T390 refuses a signed lead commit when open PRs cannot be read whole", () => {
     const commits = { totalCount: 251, nodes: [] };
     each(
@@ -817,6 +957,148 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
         }),
     );
   });
+
+  it("T390 scenario: a stale note on commit 408 blocks the lead sign", () => {
+    withRepo([["src/owned.ts", "lead"]], (r) => {
+      r.openPr("fabrikalfa/quest", "321");
+      const base = sha(5000);
+      const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+      put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
+      put(join(r.dir, "compare.json"), JSON.stringify(comparePages(oids, base)));
+      r.changed("src/owned.ts");
+
+      const got = r.commit("lead", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(5);
+      expect(got.text).toContain("stale_link: ticket 321's open PR 609 is on fabrikalfa/quest");
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      expect(r.git("diff", "--cached", "--name-only")).toBe("");
+      expect(r.signs()).toEqual([]);
+      expect(r.published()).toEqual([]);
+      expect(r.compareCalls()).toHaveLength(1);
+      expect(r.compareCalls()[0]).toContain(`repos/{owner}/{repo}/compare/${base}...${r.base}?per_page=100`);
+      expect(
+        r
+          .calls()
+          .find((call) => call[0] === "gh" && call[1] === "api" && call[2] === "graphql")
+          ?.join(" "),
+      ).toContain("commits(first:100)");
+    });
+  });
+
+  it("T390 scenario: five complete compare pages allow fallback after a PR reread", () => {
+    withRepo([["src/owned.ts", "lead"]], (r) => {
+      const base = sha(5000);
+      const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+      put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
+      put(join(r.dir, "compare.json"), JSON.stringify(comparePages(oids, base)));
+      r.changed("src/owned.ts");
+
+      const got = r.commit("lead", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(0);
+      expect(r.git("rev-parse", "HEAD").trim()).not.toBe(r.base);
+      expect(r.signs()).toHaveLength(1);
+      expect(r.published()).toHaveLength(1);
+      expect(r.compareCalls()).toHaveLength(1);
+      expect(r.calls().filter((call) => call[0] === "gh" && call[1] === "api" && call[2] === "graphql")).toHaveLength(
+        2,
+      );
+    });
+  });
+
+  it("T390 scenario: an incomplete or malformed compare page blocks before staging", () => {
+    each(
+      [
+        "missing-page",
+        "wrong-count",
+        "wrong-ahead",
+        "wrong-base",
+        "duplicate",
+        "invalid-sha",
+        "wrong-tip",
+        "replaced-listed",
+      ] as const,
+      (fault) =>
+        withRepo([["src/owned.ts", "lead"]], (r) => {
+          const base = sha(5000);
+          const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+          const pages = comparePages(oids, base);
+
+          if (fault === "missing-page") {
+            pages.pop();
+          }
+
+          if (fault === "wrong-count") {
+            pages[0]!.total_commits -= 1;
+          }
+
+          if (fault === "wrong-ahead") {
+            pages[0]!.ahead_by -= 1;
+          }
+
+          if (fault === "wrong-base") {
+            pages[0]!.base_commit.sha = sha(5001);
+          }
+
+          if (fault === "duplicate") {
+            pages[1]!.commits[0]!.sha = pages[0]!.commits[0]!.sha;
+          }
+
+          if (fault === "invalid-sha") {
+            pages[0]!.commits[0]!.sha = "not-a-sha";
+          }
+
+          if (fault === "wrong-tip") {
+            const lastPage = pages[pages.length - 1]!;
+            lastPage.commits[lastPage.commits.length - 1]!.sha = sha(6000);
+          }
+
+          if (fault === "replaced-listed") {
+            pages[0]!.commits[0]!.sha = sha(10000);
+          }
+
+          put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
+          put(join(r.dir, "compare.json"), JSON.stringify(pages));
+          r.changed("src/owned.ts");
+          const got = r.commit("lead", ["src/owned.ts"]);
+
+          expect(got.code, got.text).toBe(5);
+          expect(got.text).toContain("open PRs cannot be read");
+
+          if (fault === "replaced-listed") {
+            expect(got.text).toContain("PR 609 compare omitted a listed PR commit");
+          }
+
+          expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+          expect(r.git("diff", "--cached", "--name-only")).toBe("");
+          expect(r.signs()).toEqual([]);
+          expect(r.published()).toEqual([]);
+        }),
+    );
+  });
+
+  it("T390 scenario: a changed head ref during compare blocks the lead sign", () => {
+    withRepo([["src/owned.ts", "lead"]], (r) => {
+      const base = sha(5000);
+      const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
+      const initial = truncatedPr("fabrikalfa/quest", base, oids);
+      const moved = truncatedPr("fabrikalfa/quest", base, oids);
+      moved.data.repository.pullRequests.nodes[0]!.headRefOid = sha(6000);
+      put(join(r.dir, "prs.json"), JSON.stringify([initial, moved]));
+      put(join(r.dir, "compare.json"), JSON.stringify(comparePages(oids, base)));
+      r.changed("src/owned.ts");
+
+      const got = r.commit("lead", ["src/owned.ts"]);
+
+      expect(got.code, got.text).toBe(5);
+      expect(got.text).toContain("open PR data changed during the check");
+      expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+      expect(r.git("diff", "--cached", "--name-only")).toBe("");
+      expect(r.signs()).toEqual([]);
+      expect(r.published()).toEqual([]);
+    });
+  });
 });
 
 describe("T134 a signed commit leaves the laptop the moment it is made (0134), today's tooling", () => {
@@ -830,7 +1112,7 @@ describe("T134 a signed commit leaves the laptop the moment it is made (0134), t
         const got = r.commit("tests", ["src/owned.ts"], only);
         expect(got.code, got.text).toBe(0);
         expect(r.published()).toEqual(only ? [] : [["publish", "fabrikalfa/one"]]);
-        const calls = readFileSync(join(r.dir, "calls"), "utf8");
+        const calls = existsSync(join(r.dir, "calls")) ? readFileSync(join(r.dir, "calls"), "utf8") : "";
         expect(only || calls.indexOf('["commits"') < calls.indexOf('["publish"')).toBe(true);
       }),
     );

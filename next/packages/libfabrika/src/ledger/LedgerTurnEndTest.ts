@@ -39,6 +39,7 @@ const line = (n: number, pad: number): Line =>
 /** The store's Sql, counting the bytes of the values every query returns while `on` is set. */
 const counted = (sql: Sql) => {
   const state = { on: false, bytes: 0 };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       const rows = sql.exec(query, ...params);
@@ -56,10 +57,12 @@ const counted = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, state };
 };
 
 const STREAMS = ["a", "b/inbox", "c/outbox"] as const;
+
 const EMPTY = "never";
 
 /** One append: its stream, an id from a small set so resends and refusals happen, and a body size
@@ -69,7 +72,9 @@ const Append = fc.record({
   id: fc.nat({ max: 5 }),
   pad: fc.oneof(fc.integer({ min: 0, max: 64 }), fc.integer({ min: 4_096, max: 1_024 * 1_024 })),
 });
+
 type Append = typeof Append extends fc.Arbitrary<infer A> ? A : never;
+
 const Log = fc.array(Append, { minLength: 1, maxLength: 24, size: "max" });
 
 /** What each law's cases reached so far, by the law's own task, so each run of a law starts empty. */

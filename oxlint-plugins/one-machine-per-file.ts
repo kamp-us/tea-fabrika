@@ -90,8 +90,10 @@ export const oneMachinePerFile: CreateRule = {
 
       return undefined;
     };
+
     const imported = (node: Node) => {
       const def = resolve(node)?.defs[0];
+
       return def?.type === "ImportBinding" &&
         def.parent?.type === "ImportDeclaration" &&
         def.parent.importKind !== "type" &&
@@ -102,6 +104,7 @@ export const oneMachinePerFile: CreateRule = {
         ? { from: def.parent.source.value, name: importedName(def.node) }
         : null;
     };
+
     const maker = (node: Node): boolean => {
       if (node.type !== "CallExpression" || node.callee.type !== "MemberExpression" || member(node.callee) !== "make") {
         return false;
@@ -111,24 +114,29 @@ export const oneMachinePerFile: CreateRule = {
 
       if (object.type === "Identifier") {
         const at = imported(object);
+
         return at !== null && TEA.has(at.from) && at.name === "Machine";
       }
 
       if (object.type === "MemberExpression" && member(object) === "Machine") {
         const at = imported(object.object);
+
         return at !== null && TEA.has(at.from) && at.name === "*";
       }
 
       return false;
     };
+
     const rootImported = (node: Node): boolean =>
       node.type === "MemberExpression" ? rootImported(node.object) : imported(node) !== null;
+
     const neverMsg = (node: Node): boolean => {
       if (node.type !== "MemberExpression" || member(node) !== "Never") {
         return false;
       }
 
       const at = imported(node.object);
+
       return at?.from === "effect" && at.name === "Schema";
     };
 
@@ -137,6 +145,7 @@ export const oneMachinePerFile: CreateRule = {
         const calls = [...below(program)].filter(
           (n): n is ESTree.CallExpression => n.type === "CallExpression" && maker(n),
         );
+
         const reached = new Set<Node>();
         const roots = new Set<Node>();
 
@@ -245,6 +254,7 @@ export const oneMachinePerFile: CreateRule = {
 
           const from = statement.source.value;
           const values = statement.specifiers.filter((s) => s.type !== "ImportSpecifier" || s.importKind !== "type");
+
           const io =
             (IO_MODULES.some((pattern) => pattern.test(from)) &&
               (statement.specifiers.length === 0 || values.length > 0)) ||

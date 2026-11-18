@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-17-law-options-tracker-association",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1140"],
+  "stage": "build",
+  "kind": "friction",
+  "what": "PR 1497's next/ law-option work belongs to tracker ticket 1140. Historical run rows saying ticket 580 confused decision 0580 with a tracker number. Tracker ticket 580 is unrelated. The assigned audit created ticket 1140 and independently read back its title, body and PR source before this build continued.",
+  "cause": "The original run rows used the decision number as the tracker ticket without checking the tracker.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Use verified ticket 1140 for current work. Keep historical ticket fields as written. The signed plan permits only the separate removal of one unmerged stale plant record.",
+  "test": "The tracker readback names PR 1497, source head f5ec4e679073c19953f6945025a3c54a768a1c4d and approved plan body 6d31e3a40575.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1497"]
+}

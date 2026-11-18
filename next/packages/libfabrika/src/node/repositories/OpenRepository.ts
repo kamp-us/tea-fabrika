@@ -1,10 +1,11 @@
 /**
  * Opening a selected repository on Node: read and check it before the instance starts, then record
  * the selection and the person's trust answer once there is a ledger.
- *
- * @stability unstable
  */
-import { DateTime, Effect, Redacted, Schema } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as Id from "../../Id.ts";
 import * as Log from "../../ledger/Log.ts";
 import * as Open from "../../packs/Open.ts";
@@ -14,18 +15,30 @@ import * as Declarations from "../../settings/Declarations.ts";
 import * as Files from "../../settings/Files.ts";
 import * as Load from "../settings/Load.ts";
 
-class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
-class InvalidDocument extends Schema.TaggedError<InvalidDocument>()("InvalidDocument", { cause: Schema.Defect() }) {}
-class ReadFailed extends Schema.TaggedError<ReadFailed>()("ReadFailed", { cause: Schema.Defect() }) {}
-
-class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError>()("OpenRepositoryError", {
-  reason: Schema.Union([Storage, InvalidDocument, ReadFailed]),
-  message: Schema.String,
+class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
 }) {}
 
+class InvalidDocument extends Schema.TaggedError<InvalidDocument, { readonly brand: unique symbol }>()(
+  "InvalidDocument",
+  { cause: Schema.Defect() },
+) {}
+
+class ReadFailed extends Schema.TaggedError<ReadFailed, { readonly brand: unique symbol }>()("ReadFailed", {
+  cause: Schema.Defect(),
+}) {}
+
+class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError, { readonly brand: unique symbol }>()(
+  "OpenRepositoryError",
+  {
+    reason: Schema.Union([Storage, InvalidDocument, ReadFailed]),
+    message: Schema.String,
+  },
+) {}
+
 const failed = (reason: "storage" | "document" | "read", cause: unknown, message?: string) =>
-  new OpenRepositoryError({
-    reason: new (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed)({
+  OpenRepositoryError.make({
+    reason: (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed).make({
       cause: Redacted.make(cause),
     }),
     message:
@@ -45,19 +58,24 @@ const documentFailed = (cause: Files.SettingsError) => {
     "$FABRIKA_HOME/fabrika.toml",
     ...Declarations.all.declarations.flatMap((d) => [`--${d.path}`, d.env]),
   ];
+
   const label = labels.find((name) =>
     [":", ", line ", " could not be read."].some((suffix) => cause.message.startsWith(`${name}${suffix}`)),
   );
+
   const line = label === undefined ? undefined : /^, line ([0-9]+):/.exec(cause.message.slice(label.length))?.[1];
   const location = label === undefined ? "Settings" : `${label}${line === undefined ? "" : `, line ${line}`}`;
   const detail = label === undefined ? "" : cause.message.slice(location.length + 2);
+
   const keys = Declarations.all.declarations.flatMap((d) =>
     d.segments.map((_, n) => d.segments.slice(0, n + 1).join(".")),
   );
+
   const key =
     cause.reason === "version"
       ? Declarations.version.path
       : keys.find((name) => detail.startsWith(`${name} =`) || detail.startsWith(`${name} is `));
+
   const explanation = {
     syntax: "Invalid TOML.",
     unknown: "Unknown setting. Run fabrika settings to list the allowed keys.",
@@ -66,6 +84,7 @@ const documentFailed = (cause: Files.SettingsError) => {
     version: "This repository requires a newer fabrika version.",
     read: "Settings could not be read.",
   }[cause.reason];
+
   return failed(
     "document",
     cause,
@@ -83,7 +102,6 @@ const documentFailed = (cause: Files.SettingsError) => {
  * It resolves no source folder and loads no code. A failure carries a message for the person. A
  * settings failure names the file, the line and the key, never the rejected value.
  *
- * @stability unstable
  * @category constructors
  */
 export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
@@ -102,11 +120,14 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
       ),
     ),
   );
+
   const loaded = yield* Load.load({
     ...options,
     repo: { name: repository.snapshot.file, text: repository.snapshot.text },
   }).pipe(Effect.mapError(documentFailed));
+
   const { text, ...snapshot } = repository.snapshot;
+
   return { snapshot: { ...snapshot, present: text !== null }, settings: loaded.snapshot, values: loaded.values };
 });
 
@@ -122,7 +143,6 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
  * selection ends with an `opened` event. Who is asking (`actor`, `by` and `build`) comes from the
  * instance's options, never from the repository's document or the terminal answer.
  *
- * @stability unstable
  * @category constructors
  */
 export const open = Effect.fn("repositoryOpen.open")(function* <R>(
@@ -141,16 +161,20 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
   const session = yield* Open.session();
   const selection = options.selection;
   yield* session.send({ type: "select", selection });
+
   const history = yield* trust
     .history(prepared.snapshot.key, options.actor)
     .pipe(Effect.mapError((cause) => failed("storage", cause)));
+
   const first = history.find((event) => event._tag === "selected");
+
   const repository =
     first?.repository ??
     (yield* Id.Generator.use((ids) => ids.next(RepositoryId)).pipe(
       Effect.provide(Id.Generator.layer),
       Effect.mapError((cause) => failed("storage", cause)),
     ));
+
   const snapshot: Open.CheckedSelection = {
     ...prepared.snapshot,
     repository,
@@ -158,6 +182,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
     settings: prepared.settings,
     person: options.actor,
   };
+
   const selected = Event.cases.selected.make({ ...snapshot, request: selection });
   const from = yield* Log.fromHere({ by: options.by, for: options.actor, seen: 0, parent: null, build: options.build });
   // A retry keeps the same append id; the ledger retains the first placing's writer clock and trace.
@@ -214,6 +239,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
       { ...answerFrom, sentAt: DateTime.formatIso(yield* DateTime.now) },
     )
     .pipe(Effect.mapError((cause) => failed("storage", cause)));
+
   return state._tag === "saving"
     ? yield* session.send({ type: "saved", selection, request: state.request, receipt })
     : state;

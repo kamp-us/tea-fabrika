@@ -17,9 +17,9 @@
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Duration, Effect, Layer, ManagedRuntime, References, Schema, type Scope, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -32,9 +32,13 @@ import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const READER = "connection:t1";
+
 const PARENT = `in-${Effect.runSync(processId)}-41`;
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The scope it is opened in closes
@@ -46,16 +50,7 @@ const folder = Effect.acquireRelease(
 
 const freshPath = folder.pipe(Effect.map((path) => join(path, "ledger.db")));
 
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
+const openDb = (path: string) => TestDatabase.make(path);
 
 const fresh = () => freshPath.pipe(Effect.flatMap(openDb), Effect.map(nodeSql));
 
@@ -63,12 +58,14 @@ type Rung = { readonly to: string; readonly stream: string; readonly rev: number
 
 const bell = () => {
   const rang: Array<Rung> = [];
+
   const layer = Layer.succeed(Doorbell, {
     ring: (to, stream, rev) =>
       Effect.sync(() => {
         rang.push({ to, stream, rev });
       }),
   });
+
   return { rang, layer };
 };
 
@@ -94,6 +91,7 @@ const line = (over: Partial<Line> = {}): Line => ({
 });
 
 const placed = (rev: number, pos: number) => ({ _tag: "placed", rev, pos });
+
 const refused = (reason: string) => ({ _tag: "refused", reason });
 
 const readAll = (stream: string, after = 0) => Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, after)));
@@ -101,17 +99,21 @@ const readAll = (stream: string, after = 0) => Ledger.use((ledger) => Stream.run
 /** A Sql that counts its calls, so a test can see that nothing was read. */
 const counting = (sql: Sql) => {
   let calls = 0;
+
   const counted: Sql = {
     exec: (query, ...params) => {
       calls++;
+
       return sql.exec(query, ...params);
     },
     transaction: (step) => {
       calls++;
+
       return sql.transaction(step);
     },
     size: () => sql.size(),
   };
+
   return { sql: counted, calls: () => calls };
 };
 
@@ -126,6 +128,7 @@ const sqliteFull = (): Error =>
 /** A Sql whose next call throws once `arm` is called, then works again. */
 const throwingOnce = (sql: Sql) => {
   let armed = false;
+
   const trip = (): void => {
     if (!armed) {
       return;
@@ -134,14 +137,17 @@ const throwingOnce = (sql: Sql) => {
     armed = false;
     throw sqliteFull();
   };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       trip();
+
       return sql.exec(query, ...params);
     },
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return {
     sql: wrapped,
     arm: () => {
@@ -153,14 +159,18 @@ const throwingOnce = (sql: Sql) => {
 /** A tracer that keeps every span it makes, so a test can count the ones that ended. */
 const capture = () => {
   const spans: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       spans.push(span);
+
       return span;
     },
   });
+
   const ended = (name: string) => spans.filter((span) => span.name === name && span.status._tag === "Ended");
+
   return { tracer, ended };
 };
 
@@ -201,6 +211,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
     ["_tag", { _tag: "deleted" }],
     ["body", { body: { note: "n-7f3a", base: 4 } }],
   ];
+
   it.effect.each(changes)("the same id with another %s is refused id_reused, and nothing is written", ([, change]) =>
     Effect.gen(function* () {
       const ledger = yield* Ledger;
@@ -252,11 +263,14 @@ describe("p18, the ledger suite on Ledger.sql", () => {
       body: fc.constantFrom(1, 2),
       ahead: fc.nat({ max: 2 }),
     });
+
     type Command = typeof command extends fc.Arbitrary<infer C> ? C : never;
+
     const model = (commands: ReadonlyArray<Command>) => {
       const kept = new Map<string, { id: string; body: number; rev: number; pos: number }>();
       const streams = new Map<string, Array<{ id: string; body: number; rev: number; pos: number }>>();
       let head = 0;
+
       const answers = commands.map(({ stream, id, body, ahead }) => {
         const first = kept.get(`${stream} ${id}`);
 
@@ -272,10 +286,13 @@ describe("p18, the ledger suite on Ledger.sql", () => {
         const entry = { id, body, rev: ++head, pos: list.length + 1 };
         kept.set(`${stream} ${id}`, entry);
         streams.set(stream, [...list, entry]);
+
         return placed(entry.rev, entry.pos);
       });
+
       return { answers, streams };
     };
+
     await fc.assert(
       fc.asyncProperty(fc.array(command, { maxLength: 30 }), (commands) =>
         Effect.runPromise(
@@ -317,6 +334,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 
   it.effect("a wait is ready with news, parks without, and the next append to its stream rings it once", () => {
     const { rang, layer } = bell();
+
     return Effect.gen(function* () {
       const ledger = yield* Ledger;
       yield* ledger.append("a", "w-1", line());
@@ -373,9 +391,11 @@ describe("p18, the ledger suite on Ledger.sql", () => {
     Effect.gen(function* () {
       const ledger = yield* Ledger;
       const writes = Array.from({ length: 60 }, (_, i) => i);
+
       const answers = yield* Effect.forEach(writes, (i) => ledger.append(`s${i % 3}`, `w-${i}`, line({ body: i })), {
         concurrency: "unbounded",
       }).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
+
       const revs = answers.map((answer) => (answer._tag === "placed" ? answer.rev : -1));
       expect([...revs].sort((x, y) => x - y)).toEqual(writes.map((i) => i + 1));
 
@@ -419,6 +439,7 @@ describe("p93, seen is bounded by the log's head", () => {
       stream: fc.constantFrom("a", "b"),
       offset: fc.integer({ min: -3, max: 2 }),
     });
+
     await fc.assert(
       fc.asyncProperty(fc.array(write, { maxLength: 25 }), (writes) =>
         Effect.runPromise(
@@ -526,8 +547,10 @@ describe("p20, failures are typed, and pass", () => {
         (value) => {
           const reject = () => Promise.reject(value);
           const stub: LedgerCalls = { append: reject, read: reject, wait: reject };
+
           return Effect.gen(function* () {
             const ledger = yield* Ledger;
+
             const errors = [
               yield* Effect.flip(ledger.append("a", "w-1", line())),
               yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
@@ -558,8 +581,10 @@ describe("p20, failures are typed, and pass", () => {
             read: () => Promise.resolve([{ id: "w-1" }]),
             wait: () => Promise.resolve({ _tag: "soon" }),
           };
+
           return Effect.gen(function* () {
             const ledger = yield* Ledger;
+
             const errors = [
               yield* Effect.flip(ledger.append("a", "w-1", line())),
               yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
@@ -580,17 +605,21 @@ describe("p20, failures are typed, and pass", () => {
 
   it.effect("a stub that answers well is decoded, and the reader's name rides on each read and wait", () => {
     const asked: Array<readonly [string, string, number, string]> = [];
+
     const stub: LedgerCalls = {
       append: () => Promise.resolve({ _tag: "placed", rev: 1, pos: 1 }),
       read: (stream, after, reader) => {
         asked.push(["read", stream, after, reader]);
+
         return Promise.resolve(page.filter((entry) => entry.rev > after));
       },
       wait: (stream, after, reader) => {
         asked.push(["wait", stream, after, reader]);
+
         return Promise.resolve({ _tag: "parked" });
       },
     };
+
     return Effect.gen(function* () {
       const ledger = yield* Ledger;
       expect(yield* ledger.append("a", "w-1", line())).toEqual(placed(1, 1));
@@ -650,6 +679,7 @@ describe("p20, failures are typed, and pass", () => {
           (thrown) =>
             Effect.gen(function* () {
               const ledger = yield* Ledger;
+
               const errors = [
                 yield* Effect.flip(ledger.append("a", "w-1", line())),
                 yield* Effect.flip(Stream.runCollect(ledger.read("a", 0))),
@@ -687,6 +717,7 @@ describe("p20, failures are typed, and pass", () => {
         Schema.makeFilter((s) => {
           try {
             JSON.parse(s);
+
             return false;
           } catch {
             return true;
@@ -709,11 +740,13 @@ describe("p20, failures are typed, and pass", () => {
 							NULL, ?, 'b-7c1d073', ?, ?)`,
                 )
                 .run(rev, stream, id, TRACE, kind, body);
+
             return Effect.gen(function* () {
               const ledger = yield* Ledger;
               expect(yield* ledger.append("ok", "w-1", line())).toEqual(placed(1, 1));
               plant(2, "a", "w-2", "saved", value);
               plant(3, "b", "w-3", "", JSON.stringify({ note: "n-7f3a" }));
+
               const errors = [
                 yield* Effect.flip(readAll("a")),
                 yield* Effect.flip(readAll("b")),

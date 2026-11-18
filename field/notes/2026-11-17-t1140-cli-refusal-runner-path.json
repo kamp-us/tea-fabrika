@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-17-t1140-cli-refusal-runner-path",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1140"],
+  "stage": "build",
+  "kind": "friction",
+  "what": "The no-plant CLI refusal printed the declaring file from Plants.records, but the signed slice-2 plan says this refusal names the runner passed to plant.ts.",
+  "cause": "The CLI reused records.failure.file after Plants.records began reporting a shared law's declaring file.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Keep the declaring file in the Plants.records result; have plant.ts print its supplied runner path in the refusal.",
+  "test": "The independent gpt-6.2-sol/xhigh reviewer rechecked the source fix. No local tests or product validation ran; automatic CI and protected proof remain pending.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1497"]
+}

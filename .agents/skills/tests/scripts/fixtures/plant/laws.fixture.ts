@@ -1,4 +1,4 @@
-// The laws plant.test.ts runs plant.ts on: one that a planted break turns red, one that holds, two
+// The laws plant.integration.test.ts runs plant.ts on: one that a planted break turns red, one that holds, two
 // with the same title, and one with no plant. Its name is no test file's, so no test run picks it up;
 // plant.ts runs the file it is given.
 import { expect, it } from "@kampus/vitest";

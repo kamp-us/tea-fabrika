@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-app-e2e-plan",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-15T20:31:11-08:00",
+  "ended": "2026-11-15T20:38:42-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Plan step for the mock sweep in next/apps/fabrika/e2e (docs/plan/quests/mock-app-e2e-PLAN.md), in next/. The folder has one vi.spyOn, on console.warn in reload.visual.test.ts's L17, and no vi.fn, toHaveBeenCalled, vi.mock, vi.doMock or vi.stubEnv. The warnings it watches are printed by Rolldown's default handler through the global console, so the plan moves bundle.ts's onLog to print through Effect's Console service in Rolldown's format, and L17 reads them with TestConsole. Effect 4.1.3's TestConsole records warn calls but has no reader, so the plan adds warnLines with a local pnpm patch. The lock is vitest/no-restricted-vi-methods in a new per-folder block; a scratch oxlint 1.90.0 run showed it refuses a renamed vi import and a computed key. plancheck --draft passes. No open question.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Cloud box, no subagents. Read-only apart from the plan and this row; no test ran. The model that served the step is not recorded here.",
+  "step": "plan"
+}

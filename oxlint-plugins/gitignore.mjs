@@ -10,6 +10,7 @@ export const checkTracked = (root = process.cwd()) => {
     encoding: "utf8",
     maxBuffer: 2 ** 28,
   });
+
   return {
     ok: result.status === 0 && result.stdout === "",
     files: (result.stdout ?? "").split("\0").filter(Boolean),

@@ -19,8 +19,6 @@
  *   fastCheck: { numRuns: runsFor({ fast: 5, full: 50 }) },
  * });
  * ```
- *
- * @stability unstable
  */
 import * as EffectVitest from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
@@ -35,6 +33,7 @@ import * as FastCheck from "./internal/fastCheck.ts";
 const SEED = 119120;
 
 Arbitrary.configureGlobal({ check: { seed: SEED } });
+
 fc.configureGlobal({ seed: SEED });
 
 /** The five labels, each with the reason it requires. A pinned law names its bug's ticket. */
@@ -66,7 +65,6 @@ type Labeled = One<"vector"> | One<"format"> | One<"scenario"> | One<"type"> | O
  * A law's options: vitest's own, less `meta` and the modes 0579 does not give (`skip`, `only`,
  * `todo`, `fails`), plus at most one label and the plant.
  *
- * @stability unstable
  * @category models
  */
 export type LawOptions = Omit<V.TestOptions, "meta" | "skip" | "only" | "todo" | "fails"> &
@@ -78,7 +76,6 @@ export type LawOptions = Omit<V.TestOptions, "meta" | "skip" | "only" | "todo" |
 /**
  * A law's label as `meta` carries it: the label's name as its tag, and its reason.
  *
- * @stability unstable
  * @category models
  */
 export const Label = Schema.TaggedUnion({
@@ -86,13 +83,12 @@ export const Label = Schema.TaggedUnion({
   format: { reason: Schema.String },
   scenario: { reason: Schema.String },
   type: { reason: Schema.String },
-  pinned: { reason: Schema.Number },
+  pinned: { reason: Schema.Finite },
 });
 
 /**
  * A law's label as `meta` carries it.
  *
- * @stability unstable
  * @category models
  */
 export type Label = typeof Label.Type;
@@ -103,6 +99,8 @@ declare module "vitest" {
     plant?: string;
     /** The law's label, from its options. */
     label?: Label;
+    /** The absolute path of the file that declared the law. */
+    file?: string | undefined;
   }
 }
 
@@ -131,7 +129,6 @@ const labelIn = (options: LawOptions): Label | undefined => {
  * A law's options as vitest takes them: the plant and the label go into `meta`, and every other
  * key passes through unchanged. Options with neither give no `meta`.
  *
- * @stability unstable
  * @category options
  */
 export const toTestOptions = (options: LawOptions = {}): V.TestOptions => {
@@ -144,9 +141,49 @@ export const toTestOptions = (options: LawOptions = {}): V.TestOptions => {
     pinned: _pinned,
     ...rest
   } = options;
+
   const label = labelIn(options);
   const meta = { ...(plant === undefined ? {} : { plant }), ...(label === undefined ? {} : { label }) };
+
   return plant === undefined && label === undefined ? rest : { ...rest, meta };
+};
+
+/** The first V8 stack frame outside this module, captured when a law is registered. */
+const declaredIn = (): string | undefined => {
+  const limit = Error.stackTraceLimit;
+  let stack: string | undefined;
+
+  try {
+    Error.stackTraceLimit = Infinity;
+    stack = new Error("law declaration").stack;
+  } finally {
+    Error.stackTraceLimit = limit;
+  }
+
+  const own = decodeURIComponent(new URL(import.meta.url).pathname);
+
+  for (const frame of stack?.split("\n") ?? []) {
+    const source = frame.match(/^\s*at (?:.* \()?((?:file:\/\/|\/).*):\d+:\d+\)?$/)?.[1];
+
+    if (source === undefined) {
+      continue;
+    }
+
+    const file = source.startsWith("file://") ? decodeURIComponent(new URL(source).pathname) : source;
+
+    if (file !== own) {
+      return file;
+    }
+  }
+
+  return undefined;
+};
+
+/** Registration adds the declaring file without making the options conversion read a stack. */
+const registration = (options?: LawOptions): V.TestOptions => {
+  const test = toTestOptions(options);
+
+  return { ...test, meta: { ...test.meta, file: declaredIn() } };
 };
 
 /** An Effect input: a `Schema` or an Effect `Arbitrary`, as `@effect/vitest`'s `it.prop` takes. */
@@ -155,7 +192,6 @@ type EffectInput = Schema.Top | Arbitrary.Arbitrary<unknown>;
 /**
  * A property's Effect inputs, by name.
  *
- * @stability unstable
  * @category models
  */
 export type EffectInputs = { readonly [name: string]: EffectInput };
@@ -163,7 +199,6 @@ export type EffectInputs = { readonly [name: string]: EffectInput };
 /**
  * The values one case draws from Effect inputs, by the input's name.
  *
- * @stability unstable
  * @category models
  */
 export type EffectValues<Arbs> = {
@@ -183,7 +218,6 @@ type Drawn = { readonly [name: string]: unknown };
 /**
  * A property's options on fast-check inputs: a law's, plus fast-check's own parameters.
  *
- * @stability unstable
  * @category models
  */
 export type FastCheckOptions = LawOptions & { readonly fastCheck?: fc.Parameters<unknown> };
@@ -191,7 +225,6 @@ export type FastCheckOptions = LawOptions & { readonly fastCheck?: fc.Parameters
 /**
  * A property's options on Effect inputs: a law's, plus Effect's own check options.
  *
- * @stability unstable
  * @category models
  */
 export type ArbitraryOptions = LawOptions & { readonly arbitrary?: Arbitrary.CheckOptions };
@@ -221,7 +254,6 @@ interface EffectLaw {
 /**
  * The package's `it`: a plain law, its property, and its Effect members.
  *
- * @stability unstable
  * @category models
  */
 export interface Law {
@@ -240,7 +272,8 @@ const isFastCheck = (inputs: Inputs): inputs is FastCheck.Inputs =>
 /** The property's own options apart from the law's. */
 const split = (options: FastCheckOptions & ArbitraryOptions = {}) => {
   const { fastCheck, arbitrary, ...law } = options;
-  return { fastCheck, arbitrary, test: toTestOptions(law) };
+
+  return { fastCheck, arbitrary, test: registration(law) };
 };
 
 /** One Effect member over `@effect/vitest`'s tester. */
@@ -274,7 +307,7 @@ const effectLaw = (tester: EffectVitest.Vitest.Tester<Scope.Scope>): EffectLaw =
 
   return Object.assign(
     <A, E>(name: string, self: (ctx: V.TestContext) => Effect.Effect<A, E, Scope.Scope>, options?: LawOptions) =>
-      tester(name, self, toTestOptions(options)),
+      tester(name, self, registration(options)),
     { prop },
   );
 };
@@ -313,11 +346,10 @@ function prop(
 /**
  * A law, with its plant and label as options: `it(name, body, { plant, scenario })`.
  *
- * @stability unstable
  * @category testing
  */
 export const it: Law = Object.assign(
   (name: string, self: (ctx: V.TestContext) => void, options?: LawOptions) =>
-    EffectVitest.it(name, toTestOptions(options), self),
+    EffectVitest.it(name, registration(options), self),
   { prop, effect: effectLaw(EffectVitest.it.effect), live: effectLaw(EffectVitest.it.live) },
 );

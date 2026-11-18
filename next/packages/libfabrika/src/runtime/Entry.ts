@@ -2,8 +2,6 @@
  * What a program runner is given: the programs it may load, the gateway's checked writer, the
  * watchers, the object's one alarm, and the recording flush. The Worker's runtime wires the real
  * ones to object calls, the Worker Loader and the span sink; Node tests wire the same shapes.
- *
- * @stability unstable
  */
 import { type Outcome, type Tagged } from "@demlik/tea";
 import { Context, Effect, Layer, Option, Schema } from "effect";
@@ -22,43 +20,32 @@ import {
   Writer,
 } from "../coordination/index.ts";
 import { nodeExecution, type Execution, type Declaration } from "./Execution.ts";
-import { type Patch } from "./Patch.ts";
 import { ProgramDown, stepper, type Stepper } from "./Program.ts";
 
 /** A function type whose parameters are checked both ways, as a method's are. */
 type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"];
 
-/**
- * A view as JSON. One runner serves every program, so the type stays open: each program's own
- * client decodes its view.
- *
- * @stability unstable
- * @category models
- */
-export type View = unknown;
-
-/**
- * What a watcher is sent: the whole view once, then one patch per installed step. `rev` is the inbox
- * position of the last installed letter, so other streams leave no gaps.
- *
- * @stability unstable
- * @category models
- */
-export type Update =
-  | { readonly type: "whole"; readonly rev: number; readonly view: View }
-  | {
-      readonly type: "patch";
-      readonly base: number;
-      readonly rev: number;
-      readonly patch: ReadonlyArray<Patch>;
-    };
+export type {
+  /**
+   * A view as JSON, re-exported so the runner's names come from one place.
+   *
+   * @category models
+   */
+  View,
+  /**
+   * What a watcher is sent, the whole view or one patch, re-exported so the runner's names come
+   * from one place.
+   *
+   * @category models
+   */
+  Update,
+} from "./News.ts";
 
 /**
  * Schema for the gateway's delivery of one input: its stable letter id, the stamped envelope, the
  * writer's clock, the rev it had seen, and the saved trace context. Its shape is checked here; its
  * authority stays with the gateway.
  *
- * @stability unstable
  * @category schemas
  */
 export const Incoming = Schema.Struct({
@@ -73,10 +60,10 @@ export const Incoming = Schema.Struct({
   seen: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   span: Schema.Struct({ traceId: Schema.String, spanId: Schema.String }),
 });
+
 /**
  * One delivered input as the runner takes it, as `Incoming` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Incoming = typeof Incoming.Type;
@@ -84,7 +71,6 @@ export type Incoming = typeof Incoming.Type;
 /**
  * A Cmd handler: it does the outside work and answers with tea's Outcome.
  *
- * @stability unstable
  * @category models
  */
 export type Handler<R> = Code<[cmd: unknown], Effect.Effect<Outcome<unknown, unknown>, unknown, R>>;
@@ -93,7 +79,6 @@ export type Handler<R> = Code<[cmd: unknown], Effect.Effect<Outcome<unknown, unk
  * An in-process program: its pure stepper, runner execution, checked declaration and allowed Cmd
  * handlers.
  *
- * @stability unstable
  * @category models
  */
 export type Loaded = {
@@ -120,7 +105,6 @@ const BUILT_IN = new Set(["send", "hands"]);
  * declaration does not pass its check. `build` names the build of the code; the in-process layer
  * stamps it on state the program saves.
  *
- * @stability unstable
  * @category services
  */
 export class ProgramLoader extends Context.Service<
@@ -137,6 +121,7 @@ export class ProgramLoader extends Context.Service<
       ProgramLoader,
       Effect.gen(function* () {
         const context = yield* Effect.context<R>();
+
         return {
           load: Effect.fn("loader.load")(function* (name: string, build = "node") {
             if (!Object.hasOwn(programs, name)) {
@@ -146,6 +131,7 @@ export class ProgramLoader extends Context.Service<
             const loaded = yield* Effect.fromResult(stepper(programs[name])).pipe(
               Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
             );
+
             return {
               stepper: loaded,
               execution: nodeExecution(programs[name], build),
@@ -185,7 +171,6 @@ export class ProgramLoader extends Context.Service<
 /**
  * An event as it travels in a checked write: JSON with its case.
  *
- * @stability unstable
  * @category models
  */
 export type Event = Schema.JsonObject & Tagged;
@@ -195,7 +180,6 @@ export type Event = Schema.JsonObject & Tagged;
  * input in the inbox. `commit` writes an event under a signed session, and `own` under the process
  * owner; both recheck admission.
  *
- * @stability unstable
  * @category services
  */
 export class CheckedWriter extends Context.Service<
@@ -222,7 +206,6 @@ export {
    * Service that delivers a view update to one client, re-exported so the runner's services come
    * from one place.
    *
-   * @stability unstable
    * @category services
    */
   WatcherManager,
@@ -231,7 +214,6 @@ export {
 /**
  * Service for the object's one alarm: `set` takes the program's next wake time, or `null` for none.
  *
- * @stability unstable
  * @category services
  */
 export class Alarm extends Context.Service<Alarm, { readonly set: (at: number | null) => Effect.Effect<void> }>()(
@@ -242,7 +224,6 @@ export class Alarm extends Context.Service<Alarm, { readonly set: (at: number | 
  * Service that sends the process's ended spans on to its JobRecord, with its services captured at
  * build time. `flush` can fail with a ledger or sink error.
  *
- * @stability unstable
  * @category services
  */
 export class Recording extends Context.Service<
@@ -254,6 +235,7 @@ export class Recording extends Context.Service<
     Effect.gen(function* () {
       const sink = yield* SpanSink;
       const context = yield* Effect.context<RecordManager | Archive>();
+
       return { flush: sink.flush.pipe(Effect.provideContext(context)) };
     }),
   );

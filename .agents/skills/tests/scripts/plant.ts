@@ -5,11 +5,14 @@
  *   node .agents/skills/tests/scripts/plant.ts <file> "<law's title>"
  *   {"file":"next/packages/libfabrika/src/ledger/LedgerTurnReads.test.ts","law":"the log reads back as written","plant":"skip the last append on read","result":"red"}
  *
+ * `<file>` is the file to run, including a shared suite's runner. The printed record names the
+ * file that declares the law, which can be another file. Refusals name the runner passed here.
+ *
  * The step plants the break in the product file, runs this, restores the file by copy, and pastes
  * the printed line into its run row's `plants`. The script runs that one law through vitest's Node
  * API, from the repo's root (the directory it runs in), with the repo's setup file and time limits,
- * and reads the law's task: its file, its exact title, `meta.plant` and its state. The record says
- * `red` when the law failed and `green` when it passed, and exits 0 either way.
+ * and reads the law's task: its declaring file, its exact title, `meta.plant` and its state. The
+ * record says `red` when the law failed and `green` when it passed, and exits 0 either way.
  *
  * It refuses, with exit 1 and no record, a title that matches no law in the file or two, and a law
  * with no `plant` option, since any of those would make a record up. It runs whatever file it is
@@ -50,7 +53,9 @@ const vitest = (root: string, file: string, title: string) => {
     maxWorkers: 1,
     reporters: [],
   };
+
   const open = () => createVitest("test", options);
+
   return Effect.acquireRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: vitest's Node API answers a Promise
     Effect.tryPromise({ try: open, catch: broke("did not start") }),
@@ -65,10 +70,12 @@ const record = Effect.fnUntraced(function* (root: string, file: string, title: s
   const start = () => running.start();
   // oxlint-disable-next-line fabrika/no-promises -- edge: vitest's Node API answers a Promise
   yield* Effect.tryPromise({ try: start, catch: broke(`could not run ${file}`) });
+
   const files = running.state.getFiles().map((ran) => ({
     filepath: ran.filepath,
     tasks: ran.tasks.flatMap(laws).filter((law) => law.name === title),
   }));
+
   const named = files.flatMap((ran) => ran.tasks);
 
   if (named.length !== 1) {
@@ -81,7 +88,7 @@ const record = Effect.fnUntraced(function* (root: string, file: string, title: s
 
   if (Result.isFailure(records)) {
     return yield* new Refused({
-      message: `"${records.failure.law}" in ${records.failure.file} has no plant option: write { plant: "<the break>" } on it`,
+      message: `"${records.failure.law}" in ${file} has no plant option: write { plant: "<the break>" } on it`,
     });
   }
 

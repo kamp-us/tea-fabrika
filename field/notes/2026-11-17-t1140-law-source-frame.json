@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-17-t1140-law-source-frame",
+  "date": "2026-11-17",
+  "quests": ["tea-fabrika#1140"],
+  "stage": "build",
+  "kind": "friction",
+  "what": "declaredIn skipped all of next/packages/vitest/src, so a direct law declaration in Law.test.ts could be mistaken for a Vitest frame instead of its declaring file.",
+  "cause": "The source filter used the package directory rather than the Law.ts implementation file.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Skip only frames whose file is Law.ts, leaving direct declarations in Law.test.ts visible.",
+  "test": "The independent gpt-6.2-sol/xhigh reviewer rechecked the exact-path filter by source inspection. No local tests or product validation ran; automatic CI and protected proof remain pending.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1497"]
+}

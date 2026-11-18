@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e24-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T04:00:00Z",
+  "ended": "2026-11-16T04:30:00Z",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice E24 of the Effect-check sweep (nestedEffectGenYield), in next/. Recount with only the check at error: 4 hits in 13 tsconfigs. 2 are in scope here and fixed by hand (the checker's quick fix has no fix for this check): next/packages/libfabrika/src/runtime/IsolateUsageTest.ts:236 (the nested Effect.gen was inlined into its parent) and next/programs/chaos/src/RunnerTest.ts:638 (a conditional nested gen became an if block assigning a typed let). 2 are left for the slice after 1366 (E72): next/packages/libfabrika/src/processes/ChildrenMemberTest.ts:516 and ProcessManager.ts:274. Lock: libfabrika's tsconfig overrides include src/runtime/**/*.ts; chaos's tsconfig turns the check on package-wide. Neither fixed file is in pull request 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Hits met 4, fixed by quick fix 0, hand edits 2, left 0, waiting on 1366 2. Tests at the branch head before commit: IsolateUsage.integration.test.ts 7 passed, apps/fabrika chaos.laws.integration.test.ts 17 passed. pnpm lint: only lint:dead failed, killed by SIGABRT (out of memory in this box), not a finding. Recount after: 0 in libfabrika src/runtime and in chaos.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "a nested Effect.gen yielded in a new file src/runtime/L1Plant.ts: libfabrika diagnostics report 1 nestedEffectGenYield error, 0 after the file was removed",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

@@ -15,8 +15,16 @@
 //
 // The oracle keeps its own count of spawns and closes and computes each answer from the generated
 // child alone; it never calls the product to decide what is right.
+//
+// Plants, each run once and undone (recorded in the tests step's field row): C1, count only stdout
+// toward the cap. C2, spawn with `extendEnv: true`. C3, report `git` when the file exists without
+// an execute bit.
 import { describe, expect, it } from "@kampus/vitest";
-import { ConfigProvider, Effect, Exit, Layer, Path } from "effect";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import type { TestContext } from "vitest";
 import { Commands } from "../../client/Commands.ts";
@@ -27,12 +35,14 @@ import { type Child, fresh, gitVectors, type Seen, spawner } from "./Spawner.tes
 
 /** The plan's cap for `git_version`: stdout and stderr together, in bytes. */
 const CAP = 4096;
+
 const GIT_VERSION = Command.cases.git_version.make({});
 
 /** The disk C1 and C2 run on: one executable `git` on the `PATH` they give. */
 const withGit = () => {
   const d = MemoryFiles.disk(["/usr/bin"]);
   MemoryFiles.put(d, "/usr/bin/git", new Uint8Array([0x7f, 0x45, 0x4c, 0x46]), 0o755);
+
   return d;
 };
 
@@ -62,6 +72,7 @@ const expected = (child: Child): Result => {
 
   const out = new Uint8Array(child.chunks.filter((c) => c.to === "out").flatMap((c) => [...c.bytes]));
   const decoded = new TextDecoder().decode(out);
+
   // Bytes are UTF-8 exactly when decoding and encoding again gives them back: a byte that is not
   // becomes U+FFFD, three other bytes. stdout that is not UTF-8 answers an empty version.
   const text =
@@ -94,6 +105,7 @@ const cut = (bytes: Uint8Array, at: ReadonlyArray<number>): Array<Uint8Array> =>
 /** Two chunk lists merged in a generated order that keeps each list's own order. */
 const merge = <A>(a: ReadonlyArray<A>, b: ReadonlyArray<A>, picks: ReadonlyArray<boolean>): Array<A> => {
   const out: Array<A> = [];
+
   let i = 0,
     j = 0,
     k = 0;
@@ -147,12 +159,15 @@ const ChildArb: fc.Arbitrary<Child> = fc
     }
 
     const err = new Uint8Array(Math.max(0, g.total - out.length)).fill(g.errByte);
+
     const chunks = merge<Child["chunks"][number]>(
       cut(out, g.outCuts).map((bytes) => ({ to: "out", bytes })),
       cut(err, g.errCuts).map((bytes) => ({ to: "err", bytes })),
       g.order,
     );
+
     const total = out.length + err.length;
+
     return {
       spawn: g.spawnFails ? "fails" : "ok",
       chunks,

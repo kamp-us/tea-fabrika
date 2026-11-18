@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1076-tests3",
+  "ticket": 1076,
+  "pr": "kamp-us/tea-fabrika#1427",
+  "started": "2026-11-15T22:45:43-08:00",
+  "ended": "2026-11-15T22:50:20-08:00",
+  "parent": "2026-11-15-t1076-review1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests fix round 3 for slice 1 of the @kalfa/config plan (docs/plan/quests/kalfa-config-PLAN.md), in next/, after review 1 sent K5 [secrets] back. K5 in next/packages/libfabrika/src/settings/App.test.ts now also puts the generated secret in two places the app's own schema refuses, beside a-table and a-array, each run with the person's file readable and unreadable: a-scalar, a plain value where a table of settings belongs (`<section> = \"<secret>\"` in the app's repo file), and a-unknown, an unknown key with a value (`[zz9zz]\\nk = \"<secret>\"`; the digit keeps it apart from every generated section). A one-off log showed the readable form reaching the intended refusals, invalid for a-scalar and unknown for a-unknown, and the unreadable form stopping as read. No other law and no product file changed: build_needed no. The review's finding row is committed unchanged in content as field/findings/2026-11-15-t1076-command-l7-never-shows-a-file-origin.json, pretty-printed like its neighbors.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Tests run in a cloud box (CLAUDE_CODE_REMOTE=true, Linux) on 4c8c25044 plus this round's test edit, with no override: settings/App.test.ts, settings/Files.test.ts, node/settings/Command.test.ts and node/settings/Load.integration.test.ts, 39 of 39 green, none refused by the 0178 guard; App.test.ts at FABRIKA_TEST_DEPTH=full, 20 of 20 green. Checks: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed (18 parts); ratchet.ts exit 0; effect-tsgo tsc --noEmit -p next/packages/libfabrika/tsconfig.json exit 0. Both plants were made in settings/Files.ts from a saved copy, run against K5 alone, and restored by copy; git status showed no product file after each. Each failed on K5's not-to-contain check for the secret.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "K5 [secrets]",
+      "plant": "Files' 'is a table of settings' message prints the refused value",
+      "result": "red"
+    },
+    {
+      "law": "K5 [secrets]",
+      "plant": "Files' 'there is no setting' message prints the unknown key's value",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

@@ -58,6 +58,7 @@ describe("Names: each new exported name has a line under ## New names (0587)", (
         { path, patch: hunk([`+${line(kind, name)}`]) },
         { path: "src/old.ts", patch: hunk([`-${line(kind, name)}`]) },
       ];
+
       expect(Names.added(moved)).toEqual([]);
 
       for (const other of [

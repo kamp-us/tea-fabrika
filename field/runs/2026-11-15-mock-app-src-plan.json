@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-app-src-plan",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-15T20:31:11-08:00",
+  "ended": "2026-11-15T20:42:29-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Plan for the mock sweep in next/apps/fabrika/src with exam/: counted on main at f7169af, 5 vi.fn, 14 toHaveBeenCalled and 23 spyOn (one split over two lines, so the recorder plan's 22 missed it). Four pull requests: the sites with no product change, the Alchemy Workerd spawn patch, the gateway and runtime crypto and startup span after PR 1366, and local-instance after PR 1366 and the node/dev slice. The lock is its own override of vitest/no-restricted-vi-methods for fn and spyOn, growing by file. Two open questions: a failed SHA digest as a defect or a typed crypto refusal, and a callback of our own API as a service or a plain list.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from the plan file and this row. plancheck --draft passes. Probes in the scratchpad on oxlint 1.90.0: no-restricted-vi-methods refuses vi.fn and vi.spyOn and misses v.fn after const v = vi; no-restricted-matchers needs each matcher spelling, not. forms included, as its own key. pnpm install --frozen-lockfile ran to read effect 4.1.3's sources. No test or typecheck ran.",
+  "step": "plan"
+}

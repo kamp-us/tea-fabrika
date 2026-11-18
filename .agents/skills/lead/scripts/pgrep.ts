@@ -17,6 +17,7 @@ export const PgrepAnswer = Schema.TaggedUnion({
   listed: { count: Schema.Int },
   refused: {},
 });
+
 export type PgrepAnswer = typeof PgrepAnswer.Type;
 
 /** What a `pgrep` run with this exit code and stdout says. */

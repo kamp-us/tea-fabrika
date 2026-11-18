@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-16-slice2-stale-plant-record-removed",
+  "date": "2026-11-16",
+  "quests": ["tea-fabrika#1140"],
+  "stage": "build",
+  "kind": "friction",
+  "what": "The next/ slice-2 tests row recorded T1041 L7 ledger under LedgerTurnReads.test.ts, its runner. LedgerTurnEndTest.ts declares that law. The signed plan's November 16 amendment allows build to remove only that stale record before the row lands on main. Build removed it on November 17; the other records and the historical ticket field stay unchanged.",
+  "cause": ".github/ci/plant-check.ts:382-387 collects every record from every added run row, without replacement by a later row. Lines 262-271 match a changed law against any red record, but lines 279-289 refuse each unmatched record. A new record under LedgerTurnEndTest.ts cannot replace the stale record under LedgerTurnReads.test.ts.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "Remove only the unmerged stale record, as the approved slice-2 amendment requires. Generate the nine declaring-file records with actual permitted plant.ts runs before review.",
+  "test": "The nine real plant runs remain pending remote execution. No replacement plant record was typed by hand.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1497"]
+}

@@ -1,8 +1,6 @@
 /**
  * The RPC shapes of the Cloudflare objects: what each Durable Object binding answers, and the reply
  * schemas that carry a refusal across the RPC as data.
- *
- * @stability unstable
  */
 import { type Brand, type Effect, Schema } from "effect";
 import { Session, SigningRefused, type Writer } from "../access/SessionManager.ts";
@@ -21,6 +19,7 @@ import type { CodeEvent, Install, Installed } from "../runtime/Code.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import type { Ask, Reply as HandsReply } from "../runtime/HandsTasks.ts";
 import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
+import type { News, Published } from "../runtime/News.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
 import type { Publication } from "../runtime/WatcherManager.ts";
 import type * as SettingsStart from "../settings/Start.ts";
@@ -32,7 +31,6 @@ import type { Answer } from "../transport/Wire.ts";
  * Schema for a mail delivery's answer over Project RPC: `ok` with the delivery's receipt, `refused`
  * with its `MailRefusal`, or `full` with the target's unread letters and its inbox cap.
  *
- * @stability unstable
  * @category schemas
  */
 export const MailReplies = Schema.TaggedUnion({
@@ -58,7 +56,6 @@ export const MailReplies = Schema.TaggedUnion({
 /**
  * The type a `MailReplies` answer decodes to.
  *
- * @stability unstable
  * @category models
  */
 export type MailReply = typeof MailReplies.Type;
@@ -66,7 +63,6 @@ export type MailReply = typeof MailReplies.Type;
 /**
  * The branded string that names one client's connection at the door.
  *
- * @stability unstable
  * @category models
  */
 export type ConnectionId = string & Brand.Brand<"ConnectionId">;
@@ -86,15 +82,14 @@ const refusals = {
  * Schema for a signing request's answer over Project RPC: `ok` with the `Session`, `SigningRefused`
  * with its reason, or `NotGranted`.
  *
- * @stability unstable
  * @category schemas
  */
 export const SigningReply = Schema.TaggedUnion({ ok: { value: Session }, ...refusals });
+
 /**
  * Schema for a commit's answer over Project RPC: `ok` with the `Appended` entry, `SigningRefused`
  * with its reason, or `NotGranted`.
  *
- * @stability unstable
  * @category schemas
  */
 export const CommitReply = Schema.TaggedUnion({ ok: { value: Appended }, ...refusals });
@@ -103,7 +98,6 @@ export const CommitReply = Schema.TaggedUnion({ ok: { value: Appended }, ...refu
  * Schema for a Project process call's answer: its value, or its checked refusal as data across the
  * RPC. The value's own type comes from the call; the schema checks the refusal.
  *
- * @stability unstable
  * @category schemas
  */
 export const ProcessReplies = Schema.TaggedUnion({
@@ -114,7 +108,6 @@ export const ProcessReplies = Schema.TaggedUnion({
 /**
  * The type of a `ProcessReplies` answer whose `ok` value is `A`.
  *
- * @stability unstable
  * @category models
  */
 export type ProcessReply<A> =
@@ -125,7 +118,6 @@ export type ProcessReply<A> =
  * Schema for a child start's answer over Project RPC: `Started`, or its `ChildrenError` refusal as
  * data. A storage failure fails the call itself.
  *
- * @stability unstable
  * @category schemas
  */
 export const ChildReplies = Schema.TaggedUnion({
@@ -137,7 +129,6 @@ export const ChildReplies = Schema.TaggedUnion({
  * Schema for a child stop's answer over Project RPC: done, or its `ChildrenError` refusal as data. A
  * storage failure fails the call itself.
  *
- * @stability unstable
  * @category schemas
  */
 export const StopReplies = Schema.TaggedUnion({
@@ -149,7 +140,6 @@ export const StopReplies = Schema.TaggedUnion({
  * Schema for a program's watch answer over Project RPC: `Watched`, or its `MonitorsError` refusal
  * as data. A storage failure fails the call itself.
  *
- * @stability unstable
  * @category schemas
  */
 export const MonitorReplies = Schema.TaggedUnion({
@@ -161,7 +151,6 @@ export const MonitorReplies = Schema.TaggedUnion({
  * The door's calls on the Project, as Effects: connecting a client, its hello, routing its calls,
  * knocks and grants, and the signing and appends a process asks for.
  *
- * @stability unstable
  * @category models
  */
 export interface GatewayCalls {
@@ -215,10 +204,14 @@ export interface GatewayCalls {
 type RemoteCall<F> = F extends (...args: infer A) => infer B ? (...args: A) => Promise<Effect.Success<B>> : never;
 
 type Remote<S> = { [K in keyof S]: RemoteCall<S[K]> };
+
 type DoorService = GatewayCalls;
+
 /** The manager's calls an object may make over RPC: no guard, and no trusted watcher. */
 type Processes = ProcessCalls;
+
 type Gateways = (typeof Connections)["Service"];
+
 type Runner = (typeof ProgramRunner)["Service"];
 
 /** One ProcessManager call over Project RPC: a refusal comes back as reply data. */
@@ -230,7 +223,6 @@ type ProcessCall<F> = F extends (...args: infer A) => Effect.Effect<infer B, unk
  * The Project Durable Object's RPC binding: the ledger's calls, the door's calls, code install and
  * lookup, settings, processes and mail. A process call answers its refusal as `ProcessReply` data.
  *
- * @stability unstable
  * @category models
  */
 export type ProjectBinding = Rpc.DurableObjectBranded &
@@ -278,7 +270,7 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
         trace?: { traceId: string; spanId: string },
       ) => Effect.Effect<Appended>
     >;
-    publish: RemoteCall<(client: string, update: unknown) => Effect.Effect<typeof Publication.Type>>;
+    publish: RemoteCall<(client: string, update: Published) => Effect.Effect<typeof Publication.Type>>;
     brain: RemoteCall<(event: typeof BrainEvent.Type) => Effect.Effect<Appended>>;
     /** The registered name whose Process object holds this process ID's storage. */
     processObject: RemoteCall<(pid: string) => Effect.Effect<string>>;
@@ -303,7 +295,6 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
  * A Process Durable Object's RPC binding: the runner's `msg`, `open`, `due`, `restart` and `swap`,
  * plus its configuration, usage, alarm and abort calls.
  *
- * @stability unstable
  * @category models
  */
 export type ProcessBinding = Rpc.DurableObjectBranded &
@@ -321,21 +312,19 @@ export type ProcessBinding = Rpc.DurableObjectBranded &
 /**
  * A Connection Durable Object's RPC binding: `fetch`, `ring`, `notify` and `probe`.
  *
- * @stability unstable
  * @category models
  */
 export type ConnectionBinding = Rpc.DurableObjectBranded &
   Remote<{
     fetch: (request: Request) => Effect.Effect<Response>;
     ring: (stream: string, rev: number) => Effect.Effect<void>;
-    notify: (client: string, news: unknown) => Effect.Effect<void>;
+    notify: (client: string, news: News) => Effect.Effect<void>;
     probe: (session: string) => Effect.Effect<number | null>;
   }>;
 
 /**
  * The Record Durable Object's RPC binding: the calls of `RecordCalls`.
  *
- * @stability unstable
  * @category models
  */
 export type RecordBinding = Rpc.DurableObjectBranded & Remote<RecordCalls>;

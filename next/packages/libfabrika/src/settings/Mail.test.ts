@@ -11,16 +11,20 @@ import { ByteSize, Effect, Exit, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import type { TestContext } from "vitest";
 import * as Declarations from "./Declarations.ts";
+import * as Sources from "./Fabrika.ts";
 import * as Files from "./Files.ts";
-import * as Sources from "./Sources.ts";
 import type { TomlDocument } from "./Toml.ts";
 
 const KIB = 1_024;
+
 const MIB = 1_024 * KIB;
+
 /** The cap's bounds: at least one letter, and no more than experiment 295 measured. */
 const UNREAD = { least: 1, most: 16_384 };
+
 /** The chunk's bounds: room for a part's own fields, and half the ledger's 2,000,000-byte row. */
 const CHUNK = { least: KIB, most: MIB };
+
 /** `catchUp` holds every unread letter at once: a full inbox of full chunks fits one eighth of 128 MB. */
 const HELD = 16 * MIB;
 

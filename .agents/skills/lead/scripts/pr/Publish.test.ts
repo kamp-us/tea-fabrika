@@ -12,9 +12,12 @@ import * as PushesTest from "./PushesTest.ts";
 
 /** Branch names of every kind the commit step meets: the bot's, a quest's backup, a person's, a bare one. */
 const Branch = Schema.Literals(["fabrikalfa/a", "fabrikalfa/quest-wip", "person/b", "c"]);
+
 const Sha = Schema.Literals(["1".repeat(40), "2".repeat(40), "a".repeat(40)]);
+
 /** No PR on the branch yet, an open draft, or an open ready one. */
 const Already = Schema.NullOr(Schema.Boolean);
+
 const text = { title: "T1 tests: a law", body: Publish.DRAFT_BODY };
 
 const open = (number: number, head: string, draft: boolean): PullRequest => ({
@@ -33,6 +36,7 @@ const memory = (
   const remote = PushesTest.remote();
   const github = PullRequestsTest.world(prs);
   const layer = Layer.mergeAll(PushesTest.layer(remote, failing.pushes), PullRequestsTest.layer(github, failing.prs));
+
   return { remote, github, layer };
 };
 
@@ -44,6 +48,7 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
     { b: Branch, head: Sha, already: Already },
     ({ b, head, already }) => {
       const m = memory(already === null ? [] : [open(7, b, already)]);
+
       return Effect.gen(function* () {
         yield* Publish.publish(ask(b, head));
         expect(yield* Recorder.calls(Pushes)).toEqual([
@@ -77,6 +82,7 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
     { b: Branch, head: Sha },
     ({ b, head }) => {
       const m = memory([], { pushes: { leakGrep: new LeakGrepRefused({ reason: "private_word" }) } });
+
       return Effect.gen(function* () {
         const e = yield* Effect.flip(Publish.publish(ask(b, head)));
         expect(e._tag).toBe("LeakGrepRefused");
@@ -92,6 +98,7 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
     { b: Branch, head: Sha },
     ({ b, head }) => {
       const m = memory([], { pushes: { push: new PushRefused({ reason: "rejected" }) } });
+
       return Effect.gen(function* () {
         const e = yield* Effect.flip(Publish.publish(ask(b, head)));
         expect(e._tag).toBe("PushRefused");

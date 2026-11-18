@@ -38,17 +38,21 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { MESSAGE, optionMessage, TYPE_MESSAGE } from "./law-shape.ts";
 
 const CODE = "fabrika(law-shape)";
+
 const ROOT = resolve(import.meta.dirname, "..");
+
 const runs = { seed: 119120, numRuns: 4 };
+
 const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;
 
 /** A fire's line and what it says, or the message a planted line should fire with: `null` for none. */
 type Fire = readonly [number, string];
-type Fires = string | null;
+type Fires = typeof MESSAGE | typeof TYPE_MESSAGE | ReturnType<typeof optionMessage> | null;
 
 /** Lints planted files as `pnpm lint` does, and answers the law-shape fires in one of them, each as its line and message. */
 const linted = async (files: Readonly<Record<string, string>>): Promise<(file: string) => readonly Fire[]> => {
   const result = await plant(files, (f): Fire => [f.line, f.message]);
+
   return (file) => result(CODE, file);
 };
 
@@ -221,17 +225,23 @@ it("fires on exactly the tests that are neither a property nor labeled, and on e
       }),
       async ({ a, id, star, title, reason, order }) => {
         const head = preamble(a, star);
+
         const files = LABELS.map((label) => {
           const lines = order.flatMap((i) => {
             const make = cases[i];
+
             return make === undefined ? [] : [make({ a, id, title, label, reason })];
           });
+
           const text = [...head, ...lines.map(([line]) => line)].join("\n");
+
           const expected = lines.flatMap(([, fires], i): Fire[] =>
             fires === null ? [] : [[head.length + i + 1, fires]],
           );
+
           return { path: `next/packages/libfabrika/src/${label}.test.ts`, text, expected };
         });
+
         const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
 
         for (const { path, text, expected } of files) {
@@ -266,13 +276,16 @@ it("counts expectTypeOf and assertType only from a value import of vitest or @ef
     fc.asyncProperty(fc.record({ reason: words, nested: fc.boolean() }), async ({ reason, nested }) => {
       const files = checks.map(([source, call, fires], i) => {
         const law = `it("type: ${reason}", () => { ${call} });`;
+
         const text = [
           'import { describe, it } from "vitest";',
           source,
           nested ? `describe("${reason}", () => { ${law} });` : law,
         ].join("\n");
+
         return { source, path: `next/packages/libfabrika/src/types/Check${i}.test.ts`, text, fires };
       });
+
       const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
       const fired = Object.fromEntries(files.map(({ source, path }) => [source, result(path)]));
       const expected = Object.fromEntries(files.map(({ source, fires }) => [source, fires ? [[3, TYPE_MESSAGE]] : []]));
@@ -306,6 +319,7 @@ it("counts the shared runner, property from Testing.test-support.ts, as a proper
       const files = sources.map(([source, call, fires], i) => {
         const run = `${call}(fc.nat(), () => Effect.void, { numRuns: 1 })`;
         const body = nested ? `Effect.gen(function* () { yield* ${run}; })` : run;
+
         const text = [
           'import { it } from "@effect/vitest";',
           'import { Effect } from "effect";',
@@ -313,8 +327,10 @@ it("counts the shared runner, property from Testing.test-support.ts, as a proper
           source,
           `it.effect("${title}", () => ${body});`,
         ].join("\n");
+
         return { source, path: `next/packages/libfabrika/src/processes/Shared${i}Test.ts`, text, fires };
       });
+
       const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
       const fired = Object.fromEntries(files.map(({ source, path }) => [source, result(path)]));
       const expected = Object.fromEntries(files.map(({ source, fires }) => [source, fires ? [[5, MESSAGE]] : []]));
@@ -332,9 +348,11 @@ it("reads next/ and .agents/ tests and shared suites, and leaves today's tests a
         ...LABELS.map((label) => `it("${label}: kept", () => ${ok(label)});`),
         `export const suite = (sql: unknown) => describe("s", () => { it("${title}", () => {}); });`,
       ].join("\n");
+
       const read = ["next/a.test.ts", "next/a.test.tsx", "next/a/SinkTest.ts", ".agents/skills/x/a.test.ts"];
       const left = ["next/a.ts", "packages/a.test.ts", "apps/a.test.ts", "programs/a.test.ts", "docs/a.test.ts"];
       const caller = "next/a/sink.test.ts";
+
       const result = await linted({
         ...Object.fromEntries([...read, ...left].map((path) => [path, text])),
         [caller]: 'import * as SinkTest from "./SinkTest.ts";\nSinkTest.suite(nodeSql);\n',
@@ -471,6 +489,7 @@ const lintOne = (text: string) => {
     const file = join(dir, "next/unit.test.ts");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, text);
+
     return spawnSync(process.execPath, [join(ROOT, "oxlint-plugins/lint.ts"), "next/unit.test.ts"], {
       cwd: dir,
       encoding: "utf8",
@@ -499,6 +518,7 @@ it("scenario: T971 L4 lint.ts blocks a type: law whose body runs a check, with t
   const ran = lintOne(
     'import { expect, expectTypeOf, it } from "vitest";\n\nit("type: one is a number", () => {\n  expectTypeOf(1).toBeNumber();\n  expect(1).toBe(1);\n});\n',
   );
+
   expect(ran.stdout).toContain(CODE);
   expect(ran.stdout).not.toMatch(/Advice|does not block/);
   expect(ran.stdout).toContain(TYPE_MESSAGE);

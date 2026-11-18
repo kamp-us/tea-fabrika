@@ -51,11 +51,13 @@ describe("box rm, today's tooling", () => {
             if (change === "conflict") {
               const hash = f.git(f.work, "rev-parse", "HEAD:tracked");
               f.git(f.work, "update-index", "--force-remove", "tracked");
+
               const ran = spawnSync("/usr/bin/git", ["-C", f.work, "update-index", "--index-info"], {
                 input: `100644 ${hash} 1\ttracked\n100644 ${hash} 2\ttracked\n100644 ${hash} 3\ttracked\n`,
                 encoding: "utf8",
                 env: f.env,
               });
+
               expect(ran.status).toBe(0);
             }
 
@@ -118,6 +120,7 @@ describe("box rm, today's tooling", () => {
                 if (v.descendant) {
                   const kept = `refs/keep/${v.name}`,
                     tree = f.git(f.main, "rev-parse", `${kept}^{tree}`);
+
                   const child = f.git(f.main, "commit-tree", tree, "-p", tip, "-m", "retained descendant");
                   f.git(f.main, "update-ref", kept, child);
                 }
@@ -216,6 +219,7 @@ describe("box rm, today's tooling", () => {
   // traceback. Missing refs or objects must keep too; a later guard also catches those.
   it("T318 a malformed pointer or missing refs or objects keeps the pair with one result line", () => {
     const word = fc.stringMatching(/^[a-z]{1,12}$/);
+
     const pointer = fc.oneof(
       fc.constant(""),
       word,
@@ -223,6 +227,7 @@ describe("box rm, today's tooling", () => {
       word.map((s) => `gitdir: ${s}\n\n`),
       word.map((s) => `gitdir: a\0${s}`),
     );
+
     fc.assert(
       fc.property(input, pointer, (v, text) => {
         for (const kind of ["pointer", "refs", "objects"]) {
@@ -250,6 +255,7 @@ describe("box rm, today's tooling", () => {
             fixture(v, (f) => {
               const marker = join(f.dir, "executed"),
                 program = join(f.dir, "program");
+
               writeFileSync(program, `#!/bin/sh\nprintf bad >> '${marker}'\ncat\n`, { mode: 0o755 });
               const include = join(f.dir, "included-config");
               writeFileSync(include, `[core]\nfsmonitor = ${program}\n`);
@@ -279,6 +285,7 @@ describe("box rm, today's tooling", () => {
 
               writeFileSync(join(f.dir, "post-index-change"), readFileSync(program), { mode: 0o755 });
               const index = readFileSync(join(f.data, "index"));
+
               const got = f.run(
                 f.name,
                 kind === "inherited"
@@ -289,6 +296,7 @@ describe("box rm, today's tooling", () => {
                     }
                   : {},
               );
+
               expect(got.code, got.text).toBe(dirty ? 1 : 0);
               expect(got.text).toMatch(dirty ? /^kept box / : /^removed box /);
               expect(existsSync(marker)).toBe(false);

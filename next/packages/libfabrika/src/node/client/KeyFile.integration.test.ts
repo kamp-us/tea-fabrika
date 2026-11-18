@@ -8,7 +8,10 @@
 // the second reads it, and no other key is left in the folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it, runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import type { TestContext } from "vitest";
 import { ClientKey } from "../../transport/ClientKey.ts";

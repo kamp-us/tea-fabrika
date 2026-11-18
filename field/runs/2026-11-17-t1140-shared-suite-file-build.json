@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1140-shared-suite-file-build",
+  "ticket": "tea-fabrika#1140",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1497",
+  "started": "2026-11-17T01:09:31-08:00",
+  "ended": "2026-11-17T01:16:11-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": null,
+  "effort": null,
+  "outcome": "parked",
+  "why": "The approved slice-2 amendment for next/ and plant tooling is implemented from published head f5ec4e679073c19953f6945025a3c54a768a1c4d. Law.ts captures the first V8 stack frame outside its package source at registration, restores Error.stackTraceLimit, and writes meta.file for every member. toTestOptions stays pure. Plants.records uses that declaring file for records and refusals, falling back to the runner. plant.ts changed only in its explanation. Removed only the signed plan's one unmerged stale LedgerTurnReads.test.ts plant record. The historical ticket fields stay unchanged; verified tracker ticket 1140 is recorded in a separate correction note. On pinned Node 26.13.0 and pnpm 12.16.1, with TYPESAFE_API_KEY unset, the in-memory Plants.test.ts law first failed at seed 119120 on a runner-file refusal, then passed after the fix. Narrow oxlint on the three product paths passed with zero findings, formatting and git diff --check passed, both note rows passed the existing field schema, and plancheck --approved passed with body 6d31e3a40575. Whole lint, compiler, CI and publication were outside this worker's reservation. The real plant harness and nine shared-suite plants were not run locally under decision 0584. Their exact runner titles and temporary mutation inputs were prepared for permitted remote execution, with restoration checks. No plant records were invented. Build is not complete until those real records and the renamed integration law are proved on the assembled head. layer-rules.json remains held and the known RelationsTest.ts import failure is unresolved. Later gpt-6.2-sol/xhigh review found two source-path mismatches; both were fixed, but this row's earlier checks predate those fixes and do not validate them. See the two 2026-11-17 ticket 1140 friction notes. No local checks were rerun after the fixes; automatic CI and protected execution remain pending.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6.67,
+  "note": "2026-11-16-slice2-stale-plant-record-removed",
+  "costUsd": null,
+  "billed": null
+}

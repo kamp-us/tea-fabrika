@@ -16,6 +16,7 @@ export const startDev = Effect.fn("instance.startDev")(function* (built: Omit<Bu
   const path = yield* Path.Path;
   const identity = options.start ?? (yield* (yield* ProcessIdGenerator).next);
   const span = yield* Effect.currentSpan;
+
   const config = Settings.make({
     settings: options.settings,
     start: identity,
@@ -35,7 +36,9 @@ export const startDev = Effect.fn("instance.startDev")(function* (built: Omit<Bu
     ...(options.mail === undefined ? {} : { mail: options.mail }),
     ...(options.starts === undefined ? {} : { starts: options.starts }),
   });
+
   const checked = yield* readSettings({ INSTANCE: JSON.stringify(config) });
+
   return yield* start(
     {
       name: config.name,
@@ -57,6 +60,7 @@ export const startDev = Effect.fn("instance.startDev")(function* (built: Omit<Bu
         Interaction.layerNonInteractive(),
         AuthProvidersLive,
       );
+
       // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
       return deploy({ stack: stack(built, checked, local), stage: "local", dev: true, scope }).pipe(
         Effect.provide(localState()),

@@ -21,7 +21,7 @@ const FIELDS = "databaseId,workflowName,event,headBranch,headSha,status,conclusi
 const Listed = Schema.fromJsonString(
   Schema.Array(
     Schema.Struct({
-      databaseId: Schema.Number,
+      databaseId: Schema.Finite,
       workflowName: Schema.String,
       event: Schema.String,
       headBranch: Schema.String,
@@ -35,7 +35,7 @@ const Listed = Schema.fromJsonString(
 
 /** `gh run list --json`'s rows, as `Run`s; gh writes an empty conclusion before a run completes. */
 export const runsIn = (out: string): Effect.Effect<ReadonlyArray<Run>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(Listed)(out.trim() || "[]"), (rows) =>
+  Effect.map(Schema.decodeEffect(Listed)(out.trim() || "[]"), (rows) =>
     rows.map((r): Run => ({
       id: r.databaseId,
       workflow: r.workflowName,
@@ -64,7 +64,7 @@ export const layer = (
           const ran = yield* run("gh", args, cwd);
 
           if (ran.code !== 0) {
-            return yield* new WorkflowRunsError({
+            return yield* WorkflowRunsError.make({
               reason: `gh ${args.slice(0, 2).join(" ")} exited ${ran.code}: ${lastLine(ran)}`,
             });
           }
@@ -73,18 +73,19 @@ export const layer = (
         },
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new WorkflowRunsError({ reason: `gh could not start: ${e.message}` })),
+          Effect.fail(WorkflowRunsError.make({ reason: `gh could not start: ${e.message}` })),
         ),
       );
 
       const list = Effect.fn("WorkflowRunsGh.list")(function* (args: ReadonlyArray<string>) {
         const out = yield* gh(["run", "list", "-R", repo, "--json", FIELDS, "-L", String(LIMIT), ...args]);
+
         const runs = yield* runsIn(out).pipe(
-          Effect.mapError(() => new WorkflowRunsError({ reason: "gh run list answered a shape we do not read" })),
+          Effect.mapError(() => WorkflowRunsError.make({ reason: "gh run list answered a shape we do not read" })),
         );
 
         if (runs.length >= LIMIT) {
-          return yield* new WorkflowRunsError({
+          return yield* WorkflowRunsError.make({
             reason: `${LIMIT} or more runs in one list: one read cannot hold all`,
           });
         }

@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1135-input-equality-lead-checks",
+  "ticket": "kamp-us/tea-fabrika#1135",
+  "pr": "kamp-us/tea-fabrika#1566",
+  "started": "2026-11-17T14:08:16.305Z",
+  "ended": "2026-11-17T14:12:18.050Z",
+  "parent": "2026-11-17-t1135-input-equality-repair",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's L11 lead-tooling equality repair passed all 30 compiler projects and all 18 normal lint parts on the normal main merge 1a8d3cb106b9435d4a1f87b2917bdba246eb8501. Normal format changed no tracked bytes or modes. All 5,265 source entries, HEAD, index and protected files stayed unchanged. The independent source reader and lead accepted the pure repair; its three reviewed blobs remain unchanged after the six exact incoming main files. Actual L11 cases wait for a separate source-pin update.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.029083333333333,
+  "note": "The first actual comparison and first repair proof remain failed. A private earlier-graph format receipt was overwritten by the later format; its original full manifest is unavailable, while its actual summary remains in tool history. Current-main checks use fresh retained receipts with unique names and overwrite refusal. No old raw data was reconstructed or credited for this graph.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "driver_caused": true,
+  "head": "1a8d3cb106b9435d4a1f87b2917bdba246eb8501",
+  "plan": "d022391308a6de07b30c49617bd697405284d21ec58d224ab7d71ad41c51d01d",
+  "checks": {
+    "node": "26.13.0",
+    "pnpm": "12.16.1",
+    "paidKeyUnset": true,
+    "overrides": false,
+    "phases": {
+      "format": {
+        "started": "2026-11-17T14:08:16.305Z",
+        "ended": "2026-11-17T14:08:49.129Z",
+        "pid": 12784,
+        "code": 0
+      },
+      "typecheck": {
+        "started": "2026-11-17T14:10:41.550Z",
+        "ended": "2026-11-17T14:10:54.665Z",
+        "pid": 20756,
+        "code": 0
+      },
+      "lint": {
+        "started": "2026-11-17T14:11:44.648Z",
+        "ended": "2026-11-17T14:12:18.050Z",
+        "pid": 24195,
+        "code": 0
+      }
+    },
+    "projects": 30,
+    "parts": 18,
+    "sources": 5265,
+    "unchanged": true,
+    "protected": true,
+    "tsgoClear": true,
+    "actualL11": false
+  },
+  "main": "bc358e659e0499a4d50d2cc6d2483c36c24ad216",
+  "lock": "1800791fae8716cfb063adc7bd50822a0bfe07d7980eb599543e07c948032c95"
+}

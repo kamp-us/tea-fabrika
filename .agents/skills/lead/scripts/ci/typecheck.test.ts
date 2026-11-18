@@ -8,12 +8,18 @@ import * as ChecksTest from "./ChecksTest.ts";
 import { errorsIn, type Found, LINES, logText, summary, type Verdict, verdict, wait, WIDTH } from "./typecheck.ts";
 
 const options = { seed: 119120, numRuns: 300 };
+
 const part = fc.stringMatching(/^[a-z][a-z0-9-]{0,8}$/);
+
 const dir = fc.array(part, { minLength: 1, maxLength: 3 }).map((ps) => ps.join("/"));
+
 const file = fc.tuple(fc.array(part, { maxLength: 2 }), part).map(([ps, f]) => [...ps, `${f}.ts`].join("/"));
+
 const message = fc.stringMatching(/^[A-Za-z][A-Za-z' ]{0,40}[a-z.]$/);
+
 // A made-up checkout, in the shape a runner lays one out: `.../work/<name>/<name>`.
 const root = "/w/work/quest/quest";
+
 const error = (path: string, text: string) => `${path}(3,7): error TS2322: ${text}`;
 
 const found = (paths: ReadonlyArray<string>): ReadonlyArray<Found> =>
@@ -57,6 +63,7 @@ describe("CI's typecheck log gives tsc's errors, today's tooling", () => {
       `p typecheck: ${error("src/a.ts", `Type 'typeof import("${root}/p/src/b")' is wrong.`)}`,
       `p typecheck:   Type 'typeof import("${root}/p/src/c")' is not 'X'.`,
     ].join("\n");
+
     const [e] = errorsIn(out);
     expect(e?.text).toBe(
       `${error("p/src/a.ts", `Type 'typeof import("p/src/b")' is wrong.`)}\n  Type 'typeof import("p/src/c")' is not 'X'.`,
@@ -72,6 +79,7 @@ describe("CI's typecheck log gives tsc's errors, today's tooling", () => {
       "[ELIFECYCLE] Command failed with exit code 1.",
       '  × "pnpm recursive run" failed in /w/quest-typecheck/packages/p',
     ].join("\n");
+
     expect(errorsIn(out)).toEqual([
       {
         path: "packages/p/src/a.ts",
@@ -88,6 +96,7 @@ describe("CI's typecheck log gives tsc's errors, today's tooling", () => {
       "packages/p typecheck:   Property 'x' is missing.",
       "packages/q typecheck:   not an error's line",
     ].join("\n");
+
     expect(errorsIn(out).map((e) => e.text)).toEqual([
       `${error("packages/p/src/a.ts", "Type 'A' is wrong.")}\n  Property 'x' is missing.`,
     ]);
@@ -213,6 +222,7 @@ describe("a job's log as the command printed it, today's tooling", () => {
       "2026-11-11T18:11:03.9758354Z apps/fabrika typecheck: Failed",
       `2026-11-11T18:11:03.9768977Z   \u001B[31m×\u001B[39m "pnpm recursive run" failed in ${root}/`,
     ].join("\n");
+
     expect(errorsIn(logText(log))).toEqual([
       {
         path: "apps/fabrika/test-window.ts",
@@ -239,6 +249,7 @@ describe("the wait for CI's typecheck job, today's tooling", () => {
   const head = "c".repeat(40);
   const main = new URL("../../../../..", import.meta.url).pathname.replace(/\/$/, "");
   const job = (status: string, conclusion: string | null) => Option.some({ id: 9, status, conclusion });
+
   // The verdict after these polls and this log, checked by `law` once the wait ends.
   const waited = (
     polls: ReadonlyArray<ChecksTest.Poll>,

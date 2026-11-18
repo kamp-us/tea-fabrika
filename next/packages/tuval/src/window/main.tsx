@@ -26,7 +26,9 @@ import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
-import { Effect, Option, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -47,16 +49,23 @@ type PageProps = {
 };
 
 const pickLink = (m: WindowModel) => m.link;
+
 const pickTiles = (m: WindowModel) => m.tiles;
+
 const pickTezgah = (m: WindowModel) => m.tezgah?.client ?? null;
+
 /** The window's tie to its person's tezgah, whose notes of where DOM focus last sat in each tile
  *  `lastCursor` reads. */
 const pickTie = (m: WindowModel) => m.tezgah;
+
 /** Whether the window's read of its person's tezgah found no process: the boot starts only the
  *  founder's tezgah, so any other person's window finds none until one is started for them. */
 const pickNoTezgah = (m: WindowModel) => m.tezgah?.reach._tag === "missing";
+
 const pickPrefix = (m: WindowModel) => m.prefix;
+
 const pickPolite = (m: WindowModel) => m.polite;
+
 const pickSize = (m: WindowModel) => m.size;
 
 const Waiting = ({
@@ -70,6 +79,7 @@ const Waiting = ({
 }) => {
   const command = `node next/apps/fabrika/grant.ts client ${origin} ${fingerprint} --code=${code} --key=<person-key-file>`;
   const clipboard = useClipboard({ value: command });
+
   return (
     <main className="screen" aria-labelledby="waiting-title">
       <h1 id="waiting-title">Let this window in</h1>
@@ -109,13 +119,15 @@ const TileBody = ({
   readonly windowFor: PageProps["windowFor"];
 }) => {
   const [row, send] = useRuntime(run, (m) => m.tiles.find((t) => t.id === tile.id));
+
   const [shown] = useRuntime(run, (m) => {
     const t = m.tiles.find((t) => t.id === tile.id);
+
     return t?.last ? m.client.views[t.last] : undefined;
   });
+
   const registration = windowFor(tile.program);
-  const data =
-    registration && shown ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view)) : null;
+  const data = registration && shown ? Option.getOrNull(Schema.decodeOption(registration.data)(shown.view)) : null;
 
   // The tile guideline's empty state: one word where the view will start, and on an ended tile in
   // place of the ended process's last view.
@@ -154,6 +166,7 @@ const prefixHints = (table: Keys.Table): ReadonlyArray<string> =>
       .filter((k) => k.startsWith("<prefix>"))
       .map((k) => k.slice("<prefix>".length))
       .map((k) => PRINTED[k] ?? k);
+
     return keys.length === 0 ? [] : [`${keys.join(" ")} ${row.word}`];
   });
 
@@ -184,6 +197,7 @@ const useKeys = (run: LiveWindow, machine: PageProps["machine"], table: Keys.Tab
   useEffect(() => {
     // The presses this listener handed the run that it may not have read yet, the listener's own.
     const line: { unread: Unread } = { unread: { from: run.getState().presses, keys: [] } };
+
     const listener = (e: KeyboardEvent) => {
       const key = Keys.spell(e);
 
@@ -207,7 +221,9 @@ const useKeys = (run: LiveWindow, machine: PageProps["machine"], table: Keys.Tab
 
       send(press);
     };
+
     document.addEventListener("keydown", listener, true);
+
     return () => document.removeEventListener("keydown", listener, true);
   }, [run, machine, table, send]);
 
@@ -229,9 +245,12 @@ const useSize = (send: (msg: WindowMsg) => void) => {
         send({ type: "size", width: Math.max(0, width - 2 * GAP), height: Math.max(0, height - 2 * GAP) });
       }
     });
+
     observer.observe(element);
+
     return () => observer.disconnect();
   }, [send]);
+
   return area;
 };
 
@@ -250,6 +269,7 @@ const focusAt = (target: EventTarget | null) => {
   const element = target instanceof Element ? target : null;
   const tile = element?.closest("section[data-tile]")?.getAttribute("data-tile") ?? null;
   const cursor = element?.closest("[data-cursor]")?.getAttribute("data-cursor") ?? null;
+
   return tile === null ? null : { tile, cursor: cursor !== null && isCursor(cursor) ? cursor : null };
 };
 
@@ -264,7 +284,9 @@ const useFocusIn = (send: (msg: WindowMsg) => void) =>
         send({ type: "focus", ...at });
       }
     };
+
     document.addEventListener("focusin", listener, true);
+
     return () => document.removeEventListener("focusin", listener, true);
   }, [send]);
 
@@ -318,6 +340,7 @@ const Desk = (props: PageProps) => {
     layout: space === undefined ? "" : JSON.stringify(space.layout),
   });
   const asked = prefix._tag === "asking" ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
+
   const line = none ? (
     NO_TEZGAH
   ) : asked !== undefined ? (
@@ -331,7 +354,9 @@ const Desk = (props: PageProps) => {
   ) : (
     tileName(focused)
   );
+
   const said = typeof line === "string" ? <span className="says">{line}</span> : line;
+
   return (
     <>
       <div className="area" ref={area}>
@@ -378,6 +403,7 @@ const Page = (props: PageProps) => {
   useKeys(props.run, props.machine, props.keys, send);
   const view = client === null ? null : optimisticState(client);
   const named = (id: string) => view?.tiles.find((t) => t.id === id);
+
   // The status messages of the current burst, as one line (0504): a refusal, or a tile without focus
   // whose process ended. A refusal's words are those of the program its tile shows.
   const burst = spoken(
@@ -385,14 +411,18 @@ const Page = (props: PageProps) => {
     (id) => named(id) ?? null,
     (tile) => props.windowFor(tile.program),
   );
+
   const roomless = polite === null ? undefined : named(polite.tile);
+
   const words = [
     ...(none ? [NO_TEZGAH] : []),
     ...(burst === "" ? [] : [burst]),
     ...(prefix._tag === "armed" ? ["prefix"] : []),
     ...(roomless === undefined ? [] : [noRoom(roomless)]),
   ].join(" ");
+
   const asked = prefix._tag === "asking" ? named(prefix.tile) : undefined;
+
   const content =
     link._tag === "waiting_grant" ? (
       <Waiting code={link.code} fingerprint={link.fingerprint} origin={props.origin} />
@@ -425,6 +455,7 @@ const Page = (props: PageProps) => {
         <Desk {...props} />
       </div>
     );
+
   return (
     <>
       {content}
@@ -449,6 +480,7 @@ export const mount = Effect.fn("Window.mount")(function* (element: HTMLElement, 
           <Page {...props} />
         </StrictMode>,
       );
+
       return root;
     }),
     (root) => Effect.sync(() => root.unmount()),

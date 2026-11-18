@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e21-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:27:01-08:00",
+  "ended": "2026-11-15T20:33:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice E21 of the Effect sweep: multipleCatchTag in .agents/ (lead tooling). Recount with only this check at error: 2 hits, sizecap.ts:436 (2 consecutive catchTag) and records.ts:778 (3). Both fixed by hand edit into one Effect.catchTags each; the caught errors and what each handler answers are unchanged, and the ShowHelp comment stays. Locked with an overrides entry in .agents/tsconfig.json (include **/*.ts, relative to that folder). 0 hits left, 0 waiting on PR 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Tests run at the branch head: records.test.ts and sizecap.test.ts, 50 passed. pnpm lint passed with NODE_OPTIONS=--max-old-space-size=6144. Recount for .agents/tsconfig.json: 0 multipleCatchTag.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "two consecutive catchTag calls appended to sizecap.ts: multipleCatchTag error at the planted line",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

@@ -24,11 +24,13 @@ export const CI_SPEED_RUN =
  */
 export const lintCiSpeed = (text: string): string[] => {
   const errors: string[] = [];
+
   const require = (holds: boolean, reason: string) => {
     if (!holds) {
       errors.push(`ci-speed.yaml: ${reason}`);
     }
   };
+
   let workflow: Record<string, unknown>;
 
   try {
@@ -88,6 +90,7 @@ export const lintCiSpeed = (text: string): string[] => {
 
       return typeof s["run"] === "string" ? s["run"] : String(s["uses"]).replace(/@.*$/, "@");
     });
+
   require(JSON.stringify(work) ===
     JSON.stringify([
       "actions/checkout@",
@@ -95,5 +98,6 @@ export const lintCiSpeed = (text: string): string[] => {
       CI_SPEED_INSTALL,
       "measure",
     ]), "K7: its steps are the checkout, the pnpm setup, its install and the measure, nothing else");
+
   return errors;
 };

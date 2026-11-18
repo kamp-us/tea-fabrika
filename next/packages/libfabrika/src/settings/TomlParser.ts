@@ -1,7 +1,5 @@
 /**
  * The only adapter that knows the TOML parser and serializer. Edit receives source positions and text.
- *
- * @stability unstable
  */
 import { stringify } from "@decimalturn/toml-patch";
 import { Effect, Layer, Predicate, Result, Schema } from "effect";
@@ -10,6 +8,7 @@ import * as Edit from "./internal/edit.ts";
 import { Conflict, Syntax, Toml, type TomlDocument, TomlError, Value } from "./Toml.ts";
 
 const range = (node: AST.HasLocs): Edit.Range => ({ start: node.range[0], end: node.range[1] });
+
 const key = (node: AST.TOMLKey): Array<string> => getStaticTOMLValue(node);
 
 // A terminator keeps 1.0.3's EOF-zero token range complete, without changing source offsets.
@@ -86,11 +85,14 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
   const value: Record<string, unknown> = {};
   const assignments: Array<Edit.Assignment> = [];
   const inlines: Array<Edit.Inline> = [];
+
   const sections: [Edit.Section, ...Array<Edit.Section>] = [
     { path: [], line: 1, end: tables[0] ? sectionStart(text, tables[0]) : text.length },
   ];
+
   const visit = (parent: Edit.Path, node: AST.TOMLKeyValue, inline?: Edit.Range): Edit.Assignment => {
     const path = [...parent, ...key(node.key)];
+
     const assignment = {
       ...range(node),
       path,
@@ -98,11 +100,13 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
       value: range(node.value),
       ...(inline ? { inline } : {}),
     };
+
     assignments.push(assignment);
 
     if (node.value.type === "TOMLInlineTable") {
       const container = range(node.value);
       const members = node.value.body.map((child) => visit(path, child, container));
+
       const commas = program.tokens
         .filter(
           (token) =>
@@ -112,6 +116,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
             !members.some((member) => token.range[0] >= member.start && token.range[1] <= member.end),
         )
         .map(range);
+
       inlines.push({ ...container, path, members, commas });
     }
 
@@ -162,6 +167,7 @@ const parseSource = Effect.fnUntraced(function* (text: string) {
 });
 
 const Scalar = Schema.Union([Schema.String, Schema.Boolean, Schema.Number.check(Schema.isFinite())]);
+
 const scalar = Schema.decodeUnknownSync(Scalar);
 
 // Validate before encoding: serializers can otherwise omit unsupported members or coerce values.
@@ -225,6 +231,7 @@ const render = Effect.fnUntraced(function* (path: ReadonlyArray<string>, value: 
 
         return text.slice(...node.key.range);
       });
+
       return { value: checked, text: source.slice(...assignment.value.range), keys };
     },
     catch: (cause: unknown) => failure(new Value({ cause }), 1),
@@ -238,6 +245,7 @@ const planned = <A>(result: Result.Result<A, Edit.Refusal>, path: ReadonlyArray<
 
 const parse = Effect.fnUntraced(function* (text: string): Effect.fn.Return<TomlDocument, TomlError> {
   const source = yield* parseSource(text);
+
   return {
     value: source.value,
     spans: [
@@ -255,6 +263,7 @@ const set = Effect.fnUntraced(function* (text: string, path: ReadonlyArray<strin
   const rendered = yield* render(path, value);
   const candidate = yield* planned(Edit.set(text, source, path, rendered.value, rendered.text, rendered.keys), path);
   yield* parseSource(candidate);
+
   return candidate;
 });
 
@@ -262,6 +271,7 @@ const remove = Effect.fnUntraced(function* (text: string, path: ReadonlyArray<st
   const source = yield* parseSource(text);
   const candidate = yield* planned(Edit.remove(text, source, path), path);
   yield* parseSource(candidate);
+
   return candidate;
 });
 
@@ -272,7 +282,6 @@ const remove = Effect.fnUntraced(function* (text: string, path: ReadonlyArray<st
  *
  * `parse` reads a document with the parser. `set` and `remove` first parse the text, then edit it by source position, and parse the edited text again before returning it. `set` also checks that the value can be written as TOML.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = Layer.succeed(Toml, Toml.of({ parse, set, remove }));

@@ -16,27 +16,37 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-09T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const PROJECT = "p34-workers";
+
 const PROGRAM = "p34/poison-fixture";
+
 // The fixture declares its own limit; the Worker's default policy says 3.
 const LIMIT = 2;
+
 // Bounded waits tied to observable facts. Backoff is 100 to 800 ms, so this is generous.
 const WAIT = 25_000;
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
     n = Buffer.alloc(4);
+
   n.writeUInt32BE(body.length);
+
   return Buffer.concat([n, body]);
 };
 
 const identity = () => {
   const pair = generateKeyPairSync("ed25519"),
     raw = pair.publicKey.export({ format: "jwk" }).x!;
+
   const bytes = Buffer.from(raw, "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -49,8 +59,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const v = Buffer.alloc(4);
       v.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         v,
@@ -60,6 +72,7 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)!
@@ -94,9 +107,11 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
+
   // A short home: a socket path has a 103-byte limit.
   const home = mkdtempSync(join(tmpdir(), "p34w-")),
     key = identity();
+
   const previousHome = process.env.FABRIKA_HOME;
   process.env.FABRIKA_HOME = home;
 
@@ -104,15 +119,18 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
     symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
     const poison = join(home, "poison.ts");
     writeFileSync(poison, poisonSource);
+
     const built = await Effect.runPromise(
       build({ out: join(home, "dist"), programs: { [PROGRAM]: poison } }).pipe(Effect.provide(NodeServices.layer)),
     );
+
     const code = built.programs[PROGRAM];
     expect(code, "the fixture program must be built").toBeDefined();
     await Effect.runPromise(
       Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
         const instance = yield* localInstance(
           built,
           RecordWireTest.startupFixture({
@@ -124,6 +142,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
             port: at.port,
           }),
         );
+
         const from: From = {
           by: key.fingerprint,
           for: PERSON,
@@ -133,6 +152,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
           traceId: TRACE,
           build: built.build,
         };
+
         yield* Effect.promise(() =>
           test(instance, key, {
             from,
@@ -147,6 +167,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
                 },
                 from,
               );
+
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             },
           }),
@@ -205,8 +226,10 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
   const socket = new WebSocket(instance.url.replace("http", "ws") + name);
   const frames: any[] = [];
+
   let closeCode: number | undefined,
     serial = 0;
+
   socket.addEventListener("message", (event) => {
     if (event.data !== "pong") {
       frames.push(JSON.parse(String(event.data)));
@@ -218,6 +241,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   socket.addEventListener("error", () => {
     closeCode ??= 1006;
   });
+
   const next = async (match: (frame: any) => boolean) => {
     const end = Date.now() + WAIT;
 
@@ -237,11 +261,14 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
 
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
+
   const call = async (method: string, params: unknown) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return next((frame) => frame.id === id);
   };
+
   const hello = async () => {
     const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
     expect(
@@ -261,11 +288,13 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
       ).error,
     ).toBeUndefined();
   };
+
   // A socket whose hello fails is closed here: no caller holds it to close.
   await hello().catch((error: unknown) => {
     socket.close();
     throw error;
   });
+
   return { call, close: () => socket.close() };
 };
 
@@ -299,11 +328,13 @@ const worldScoped = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p34w-"))),
     (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
   );
+
   yield* Effect.acquireRelease(
     Effect.sync(() => {
       const previous = process.env.FABRIKA_HOME;
       process.env.FABRIKA_HOME = home;
       process.env.DO_NOT_TRACK = "1";
+
       return previous;
     }),
     (previous) =>
@@ -324,14 +355,18 @@ const worldScoped = Effect.gen(function* () {
   symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
   const poison = join(home, "poison.ts");
   writeFileSync(poison, poisonSource);
+
   const built = yield* build({ out: join(home, "dist"), programs: { [PROGRAM]: poison } }).pipe(
     Effect.provide(NodeServices.layer),
   );
+
   const code = built.programs[PROGRAM];
   expect(code, "the fixture program must be built").toBeDefined();
+
   const context = yield* Layer.build(
     localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
   );
+
   const instance: Instance = yield* localInstance(
     built,
     RecordWireTest.startupFixture({
@@ -343,6 +378,7 @@ const worldScoped = Effect.gen(function* () {
       port: at.port,
     }),
   ).pipe(Effect.provideContext(context));
+
   const from: From = {
     by: key.fingerprint,
     for: PERSON,
@@ -352,6 +388,7 @@ const worldScoped = Effect.gen(function* () {
     traceId: TRACE,
     build: built.build,
   };
+
   const fixture: Fixture = {
     from,
     hash: code!.hash,
@@ -360,9 +397,11 @@ const worldScoped = Effect.gen(function* () {
         { _tag: "first", id: `start-${name}`, name, code: { program: PROGRAM, hash: code!.hash } },
         from,
       );
+
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
   };
+
   return { instance, key, fixture, home };
 });
 
@@ -397,11 +436,13 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
   Effect.promise(async () => {
     const end = Date.now() + WAIT,
       seenRows: Array<unknown> = [];
+
     let seen = 0;
 
     while (Date.now() < end) {
       const read = await c.call("ledger.read", { stream: `processes/${name}`, after: seen });
       expect(read.error, `reading processes/${name}`).toBeUndefined();
+
       const found = (read.result.entries as Array<any>).find(
         (entry) => entry._tag === "restarted" && entry.body.after === after,
       );
@@ -433,6 +474,7 @@ const healthy = async (
   expect(sent, `healthy letter ${letter} on ${pid}`).toMatchObject({ result: { _tag: "accepted" } });
   const after = await c.call("view.open", { pid });
   expect(after).toMatchObject({ result: { view: { count: before.result.view.count + 1 } } });
+
   return { rev: sent.result.rev, count: after.result.view.count };
 };
 
@@ -458,6 +500,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
           () => restarts(instance, name),
           (rows) => rows.length >= 1,
         );
+
         const second = String(restarted.process);
         expect(restarted).toMatchObject({ _tag: "restarted", after: first, name });
         expect(second).not.toBe(first);
@@ -473,11 +516,13 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         const two = await c.call("process.send", poison);
         // 4. The sender is refused with dead.
         expect(two).toMatchObject({ error: { data: { reason: "dead" } } });
+
         const dead = await until(
           "one dead row on the failing process's stream",
           () => facts(instance, `${second}/dead`),
           (rows) => rows.length >= 1,
         );
+
         expect(dead).toEqual([
           {
             _tag: "dead",
@@ -506,6 +551,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
           () => restarts(instance, name),
           (found) => found.length >= 2,
         );
+
         expect(rows[1]).toMatchObject({ _tag: "restarted", after: second, name });
         const third = String(rows[1].process);
         expect(new Set([first, second, third]).size).toBe(3);
@@ -557,11 +603,13 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         });
         const request = { id: "restart-1", build: fixture.hash };
         await instance.process(first).restart(request);
+
         const [restarted] = await until(
           "one restarted fact after a trusted restart",
           () => restarts(instance, name),
           (rows) => rows.length >= 1,
         );
+
         const second = String(restarted.process);
         expect(restarted).toMatchObject({ _tag: "restarted", after: first, name });
         expect(second).not.toBe(first);
@@ -613,11 +661,13 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
           .catch(() => undefined);
         // Any call wakes the object; the stored marker, not this call, causes the recovery.
         await c.call("view.open", { pid: first });
+
         const [restarted] = await until(
           "one restarted fact after the interrupted step",
           () => restarts(instance, name),
           (rows) => rows.length >= 1,
         );
+
         const second = String(restarted.process);
         expect(restarted).toMatchObject({ _tag: "restarted", after: first, name });
         expect(second).not.toBe(first);

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-alchemy-mocks-plan",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null,
+  "started": "2026-11-15T23:07:22-08:00",
+  "ended": "2026-11-15T23:18:18-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for the mock sweep's left-out hits in next/ (docs/plan/quests/alchemy-mocks-PLAN.md): 12 vi.mock(\"cloudflare:workers\") and 4 Alchemy mocks in libfabrika's cloudflare and node/dev folders and the app's src. programBox takes its base class, as Alchemy's makeWorkerBridge does, so box.ts imports no platform module and all 12 platform mocks go; the stack takes its providers and state, so the two app laws run Alchemy's real Stack and deploy over Provider.effect test providers and inMemoryState. Three slices on the sweep's fold branch, the third landing each folder's lock whole at zero. plancheck --draft passes. It resolves finding 2026-11-15-cloudflare-workers-mocks-have-no-slice and files one new finding: two PR 1366 mocks in runtime-quotas.laws.test.ts that the app-src plan does not list.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Cloud box, plan step for the cloud twin. Read Alchemy 2.0.0-beta.85 (alchemy, @alchemy.run/cloudflare, @alchemy.run/cloudflare-runtime) in node_modules; no test, install beyond the frozen one, or typecheck was run. Started and ended are Pacific times read with date; the model, tokens and tool calls were not recorded here. The pr field stays null because the row is committed before the pull request opens.",
+  "step": "plan"
+}

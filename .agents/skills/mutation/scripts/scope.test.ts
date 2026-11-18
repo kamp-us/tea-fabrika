@@ -7,7 +7,9 @@ const options = { seed: 119120, numRuns: 200 };
 // Script paths are built from their stems, so the script-reads lint does not take this file for a
 // reader of the scripts it names: they are data here, never read.
 const skill = (name: string, stem: string, end = ".ts") => `.agents/skills/${name}/scripts/${stem}${end}`;
+
 const lead = (stem: string, end = ".ts") => skill("lead", stem, end);
+
 const QUEST = ["chain", "drive"].flatMap((stem) => [lead(stem), lead(stem, ".test.ts")]);
 
 const segment = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
@@ -65,6 +67,7 @@ const quest = fc.oneof(
 );
 
 const leadCode = fc.oneof(quest, otherLead);
+
 const anyPath = fc.oneof(product, quest, otherLead);
 
 // The `range` step before 0089, read as git reads its pathspecs: `*` crosses `/`. For each changed
@@ -72,6 +75,7 @@ const anyPath = fc.oneof(product, quest, otherLead);
 const before = (changed: ReadonlyArray<string>) => {
   const code = (path: string) =>
     /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(path) && !path.includes(".test.") && !/\.d\.[mc]?ts$/.test(path);
+
   const tests = changed.flatMap((path) =>
     code(path)
       ? [".test.ts", ".test.tsx"].map((end) => `${path.slice(0, path.lastIndexOf("."))}${end}`)
@@ -79,6 +83,7 @@ const before = (changed: ReadonlyArray<string>) => {
         ? [path]
         : [],
   );
+
   return [...new Set(tests)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 };
 

@@ -1,7 +1,5 @@
 /**
  * Menu bar extra state and items. Checks and signatures are commands, never I/O here.
- *
- * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Schema from "effect/Schema";
@@ -13,7 +11,6 @@ const Kind = Access.Grant.fields.as;
 /**
  * Words for every admitted client kind. A new kind must have words before it can be drawn.
  *
- * @stability unstable
  * @category models
  */
 export const words: Record<typeof Kind.Type, string> = { window: "window", agent: "agent", hands: "hands" };
@@ -21,7 +18,6 @@ export const words: Record<typeof Kind.Type, string> = { window: "window", agent
 /**
  * Schema for one waiting key, shared by its tabs. A pass is a digest only.
  *
- * @stability unstable
  * @category schemas
  */
 export const Row = Schema.Struct({
@@ -34,6 +30,7 @@ export const Row = Schema.Struct({
   has: Schema.Array(Schema.String),
   as: Kind,
 });
+
 type Row = typeof Row.Type;
 
 const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
@@ -41,7 +38,6 @@ const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
 /**
  * Schema for an admitted client, with its current tab count or an unknown probe result.
  *
- * @stability unstable
  * @category schemas
  */
 export const Client = Schema.Struct({
@@ -59,7 +55,8 @@ const Act = Schema.TaggedUnion({
 });
 
 const Link = Schema.TaggedUnion({ connecting: {}, online: {}, lost: {} });
-const Pass = Schema.Struct({ digest: Schema.String, until: Schema.Number });
+
+const Pass = Schema.Struct({ digest: Schema.String, until: Schema.Finite });
 
 const Shown = {
   link: Link,
@@ -74,13 +71,14 @@ const Model = Schema.TaggedUnion({
   idle: { ...Shown },
   checking: { ...Shown, act: Act, cmd: Id.Cmd },
 });
+
 type Model = typeof Model.Type;
 
 const clickFields = { key: Schema.String, cmd: Id.Cmd };
 
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("link"), link: Link }),
-  Schema.Struct({ type: Schema.Literal("rows"), rows: Schema.Array(Row), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("rows"), rows: Schema.Array(Row), at: Schema.Finite }),
   Schema.Struct({ type: Schema.Literal("clients"), clients: Schema.Array(Client) }),
   Schema.Struct({ type: Schema.Literal("approve"), ...clickFields }),
   Schema.Struct({ type: Schema.Literal("deny"), ...clickFields }),
@@ -93,7 +91,7 @@ const Msg = Schema.Union([
     reason: Schema.Literals(["declined", "unavailable"]),
   }),
   Schema.Struct({ type: Schema.Literal("open_browser"), cmd: Id.Cmd }),
-  Schema.Struct({ type: Schema.Literal("opened"), cmd: Id.Cmd, digest: Schema.String, at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("opened"), cmd: Id.Cmd, digest: Schema.String, at: Schema.Finite }),
   Schema.Struct({ type: Schema.Literal("open_window") }),
   Schema.Struct({ type: Schema.Literal("quit") }),
 ]);
@@ -123,14 +121,15 @@ const deny = Cmd.make("deny", {
 });
 
 const open = Cmd.make("open", { input: Schema.toType(Schema.Struct({ cmd: Id.Cmd })), ok: Schema.Null, err: [] });
+
 const openWindow = Cmd.make("open_window", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
+
 const quit = Cmd.make("quit", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
 
 /**
  * Schema for one item a popover draws, with its words: the status, an empty note, a waiting key, an admitted
  * client or an action.
  *
- * @stability unstable
  * @category schemas
  */
 export const Item = Schema.TaggedUnion({
@@ -146,6 +145,7 @@ const safe = (text: string) => text.replace(/[\uD800-\uDFFF]/gu, "\uFFFD").repla
 // The brain-line text cap is 256 UTF-16 units. Keep a pair whole at its boundary.
 const label = (text: string) => {
   const cut = safe(text).slice(0, 256);
+
   return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
 };
 
@@ -188,7 +188,6 @@ const unique = <A extends { readonly key: string }>(rows: ReadonlyArray<A>): Rea
  * Creates the menu's one machine from a browser link's lifetime and whether that link is offered. Its model is
  * never loaded: every start is idle and connecting, with no rows, no clients and no check in flight.
  *
- * @stability unstable
  * @category constructors
  */
 export const machine = (options: { readonly linkTtl: number; readonly browserLink: boolean }) =>
@@ -213,6 +212,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         const clients = unique(m.clients);
         // Snapshots arrive separately. The latest list decides a shared key's row.
         const rows = s.rows.filter((row) => !clients.some((client) => client.key === row.key));
+
         return [{ ...s, rows, clients }, []];
       },
       rows: (s, m) => {
@@ -228,6 +228,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         }
 
         const clients = s.clients.filter((client) => !rows.some((row) => row.key === client.key));
+
         return [{ ...s, rows, clients, passes }, commands];
       },
       approve: (s, m) => {
@@ -242,6 +243,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         }
 
         const shown = Row.make({ ...row, has: [...row.has] });
+
         return [
           Model.cases.checking.make({
             ...current(s),
@@ -263,6 +265,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         }
 
         const shown = Client.make({ ...client, tabs: { ...client.tabs } });
+
         return [
           Model.cases.checking.make({
             ...current(s),
@@ -274,6 +277,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
       },
       deny: (s, m) => {
         const row = s.rows.find((r) => r.key === m.key);
+
         return [s, row === undefined ? [] : [deny({ key: row.key, saw: saw(row, "compare", "none") })]];
       },
       checked: (s, m) => {
@@ -349,7 +353,6 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
  * keys, the admitted clients, then the actions. Every item has words, also for an unknown tab count and while a
  * check runs.
  *
- * @stability unstable
  * @category getters
  */
 export const view = (model: Model): ReadonlyArray<typeof Item.Type> => {
@@ -391,5 +394,6 @@ export const view = (model: Model): ReadonlyArray<typeof Item.Type> => {
   }
 
   items.push(Item.cases.action.make({ id: "quit", words: "Quit" }));
+
   return items;
 };

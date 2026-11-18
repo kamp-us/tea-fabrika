@@ -1,6 +1,10 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
+
+/** A value the walk built, checked as the JSON the diff takes: the check hands back the same value. */
+const json = Schema.decodeUnknownSync(Schema.Json);
 
 type Patch = {
   readonly op: "add" | "remove" | "replace";
@@ -21,6 +25,7 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
       .slice(1)
       .split("/")
       .map((s) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
+
     let object = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -74,7 +79,7 @@ describe("p22 whole view plus patches", () => {
         let watcher: unknown = structuredClone(views[0]);
 
         for (const next of views.slice(1)) {
-          watcher = apply(watcher, diff(watcher, next));
+          watcher = apply(watcher, diff(json(watcher), json(next)));
           expect(watcher).toEqual(next);
         }
       }),
@@ -127,6 +132,7 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
   if (Array.isArray(value)) {
     const copy = [...value];
     copy[Number(key)] = change(copy[Number(key)], rest, f);
+
     return copy;
   }
 
@@ -186,7 +192,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
             p.some((k) => (UNSAFE as ReadonlyArray<string>).includes(k)),
           ),
         );
-        const ops = diff(before, after);
+        const ops = diff(json(before), json(after));
         const beforeCopy = structuredClone(before);
         const opsCopy = structuredClone(ops);
         const got = apply(before, ops);
@@ -267,6 +273,7 @@ describe("L7: pointers and operations as the RFCs give them", () => {
   it("vector: RFC 6901 section 5, each pointer names the value the RFC says, read through a replace", async () => {
     const { apply } = await import("./Patch.ts");
     const { Result } = await import("effect");
+
     const vectors: ReadonlyArray<readonly [string, ReadonlyArray<string | number>]> = [
       ["/foo", ["foo"]],
       ["/foo/0", ["foo", 0]],
@@ -305,6 +312,7 @@ describe("L7: pointers and operations as the RFCs give them", () => {
   it("vector: RFC 6902 appendix A, the add, remove and replace examples and their errors", async () => {
     const { apply } = await import("./Patch.ts");
     const { Result } = await import("effect");
+
     const ok: ReadonlyArray<readonly [string, Json, ReadonlyArray<unknown>, Json]> = [
       [
         "A.1 adding an object member",

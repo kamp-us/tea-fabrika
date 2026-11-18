@@ -4,8 +4,6 @@
  * plant, result }`, `red` when it failed and `green` when it passed. The tests step pastes those
  * lines into its run row's `plants`, so a record is never typed by hand, and the CI plant check reads
  * them there.
- *
- * @stability unstable
  */
 import * as Result from "effect/Result";
 
@@ -13,20 +11,18 @@ import * as Result from "effect/Result";
  * A law in vitest's task tree, as far as `records` reads it: its title, its `meta.plant` and its
  * state once run.
  *
- * @stability unstable
  * @category models
  */
 export interface Test {
   readonly type: "test";
   readonly name: string;
-  readonly meta: { readonly plant?: string | undefined };
+  readonly meta: { readonly plant?: string | undefined; readonly file?: string | undefined };
   readonly result?: { readonly state: string } | undefined;
 }
 
 /**
  * A `describe` in vitest's task tree, as far as `records` reads it: the tasks under it.
  *
- * @stability unstable
  * @category models
  */
 export interface Suite {
@@ -37,7 +33,6 @@ export interface Suite {
 /**
  * One test file of a run, the part of vitest's `RunnerTestFile` that `records` reads.
  *
- * @stability unstable
  * @category models
  */
 export interface File {
@@ -49,7 +44,6 @@ export interface File {
  * One plant's record, as a run row's `plants` holds it: the law's file from the repo's root, its
  * exact title, its plant, and whether the plant turned it red.
  *
- * @stability unstable
  * @category models
  */
 export interface Plant {
@@ -62,7 +56,6 @@ export interface Plant {
 /**
  * A law that ran with no `plant` option: no record can be made for it.
  *
- * @stability unstable
  * @category models
  */
 export interface Unplanted {
@@ -81,7 +74,6 @@ const fromRoot = (filepath: string, root: string): string =>
  * The record of each law that ran in `files`, in source order: a law that passed or failed, so a
  * skipped or unfinished one is left out. The first law that ran with no plant is refused.
  *
- * @stability unstable
  * @category records
  */
 export const records = (files: ReadonlyArray<File>, root: string): Result.Result<ReadonlyArray<Plant>, Unplanted> => {
@@ -89,8 +81,9 @@ export const records = (files: ReadonlyArray<File>, root: string): Result.Result
     file.tasks
       .flatMap(laws)
       .filter((law) => law.result?.state === "pass" || law.result?.state === "fail")
-      .map((law) => ({ file: fromRoot(file.filepath, root), law })),
+      .map((law) => ({ file: fromRoot(law.meta.file ?? file.filepath, root), law })),
   );
+
   const bare = ran.find(({ law }) => law.meta.plant === undefined);
 
   if (bare !== undefined) {

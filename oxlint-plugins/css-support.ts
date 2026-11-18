@@ -5,12 +5,19 @@ import stylelint from "stylelint";
 import names from "../packages/fabrika-design/src/token-names.json" with { type: "json" };
 
 type Root = Parameters<ReturnType<stylelint.Rule>>[0];
+
 type Declaration = Extract<Root["nodes"][number], { type: "decl" }>;
+
 const TOKENS = "packages/fabrika-design/src/tokens.css";
+
 export const WINDOW = "apps/fabrika/src/window/window.css";
+
 export const tokens = new Map(names.tokens.map(({ name, owner }) => [name, owner]));
+
 export const steps = new Set(names.steps);
+
 export const parts: Readonly<Record<string, readonly string[]>> = names.parts;
+
 export const file = (decl: Declaration) => relative(process.cwd(), decl.source?.input.file ?? "");
 
 const place = (decl: Declaration) =>
@@ -61,6 +68,7 @@ export const references = (decl: Declaration) => {
       found.push(name.value);
     }
   });
+
   return found;
 };
 
@@ -84,16 +92,20 @@ export const media = (decl: Declaration, feature: string, value: string) => {
 };
 
 type Fire = (decl: Declaration, detail: string, debt?: string) => void;
+
 type Check = (root: Root, fire: Fire) => void;
+
 type Options = { known: readonly string[] };
 
 // Hits are kept on the PostCSS result, including debt hidden by known. Each lint call owns its map.
 type Counts = { fires: number; known: Set<string> };
+
 export type CssResult = stylelint.PostcssResult & { fabrika?: Map<string, Counts> };
 
 export const plugin = (name: string, check: Check) => {
   const ruleName = `fabrika/${name}`;
   const messages = stylelint.utils.ruleMessages(ruleName, { rejected: (detail: string) => detail });
+
   const rule: stylelint.Rule<boolean, Options> = Object.assign(
     (primary: boolean, options: Options) => (root: Root, result: CssResult) => {
       if (
@@ -115,6 +127,7 @@ export const plugin = (name: string, check: Check) => {
 
         if (options.known.includes(debt)) {
           counts.known.add(debt);
+
           return;
         }
 
@@ -123,5 +136,6 @@ export const plugin = (name: string, check: Check) => {
     },
     { ruleName, messages },
   );
+
   return stylelint.createPlugin(ruleName, rule);
 };

@@ -195,6 +195,7 @@ const required = (node: { readonly callee: unknown; readonly arguments: readonly
 
 // A module Worker's default export names its event handlers.
 const handler = /^(?:fetch|scheduled|queue|email|tail)$/;
+
 const windowFile = (file: string) => /\.[jt]sx$/.test(file) && !/\.test\.[jt]sx$/.test(file);
 
 const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
@@ -247,20 +248,25 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
   const runtime = new Set<string>();
   const unjudged: string[] = [];
   const home = realpathSync(root);
+
   const inside = (path: string) => {
     const at = relative(home, realpathSync(path));
 
     return !at.startsWith("..") && !/(?:^|\/)node_modules(?:\/|$)/.test(at);
   };
+
   // A dependency's code, by the path the resolver gives or the file it stands for.
   const modules = (path: string) =>
     /(?:^|\/)node_modules(?:\/|$)/.test(path) || /(?:^|\/)node_modules(?:\/|$)/.test(realpathSync(path));
+
   let loadsWorker = false;
   let definesWorker = false;
+
   const defines = () => {
     loadsWorker = true;
     definesWorker = true;
   };
+
   const visit = (file: string) => {
     if (declaration(file) || files.has(file) || !isFile(file)) {
       return;
@@ -279,6 +285,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
       text = readFileSync(file, "utf8");
     } catch {
       unjudged.push(`'${at}' cannot be read`);
+
       return;
     }
 
@@ -289,6 +296,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
     }
 
     const tree = parsed.program;
+
     const link = (name: string | undefined) => {
       if (name === undefined) {
         unjudged.push(`'${at}' loads a module by a computed name`);
@@ -307,6 +315,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
         }
       }
     };
+
     // A default export by name, as in `const app = {fetch() {}}; export default app;`.
     const values = new Map<string, unknown>();
 
@@ -337,6 +346,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
 
       return at;
     };
+
     // A base class by a local name, as in `const Base = DurableObject; class X extends Base {}`.
     const workerBase = (node: unknown) => {
       const seen = new Set<string>();
@@ -357,6 +367,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
 
       return false;
     };
+
     new Visitor({
       ImportDeclaration(node) {
         if (valueLink(node.importKind, node.specifiers) && typeof node.source.value === "string") {
@@ -431,6 +442,7 @@ const isFolder = (path: string) => existsSync(path) && statSync(path).isDirector
 // with a guard against a link loop. `skip` names the folders left out.
 const listing = (folder: string, skip: readonly string[]) => {
   const found: string[] = [];
+
   const walk = (at: string, path: string, above: ReadonlySet<string>) => {
     const real = realpathSync(at);
 
@@ -529,6 +541,7 @@ export const programPackageLayout: CreateRule = {
     // subpath a pattern matches counts as offered.
     const name = map(manifest) && typeof manifest.name === "string" ? manifest.name : "";
     const raw = map(manifest) ? manifest.exports : undefined;
+
     const names: Names = {
       aliases: map(manifest) && map(manifest.imports) ? manifest.imports : {},
       dependencies: new Set(
@@ -539,10 +552,13 @@ export const programPackageLayout: CreateRule = {
         }),
       ),
     };
+
     const keys = map(raw) ? Object.keys(raw) : [];
+
     // A string, an array, null, or an object of conditions is the '.' export alone.
     const exports: Record<string, unknown> =
       map(raw) && Object.keys(raw).some((key) => key.startsWith(".")) ? raw : raw === undefined ? {} : { ".": raw };
+
     // Every target one export key names under a runtime condition, each resolved; a target that
     // names nothing real comes back as `undefined`. A pattern key gives its targets once per
     // subpath the package's own exports still offer there.
@@ -561,6 +577,7 @@ export const programPackageLayout: CreateRule = {
       return matchesOf(root, exportValue).flatMap((match) => {
         const own = targets.map((path) => target(path.replaceAll("*", match)));
         const real = new Set(own.flatMap((path) => (path === undefined ? [] : [realpathSync(path)])));
+
         // The subpath is this key's only if the package's exports answer with one of its own
         // targets: a null target or a more specific key takes it away. With no name to ask by,
         // it stays the key's.
@@ -575,12 +592,16 @@ export const programPackageLayout: CreateRule = {
         return offered ? own : [];
       });
     };
+
     const dotTargets = resolveKey(".");
+
     const entries = [...new Set(dotTargets.flatMap((path) => (path === undefined ? [] : [path])))].filter(
       (path) => !declaration(path),
     );
+
     const dot = graph(entries, root, names);
     const pure = dot.files;
+
     // The files oxlint lints here: in the package, by their own path (no symlink on the way),
     // outside dependencies and the config's ignored folders. The per-line checks below see only
     // these, so pure code anywhere else that loads a Worker runtime is reported for the package.
@@ -600,6 +621,7 @@ export const programPackageLayout: CreateRule = {
     const first = entries.find((path) => isFile(path) && lined(path));
     const report = first === undefined || first === file;
     const errors: string[] = [];
+
     const unjudged = (key: string, reasons: readonly string[]) => {
       for (const reason of reasons) {
         errors.push(`The rule cannot judge '${key}': ${reason}.`);
@@ -631,8 +653,10 @@ export const programPackageLayout: CreateRule = {
     // './window' is judged for Worker code like every other subpath.
     const subpaths = Object.keys(exports).filter((key) => key.startsWith("./"));
     const windowTargets = "./window" in exports ? resolveKey("./window") : [];
+
     const real = (paths: readonly (string | undefined)[]) =>
       paths.flatMap((path) => (path === undefined || declaration(path) ? [] : [path]));
+
     // A window behind another key is reported there, so it does not count as unexported too.
     const exported = new Set<string>();
 

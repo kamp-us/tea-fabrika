@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import { afterAll, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { rowsAt } from "../../vitest.shards.ts";
 import { E2E_SETUP, room } from "./legs.ts";
@@ -24,6 +26,7 @@ import {
 // own; seconds come from scratch tables, so a law holds for any table, not only today's. Each plant
 // was run once on proof.ts and restored; each turned its law red.
 const options = { seed: 119120, numRuns: 100 };
+
 const sha = (c: string) => c.repeat(40);
 
 const seen = (changed: readonly string[]): Seen => ({
@@ -35,6 +38,7 @@ const seen = (changed: readonly string[]): Seen => ({
 });
 
 const workflow = parse(readFileSync(new URL("../workflows/scheduled.yaml", import.meta.url), "utf8")) as {
+  env: Record<string, number>;
   jobs: Record<string, { steps: Record<string, unknown>[]; strategy?: Record<string, unknown> }>;
 };
 
@@ -78,15 +82,17 @@ it("pinned: a change to any rerun trigger 0590 names runs the full set, whatever
   // splits a list); `isTrigger` drops `dot: true` (red: .oxlintrc.json reads as plain).
   for (const path of TRIGGERS) {
     expect(isTrigger(path), path).toBe(true);
+
     const proof = choose(
       seen(["next/a.ts", path]),
       triggered(["next/a.ts", path], isTrigger),
       ["next/a.test.ts"],
       real,
     );
+
     const { base, head, at, vitest } = seen([]);
     expect(proof, path).toStrictEqual({ _tag: "full", base, head, at, vitest, triggers: [path] });
-    expect(outputs(proof), path).toEqual(["scope=full", "legs=[]", "files={}"]);
+    expect(outputs(proof, 8, real.most), path).toEqual(["scope=full", "legs=[]", "files={}", identitySlots]);
   }
 
   for (const path of PLAIN) {
@@ -109,7 +115,7 @@ it("pinned: a changed set of zero files is a green run with no leg, and its reco
   // Plant, run once on proof.ts and restored: `outputs` gives one empty leg (red: `legs=["1"]`).
   const proof = choose(seen(["docs/plan/README.md"]), [], [], real);
   expect(proof).toEqual({ ...seen(["docs/plan/README.md"]), _tag: "changed", legs: {}, seconds: {} });
-  expect(outputs(proof)).toEqual(["scope=changed", "legs=[]", "files={}"]);
+  expect(outputs(proof, 8, real.most)).toEqual(["scope=changed", "legs=[]", "files={}", identitySlots]);
   expect(summary(proof)).toContain("no leg starts and the run is green");
 });
 
@@ -138,6 +144,151 @@ const set = fc
       })),
   );
 
+// The group names 1 to `count`, as text.
+const upTo = (count: number) => Array.from({ length: count }, (_, index) => String(index + 1));
+
+const propertyOptions = { arbitrary: { seed: 119120, runs: runsFor({ fast: 100, full: 100 }), size: 100 } };
+
+// At run 8 the real four proof groups (0598) turn by 8 mod 4, which is none: the identity.
+const identitySlots = `slots=${JSON.stringify(Object.fromEntries(upTo(real.most).map((slot) => [slot, slot])))}`;
+
+// P5, pinned: the real select's MOST is 0598's four proof groups, whatever else the workflow sets.
+it("pinned: the real select's MOST is PROOF_SLOTS, four proof groups, and so is the changed matrix's max-parallel", () => {
+  // Plant, run once on scheduled.yaml and restored: `MOST: &most 9` back (red: 9 is not 4).
+  expect(setStep.env["MOST"]).toBe(4);
+  expect(workflow.env["PROOF_SLOTS"]).toBe(4);
+  expect(real.most).toBe(4);
+});
+
+// P4. Plant: accept a missing, nonpositive, fractional, infinite or unsafe run number.
+it.prop(
+  "property: invalid or missing run numbers fail before any proof output",
+  { number: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })) },
+  ({ number }) => {
+    const proofs = [
+      choose(seen(["package.json"]), ["package.json"], [], real),
+      choose(seen(["next/a.ts"]), [], [], real),
+      choose(seen(["next/a.ts"]), [], ["next/a.test.ts"], real),
+    ];
+
+    for (const proof of proofs) {
+      for (const run of [0, -number, number + 0.5, Number.NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+        expect(() => outputs(proof, run, real.most), String(run)).toThrow(/RUN_NUMBER/);
+      }
+
+      // @ts-expect-error A missing run number can still reach the runtime boundary.
+      expect(() => outputs(proof)).toThrow(/RUN_NUMBER/);
+    }
+  },
+  propertyOptions,
+);
+
+// P2 and P3. Plant: drop the count check (red: `% 0` prints `slots={"1":"NaN"}`); and for the type,
+// give `count` a default of 9 (red in a typecheck: the expect-error line below is then unused).
+it.prop(
+  "property: an invalid group count fails before any proof output",
+  {
+    number: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })),
+    run: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000_000 })),
+  },
+  ({ number, run }) => {
+    const proofs = [
+      choose(seen(["package.json"]), ["package.json"], [], real),
+      choose(seen(["next/a.ts"]), [], [], real),
+      choose(seen(["next/a.ts"]), [], ["next/a.test.ts"], real),
+    ];
+
+    for (const proof of proofs) {
+      for (const count of [0, -number, number + 0.5, Number.NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+        expect(() => outputs(proof, run, count), String(count)).toThrow(/MOST/);
+      }
+
+      // @ts-expect-error A missing group count can still reach the runtime boundary.
+      expect(() => outputs(proof, run)).toThrow(/MOST/);
+    }
+  },
+  propertyOptions,
+);
+
+// P1, with the group counts it reaches: a failure to reach every count from 1 to 9 fails the file.
+const reached = new Set<number>();
+
+afterAll(() => {
+  // Nothing reached means the property was filtered out of this run, not that it missed a count.
+  const missing = reached.size === 0 ? [] : upTo(9).filter((count) => !reached.has(Number(count)));
+  expect(missing).toEqual([]);
+});
+
+// Plant: keep `% 9` in `slots` (red: count 4 gives a group past 4); keep the old fixed assignment, reuse
+// one group, or key the files by physical group.
+it.prop(
+  "property: changed-leg rotation visits every proof group, for any group count, and preserves all leg counts",
+  {
+    count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9 })),
+    run: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER - 9 })),
+    files: Schema.Array(Schema.String.check(Schema.isPattern(/^next\/[a-z]{1,8}\/[a-z]{1,8}\.test\.ts$/))).check(
+      Schema.isMinLength(9),
+      Schema.isMaxLength(9),
+      Schema.isUnique(),
+    ),
+  },
+  ({ count, run, files }) => {
+    reached.add(count);
+
+    const groups = upTo(count);
+    const visited = new Map(groups.map((leg) => [leg, new Set<string>()]));
+
+    for (let offset = 0; offset < count; offset++) {
+      // Any leg count up to the group count: MOST is the group count, and a small set makes fewer legs.
+      for (let most = 1; most <= count; most++) {
+        const selected = files.slice(0, most);
+
+        const proof = choose(seen(["next/a.ts"]), [], selected, {
+          most,
+          limit: 1,
+          table: Object.fromEntries(files.map((file) => [file, 1])),
+        });
+
+        const before = structuredClone(proof);
+        const emitted = outputs(proof, run + offset, count);
+        expect(emitted).toHaveLength(4);
+        expect(emitted[0]).toBe("scope=changed");
+        expect(emitted[3]).toMatch(/^slots=/);
+
+        const names: string[] = JSON.parse(emitted[1]!.slice("legs=".length));
+        const words: Record<string, string> = JSON.parse(emitted[2]!.slice("files=".length));
+        const slots: Record<string, string> = JSON.parse(emitted[3]!.slice("slots=".length));
+        expect(names).toEqual(groups.slice(0, most));
+        expect(Object.keys(words)).toEqual(names);
+        expect(names.flatMap((leg) => words[leg]!.split(" ")).toSorted()).toEqual([...selected].toSorted());
+        expect(
+          proof._tag === "changed" &&
+            Object.fromEntries(Object.entries(proof.legs).map(([leg, list]) => [leg, list.join(" ")])),
+        ).toEqual(words);
+        expect(Object.keys(slots)).toEqual(groups);
+        expect(Object.values(slots).toSorted()).toEqual(groups);
+        expect(Number(slots["1"]) - 1).toBe((run + offset) % count);
+
+        for (let index = 0; index < groups.length; index++) {
+          const leg = groups[index]!;
+          const next = groups[(index + 1) % count]!;
+          expect(Number(slots[next])).toBe((Number(slots[leg]) % count) + 1);
+          visited.get(leg)!.add(slots[leg]!);
+        }
+
+        expect(outputs(proof, run + offset, count)).toEqual(emitted);
+        expect(proof).toEqual(before);
+      }
+    }
+
+    // `count` runs in a row send every leg to every group.
+    for (const slots of visited.values()) {
+      expect([...slots].toSorted()).toEqual(groups);
+    }
+  },
+  propertyOptions,
+);
+
 it("property: the legs hold every file of the set once, numbered from 1, at most MOST, and one leg when it fits one", () => {
   // Plants, each run once on proof.ts and restored: `legsOf` takes `most` legs always (red: a small
   // set gets several legs); it drops the last leg (red: a file is missing).
@@ -165,7 +316,7 @@ it("property: the outputs give the changed job its legs and each leg its files a
   fc.assert(
     fc.property(set, ({ files, sizing }) => {
       const proof = choose(seen(["next/a/b.ts"]), [], files, sizing);
-      const [scope, legs, lists] = outputs(proof);
+      const [scope, legs, lists] = outputs(proof, 9, 9);
       expect(scope).toBe("scope=changed");
       const parsed: string[] = JSON.parse(legs!.slice("legs=".length));
       const words: Record<string, string> = JSON.parse(lists!.slice("files=".length));

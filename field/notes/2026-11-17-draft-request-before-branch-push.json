@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-17-draft-request-before-branch-push",
+  "date": "2026-11-17",
+  "quests": [],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "A lead requested a bot-authored draft before publishing its new branch. GitHub returned404 because the remote ref did not exist.",
+  "cause": "The lead treated botpush --draft as both push and PR creation. That mode creates only the draft and never pushes.",
+  "person": false,
+  "primitive": null,
+  "fix": "Use the regular bot push first, verify the exact remote head, then request the draft. Keep failed publication visible.",
+  "test": "The script separates push from draft creation. A remote-ref read confirmed the branch was absent; the corrected order uses the existing push and draft paths. A preflight remote-ref check would catch this ordering mistake.",
+  "links": []
+}

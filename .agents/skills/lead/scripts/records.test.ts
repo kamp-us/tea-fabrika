@@ -23,9 +23,13 @@ import {
 } from "./records.ts";
 
 const script = join(import.meta.dirname, "records.ts");
+
 const folders: ReadonlyArray<Folder> = [".decisions", "experiments", ".patterns", "docs/direction", ".runbooks"];
+
 const folder = fc.constantFrom(...folders);
+
 const slug = fc.stringMatching(/^[a-z][a-z0-9-]{0,20}$/);
+
 // One line of frontmatter text: anything with no line break, quotes, colons and backticks included.
 const value = fc.string({ minLength: 1 }).filter((s) => !/[\r\n]/.test(s) && s.trim() === s);
 
@@ -53,12 +57,14 @@ describe("nextNumber", () => {
     fc.assert(
       fc.property(fc.array(fc.nat({ max: 500 }), { minLength: 1 }), (ns) => {
         const paths = ns.map((n) => `experiments/${n}-x.md`);
+
         const noise = [
           "experiments/README.md",
           "experiments/open-questions.md",
           "experiments/999-x.json",
           "elsewhere/998-x.md",
         ];
+
         expect(nextNumber("experiments", [...paths, ...noise])).toBe(nextNumber("experiments", paths));
       }),
     ));
@@ -132,6 +138,7 @@ describe("readTop", () => {
       "",
       "# 0008: Decision discovery is the AGENTS.md contract alone",
     ].join("\n");
+
     const top = readTop(text);
     expect(top.fields.get("title")).toBe("Decision discovery is the AGENTS.md contract alone");
     expect(top.fields.get("status")).toBe("amended-in-part by [0522](0522-no-folder-keeps-an-index-table.md)");
@@ -203,13 +210,17 @@ describe("batchTexts", () => {
     fc.assert(
       fc.property(fc.array(fc.string()), (texts) => {
         const encoder = new TextEncoder();
+
         const parts = texts.flatMap((text) => {
           const bytes = encoder.encode(text);
+
           return [encoder.encode(`abc123 blob ${bytes.length}\n`), bytes, encoder.encode("\n")];
         });
+
         const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
         parts.reduce((at, p) => {
           all.set(p, at);
+
           return at + p.length;
         }, 0);
         expect(batchTexts(all)).toEqual(texts);
@@ -224,14 +235,17 @@ describe("batchTexts", () => {
 
 describe("records.ts on a real clone", () => {
   const root = mkdtempSync(join(tmpdir(), "records-"));
+
   const git = (cwd: string, ...args: Array<string>) => {
     const ran = spawnSync("git", args, { cwd, encoding: "utf8" });
     expect(ran.status, ran.stderr).toBe(0);
   };
+
   const put = (repo: string, path: string, text: string) => {
     mkdirSync(dirname(join(repo, path)), { recursive: true });
     writeFileSync(join(repo, path), text);
   };
+
   const records = (cwd: string, ...args: Array<string>) =>
     spawnSync(process.execPath, [script, ...args], {
       cwd,
@@ -420,6 +434,7 @@ describe("find", () => {
       fc.property(fc.integer({ min: 1, max: 6 }), fc.integer({ min: 1, max: 6 }), (rare, more) => {
         // `alpha` sits in `rare` records, `beta` in more of them, and every record holds `filler`.
         const common = rare + more;
+
         const made = Array.from({ length: 12 + common }, (_, i) => ({
           path: `experiments/${String(i + 1).padStart(2, "0")}-x.md`,
           title: String(i),
@@ -430,6 +445,7 @@ describe("find", () => {
           ]),
           decision: undefined,
         }));
+
         const hits = shortlist(find("alpha beta filler", made, { limit: 100, all: false }));
         const score = (word: string) => hits.find((h) => h.words.includes(word) && h.words.length === 1)?.score ?? 0;
         expect(score("alpha")).toBeGreaterThan(score("beta"));
@@ -498,6 +514,7 @@ describe("resolve", () => {
       fc.property(fc.uniqueArray(fc.integer({ min: 1, max: 9999 }), { minLength: 1, maxLength: 12 }), (ns) => {
         const ids = ns.map((n) => String(n).padStart(4, "0"));
         const last = ids.at(-1) ?? "";
+
         const chain = new Map(
           ids.map((id, i) => [
             id,
@@ -520,6 +537,7 @@ describe("resolve", () => {
       ["0003", Status.cases.superseded.make({ by: ["0009"] })],
       ["0004", readStatus("superseded by a later rule")],
     ]);
+
     expect(Resolution.isAnyOf(["broken"])(resolve("0001", loop))).toBe(true);
     expect(Resolution.isAnyOf(["broken"])(resolve("0003", loop))).toBe(true);
     expect(Resolution.isAnyOf(["broken"])(resolve("0004", loop))).toBe(true);
@@ -532,6 +550,7 @@ describe("resolve", () => {
       ["0003", Status.cases.superseded.make({ by: ["0004"] })],
       ["0004", Status.cases.accepted.make({ amendedBy: [] })],
     ]);
+
     expect(resolve("0001", meet)).toEqual(Resolution.cases.superseded.make({ id: "0001", by: ["0004"] }));
   });
 });

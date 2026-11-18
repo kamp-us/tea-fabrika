@@ -1,4 +1,4 @@
-// A shared suite for plant.test.ts: a law with a plant, declared inside an exported suite function,
+// A shared suite for plant.integration.test.ts: a law with a plant, declared inside an exported suite function,
 // the way libfabrika's `*Test.ts` suites are. It runs only from runs-shared.fixture.ts, so plant.ts
 // runs that file and its record must name this one, where the law is declared. Its name is no test
 // file's and does not end in `Test.ts`, so no test run and no plant check reads it as a law file.

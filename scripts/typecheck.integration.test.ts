@@ -74,6 +74,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
     `import {existsSync, writeFileSync} from 'node:fs';
 import {basename} from 'node:path';
 if (existsSync('/proc/self/comm')) writeFileSync('/proc/self/comm', basename(process.argv0));
+process.stdout.write('ready\\n');
 setTimeout(() => {}, 60_000);
 `,
   );
@@ -109,10 +110,12 @@ const typecheck = (r: Rig, id: string, env: Record<string, string | undefined> =
   return { child, stderr: () => err };
 };
 
+// The deadline reads the monotonic clock. A runner's wall clock can step forward, and a Date.now()
+// deadline then ends at once: CI run 43831921638 failed a 5 s wait in a test that took 37 ms.
 const until = async (test: () => boolean, what: string) => {
-  const end = Date.now() + 5_000;
+  const end = performance.now() + 5_000;
 
-  while (!test() && Date.now() < end) {
+  while (!test() && performance.now() < end) {
     await new Promise((r) => setTimeout(r, 20));
   }
 
@@ -121,15 +124,24 @@ const until = async (test: () => boolean, what: string) => {
 
 /**
  * A compiler the lock does not cover, or with `--lsp` a language server: node, linked under the rig's
- * compiler name. It returns once pgrep -x sees that name, so the typecheck after it finds it.
+ * compiler name. The stand-in prints `ready` once it runs under that name, and only then does pgrep -x
+ * look for it, once, so the typecheck after it finds it. The wait is on the child's own event, so no
+ * clock bounds it: a stand-in that errors or exits first fails the law at once.
  */
 const named = async (r: Rig, args: readonly string[] = []) => {
   const path = join(r.bin, r.compiler),
     standIn = join(r.dir, "named.mjs");
   symlinkSync(process.execPath, path);
-  const child = spawn(path, [standIn, ...args], { detached: true, stdio: "ignore" });
+  const child = spawn(path, [standIn, ...args], { detached: true, stdio: ["ignore", "pipe", "ignore"] });
   children.push(child);
-  await until(() => spawnSync("pgrep", ["-x", r.compiler]).status === 0, "the stand-in compiler never started");
+  await new Promise<void>((ready, failed) => {
+    child.stdout!.once("data", () => ready());
+    child.once("error", failed);
+    child.once("exit", (code, signal) =>
+      failed(new Error(`the stand-in compiler ended before it was ready: ${code ?? signal}`)),
+    );
+  });
+  expect(spawnSync("pgrep", ["-x", r.compiler]).status === 0, "the stand-in compiler never started").toBe(true);
   return { child, command: [path, standIn, ...args].join(" ") };
 };
 

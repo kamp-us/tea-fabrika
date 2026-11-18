@@ -19,7 +19,9 @@ export const Model = Schema.TaggedUnion({
 );
 
 const Msg = Schema.Struct({ type: Schema.Literal("take"), at: Integer, policy: Policy });
+
 const report = Cmd.make("report", { input: Schema.Struct({ decision: Decision }), ok: Schema.Null, err: [] });
+
 const times = Schema.decodeUnknownResult(Schema.Struct({ at: Integer, until: Integer, ttl: Positive }));
 
 /** @internal One sender's saved budget. Time and policy enter only in a take message. */
@@ -51,10 +53,12 @@ export const machine = Machine.make({
       }
 
       const used = continuing && s._tag === "open" ? s.used + 1 : 1;
+
       const next =
         used === m.policy.limit
           ? Model.cases.full.make({ policy: m.policy, until, at })
           : Model.cases.open.make({ policy: m.policy, until, at, used });
+
       return [next, [report({ decision: Decision.cases.allowed.make({ count: used, ttl }) })]];
     },
     report_ok: (s) => [s, []],

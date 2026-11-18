@@ -30,6 +30,7 @@ const taskFor = (a: typeof AnyItem.Type): Task => {
     execution: a.execution,
     executor: { ...a.executor, key: a.matching ? a.request.target : `${a.request.target}x` },
   };
+
   const state =
     a.phase === "requested"
       ? State.cases.requested.make({ request: a.request })
@@ -45,6 +46,7 @@ const taskFor = (a: typeof AnyItem.Type): Task => {
                 result: a.result,
                 collection: { process: a.request.process, letter: `${a.request.id}/answer` },
               });
+
   return { state, events: [] };
 };
 
@@ -60,6 +62,7 @@ it.prop(
   },
   ({ items, key, process }) => {
     const tasks = items.map((item) => taskFor({ ...item, matching: true }));
+
     const subjects = tasks.flatMap((j) =>
       j.state._tag === "absent" ? [] : [{ process: j.state.request.process, key: j.state.request.target }],
     );
@@ -73,6 +76,7 @@ it.prop(
             j.state.request.target === subject.key &&
             j.state.request.process === subject.process,
         );
+
         expect(TaskAccess.select(values, subject)).toEqual(
           wanted.length > 1 ? Result.fail("ambiguous") : Result.succeed(wanted[0] ?? null),
         );

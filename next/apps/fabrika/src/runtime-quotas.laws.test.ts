@@ -331,9 +331,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     },
     PROCESS: {
       getByName: (name: string) => {
-        const [, storageKey] = Schema.decodeUnknownSync(
-          Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-        )(name);
+        const [, storageKey] = Schema.decodeSync(Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])))(
+          name,
+        );
         let store = stores.get(storageKey);
 
         if (store === undefined) {

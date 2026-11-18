@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-fold-recheck-gatewaywaits",
+  "ticket": "1075",
+  "pr": "kamp-us/tea-fabrika#1462",
+  "started": "2026-11-15T21:56:05-08:00",
+  "ended": "2026-11-15T21:57:49-08:00",
+  "parent": "2026-11-15-effect-fold-review-gatewaywaits",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of 5dfed43be, in next/: merge-ready, no new finding. The second-stub finding is fixed: gatewayProject(env) builds the one ProjectClient over the recorded start's project, and gatewayLogic and GatewayWaits.layer both read it, provided once below both in connectionLayer, as before 014ba9b56 when p was the gateway's one client. A scratch count of projectStub calls per law run read 2 at 5dfed43be (the settings start and the shared client) and 3 at 014ba9b56. The law's checks are unchanged, and the three earlier plants (orDie on the gateway's waits.wait call, reason unreachable for bad_row, a retry on options.wait in transport/Connection.ts) each still turn it red.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Ran alone, green: readers.laws.test.ts (39), connection.test.ts (11), entry-flows.laws.test.ts (6). git merge-tree with origin/main 81ae89169: no conflict. loosening.sh from 85733f38d: one hit, an import line, no law loosened. Not run: any .integration. or .visual. file, pnpm typecheck.",
+  "step": "review"
+}

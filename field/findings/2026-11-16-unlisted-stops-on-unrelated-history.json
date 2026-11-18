@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-unlisted-stops-on-unrelated-history",
+  "date": "2026-11-16",
+  "by": "lead",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/pr/BranchesGit.ts",
+    "line": 69
+  },
+  "says": "In today's lead tooling, the unlisted-branch scan stops when a branch has no shared history with main, so it produces no report for the remaining branches.",
+  "proof": "At main 55ae19989916bacf063c1e418f72869fe1891957, the scan exits 1 with 'refusing to merge unrelated histories'. The retained tip 8f64088c53f4eb4c97c2ada470e39f0a7024496a has no merge base with main. git merge-tree --write-tree main <tip> exits 128, while BranchesGit.landsEmpty accepts only 0 or 1. Unlisted.check propagates that failure instead of reporting that branch as unlisted.",
+  "cost": "One unrelated branch prevents the lead from seeing which other branches still need a pull request.",
+  "head": "55ae19989916bacf063c1e418f72869fe1891957",
+  "ticket": null,
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1530"
+}

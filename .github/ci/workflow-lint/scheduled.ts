@@ -1,4 +1,8 @@
-// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC18).
+// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC20).
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Result, Schema } from "effect";
 import { parse } from "yaml";
 import {
   allSteps,
@@ -11,6 +15,7 @@ import {
   nextJob,
   numbered,
   ON_E2E,
+  type Require,
   steps,
   TOKEN,
   uses,
@@ -26,54 +31,165 @@ const TOOLING_PROJECT = "--project tooling";
 
 // The full run (0534, 0581): scheduled.yaml runs all of next/ and every tooling test on main, and a
 // red run opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull
-// requests keep theirs.
-const RUNNERS = 10;
+// requests keep theirs (0595). The ten jobs are MAIN_SLOTS groups for main's full run, PROOF_SLOTS for
+// branch proofs and one control group (0598); the merge line, check.yaml, holds none.
+const BUDGET = 10;
+
+const CONTROL_GROUP = "scheduled-control";
+
+const MAIN_GROUP = "scheduled-main-";
+
+const PROOF_GROUP = "scheduled-proof-";
+
+// 0595's names, which no group of this workflow holds any more.
+const OLD_GROUP = "scheduled-test-";
+
+// The two counts (0069): how many groups main's full run takes and how many a branch proof takes.
+// GitHub allows no `env` in `strategy` or a job's `concurrency`, so the copies are held equal here.
+const MAIN_SLOTS = "MAIN_SLOTS";
+
+const PROOF_SLOTS = "PROOF_SLOTS";
+
+const ON_MAIN = "github.ref == 'refs/heads/main'";
+
+/** A count: a whole number of 1 or more, written as a number, never as text. */
+const count = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isInteger(value) && value >= 1 ? value : undefined;
+
+const decodePins = Schema.decodeResult(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Finite]))),
+);
+
+type Pins = Readonly<Record<string, string>>;
+
+/** The expression with every space outside a quoted string gone: spacing never changes its meaning. */
+const squash = (value: string) => value.replace(/'(?:[^']|'')*'|\s+/g, (match) => (match.startsWith("'") ? match : ""));
+
+const pinsFrom = (text: string | undefined): Pins | undefined => {
+  const decoded = Result.getOrUndefined(decodePins(text ?? ""));
+
+  return decoded === undefined
+    ? undefined
+    : Object.fromEntries(Object.entries(decoded).map(([leg, group]) => [leg, String(group)]));
+};
+
+/**
+ * The two closed maps of `tests`'s group, each leg's number in its group, one for main and one for a
+ * branch proof; or none. Only the exact ref-conditional form reads: the prefix chosen by the ref, and
+ * the same condition choosing the map.
+ */
+const pinsOf = (group: unknown): { readonly main: Pins; readonly proof: Pins } | undefined => {
+  const match =
+    typeof group === "string"
+      ? /^\$\{\{github\.ref=='refs\/heads\/main'&&'scheduled-main-'\|\|'scheduled-proof-'\}\}\$\{\{fromJSON\(github\.ref=='refs\/heads\/main'&&'([^']*)'\|\|'([^']*)'\)\[matrix\.shard\]\}\}$/i.exec(
+          squash(group),
+        )
+      : null;
+
+  const main = pinsFrom(match?.[1]);
+  const proof = pinsFrom(match?.[2]);
+
+  return main === undefined || proof === undefined ? undefined : { main, proof };
+};
+
+/** Only a closed identity lookup over the proof groups may turn a selected leg's group into a name. */
+const rotationOf = (value: unknown): Pins | undefined => {
+  const match =
+    typeof value === "string"
+      ? /^scheduled-proof-\$\{\{\s*fromJSON\('([^']*)'\)\[fromJSON\(needs\.select\.outputs\.slots\)\[matrix\.shard\]\]\s*\|\|\s*'1'\s*\}\}$/i.exec(
+          value,
+        )
+      : null;
+
+  return pinsFrom(match?.[1]);
+};
+
+/** The numbers 1 to `most`, as text. */
+const upTo = (most: number | undefined) =>
+  most === undefined ? [] : Array.from({ length: most }, (_, index) => String(index + 1));
+
+/** Every pin of `legs`, and the groups they reach exactly 1 to `most`. */
+const covers = (pins: Pins | undefined, shards: readonly unknown[], most: number | undefined) =>
+  pins !== undefined &&
+  most !== undefined &&
+  Object.keys(pins).length === shards.length &&
+  shards.every((shard) => typeof shard === "string" && Object.hasOwn(pins, shard)) &&
+  JSON.stringify(upTo(most)) ===
+    JSON.stringify([...new Set(Object.values(pins))].toSorted((a, b) => Number(a) - Number(b)));
+
 // What the workflow's token may do: read runs (the time tables) and the checkout. Canceling a run takes
 // `actions: write`, and a run anything canceled ends `cancelled`, never `failure`.
 const READS = { actions: "read", contents: "read" };
+
 export const VERDICT = "report";
+
 // The one job that holds every test leg, next's and tooling's, so one `fail-fast` stops them all
 // (SC6). A tooling leg's shard starts TOOLING_LEG, which is how scheduled.mjs's `suiteOf` reads it.
 const TESTS_JOB = "tests";
+
 const TOOLING_LEG = "tooling-";
+
 const ON_TOOLING = `startsWith(matrix.shard, '${TOOLING_LEG}')`;
+
 // On every branch: the report job fails unless the run is green, so a red run with no failed job
 // still ends `failure`. scheduled.mjs writes the issue on main alone.
 // A run whose gate said `false` skips the report too, so it leaves the issue as it was; a gate that
 // failed leaves `start` empty, and the report judges that run red (0581).
 const REPORT_IF = "always() && needs.gate.outputs.start != 'false'";
+
 const REPORT = "node .github/ci/scheduled.mjs";
+
 // The gate (0581): the first job, which says whether this run starts the tests. A push to main or
 // the hourly catch-up starts them only when no full run on main started within the gap, and the
 // catch-up only on a head that has had none; a hand start always does.
 const GATE_JOB = "gate";
+
 const GATE = "node .github/ci/gate.mjs";
+
 const GATE_STEP = "decide";
+
 const GATE_OUTPUTS = { start: `\${{ steps.${GATE_STEP}.outputs.start }}` };
+
 const STARTED = `needs.${GATE_JOB}.outputs.start == 'true'`;
+
 // A branch's proof run (0590): `select` runs proof.ts on a hand start on a branch other than main
 // alone, so main's push, catch-up and hand start run the full set on `tests` (SC15, SC17). It says
 // `full` or `changed`, and a changed set runs on `changed`'s legs, each its own list (SC18).
 const SELECT_JOB = "select";
+
 const SELECT = "node .github/ci/proof.ts";
+
 const SELECT_STEP = "set";
+
 const SELECT_IF = `${STARTED} && github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'`;
 
 const SELECT_OUTPUTS = Object.fromEntries(
   ["scope", "legs", "files"].map((key) => [key, `\${{ steps.${SELECT_STEP}.outputs.${key} }}`]),
 );
 
+const SLOT_OUTPUT = `\${{ steps.${SELECT_STEP}.outputs.slots }}`;
+
+const RUN_NUMBER = `\${{ github.run_number }}`;
+
 const RECORD = `\${{ runner.temp }}/proof-set.json`;
+
 // `tests` runs after a skipped `select`, on main, or after one that said `full`.
 const TESTS_IF = `\${{ !cancelled() && ${STARTED} && (needs.${SELECT_JOB}.result == 'skipped' || needs.${SELECT_JOB}.outputs.scope == 'full') }}`;
+
 const CHANGED_JOB = "changed";
+
 const CHANGED_IF = `${STARTED} && needs.${SELECT_JOB}.outputs.scope == 'changed' && needs.${SELECT_JOB}.outputs.legs != '[]'`;
+
 const CHANGED_LEGS = `\${{ fromJSON(needs.${SELECT_JOB}.outputs.legs) }}`;
+
 const LEG_FILES = `fromJSON(needs.${SELECT_JOB}.outputs.files)[matrix.shard]`;
+
 // The gap (0581, 0069): a setting in the workflow's own env, beside the cron line. 0581's binding
 // constraint is an hour at least.
 const GAP = "GAP_MINUTES";
+
 const LEAST_GAP = 60;
+
 // The hourly catch-up: a fixed minute of every hour, never minute 0, which GitHub's docs name as
 // the busiest ("Events that trigger workflows", schedule).
 const HOURLY = /^([1-9]|[1-5][0-9]) \* \* \* \*$/;
@@ -85,21 +201,29 @@ const REPORT_ENV = {
 };
 
 const RESULTS = '--outputFile.json="$RUNNER_TEMP/results.json"';
+
 const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions ${RESULTS}`;
+
 // Every layer of next/ (0536): the vitest legs run the in-memory and the real-resource projects, and
 // the e2e legs the visual one. A project, not a path, picks the files: `next/` as a path would start
 // `next-visual` on legs with no Chromium, and a project ignores `--exclude`.
 const WHOLE_NEXT = `pnpm exec vitest run --project next --project next-integration --shard "$SHARD" ${REPORTERS}`;
+
 const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
+
 const WHOLE_TOOLING = `pnpm exec vitest run ${TOOLING_PROJECT} --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+
 // A changed leg's one command: its own list, `$FILES` from `select`, over every project CI runs and
 // proof.ts lists, today's left out (0533). No `--changed` and no `--shard`: the list is the leg.
 const CHANGED_RUN = `pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling $FILES ${REPORTERS}`;
+
 // The schedule's test depth (pull request 1274): its laws run their full case count.
 const DEPTH = "full";
+
 // Each suite's test commands, which carry its time limit on their own steps (SC13). The report reads
 // each limit as `LIMIT_<SUITE>` (SC5).
 const SUITES = { next: [WHOLE_NEXT, WHOLE_E2E], tooling: [WHOLE_TOOLING] } as const;
+
 // The test job's own limit is a leg's test step limit and this many minutes more. In green runs
 // 43765797242, 43734956911 and 43734841211 the steps before a test step took at most 56 s in all
 // and the three after it at most 7 s, against their 2 minutes of step limits.
@@ -115,6 +239,7 @@ const limitOf = (jobs: Record<string, unknown>, suite: keyof typeof SUITES): unk
   const commands: readonly string[] = SUITES[suite];
   const found = steps(map(jobs[TESTS_JOB])).filter((s) => typeof s["run"] === "string" && commands.includes(s["run"]));
   const limits = new Set(found.map((s) => s["timeout-minutes"]));
+
   return found.length > 0 && limits.size === 1 ? [...limits][0] : undefined;
 };
 
@@ -125,7 +250,123 @@ const backstop = (next: number, tooling: number) =>
 /** A matrix job's legs, as the workflow lists them: a plain list, never an expression. */
 const listed = (job: Record<string, unknown>): unknown[] => {
   const shard = map(map(job["strategy"])["matrix"])["shard"];
+
   return Array.isArray(shard) ? shard : [];
+};
+
+/** The shared scheduled job budget, independent of the workflow admission queue. */
+const jobSlots = (workflow: Record<string, unknown>, require: Require): void => {
+  const jobs = map(workflow["jobs"]);
+  const concurrency = map(workflow["concurrency"]);
+
+  const selectRuns = steps(map(jobs[SELECT_JOB])).filter(
+    (s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile",
+  );
+
+  const selectEnv = map(selectRuns[0]?.["env"]);
+
+  const names = [GATE_JOB, SELECT_JOB, VERDICT, TESTS_JOB, CHANGED_JOB];
+  require(Object.keys(jobs).length === names.length &&
+    names.every((name) =>
+      Object.hasOwn(jobs, name),
+    ), "SC19: every admitted job is one of the five jobs with shared slots");
+
+  // SC16, the counts. Two settings, whole numbers of 1 or more, that with the control group make the
+  // budget (0598); the workflow's env holds them beside the gap.
+  const settings = map(workflow["env"]);
+  const main = count(settings[MAIN_SLOTS]);
+  const proof = count(settings[PROOF_SLOTS]);
+  require(main !== undefined &&
+    proof !==
+      undefined, `SC16: ${MAIN_SLOTS} and ${PROOF_SLOTS} are each a whole number of 1 or more, written as a number`);
+
+  // SC19. The two counts and the control group are the whole budget (0595, 0598).
+  require(main !== undefined &&
+    proof !== undefined &&
+    main + proof + 1 ===
+      BUDGET, `SC19: ${MAIN_SLOTS} and ${PROOF_SLOTS} with the one control group add up to the budget of ${BUDGET} jobs`);
+
+  // Fixed job groups reserve main's groups, the branch proofs' groups and one control group
+  // across participating scheduled workflows, even when their refs have separate workflow queues.
+  const pins = pinsOf(map(map(jobs[TESTS_JOB])["concurrency"])["group"]);
+  const fullShards = listed(map(jobs[TESTS_JOB]));
+  const fullMatrix = map(map(map(jobs[TESTS_JOB])["strategy"])["matrix"]);
+  const changedStrategy = map(map(jobs[CHANGED_JOB])["strategy"]);
+  const changedMatrix = map(changedStrategy["matrix"]);
+  const rotation = rotationOf(map(map(jobs[CHANGED_JOB])["concurrency"])["group"]);
+
+  const rotated =
+    proof !== undefined &&
+    rotation !== undefined &&
+    Object.keys(rotation).length === proof &&
+    upTo(proof).every((slot) => Object.hasOwn(rotation, slot) && rotation[slot] === slot) &&
+    selectRuns.length === 1 &&
+    selectRuns[0]?.["id"] === SELECT_STEP &&
+    selectRuns[0]?.["run"] === SELECT &&
+    selectEnv["RUN_NUMBER"] === RUN_NUMBER &&
+    map(map(jobs[SELECT_JOB])["outputs"])["slots"] === SLOT_OUTPUT;
+
+  const fullGroup =
+    Object.keys(fullMatrix).length === 1 &&
+    new Set(fullShards).size === fullShards.length &&
+    covers(pins?.main, fullShards, main) &&
+    covers(pins?.proof, fullShards, proof);
+
+  for (const name of names) {
+    const held = map(map(jobs[name])["concurrency"]);
+    const group = held["group"];
+
+    const shared =
+      name === TESTS_JOB
+        ? fullGroup
+        : name === CHANGED_JOB
+          ? rotated &&
+            count(selectEnv["MOST"]) === proof &&
+            changedStrategy["max-parallel"] === selectEnv["MOST"] &&
+            Object.keys(changedMatrix).length === 1 &&
+            changedMatrix["shard"] === CHANGED_LEGS
+          : typeof group === "string" && group.toLowerCase() === CONTROL_GROUP;
+
+    require(Object.keys(held).length === 3 &&
+      held["queue"] === "max" &&
+      held["cancel-in-progress"] === false &&
+      shared, `SC19: ${name} shares its fixed job slots across runs, keeps every waiting job and cancels none`);
+  }
+
+  const reserved = [
+    CONTROL_GROUP,
+    ...upTo(main).map((slot) => `${MAIN_GROUP}${slot}`),
+    ...upTo(proof).map((slot) => `${PROOF_GROUP}${slot}`),
+  ];
+
+  require(typeof concurrency["group"] === "string" &&
+    !reserved.includes(concurrency["group"].toLowerCase()), "SC19: the workflow group never holds a shared job group");
+
+  // 0595's groups are gone: no job group of this workflow, nor its own, starts with their prefix.
+  require(![concurrency, ...names.map((name) => map(map(jobs[name])["concurrency"]))].some(
+    (held) => typeof held["group"] === "string" && held["group"].toLowerCase().includes(OLD_GROUP),
+  ), `SC19: no group holds 0595's ${OLD_GROUP} names`);
+
+  // SC20. The matrix lists the legs in the order they should start. A group is a first in, first out
+  // queue and the matrix makes its jobs in list order, so the first MAIN_SLOTS legs take main's groups
+  // 1 to MAIN_SLOTS in order, and the first PROOF_SLOTS legs the proof groups 1 to PROOF_SLOTS, so no
+  // group sits empty while another has a leg waiting.
+  const firstOnes = (map_: Pins | undefined, most: number | undefined) =>
+    map_ !== undefined &&
+    most !== undefined &&
+    upTo(most).every((slot, index) => {
+      const leg = fullShards[index];
+
+      return typeof leg === "string" && map_[leg] === slot;
+    });
+
+  require(fullShards.every((shard) => typeof shard === "string") &&
+    new Set(fullShards).size === fullShards.length &&
+    firstOnes(pins?.main, main) &&
+    firstOnes(
+      pins?.proof,
+      proof,
+    ), `SC20: the test job's first ${MAIN_SLOTS} legs take main's groups 1 to ${MAIN_SLOTS} in order, and its first ${PROOF_SLOTS} legs the proof groups 1 to ${PROOF_SLOTS}, each leg once, so no group waits empty`);
 };
 
 /**
@@ -136,9 +377,11 @@ const listed = (job: Record<string, unknown>): unknown[] => {
 const depth = (jobs: Record<string, unknown>, name: string, seen: readonly string[] = []): number => {
   const needs = map(jobs[name])["needs"];
   const list = typeof needs === "string" ? [needs] : Array.isArray(needs) ? needs : [];
+
   const known = list.filter(
     (need): need is string => typeof need === "string" && need in jobs && !seen.includes(need) && need !== name,
   );
+
   return known.length === 0 ? 0 : 1 + Math.max(...known.map((need) => depth(jobs, need, [...seen, name])));
 };
 
@@ -147,18 +390,18 @@ const depth = (jobs: Record<string, unknown>, name: string, seen: readonly strin
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
 export const lintScheduled = (text: string, check: string): string[] => {
-  let source: unknown;
+  const parsed = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(parsed)) {
     return ["scheduled.yaml: invalid YAML"];
   }
 
-  const workflow = map(source),
+  const workflow = map(parsed.success),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
+
   const errors: string[] = [];
+
   const require = (holds: boolean, reason: string) => {
     if (!holds) {
       errors.push(`scheduled.yaml: ${reason}`);
@@ -177,18 +420,22 @@ export const lintScheduled = (text: string, check: string): string[] => {
     HOURLY.test(
       String(map(crons[0])["cron"]),
     ), "SC1: it runs on a push to main, on one hourly schedule at a minute from 1 to 59, and by hand, on no other event");
-  // SC16. The gap is the workflow's one env value, a whole number of minutes, an hour at least
-  // (0581's binding constraint), so a person changes it in one line beside the cron line.
+  // SC16. The workflow's env is its three settings, nothing else: the gap, a whole number of
+  // minutes, an hour at least (0581's binding constraint), and the two group counts (0598, checked in
+  // jobSlots). A person changes each in one line beside the cron line.
   const gap = map(workflow["env"])[GAP];
-  require(JSON.stringify(Object.keys(map(workflow["env"]))) === JSON.stringify([GAP]) &&
+  require(JSON.stringify(Object.keys(map(workflow["env"])).toSorted()) ===
+    JSON.stringify([GAP, MAIN_SLOTS, PROOF_SLOTS].toSorted()) &&
     typeof gap === "number" &&
     Number.isInteger(gap) &&
-    gap >= LEAST_GAP, `SC16: the workflow's env is ${GAP} alone, a whole number of minutes, ${LEAST_GAP} or more`);
-  // SC2. One run at a time, and a running one is never cut short.
+    gap >=
+      LEAST_GAP, `SC16: the workflow's env is ${GAP}, ${MAIN_SLOTS} and ${PROOF_SLOTS}, nothing else, the gap a whole number of minutes, ${LEAST_GAP} or more`);
+  // SC2. One run per ref at a time. Main's triggers share a queue; branch proofs have their own.
   const concurrency = map(workflow["concurrency"]);
   require(typeof concurrency["group"] === "string" &&
-    !concurrency["group"].includes("${{") &&
-    concurrency["cancel-in-progress"] === false, "SC2: one run at a time, in one fixed group, and none cut short");
+    /^scheduled-\$\{\{\s*github\.ref\s*\}\}$/i.test(concurrency["group"]) &&
+    concurrency["cancel-in-progress"] ===
+      false, "SC2: one run per ref at a time, in the shared per-ref group, and none cut short");
 
   // SC3. The token reads runs (the time tables) and the checkout, and no more: `actions: write`
   // is what canceling a run takes. Only the report may write issues, and it may read runs to find
@@ -239,6 +486,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // judged red. It, the gate's step and the time tables are the steps that get the token.
   const report = map(jobs[VERDICT]),
     others = Object.keys(jobs).filter((name) => name !== VERDICT);
+
   const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
   require(needed.length === others.length &&
     others.every((name) => needed.includes(name)) &&
@@ -247,6 +495,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
         REPORT_IF,
       ), "SC5: the report needs every other job, and runs after any result, on every branch, unless the gate said false");
   const judged = steps(report).filter((s) => "run" in s);
+
   // Each suite's limit, as `LIMIT_<SUITE>`, equal to its test steps' `timeout-minutes` (SC13):
   // scheduled.mjs tells a timed-out leg from a red or a canceled one by it, and reads a leg's suite
   // from its name's shard, so no job sets a `name` of its own.
@@ -259,6 +508,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ]),
     ),
   };
+
   require(Object.values(jobs).every(
     (job) => !("name" in map(job)),
   ), "SC5: no job sets a name, so a leg's name is its job's id and its shard");
@@ -327,28 +577,32 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC17. `select` runs only on a hand start on a branch other than main, after the gate said
   // `true` (0590): a push to main, the catch-up and a hand start on main skip it, so SC15's `tests`
-  // runs every test there. It runs proof.ts once, in a step whose three outputs are the job's,
-  // with the most legs at once (`MOST`, the `changed` matrix's `max-parallel`, SC6), the legs' test
+  // runs every test there. It runs proof.ts once, in a step whose outputs are the job's,
+  // with the most legs at once (`MOST`, the `changed` matrix's `max-parallel` and PROOF_SLOTS, SC6, SC19), the legs' test
   // step limit (`LIMIT`, next's, SC18) and where its record goes, and no token. It checks out the
   // whole history, to diff the branch with origin/main from their merge base, and keeps the record
   // as `proof-set` after a red step too.
   const commandsOf = (job: Record<string, unknown>) =>
     steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
+
   const select = map(jobs[SELECT_JOB]);
   const selectSteps = steps(select);
   const selectRuns = selectSteps.filter((s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile");
   const selectEnv = map(selectRuns[0]?.["env"]);
+  const selectOutputs = { ...SELECT_OUTPUTS, slots: SLOT_OUTPUT };
+  const selectKeys = ["MOST", "LIMIT", "RECORD", "RUN_NUMBER"];
   const selectCheckouts = selectSteps.filter((s) => uses(s, "actions/checkout"));
   const records = selectSteps.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === RECORD);
   require(SELECT_JOB in jobs &&
     JSON.stringify(select["needs"]) === JSON.stringify([GATE_JOB]) &&
     compact(select["if"]) === compact(SELECT_IF) &&
-    JSON.stringify(select["outputs"]) === JSON.stringify(SELECT_OUTPUTS) &&
+    JSON.stringify(select["outputs"]) === JSON.stringify(selectOutputs) &&
     selectRuns.length === 1 &&
     selectRuns[0]?.["id"] === SELECT_STEP &&
     selectRuns[0]?.["run"] === SELECT &&
     !("if" in (selectRuns[0] ?? {})) &&
-    JSON.stringify(Object.keys(selectEnv)) === JSON.stringify(["MOST", "LIMIT", "RECORD"]) &&
+    JSON.stringify(Object.keys(selectEnv)) === JSON.stringify(selectKeys) &&
+    selectEnv["RUN_NUMBER"] === RUN_NUMBER &&
     selectEnv["RECORD"] === RECORD &&
     selectCheckouts.length === 1 &&
     map(selectCheckouts[0]?.["with"])["fetch-depth"] === 0 &&
@@ -388,9 +642,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
       JSON.stringify(
         ["pnpm install --frozen-lockfile", chromium, CHANGED_RUN, TIME_TABLE].toSorted(),
       ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over every project at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
+
   const changedKept = changedSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
   );
+
   require(changedKept.length === 1 &&
     compact(changedKept[0]?.["if"]) === "!cancelled()" &&
     changedSteps.indexOf(changedKept[0] ?? {}) >
@@ -403,11 +659,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // the `changed` job's, which SC15 and SC18 keep from running in one run. The gate, `select` and
   // the report are the only other jobs: GitHub's fail-fast stops only the legs of the red leg's own
   // matrix (probe run 43778347612), so a second matrix in one run would run on to its end after a red
-  // leg, as the stop step never let it. At most RUNNERS machines at once: jobs run together only at
+  // leg, as the stop step never let it. At most BUDGET machines at once: jobs run together only at
   // the same step of the `needs` chain, so each step counts its jobs, a matrix its `max-parallel` and
   // any other job one, and the two test matrices, which never run together, count as the larger.
   // A matrix sets it, runs no more at once than it has legs (the `changed` legs: no more than proof.ts
-  // makes, its `MOST`), and stops its other legs once one failed, which leaves the run's conclusion
+  // makes, its `MOST`, PROOF_SLOTS), and stops its other legs once one failed, which leaves the run's conclusion
   // `failure`.
   const MATRICES = [TESTS_JOB, CHANGED_JOB];
   require(JSON.stringify(others.toSorted()) === JSON.stringify([GATE_JOB, SELECT_JOB, ...MATRICES].toSorted()) &&
@@ -416,25 +672,54 @@ export const lintScheduled = (text: string, check: string): string[] => {
     ), `SC6: every test leg a run starts is in one matrix, the ${TESTS_JOB} job or the ${CHANGED_JOB} job, so its first red leg stops all the others`);
   const atOnce = new Map<number, number>();
   const matrixAt = new Map<number, number>();
+  const main = count(map(workflow["env"])[MAIN_SLOTS]);
+  const proof = count(map(workflow["env"])[PROOF_SLOTS]);
+
+  // The test job runs MAIN_SLOTS legs at once on main and PROOF_SLOTS on any other ref. GitHub allows no
+  // `env` in `strategy`, so its `max-parallel` is that expression with the two numbers written in,
+  // and the lint holds them equal to the two settings.
+  const BY_REF = /^github\.ref=='refs\/heads\/main'&&(\d+)\|\|(\d+)$/.exec(
+    compact(map(map(jobs[TESTS_JOB])["strategy"])["max-parallel"]),
+  );
+
+  const byRef = BY_REF === null ? undefined : { main: Number(BY_REF[1]), proof: Number(BY_REF[2]) };
+
+  require(main !== undefined &&
+    proof !== undefined &&
+    byRef?.main === main &&
+    byRef.proof ===
+      proof, `SC6: ${TESTS_JOB}'s max-parallel is \${{ ${ON_MAIN} && ${MAIN_SLOTS} || ${PROOF_SLOTS} }}, the count of its ref's groups, with the two settings' numbers written in`);
 
   for (const [name, job] of Object.entries(jobs).map(([name, job]) => [name, map(job)] as const)) {
     const strategy = map(job["strategy"]);
     const most = strategy["max-parallel"];
-    const cap = name === CHANGED_JOB ? selectEnv["MOST"] : listed(job).length;
+    const legsHere = listed(job).length;
 
-    if ("strategy" in job) {
+    if (name === TESTS_JOB) {
+      require(main !== undefined &&
+        proof !== undefined &&
+        Math.max(main, proof) <= legsHere &&
+        strategy["fail-fast"] ===
+          true, `SC6: ${name} sets max-parallel to at most its legs, and its first red leg stops the others`);
+    } else if ("strategy" in job) {
+      const cap = selectEnv["MOST"];
       require(typeof most === "number" &&
         Number.isInteger(most) &&
         most >= 1 &&
         typeof cap === "number" &&
-        most <= cap &&
-        (name !== CHANGED_JOB || most === cap) &&
+        most === cap &&
         strategy["fail-fast"] ===
           true, `SC6: ${name} sets max-parallel to at most its legs, and its first red leg stops the others`);
     }
 
     const at = depth(jobs, name);
-    const machines = "strategy" in job && typeof most === "number" ? most : 1;
+
+    const machines =
+      name === TESTS_JOB
+        ? Math.max(byRef?.main ?? legsHere, byRef?.proof ?? legsHere)
+        : "strategy" in job && typeof most === "number"
+          ? most
+          : 1;
 
     if (MATRICES.includes(name)) {
       matrixAt.set(at, Math.max(matrixAt.get(at) ?? 0, machines));
@@ -448,12 +733,15 @@ export const lintScheduled = (text: string, check: string): string[] => {
   }
 
   require([...atOnce.values()].every(
-    (machines) => machines <= RUNNERS,
-  ), `SC6: its jobs take at most ${RUNNERS} machines at once, half of the 20 runners`);
+    (machines) => machines <= BUDGET,
+  ), `SC6: its jobs take at most ${BUDGET} machines at once, half of the 20 runners`);
+
+  jobSlots(workflow, require);
 
   // SC7. All of next/ on check.yaml's full matrix, each leg's `/N` its kind's count, nothing
   // narrowed. A `--changed`, a `$FILTER` or a list would make it the merge line's selection again.
-  // The test job lists check.yaml's legs first, then the tooling legs (SC8).
+  // The test job lists check.yaml's legs, each once, among the tooling legs (SC8); their order is
+  // SC20's, the start order, and no longer check.yaml's.
   const tests = map(jobs[TESTS_JOB]),
     testSteps = steps(tests),
     shards = listed(tests),
@@ -462,10 +750,12 @@ export const lintScheduled = (text: string, check: string): string[] => {
     legsOfCheck = legs(nextJob(check)),
     e2eCount = ends(legsOfCheck).length,
     vitestCount = numbered(legsOfCheck).length;
+
   require(legsOfCheck.length > 0 &&
-    JSON.stringify(shards.slice(0, nextLegs.length)) === JSON.stringify(nextLegs) &&
-    JSON.stringify(nextLegs) ===
-      JSON.stringify(legsOfCheck), "SC7: the test job's next legs are check.yaml's full matrix of next legs, first");
+    JSON.stringify(nextLegs.toSorted()) ===
+      JSON.stringify(
+        legsOfCheck.toSorted(),
+      ), "SC7: the test job's next legs are check.yaml's full matrix of next legs, each once");
   const vitest = testSteps.filter((s) => s["run"] === WHOLE_NEXT);
   const e2e = testSteps.filter((s) => s["run"] === WHOLE_E2E);
   require(vitest.length === 1 &&
@@ -480,14 +770,13 @@ export const lintScheduled = (text: string, check: string): string[] => {
     (s) => s["run"] === chromium && compact(s["if"]) === compact(`${ON_E2E} && ${VISUAL_FILES}`),
   ), "SC7: next fetches chromium on the e2e legs, once a visual file exists");
 
-  // SC8. Every tooling test on the tooling legs, `tooling-1` to `tooling-N` after the next legs,
-  // nothing narrowed.
+  // SC8. Every tooling test on the tooling legs, `tooling-1` to `tooling-N`, nothing narrowed.
   const toolingRuns = testSteps.filter((s) => s["run"] === WHOLE_TOOLING);
   require(toolingRuns.length === 1 &&
     compact(toolingRuns[0]?.["if"]) === ON_TOOLING &&
     map(toolingRuns[0]?.["env"])["SHARD"] === `\${{ matrix.shard }}/${toolingLegs.length}` &&
     toolingLegs.length > 0 &&
-    JSON.stringify(shards.slice(nextLegs.length)) ===
+    JSON.stringify(toolingLegs.toSorted()) ===
       JSON.stringify(
         Array.from({ length: toolingLegs.length }, (_, i) => `${TOOLING_LEG}${i + 1}`),
       ), "SC8: the tooling legs run every tooling test once, legs tooling-1 to tooling-N, each its share of them");
@@ -503,6 +792,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const kept = testSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
   );
+
   const last = testSteps.findLastIndex((s) => typeof s["run"] === "string" && s["run"].includes(RESULTS));
   require(kept.length === 1 &&
     compact(kept[0]?.["if"]) === "!cancelled()" &&
@@ -521,7 +811,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }
 
-  // SC12. SC2's one group holds main's schedule and every hand-started run, so a waiting run is
+  // SC12. SC2's group holds every run on the same ref, so a waiting run is
   // never replaced: GitHub's default queue keeps one waiting and cancels it when a newer run queues.
   require(map(workflow["concurrency"])["queue"] === "max", "SC12: a newer run never cancels a waiting one: queue: max");
 
@@ -532,6 +822,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // job's limit may read `matrix` (GitHub's docs, "Contexts reference").
   const whole = (limit: unknown): limit is number =>
     typeof limit === "number" && Number.isInteger(limit) && limit > 0 && limit + BACKSTOP < 360;
+
   const nextLimit = limitOf(jobs, "next"),
     toolingLimit = limitOf(jobs, "tooling");
 
@@ -551,3 +842,34 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   return errors;
 };
+
+// Proof preflight reads the workflow at its exact source head, without executing that source.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv.length !== 3 || process.argv[2] !== "--job-slots") {
+    console.error("usage: scheduled.ts --job-slots < scheduled.yaml");
+    process.exitCode = 2;
+  } else {
+    const input = Result.try((): unknown => parse(readFileSync(0, "utf8")));
+    const errors: string[] = [];
+
+    if (Result.isFailure(input)) {
+      errors.push("scheduled.yaml: invalid YAML");
+    } else {
+      jobSlots(map(input.success), (holds, reason) => {
+        if (!holds) {
+          errors.push(`scheduled.yaml: ${reason}`);
+        }
+      });
+    }
+
+    if (errors.length === 0) {
+      console.log("scheduled job slots conform");
+    } else {
+      for (const error of errors) {
+        console.error(error);
+      }
+
+      process.exitCode = 1;
+    }
+  }
+}

@@ -65,9 +65,11 @@ name: scheduled
 # Every test leg sets `FABRIKA_TEST_DEPTH: full`, so a law with a depth runs its full case count
 # here; the merge line leaves it unset, which reads as `fast` (pull request 1274).
 #
-# 10 machines at most, half of the organization's 20 runners, so pull requests keep theirs:
-# `max-parallel` on the matrix, which workflow-lint.ts adds up per step of the `needs` chain. The next legs are check.yaml's full
-# matrix, and workflow-lint.ts keeps the two the same. Their split is not check.yaml's: at full
+# 10 machines at most, half of the organization's 20 runners, so pull requests keep theirs. Across
+# runs the job groups below hold the cap; within one run `max-parallel` on the matrix does, which
+# workflow-lint.ts adds up per step of the `needs` chain. The next legs are check.yaml's full
+# matrix, and workflow-lint.ts keeps the two the same, though not in one order: the `tests` matrix lists
+# its legs in the order they should start (SC20). Their split is not check.yaml's: at full
 # depth a file takes longer, so `Shards` splits and orders these legs by the seconds measured here,
 # vitest.shards.full.json (vitest.shards.ts). Refresh its rows from a leg's `results-next-N` report.
 on:
@@ -84,15 +86,22 @@ on:
   # main's run writes the issue.
   workflow_dispatch:
 
-# One run at a time, and a running one is never cut short: a newer one waits its turn. `queue: max`
-# lets up to 100 wait, first in first out. GitHub's default keeps one waiting and cancels it when a
-# newer run queues, so a hand-started branch run could cancel main's waiting scheduled run: two of
-# the first three scheduled runs waited 10 and 13 minutes behind a hand-started one (GitHub's docs,
+# One run per ref at a time, and a running one is never cut short. Main's push, catch-up and hand
+# starts share a queue; each branch proof has its own. `queue: max` lets up to 100 wait, first in
+# first out. GitHub's default keeps one waiting and cancels it when a newer run queues. Under the
+# old global group, two of the first three scheduled runs waited 10 and 13 minutes behind a
+# hand-started one (GitHub's docs,
 # "Control the concurrency of workflows and jobs").
 concurrency:
-  group: scheduled
+  group: scheduled-${{ github.ref }}
   queue: max
   cancel-in-progress: false
+
+# Ten job groups cap jobs across participating refs and runs (0595, 0598): `scheduled-main-1` to
+# `MAIN_SLOTS` for main's full run, `scheduled-proof-1` to `PROOF_SLOTS` for a branch's proof run, and
+# `scheduled-control` for the gate, select and report. The merge line, check.yaml, holds none of them, so a
+# pull request never waits on a full run. A group is a queue that admits one job: the legs pinned to
+# one group run one after the other, so each count is how many legs run at once.
 
 # `actions: read` lets each leg's time table read its own job's steps, and no more: a token that
 # cannot write actions cannot cancel a run. `contents: read` is the checkout's. The report job alone
@@ -101,18 +110,24 @@ permissions:
   actions: read
   contents: read
 
-# The gap (0581, 0069): no full run on main starts within this many minutes of the last one, except
-# by hand. An hour at least, 0581's binding constraint. The gate reads it; change this line to
-# change it.
+# The settings (0069). The gap: no full run on main starts within this many minutes of the last one,
+# except by hand; an hour at least, 0581's binding constraint, and the gate reads it. The two group
+# counts: MAIN_SLOTS for main's full run and PROOF_SLOTS for a branch's proof run, which with the one
+# control group make the ten jobs of 0595's budget. Change them here, keeping MAIN_SLOTS + PROOF_SLOTS
+# at 9, and then pin `tests` again to the new counts (its two maps and its `max-parallel`), since
+# GitHub allows no `env` in `strategy` or a job's `concurrency`. workflow-lint.ts holds all of it
+# (SC6, SC16, SC19, SC20).
 env:
   GAP_MINUTES: 60
+  MAIN_SLOTS: 5
+  PROOF_SLOTS: &proof-slots 4
 
 jobs:
   # The gate (0581): whether this run starts the tests. A hand start always does; a push or the
   # catch-up does when no full run on main started within the gap, and only on a head that has had
-  # none (gate.mjs). It runs while this run holds the `scheduled` group, so every run ahead of it
-  # has ended. It reads the run list with the workflow's own token, which cannot cancel a run, and
-  # its summary line says why. When it cannot read GitHub it fails and gives no `start`: the tests
+  # none (gate.mjs). The ref's workflow group holds this run, so earlier runs on main have ended
+  # before main's gate reads them. It reads runs with the workflow's own token, which cannot cancel
+  # a run, and its summary line says why. When it cannot read GitHub it fails and gives no `start`: the tests
   # skip and the report judges the run red. No install: the runner's own Node runs gate.mjs.
   #
   # Every way it ends with no `start` ends the job `failure`, so the report judges the run red:
@@ -121,6 +136,10 @@ jobs:
   # that hits it ends `cancelled`, which the report reads as a run a person stopped (the review of
   # pull request 1404). Nothing here continues on error. workflow-lint.ts holds it (SC14).
   gate:
+    concurrency:
+      group: scheduled-control
+      queue: max
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -158,7 +177,19 @@ jobs:
   # `select` said `full`. A run starts this job or `changed`, never both, so each red leg still stops
   # every leg the run started. `!cancelled()` lets it run after a skipped `select`, which would skip
   # it otherwise; the gate's `start` and the select's own result still decide (SC15).
+  #
+  # The groups (0598). Main's full run takes `scheduled-main-1` to MAIN_SLOTS and a branch's full set
+  # `scheduled-proof-1` to PROOF_SLOTS, each leg pinned to one by its place in the matrix. A group is a
+  # first in, first out queue that admits one job, and the matrix makes its jobs in list order, so
+  # the matrix lists the legs in the order they should start: the longest first, the first MAIN_SLOTS
+  # legs on groups 1 to MAIN_SLOTS (and the first PROOF_SLOTS on a proof's groups 1 to PROOF_SLOTS), and each
+  # later leg behind the leg that frees its group first, as measured in run 44155250216. The pins are
+  # measured data: refresh them with vitest.shards.full.json. SC19 and SC20 hold their shape.
   tests:
+    concurrency:
+      group: ${{ github.ref == 'refs/heads/main' && 'scheduled-main-' || 'scheduled-proof-' }}${{ fromJSON(github.ref == 'refs/heads/main' && '{"tooling-1":"1","3":"2","2":"3","5":"4","tooling-2":"5","e2e-2":"4","1":"3","4":"2","e2e-1":"1"}' || '{"tooling-1":"1","3":"2","2":"3","5":"4","tooling-2":"4","e2e-2":"3","1":"2","4":"1","e2e-1":"1"}')[matrix.shard] }}
+      queue: max
+      cancel-in-progress: false
     needs: [gate, select]
     if: ${{ !cancelled() && needs.gate.outputs.start == 'true' && (needs.select.result == 'skipped' || needs.select.outputs.scope == 'full') }}
     runs-on: ubuntu-latest
@@ -171,13 +202,15 @@ jobs:
     # time-out.
     timeout-minutes: ${{ startsWith(matrix.shard, 'tooling-') && 33 || 20 }}
     # Fail fast, GitHub's own (ticket 990): the first red leg stops every other leg, so they free
-    # their runners, and the run still ends `failure`. Every leg at once: 9, and the report job
-    # after them, 10 machines; the gate runs before them, alone.
+    # their runners, and the run still ends `failure`. MAIN_SLOTS legs at once on main, PROOF_SLOTS
+    # on any other ref, which `max-parallel` reads from `github` (it may not read `env`, so SC6 holds
+    # the two numbers equal to the settings); the report job after them, and the gate before them,
+    # alone.
     strategy:
       fail-fast: true
-      max-parallel: 9
+      max-parallel: ${{ github.ref == 'refs/heads/main' && 5 || 4 }}
       matrix:
-        shard: ["e2e-1", "e2e-2", "1", "2", "3", "4", "5", "tooling-1", "tooling-2"]
+        shard: ["tooling-1", "3", "2", "5", "tooling-2", "e2e-2", "1", "4", "e2e-1"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -266,9 +299,14 @@ jobs:
   # since Vitest lists the set. It says `full` when the change touches a rerun trigger, else `changed`
   # with each leg's files, and keeps that record, the commits it chose from and when, as the run's
   # `proof-set` artifact, after a failed select too, so a broken choice can be read. `MOST`, the most
-  # legs at once, is the `changed` matrix's `max-parallel`, and `LIMIT` the legs' test step limit,
-  # each an alias of its one line.
+  # legs at once, is PROOF_SLOTS, so the `changed` matrix's `max-parallel` is its alias too, and the
+  # legs rotate over the proof groups by the run number; `LIMIT` is the legs' test step limit, an alias
+  # of its one line.
   select:
+    concurrency:
+      group: scheduled-control
+      queue: max
+      cancel-in-progress: false
     needs: [gate]
     if: needs.gate.outputs.start == 'true' && github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -277,6 +315,7 @@ jobs:
       scope: ${{ steps.set.outputs.scope }}
       legs: ${{ steps.set.outputs.legs }}
       files: ${{ steps.set.outputs.files }}
+      slots: ${{ steps.set.outputs.slots }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -291,9 +330,10 @@ jobs:
         name: set
         timeout-minutes: 5
         env:
-          MOST: &most 9
+          MOST: *proof-slots
           LIMIT: *next-limit
           RECORD: ${{ runner.temp }}/proof-set.json
+          RUN_NUMBER: ${{ github.run_number }}
         run: node .github/ci/proof.ts
       - name: record
         if: ${{ !cancelled() }}
@@ -311,13 +351,17 @@ jobs:
   # it and `tests` never run in one run, and its own fail-fast stops each leg of it. Its legs are
   # next legs for the report (`changed (k)`), with next's test step limit and the same backstop.
   changed:
+    concurrency:
+      group: scheduled-proof-${{ fromJSON('{"1":"1","2":"2","3":"3","4":"4"}')[fromJSON(needs.select.outputs.slots)[matrix.shard]] || '1' }}
+      queue: max
+      cancel-in-progress: false
     needs: [gate, select]
     if: needs.gate.outputs.start == 'true' && needs.select.outputs.scope == 'changed' && needs.select.outputs.legs != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: true
-      max-parallel: *most
+      max-parallel: *proof-slots
       matrix:
         shard: ${{ fromJSON(needs.select.outputs.legs) }}
     steps:
@@ -383,6 +427,10 @@ jobs:
   # Node runs scheduled.mjs. A job the run skipped on purpose passes: `select` on main, the test job
   # `select` did not choose, and both on a changed set of zero files (scheduled.mjs's `skippable`).
   report:
+    concurrency:
+      group: scheduled-control
+      queue: max
+      cancel-in-progress: false
     needs: [gate, select, tests, changed]
     if: always() && needs.gate.outputs.start != 'false'
     runs-on: ubuntu-latest

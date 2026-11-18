@@ -21,14 +21,21 @@ import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 import type { Store } from "./ProgramMailTest.ts";
 
 const RUNS = runsFor({ fast: 3, full: 25 });
+
 /** The largest history either law reaches: letters already in the outbox and the inbox. */
 const TOP = 120;
+
 /** T1041: the deepest inbox and acked stream L7 reaches, the plan's 2,000. */
 const DEEP = 2_000;
+
 const BRAIN = "SHA256:brain";
+
 const REQUESTER = "requester:1";
+
 const RESPONDER = "responder:1";
+
 const GRANTS: Grants = { [REQUESTER]: [RESPONDER] };
+
 const CODE = { program: "mail", hash: "build-a" };
 
 const PIDS: ReadonlyArray<string> = Array.from(
@@ -48,6 +55,7 @@ const from = (over: Partial<From> = {}): From => ({
 });
 
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
 /** A value as JSON text carries it, so -0 and other values JSON cannot keep are normalized. */
 const copied = (value: unknown): Schema.Json => decodeJson(JSON.stringify(value));
 
@@ -64,6 +72,7 @@ const encoder = new TextEncoder();
 /** The store's Sql, counting every row `exec` returns and the bytes of the values in them. */
 const counted = (sql: Sql) => {
   const count = { rows: 0, bytes: 0 };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       const rows = sql.exec(query, ...params);
@@ -80,6 +89,7 @@ const counted = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, count };
 };
 
@@ -121,10 +131,13 @@ const mail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const store = yield* open;
     const { sql, count } = counted(store.sql);
     let pids = 0;
+
     const next = Effect.suspend(() => {
       const pid = PIDS[pids++];
+
       return pid === undefined ? Effect.die(new Error("test exhausted its process IDs")) : Effect.succeed(pid);
     });
+
     const context = yield* Layer.build(layer(sql, next));
 
     for (const name of [REQUESTER, RESPONDER]) {
@@ -141,26 +154,33 @@ const mail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
     const source = { name: REQUESTER, process: PIDS[0] as string };
     let sent = 0;
+
     const deliver = Effect.fnUntraced(function* (delivery: Delivery) {
       const before = { ...count };
       const answer = yield* ProgramMail.use((m) => m.deliver(delivery)).pipe(Effect.provide(context), Effect.result);
+
       return { answer, rows: count.rows - before.rows, bytes: count.bytes - before.bytes };
     });
+
     /** A new delivery of the next command, with one of the walk's bodies. */
     const fresh = (m: unknown) =>
       deliver({ command: `${source.process}/${++sent}/0`, source, to: RESPONDER, m, from: from() });
+
     let filled = 0;
+
     /** T1041: one letter straight into the responder's inbox, of about `size` bytes, counted by nothing. */
     const fill = (size: number) =>
       Mailbox.use((mail) =>
         mail.send(RESPONDER, `filler-${++filled}`, { type: "filler", pad: "x".repeat(size) }, from()),
       ).pipe(Effect.provide(context), Effect.orDie);
+
     /** T1041: the responder's live life reads up to `pos` and the brain records it. */
     const ack = (pos: number) =>
       ProcessManager.use((p) => p.ack(PIDS[1] as string, pos, from({ by: BRAIN }))).pipe(
         Effect.provide(context),
         Effect.orDie,
       );
+
     return { deliver, fresh, fill, ack };
   });
 
@@ -170,6 +190,7 @@ const points = (lowest: number, sizes: ReadonlyArray<number>) =>
 
 const accepted = (answer: Result.Result<Receipt, unknown>, message: string): Receipt => {
   expect(Result.isSuccess(answer), message).toBe(true);
+
   return Result.getOrThrow(answer);
 };
 

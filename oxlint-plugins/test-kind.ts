@@ -44,7 +44,9 @@ type Finding =
     };
 
 const INTEGRATION = /\.integration\.test\.tsx?$/;
+
 const TEST = /\.test\.tsx?$/;
+
 const NAMED = /\.(?:integration|visual)\.test\.tsx?$/;
 
 /** A callee as written in oxc-parser's tree, `cp.spawn`, or `null` for any other shape. */
@@ -58,6 +60,7 @@ const written = (node: Expression): string | null => {
   }
 
   const object = written(node.object);
+
   return object === null || node.computed ? null : `${object}.${node.property.name}`;
 };
 
@@ -67,6 +70,7 @@ const bare = (node: Expression): Expression => (node.type === "ParenthesizedExpr
 /** The service a `yield*` hands over, as written: `ChildProcessSpawner.ChildProcessSpawner`. */
 const yielded = (node: Expression | null): string | null => {
   const at = node === null ? null : bare(node);
+
   return at?.type === "YieldExpression" && at.delegate && at.argument !== null ? written(at.argument) : null;
 };
 
@@ -78,6 +82,7 @@ const receiver = (callee: Expression): Receiver | null => {
 
   const service = yielded(callee.object);
   const name = written(bare(callee.object));
+
   return service !== null
     ? { _tag: "yield", written: service }
     : name === null
@@ -94,7 +99,7 @@ const literal = (node: Argument | undefined): string | null =>
       : null;
 
 /** What one module's own code opens: oxc-parser's tree, fed to starters.ts's reader. */
-const read = (file: string, source: string) => {
+export const openers = (file: string, source: string) => {
   const each = reader<null>();
   new Visitor({
     ImportDeclaration(node) {
@@ -131,23 +136,27 @@ const read = (file: string, source: string) => {
     },
     CallExpression(node) {
       const { callee } = node;
+
       const method =
         callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier"
           ? callee.property.name
           : null;
+
       each.calls(null, written(callee), method, receiver(callee), literal(node.arguments[0]));
     },
   }).visit(parseSync(file, source).program);
+
   return { alone: each.opens("alone"), any: each.opens("any") };
 };
 
 /** What each module's own code opens, read once per module. */
 const opener = (modules: ReadonlyMap<string, Module>) => {
-  const known = new Map<string, ReturnType<typeof read>>();
+  const known = new Map<string, ReturnType<typeof openers>>();
 
   return (file: string) => {
-    const found = known.get(file) ?? read(file, modules.get(file)?.source ?? "");
+    const found = known.get(file) ?? openers(file, modules.get(file)?.source ?? "");
     known.set(file, found);
+
     return found;
   };
 };
@@ -190,18 +199,22 @@ const reach = (
 export const judge = (modules: ReadonlyMap<string, Module>): ReadonlyArray<Finding> => {
   const read = opener(modules);
   const tests = [...modules.keys()].filter((file) => TEST.test(file)).sort();
+
   const failures = tests
     .filter((file) => INTEGRATION.test(file) && reach(modules, file, (at) => read(at).any) === null)
     .map((file): Finding => ({ _tag: "integration_opens_nothing", file }));
+
   // A plain test whose own code opens something is the per-file rule's; this names the rest.
   const advice = tests
     .filter((file) => !NAMED.test(file) && read(file).alone.length === 0)
     .flatMap((file): ReadonlyArray<Finding> => {
       const found = reach(modules, file, (at) => (at === file ? [] : read(at).alone));
+
       return found === null
         ? []
         : [{ _tag: "plain_opens", file, via: found.via, opens: { _tag: found.open._tag, call: found.open.call } }];
     });
+
   return [...failures, ...advice];
 };
 
@@ -233,6 +246,7 @@ const tree = (
     encoding: "utf8",
     maxBuffer: 2 ** 30,
   });
+
   const read = graph.status === 0 ? readGraph(graph.stdout) : Option.none();
 
   if (Option.isNone(read)) {
@@ -249,6 +263,7 @@ const tree = (
       })),
     },
   ]);
+
   return { _tag: "read", modules };
 };
 

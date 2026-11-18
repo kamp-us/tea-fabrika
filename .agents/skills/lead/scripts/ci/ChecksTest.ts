@@ -10,11 +10,14 @@ export type Poll = Option.Option<Job> | ChecksError;
 export const layer = (polls: ReadonlyArray<Poll>, log: string): Layer.Layer<Checks> =>
   Layer.sync(Checks, () => {
     let at = 0;
+
     const job = () =>
       Effect.suspend(() => {
         const poll = polls[Math.min(at, polls.length - 1)] ?? Option.none();
         at += 1;
+
         return Option.isOption(poll) ? Effect.succeed(poll) : Effect.fail(poll);
       });
+
     return Checks.of({ job, log: () => Effect.succeed(log) });
   });

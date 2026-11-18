@@ -44,13 +44,19 @@ import type { CreateRule, ESTree } from "@oxlint/plugins";
 import { below, dotted, type Node } from "./match.ts";
 
 const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;
+
 type Label = (typeof LABELS)[number];
+
 /** One leading ticket or law id, `T652 ` or `R3.1 `, may stand before the label (lead, 2026-11-11). */
 const ID = /^[A-Za-z0-9.]+ /;
+
 const LABELED = new RegExp(`^(?:${ID.source.slice(1)})?(${LABELS.join("|")}):\\s*\\S`);
+
 const RUNNERS = new Set(["propertyTrace", "propertyInvariant", "propertyTerminates"]);
+
 /** The shared runner's module, by its last path segment: `../Testing.test-support.ts`, and its one export. */
 const SHARED = /(?:^|\/)Testing\.test-support\.ts$/;
+
 const SHARED_RUNNER = "property";
 
 /** Vitest's two compile-time checks, and the modules that give them. */
@@ -122,6 +128,7 @@ const chainOf = (callee: Node): readonly string[] | null => {
 /** The label a text starts with, after one optional id, when its reason follows: `type` for `T652 type: x`. */
 const leading = (text: string): Label | "none" => {
   const found = LABELED.exec(text)?.[1];
+
   return LABELS.find((label) => label === found) ?? "none";
 };
 
@@ -282,6 +289,7 @@ export const lawShape: CreateRule = {
 
           for (const spec of statement.specifiers) {
             const name = spec.local.name;
+
             const imported =
               spec.type === "ImportSpecifier" && spec.imported.type === "Identifier" ? spec.imported.name : null;
 

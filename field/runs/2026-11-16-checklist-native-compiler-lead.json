@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-checklist-native-compiler-lead",
+  "ticket": "1126",
+  "pr": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "parked",
+  "why": "next/ checklist repair at18f111d751bfa4198b3c809ca57dfde57b656374 passed a whole workspace compiler check with Node26.13.0 verified directly and through a Python child launching nested pnpm. The native pnpm binary and pinned Node binary were selected through a command-local PATH. The unchanged wrapper held the existing global lock. Every workspace finished. This clears compiler proof only; deliberate fault checks and fresh review remain pending.",
+  "note": "The prior build2 log proves exit0 and30 completed checks but does not record the nested interpreter version. Its original row and separate correction are preserved. Separately, exact-head scheduled run https://github.com/kamp-us/tea-fabrika/actions/runs/44018576689 passed. The checklist integration file ran all six tests in56.4seconds, including both L13 properties and L21. The branch proof selected other files too and preserves their existing skips; no full-main-green claim. This run executed no temporary plants. No guarded law or signal ran locally. Usage, elapsed compiler time and list price were not exposed.",
+  "head": "18f111d751bfa4198b3c809ca57dfde57b656374",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "plants": []
+}
