@@ -50,6 +50,7 @@ const forHands = (m: DialMsg): m is Exclude<DialMsg, { readonly type: "socket_fa
 
 /** A JSON value that is a table: an object, never an array. */
 const isTable = (json: Schema.Json): json is Schema.JsonObject => Predicate.isObject(json);
+
 /** A call that says what the client has `seen` also says when it was sent, on the client's own clock. */
 const stamped = (params: Schema.Json, sentAt: string): Schema.Json =>
   isTable(params) && "seen" in params ? { ...params, sentAt } : params;

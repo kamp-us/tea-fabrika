@@ -61,7 +61,6 @@ export const lintCaches = (files: CacheFiles): string[] => {
   }));
 
   if (Result.isFailure(read)) {
-
     return ["cache lint: a file is not valid YAML"];
   }
 

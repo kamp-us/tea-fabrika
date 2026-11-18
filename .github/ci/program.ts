@@ -76,6 +76,7 @@ const unmatched = (from: readonly Comment[], to: readonly Comment[]) => {
 const refusal = (name: string, before: string, after: string, parse: typeof parseSync): string | undefined => {
   const options = { lang: name.endsWith(".tsx") ? "tsx" : "ts", sourceType: "module" } as const;
   const parsed = Result.try(() => ({ old: parse(name, before, options), fresh: parse(name, after, options) }));
+
   if (Result.isFailure(parsed)) {
     const error = parsed.failure;
 
@@ -83,6 +84,7 @@ const refusal = (name: string, before: string, after: string, parse: typeof pars
   }
 
   const { old, fresh } = parsed.success;
+
   if (old.errors.length > 0 || fresh.errors.length > 0) {
     return `a parse error on the ${old.errors.length > 0 ? "old" : "new"} side`;
   }

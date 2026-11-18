@@ -158,6 +158,7 @@ const plant = (chains: ReadonlyArray<Chain>) => {
       const name = `c${i}m${k + 1}`;
       // A relative hop stays in the importer's package; a workspace hop goes into the library.
       const next = hop === "relative" ? `${dirname(at)}/${name}.ts` : `${LIB}/src/${name}.ts`;
+
       const specifier = Match.value(hop).pipe(
         Match.when("relative", () => `./${name}.ts`),
         Match.when("exact", () => `@t/lib/${name}`),

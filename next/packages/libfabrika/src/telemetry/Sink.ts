@@ -450,6 +450,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
 
   const countRefusal = (span: SinkSpan, at: number, ancestor?: Tracer.Span): boolean => {
     const inherited = ancestor?.attributes.get(REFUSED);
+
     if (!span.attributes.has(REFUSED) && inherited === undefined) {
       return false;
     }

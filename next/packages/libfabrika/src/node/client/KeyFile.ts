@@ -54,7 +54,6 @@ const errorClass = (cause: unknown): ErrorClass => {
       Match.tag("PermissionDenied", (): ErrorClass => "NotAllowedError"),
       Match.orElse((): ErrorClass => "other"),
     );
-
   }
 
   return cause instanceof Error && isErrorClass(cause.name) ? cause.name : "other";

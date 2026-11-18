@@ -307,6 +307,7 @@ it("property: a tool comment that was added, removed or changed is refused, in a
           Match.when("removed", () => put(write(form, body))),
           Match.orElse(() => put(write(form, body))),
         );
+
         const fresh = Match.value(how).pipe(
           Match.when("added", () => put(write(form, body))),
           Match.when("removed", () => before),

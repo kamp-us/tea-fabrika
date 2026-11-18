@@ -83,6 +83,7 @@ const freezeAll = (value: unknown): void => {
     Object.freeze(value);
   }
 };
+
 /** A deep copy of `value` with every array and table inside it frozen. */
 const frozen = <A>(value: A): A => {
   const copy = structuredClone(value);

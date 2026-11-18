@@ -4,8 +4,10 @@
 import { dirname, matchesGlob } from "node:path";
 
 import { Predicate, Result } from "effect";
+
 /** A value as JSON text holds it, the same type as Effect's `Schema.Json`. */
 type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
+
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
  * before decision 0546 says `lane`, since saved data keeps the word it was written with: it reads
@@ -89,7 +91,6 @@ export const questRoot = (
 export const stepOf = (note: string): string[] => {
   const n = Result.getOrUndefined(Result.try((): unknown => JSON.parse(note)));
 
-
   const step = Predicate.hasProperty(n, "step") ? n.step : undefined;
 
   return Predicate.isString(step) ? [step] : [];
@@ -100,7 +101,6 @@ const stuckIn = (out: string) =>
     const a = Result.getOrUndefined(Result.try((): unknown => JSON.parse(line)));
 
     if (!Predicate.isTagged(a, "stuck")) {
-
       return [];
     }
 
@@ -221,9 +221,9 @@ const lockedPart = (text: string): string | null => {
   const json = Result.getOrUndefined(Result.try((): Json => JSON.parse(text)));
 
   if (!Predicate.isObjectOrArray(json)) {
-
     return null;
   }
+
   // SAFETY: `json` is a non-null object, checked above; a LOCKED key it lacks reads as undefined,
   // which `?? null` turns to null.
   return canon(LOCKED.map((k) => (json as Record<string, Json>)[k] ?? null));

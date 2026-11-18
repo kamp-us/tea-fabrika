@@ -395,7 +395,6 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                           }),
                         ),
                       ),
-
                     ),
           },
         );

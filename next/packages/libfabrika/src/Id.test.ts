@@ -117,7 +117,6 @@ const validPrefix = (type: string): boolean =>
 /** The oracle: `input` is a well-formed ID, of `type` when one is given. A caller with a value that
  *  may be no string at all checks `Predicate.isString` first, since no other value is an ID. */
 const accepts = (input: string, type?: string): boolean => {
-
   const [found, suffix] = split(input);
 
   if (!validPrefix(found) || (type !== undefined && found !== type)) {

@@ -317,6 +317,7 @@ const encoder = new TextEncoder();
 
 /** A JSON value that is an object, not an array or a scalar. */
 const isJsonObject = (json: Schema.Json): json is Schema.JsonObject => Predicate.isObject(json);
+
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
 const withoutInput = (cmd: Schema.Json): Schema.Json => {

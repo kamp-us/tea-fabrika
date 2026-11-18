@@ -85,7 +85,6 @@ const shown = flow(Schema.decodeUnknownSync(View), (v) => ({
   left: v.left,
 }));
 
-
 /** Only the letters this suite sent: the runner's own timers are not a writer's. */
 const sent = (letters: ReadonlyArray<Saved>) => letters.filter((l) => l.id.startsWith("checklist-"));
 

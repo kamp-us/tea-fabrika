@@ -43,8 +43,10 @@ const Move = Schema.Union([
 const watched = () => {
   const events: Array<RecordPartSupport.Event> = [];
   const opened = () => events.flatMap((e) => (e.step === "opened" ? [e.db] : []));
+
   const closes = (db: ReturnType<typeof opened>[number]) =>
     events.filter((e) => e.step === "closed" && e.db === db).length;
+
   const folders = () => events.flatMap((e) => (e.step === "folder" ? [e.path] : []));
 
   const released = Effect.gen(function* () {

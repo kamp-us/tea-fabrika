@@ -1146,6 +1146,7 @@ export const make = Effect.fnUntraced(function* () {
       const [spelled = "", ...files] = rest;
       const id = revision(here, spelled);
       const object = id === null ? undefined : here.store.objects.get(id);
+
       const tree = Match.value(object).pipe(
         Match.when({ type: "commit" }, (object) => object.tree),
         Match.when({ type: "tree" }, () => id),

@@ -113,6 +113,7 @@ const PatchStep = Schema.Struct({
 });
 
 const both = (m: TezgahClient, msg: TezgahMsg) => applyCell(tezgahMachine, m, msg);
+
 /** The two view Msgs the L11 walk sends: a whole view or a patch, each with its `rev`. */
 type ViewMsg = Extract<TezgahMsg, { readonly type: "server" | "patch" }>;
 

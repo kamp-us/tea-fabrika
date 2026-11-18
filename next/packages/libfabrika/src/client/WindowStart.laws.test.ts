@@ -616,6 +616,7 @@ describe("L9: failure classes through the real runtime", () => {
           let injected = 0;
           let writes = 0;
           let failedRecord: ClientRow["record"] | undefined;
+
           const op = Match.value(operation).pipe(
             Match.when("sign", () => "key"),
             Match.when("claim", () => "persist"),

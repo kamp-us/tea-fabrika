@@ -130,6 +130,7 @@ const functions = (file: string, text: string): readonly Fn[] => {
 
     // The guard only rules out a leaf: the walk goes on reading the node loosely, as `Tree` says.
     const node: Tree = input;
+
     if (Array.isArray(node)) {
       for (const n of node) {
         walk(n, bound, depth, inJsx);

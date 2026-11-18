@@ -1077,6 +1077,7 @@ describe("L8: the window parent's connection", () => {
 
           const owner = refusedLetter === undefined ? undefined : world.from.get(refusedLetter.n);
           const made = next.client.pending.filter((p) => p.n >= prev.client.written);
+
           const aimed = Match.value(m).pipe(
             Match.discriminator("type")("press", (press) => press.tile),
             Match.discriminator("type")("tile", (tile) => tile.id),

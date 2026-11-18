@@ -19,6 +19,7 @@ import { lifeCell, signal, terminate } from "./local-dev.ts";
 
 /** The state a step moves from, as the life machine holds it. */
 type Life = typeof devLife.model.Type;
+
 const SEED = 119120;
 
 const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));

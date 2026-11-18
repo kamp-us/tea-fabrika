@@ -47,6 +47,7 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
 
 /** A value as the parser reads it: a string, number, boolean or date, an array, or a table. */
 type Parsed = AST.TOMLValue["value"] | ReadonlyArray<Parsed> | { readonly [name: string]: Parsed };
+
 const content = (node: AST.TOMLContentNode): Parsed => {
   if (node.type === "TOMLValue") {
     return node.value;
@@ -174,6 +175,7 @@ const scalar = Schema.decodeUnknownSync(Scalar);
 
 /** A value checked for the serializer: a scalar, an array or a plain table of them, with no date. */
 type Encoded = typeof Scalar.Type | ReadonlyArray<Encoded> | { readonly [name: string]: Encoded };
+
 // Validate before encoding: serializers can otherwise omit unsupported members or coerce values.
 const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): Encoded => {
   if (Predicate.isObjectOrArray(value)) {

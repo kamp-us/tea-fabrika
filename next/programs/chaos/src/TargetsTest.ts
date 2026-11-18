@@ -66,7 +66,6 @@ const shown = flow(Schema.decodeUnknownSync(View), (view) => ({
   items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)),
 }));
 
-
 const Controller = Schema.TaggedStruct("armed", {
   attempts: Schema.Array(Schema.Struct({ process: Schema.String, error: Schema.String })),
 });

@@ -41,7 +41,6 @@ export const ending = (m: FlowMachine.Model): End => {
   return { outcome: "stuck", reason: `the flow stopped while ${m.flow.steps[m.position]?.name} ran`, exit: 30 };
 };
 
-
 /** A runner's failure as tea's error channel takes it: plain data with its tag. */
 const Failed = Schema.TaggedStruct("StepFailed", { reason: Schema.String });
 

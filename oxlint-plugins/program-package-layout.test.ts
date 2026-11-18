@@ -129,6 +129,7 @@ const inProcess = (plants: readonly Plant[]): Finding[][] => {
             invalid: [],
           }),
         );
+
         // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
         // parse, so that file has no finding here either; the law's oxlint run checks the same.
         if (Result.isFailure(ran) && !(ran.failure instanceof Error && ran.failure.message === "Parsing failed")) {

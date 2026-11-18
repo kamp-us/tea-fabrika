@@ -168,6 +168,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
           if (model._tag === "failed_up" || model._tag === "failed_stop") {
             const failed = model;
+
             const reason = Match.value(failed.reason).pipe(
               Match.when("Timeout", () => Timeout.make({ action, cause })),
               Match.when("Conflict", () => Conflict.make({ cause })),

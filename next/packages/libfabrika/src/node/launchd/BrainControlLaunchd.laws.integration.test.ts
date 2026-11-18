@@ -637,6 +637,7 @@ it.effect.prop(
         Match.when("leading", () => ` ${word}`),
         Match.orElse(() => `${word} `),
       );
+
       const input = Match.value(field).pipe(
         Match.when("args", () => ({ args: [value] })),
         Match.when("executable", () => ({
@@ -645,7 +646,6 @@ it.effect.prop(
         Match.when("build", () => ({ build: value })),
         Match.orElse(() => ({})),
       );
-
 
       const opened: Array<Effect.Success<ReturnType<typeof LaunchdTest.open>>> = [];
 

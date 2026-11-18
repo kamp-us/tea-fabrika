@@ -93,9 +93,6 @@ const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E,
 /** Whether an object carries a field that only the door stamps. Callers narrow with `Predicate.isReadonlyObject`. */
 const reserved = (value: object) => ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key));
 
-
-
-
 const no = (reason: string) => Answer.cases.refused.make({ reason });
 
 const refuse = Effect.fn("gateway.route")(function* (reason: "reserved") {

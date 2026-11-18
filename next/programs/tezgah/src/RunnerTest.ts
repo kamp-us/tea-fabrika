@@ -65,10 +65,12 @@ const Via = Schema.TaggedUnion({ key: { keys: Schema.String } });
 
 /** What the law reads of a layout: a tile's id, or a container's parts, each holding a layout. */
 type Node = string | { readonly parts: ReadonlyArray<{ readonly inner: Node }> };
+
 const Node: Schema.Codec<Node> = Schema.Union([
   Schema.String,
   Schema.Struct({ parts: Schema.Array(Schema.Struct({ inner: Schema.suspend((): Schema.Codec<Node> => Node) })) }),
 ]);
+
 /** What the law reads of tezgah's view: each workspace's tiles in reading order, and each tile. */
 const View = Schema.Struct({
   workspaces: Schema.Array(Schema.Struct({ n: Schema.Int, layout: Node })),

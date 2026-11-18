@@ -155,12 +155,14 @@ const matches = (m: Model, cmd: Command): m is Active =>
 
 /** The command an active state waits on when no command is pending. */
 type Waits = Command["type"];
+
 const waitsOn = (m: Active): Waits =>
   Model.matchOrElse(
     m,
     { waiting_ready: (): Waits => "ready", checking_children: (): Waits => "cleanup" },
     (): Waits => "inspect",
   );
+
 const fail = (m: Active, reason: typeof Failure.reason.Type, command?: Command["type"]): Cell => [
   Model.cases[m.action === "up" ? "failed_up" : "failed_stop"].make({
     sequence: m.sequence,

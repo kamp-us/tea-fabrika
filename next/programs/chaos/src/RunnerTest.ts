@@ -595,7 +595,6 @@ export const suite = (open: Open, checklist: unknown) =>
             const handlers = {
               now: flow(Schema.decodeUnknownSync(Schema.Struct({ id: Chaos.ExperimentId })), (request) =>
                 Effect.succeed(
-
                   Outcome.ok(request.id === nextId ? 100 + (input.most + 1) * (input.gap + input.late) : 100),
                 ),
               ),

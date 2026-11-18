@@ -26,6 +26,7 @@ const value = (node: Expression): Schema.Json => {
       if (Predicate.isBigInt(node.value) || Predicate.isRegExp(node.value)) {
         throw new Error(`tsconfig.base.json holds a ${node.type} that is not JSON`);
       }
+
       return node.value;
     case "ArrayExpression":
       return node.elements.map((element) =>

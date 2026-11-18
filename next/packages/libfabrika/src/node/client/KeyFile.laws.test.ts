@@ -87,11 +87,13 @@ const openStep = (rejected: "none" | "stored" | "other"): Step => ({
 
     return Effect.gen(function* () {
       const before = MemoryFiles.read(r.disk, FILE);
+
       const fp = Match.value(rejected).pipe(
         Match.when("stored", () => m.fingerprint),
         Match.when("other", () => "SHA256:not-this-key"),
         Match.orElse(() => null),
       );
+
       const exit = yield* open(r, fp);
 
       if (m.file === null) {
