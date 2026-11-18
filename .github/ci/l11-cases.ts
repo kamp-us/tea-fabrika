@@ -1,5 +1,5 @@
 // Today's lead tooling. Fixed mappings for next/'s L11 experiment, never caller-provided edits.
-import { Effect, Result, Schema } from "effect";
+import { Effect, Match, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 
 export const cached = "875e45de42b4dceee1aa47b57a046050ada4a4dc";
@@ -257,12 +257,12 @@ const catchDefect = '    Effect.catchDefect(() => Effect.fail(new LedgerError({ 
 const fault = (field: "name" | "code" | "errcode") => {
   const marker = "$" + "{marker}";
 
-  const fields =
-    field === "code"
-      ? 'name: "Error", code: marker'
-      : field === "name"
-        ? 'name: marker, code: "SQLITE_FULL", errcode: "SQLITE_FULL"'
-        : 'name: "Error", code: "SQLITE_FULL", errcode: marker';
+  const fields = Match.value(field).pipe(
+    Match.when("code", () => 'name: "Error", code: marker'),
+    Match.when("name", () => 'name: marker, code: "SQLITE_FULL", errcode: "SQLITE_FULL"'),
+    Match.when("errcode", () => 'name: "Error", code: "SQLITE_FULL", errcode: marker'),
+    Match.exhaustive,
+  );
 
   return [
     edit(

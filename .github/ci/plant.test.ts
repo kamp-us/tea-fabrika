@@ -1,7 +1,7 @@
 // Today's tooling. These laws supply in-memory I/O only; the real adapters remain unexercised.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, RegExp as Regex, Result, Schema } from "effect";
+import { Effect, FileSystem, Match, Option, Path, RegExp as Regex, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { describe } from "vitest";
 import { argv, cases, decodeRequest, derive, prepare, Request } from "./plant-cases.ts";
@@ -109,13 +109,12 @@ const position = (key: Request["case"], line = 17, column = 23) => {
     return { line, column };
   }
 
-  return key === "host-requested-pin"
-    ? { line: 195, column: 62 }
-    : key === "host-pnpm-path"
-      ? { line: 194, column: 70 }
-      : key === "host-env-order"
-        ? { line: 197, column: 24 }
-        : { line, column };
+  return Match.value(key).pipe(
+    Match.when("host-requested-pin", () => ({ line: 195, column: 62 })),
+    Match.when("host-pnpm-path", () => ({ line: 194, column: 70 })),
+    Match.when("host-env-order", () => ({ line: 197, column: 24 })),
+    Match.orElse(() => ({ line, column })),
+  );
 };
 
 const message = (key: Request["case"], content = "", syntax = false) => {
@@ -321,21 +320,24 @@ for (const { key, suite, leaf } of nested) {
       leaf,
       { extra: Schema.String },
       ({ extra }, context) => {
-        for (const selected of key === "host-pin"
-          ? ([key, "host-requested-pin", "host-pnpm-path", "host-env-order"] as const)
-          : key === "checklist-pid"
-            ? ([key, "checklist-body", "checklist-drop-notify"] as const)
-            : key === "checklist-early-complete"
-              ? ([
-                  key,
-                  "checklist-held-call",
-                  "checklist-due-reschedule",
-                  "checklist-running-replace",
-                  "checklist-running-delete",
-                  "checklist-alarm-failure",
-                  "checklist-late-failure",
-                ] as const)
-              : [key]) {
+        for (const selected of Match.value(key).pipe(
+          Match.when("host-pin", (key) => [key, "host-requested-pin", "host-pnpm-path", "host-env-order"] as const),
+          Match.when("checklist-pid", (key) => [key, "checklist-body", "checklist-drop-notify"] as const),
+          Match.when(
+            "checklist-early-complete",
+            (key) =>
+              [
+                key,
+                "checklist-held-call",
+                "checklist-due-reschedule",
+                "checklist-running-replace",
+                "checklist-running-delete",
+                "checklist-alarm-failure",
+                "checklist-late-failure",
+              ] as const,
+          ),
+          Match.orElse((key) => [key]),
+        )) {
           const pattern = new RegExp(argv(selected, "/private/result.json").at(-1) ?? "(?!)");
           expect(pattern.test(context.task.fullTestName)).toBe(true);
           expect(pattern.test(`${context.task.fullTestName}${extra}!`)).toBe(false);
