@@ -23,7 +23,10 @@ const runs = new Map(
     .trim()
     .split("\n")
     .map((line) => line.split("\t"))
-    .map(([id, event, conclusion, created, sha]) => [id!, { event: event!, conclusion: conclusion!, created: created!, sha: sha! }]),
+    .map(([id, event, conclusion, created, sha, , attempt]) => [
+      id!,
+      { event: event!, conclusion: conclusion!, created: created!, sha: sha!, attempt: Number(attempt) },
+    ]),
 );
 const legs: Leg[] = legPaths.flatMap((path) =>
   readFileSync(path, "utf8")
@@ -58,7 +61,13 @@ const median = (xs: number[]): number => {
 // f1540a3 landed on main at 02:38:47Z. A pull request run tests the merge with main at its
 // creation, so a run created after that holds the new rows; a queue run holds them when its
 // head is f1540a3 or a later main commit.
-const ROWS_AT = Date.parse("2026-11-18T02:38:47Z") / 1000;
+const ROWS_AT = Date.parse("2026-11-18T02:58:46Z") / 1000; // f1540a3's push run on main, not its commit date
+// Queue groups in this window whose head is f1540a31 or a later main commit (git log origin/main).
+const ROWS_HEADS = new Set(["f1540a3171f5919f285176c1e4f936be3e435157", "87e9b955b79bb973d9e9ef044cb1b909926f71f9"]);
+// The window ends when the run list was read; a leg made later (a rerun) is outside it.
+const WINDOW_END = Date.parse("2026-11-18T03:23:17Z") / 1000;
+// A canceled leg that never got a runner shows started_at = created_at and no step: not a wait sample.
+const neverRan = (l: Leg) => l.stepStarted === null && l.started === l.created && l.conclusion !== "success";
 
 // A rerun (attempt 2) keeps the legs that passed in attempt 1 with their old start and end but the
 // new attempt's created_at, so they show a start before their creation. Those legs did not run in
@@ -66,10 +75,14 @@ const ROWS_AT = Date.parse("2026-11-18T02:38:47Z") / 1000;
 const stale = legs.filter((l) => l.started < l.created);
 console.log(`legs from an earlier attempt, dropped: ${stale.map((l) => `${l.run} ${l.name}`).join(", ") || "none"}`);
 const byRun = Map.groupBy(
-  legs.filter((l) => l.started >= l.created),
+  legs.filter((l) => l.started >= l.created && l.created <= WINDOW_END && !neverRan(l)),
   (l) => l.run,
 );
-const done = [...byRun].filter(([, ls]) => ls.every((l) => l.conclusion === "success"));
+// A rerun (attempt 2 or later) is shown but left out of the rule and the medians: its legs are only
+// the ones attempt 1 lost, started on a fresh queue.
+const isRerun = (run: string) => (runs.get(run)?.attempt ?? 1) > 1;
+const complete = [...byRun].filter(([, ls]) => ls.every((l) => l.conclusion === "success"));
+const done = complete.filter(([run]) => !isRerun(run));
 const waits = { tooling: [] as number[], integration: [] as number[] };
 const times = { tooling: [] as number[], integration: [] as number[] };
 const walls: number[] = [];
@@ -77,30 +90,32 @@ const lastWaits: number[] = [];
 let fires = 0;
 let withBoth = 0;
 
-for (const [run, ls] of done.sort(([a], [b]) => a.localeCompare(b))) {
+for (const [run, ls] of complete.sort(([a], [b]) => a.localeCompare(b))) {
+  const counted = !isRerun(run);
   const info = runs.get(run);
-  const rows = info && Date.parse(info.created) / 1000 > ROWS_AT ? "new" : "old";
-  for (const l of ls) {
+  const rows =
+    info && (info.event === "merge_group" ? ROWS_HEADS.has(info.sha) : Date.parse(info.created) / 1000 > ROWS_AT) ? "new" : "old";
+  for (const l of counted ? ls : []) {
     const project = l.project === "tooling" ? "tooling" : "integration";
     waits[project].push(l.started - l.created);
     times[project].push(l.completed - l.started);
   }
   const last = ls.reduce((a, b) => (b.completed > a.completed ? b : a));
   const wall = Math.max(...ls.map((l) => l.completed)) - Math.min(...ls.map((l) => l.created));
-  walls.push(wall);
-  lastWaits.push(last.started - last.created);
+  if (counted) walls.push(wall);
+  if (counted) lastWaits.push(last.started - last.created);
   const integration = ls.filter((l) => l.project === "integration");
   const longestIntegration = integration.length > 0 ? Math.max(...integration.map((l) => l.completed - l.started)) : null;
-  if (longestIntegration !== null && ls.some((l) => l.project === "tooling")) withBoth++;
+  if (counted && longestIntegration !== null && ls.some((l) => l.project === "tooling")) withBoth++;
   const gap = longestIntegration === null ? null : last.completed - last.started - longestIntegration;
   const rule = last.project === "tooling" && last.started - last.created <= 60 && gap !== null && gap >= 120;
-  if (rule) fires++;
+  if (rule && counted) fires++;
   const cells = ls
     .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }))
     .map((l) => `${l.name.replace("related ", "")}${l.project[0]} ${l.started - l.created}/${l.completed - l.started}`)
     .join(", ");
   console.log(
-    [run, info?.event ?? "?", rows, `last ${last.name.replace("related ", "")} ${last.project}`, `wall ${wall}`, `wait on path ${wall - Math.max(...ls.map((l) => l.completed - l.started))}`, `gap ${gap ?? "-"}`, rule ? "FIRES" : "no", cells].join("\t"),
+    [run, info?.event ?? "?", rows, `last ${last.name.replace("related ", "")} ${last.project}`, `wall ${wall}`, `wait on path ${wall - Math.max(...ls.map((l) => l.completed - l.started))}`, `gap ${gap ?? "-"}`, rule ? "FIRES" : "no", counted ? "" : "rerun, not counted", cells].join("\t"),
   );
 }
 
@@ -114,7 +129,7 @@ console.log(`group wall median ${median(walls)} p90 ${pct(walls, 90)}; last leg'
 
 // Wait of legs in runs that did not finish their related group (canceled by a newer push):
 // a leg that started is still a sample of runner wait. Rows with an empty start are left out.
-const partial = [...Map.groupBy(legs, (l) => l.run)].filter(([run]) => !done.some(([r]) => r === run));
+const partial = [...byRun].filter(([run]) => !complete.some(([r]) => r === run));
 const partialWaits = partial.flatMap(([, ls]) => ls.filter((l) => l.started >= l.created).map((l) => l.started - l.created));
 const pathCosts = done.map(([, ls]) => Math.max(...ls.map((l) => l.completed)) - Math.min(...ls.map((l) => l.created)) - Math.max(...ls.map((l) => l.completed - l.started)));
 console.log(`wait on the critical path: median ${median(pathCosts)} p90 ${pct(pathCosts, 90)} max ${Math.max(...pathCosts)}`);
