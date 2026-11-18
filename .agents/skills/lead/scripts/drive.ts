@@ -890,6 +890,7 @@ export type Env = {
 const codexProfile = (env: Env, step: StepName) => {
   const model =
     step === "plan" ? env.CODEX_PLAN_MODEL : step === "review" ? env.CODEX_REVIEW_MODEL : env.CODEX_BUILD_MODEL;
+
   const effort =
     step === "plan" ? env.CODEX_PLAN_EFFORT : step === "review" ? env.CODEX_REVIEW_EFFORT : env.CODEX_BUILD_EFFORT;
 
@@ -1523,10 +1524,12 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         const { ask } = e;
         const notes: string[] = [];
         const ended = new Date().toISOString();
+
         const profileNote =
           ask.agent === "claude"
             ? ""
             : ` Requested profile: model ${ask.model}, effort ${ask.effort ?? "unknown"}; effective API context unknown.`;
+
         dropView(env, ask.box);
 
         // The saved files are scrubbed first (redact.sh prints only a count), then the field row,
