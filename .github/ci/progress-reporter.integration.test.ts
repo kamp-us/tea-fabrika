@@ -18,9 +18,19 @@ import {
 } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { collect, legOf, markdown, Unread, type Io, type Timings } from "./time-table.ts";
+import { collect, markdown, Unread, type Io, type Timings } from "./time-table.ts";
 
 const ready = "CI_PROGRESS_READY\n";
+
+const fixtureIdentity = {
+  run: "1",
+  attempt: "1",
+  workflow: "scheduled",
+  event: "workflow_dispatch",
+  sha: "0000000000000000000000000000000000000000",
+  job: "tests",
+  leg: "tooling-1",
+} as const;
 
 const metricsPrefix = "CI_PROGRESS_COORDINATOR ";
 
@@ -128,15 +138,7 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
 
   const vars = process.env;
 
-  const leg = legOf({
-    GITHUB_RUN_ID: vars.GITHUB_RUN_ID,
-    GITHUB_RUN_ATTEMPT: vars.GITHUB_RUN_ATTEMPT,
-    GITHUB_WORKFLOW: vars.GITHUB_WORKFLOW,
-    GITHUB_EVENT_NAME: vars.GITHUB_EVENT_NAME,
-    HEAD: vars.HEAD ?? vars.GITHUB_SHA,
-    GITHUB_JOB: vars.GITHUB_JOB,
-    LEG: vars.LEG ?? vars.SHARD?.split("/")[0],
-  });
+  const leg = fixtureIdentity;
 
   const marker = yield* Deferred.make<void>();
   let tail = "";
@@ -325,6 +327,14 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
   expect(yield* handle.isRunning).toBe(false);
   const actual = yield* collect(environment, scratch, io, 0);
   const code = Exit.isSuccess(exit) ? Number(exit.value) : null;
+
+  if (actual.progress && actual.progress._tag !== "unavailable") {
+    expect(actual.progress.leg).toEqual(fixtureIdentity);
+  }
+
+  if (before?.progress && before.progress._tag !== "unavailable") {
+    expect(before.progress.leg).toEqual(fixtureIdentity);
+  }
 
   if (mode === "cutoff") {
     expect(Exit.isFailure(exit)).toBe(true);
