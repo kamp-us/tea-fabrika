@@ -287,7 +287,6 @@ const check = (state: State, name: string) =>
   `"private": true` for now.
 - **`@kalfa/program`** holds programs and their running instances, `Program.supervise`, and the
   `Supervisor`, `Journal`, `Errors` and `Machine` services.
-- **No kalfa package imports another.**
 - **libfabrika implements them and joins them:** the ledger on Durable Objects, the Journal on the
   ledger, the `Supervisor` with its records, and the WebSocket and WebRTC Layers. The goal is
   `fabrika.run(checklist)`, with everything provided.
@@ -303,7 +302,6 @@ const check = (state: State, name: string) =>
   `Req`.
 - An Err never stops a program; it goes to `errors`. Only a defect stops one.
 - `make` never runs a confirmed step or `init` again. Boot installs the committed state.
-- No kalfa package imports another. libfabrika joins them.
 - The runner provides Layers and plumbs streams. Deciding stays in the program.
 
 ## Consequences
