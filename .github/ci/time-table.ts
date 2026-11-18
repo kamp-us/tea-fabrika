@@ -56,7 +56,7 @@ export type Leg = {
 };
 
 /** The time from GitHub creating a job until it starts. */
-export type QueueWait = {
+type QueueWait = {
   readonly created: string;
   readonly started: string;
   readonly seconds: number;
@@ -87,6 +87,8 @@ const Job = Schema.Struct({
 
 const JobTimes = Schema.Struct({
   status: Schema.optionalKey(Schema.String),
+  conclusion: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  runner_id: Schema.optionalKey(Schema.NullOr(Schema.Int)),
   created_at: Schema.optionalKey(Time),
   started_at: Schema.optionalKey(Time),
 });
@@ -131,6 +133,31 @@ export const readSteps = (input: unknown): Section<Step> => {
     : unavailable("the jobs API answer is not a job");
 };
 
+const timestamp = (value: string): number | undefined => {
+  if (
+    !/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(
+      value,
+    )
+  ) {
+    return undefined;
+  }
+
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const calendar = new Date(0);
+
+  calendar.setUTCFullYear(year, month - 1, day);
+
+  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 || calendar.getUTCDate() !== day) {
+    return undefined;
+  }
+
+  const millis = Date.parse(value);
+
+  return Number.isFinite(millis) ? millis : undefined;
+};
+
 /** A real started job's queue wait. Pending placeholders have no queue wait. */
 export const readQueueWait = (input: unknown): QueueWait | undefined => {
   const decoded = Schema.decodeUnknownResult(JobTimes)(input);
@@ -138,14 +165,21 @@ export const readQueueWait = (input: unknown): QueueWait | undefined => {
   if (
     Result.isFailure(decoded) ||
     !["in_progress", "completed"].includes(decoded.success.status ?? "") ||
+    decoded.success.conclusion === "skipped" ||
+    decoded.success.runner_id == null ||
     decoded.success.created_at == null ||
     decoded.success.started_at == null
   ) {
     return undefined;
   }
 
-  const created = Date.parse(decoded.success.created_at);
-  const started = Date.parse(decoded.success.started_at);
+  const created = timestamp(decoded.success.created_at);
+  const started = timestamp(decoded.success.started_at);
+
+  if (created === undefined || started === undefined) {
+    return undefined;
+  }
+
   const seconds = (started - created) / 1000;
 
   return Number.isFinite(seconds) && seconds >= 0

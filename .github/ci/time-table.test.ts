@@ -33,6 +33,8 @@ const root = resolve("time-table-fixture");
 const job = {
   id: 131255816934,
   status: "in_progress",
+  conclusion: null,
+  runner_id: 131255816934,
   created_at: "2026-11-14T09:59:56Z",
   started_at: "2026-11-14T10:00:00Z",
   steps: [
@@ -289,9 +291,14 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
       expect(timings.steps._tag).toBe("unavailable");
       expect(timings.files._tag).toBe("unavailable");
       const text = markdown(timings);
-      expect(text.match(/^Unavailable: /gm)).toHaveLength(2);
-      expect(markdown({ ...timings, steps: read })).toContain("| Set up job | success | 2 |");
-      expect(markdown({ ...timings, steps: read }).match(/^Unavailable: /gm)).toHaveLength(1);
+      expect(text).toContain("### Steps\n\nUnavailable: the jobs API answer is not a job");
+      expect(text).toContain("### Slowest test files\n\nUnavailable: the report is not Vitest's JSON");
+      expect(text).toContain("### Queue wait\n\nUnavailable: no valid job queue timing");
+
+      const stepsRead = markdown({ ...timings, steps: read });
+      expect(stepsRead).toContain("| Set up job | success | 2 |");
+      expect(stepsRead).toContain("### Slowest test files\n\nUnavailable: the report is not Vitest's JSON");
+      expect(stepsRead).toContain("### Queue wait\n\nUnavailable: no valid job queue timing");
     }),
     options,
   );
@@ -472,6 +479,49 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
   expect(readQueueWait({ status: "in_progress", created_at: created, started_at: null })).toBeUndefined();
   expect(readQueueWait({ status: "in_progress", created_at: "bad", started_at: started })).toBeUndefined();
   expect(readQueueWait({ status: "in_progress", created_at: started, started_at: created })).toBeUndefined();
+
+  const skipped = {
+    status: "completed",
+    conclusion: "skipped",
+    runner_id: null,
+    created_at: "2026-11-17T15:14:10Z",
+    started_at: "2026-11-17T15:14:10Z",
+  };
+  const skippedTimings = await timingsOf(
+    env,
+    io(
+      () => ({ ...job, ...skipped }),
+      () => "{}",
+    ),
+  );
+  expect(readQueueWait(skipped)).toBeUndefined();
+  expect(Object.hasOwn(skippedTimings, "queueWait")).toBe(false);
+
+  const real = {
+    status: "completed",
+    conclusion: "success",
+    runner_id: 1_000_332_569,
+    created_at: "2026-11-17T15:14:09Z",
+    started_at: "2026-11-17T15:25:54Z",
+  };
+  const realTimings = await timingsOf(
+    env,
+    io(
+      () => ({ ...job, ...real }),
+      () => "{}",
+    ),
+  );
+  expect(readQueueWait(real)).toEqual({ created: real.created_at, started: real.started_at, seconds: 705 });
+  expect(realTimings.queueWait).toEqual({ created: real.created_at, started: real.started_at, seconds: 705 });
+
+  for (const [field, value] of [
+    ["created_at", "2026-02-30T09:59:56Z"],
+    ["started_at", "2026-02-30T10:00:00Z"],
+    ["created_at", "2026-11-14T09:59:56"],
+    ["started_at", "2026-11-14T10:00:00"],
+  ] as const) {
+    expect(readQueueWait({ ...job, [field]: value })).toBeUndefined();
+  }
 });
 
 // The existing timing properties above keep their generators, assertions and run counts.
