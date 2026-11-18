@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0585, 0590, 0594, 0595 and 0599 with the approved package and ordinary-routing amendments; body 0548c6b8ed3f
+Approved by the lead agent, builds 0585, 0590, 0594, 0595 and 0599 with the approved package and ordinary-routing amendments; body 06fb72170771
 Plancheck-Version: 3
 
 # Plan: CI delivers the tested @kalfa/config archive, then two CI speed items
@@ -87,8 +87,9 @@ its existing cases go red because the generated valid workflow changes, that is 
 lead, not a row here.
 
 Routing paths outside our 18 that the work needs: none found. The pieces outside it that the
-work reads and does not change are `proof.ts` (`slots`, `legsOf`, `whole`), `plant-related.ts`
-(`wanted`, `fixture`), `required.mjs` and the `jobs.ts` guard (both pin `select`'s name, `needs` and
+work reads and does not change are `proof.ts` (`slots`, `legsOf`, `whole`), `related.ts`'s
+`wantsChecklistLaw` and `checklistFixture` (from #1569, which removed `plant-related.ts`),
+`required.mjs` and the `jobs.ts` guard (both pin `select`'s name, `needs` and
 `if`, which this plan keeps), `scheduled.yaml` (already lists projects without a path, so it runs
 Kalfa), the shard-rows guard, the timing tables and every slot-concurrency map. If any of these
 must change, the step stops and names it to the lead as a blocker.
@@ -107,9 +108,9 @@ pull request changes none of those blocks and none of those rules.
 |---|---|---|---|
 | `changes`, step `size`, env `FILTER` | 200 on 1583 (201 on main) | `'next/'` fallback becomes `'next/ kalfa/'` | no |
 | `next`, the vitest `run` step, env `FILTER` | 472 on 1583 (464 on main) | same fallback change | no; `next`'s `concurrency` block is at main 419 to 422, 42 lines above |
-| `select`, `outputs` | main 538 to 544 | add `archive` and `consumer` after `plants` (544) | yes: the block 0598 drops ends at 533, five lines above |
+| `select`, `outputs` | main 538 to 544 | add `archive` and `consumer` (544; #1569 later removed `plants`) | yes: the block 0598 drops ends at 533, five lines above |
 | `related`, after step `integration` | main 597 to 603 | `id: integration`; new step `package receipt` | no; `related`'s `concurrency` block is at 576 to 579 |
-| `related`, after step `checklist faults` and `tooling` | main 604 to 619 | new steps `consumer fault` and `package archive` before `results` (620) | no |
+| `related`, after step `tooling` (#1569 removed `checklist faults`) | main 604 to 619 | new steps `consumer fault` and `package archive` before `results` (620) | no |
 
 Guard code, on main:
 
@@ -136,7 +137,7 @@ too (see each item).
   invisible to `--changed`; decision 0590 item 4 and `changes.mjs`'s `readers` add such tests by
   path. P2 is that kind: it imports nothing from the package, it builds and packs it. So P2 is
   added by path, the way `related.ts` already adds the checklist fixture through
-  `plant-related.ts`'s `wanted`.
+  `wantsChecklistLaw`.
 - **npm's tarball install.** `npm install <file>.tgz` installs a packed archive like a registry
   version; `pnpm pack` substitutes `publishConfig.exports` (the approved amendment and
   experiment 108 cite this path).
@@ -267,7 +268,7 @@ type Fault =
     HEAD: ${{ github.sha }}
     REQUESTED: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
   run: node .github/ci/related.ts --receipt
-# ... checklist faults and tooling, as today ...
+# ... tooling, as today ...
 # After `tooling`, on the leg that owns P1:
 - name: consumer fault
   if: success() && needs.select.outputs.consumer == matrix.shard
@@ -289,7 +290,7 @@ type Fault =
 ```
 
 `select` gains the outputs `archive` and `consumer`, each `${{ steps.set.outputs.<name> }}`. The
-receipt step runs right after `integration`, before the checklist faults, so it binds the folder
+receipt step runs right after `integration`, before `tooling`, so it binds the folder
 and report P2 just wrote. The upload waits until every test step of the leg passed. `related`
 still runs only after a successful `select` on a ready pull request or a queue group; the event
 clause is repeated on both delivery steps and in the script, so a change elsewhere cannot widen
@@ -317,7 +318,7 @@ const filterOf = (need) => (need === "readers" ? readers.join(" ") : FULL);
    is imported by them. `delivered` sees `check.yaml`, so `confirmed` asks Vitest for each law in
    its own project and adds them. `select()` places P2 on one integration leg, say `2`, and P1 on
    one tooling leg, say `6`, and prints `archive="2"` and `consumer="6"` beside the unchanged
-   `legs`, `files`, `projects`, `slots` and `plants`.
+   `legs`, `files` and `projects`.
 3. Leg 2's `integration` step runs P2: pnpm packs the package once, npm installs the archive in a
    temp project outside the workspace, Node imports all twelve subpaths, tsc checks them with
    `skipLibCheck: false`, and the four broken installed copies are each refused, restored and
@@ -439,12 +440,12 @@ also asserts nine distinct slot groups; that one line is not taken (below).
   as triggers and without the record guard: the lead fixed the route as `related.ts`,
   `check.yaml`, the related guard and the record guard. A test file does not change the route,
   and P1 is selected by the rule, not a trigger for it. The rule lives in `related.ts` beside
-  `wanted`'s shape.
+  `wantsChecklistLaw`'s shape.
 - **Its `config` output, a map of leg to `true`:** a single leg name holds at most one owner by
   its type, and is compared with `matrix.shard` without `fromJSON`. Named `archive`, for what the
   leg delivers, since "config" already means the settings.
-- **Its receipt step after `tooling`:** ours runs directly after `integration`, before the
-  checklist faults run on the same runner, so it binds the folder and report P2 just wrote. The
+- **Its receipt step after `tooling`:** ours runs directly after `integration`, before
+  `tooling` runs on the same runner, so it binds the folder and report P2 just wrote. The
   upload still waits for the whole leg.
 - **Its folder check, which is absent:** ours also refuses an extra file in the delivery folder
   and export keys other than the twelve subpaths and the metadata subpath.
@@ -460,18 +461,19 @@ also asserts nine distinct slot groups; that one line is not taken (below).
 ## Existing tools
 
 - `delivered` and `confirmed` in `.github/ci/related.ts`: searched `related.ts`,
-  `plant-related.ts`, `changes.mjs` and the batch. They follow `plant-related.ts`'s `wanted`,
-  `changes.mjs`'s `readers` and the batch's `withConfig`. `wanted` is for the checklist fixture and
-  lives in a file we do not own, so a sibling in `related.ts` fits.
+  `plant-related.ts` (since removed by #1569), `changes.mjs` and the batch. They follow the shape of
+  `related.ts`'s `wantsChecklistLaw` (once `plant-related.ts`'s `wanted`), `changes.mjs`'s `readers`
+  and the batch's `withConfig`. `wantsChecklistLaw` is for the checklist fixture, so a sibling beside
+  it fits.
 - The `--receipt` mode in `.github/ci/related.ts`: searched `proof.ts`, `plant-related.ts`
-  (which hashes with Effect's `Digest` and reads the same `related.json` report), P2 itself, the
+  (since removed by #1569; it hashed with Effect's `Digest` and read the same `related.json` report), P2 itself, the
   batch's `checkedConfig` and Node's `node:crypto`. Uses Effect Schema to decode and
   `createHash("sha256")` to hash. No new file: a new script in the CI folder would be outside our
   18 paths, and `related.ts` already owns the related job's other node step.
-- The `--fault` mode in `.github/ci/related.ts`: searched `plant-related.ts` and `plant.ts` (the
-  checklist fixture's fault runner, scoped to that fixture and its catalog) and the batch (none).
-  It reuses the shape of `plant-related.ts`'s CI-only environment check and its JSON-report
-  reading, and Effect's `ChildProcess` and scoped finalizers, as P2 does, for the restore.
+- The `--fault` mode in `.github/ci/related.ts`: searched `plant-related.ts` (since removed by
+  #1569), `plant.ts` (the checklist fixture's fault runner, scoped to that fixture and its catalog)
+  and the batch (none). It reuses the shape of the removed `plant-related.ts`'s CI-only environment
+  check and its JSON-report reading, and Effect's `ChildProcess` and scoped finalizers, as P2 does, for the restore.
 - The upload: `actions/upload-artifact@v7`, the action every other upload in `check.yaml` uses.
 - Guard cases: the existing `Fault` list and `lintWorkflow` in the related guard test, and the
   generated plants of `wiring.test-support.ts`. No new validator.
