@@ -107,21 +107,29 @@ const LONGEST = 60 * 60_000;
 
 const DIGITS = /^[0-9]+$/;
 
+/** The `message` of GitHub's JSON answer, when it has one. */
+const Message = Schema.fromJsonString(Schema.Struct({ message: Schema.String }));
+
+/** Whether GitHub's own message in `body` names a rate limit, primary or secondary. */
+const namesLimit = (body: string): boolean =>
+  Option.exists(Schema.decodeOption(Message)(body), ({ message }) =>
+    Str.includes("rate limit")(Str.toLowerCase(message)),
+  );
+
 /**
- * When GitHub takes calls again after an answer of `status` with these headers, or `null` when it
- * names no wait: `limitWait`'s rules, as a time. Only a 403 or a 429 counts. `retry-after` comes
- * first, as RFC 9110 section 10.2.3 gives it: seconds (digits only) or an HTTP date, read with
- * `DateTime.make`. Then `x-ratelimit-reset` (seconds since 1970, digits only) when
- * `x-ratelimit-remaining` is 0. A header neither reads is read as no header. `DateTime.make` is
- * looser than `limitWait`'s `httpDate`: it takes "1.5" as a day in 2001, so such a header names no
- * wait at all, where `limitWait` would fall through to the reset. Never before `now`, and at most an
- * hour after it.
+ * When GitHub takes calls again after `answer`, or `null` when it is no rate limit. Only a 403 or a
+ * 429 counts. First `limitWait`'s rules, read from the headers: `retry-after`, as RFC 9110 section
+ * 10.2.3 gives it, in seconds (digits only) or an HTTP date read with `DateTime.make`; then
+ * `x-ratelimit-reset` (seconds since 1970, digits only) when `x-ratelimit-remaining` is 0. A header
+ * neither reads is read as no header. `DateTime.make` is looser than `limitWait`'s `httpDate`: it
+ * takes "1.5" as a day in 2001, so such a header names no wait at all. When no header names a wait,
+ * a 429, or a 403 whose message names a rate limit (a secondary one, with calls left), waits one
+ * minute: GitHub's REST docs, "Best practices for using the REST API". Never before `now`, and at
+ * most an hour after it.
  */
-export const retryAt = (
-  status: number,
-  headers: Readonly<Record<string, string>>,
-  now: DateTime.Utc,
-): DateTime.Utc | null => {
+export const retryAt = (answer: Answer, now: DateTime.Utc): DateTime.Utc | null => {
+  const { status, headers } = answer;
+
   if (status !== 403 && status !== 429) {
     return null;
   }
@@ -132,13 +140,17 @@ export const retryAt = (
   const date = DateTime.make(after);
   const spent = Str.trim(headers["x-ratelimit-remaining"] ?? "") === "0" && DIGITS.test(reset);
 
+  const limited = status === 429 || namesLimit(answer.body);
+
   const at = DIGITS.test(after)
     ? from + Number(after) * 1000
     : Option.isSome(date)
       ? DateTime.toEpochMillis(date.value)
       : spent
         ? Number(reset) * 1000
-        : null;
+        : limited
+          ? from + 60_000
+          : null;
 
   return at === null ? null : DateTime.add(now, { milliseconds: Math.min(Math.max(at - from, 0), LONGEST) });
 };
@@ -172,7 +184,7 @@ export const layer = (
             return yield* WorkflowRunsError.make({ reason, status: null });
           }
 
-          const until = retryAt(answer.value.status, answer.value.headers, yield* DateTime.now);
+          const until = retryAt(answer.value, yield* DateTime.now);
 
           if (until !== null) {
             return yield* RateLimited.make({ until, reason });

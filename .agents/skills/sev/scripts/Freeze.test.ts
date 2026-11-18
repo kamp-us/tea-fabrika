@@ -66,8 +66,14 @@ const answered = (status: number | null) =>
 /** A beat short enough that a property runs many cases quickly. */
 const BEAT = Duration.seconds(2);
 
-/** A 4xx that is not a rate limit, which the gh layer makes `RateLimited` by its headers alone. */
-const Status4xx = Schema.Int.check(Schema.isBetween({ minimum: 400, maximum: 499 }));
+/**
+ * A 4xx that is not a rate limit: the gh layer makes every 429, and every 403 that names a rate
+ * limit, a `RateLimited`, so a refusal never carries 429.
+ */
+const Status4xx = Schema.Union([
+  Schema.Int.check(Schema.isBetween({ minimum: 400, maximum: 428 })),
+  Schema.Int.check(Schema.isBetween({ minimum: 430, maximum: 499 })),
+]);
 
 const Status5xx = Schema.Int.check(Schema.isBetween({ minimum: 500, maximum: 599 }));
 

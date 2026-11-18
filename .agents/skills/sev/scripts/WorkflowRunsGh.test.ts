@@ -60,6 +60,10 @@ const SPENT = {
   err: "gh: API rate limit exceeded. (HTTP 403)\n",
 };
 
+/** GitHub's message for a secondary rate limit (REST docs, "Rate limits for the REST API"). */
+const SECONDARY =
+  '{"message":"You have exceeded a secondary rate limit. Please wait a few minutes before you try again."}';
+
 /** Tonight's 502 for one cancel, line 351 of that sev0's log. */
 const BAD_GATEWAY = { out: printed(502, [["Content-Type", "text/html"]], ""), err: "gh: Server Error (HTTP 502)\n" };
 
@@ -207,14 +211,14 @@ describe("retryAt", () => {
   /** The wait, in ms from `now`, as `limitWait` gives it: never below zero, at most an hour. */
   const clamped = (ms: number) => Math.min(Math.max(ms, 0), 60 * 60_000);
 
-  const waited = (status: number, headers: Record<string, string>) => {
-    const at = WorkflowRunsGh.retryAt(status, headers, SEEN);
+  const waited = (status: number, headers: Record<string, string>, body = "{}") => {
+    const at = WorkflowRunsGh.retryAt({ status, headers, body }, SEEN);
 
     return at === null ? null : DateTime.toEpochMillis(at) - DateTime.toEpochMillis(SEEN);
   };
 
   it.prop(
-    "property: only a 403 or a 429 names a wait, whatever its headers say",
+    "property: only a 403 or a 429 names a wait, whatever its headers and message say",
     {
       status: Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 599 })),
       after: Schema.String,
@@ -224,7 +228,8 @@ describe("retryAt", () => {
     ({ status, after, left, reset }) =>
       status === 403 ||
       status === 429 ||
-      waited(status, { "retry-after": after, "x-ratelimit-remaining": left, "x-ratelimit-reset": reset }) === null,
+      waited(status, { "retry-after": after, "x-ratelimit-remaining": left, "x-ratelimit-reset": reset }, SECONDARY) ===
+        null,
   );
 
   it.prop(
@@ -246,21 +251,25 @@ describe("retryAt", () => {
   );
 
   it.prop(
-    "property: with no retry-after it reads, a spent limit waits for x-ratelimit-reset, and one with calls left names no wait",
+    "property: with no retry-after it reads, a spent limit waits for x-ratelimit-reset; with calls left, a 429 or a 403 that names a rate limit waits a minute, and any other 403 names no wait",
     {
       status: Limit,
       after: Schema.Literals(["", "soon", "later", "60s", "never"]),
       left: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 5 })),
       offset: Seconds,
+      named: Schema.Boolean,
     },
-    ({ status, after, left, offset }) => {
+    ({ status, after, left, offset, named }) => {
       const reset = String(Math.floor(DateTime.toEpochMillis(SEEN) / 1000) + offset);
       const headers = { "retry-after": after, "x-ratelimit-remaining": String(left), "x-ratelimit-reset": reset };
-      expect(waited(status, headers)).toBe(left === 0 ? clamped(offset * 1000) : null);
+      const body = named ? SECONDARY : '{"message":"Resource not accessible by integration"}';
+      expect(waited(status, headers, body)).toBe(
+        left === 0 ? clamped(offset * 1000) : status === 429 || named ? 60_000 : null,
+      );
 
       // Tonight's 403: none left, and the reset at 10:08:55.
       const tonight = { "x-ratelimit-remaining": "0", "x-ratelimit-reset": "1794996535" };
-      expect(WorkflowRunsGh.retryAt(403, tonight, SEEN)).toEqual(RESET);
+      expect(WorkflowRunsGh.retryAt({ status: 403, headers: tonight, body: "{}" }, SEEN)).toEqual(RESET);
     },
   );
 });
@@ -269,7 +278,11 @@ describe("cancel", () => {
   it.effect.prop(
     "property: a cancel GitHub refuses with a status but no wait fails with that status and gh's own words, in one call",
     {
-      status: Schema.Int.check(Schema.isBetween({ minimum: 400, maximum: 599 })),
+      // Any error status but a 429, which is always a rate limit.
+      status: Schema.Union([
+        Schema.Int.check(Schema.isBetween({ minimum: 400, maximum: 428 })),
+        Schema.Int.check(Schema.isBetween({ minimum: 430, maximum: 599 })),
+      ]),
       words: Schema.String,
     },
     ({ status, words }) =>
@@ -321,6 +334,24 @@ describe("cancel", () => {
           expect(failed).toMatchObject({ _tag: "RateLimited", until });
           expect(calls).toEqual([CANCEL]);
         }
+      }),
+  );
+
+  it.effect.prop(
+    "property: a 429, or a 403 whose message names a rate limit, with calls left and no header naming a wait, fails as RateLimited for one minute",
+    { status: Schema.Literals([403, 429]), left: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 5000 })) },
+    ({ status, left }) =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(DateTime.toEpochMillis(SEEN));
+
+        const given = {
+          out: printed(status, [["X-Ratelimit-Remaining", String(left)]], SECONDARY),
+          err: `gh: You have exceeded a secondary rate limit. (HTTP ${status})\n`,
+        };
+
+        const { failed, calls } = yield* cancelled(given);
+        expect(failed).toMatchObject({ _tag: "RateLimited", until: DateTime.add(SEEN, { minutes: 1 }) });
+        expect(calls).toEqual([CANCEL]);
       }),
   );
 
