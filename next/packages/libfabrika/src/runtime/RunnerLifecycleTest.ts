@@ -30,7 +30,9 @@ export interface Exit {
  * One call into the runner, or one outside event. `inc` and `work` are inputs (`work` asks one Cmd), `stop`
  * is the program's built-in exit Cmd, `crash` is an input the program throws on, `due`, `open` and
  * `restart` are the runner's other calls, `shutdown` is a writer outside the runner ending the live
- * process, and `wake` is a new runner over the same stores, as an object's wake makes one.
+ * process, and `wake` is a new runner over the same stores, as an object's wake makes one. `start_child`
+ * and `stop_child` are inputs that make the program ask the host for the built-in Cmd of that name: the
+ * start makes a child under a new name, and the stop ends the child the last start made.
  */
 export type Move =
   | "inc"
@@ -42,6 +44,8 @@ export type Move =
   | "restart"
   | "shutdown"
   | "wake"
+  | "start_child"
+  | "stop_child"
   | "overlap"
   | "successor"
   | "replaced"
@@ -71,8 +75,10 @@ export interface World {
 type Model = "live" | "ended_normal" | "ended_shutdown" | "ended_crashed";
 
 /** The moves possible in a state: those whose answer today's runner gives the same way every time. */
+const LIVE: ReadonlyArray<Move> = ["inc", "work", "stop", "crash", "due", "open", "restart", "shutdown", "wake"];
+
 const POSSIBLE: Record<Model, ReadonlyArray<Move>> = {
-  live: ["inc", "work", "stop", "crash", "due", "open", "restart", "shutdown", "wake"],
+  live: [...LIVE, "start_child", "stop_child"],
   ended_normal: ["inc", "due", "open", "wake"],
   ended_shutdown: ["due", "open", "wake", "restart"],
   ended_crashed: ["due", "restart"],
@@ -101,7 +107,7 @@ type Standing = Model | "other_live";
  *  while another call's step holds a snapshot (`overlap`), and the replacements by a writer outside the
  *  runner: while a Cmd is in its handler (`replaced`), or after the process ended (`successor`). */
 const WALK: Record<Standing, ReadonlyArray<Move>> = {
-  live: [...POSSIBLE.live, "schedule", "overlap", "replaced"],
+  live: [...LIVE, "schedule", "overlap", "replaced"],
   ended_normal: POSSIBLE.ended_normal,
   ended_shutdown: [...POSSIBLE.ended_shutdown, "successor"],
   ended_crashed: POSSIBLE.ended_crashed,
@@ -131,6 +137,9 @@ const TO: Partial<Record<Move, Standing>> = {
   successor: "other_live",
 };
 
+/** The state a move leaves the walk in: its exit, or a restart's new process. */
+const leaves = (model: Model, move: Move): Model => AFTER[move]?.to ?? (move === "restart" ? "live" : model);
+
 const Pick = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
 
 const Tape = Schema.Array(Pick).check(Schema.isMinLength(4), Schema.isMaxLength(14));
@@ -143,7 +152,7 @@ const reached = new Map<string, Set<string>>();
 const reach = (law: string, kind: string) => reached.set(law, (reached.get(law) ?? new Set<string>()).add(kind));
 
 const REQUIRED: Record<string, ReadonlyArray<string>> = {
-  B1: ["inc", "work", "due", "open", "wake"],
+  B1: ["inc", "work", "stop", "crash", "due", "open", "restart", "start_child", "stop_child", "wake"],
   B2: [
     "inc",
     "work",
@@ -157,12 +166,24 @@ const REQUIRED: Record<string, ReadonlyArray<string>> = {
     "successor",
     "stale runner with a timer",
   ],
-  B3: ["stop", "crash", "shutdown", "restart from live"],
+  B3: ["stop", "crash", "shutdown", "restart from live", "stop_child"],
 };
 
 /** A call's budget of lifecycle reads: one lifecycle read and the reads for `at` in each serial step. A
- *  step is one turn, and a Cmd's answer is a second. */
-const STEPS: Partial<Record<Move, number>> = { inc: 1, due: 1, open: 1, work: 2 };
+ *  step is one turn, and a Cmd's answer is a second. A crash's recovery and a restart each walk three
+ *  journal steps after their turn (`writing_exit`, `waiting_start`, `checkpointing`), and each reads the
+ *  status for `at` once, so each is a step: the driver sees only the call's total, and a call's steps add. */
+const STEPS: Partial<Record<Move, number>> = {
+  inc: 1,
+  due: 1,
+  open: 1,
+  work: 2,
+  stop: 2,
+  crash: 4,
+  restart: 4,
+  start_child: 2,
+  stop_child: 2,
+};
 
 const BUDGET_PER_STEP = 3;
 
@@ -182,10 +203,11 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
         Effect.scoped(
           Effect.gen(function* () {
             const w = yield* open;
-            const moves: ReadonlyArray<Move> = ["inc", "work", "due", "open", "wake"];
+            let model: Model = "live";
 
             for (const pick of tape) {
-              const move = moves[pick % moves.length] ?? "inc";
+              const choices = POSSIBLE[model].filter((one) => one !== "shutdown");
+              const move: Move = choices[pick % choices.length] ?? "due";
               reach("B1", move);
               yield* w.reset;
               yield* w.call(move);
@@ -195,6 +217,7 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
                 reads.status + reads.isLive,
                 `${move} read the lifecycle ${reads.status + reads.isLive} times (status ${reads.status}, isLive ${reads.isLive}), over ${steps} step(s) of ${BUDGET_PER_STEP}`,
               ).toBeLessThanOrEqual(steps * BUDGET_PER_STEP);
+              model = leaves(model, move);
             }
           }),
         ),
@@ -204,8 +227,9 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
     // Plants, each applied once to Runner.ts and undone: the runner's own exit does not drop a step's snapshot
     // (red on the overlap: an alarm is armed for a process that exited normally); `living` is derived
     // without the process id (red on a replaced process: the old runner arms its program's timer); and `ended`
-    // keeps its first answer for the runner's life (red on the Cmd listed after an exit). The snapshot kept
-    // past its step's end cannot be seen here: see the report.
+    // keeps its first answer for the runner's life (red on the Cmd listed after an exit). A Reading carried
+    // across steps turns B2 red through the runner's own exit. A Reading merely not cleared at its own step's
+    // end is out of reach: each step makes a new one on its own fiber, so nothing reads the old one again.
     it.effect.prop(
       "B2 what a runner does follows the process table after its own exit, a crash, an outside shutdown, a restart and a replaced process",
       { tape: Tape },
@@ -291,7 +315,8 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
       options,
     );
 
-    // Plants: the manual restart's exit line writes `normal`; the runner's crash exit writes `normal`.
+    // Plants: the manual restart's exit line writes `normal`; the runner's crash exit writes `normal`; and
+    // `ChildrenLedger`'s stop writes `normal` (ChildrenLedger.ts, the exit it asks of the manager in `stop`).
     it.effect.prop(
       "B3 a process's normal exit is written only by its own runner's built-in exit",
       { tape: Tape },
@@ -300,6 +325,8 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
           Effect.gen(function* () {
             const w = yield* open;
             let model: Model = "live";
+            // The child the last `start_child` made: a new life has none, and a stopped one is gone.
+            let child: "none" | "live" | "stopped" = "none";
             const expected: Array<{ reason: string; by: string }> = [];
 
             for (const pick of tape) {
@@ -307,6 +334,18 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
               const move: Move = choices[pick % choices.length] ?? "due";
               yield* w.call(move);
               const ended: (typeof AFTER)[Move] = AFTER[move];
+
+              if (move === "start_child") {
+                child = "live";
+              } else if (move === "stop_child" && child === "live") {
+                // The runner's stop_child ends its own live child with shutdown, never normal. Another life's
+                // child is `not_child` and an ended one `noproc`: neither writes a line.
+                reach("B3", "stop_child");
+                expected.push({ reason: "shutdown", by: "SHA256:brain" });
+                child = "stopped";
+              } else if (ended !== undefined || move === "restart") {
+                child = "none";
+              }
 
               if (ended !== undefined) {
                 reach("B3", move);

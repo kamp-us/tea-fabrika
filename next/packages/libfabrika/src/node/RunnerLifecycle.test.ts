@@ -18,6 +18,10 @@ import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { InputId, Row, valueFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { Model as FabrikaModel } from "../permissions/Model.ts";
+import * as RelationsMemory from "../permissions/RelationsMemory.ts";
+import { Senders } from "../permissions/Senders.ts";
+import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, ProcessEvent, Recipient, Start } from "../processes/Process.ts";
@@ -26,7 +30,7 @@ import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import * as RunnerLifecycleTest from "../runtime/RunnerLifecycleTest.ts";
-import { exit } from "../runtime/StartChild.ts";
+import { exit, startChild, stopChild } from "../runtime/StartChild.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 
@@ -56,6 +60,8 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("stop") }),
   Schema.Struct({ type: Schema.Literal("crash") }),
   Schema.Struct({ type: Schema.Literal("schedule") }),
+  Schema.Struct({ type: Schema.Literal("start_child"), name: Schema.String }),
+  Schema.Struct({ type: Schema.Literal("stop_child"), name: Schema.String }),
 ]);
 
 const work = Cmd.make("work", { input: Schema.Struct({}), ok: Schema.Null, err: ["failed"] });
@@ -65,7 +71,7 @@ const program = {
   machine: Machine.make({
     model: Model,
     msg: Msg,
-    cmds: [work, exit],
+    cmds: [work, exit, startChild, stopChild],
     init: (saved) => [saved ?? { count: 0, replies: 0, wake: null }, []],
     update: {
       inc: (s) => [{ ...s, count: s.count + 1 }, []],
@@ -77,8 +83,15 @@ const program = {
       crash: () => {
         throw new TypeError("lifecycle fixture");
       },
+      // This life is the requester: it starts a child by name and stops it by the same name.
+      start_child: (s, m) => [s, [startChild({ program: PROGRAM, name: m.name })]],
+      stop_child: (s, m) => [s, [stopChild({ name: m.name })]],
       work_ok: (s) => [{ ...s, replies: s.replies + 1 }, []],
       work_err: (s) => [{ ...s, replies: s.replies + 1 }, []],
+      start_child_ok: (s) => [{ ...s, replies: s.replies + 1 }, []],
+      start_child_err: (s) => [{ ...s, replies: s.replies + 1 }, []],
+      stop_child_ok: (s) => [{ ...s, replies: s.replies + 1 }, []],
+      stop_child_err: (s) => [{ ...s, replies: s.replies + 1 }, []],
       exit_ok: (s) => [s, []],
       exit_err: (s) => [s, []],
     },
@@ -89,7 +102,7 @@ const program = {
   view: { data: Model, select: (s: typeof Model.Type) => s },
   refuse: () => null,
   inputs: Object.fromEntries(
-    ["inc", "work", "stop", "crash", "schedule"].map((key) => [
+    ["inc", "work", "stop", "crash", "schedule", "start_child", "stop_child"].map((key) => [
       key,
       { ...Schema.TaggedStruct("write", {}).make({}), schema: Msg, personOnly: false, description: key },
     ]),
@@ -129,6 +142,8 @@ const open = Effect.fnUntraced(function* () {
   const armings: Array<{ at: number | null; state: string; reason: string | null }> = [];
   let worked = 0;
   let input = 0;
+  /** The children the runner's lives have asked for: each has its own name, `child:1` and on. */
+  let children = 0;
   const reads = { status: 0, isLive: 0 };
   // A hold stops the runner's next call of its kind until the law lets it go, as a slow platform call would.
   const holds: { exit: Hold | null; read: Hold | null; work: Hold | null } = { exit: null, read: null, work: null };
@@ -146,7 +161,19 @@ const open = Effect.fnUntraced(function* () {
   ).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })));
 
   const base = Layer.mergeAll(Mailbox.layer, ProcessManager.layer(caller, pid)).pipe(Layer.provideMerge(data));
-  const real = yield* Layer.build(base);
+
+  // The runner starts and stops children through the real `Children` on the same ledger. No letter has a member
+  // behind it, so the start grant below judges each start.
+  const withChildren = ChildrenLedger.layer({
+    grants: [{ source: PROGRAM, to: PROGRAM }],
+    fabrika: FabrikaModel.ref("fabrika", "lifecycle"),
+  }).pipe(
+    Layer.provide(RelationsMemory.layer([])),
+    Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
+    Layer.provideMerge(base),
+  );
+
+  const real = yield* Layer.build(withChildren);
   const manager = Context.get(real, ProcessManager);
 
   // The runner's manager counts the lifecycle reads it makes. The law's own reads use the real one.
@@ -278,8 +305,17 @@ const open = Effect.fnUntraced(function* () {
 
   let current = yield* runner();
 
-  const send = Effect.fnUntraced(function* (type: "inc" | "work" | "stop" | "crash" | "schedule") {
+  const send = Effect.fnUntraced(function* (
+    asked:
+      | "inc"
+      | "work"
+      | "stop"
+      | "crash"
+      | "schedule"
+      | { readonly type: "start_child" | "stop_child"; readonly name: string },
+  ) {
     input += 1;
+    const message = typeof asked === "string" ? { type: asked } : asked;
 
     return yield* current.msg({
       id: `letter-${input}`,
@@ -287,7 +323,7 @@ const open = Effect.fnUntraced(function* () {
         id: Schema.decodeSync(InputId)(`input_0000000000e008${input.toString(16).padStart(12, "0")}`),
         by: person,
         arrivedAt: yield* Clock.currentTimeMillis,
-        input: { type },
+        input: message,
       },
       sentAt: from().sentAt,
       seen: 0,
@@ -302,6 +338,11 @@ const open = Effect.fnUntraced(function* () {
       case "stop":
       case "schedule":
         return yield* send(move);
+      // The latest name is the child the last start made, or none the program started: `child:0` is no child.
+      case "start_child":
+        return yield* send({ type: "start_child", name: `child:${++children}` });
+      case "stop_child":
+        return yield* send({ type: "stop_child", name: `child:${children}` });
       // The program throws, so the call fails with `ProgramDown`: the failure is the move's answer.
       case "crash":
         return yield* Effect.exit(send("crash"));
