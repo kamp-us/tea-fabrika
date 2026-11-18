@@ -78,6 +78,9 @@ const Msg = Schema.Union([
   answers("send", Send.SendInput, Send.Queued, Send.send.errTags),
 ]);
 
+/** What the machine decodes: the inputs alone, since tea mints each answer from the Cmd list. */
+const Input = Schema.Union([Enqueue, Drop, Resume, Reply]);
+
 type Message = typeof Msg.Type | Settled<typeof StartChild.startChild | typeof Send.send>;
 
 const forward = (entry: Entry, reply: typeof Reply.Type): ReadonlyArray<Command> =>
@@ -229,7 +232,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
 
   const machine = Machine.make({
     model: Model,
-    msg: Msg,
+    msg: Input,
     cmds: [StartChild.startChild, Send.send],
     init: (loaded) => [loaded ?? Model.cases.idle.make({ attempt: 0, late: 0 }), []],
     update: {
@@ -253,7 +256,8 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
 
   return Program.make({
     name: "pipeline/queue",
-    machine,
+    // The program keeps the whole Msg, tea's answers included: the runner folds them, and the laws decode them.
+    machine: { ...machine, msg: Msg },
     state: { v: 1, upgrades: [] },
     view: (s) => ({
       state: s._tag,

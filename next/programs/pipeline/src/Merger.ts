@@ -137,6 +137,9 @@ const Msg = Schema.Union([
   answers(Send.send.cmdType, Send.SendInput, Send.Queued, Send.send.errTags),
 ]);
 
+/** What the machine decodes: the inputs alone, since tea mints each answer from the Cmd list. */
+const Input = Schema.Union([Land, Abandon, Schema.TaggedStruct("timer", { at: Schema.Finite })]);
+
 const clamp = (at: number) => Math.min(at, 8.64e15);
 
 const commandFor = (s: Working) =>
@@ -390,7 +393,7 @@ export const merger = (settings: Values) => {
 
   const machine = Machine.make({
     model: Model,
-    msg: Msg,
+    msg: Input,
     cmds: [change, update, checks, merge, Send.send, StartChild.exit],
     init: (loaded) => [loaded ?? Model.cases.idle.make({ attempt: 0, late: 0 }), []],
     update: {
@@ -414,7 +417,8 @@ export const merger = (settings: Values) => {
 
   return Program.make({
     name: "pipeline/merger",
-    machine,
+    // The program keeps the whole Msg, tea's answers included: the runner folds them, and the laws decode them.
+    machine: { ...machine, msg: Msg },
     state: { v: 2, upgrades: [rounds] },
     view: (s) => ({
       state: s._tag,
