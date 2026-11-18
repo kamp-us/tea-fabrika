@@ -103,7 +103,7 @@ The Ours column is as read on 2026-11-09, except where a cell names a file and k
 | Area | Effect at 4.1.2 | Ours | Set by | Outcome |
 |---|---|---|---|---|
 | Indent | 2 spaces (`dprint.json` `indentWidth: 2`) | `.oxfmtrc.json`: `useTabs`, `tabWidth` | [0029](0029-format-and-names-follow-effect.md) | same: 0029 took Effect's setting |
-| Line width | 120 | `.oxfmtrc.json`: `printWidth` | 0029, then [0094](0094-lines-are-100-columns.md) | differs: the owner reads the code daily and wants it narrower than Effect's (0094) |
+| Line width | 120 | `.oxfmtrc.json`: `printWidth` | 0029, then [0094](0094-lines-are-100-columns.md) | set by `.oxfmtrc.json`'s `printWidth` (0029, 0094) |
 | Semicolons | none (`semiColons: "asi"`) | always: `semi` is left out of `.oxfmtrc.json`, so oxfmt's default | [0039](0039-keep-semicolons-and-es5-commas.md) | differs: the owner's reading taste (0039) |
 | Trailing commas | never (`trailingCommas: "never"`) | always: `.oxfmtrc.json`: `trailingComma` | 0039 | differs: the owner's reading taste (0039) |
 | Spaces in braces | `import { dual } from` (dprint default) | `.oxfmtrc.json`: `bracketSpacing` | 0029 | same: 0029 took Effect's setting |

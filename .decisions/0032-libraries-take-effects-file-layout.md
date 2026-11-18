@@ -26,10 +26,8 @@ flowchart LR
 ```
 
 ```ts
-// src/index.ts, as clanka's and Effect's are written (libfabrika's adds the module folder)
-/**
- * @since 0.0.0
- */
+// src/index.ts, as clanka's and Effect's are written (libfabrika's adds the module folder, and
+// leaves out their `@since` tag until the first release, 0118)
 export * as Ledger from "./ledger/Ledger.ts"
 
 // a caller
@@ -91,8 +89,9 @@ module, each with its own files and `internal/`.**
   none of it.
 - **No folders by kind:** no `services/`, `types/`, `utils/` or `helpers/`. Folders by area are
   gone too, apart from `libfabrika`'s module folders.
-- **`index.ts` re-exports each public file as a namespace with a doc tag:**
-  `/** @since 0.0.0 */ export * as Ledger from "./ledger/Ledger.ts"`. Callers write
+- **`index.ts` re-exports each public file as a namespace:**
+  `export * as Ledger from "./ledger/Ledger.ts"`. A doc comment carries no `@since` until
+  `libfabrika` has a released version ([0118](0118-no-since-tag-before-a-release.md)). Callers write
   `Ledger.make(...)` and `Ledger.Ledger`. `package.json` exports each module's files by subpath, as
   Effect's does, so a caller can also import one file by its path.
 - **The top level still names no platform** (AGENTS.md): `index.ts` re-exports no `Node*` or
@@ -153,6 +152,7 @@ Binding constraints:
 - The path shows a file's subject and not its layer. A reader learns the layer from
   `layer-rules.json` or the lint error. That is the cost.
 - 0023's "PascalCase module files plus `internal/` and the namespace barrel" item is closed by this
-  record. The `@since` value stays `0.0.0` while `libfabrika` is `0.0.0`.
+  record. No doc comment carries `@since` until the first release
+  ([0118](0118-no-since-tag-before-a-release.md)).
 - Not decided here: the app's layout (a lean above), and better names than the mechanical ones the
   move picks (`State.ts` holds `Saved`): a rename after the move is its own change.
