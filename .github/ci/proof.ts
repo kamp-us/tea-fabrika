@@ -147,7 +147,7 @@ export const outputs = (proof: Proof, run: number): string[] => {
 const Run = Schema.Int.check(Schema.isGreaterThan(0));
 
 /** A full permutation of 0595's nine groups. A retry keeps its workflow run number. */
-export const slots = (run: number): Record<string, string> => {
+const slots = (run: number): Record<string, string> => {
   const parsed = Schema.decodeUnknownResult(Run)(run);
 
   if (Result.isFailure(parsed)) {
