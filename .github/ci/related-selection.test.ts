@@ -25,7 +25,7 @@ it.prop(
 
     const table = Object.fromEntries(files["next-integration"].map((file, index) => [file, index < 5 ? 100 : 0]));
 
-    const result = select(files, { ...sizing, table }, 1, true);
+    const result = select(files, { ...sizing, table }, true);
 
     const assigned = Object.values(result.plants).flat();
 
@@ -55,9 +55,9 @@ it.prop(
       result.plants,
     );
 
-    expect(select(files, sizing, 1).plants).toEqual({});
+    expect(select(files, sizing).plants).toEqual({});
 
-    expect(() => select({ "next-integration": [], tooling: [] }, sizing, 1, true)).toThrow();
+    expect(() => select({ "next-integration": [], tooling: [] }, sizing, true)).toThrow();
   },
   options,
 );
@@ -76,7 +76,7 @@ it.prop(
 
     const table = Object.fromEntries(files["next-integration"].map((file) => [file, 100]));
 
-    const result = select(files, { ...sizing, table }, 1, true);
+    const result = select(files, { ...sizing, table }, true);
 
     const assigned = Object.values(result.plants).flat();
 
@@ -118,7 +118,7 @@ it("uniform sixteen-file selection uses four groups when the best load ties", ()
 
   const table = Object.fromEntries(files["next-integration"].map((file) => [file, 100]));
 
-  const result = select(files, { ...sizing, table }, 1, true);
+  const result = select(files, { ...sizing, table }, true);
 
   expect(Object.keys(result.plants)).toHaveLength(4);
 });
@@ -141,19 +141,18 @@ it.prop(
 );
 
 it.prop(
-  "related selection preserves both missing projects exactly once within the shared slots",
+  "related selection preserves both missing projects exactly once",
   {
     integration: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 })),
     tooling: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 })),
-    run: Schema.Int.check(Schema.isGreaterThan(0)),
   },
-  ({ integration, tooling, run }) => {
+  ({ integration, tooling }) => {
     const files = {
       "next-integration": Array.from({ length: integration }, (_, index) => `next/a-${index}.integration.test.ts`),
       tooling: Array.from({ length: tooling }, (_, index) => `.github/ci/a-${index}.test.ts`),
     };
 
-    const result = select(files, sizing, run);
+    const result = select(files, sizing);
 
     const all = Object.values(result.legs).flat();
 
@@ -165,18 +164,12 @@ it.prop(
 
     expect(Object.keys(result.legs).length === 0).toBe(integration + tooling === 0);
 
-    expect(new Set(Object.values(result.slots)).size).toBe(9);
-
-    expect(Object.values(result.slots).toSorted()).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
-
     for (const [leg, paths] of Object.entries(result.legs)) {
       const project = result.projects[leg]!;
 
       expect(paths.length).toBeGreaterThan(0);
 
       expect(paths.every((path) => files[project].includes(path))).toBe(true);
-
-      expect(result.slots[leg]).toBeDefined();
     }
 
     const emitted = Object.fromEntries(
@@ -187,32 +180,33 @@ it.prop(
       }),
     );
 
+    // 0598: the related job holds no group, so the selection carries no group map.
+    expect(Object.keys(emitted)).toEqual(["run", "legs", "files", "projects", "plants"]);
+
+    expect(Object.keys(result).toSorted()).toEqual(["legs", "plants", "projects"]);
+
     expect(emitted["run"]).toBe(String(all.length > 0));
 
     expect(JSON.parse(emitted["legs"]!)).toEqual(Object.keys(result.legs));
 
     expect(JSON.parse(emitted["projects"]!)).toEqual(result.projects);
 
-    expect(select(files, sizing, run)).toEqual(result);
+    expect(select(files, sizing)).toEqual(result);
   },
   options,
 );
 
 it.prop(
-  "related selection refuses ambiguous file lists and invalid run numbers",
+  "related selection refuses ambiguous file lists",
   { word: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)) },
   ({ word }) => {
     const path = `next/${word}.integration.test.ts`;
 
-    expect(() => select({ "next-integration": [path], tooling: [path] }, sizing, 1)).toThrow();
+    expect(() => select({ "next-integration": [path], tooling: [path] }, sizing)).toThrow();
 
     expect(() =>
-      select({ "next-integration": [`next/${word} name.integration.test.ts`], tooling: [] }, sizing, 1),
+      select({ "next-integration": [`next/${word} name.integration.test.ts`], tooling: [] }, sizing),
     ).toThrow();
-
-    for (const run of [0, -1, 1.5, Number.NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
-      expect(() => select({ "next-integration": [], tooling: [] }, sizing, run)).toThrow();
-    }
   },
   options,
 );
