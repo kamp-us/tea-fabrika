@@ -604,6 +604,46 @@ visible, and never weaken the rules to hide this message.
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
 
+## How a change lands
+
+- **Every pull request, `next/` or today's, goes through the pipeline's steps:** plan, test writer,
+  build, one review, each by its own agent, with laws. No builder starts before an approved plan and
+  tests that exist ([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)), and `next/` does
+  not wait on the pipeline. Today's pipeline programs are paused, so the lead session's agents run
+  the steps by hand, each logged in `field/`, and the lead reads every diff, CI and the leak grep
+  before a merge. [The lead skill](SKILL.md) says how, and
+  [the plan](../../../docs/plan/README.md#how-a-change-lands) says how a change lands.
+  [The tests skill](../tests/SKILL.md#new-and-changed-laws) says what a new or changed
+  law must be, and [the lead skill's "Land it" step](#steps) what a
+  loosening.sh hit on one means.
+- **The decisions that shape the steps,** each read when you are at that point:
+  [0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md) (mutation),
+  [0064](../../../.decisions/0064-the-lead-drives-with-flows.md) and
+  [the lead skill](#run-a-whole-quest-with-chaints) (one agent per
+  step), [0177](../../../.decisions/0177-fix-round-is-one-agent.md) (a fix round),
+  [0178](../../../.decisions/0178-host-only-laws-run-first.md) and
+  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md) (laws that need the real machine),
+  [0176](../../../.decisions/0176-second-send-back-stops-lane.md) and
+  [0564](../../../.decisions/0564-lead-decides-further-fix-rounds.md) (a second sent-back review),
+  [0099](../../../.decisions/0099-no-number-caps-a-pull-request.md) (no cap on size),
+  [0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md) (the lead merges) and
+  [0166](../../../.decisions/0166-owed-work-needs-no-owner-read.md) (owed work).
+- **Who approves a plan, and what skips the steps:** the lead skill's
+  [Steps](#steps) and
+  [the open questions test](../plan/SKILL.md#the-open-questions-test) say who approves
+  a plan. A docs-only pull request that writes down a decision skips the steps
+  ([decisions land at once](#decisions-land-at-once)), and so does lead
+  tooling ([fast-tracked](#lead-tooling-is-fast-tracked)), whose code
+  still follows `next/`'s rules ([0033](../../../.decisions/0033-agents-code-follows-next-rules.md)) and
+  no new shell or Python script enters the repo ([0113](../../../.decisions/0113-no-shell-or-python-scripts.md)),
+  which `oxlint-plugins/tracked-scripts.ts` holds. Product code keeps its steps.
+- **No agent approves a pull request, and no agent answers a question the machine put to a
+  person.**
+- **A step is a program,** and a prompt you would have typed is its first source. A v0 has no
+  missing parts: quick means each part is small, never absent. A rule that code checks leaves the
+  prose, a rule that code could check becomes a check, and only judgment stays in prose
+  ([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
+
 ## Tickets and tracker posts
 
 Every ticket for this repo goes in the app's own tracker, through its `tracker_file`,
@@ -685,6 +725,63 @@ what counts as a hit.
 ## Go easy on the machine
 
 - One Electron test app and one Docker box at a time. Every wait or poll loop runs in the background.
+
+These run on a laptop a person is using. A prompt can't see the load, so every agent brief carries
+these caps. Each one came from a laptop that became unusable. The caps in
+[`AGENTS.md`](../../../AGENTS.md#go-easy-on-the-machine) are the short form. The full caps, moved from there word for word:
+
+- **Tests:** `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you work, then
+  `--changed origin/main` once at the end. Never the full suite locally: the test config refuses it
+  ([0410](../../../.decisions/0410-the-machine-caps-live-in-code.md)). When a change makes `--changed` the
+  full suite (a `package.json`, the lockfile, a tsconfig), run the narrow paths of the tests you
+  touched and of the tests that read that file. A run that needs what CI lacks (Electron shots, a
+  stage with workerd) still runs here.
+- **With two or more code agents running:** `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at
+  the very end. `tsgo` takes about 8 cores, so small jobs add up.
+- **Count actual productive workers** under
+  [0597](../../../.decisions/0597-eight-workers-before-twelve.md).
+- **Shared resources stay capped:** one `pnpm typecheck` at a time, one Electron test app and one
+  Docker box ([0012](../../../.decisions/0012-twelve-agents-at-once.md)). Wait while
+  `pgrep -x tsgo` finds one (`pgrep -f tsgo` also matches the waiting shell, so that loop never
+  ends); in a step's box, skip the wait, since `pnpm typecheck` takes its own lock. Two type checks
+  at once froze the laptop before; reduce demand if it feels slow.
+- Never run the sandbox runtime or a shimmed tool with `env -i` or `HOME` unset while a
+  version-manager shim is on `PATH`: one run made about 7,000 processes. Set `ulimit -u` in a
+  subshell first.
+- Searches: `gh search code` first. Locally, `nice -n 19 rg` on working trees, one repo at a time.
+  Never `git grep` across all branches. If a search goes heavy, stop the agent, not its child
+  process.
+- Mutation runs: a fixed-seed sample of about 150, never the whole set (seed 119120 is the shared
+  one), under `nice -n 15`, with a fixed number of runs. Ask before you scale up.
+- A test window is launched only through `apps/fabrika/test-window.ts`, which lint holds and whose
+  header says how it stays out of the person's way. Shots come only from `page.screenshot`.
+- A wait or poll loop runs in the background.
+- Ordinary safe checks run directly in parallel, under the caps above. Launchd, real Electron and
+  real process-signal laws run on eligible disposable CI off the owner's laptop
+  ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)).
+
+## Money
+
+- **Money.** A real Jev call needs `TYPESAFE_API_KEY` in the environment. Run everything else with
+  it unset, so no test can spend money by accident. Before any paid run, estimate the cost, try a
+  handful of cases, look at the answers, then scale. Jev bills by the token, about $0.04 per million
+  in, so send the least text that answers the question. Record what it cost in the write-up. Every
+  model run gets dollars at the provider's list price, with the source and date, even when it ran
+  on a subscription: a plan hides the number the comparison needs.
+
+## Tool facts that cost us time
+
+- `gh pr edit` fails here with a classic Projects error. Use `gh api -X PATCH`.
+- In `claude -p`, `--allowedTools` only pre-approves. `--tools` is what limits an agent; without it
+  the agent keeps a shell and can read what you meant to hide, git history included.
+- A plain `rg` (or `rg .`) from the repo root searches our dot folders, `.decisions/` and
+  `.agents/` included, because the root `.ignore` lists them; a new dot folder needs its line
+  there. It still skips `node_modules`, `dist` and `runs`. `.claude/skills/` holds links into
+  `.agents/skills/`, which rg does not follow, so each skill is searched once.
+- `rg field` skips `field/runs/`, which the root `.gitignore` re-includes with `!/field/runs/`
+  (ripgrep 13). Plain `rg`, `rg .` and `rg field/runs` find those files.
+- `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. No check needs it; CI
+  runs it too.
 
 ## Never
 

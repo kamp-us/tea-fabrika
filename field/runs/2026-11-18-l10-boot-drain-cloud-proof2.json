@@ -1,0 +1,258 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l10-boot-drain-cloud-proof2",
+  "ticket": "kamp-us/tea-fabrika#1172",
+  "pr": null,
+  "started": "2026-11-18T19:27:48Z",
+  "ended": "2026-11-18T19:43:33Z",
+  "parent": "2026-11-18-l10-boot-drain-cloud-proof",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "next/ L10 repair, cloud-box proof at 2016e8d5 after the owner's rulings Q1 and Q2 (law code as at e797fbf8): L10 has no clock. The scenario law passed 5 of 5 (about 7 s), L10 at full depth passed 10 of 10 idle (36 to 39 s) and 3 of 3 beside a pnpm lint (69 to 82 s), the load that failed it 3 of 3 at 2f388a50, and the whole law file passed 6 of 6 laws in 214 s. The plants were run by the tests step: P1 to P6 and the law plants at 2f388a50 (tests1), and P4 and the L10d law plant again at e797fbf8 (tests2), all red.",
+  "note": "Command: FABRIKA_TEST_DEPTH=full nice -n 15 pnpm exec vitest run --project next-integration --maxWorkers=1 next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts with -t naming the law. Linux cloud box, 4 CPUs, 16 GB, Node 26.13.0, TYPESAFE_API_KEY unset, seed 119120. Raw logs stay off git.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 15.8,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "head": "2016e8d5433703297c0f47c5710afbe8818c2a0d",
+  "runs": [
+    {
+      "label": "b-scenario-1",
+      "exit": 0,
+      "seconds": 7,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 4538
+        }
+      }
+    },
+    {
+      "label": "b-scenario-2",
+      "exit": 0,
+      "seconds": 7,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 4931
+        }
+      }
+    },
+    {
+      "label": "b-scenario-3",
+      "exit": 0,
+      "seconds": 7,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 4425
+        }
+      }
+    },
+    {
+      "label": "b-scenario-4",
+      "exit": 0,
+      "seconds": 7,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 4793
+        }
+      }
+    },
+    {
+      "label": "b-scenario-5",
+      "exit": 0,
+      "seconds": 6,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 4456
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-1",
+      "exit": 0,
+      "seconds": 36,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 33731
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-2",
+      "exit": 0,
+      "seconds": 37,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 34078
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-3",
+      "exit": 0,
+      "seconds": 36,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 34369
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-4",
+      "exit": 0,
+      "seconds": 37,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 34417
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-5",
+      "exit": 0,
+      "seconds": 36,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 33950
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-6",
+      "exit": 0,
+      "seconds": 37,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 33861
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-7",
+      "exit": 0,
+      "seconds": 39,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 36588
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-8",
+      "exit": 0,
+      "seconds": 39,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 36635
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-9",
+      "exit": 0,
+      "seconds": 39,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 36154
+        }
+      }
+    },
+    {
+      "label": "b-l10-idle-10",
+      "exit": 0,
+      "seconds": 36,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 34153
+        }
+      }
+    },
+    {
+      "label": "b-l10-load-1",
+      "exit": 0,
+      "seconds": 69,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 64691
+        }
+      },
+      "load": "nice -n 15 pnpm lint in the same worktree, started 20 s before the law; the lint itself failed each time because the box memory limit killed its type-checker parts"
+    },
+    {
+      "label": "b-l10-load-2",
+      "exit": 0,
+      "seconds": 82,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 77072
+        }
+      },
+      "load": "nice -n 15 pnpm lint in the same worktree, started 20 s before the law; the lint itself failed each time because the box memory limit killed its type-checker parts"
+    },
+    {
+      "label": "b-l10-load-3",
+      "exit": 0,
+      "seconds": 71,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 67316
+        }
+      },
+      "load": "nice -n 15 pnpm lint in the same worktree, started 20 s before the law; the lint itself failed each time because the box memory limit killed its type-checker parts"
+    },
+    {
+      "label": "b-whole-1",
+      "exit": 0,
+      "seconds": 214,
+      "laws": {
+        "L17/L18: every completed rebui": {
+          "result": "pass",
+          "ms": 21663
+        },
+        "L17/L18: save-driven rebuilds": {
+          "result": "pass",
+          "ms": 70961
+        },
+        "scenario: R1 a held same reply": {
+          "result": "pass",
+          "ms": 7644
+        },
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 40596
+        },
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 5722
+        },
+        "L18: every Rolldown watcher an": {
+          "result": "pass",
+          "ms": 64090
+        }
+      }
+    }
+  ]
+}

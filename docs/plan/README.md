@@ -55,6 +55,17 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-18:* [The rules and records build](./quests/rules-and-records-build-PLAN.md), in today's
+tooling and the records both versions read, cleans the records up and then turns on its checks in
+`pnpm lint` (0605 to 0607). Slices 1 to 3 folded decisions 0001 to 0199 into their own text
+([PR 1628](https://github.com/kamp-us/tea-fabrika/pull/1628),
+[PR 1629](https://github.com/kamp-us/tea-fabrika/pull/1629),
+[PR 1627](https://github.com/kamp-us/tea-fabrika/pull/1627)). Slice 6 could not fit 0608's
+32,768 bytes by 0129's moves without dropping a rule, so the lead replaced both with
+[0610](../../.decisions/0610-agents-md-follows-memory-guide.md): the root `AGENTS.md` stays under
+200 lines, and procedures move to the skill read for that job. Slice 6 makes that cut, and slice
+8's size check counts lines, as advice. The other slices remain.
+
 *2026-11-18:* [The leaf-script ports](https://github.com/kamp-us/tea-fabrika/pull/1517), ticket 766
 slices S1 to S4, in today's lead tooling: `governance.sh`, `fieldrow.py` and `keepruns.sh` become
 `governance.ts`, `fieldrow.ts` and `box/RunsFs.ts`, and `pnpm lint` refuses a new tracked shell or
@@ -72,6 +83,14 @@ integration laws no longer run on pull requests: 10 of 10 repeats were green, an
 the law and in `watch.ts` turned it red. L10 shows the same "one install per event" assumption at
 boot, under load. That flake is a [finding](../../field/findings/2026-11-18-watch-l10-boot-drain-saw-repeated-installs.json)
 and needs its own ticket and fix.
+
+*2026-11-18:* The L10 repair, ticket 1172, in `next/`, fixes that flake by the owner's two rulings.
+L10 now checks every install by program and hash: each boot or save owes one change, and any other
+install must be an unchanged repeat inside its own program's rebuild. It waits on events with no
+clock, and only the test's own time limit backs a silent watcher. No product code changed. On the
+Linux cloud box at full depth, L10 passed 10 of 10 idle and 3 of 3 beside a `pnpm lint`, the load
+that failed it before, and it now takes about 40 s instead of 260 s. Left as findings: the law file's
+heap near its 2 GB limit, the waits that miss a dead product stream, and the other clocks in the file.
 
 *2026-11-17:* [Settings slice 1](https://github.com/kamp-us/tea-fabrika/pull/1427), ticket 1076,
 generalizes the engine in `next/`. One `App` value supplies the settings file names, environment
@@ -306,7 +325,8 @@ and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea
 as [PR 1031](https://github.com/usirin/tea-fabrika/pull/1031); its fourth, quotas per program, has an approved plan. Main was red for 47
 minutes between the two: each pull request passed alone and they broke together, which is why a
 pull request now lands only when its checks ran on a head that holds main
-([0146](../../.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md)).
+(GitHub's merge queue, [0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md);
+[0162](../../.decisions/0162-no-friction-before-a-merge.md)).
 
 *2026-11-12, P40 slice 2, ticket 878, merged as [PR 1072](https://github.com/usirin/tea-fabrika/pull/1072):* `next/` has an explicit `dev --repo` route that checks one
 default-branch commit through P38 before building the shipped programs. Repository selections,

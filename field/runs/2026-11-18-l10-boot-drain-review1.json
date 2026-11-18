@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l10-boot-drain-review1",
+  "ticket": "kamp-us/tea-fabrika#1172",
+  "pr": null,
+  "started": "2026-11-18T11:46:03-08:00",
+  "ended": "2026-11-18T12:01:05-08:00",
+  "parent": "2026-11-18-l10-boot-drain-cloud-proof2",
+  "active": null,
+  "driver_caused": false,
+  "role": "hand",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "head": "1fe5971d857f691043588b6ed57984e024cae852",
+  "base": "0f41ba4c8d73fdbe59817d4fb87520af94cfc8c6",
+  "why": "The one review of ticket 1172 in next/: merge-ready. L10 accounts for every install as the owed change or an unchanged repeat in its own rebuild, with no clock, by the owner's rulings Q1 and Q2 and decision 0609. No clock is left in L10's waits, and only the it timeout backs a silent watcher. The lead's reading of Q2 lets no stale or missing change pass. An unreached program's changed hash, a repeat with different source and an install outside its own rebuild each fail. The loosening.sh hits are an import and the removed old L10 checks, narrowed exactly by Q1, Q2 and Q1's principle applied to boot repeats. The heap headroom is the existing finding's cause and needs its 0036 ticket. The branch merges cleanly with origin/main 4b3758a4.",
+  "note": "Claude subagent (step-review) started by the lead session. Agent report: 236314 tokens at its last turn, 53 tool uses, 16.1 minutes. Read-only apart from the answer. Node 26.13.0, nice 19: cd next/packages/libfabrika && pnpm typecheck exit 0; pnpm lint 18 of 18 parts passed. No watcher integration law was run (brief); the proof rows are the runtime evidence. Plants by reading only. One finding row: L10's waits miss a dead product stream. Owed by the lead: the loaded-run trace, the docs/plan/README.md entry, the PR body's New names and mapping table, rated rows for the two flaky_test findings, and the ticket text for the other clocks in this file.",
+  "tokens": 236314,
+  "tools": 53,
+  "minutes": 16.1,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "L10c, in L10",
+      "plant": "watch.ts installs program two's build inside program one's watch.rebuild span (by reading)",
+      "result": "red"
+    },
+    {
+      "law": "L10c, in L10",
+      "plant": "watch.ts sends a repeat with the program's last hash but a different source (by reading)",
+      "result": "red"
+    },
+    {
+      "law": "L10d, in L10",
+      "plant": "watch.ts skips the install on the first rebuild after a save and installs on a later cycle (by reading)",
+      "result": "red"
+    },
+    {
+      "law": "L10c change tie, in L10",
+      "plant": "program two's watcher also watches programs/one/own.ts (by reading)",
+      "result": "red"
+    },
+    {
+      "law": "L10, Q2 backstop",
+      "plant": "the product stream dies on its first install (scratch Effect script)",
+      "result": "green"
+    }
+  ]
+}
