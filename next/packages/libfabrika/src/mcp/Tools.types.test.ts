@@ -8,8 +8,8 @@ import * as Tools from "./Tools.ts";
 
 const types = () => {
   const msg = Schema.Union([
-    Schema.Struct({ type: Schema.Literal("check"), name: Schema.String, note: Schema.optionalKey(Schema.String) }),
-    Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
+    Schema.TaggedStruct("check", { name: Schema.String, note: Schema.optionalKey(Schema.String) }),
+    Schema.TaggedStruct("timer", { at: Schema.Int }),
   ]);
 
   const machine = Machine.make({

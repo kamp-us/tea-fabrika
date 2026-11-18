@@ -24,7 +24,7 @@
 // The shots (plan, "Show it running"; AGENTS.md, "Shoot more than one layout") go to the folder
 // `SHOTS` names, only when it is set, named `tezgah-fold-<state>-<layout>.png`. One tile is never
 // shot: a lone tile is focused, so it never folds.
-import { Array as Arr, Effect, Formatter, Option } from "effect";
+import { Array as Arr, Effect, Formatter, Option, Schema } from "effect";
 
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, waiting } from "./p14.test-support.ts";
@@ -46,6 +46,12 @@ import {
   typeId,
   whole,
 } from "./tezgah.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  did: {},
+});
 
 /** The law's own limit in ms: a brain, two tabs and about sixty waits of at most 30 s each. */
 const LIMIT = 600_000;
@@ -130,7 +136,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
             Effect.gen(function* () {
               const id = typeId("tile", ++minted);
               yield* letter(
-                { type: "did", does: down ? "tezgah.split_down" : "tezgah.split_right", from, tile: id },
+                { ...Tag.cases.did.make({}), does: down ? "tezgah.split_down" : "tezgah.split_right", from, tile: id },
                 (view) => has(view, id),
                 `a split of ${from}`,
               );
@@ -140,7 +146,11 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
 
           /** Closes `tile` by a letter. */
           const close = (tile: string) =>
-            letter({ type: "did", does: "tezgah.close", from: tile }, (view) => !has(view, tile), `${tile} closed`);
+            letter(
+              { ...Tag.cases.did.make({}), does: "tezgah.close", from: tile },
+              (view) => !has(view, tile),
+              `${tile} closed`,
+            );
 
           /** A click on tile `id`'s title bar in tab `on`, which focuses it (L30). */
           const clickTile = (on: Page, view: View, id: string) =>

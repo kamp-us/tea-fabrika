@@ -49,12 +49,25 @@ const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0b
 
 const Model = Schema.Struct({ versions: Schema.Record(Schema.String, Schema.Int) });
 
-const Save = Schema.Struct({
-  type: Schema.Literal("save"),
+const Save = Schema.TaggedStruct("save", {
   note: Schema.String,
   base: Schema.Int,
   body: Schema.String,
 });
+
+/** The key of each supervisor Msg this walk hands the real schema, made by a schema (0562); the walk
+ *  sets the fields, and `supervisor.msg` judges them. */
+const Step = Schema.TaggedUnion({
+  begin: {},
+  admitted: {},
+  refused: {},
+  abandoned: {},
+  finished: {},
+  reply_written: {},
+  attempt_cleared: {},
+});
+
+const Later = Schema.Literals(["finished", "reply_written", "attempt_cleared"]);
 
 const COUNTS: Runs = { fast: 10, full: 40 };
 
@@ -214,7 +227,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
           id: yield* ids.next(Id.Input),
           by: owner,
           arrivedAt: n,
-          input: Save.make({ type: "save", note: `n${cell.pick % 3}`, base: n, body: `BODY-${cell.pick}-${n} "/雪\n` }),
+          input: Save.make({ note: `n${cell.pick % 3}`, base: n, body: `BODY-${cell.pick}-${n} "/雪\n` }),
         },
         sentAt: SENT_AT,
         seen: 0,
@@ -222,7 +235,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       };
 
       pending.set(input.id, input);
-      message = { type: "begin", process, letter: input.id, build: "test", phase: "fresh", at: n };
+      message = { ...Step.cases.begin.make({}), process, letter: input.id, build: "test", phase: "fresh", at: n };
     } else if (j._tag === "checking") {
       const input = pending.get(j.attempt.letter);
       expect(input).toBeDefined();
@@ -230,7 +243,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
 
       if (move === "admit" || move === "fail_receipt" || move === "fail_journal") {
         message = {
-          type: "admitted",
+          ...Step.cases.admitted.make({}),
           seq: j.attempt.seq,
           receipt: {
             letter: j.attempt.letter,
@@ -249,7 +262,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
         }
       } else if (move === "refuse") {
         message = {
-          type: "refused",
+          ...Step.cases.refused.make({}),
           seq: j.attempt.seq,
           reply: {
             name: NAME,
@@ -262,17 +275,17 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
           },
         };
       } else {
-        message = { type: "abandoned", seq: j.attempt.seq };
+        message = { ...Step.cases.abandoned.make({}), seq: j.attempt.seq };
       }
     } else if ("attempt" in j) {
-      message = { type: move, seq: j.attempt.seq };
+      message = { ...Step.cases[Schema.decodeUnknownSync(Later)(move)].make({}), seq: j.attempt.seq };
     }
 
     const msg = yield* Schema.decodeUnknownEffect(Schema.toType(supervisor.msg))(message);
     const before = model;
     const next = applyCell(supervisor, model, msg)[0];
 
-    if (msg.type === "begin") {
+    if (msg._tag === "begin") {
       expect(next.journal._tag).toBe("checking");
     }
 
@@ -606,7 +619,6 @@ const walk = Effect.fnUntraced(function* (
         by: owner,
         arrivedAt: serial,
         input: Save.make({
-          type: "save",
           note,
           base: refusing ? now + 1 + (cell.pick % 4) : now,
           body: `BODY-${serial}-${cell.pick} "/雪\n`,

@@ -250,14 +250,15 @@ const declared = (inputs: ReadonlyArray<InputDeclaration>) => {
   const writes = inputs.filter((d) => !d.readOnly || d.personOnly);
 
   const msg = Schema.Union([
-    ...writes.map((d) =>
-      Schema.Struct({ type: Schema.Literal(d.name), ...("fields" in d.schema ? d.schema.fields : {}) }),
-    ),
-    Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
+    ...writes.map((d) => Schema.TaggedStruct(d.name, "fields" in d.schema ? d.schema.fields : {})),
+    Schema.TaggedStruct("timer", { at: Schema.Int }),
   ]);
 
   const machine = Machine.make({
     model: Schema.Null,
+    // Inputs drawn at run time: the Msg tags are data, so tea's literal-tag rule (demlik #936) cannot
+    // hold, and `update` is built from the same keys, so no cell name can be misspelled.
+    // @ts-expect-error every msg tag must be a literal, and a drawn input's name is not one
     msg,
     cmds: [],
     init: () => [null, []],

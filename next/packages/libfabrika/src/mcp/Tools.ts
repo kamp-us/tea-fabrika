@@ -136,11 +136,11 @@ const members = (node: unknown, defs: JsonSchema.Definitions) =>
   alternatives<Member>(node, defs, (node) => {
     const shape = Schema.decodeUnknownResult(MemberShape)(node);
 
-    if (Result.isFailure(shape) || !shape.success.required.includes("type")) {
+    if (Result.isFailure(shape) || !shape.success.required.includes("_tag")) {
       return Result.fail("not_tagged");
     }
 
-    const tag = alternatives<string>(shape.success.properties.type, defs, (node) => {
+    const tag = alternatives<string>(shape.success.properties._tag, defs, (node) => {
       const decoded = Schema.decodeUnknownResult(Tag)(node);
 
       return Result.isFailure(decoded) ? Result.fail("not_tagged") : Result.succeed(decoded.success.enum);
@@ -165,13 +165,13 @@ const value = (all: ReadonlyArray<Member>, key: string): Result.Result<JsonSchem
     .filter((member) => member.tags.includes(key))
     .map((member) => {
       const {
-        properties: { type: _, ...properties },
+        properties: { _tag: _, ...properties },
         required,
         tags: __,
         ...rest
       } = member;
 
-      return { ...rest, properties, required: required.filter((name) => name !== "type") };
+      return { ...rest, properties, required: required.filter((name) => name !== "_tag") };
     });
 
   const [first, ...rest] = mine;
@@ -441,7 +441,10 @@ export const read = (programs: ReadonlyArray<AnyProgram>, name: string, args: un
       return refused({ reason: "bad_input" });
     }
 
-    const m = Schema.encodeUnknownResult(Schema.toCodecJson(program.msg))({ ...value.success.value, type: key });
+    const m = Schema.encodeUnknownResult(Schema.toCodecJson(program.msg))({
+      ...value.success.value,
+      ...Schema.TaggedStruct(key, {}).make({}),
+    });
 
     return Result.isFailure(m)
       ? refused({ reason: "bad_input" })

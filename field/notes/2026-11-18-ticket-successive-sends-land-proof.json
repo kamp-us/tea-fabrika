@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "person": false,
+  "links": [],
+  "id": "2026-11-18-ticket-successive-sends-land-proof",
+  "stage": "plan",
+  "kind": "friction",
+  "what": "Ticket text, filed as a row because this cloud session has no tracker. Title: the law successive sends land has no planted proof. Body: decision 0600 drops the nine checklist cases that edited the checklist law file's own fake; seven of them pointed at L13 successive sends land and a client joining after the first send opens the current checklist, in next/apps/fabrika/src/checklist-instance.laws.integration.test.ts. Its product code is libfabrika's cloudflare runtime. The hourly mutation run's pick only reaches tests beside a changed file, so even with libfabrika in scope it never runs this law. Until a product-code plant is found for it, or the hourly pick follows the import graph, the law has no planted proof.",
+  "cause": "The law lives in another package's folder than the code it covers.",
+  "primitive": "Check",
+  "fix": "Survey libfabrika's alarm code in cloudflare/runtime.ts against the law file and add a product-code plant to .github/ci/plants.ts, or weigh vitest's own changed-file pick for the hourly run.",
+  "test": "A plant for this law answers killed on CI."
+}

@@ -60,6 +60,14 @@ import { queue } from "../Queue.ts";
 import * as QueueRunnerTest from "../QueueRunnerTest.ts";
 import * as Settings from "../Settings.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  drop: {},
+  enqueue: {},
+  resume: {},
+});
+
 const NAME = "queue:1";
 
 const BUILD = "queue-laws";
@@ -529,14 +537,14 @@ const open = Effect.fnUntraced(function* (
         const found = yield* host.read(change);
 
         return yield* deliver({
-          type: "enqueue",
+          ...Tag.cases.enqueue.make({}),
           change,
           head: found!.head,
           ...(ref === null ? {} : { reply: { to: `quest:${change}`, ref } }),
         });
       }),
-    drop: (change) => deliver({ type: "drop", change }),
-    resume: deliver({ type: "resume" }),
+    drop: (change) => deliver({ ...Tag.cases.drop.make({}), change }),
+    resume: deliver(Tag.cases.resume.make({})),
     green: (change) =>
       Effect.gen(function* () {
         const found = yield* host.read(change);

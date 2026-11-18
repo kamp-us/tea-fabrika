@@ -40,25 +40,24 @@ const State = Schema.TaggedUnion({
   refused: { selection: Id.InputId, reason: Refusal },
 });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("select"), selection: Id.InputId }),
-  Schema.Struct({ type: Schema.Literal("checked"), ...selected }),
-  Schema.Struct({ type: Schema.Literal("history"), selection: Id.InputId, events: Schema.Array(Event) }),
-  Schema.Struct({
-    type: Schema.Literal("answer"),
+/** @internal What one opening is told, step by step. */
+export const Msg = Schema.TaggedUnion({
+  select: { selection: Id.InputId },
+  checked: { ...selected },
+  history: { selection: Id.InputId, events: Schema.Array(Event) },
+  answer: {
     selection: Id.InputId,
     request: Id.InputId,
     decision: TrustDecision,
-  }),
-  Schema.Struct({ type: Schema.Literal("saved"), selection: Id.InputId, request: Id.InputId, receipt: Receipt }),
-  Schema.Struct({
-    type: Schema.Literal("failed"),
+  },
+  saved: { selection: Id.InputId, request: Id.InputId, receipt: Receipt },
+  failed: {
     selection: Id.InputId,
     request: Schema.optionalKey(Id.InputId),
     reason: Refusal,
-  }),
-  Schema.Struct({ type: Schema.Literal("close") }),
-]);
+  },
+  close: {},
+});
 
 /** @internal */
 export const machine = Machine.make({

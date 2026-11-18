@@ -91,31 +91,35 @@ const Reply = Schema.TaggedUnion({
   unknown: {},
 });
 
-const Msg = Schema.Union([
+/**
+ * Schema for what the client machine takes, each Msg made with its case's maker.
+ *
+ * @category schemas
+ */
+export const ClientMsg = Schema.TaggedUnion({
   /** A person pressed `m`, one of the program's Msgs, on the tile of `pid`. */
-  Schema.Struct({ type: Schema.Literal("press"), pid: Schema.String, m: Schema.Unknown }),
+  press: { pid: Schema.String, m: Schema.Unknown },
   /** Slot `n`'s letter id and time, from the Cmd the window ran. */
-  Schema.Struct({
-    type: Schema.Literal("dated"),
+  dated: {
     n: Schema.Int,
     letter: Schema.String,
     sentAt: Schema.String,
     traceId: Schema.optionalKey(Schema.String),
-  }),
+  },
   /** What came back for `letter`. */
-  Schema.Struct({ type: Schema.Literal("reply"), letter: Schema.String, answer: Reply }),
+  reply: { letter: Schema.String, answer: Reply },
   /** This client has read the ledger up to revision `rev`. */
-  Schema.Struct({ type: Schema.Literal("read"), rev: Schema.Int }),
+  read: { rev: Schema.Int },
   /** One view notification for `pid`, as it arrived: a whole view, a patch, or junk. */
-  Schema.Struct({ type: Schema.Literal("notice"), pid: Schema.String, note: Schema.Unknown }),
-]);
+  notice: { pid: Schema.String, note: Schema.Unknown },
+});
 
 /**
  * A Msg the client machine takes: `press`, `dated`, `reply`, `read` or `notice`.
  *
  * @category models
  */
-export type ClientMsg = typeof Msg.Type;
+export type ClientMsg = typeof ClientMsg.Type;
 
 /** Ask for a whole view of `pid`: the last good one stays shown until it comes. The window turns
  *  it into its own move. */
@@ -271,7 +275,7 @@ const anyView = (view: unknown): unknown => view;
 export const clientMachineFor = (checks: ClientChecks) =>
   Machine.make({
     model: Client,
-    msg: Msg,
+    msg: ClientMsg,
     cmds: [ask],
     init: (loaded: Client | null) => [loaded ?? emptyClient, []],
     update: {

@@ -56,7 +56,7 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const Model = Schema.Struct({ count: Schema.Int });
 
-const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+const Msg = Schema.TaggedStruct("inc", {});
 
 const counter = {
   name: PROGRAM,
@@ -336,7 +336,7 @@ const input = (id: number) => ({
     id: Schema.decodeSync(InputId)(`input_0000000000e008${id.toString(16).padStart(12, "0")}`),
     by: Writer.cases.person.make({ key: "SHA256:input", for: PERSON }),
     arrivedAt: 0,
-    input: { type: "inc" },
+    input: Msg.make({}),
   },
   sentAt: SENT,
   seen: 0,

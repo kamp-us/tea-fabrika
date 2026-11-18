@@ -141,7 +141,8 @@ const Model = Schema.Struct({
 /** @internal */
 export type Model = typeof Model.Type;
 
-const Msg = Schema.Struct({ type: Schema.Literal("recorded"), entry: Entry });
+/** @internal The one Msg: an entry was recorded. */
+export const Recorded = Schema.TaggedStruct("recorded", { entry: Entry });
 
 const decodeEvent = Schema.decodeUnknownSync(ProcessEvent);
 
@@ -168,7 +169,7 @@ const lifeFor = (s: Model, process: string): Life => {
 export const processTableFor = (by: string) =>
   Machine.make({
     model: Model,
-    msg: Msg,
+    msg: Recorded,
     cmds: [],
     init: () => [
       {

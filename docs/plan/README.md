@@ -167,6 +167,22 @@ Each accepted exercise passed before the deliberate break, failed at its intende
 Each product change records its own source-bound fault evidence separately from these tooling fixtures.
 These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
 
+The plant runner moves onto Stryker, in [`@kalfa/quality/stryker`](../../kalfa/quality/README.md)
+([0600](../../.decisions/0600-kalfa-quality-holds-test-lint-format.md)). A plant names a product file, a Stryker
+mutator, the node's text and Stryker's replacement, and the law that must kill it; the runner finds that one place by
+shape, runs Stryker against the law's file alone, and answers `killed` only when the law is among the tests that
+failed. No byte offset or commit is pinned, so a squash merge or a blank line leaves a plant as it was. The catalog is
+[`.github/ci/plants.ts`](../../.github/ci/plants.ts), five plants (`checklist-pid`, `host-pin`, `host-requested-pin`,
+`host-pnpm-path`, `host-env-order`), and the [`plants.yaml`](../../.github/workflows/plants.yaml) workflow runs one on
+disposable CI by hand. The old runner above stays until a run of the new one on main is its proof, then it goes.
+The ten old cases that edited a test file's own fake are dropped, and `host-discovery-timeout` moves code, which no
+Stryker mutator does, so it keeps its recorded one-time plant.
+
+The hourly mutation run reaches libfabrika's laws: it picks a changed file's `name.<kind>.test.ts` siblings, such as
+`name.laws.test.ts` and `name.integration.test.ts`, not only `name.test.ts`, and passes CI's own `CI` marker into its
+container, so `.integration.` laws pass the host guard on GitHub's disposable runner and never on the laptop. A law in
+another folder, a `.visual.` law and a `.types.` law still stay out.
+
 [Checklist L13's fixture repair](https://github.com/kamp-us/tea-fabrika/pull/1543), ticket 1126,
 replaces fixed waits in `next/` with completion of the real Process alarm call, publication and
 notification. It includes newly due work, leaves future alarms pending and waits for started calls

@@ -7,7 +7,7 @@ import { Effect, Layer, Result, Schema, SchemaIssue } from "effect";
 import * as Arr from "effect/Array";
 import type { Accounting } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
-import { Model, Reply, reply as machine } from "./internal/reply.ts";
+import { Model, Remember, Reply, reply as machine } from "./internal/reply.ts";
 import { Replies, RepliesError } from "./Replies.ts";
 
 const TABLE =
@@ -64,7 +64,7 @@ const remember = (
   }
 
   const model = load(sql, reply.name, reply.id);
-  const [next] = applyCell(machine, model, { type: "remember", reply });
+  const [next] = applyCell(machine, model, Remember.make({ reply }));
 
   // The machine never forgets: a remember always leaves a remembered Model.
   if (next._tag !== "remembered") {

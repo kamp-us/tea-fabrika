@@ -13,6 +13,17 @@ import type { Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  remove: {},
+  add: {},
+  check: {},
+  rename: {},
+  timer: {},
+  uncheck: {},
+});
+
 const SEED = 119120;
 
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
@@ -135,17 +146,21 @@ const named = (items: ReadonlyMap<string, Kept>, step: Step): Record<string, str
 
   switch (step.input) {
     case "add":
-      return fresh === undefined ? null : { type: "add", name: fresh };
+      return fresh === undefined ? null : { ...Tag.cases.add.make({}), name: fresh };
     case "rename":
-      return name === undefined || fresh === undefined ? null : { type: "rename", name, to: fresh };
+      return name === undefined || fresh === undefined ? null : { ...Tag.cases.rename.make({}), name, to: fresh };
     case "check": {
       const note = NOTES[step.note];
 
-      return name === undefined ? null : note === undefined ? { type: "check", name } : { type: "check", name, note };
+      return name === undefined
+        ? null
+        : note === undefined
+          ? { ...Tag.cases.check.make({}), name }
+          : { ...Tag.cases.check.make({}), name, note };
     }
 
     default:
-      return name === undefined ? null : { type: step.input, name };
+      return name === undefined ? null : { ...Tag.cases[step.input].make({}), name };
   }
 };
 
@@ -157,7 +172,7 @@ const apply = (items: Map<string, Kept>, input: Record<string, string>) => {
   const name = input["name"] ?? "";
   const was = items.get(name) ?? { done: false, note: null };
 
-  switch (input["type"]) {
+  switch (input["_tag"]) {
     case "add":
       items.set(name, { done: false, note: null });
 
@@ -213,22 +228,22 @@ export const suite = (open: Open, fresh: Fresh) =>
 
             // Two items, one checked, so an agent's first move has something to name.
             for (const input of [
-              { type: "add", name: "git" },
-              { type: "add", name: "node" },
-              { type: "check", name: "node" },
+              { ...Tag.cases.add.make({}), name: "git" },
+              { ...Tag.cases.add.make({}), name: "node" },
+              { ...Tag.cases.check.make({}), name: "node" },
             ]) {
               expect((yield* r.msg(letter(++n, person, input)))._tag).toBe("accepted");
               apply(items, input);
             }
 
             for (const step of steps) {
-              const input = named(items, step) ?? { type: "add", name: "git" };
+              const input = named(items, step) ?? { ...Tag.cases.add.make({}), name: "git" };
               const by = step.by === "agent" ? agent : person;
               const before = shown((yield* r.open("before")).view);
               const saved = (yield* letters).length;
               const answer = yield* r.msg(letter(++n, by, input));
-              const refusable = items.has(input["name"] ?? "") && input["type"] === "add";
-              const walled = step.by === "agent" && PERSON_ONLY.has(input["type"] ?? "");
+              const refusable = items.has(input["name"] ?? "") && input["_tag"] === "add";
+              const walled = step.by === "agent" && PERSON_ONLY.has(input["_tag"] ?? "");
               const bad = malformed(input);
               // Until the 0125 code batch names its reason, a walled input is `refused` (bad_msg today).
               expect(answer._tag, `${step.by} ${Formatter.format(input)}`).toBe(
@@ -270,9 +285,9 @@ export const suite = (open: Open, fresh: Fresh) =>
             let n = 0;
 
             for (const input of [
-              { type: "add", name: "git" },
-              { type: "add", name: "node" },
-              { type: "check", name: "node", note: "first" },
+              { ...Tag.cases.add.make({}), name: "git" },
+              { ...Tag.cases.add.make({}), name: "node" },
+              { ...Tag.cases.check.make({}), name: "node", note: "first" },
             ]) {
               const sent = letter(++n, person, input);
               const answer = yield* r.msg(sent);
@@ -297,13 +312,13 @@ export const suite = (open: Open, fresh: Fresh) =>
                 }
               }
 
-              const input = named(items, step) ?? { type: "add", name: "git" };
+              const input = named(items, step) ?? { ...Tag.cases.add.make({}), name: "git" };
               const fresh = letter(++n, step.by === "agent" ? agent : person, input);
               const answer = yield* r.msg(fresh);
 
               const ok =
-                !(step.by === "agent" && PERSON_ONLY.has(input["type"] ?? "")) &&
-                !(items.has(input["name"] ?? "") && input["type"] === "add") &&
+                !(step.by === "agent" && PERSON_ONLY.has(input["_tag"] ?? "")) &&
+                !(items.has(input["name"] ?? "") && input["_tag"] === "add") &&
                 !malformed(input);
 
               expect(answer._tag, `${step.by} ${Formatter.format(input)}`).toBe(ok ? "accepted" : "refused");
@@ -348,7 +363,9 @@ export const suite = (open: Open, fresh: Fresh) =>
               left: state === "checked" ? 0 : 1,
             });
 
-            expect((yield* r.msg(letter(1, person, { type: "add", name: "git" }, clock)))._tag).toBe("accepted");
+            expect((yield* r.msg(letter(1, person, { ...Tag.cases.add.make({}), name: "git" }, clock)))._tag).toBe(
+              "accepted",
+            );
             yield* TestClock.setTime(1000);
             yield* r.due(0);
             expect(yield* view, "the referee's time stamps it, not the writer's").toEqual(one("open", null));
@@ -356,12 +373,12 @@ export const suite = (open: Open, fresh: Fresh) =>
             expect(
               Option.getOrUndefined(Arr.findFirst(yield* letters, (l) => !Str.startsWith("checklist-")(l.id)))?.m,
             ).toEqual({
-              type: "timer",
+              ...Tag.cases.timer.make({}),
               at: 0,
               arrivedAt: 1000,
             });
 
-            const check = letter(2, writer, { type: "check", name: "git", note }, clock);
+            const check = letter(2, writer, { ...Tag.cases.check.make({}), name: "git", note }, clock);
             expect((yield* r.msg(check))._tag).toBe("accepted");
             expect(yield* view).toEqual(one("checked", note));
             expect(alarms.at(-1), "nothing is left to wake for").toBeNull();
@@ -372,7 +389,9 @@ export const suite = (open: Open, fresh: Fresh) =>
             expect(saved?.by, "the writer's checked key").toBe(key(writer));
             expect(saved?.sentAt, "the writer's own clock, kept as it came").toBe(clock);
 
-            expect((yield* r.msg(letter(3, person, { type: "uncheck", name: "git" }, clock)))._tag).toBe("accepted");
+            expect((yield* r.msg(letter(3, person, { ...Tag.cases.uncheck.make({}), name: "git" }, clock)))._tag).toBe(
+              "accepted",
+            );
             yield* TestClock.setTime(5000);
             yield* r.due(5000);
             expect(yield* view).toEqual(one("open", null));
@@ -414,9 +433,9 @@ export const suite = (open: Open, fresh: Fresh) =>
 
             yield* reopen((r) =>
               Effect.gen(function* () {
-                yield* r.msg(letter(1, person, { type: "add", name: "git" }));
-                yield* r.msg(letter(2, person, { type: "add", name: "node" }));
-                yield* r.msg(letter(3, person, { type: "check", name: "node" }));
+                yield* r.msg(letter(1, person, { ...Tag.cases.add.make({}), name: "git" }));
+                yield* r.msg(letter(2, person, { ...Tag.cases.add.make({}), name: "node" }));
+                yield* r.msg(letter(3, person, { ...Tag.cases.check.make({}), name: "node" }));
                 expect(yield* view(r)).toEqual(both("new"));
                 expect(alarms.at(-1), "a new item asks for the alarm at once").toBe(0);
               }),

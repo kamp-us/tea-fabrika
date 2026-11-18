@@ -4,10 +4,10 @@
 // The shape this law holds `tile.ts` to, from the plan (the build may add more):
 // - `tile`: one tea machine (`Machine.make` from `@demlik/tea/effect`). Its Model is `{draft}`, a string
 //   of at most 80 characters, and its init is `{draft: ""}`.
-// - Msgs by `type`: typed{text} and submit{}. Its one Cmd is `press {m}`, which the window parent reads
+// - Msgs by `_tag`: typed{text} and submit{}. Its one Cmd is `press {m}`, which the window parent reads
 //   and sends on as a letter; no engine runs it.
 // - typed sets the draft (capped at 80); submit with an empty draft does nothing; submit with text
-//   empties the draft and returns exactly one `press {m: {type: "add", name: draft}}`.
+//   empties the draft and returns exactly one `press {m: {_tag: "add", name: draft}}`.
 //
 // The walk starts at the real init, folds the real update, and picks each next move from the folded
 // draft: a typed text (empty, short, at the cap or past it), or a submit of what is there now.
@@ -18,6 +18,15 @@ import * as fc from "fast-check";
 import type { checklistMachine } from "./program.ts";
 import { tile } from "./tile.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  press: {},
+  submit: {},
+  typed: {},
+});
+
 const SEED = 119120;
 
 const CAP = 80;
@@ -27,14 +36,14 @@ type Tile = { readonly draft: string };
 
 expectTypeOf<Tile>().toEqualTypeOf<typeof tile.model.Type>();
 
-type Msg = { readonly type: "typed"; readonly text: string } | { readonly type: "submit" };
+type Msg = { readonly _tag: "typed"; readonly text: string } | { readonly _tag: "submit" };
 
 expectTypeOf<Msg>().toEqualTypeOf<typeof tile.msg.Type>();
 
-type Cmd = { readonly type: string; readonly m?: unknown };
+type Cmd = { readonly _tag: string; readonly m?: unknown };
 
 /** The program's own add, so a press the tile hands up is a Msg the checklist takes. */
-type Add = Extract<typeof checklistMachine.msg.Type, { readonly type: "add" }>;
+type Add = Extract<typeof checklistMachine.msg.Type, { readonly _tag: "add" }>;
 
 const step = (s: Tile, m: Msg): readonly [Tile, ReadonlyArray<Cmd>] => applyCell(tile, s, m);
 
@@ -53,8 +62,8 @@ type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
 /** The moves the folded draft allows: type over it, or submit what it holds now. */
 const moves = (s: Tile, c: Choice): ReadonlyArray<Msg> =>
   s.draft === ""
-    ? [{ type: "typed", text: c.text }, { type: "submit" }]
-    : [{ type: "submit" }, { type: "typed", text: c.text }];
+    ? [{ ...Tag.cases.typed.make({}), text: c.text }, Tag.cases.submit.make({})]
+    : [Tag.cases.submit.make({}), { ...Tag.cases.typed.make({}), text: c.text }];
 
 const walk = (
   list: ReadonlyArray<Choice>,
@@ -86,7 +95,7 @@ describe("L22: the checklist tile", () => {
     fc.assert(
       fc.property(walks, (list) => {
         walk(list, (_prev, m, next, cmds) => {
-          if (m.type !== "typed") {
+          if (m._tag !== "typed") {
             return;
           }
 
@@ -108,7 +117,7 @@ describe("L22: the checklist tile", () => {
     fc.assert(
       fc.property(walks, (list) => {
         walk(list, (prev, m, next, cmds) => {
-          if (m.type !== "submit") {
+          if (m._tag !== "submit") {
             return;
           }
 
@@ -120,10 +129,10 @@ describe("L22: the checklist tile", () => {
           }
 
           seen.sent++;
-          const add: Add = { type: "add", name: prev.draft };
+          const add: Add = { ...Tag.cases.add.make({}), name: prev.draft };
           expect(next).toEqual({ draft: "" });
           expect(cmds).toHaveLength(1);
-          expect(cmds[0]).toMatchObject({ type: "press", m: add });
+          expect(cmds[0]).toMatchObject({ ...Tag.cases.press.make({}), m: add });
         });
       }),
       opts,

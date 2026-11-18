@@ -35,6 +35,10 @@
     "kalfa-config": {
       "imports": ["next-vitest"],
       "pure": false
+    },
+    "kalfa-quality": {
+      "imports": [],
+      "pure": false
     }
   },
   "libraries": {
@@ -51,7 +55,8 @@
     "next/programs/counter": "next-program",
     "next/programs/pipeline": "next-program",
     "next/programs/tezgah": "next-program",
-    "kalfa/config": "kalfa-config"
+    "kalfa/config": "kalfa-config",
+    "kalfa/quality": "kalfa-quality"
   },
   "libraryRoots": ["next", "kalfa"],
   "acrossDeployables": ["relative-import-crosses-workspace"]

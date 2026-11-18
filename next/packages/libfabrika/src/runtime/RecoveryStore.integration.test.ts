@@ -21,6 +21,13 @@ import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
 import { Supervision } from "./internal/supervisor.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  dead: {},
+  save: {},
+});
+
 /** The store's own error as these laws read it: its tag, and a tagged reason with the fault it kept. */
 type Fault = {
   readonly _tag: "RecoveryStoreError";
@@ -60,7 +67,7 @@ const input = {
     id: `in-${A}-1`,
     by: { _tag: "person", key: "SHA256:caller", for: from().for },
     arrivedAt: 1,
-    input: { type: "save", text: "original dead input" },
+    input: { ...Tag.cases.save.make({}), text: "original dead input" },
   },
   sentAt: from().sentAt,
   seen: 0,
@@ -87,7 +94,7 @@ const before = {
     process: B,
     failure: { _tag: "fresh", process: B, letter: "poison", build: "build-a", seq: 3, error: "TypeError" },
   },
-  pending: { type: "dead", id: "dead:poison:3", process: B, from: from() },
+  pending: { ...Tag.cases.dead.make({}), id: "dead:poison:3", process: B, from: from() },
   attempt: null,
   build: "build-a",
   restarts: [],

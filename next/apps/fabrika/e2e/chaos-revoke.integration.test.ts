@@ -40,6 +40,13 @@ import { Nemesis } from "@kampus/libfabrika/runtime/Nemesis";
 import * as NemesisLedger from "@kampus/libfabrika/runtime/NemesisLedger";
 import * as RevokeHold from "./chaos-revoke.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  start: {},
+});
+
 const PERSON = "person_0000000000e008000000000001";
 
 const PROJECT = "p17b-revoke";
@@ -483,7 +490,7 @@ it.live(
         const input = (letter: string, name: string) => ({
           pid,
           letter,
-          m: { type: "add", name },
+          m: { ...Tag.cases.add.make({}), name },
           sentAt: RevokeTest.SENT,
           seen: 0,
         });
@@ -597,7 +604,9 @@ it.live(
         yield* Effect.scoped(
           Effect.gen(function* () {
             const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
-            expect((yield* runner.msg(world.letter(1, { type: "start", ...start, most })))._tag).toBe("accepted");
+            expect((yield* runner.msg(world.letter(1, { ...Tag.cases.start.make({}), ...start, most })))._tag).toBe(
+              "accepted",
+            );
 
             for (let n = 0; n < most; n++) {
               const saved = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
@@ -668,7 +677,7 @@ it.live(
         for (const row of Arr.filter(sends, (entry) => !clientKeys.has(entry.by))) {
           const { m } = Schema.decodeUnknownSync(
             Schema.Struct({
-              m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
+              m: Schema.TaggedStruct("timer", { at: Schema.Int, arrivedAt: Schema.Int }),
             }),
           )(row.body);
 

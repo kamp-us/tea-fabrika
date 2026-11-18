@@ -5,6 +5,7 @@ import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as Predicate from "effect/Predicate";
@@ -185,7 +186,7 @@ const door: ProjectAuditTest.Harness["door"] =
             schema: input,
             raw: [],
             personOnly: [],
-            name: (m: typeof input.Type) => m.type,
+            name: (m: typeof input.Type) => Option.getOrUndefined(Schema.decodeUnknownOption(Schema.String)(m["_tag"])),
           },
           events: { personOnly: [] },
         }).pipe(

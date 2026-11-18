@@ -38,6 +38,12 @@ import type { RepliesError } from "./Replies.ts";
 import { capture, nat, nth, parsed, sentinel, text, unleaked } from "./RepliesTest.ts";
 import { ProgramRunner, Sent } from "./Runner.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const SEED = 119120;
 
 const RUNS = runsFor({ fast: 10, full: 100 });
@@ -106,12 +112,7 @@ const Model = Schema.Struct({ notes: Schema.Record(Schema.String, Schema.Int) })
 
 type Model = typeof Model.Type;
 
-const Save = Schema.Struct({
-  type: Schema.Literal("save"),
-  note: Schema.String,
-  base: Schema.Int,
-  body: Schema.String,
-});
+const Save = Schema.TaggedStruct("save", { note: Schema.String, base: Schema.Int, body: Schema.String });
 
 /** One version per note. A save on any other base is refused with the current version. */
 const program = {
@@ -407,7 +408,7 @@ const walk = (
           id: inputId(),
           by: Writer.cases.person.make(by),
           arrivedAt: 0,
-          input: { type: "save", note, base, body },
+          input: { ...Tag.cases.save.make({}), note, base, body },
         },
         sentAt: "2026-11-11T00:00:00Z",
         seen: 0,

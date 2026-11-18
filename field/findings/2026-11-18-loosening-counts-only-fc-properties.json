@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-loosening-counts-only-fc-properties",
+  "date": "2026-11-18",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/loosening.sh",
+    "line": 248
+  },
+  "says": "Today's lead tooling: loosening.sh's properties() counts only fc.property and fc.asyncProperty calls, and its numRuns check reads only fast-check's numRuns key, so a law moved to it.prop or it.effect.prop, the shape decision 0579 asks for, is reported as a removed law with fewer numRuns even when it keeps its title, its checks and its run count.",
+  "proof": "`sh .agents/skills/lead/scripts/loosening.sh e9988e259 5152cf3f8` on PR 1619 prints `removed law: P1 and P2: owed work stays owed ...` and `fewer numRuns: line 33` for next/packages/libfabrika/src/runtime/Owed.test.ts, whose law keeps its exact title and its runsFor({ fast: 20, full: 100 }) count, now passed as `{ arbitrary: { runs } }` to it.effect.prop; `rg -n 'prop' .agents/skills/lead/scripts/loosening.sh` finds no it.prop or arbitrary.runs case.",
+  "cost": "Every 0579 move becomes a hand check of hits that are not loosening, so a real loosening in the same diff is easier to miss among them, and a law that drops its property for a plain example reads the same as a clean move.",
+  "head": "5152cf3f8962384078ff54502125eab1de5678cf",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1619"
+}
