@@ -24,8 +24,8 @@ From [agents commit as a bot](../docs/direction/agents-commit-as-a-bot.md), deci
   commits included.
 - It goes on a `fabrikalfa/<name>` branch, pushed with a token that lasts one hour
   (`botpush.mjs`, [0056](0056-lead-runs-a-refused-step-itself.md)).
-- Pull requests open as the bot ([0405](0405-pull-requests-open-as-person-or-bot.md)'s setting, set to
-  the bot for this repo).
+- Pull requests open as the bot ([0405](0405-pull-requests-open-as-person-or-bot.md)'s setting,
+  set to the bot for this repo by [0164](0164-the-bot-stays-without-signing.md)).
 - A repo where the app is not installed is not covered.
 
 ## Consequences

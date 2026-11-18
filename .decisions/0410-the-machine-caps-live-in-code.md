@@ -13,7 +13,9 @@ tags: [tests, typecheck, laptop, lead]
 ## Context
 
 From [skills keep judgment, K9](../docs/direction/skills-hold-only-judgment.md#the-rule), decided
-2026-11-08. AGENTS.md's "Go easy on the machine" names the same limits.
+2026-11-08. AGENTS.md's "Go easy on the machine" names the same limits. On 2026-11-15, the script
+port of [0113](0113-no-shell-or-python-scripts.md) moved `typecheck.sh` to `scripts/typecheck.ts`,
+and the lead ruled that the fixed OS lock may be a pid lock at the same single path.
 
 ## Decision
 

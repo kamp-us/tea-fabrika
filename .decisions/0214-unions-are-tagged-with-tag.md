@@ -1,12 +1,12 @@
 ---
 id: 0214
-title: Every union we define tags its members with _tag, written by Effect Schema and never by hand, tea's Msgs, Cmds and Subs included, while third-party shapes keep their own key
+title: Every union we define tags its members with _tag, written by Effect Schema and never by hand, tea's Msgs, Cmds and Subs included in next/ and our tooling, while third-party shapes keep their own key
 status: accepted
 date: 2026-11-01
 tags: [schema, tag, union, effect-schema, tea, names]
 ---
 
-# 0214: Every union we define tags its members with _tag, written by Effect Schema and never by hand, tea's Msgs, Cmds and Subs included, while third-party shapes keep their own key
+# 0214: Every union we define tags its members with _tag, written by Effect Schema and never by hand, tea's Msgs, Cmds and Subs included in next/ and our tooling, while third-party shapes keep their own key
 
 **What this decides:** the one key that says which case a value is.
 

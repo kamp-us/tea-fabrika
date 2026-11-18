@@ -1,15 +1,15 @@
 ---
 id: 0202
-title: In next/, every span and every raw measurement of an accepted write is kept forever, spans outside a process go to record objects of their own, and old measurements move to R2 files each object uploads itself
+title: In next/, every span and every raw measurement is kept forever, spans outside a process go to record objects of their own, and old measurements move to R2 files each object uploads itself
 status: accepted
 date: 2026-11-07
 tags: [spans, measurement, r2, archive, retention, record-wide, next]
 ---
 
-# 0202: In next/, every span and every raw measurement of an accepted write is kept forever, spans outside a process go to record objects of their own, and old measurements move to R2 files each object uploads itself
+# 0202: In next/, every span and every raw measurement is kept forever, spans outside a process go to record objects of their own, and old measurements move to R2 files each object uploads itself
 
-**What this decides:** in `next/`, no span and no raw measurement of an accepted write is ever
-deleted, and where each one is kept.
+**What this decides:** in `next/`, no span and no raw measurement is ever deleted, and where each
+one is kept.
 
 ```mermaid
 flowchart LR
@@ -29,7 +29,7 @@ See [design for bounded objects](../docs/direction/design-for-bounded-objects.md
 
 ## Decision
 
-**In `next/`, every span and every raw measurement of an accepted write is kept forever.**
+**In `next/`, every span and every raw measurement is kept forever.**
 
 - One exception: a call the gateway refuses under the closed `fab.gateway.refused` values writes no
   span row and no measurement row, only an hourly count

@@ -44,11 +44,12 @@ forward. See [saved state](../docs/direction/saved-state.md).
 **In `next/`, a saved model carries its shape's number `v` and its `build`, and a program's state
 declares a chain of named upgrades, one per number; the schema is still the last check.**
 
+Until the first release this record is set aside
+([0572](0572-pre-release-shape-change-wipes-data.md)): a saved-shape change wipes the stored data,
+with no upgrade chain.
+
 - An old number climbs through each named upgrade in order, then decodes. Never a guessed upcast.
 - The upgrade writes `state.upgraded` with the upgrades it `ran`.
-- Until the first release, a shape change wipes the stored data and no upgrade chain is written
-  ([0572](0572-pre-release-shape-change-wipes-data.md)). What a shape change does after the first
-  release is not decided there.
 - The saved model carries the `build` that saved it, so its shape can be worked out later from the
   code kept by hash.
 - When code meets saved state whose `v` it does not know, because a newer fabrika saved it, that

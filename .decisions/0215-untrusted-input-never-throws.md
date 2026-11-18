@@ -37,8 +37,8 @@ trusted input, the typed error for untrusted input.**
   `encodeUnknownSync` are not used, even for trusted input: the Effect checker's `schemaSync` is an
   error in `next/` and our tooling ([0576](0576-schema-sync-error-result-in-plain-code.md)).
 - `makeEffect`, `decodeEffect` and `decodeUnknownEffect` keep the failure in the error channel.
-- `decodeResult` and `decodeUnknownResult` are used only where plain code needs the failure's
-  details. The Result form for a plain function's decodes and encodes has its home in
+- A plain function decodes and encodes with `Schema.decodeUnknownResult`, `Schema.decodeResult`,
+  `Schema.encodeResult` and `Schema.encodeUnknownResult` and handles the failure. Its home is
   [0576](0576-schema-sync-error-result-in-plain-code.md).
 - Saved state, anything off the wire and anything read from disk never take the throwing one.
 
