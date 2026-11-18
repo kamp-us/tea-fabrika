@@ -1,16 +1,16 @@
 // T518, PR 1, next/: TypeID format, Effect failures, writer state, and the public Id export.
 // TypeID 0.3.0: https://github.com/jetify-com/typeid/tree/main/spec
 // Fabrika deliberately requires UUIDv7 on decode too; the spec permits other versions on decode.
-import { describe, expect, it, vi } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
+import { Recorder } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
@@ -19,23 +19,17 @@ import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
+import { bytes, generatorWith } from "./Id.test-support.ts";
 import * as Front from "./Id.ts";
 import { ProcessId } from "./ProcessId.ts";
-
-/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
-class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
-  cause: Schema.Unknown,
-}) {}
-
-/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
-const promised = <A>(run: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 const seed = 119120;
 
 const options = { seed, numRuns: 100 };
 
-const effectOptions = { arbitrary: { seed, runs: 40 } };
+const effectOptions = { arbitrary: { runs: 40 } };
+
+const scheduleOptions = { arbitrary: { runs: 40, size: 61 } };
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -183,6 +177,19 @@ const expectDecoded = <A, E>(exit: Exit.Exit<A, E>, ok: boolean, input: unknown,
   }
 };
 
+/** The 16 UUID bytes for a clock and a 74-bit random field, packed by RFC 9562 5.7's bit layout. */
+const layout = (at: number, random: bigint): Uint8Array => {
+  const field = random.toString(2).padStart(74, "0");
+  // 48 clock bits, version 0111, the top 12 random bits, variant 10, the low 62 random bits.
+  const bits = `${at.toString(2).padStart(48, "0")}0111${field.slice(0, 12)}10${field.slice(12)}`;
+
+  return Uint8Array.from({ length: 16 }, (_, i) => Number.parseInt(bits.slice(i * 8, i * 8 + 8), 2));
+};
+
+/** The ids a burst in one millisecond owes from random field `from`: that field, then one more each. */
+const burst = (type: string, at: number, from: bigint, count: number): ReadonlyArray<string> =>
+  Array.from({ length: count }, (_, k) => wire(type, layout(at, from + BigInt(k))));
+
 const timestamp = (id: string): number =>
   Arr.reduce([...referenceDecode(split(id)[1]).slice(0, 6)], 0, (total, byte) => total * 256 + byte);
 
@@ -196,7 +203,7 @@ const increasing = (ids: ReadonlyArray<string>): void => {
 
 const compare = (left: string, right: string): -1 | 0 | 1 => (left < right ? -1 : left > right ? 1 : 0);
 
-/** A stand-in for `crypto.getRandomValues` that fails as the platform's does: it throws. */
+/** A random source that fails as the platform's does: it throws. */
 const refuses = (marker: string) => (): never => {
   throw new Error(marker);
 };
@@ -656,37 +663,26 @@ describe("T518 Id order and generation", () => {
       Effect.gen(function* () {
         const Specific = Id.make(type);
         const generator = yield* Id.Generator;
+        yield* TestClock.setTime(at);
 
-        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-          if (array instanceof Uint8Array) {
-            array.fill(0);
-          }
-
-          return array;
+        const ids = yield* Effect.forEach(Array.from({ length: count }), () => generator.next(Specific), {
+          concurrency: 1,
         });
 
-        try {
-          yield* TestClock.setTime(at);
+        increasing(ids);
+        expect(ids, "a fresh millisecond takes the zero bytes, then counts up").toEqual(burst(type, at, 0n, count));
 
-          const ids = yield* Effect.forEach(Array.from({ length: count }), () => generator.next(Specific), {
-            concurrency: 1,
-          });
-
-          increasing(ids);
-
-          for (const id of ids) {
-            expect(accepts(id, type)).toBe(true);
-            expect(Str.startsWith(`${type}_`)(id)).toBe(true);
-            expect(Schema.decodeSync(Specific)(id)).toBe(id);
-            expect(timestamp(id)).toBe(at);
-          }
-
-          expect(() => Id.make("")).toThrow();
-          expectIdFailure(yield* Effect.exit(Id.makeEffect("")), "prefix");
-        } finally {
-          random.mockRestore();
+        for (const id of ids) {
+          expect(accepts(id, type)).toBe(true);
+          expect(Str.startsWith(`${type}_`)(id)).toBe(true);
+          expect(Schema.decodeSync(Specific)(id)).toBe(id);
+          expect(timestamp(id)).toBe(at);
         }
-      }).pipe(Effect.provide(Id.Generator.layer)),
+
+        expect(() => Id.make("")).toThrow();
+        expectIdFailure(yield* Effect.exit(Id.makeEffect("")), "prefix");
+        // T1067 T1: zero bytes from SecureRandom. Plant: draw from `crypto.getRandomValues` again.
+      }).pipe(Effect.provide(generatorWith(bytes(0)))),
     effectOptions,
   );
   it("Order compares suffix first, then the whole prefix on ties", () => {
@@ -733,35 +729,34 @@ describe("T518 Id order and generation", () => {
         const Specific = Id.make("letter");
         const generator = yield* Id.Generator;
 
-        // Zero entropy keeps a burst at the last millisecond inside the clock's range.
-        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-          if (array instanceof Uint8Array) {
-            array.fill(0);
+        // A repeated millisecond (`at` at an edge) keeps counting from where the last burst stopped.
+        let previous = -1,
+          from = 0n;
+
+        for (const now of [0, at, maxClock]) {
+          from = now > previous ? 0n : from;
+          previous = now;
+          yield* TestClock.setTime(now);
+
+          const ids = yield* Effect.forEach(Array.from({ length: count }), () => generator.next(Specific), {
+            concurrency: 1,
+          });
+
+          increasing(ids);
+          expect(ids, "a fresh millisecond takes the zero bytes, then counts up").toEqual(
+            burst("letter", now, from, count),
+          );
+          from += BigInt(count);
+
+          for (const id of ids) {
+            expect(accepts(id, "letter")).toBe(true);
+            expect(Schema.decodeSync(Specific)(id)).toBe(id);
+            expect(timestamp(id)).toBe(now);
           }
-
-          return array;
-        });
-
-        try {
-          for (const now of [0, at, maxClock]) {
-            yield* TestClock.setTime(now);
-
-            const ids = yield* Effect.forEach(Array.from({ length: count }), () => generator.next(Specific), {
-              concurrency: 1,
-            });
-
-            increasing(ids);
-
-            for (const id of ids) {
-              expect(accepts(id, "letter")).toBe(true);
-              expect(Schema.decodeSync(Specific)(id)).toBe(id);
-              expect(timestamp(id)).toBe(now);
-            }
-          }
-        } finally {
-          random.mockRestore();
         }
-      }).pipe(Effect.provide(Id.Generator.layer)),
+        // Zero entropy keeps a burst at the last millisecond inside the clock's range.
+        // T1067 T1. Plant: draw from `crypto.getRandomValues` again, and the last millisecond overflows.
+      }).pipe(Effect.provide(generatorWith(bytes(0)))),
     effectOptions,
   );
   it.effect.prop(
@@ -803,34 +798,22 @@ describe("T518 Id order and generation", () => {
       Effect.gen(function* () {
         const Specific = Id.make("process");
         const generator = yield* Id.Generator;
+        const now = Math.min(at, maxClock - 1);
+        yield* TestClock.setTime(now);
 
-        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-          if (array instanceof Uint8Array) {
-            array.fill(255);
-          }
-
-          return array;
+        const ids = yield* Effect.forEach(Array.from({ length: count }), () => generator.next(Specific), {
+          concurrency: 1,
         });
 
-        try {
-          const now = Math.min(at, maxClock - 1);
-          yield* TestClock.setTime(now);
+        increasing(ids);
+        expect(timestamp(ids[0]!)).toBe(now);
 
-          const ids = yield* Effect.forEach(Array.from({ length: count }), () => generator.next(Specific), {
-            concurrency: 1,
-          });
-
-          increasing(ids);
-          expect(timestamp(ids[0]!)).toBe(now);
-
-          for (const id of ids.slice(1)) {
-            expect(timestamp(id)).toBe(now + 1);
-            expect(accepts(id, "process")).toBe(true);
-          }
-        } finally {
-          random.mockRestore();
+        for (const id of ids.slice(1)) {
+          expect(timestamp(id)).toBe(now + 1);
+          expect(accepts(id, "process")).toBe(true);
         }
-      }).pipe(Effect.provide(Id.Generator.layer)),
+        // T1067 T1: all-ones bytes from SecureRandom. Plant: draw from `crypto.getRandomValues` again.
+      }).pipe(Effect.provide(generatorWith(bytes(255)))),
     effectOptions,
   );
   it.effect.prop(
@@ -841,34 +824,30 @@ describe("T518 Id order and generation", () => {
         const Specific = Id.make("process");
 
         // A bad clock is reported as `clock` whether or not entropy works: the clock is checked first.
+        // T1067 T3. Plant: check the clock after the draw, and the failing pass answers `entropy`.
         for (const entropy of ["working", "failing"] as const) {
-          const random =
-            entropy === "failing" ? vi.spyOn(crypto, "getRandomValues").mockImplementation(refuses(marker)) : undefined;
+          const layer = entropy === "failing" ? generatorWith(refuses(marker)) : Id.Generator.layer;
 
-          try {
-            // One past each edge, then generated distances past it.
-            for (const now of [
-              -1,
-              -extra,
-              maxClock + 1,
-              maxClock + extra,
-              Number.MAX_SAFE_INTEGER + extra,
-              extra + 0.5,
-              Number.NaN,
-              Infinity,
-            ]) {
-              yield* TestClock.setTime(now);
+          // One past each edge, then generated distances past it.
+          for (const now of [
+            -1,
+            -extra,
+            maxClock + 1,
+            maxClock + extra,
+            Number.MAX_SAFE_INTEGER + extra,
+            extra + 0.5,
+            Number.NaN,
+            Infinity,
+          ]) {
+            yield* TestClock.setTime(now);
 
-              const exit = yield* Effect.gen(function* () {
-                const generator = yield* Id.Generator;
+            const exit = yield* Effect.gen(function* () {
+              const generator = yield* Id.Generator;
 
-                return yield* generator.next(Specific);
-              }).pipe(Effect.provide(Id.Generator.layer), Effect.exit);
+              return yield* generator.next(Specific);
+            }).pipe(Effect.provide(layer), Effect.exit);
 
-              expectIdFailure(exit, "clock");
-            }
-          } finally {
-            random?.mockRestore();
+            expectIdFailure(exit, "clock");
           }
         }
       }),
@@ -881,27 +860,15 @@ describe("T518 Id order and generation", () => {
       Effect.gen(function* () {
         const Specific = Id.make("process");
         const generator = yield* Id.Generator;
+        yield* TestClock.setTime(maxClock);
+        expect(timestamp(yield* generator.next(Specific))).toBe(maxClock);
 
-        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-          if (array instanceof Uint8Array) {
-            array.fill(255);
-          }
-
-          return array;
-        });
-
-        try {
-          yield* TestClock.setTime(maxClock);
-          expect(timestamp(yield* generator.next(Specific))).toBe(maxClock);
-
-          for (let i = 1; i < count; i++) {
-            const exit = yield* Effect.exit(generator.next(Specific));
-            expectIdFailure(exit, "exhausted");
-          }
-        } finally {
-          random.mockRestore();
+        for (let i = 1; i < count; i++) {
+          const exit = yield* Effect.exit(generator.next(Specific));
+          expectIdFailure(exit, "exhausted");
         }
-      }).pipe(Effect.provide(Id.Generator.layer)),
+        // T1067 T1: all-ones bytes from SecureRandom. Plant: draw from `crypto.getRandomValues` again.
+      }).pipe(Effect.provide(generatorWith(bytes(255)))),
     effectOptions,
   );
   it.effect.prop(
@@ -958,16 +925,11 @@ describe("T518 Id order and generation", () => {
     { at: Time, marker: Schema.String },
     ({ at, marker }) =>
       Effect.gen(function* () {
-        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation(refuses(marker));
-
-        try {
-          yield* TestClock.setTime(at);
-          const generator = yield* Id.Generator;
-          expectIdFailure(yield* Effect.exit(generator.next(Id.Input)), "entropy");
-        } finally {
-          random.mockRestore();
-        }
-      }).pipe(Effect.provide(Id.Generator.layer)),
+        yield* TestClock.setTime(at);
+        const generator = yield* Id.Generator;
+        expectIdFailure(yield* Effect.exit(generator.next(Id.Input)), "entropy");
+        // T1067 T2. Plant: drop the draw's `catchDefect`, and the throw is a defect.
+      }).pipe(Effect.provide(generatorWith(refuses(marker)))),
     effectOptions,
   );
   it.effect.prop(
@@ -984,53 +946,42 @@ describe("T518 Id order and generation", () => {
     },
     ({ at, raw, rollback, deltas }) =>
       Effect.gen(function* () {
-        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-          if (array instanceof Uint8Array) {
-            array.forEach((_, i) => {
-              array[i] = raw[i % raw.length]!;
-            });
+        const generator = yield* Id.Generator;
+
+        const Input = Id.make("input"),
+          Chaos = Id.make("chaos");
+
+        // Leave room above the longest rollback, so all-ones entropy never reaches the last millisecond.
+        const start = Math.min(at, maxClock - 1_000_010_000);
+        const suffixes: Array<string> = [];
+        let highest = 0;
+
+        for (const now of [start, start, start + rollback, start, start - 1, ...Arr.map(deltas, (n) => start + n)]) {
+          yield* TestClock.setTime(Math.max(0, now));
+          highest = Math.max(highest, Math.max(0, now));
+
+          const input = yield* generator.next(Input),
+            chaos = yield* generator.next(Chaos);
+
+          if (suffixes.length === 0) {
+            const expected = Arr.reduce(raw, 0n, (n, byte) => (n << 8n) | BigInt(byte)) & ((1n << 74n) - 1n);
+            const uuid = Arr.reduce([...referenceDecode(split(input)[1])], 0n, (n, byte) => (n << 8n) | BigInt(byte));
+            const actual = (((uuid >> 64n) & 4095n) << 62n) | (uuid & ((1n << 62n) - 1n));
+            expect(actual, "a fresh id uses the supplied entropy, not a count").toBe(expected);
           }
 
-          return array;
-        });
-
-        try {
-          const generator = yield* Id.Generator;
-
-          const Input = Id.make("input"),
-            Chaos = Id.make("chaos");
-
-          // Leave room above the longest rollback, so all-ones entropy never reaches the last millisecond.
-          const start = Math.min(at, maxClock - 1_000_010_000);
-          const suffixes: Array<string> = [];
-          let highest = 0;
-
-          for (const now of [start, start, start + rollback, start, start - 1, ...Arr.map(deltas, (n) => start + n)]) {
-            yield* TestClock.setTime(Math.max(0, now));
-            highest = Math.max(highest, Math.max(0, now));
-
-            const input = yield* generator.next(Input),
-              chaos = yield* generator.next(Chaos);
-
-            if (suffixes.length === 0) {
-              const expected = Arr.reduce(raw, 0n, (n, byte) => (n << 8n) | BigInt(byte)) & ((1n << 74n) - 1n);
-              const uuid = Arr.reduce([...referenceDecode(split(input)[1])], 0n, (n, byte) => (n << 8n) | BigInt(byte));
-              const actual = (((uuid >> 64n) & 4095n) << 62n) | (uuid & ((1n << 62n) - 1n));
-              expect(actual, "a fresh id uses the supplied entropy, not a count").toBe(expected);
-            }
-
-            expect(accepts(input, "input")).toBe(true);
-            expect(accepts(chaos, "chaos")).toBe(true);
-            expect(timestamp(input)).toBeGreaterThanOrEqual(highest);
-            suffixes.push(split(input)[1], split(chaos)[1]);
-          }
-
-          // One state serves every prefix: the suffixes alone keep the writer's order.
-          increasing(suffixes);
-        } finally {
-          random.mockRestore();
+          expect(accepts(input, "input")).toBe(true);
+          expect(accepts(chaos, "chaos")).toBe(true);
+          expect(timestamp(input)).toBeGreaterThanOrEqual(highest);
+          suffixes.push(split(input)[1], split(chaos)[1]);
         }
-      }).pipe(Effect.provide(Id.Generator.layer)),
+
+        // One state serves every prefix: the suffixes alone keep the writer's order.
+        increasing(suffixes);
+        // T1067 T1: the bytes are `raw`, from SecureRandom. Plant: draw from `crypto.getRandomValues` again.
+      }).pipe(
+        Effect.provide(generatorWith((size) => Uint8Array.from({ length: size }, (_, i) => raw[i % raw.length]!))),
+      ),
     effectOptions,
   );
 });
@@ -1045,101 +996,168 @@ describe("T518 shared Id generator", () => {
     }>;
   };
 
-  const checkSchedule = async (schedule: Schedule) => {
-    const Specific = Id.make(schedule.type);
-    const allocated: Array<string> = [];
-    const check = Option.getOrUndefined(Arr.findFirst(Specific.ast.checks ?? [], (check) => check._tag === "Filter"));
+  /**
+   * The ids the generator owes a schedule, in allocation order, written again from RFC 9562's
+   * counter method: a fresh millisecond takes the 74 low bits of ten `entropy` bytes, a repeated or
+   * rolled-back one counts up, and the all-ones field moves the clock on by one. Every fiber of a
+   * batch reads the batch's millisecond, then one later call follows the burst.
+   */
+  const predicted = (schedule: Schedule): ReadonlyArray<string> => {
+    const max = (1n << 74n) - 1n;
+    const seed = BigInt(`0x${schedule.entropy.toString(16).padStart(2, "0").repeat(10)}`) & max;
 
-    if (check === undefined) {
-      throw new Error("The Id schema needs its real format check");
-    }
+    let at = -1,
+      random = 0n;
 
-    const validate = check.run;
+    const ids: Array<string> = [];
 
-    // The real format check runs synchronously after the state write and encoding.
-    // Observe there: a fiber can yield between allocation and returning to its caller.
-    const decoding = vi.spyOn(check, "run").mockImplementation((input, self, options) => {
-      if (Predicate.isString(input)) {
-        allocated.push(input);
+    const one = (now: number) => {
+      if (now > at) {
+        at = now;
+        random = seed;
+      } else if (random === max) {
+        at++;
+        random = 0n;
+      } else {
+        random++;
       }
 
-      return validate(input, self, options);
-    });
+      ids.push(wire(schedule.type, layout(at, random)));
+    };
 
-    const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-      if (array instanceof Uint8Array) {
-        array.fill(schedule.entropy);
+    for (const batch of schedule.batches) {
+      for (const _ of batch.work) {
+        one(batch.at);
       }
 
-      return array;
-    });
-
-    try {
-      const returned = await Effect.runPromise(
-        Effect.gen(function* () {
-          const generator = yield* Id.Generator;
-          const ids: Array<string> = [];
-
-          for (const batch of schedule.batches) {
-            yield* TestClock.setTime(batch.at);
-            ids.push(
-              ...(yield* Effect.forEach(
-                batch.work,
-                (work) =>
-                  Effect.gen(function* () {
-                    for (let i = 0; i < work; i++) {
-                      yield* Effect.sync(() => {});
-                    }
-
-                    return yield* generator.next(Specific);
-                  }),
-                { concurrency: batch.work.length },
-              )),
-            );
-            // A later call must continue the state saved by the concurrent burst.
-            ids.push(yield* generator.next(Specific));
-          }
-
-          return ids;
-        }).pipe(Effect.provide(Id.Generator.layer.pipe(Layer.provideMerge(TestClock.layer())))),
-      );
-
-      expect(allocated).toHaveLength(returned.length);
-      expect([...allocated].sort()).toEqual([...returned].sort());
-      increasing(allocated);
-    } finally {
-      random.mockRestore();
-      decoding.mockRestore();
+      one(batch.at);
     }
+
+    return ids;
   };
 
-  it("shared fibers allocate unique, strictly increasing ids over generated schedules", () =>
-    fc.assert(
-      fc.asyncProperty(
-        fc.record({
-          type: prefix,
-          entropy: fc.oneof(fc.constant(0), fc.integer({ min: 0, max: 255 })),
-          batches: fc.array(
-            fc.record({
-              // Leave room for logical-clock increments after all-ones entropy.
-              at: fc.integer({ min: 0, max: maxClock - 1000 }),
-              // Effect 4.1.1's normal scheduler budget is crossed near this range.
-              work: fc.array(fc.integer({ min: 2000, max: 2070 }), { minLength: 2, maxLength: 8 }),
-            }),
-            { minLength: 2, maxLength: 6 },
+  /** What the generated schedules reached, so the law fails loudly when a required case is missing. */
+  const reached = { fresh: 0, rollback: 0, overflow: 0 };
+  let schedules = 0;
+
+  const lower = Schema.String.check(Schema.isPattern(/^[a-z]$/));
+  const middle = Schema.String.check(Schema.isPattern(/^[a-z_]$/));
+
+  const typePrefix = Arbitrary.schema(
+    Schema.Union([
+      lower,
+      Schema.Struct({
+        first: lower,
+        middle: Schema.Array(middle).check(Schema.isBetweenLength(0, 61)),
+        last: lower,
+      }),
+    ]),
+  ).pipe(
+    Arbitrary.map((value) =>
+      Predicate.isString(value) ? value : `${value.first}${Arr.join(value.middle, "")}${value.last}`,
+    ),
+  );
+
+  const checkSchedule = (schedule: Schedule) =>
+    Effect.gen(function* () {
+      const validation = yield* Front.Validation;
+
+      const { returned, recorded } = yield* Effect.gen(function* () {
+        const Specific = Id.make(schedule.type);
+        const generator = yield* Id.Generator;
+        const ids: Array<string> = [];
+
+        for (const batch of schedule.batches) {
+          yield* TestClock.setTime(batch.at);
+          ids.push(
+            ...(yield* Effect.forEach(
+              batch.work,
+              (work) =>
+                Effect.gen(function* () {
+                  for (let i = 0; i < work; i++) {
+                    yield* Effect.sync(() => {});
+                  }
+
+                  return yield* generator.next(Specific);
+                }),
+              { concurrency: batch.work.length },
+            )),
+          );
+          // A later call must continue the state saved by the concurrent burst.
+          ids.push(yield* generator.next(Specific));
+        }
+
+        const calls = yield* Recorder.calls(Front.Validation, "decode");
+
+        return { returned: ids, recorded: calls.map(([, encoded]) => encoded) };
+      }).pipe(
+        Effect.provide(generatorWith(bytes(schedule.entropy))),
+        Effect.provide(TestClock.layer()),
+        Effect.provide(Recorder.layer(Front.Validation, validation)),
+      );
+
+      // The independent model checks the IDs themselves. The Recorder captures the live validation
+      // arguments in order, including fibers that finish out of order.
+      expect([...returned].sort(compare)).toEqual(predicted(schedule));
+      expect([...recorded].sort(compare)).toEqual([...returned].sort(compare));
+      increasing(recorded);
+      const swapped = [...recorded];
+      [swapped[0], swapped[1]] = [swapped[1]!, swapped[0]!];
+      expect(() => increasing(swapped), "an adjacent ID swap breaks actual-order checking").toThrow();
+      schedule.batches.forEach((batch, i) => {
+        const before = schedule.batches[i - 1];
+        reached.fresh += before === undefined || batch.at > before.at ? 1 : 0;
+        reached.rollback += before !== undefined && batch.at < before.at ? 1 : 0;
+      });
+      reached.overflow += schedule.entropy === 255 ? 1 : 0;
+    });
+
+  // T1067 T4. Plant: in the generator's synchronous step, take a fresh draw whenever one is given,
+  // without `now > at`, so fibers that drew for one millisecond each reseed it (T518 review 5 P1);
+  // a second plant yields between reading and writing the state.
+  it.effect.prop(
+    "shared fibers allocate exactly the ids the generator's model owes, unique and increasing, over generated schedules",
+    {
+      type: typePrefix,
+      entropy: Arbitrary.schema(
+        Schema.Union([
+          Schema.Literals([0]),
+          Schema.Literals([255]),
+          Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 })),
+        ]),
+      ),
+      batches: Arbitrary.array(
+        Arbitrary.all({
+          at: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: maxClock - 1000 }))),
+          work: Arbitrary.array(
+            Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 2000, maximum: 2070 }))),
+            { minLength: 2, maxLength: 8 },
           ),
         }),
-        checkSchedule,
+        { minLength: 2, maxLength: 6 },
       ),
-      { ...options, numRuns: 40 },
-    ));
-  it.live("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", () =>
-    promised(() =>
-      checkSchedule({
-        type: "process",
-        entropy: 0,
-        batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
-      }),
-    ),
+    },
+    (schedule) =>
+      Effect.andThen(
+        checkSchedule(schedule),
+        Effect.sync(() => {
+          schedules += 1;
+          expect.hasAssertions();
+
+          if (schedules === scheduleOptions.arbitrary.runs) {
+            expect(reached.fresh, "a batch on a fresh millisecond").toBeGreaterThan(0);
+            expect(reached.rollback, "a batch after the clock moved back").toBeGreaterThan(0);
+            expect(reached.overflow, "a schedule on all-ones entropy").toBeGreaterThan(0);
+          }
+        }),
+      ),
+    scheduleOptions,
+  );
+  it.effect("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", () =>
+    checkSchedule({
+      type: "process",
+      entropy: 0,
+      batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
+    }),
   );
 });

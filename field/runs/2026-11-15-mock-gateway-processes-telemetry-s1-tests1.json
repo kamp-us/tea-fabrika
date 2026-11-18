@@ -1,0 +1,82 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-gateway-processes-telemetry-s1-tests1",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-15T23:13:34-08:00",
+  "ended": "2026-11-15T23:46:14-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 1 of the mock sweep in gateway, processes and telemetry (decision 0555, plan mock-gateway-processes-telemetry-PLAN.md at 14e9b3134), in next/ and the lint config, on main after pull requests 1366 and 1508. New: next/packages/libfabrika/src/crypto.test-support.ts with paused(marker) and rejecting(failure), stand-in WebCrypto objects on Stub.make. M2/M5 (telemetry/ErrorCause.test.ts C1) hands rejecting(failure) in with WebCrypto.layer and checks a typed storage failure, no defect, and that the digest was asked exactly [body]; red on main: the digest's rejection never reaches the work, since Archive.ts hashes with globalThis.crypto. M1/M5 (gateway/GatewayRevocation.integration.test.ts, the three paused-hash laws) fork the paused call under WebCrypto.layer(pause.crypto) and wait for the pause with a 5-second live-clock timeout; red on main at that timeout: the paused hash was never reached through the WebCrypto reference. The three vi.spyOn calls and their try/finally restores are gone. M4: .oxlintrc.json gets the vitest/no-restricted-vi-methods block for gateway/** and telemetry/**, oxlint-plugins/builtin-plants.ts gets VI_METHODS (three import forms: vitest, @effect/vitest, and a renamed vi, which oxlint 1.90.0 does refuse), and oxlint-plugins/plants.test.ts gets the scenario that plants them in every folder of every block; green. Two lines outside the plan's Files table: layer-rules.json gets a row for crypto.test-support.ts, and fabrika/modules' shared top-file list in .oxlintrc.json gets crypto, both so the plan's top-of-src file passes lint. The plants on the product were run on a trial build (the plan's two reads of WebCrypto.WebCrypto applied by hand, then undone); Archive.ts, Gateway.ts and Authorization.ts are byte for byte main's. The build is needed: Archive.ts's sha256 and Gateway.ts's fingerprint and hash must read WebCrypto.WebCrypto, plus the pattern doc.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "The three gateway laws now use endOnFailure, so a missed pause reports its first failure in 5 seconds instead of shrinking past the 60-second law timeout; on the green path nothing changes. The stand-in is provided on the paused call, not inside world() and setup() as the plan sketched: a Context.Reference is read where the hash runs, and the trial build showed that reaches it.",
+  "plants": [
+    {
+      "law": "M2",
+      "plant": "main's Archive.ts as it is (hashes with globalThis.crypto, past the reference)",
+      "result": "red"
+    },
+    {
+      "law": "M2",
+      "plant": "trial build: Archive.ts's sha256 reads WebCrypto.WebCrypto; all 6 laws of ErrorCause.test.ts pass; undone",
+      "result": "green"
+    },
+    {
+      "law": "M2",
+      "plant": "on the trial build, fail built with no cause: expected undefined to be the failure",
+      "result": "red"
+    },
+    {
+      "law": "M2",
+      "plant": "on the trial build, hash body.slice(1): asked is not [body]",
+      "result": "red"
+    },
+    {
+      "law": "M2",
+      "plant": "on the trial build, Effect.promise in place of Effect.tryPromise: a rejected digest is no defect fails",
+      "result": "red"
+    },
+    {
+      "law": "M1",
+      "plant": "main's Gateway.ts as it is (hashes with globalThis.crypto, past the reference): all three paused-hash laws fail at the pause's timeout",
+      "result": "red"
+    },
+    {
+      "law": "M1",
+      "plant": "trial build: Gateway.ts's fingerprint and hash read WebCrypto.WebCrypto; the three paused-hash laws pass; undone",
+      "result": "green"
+    },
+    {
+      "law": "M1",
+      "plant": "on the trial build, skip the membership check of Authorization.ts's appendAdmitted: the route law and the caused-event law fail on revokeFirst",
+      "result": "red"
+    },
+    {
+      "law": "M1",
+      "plant": "on the trial build, skip Gateway.ts's membership check before a settled retry's cached answer: the settled-retry law fails",
+      "result": "red"
+    },
+    {
+      "law": "M5",
+      "plant": "on the trial build, Gateway.ts's hash reads globalThis.crypto.subtle again: all three paused-hash laws fail at the pause's timeout",
+      "result": "red"
+    },
+    {
+      "law": "M4",
+      "plant": "delete telemetry/** from the vitest/no-restricted-vi-methods block of .oxlintrc.json: the scenario's coverage check fails",
+      "result": "red"
+    },
+    {
+      "law": "M4",
+      "plant": "rename the block's stubEnv option to stubEnvX: the stubEnv line of each planted file is not refused",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

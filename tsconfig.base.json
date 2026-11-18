@@ -302,6 +302,7 @@
                 "effect/crypto/Digest",
                 "effect/crypto/SecureRandom",
                 "effect/crypto/Signature",
+                "effect/crypto/WebCrypto",
                 "effect/http/FetchHttpClient",
                 "effect/http/HttpClient",
                 "effect/http/HttpClientRequest",

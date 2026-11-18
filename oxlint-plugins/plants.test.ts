@@ -14,6 +14,7 @@ import {
   mkdirSync,
   readdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -24,10 +25,18 @@ import { dirname, join, relative } from "node:path";
 import { it } from "@effect/vitest";
 import { Array as Arr, Effect, pipe, Predicate, Record as Rec, Schema, Order, String as Str } from "effect";
 import fc from "fast-check";
+import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT, REFLECT_NEW_FOLDERS, TAGGED_ERROR } from "./builtin-plants.ts";
+import {
+  BUILTIN_PLANTS,
+  GRANT_NO_CONSOLE,
+  type Plant,
+  REFLECT,
+  REFLECT_NEW_FOLDERS,
+  TAGGED_ERROR,
+} from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
@@ -42,6 +51,78 @@ const promised = <A>(run: () => PromiseLike<A>) =>
 const ROOT = join(import.meta.dirname, "..");
 
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
+
+type JsoncNode = any;
+
+const jsoncValue = (node: JsoncNode): unknown => {
+  if (node.type === "ObjectExpression") {
+    return Object.fromEntries(
+      node.properties.map((property: JsoncNode) => [
+        property.key.value ?? property.key.name,
+        jsoncValue(property.value),
+      ]),
+    );
+  }
+
+  if (node.type === "ArrayExpression") {
+    return node.elements.map(jsoncValue);
+  }
+
+  if (node.type === "Literal") {
+    return node.value;
+  }
+
+  throw new Error(`.oxlintrc.json holds a ${node.type}`);
+};
+
+interface LintConfig {
+  overrides: Array<{
+    files: string[];
+    rules?: Record<string, unknown>;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+}
+
+const readLintConfig = (text: string): LintConfig => {
+  const parsed = parseSync("oxlintrc.ts", `export default ${text}`);
+  expect(parsed.errors).toEqual([]);
+  const program: JsoncNode = parsed.program;
+
+  return jsoncValue(program.body[0].declaration) as LintConfig;
+};
+
+const withoutGrantNoConsole = (text: string): LintConfig => {
+  const config = readLintConfig(text);
+
+  const matches = config.overrides.flatMap((override, index) =>
+    override.files.length === 1 &&
+    override.files[0] === GRANT_NO_CONSOLE.file &&
+    override.rules !== undefined &&
+    Object.hasOwn(override.rules, GRANT_NO_CONSOLE.rule)
+      ? [index]
+      : [],
+  );
+
+  expect(matches).toHaveLength(1);
+
+  const index = matches[0]!;
+  const override = config.overrides[index]!;
+  const rules = override.rules!;
+
+  expect(rules[GRANT_NO_CONSOLE.rule]).toBe("error");
+  delete rules[GRANT_NO_CONSOLE.rule];
+
+  if (Object.keys(rules).length === 0) {
+    delete override.rules;
+
+    if (Object.keys(override).length === 1) {
+      config.overrides.splice(index, 1);
+    }
+  }
+
+  return config;
+};
 
 // RuleTester runs each case at once, inside the test that plants it.
 RuleTester.describe = (_name, fn) => fn();
@@ -398,8 +479,29 @@ describe("each rule refuses what it is there to refuse", () => {
     expect([...new Set(firesInPlanted(poll, "vitest(require-awaited-expect-poll)"))]).toEqual([2]);
   });
 
+  it("A3b: raw console calls in the grant entry are refused by its exact override", () => {
+    const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
+    const control = withoutGrantNoConsole(config);
+    const neighbor = "next/apps/fabrika/grant-neighbor.ts";
+
+    const sources = {
+      [GRANT_NO_CONSOLE.file]: GRANT_NO_CONSOLE.text,
+      [neighbor]: 'export const log = () => console.log("outside");',
+    };
+
+    inConfigCopy(({ lintFiles, lintWithConfig }) => {
+      const current = lintFiles(sources);
+      const disabled = lintWithConfig(control, sources);
+
+      expect(refusedIn(current, GRANT_NO_CONSOLE.file, GRANT_NO_CONSOLE.code)).toEqual(GRANT_NO_CONSOLE.lines);
+      expect(refusedIn(disabled, GRANT_NO_CONSOLE.file, GRANT_NO_CONSOLE.code)).toEqual([]);
+      expect(refusedIn(current, neighbor, GRANT_NO_CONSOLE.code)).toEqual([]);
+      expect(refusedIn(disabled, neighbor, GRANT_NO_CONSOLE.code)).toEqual([]);
+    });
+  }, 120_000);
+
   it("each built-in rule is planted once", () => {
-    const codes = Arr.map(BUILTIN_PLANTS, (p) => p.code);
+    const codes = [...Arr.map(BUILTIN_PLANTS, (p) => p.code), GRANT_NO_CONSOLE.code];
     expect(new Set(codes).size).toBe(codes.length);
   });
 
@@ -640,6 +742,8 @@ const inConfigCopy = (
   use: (copy: {
     readonly printed: Printed;
     readonly lint: (text: string, files: ReadonlyArray<string>) => Diagnostics;
+    readonly lintFiles: (sources: Readonly<Record<string, string>>) => Diagnostics;
+    readonly lintWithConfig: (config: LintConfig, sources: Readonly<Record<string, string>>) => Diagnostics;
   }) => void,
 ) => {
   const at = realpathSync(mkdtempSync(join(tmpdir(), "restricted-properties-")));
@@ -668,8 +772,10 @@ const inConfigCopy = (
 
     expect(printed.status, printed.stderr).toBe(0);
 
-    const lint = (text: string, files: ReadonlyArray<string>): Diagnostics => {
-      for (const file of files) {
+    const lintFiles = (sources: Readonly<Record<string, string>>): Diagnostics => {
+      const files = Object.keys(sources);
+
+      for (const [file, text] of Object.entries(sources)) {
         mkdirSync(dirname(join(at, file)), { recursive: true });
         writeFileSync(join(at, file), text);
       }
@@ -685,7 +791,29 @@ const inConfigCopy = (
       return report.diagnostics;
     };
 
-    use({ printed: JSON.parse(printed.stdout), lint });
+    const lint = (text: string, files: ReadonlyArray<string>): Diagnostics =>
+      lintFiles(Object.fromEntries(files.map((file) => [file, text])));
+
+    const lintWithConfig = (config: LintConfig, sources: Readonly<Record<string, string>>): Diagnostics => {
+      const configFile = join(at, ".oxlintrc.json");
+      const original = readFileSync(configFile, "utf8");
+
+      try {
+        const serialized = JSON.stringify(config);
+
+        if (serialized === undefined) {
+          throw new Error("the control lint config could not be serialized");
+        }
+
+        writeFileSync(configFile, serialized);
+
+        return lintFiles(sources);
+      } finally {
+        writeFileSync(configFile, original);
+      }
+    };
+
+    use({ printed: JSON.parse(printed.stdout), lint, lintFiles, lintWithConfig });
   } finally {
     rmSync(at, { recursive: true, force: true });
   }

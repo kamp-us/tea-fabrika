@@ -1284,6 +1284,11 @@
       }
     },
     {
+      // A3b: raw Node console output in the grant entry runs before `runMain` starts.
+      "files": ["next/apps/fabrika/grant.ts"],
+      "rules": { "eslint/no-console": "error" }
+    },
+    {
       // Product code reads the time through Effect's `Clock` or `DateTime`, so a test sets it with
       // `TestClock`. A `.tsx` file has `no-clock-in-view`, which refuses more. Tests are left out below.
       "files": ["next/**/*.ts", "kalfa/**/*.ts"],

@@ -1201,3 +1201,21 @@ export const BUILTIN_PLANTS: readonly Plant[] = [
   ...promise,
   ...react,
 ];
+
+/** A3b's exact grant entry: raw Node console calls are refused, while Effect Console calls pass. */
+export const GRANT_NO_CONSOLE = {
+  code: "eslint(no-console)",
+  rule: "eslint/no-console",
+  file: "next/apps/fabrika/grant.ts",
+  text: [
+    'import {NodeRuntime} from "@effect/platform-node";',
+    'import {Console, Effect} from "effect";',
+    'console.log("extra");',
+    'export const nested = () => console.log("inside");',
+    '// console.log("comment")',
+    'export const text = "console.log";',
+    'export const allowed = Console.log("ok");',
+    "NodeRuntime.runMain(Effect.void);",
+  ].join("\n"),
+  lines: [3, 4],
+} as const;

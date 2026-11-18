@@ -1,0 +1,130 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-lib-top-s1-tests1",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-15T23:13:18-08:00",
+  "ended": "2026-11-15T23:35:54-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 1 of the mock sweep's lib-top plan (docs/plan/quests/mock-lib-top-PLAN.md at 14e9b3134, decisions 0555 and 0579), in next/. The ten vi.spyOn calls in Id.test.ts and Id.cause.test.ts are gone: nine laws take their random bytes from a SecureRandom made by SecureRandom.make(fill), through generatorWith in Id.test-support.ts, and the allocation-order law checks the exact ids a model of the generator predicts in place of spying on the format check's run. T5 is a type law in Id.types.test.ts. L1 is node's M1: VI_METHODS in oxlint-plugins/builtin-plants.ts and a scenario in oxlint-plugins/plants.test.ts that plants it in every folder of every vitest/no-restricted-vi-methods block. Neither VI_METHODS nor the block existed on origin/main, so this slice created both in node's plan's names and shape (all five methods, fn included, node's messages), with only this plan's two globs in files, so a later fold merges the files lists as a union. On main's Id.ts the nine entropy laws are red because Id.makeGenerator does not exist (Fiber.runLoop: Not a valid effect: undefined), the build's export. Every plant was run against the plan's own sketch of makeGenerator, applied to Id.ts on a saved copy and restored by copy: all thirty Id laws were green on it, and each plant turned its law red. T4's plant (the T518 review 5 P1 shape) turned T4 red, so the plan's doubt about the model law is settled. Under T1's plant the two zero-byte laws first stayed green, since a burst of at most 128 ids never overflows on real random bits; both laws now also check the exact ids of each burst, and turned red under the plant. The plan's claim that the zero laws go red under T1 held only after that addition.",
+  "laws": [
+    {
+      "law": "T1 next/packages/libfabrika/src/Id.test.ts: built-in prefixes generate UUIDv7 bursts; empty prefixes fail typed",
+      "red": "on main's Id.ts: Fiber.runLoop: Not a valid effect: undefined (Id.makeGenerator not exported yet)"
+    },
+    {
+      "law": "T1 next/packages/libfabrika/src/Id.test.ts: next(schema) encodes the controlled clock and UUIDv7 bits at both clock edges",
+      "red": "same: Id.makeGenerator not exported yet"
+    },
+    {
+      "law": "T1 next/packages/libfabrika/src/Id.test.ts: exhausted random bits advance the logical clock and keep the UUID layout",
+      "red": "same: Id.makeGenerator not exported yet"
+    },
+    {
+      "law": "T1 next/packages/libfabrika/src/Id.test.ts: random-bit overflow at the last millisecond fails typed instead of wrapping",
+      "red": "same: Id.makeGenerator not exported yet"
+    },
+    {
+      "law": "T1 next/packages/libfabrika/src/Id.test.ts: a fresh millisecond takes its random bits from entropy, and one writer orders ids across prefixes and long rollbacks",
+      "red": "same: Id.makeGenerator not exported yet"
+    },
+    {
+      "law": "T2 next/packages/libfabrika/src/Id.cause.test.ts: C1: a generated throw from the random source is `entropy` with the thrown value as its cause",
+      "red": "Property failed after 1 tests, caused by Fiber.runLoop: Not a valid effect: undefined (Id.makeGenerator not exported yet)"
+    },
+    {
+      "law": "T2 next/packages/libfabrika/src/Id.test.ts: an entropy failure is a typed IdError, never a defect",
+      "red": "same: Id.makeGenerator not exported yet"
+    },
+    {
+      "law": "T3 next/packages/libfabrika/src/Id.test.ts: out-of-range, fractional and non-finite clocks fail with a typed IdError, even when entropy fails too",
+      "red": "same: Id.makeGenerator not exported yet"
+    },
+    {
+      "law": "T4 next/packages/libfabrika/src/Id.test.ts: shared fibers allocate exactly the ids the generator's model owes, unique and increasing, over generated schedules",
+      "red": "Property failed after 1 tests, caused by Fiber.runLoop: Not a valid effect: undefined (Id.makeGenerator not exported yet)"
+    },
+    {
+      "law": "T4 next/packages/libfabrika/src/Id.test.ts: pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield",
+      "red": "same: Id.makeGenerator not exported yet"
+    },
+    {
+      "law": "T5 next/packages/libfabrika/src/Id.types.test.ts: type: Generator.layer needs nothing, and makeGenerator needs only SecureRandom",
+      "red": "a type law, red only in a type check, so vitest passes it; seen red in tsc under its plant, at Id.types.test.ts:92"
+    },
+    {
+      "law": "L1 oxlint-plugins/plants.test.ts: scenario: VI_METHODS' lines are refused exactly, in every folder of every vi ban block",
+      "red": "green from the start, since this step adds the block it checks; seen red under both of its plants"
+    }
+  ],
+  "plants": [
+    {
+      "law": "T1, the eight entropy laws in Id.test.ts",
+      "plant": "the draw reads crypto.getRandomValues(new Uint8Array(10)) in place of secure.randomBytes(10)",
+      "result": "red"
+    },
+    {
+      "law": "T1 and T2, C1 in Id.cause.test.ts",
+      "plant": "the draw reads crypto.getRandomValues(new Uint8Array(10)) in place of secure.randomBytes(10)",
+      "result": "red"
+    },
+    {
+      "law": "T2, C1 in Id.cause.test.ts",
+      "plant": "drop the draw's Effect.catchDefect, so a throw from the random source dies",
+      "result": "red"
+    },
+    {
+      "law": "T2, an entropy failure is a typed IdError, never a defect",
+      "plant": "drop the draw's Effect.catchDefect",
+      "result": "red"
+    },
+    {
+      "law": "T3, bad clocks fail clock even when entropy fails",
+      "plant": "check the clock after the draw, so the failing pass answers entropy",
+      "result": "red"
+    },
+    {
+      "law": "T4, the generated schedules and the pinned four-fiber case",
+      "plant": "the T518 review 5 P1 shape: allocate takes fresh whenever it is given, without now > at",
+      "result": "red"
+    },
+    {
+      "law": "T4, the generated schedules and the pinned four-fiber case",
+      "plant": "Effect.yieldNow between reading at and random and writing them back",
+      "result": "red"
+    },
+    {
+      "law": "T5, Generator.layer needs nothing",
+      "plant": "drop Layer.provide(SecureRandom.layerWebCrypto) and the layer's type annotation from Generator.layer",
+      "result": "red"
+    },
+    {
+      "law": "L1, VI_METHODS in every vi ban folder",
+      "plant": "delete the fn entry from the block in .oxlintrc.json",
+      "result": "red"
+    },
+    {
+      "law": "L1, VI_METHODS in every vi ban folder",
+      "plant": "delete the spyOn entry from the block in .oxlintrc.json",
+      "result": "red"
+    },
+    {
+      "law": "T1, the two zero-byte laws, before they checked exact ids",
+      "plant": "the draw reads crypto.getRandomValues in place of secure.randomBytes",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 23,
+  "note": "Every Id plant ran on a copy of Id.ts holding the plan's sketch of makeGenerator (its draw before the synchronous step, catchDefect, Generator.layer over SecureRandom.layerWebCrypto), never committed; Id.ts was restored by copy and git status showed no product file. The build writes the real makeGenerator, so the review reruns the plants against it. The renamed import (import {vi as renamed}) is refused by oxlint 1.90.0's vitest/no-restricted-vi-methods, and so is vi from @effect/vitest; a local object named vi is not. pnpm format passes. pnpm lint passes except lint:dead, which flags next/packages/libfabrika/src/Id.test-support.ts:generatorWith as only-called-from-tests: code-graph 0.15.0's default test-support patterns do not list *.test-support.ts, and 0524 allows no ledger row, so this goes to the lead as a finding. lint:promise-types died once with EPIPE when the box ran out of memory and passed on its own. The list ratchet exits 0. Tests run: Id.cause.test.ts, Id.test.ts, Id.types.test.ts and oxlint-plugins/plants.test.ts, one file at a time. One tsc --noEmit -p next/packages/libfabrika per type state (scaffold clean, T5 plant red). No pnpm typecheck.",
+  "step": "tests",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}
