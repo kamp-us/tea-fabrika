@@ -13,6 +13,8 @@
     "./stryker/Settings": "./src/stryker/Settings.ts",
     "./stryker/Target": "./src/stryker/Target.ts",
     "./stryker/Mutants": "./src/stryker/Mutants.ts",
+    "./stryker/Guard": "./src/stryker/Guard.ts",
+    "./stryker/Report": "./src/stryker/Report.ts",
     "./stryker/node/MutantsStryker": "./src/stryker/node/MutantsStryker.ts",
     "./cli": "./src/cli.ts",
     "./package.json": "./package.json"

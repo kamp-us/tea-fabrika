@@ -15,9 +15,6 @@ import * as Target from "./Target.ts";
 
 type Needs = FileSystem.FileSystem | Path.Path | Mutants | Scope.Scope;
 
-// The Node version of this process, for the record line.
-const NODE = globalThis.process.version;
-
 const stuck = () => new Refused({ reason: "could_not_run", at: [] });
 
 /** The folder of the nearest `package.json` at or above `file`'s folder, or `root` when none is nearer. */
@@ -95,7 +92,7 @@ export const plant = Effect.fn("Run.plant")(function* (ask: {
 
   return record(chosen, target, done.report, {
     seconds: done.seconds,
-    node: NODE,
+    node: mutants.node,
     stryker: done.report.framework?.version ?? "unknown",
   });
 });

@@ -7,12 +7,24 @@
 // through its `KALFA_` variable until then.
 import { Config, ConfigProvider, Schema } from "effect";
 
+/** What every environment variable of a setting starts with; the provider below reads under it. */
+const PREFIX = "KALFA";
+
 const Atleast = (minimum: number) => Schema.Int.check(Schema.isGreaterThanOrEqualTo(minimum));
 
 /** The Stryker settings of one run. */
 export const all = Config.all({
   /** The module that lists the repo's plants. No default: a run without one says which variable to set. */
-  catalog: Config.NonEmptyString("catalog"),
+  catalog: Config.NonEmptyString("catalog").pipe(
+    Config.orElse((error) =>
+      Config.fail(
+        new ConfigProvider.SourceError({
+          message: `set ${PREFIX}_QUALITY_STRYKER_CATALOG to the module that lists the plants`,
+          cause: error,
+        }),
+      ),
+    ),
+  ),
   /** Stryker's test runners at once. One: other work shares the machine. */
   concurrency: Config.schema(Atleast(1), "concurrency").pipe(Config.withDefault(1)),
   /** Stryker's `timeoutMS`, in milliseconds. */
@@ -39,6 +51,6 @@ export const provider = (
   repo: unknown,
 ): ConfigProvider.ConfigProvider =>
   ConfigProvider.orElse(
-    ConfigProvider.fromEnvRecord({ ...env }).pipe(ConfigProvider.constantCase, ConfigProvider.nested("KALFA")),
+    ConfigProvider.fromEnvRecord({ ...env }).pipe(ConfigProvider.constantCase, ConfigProvider.nested(PREFIX)),
     ConfigProvider.fromUnknown(repo),
   );

@@ -7,8 +7,9 @@
 // run starts Stryker and its test runner; a generated input would repeat that cost to show no more.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Option, Path } from "effect";
+import { Effect, FileSystem, Layer, Option, Path } from "effect";
 import { FILES, KILLS, PRODUCT, SPARES, TARGET, TESTS } from "../Fixture.test-support.ts";
+import { Guard } from "../Guard.ts";
 import { plant } from "../Plant.ts";
 import * as Run from "../Run.ts";
 import * as MutantsStryker from "./MutantsStryker.ts";
@@ -53,7 +54,10 @@ it.live(
       yield* fs.symlink(path.join(import.meta.dirname, MODULES), path.join(root, "node_modules"));
 
       const catalog = [named("kills", KILLS), named("spares", SPARES)];
-      const real = MutantsStryker.layer({ root, nice: 0 });
+      // Nothing here is host-only: this law runs where Stryker may.
+      const real = MutantsStryker.layer({ root, nice: 0 }).pipe(
+        Layer.provide(Layer.succeed(Guard, { allow: () => Effect.void })),
+      );
       const run = (name: string) =>
         Run.plant({ catalog, name, settings: settings(path, root), root }).pipe(Effect.scoped, Effect.provide(real));
 

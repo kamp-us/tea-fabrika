@@ -15,11 +15,12 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Catalog } from "@kalfa/quality/stryker";
+import { Guard } from "@kalfa/quality/stryker/Guard";
 import { Mutants } from "@kalfa/quality/stryker/Mutants";
 import { layer } from "@kalfa/quality/stryker/node/MutantsStryker";
 import * as Target from "@kalfa/quality/stryker/Target";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Result, Schema } from "effect";
+import { Effect, Exit, Layer, Result, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { type CallExpression, type Expression, parseSync, Visitor } from "oxc-parser";
 import { hostFiles } from "../../vitest.hostrun.ts";
@@ -90,7 +91,13 @@ const mutantsOf = (file: string, text: string) =>
   Effect.runPromise(
     Effect.gen(function* () {
       return yield* (yield* Mutants).make(file, text);
-    }).pipe(Effect.provide(layer({ root: ROOT, nice: 0 })), Effect.provide(NodeServices.layer)),
+    }).pipe(
+      // `make` runs no test file, so the guard has nothing to answer here.
+      Effect.provide(
+        layer({ root: ROOT, nice: 0 }).pipe(Layer.provide(Layer.succeed(Guard, { allow: () => Effect.void }))),
+      ),
+      Effect.provide(NodeServices.layer),
+    ),
   );
 
 describe("the plant catalog at head (decision 0600)", () => {

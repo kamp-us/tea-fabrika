@@ -17,13 +17,16 @@ import { readFileSync } from "node:fs";
 // code, which no Stryker mutator does, so it keeps its recorded one-time plant and is left out.
 //
 // This file is the repo's edge. The package holds no repo path and no host guard; this file hands it
-// the repo's settings and runs the repo's own guard (0594) on the law's test file first: a law that
-// starts a real resource never runs on a person's laptop, here or anywhere else.
+// the repo's settings and its own guard (0594), which the package asks about the test files Stryker
+// is about to run, whatever command line named them: a law that starts a real resource never runs on a
+// person's laptop, here or anywhere else.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { quality } from "@kalfa/quality/cli";
 import { plant } from "@kalfa/quality/stryker";
+import { Guard } from "@kalfa/quality/stryker/Guard";
+import { Refused } from "@kalfa/quality/stryker/Report";
 import { provider } from "@kalfa/quality/stryker/Settings";
-import { ConfigProvider, Effect, Schema } from "effect";
+import { Console, ConfigProvider, Effect, Layer } from "effect";
 import { Command } from "effect/cli";
 import { hostFiles } from "../../vitest.hostrun.ts";
 
@@ -100,43 +103,37 @@ const repo = { quality: { stryker: { catalog: import.meta.filename, nice: 15, ig
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-/** The run is refused here (0594): its law reaches a real resource and this machine is not one that may start it. */
-class HostOnly extends Schema.TaggedError<HostOnly, { readonly brand: unique symbol }>()("HostOnly", {
-  files: Schema.Array(Schema.String),
-}) {
-  override get message(): string {
-    return [
-      `Local host-only plant run refused (decision 0178). This plant's law reaches a real resource: ${this.files.join(", ")}`,
-      "Use eligible disposable CI for the selected laws (0594): gh workflow run plants.yaml -f plant=<name>.",
-    ].join("\n");
-  }
-}
-
-/** The test file a command line names, for the host guard: a plant's law, or `survey`'s `--law`. */
-const lawOf = (args: ReadonlyArray<string>) => {
-  const [, verb, subject] = args;
-  const flag = args.indexOf("--law");
-
-  return verb === "survey"
-    ? flag < 0
-      ? undefined
-      : args[flag + 1]
-    : catalog.find(({ name }) => name === subject)?.law.file;
-};
+/**
+ * The repo's host guard (0594), as the package asks for it: the test files Stryker is about to run,
+ * whatever command line named them. A file this machine may not start is refused with the same message
+ * the test runner prints.
+ */
+const guard = (env: Env, platform: NodeJS.Platform) =>
+  Layer.succeed(Guard, {
+    allow: (files) =>
+      Effect.try({
+        try: () => hostFiles(files, env, platform, (path) => readFileSync(path, "utf8")),
+        catch: () => Refused.make({ reason: "could_not_run", at: [] }),
+      }).pipe(
+        Effect.flatMap((refused) =>
+          refused.length === 0
+            ? Effect.void
+            : Console.error(
+                [
+                  `Local host-only plant run refused (decision 0178). This plant's law reaches a real resource: ${refused.join(", ")}`,
+                  "Use eligible disposable CI for the selected laws (0594): gh workflow run plants.yaml -f plant=<name>.",
+                ].join("\n"),
+              ).pipe(Effect.andThen(Effect.fail(Refused.make({ reason: "not_allowed", at: [] })))),
+        ),
+      ),
+  });
 
 /** One command line, `args` as typed after the script's name, with the environment and platform the guard and the settings read. */
 export const run = (args: ReadonlyArray<string>, env: Env, platform: NodeJS.Platform) =>
-  Effect.suspend(() => {
-    const law = lawOf(args);
-    // 0594: refuse here, with the same message the test runner prints, before anything starts.
-    const refused = law === undefined ? [] : hostFiles([law], env, platform, (path) => readFileSync(path, "utf8"));
-
-    return refused.length > 0
-      ? Effect.fail(new HostOnly({ files: refused }))
-      : Command.runWith(quality, { version: "0.0.0" })(args).pipe(
-          Effect.provide(ConfigProvider.layer(provider(env, repo))),
-        );
-  });
+  Command.runWith(quality, { version: "0.0.0" })(args).pipe(
+    Effect.provide(guard(env, platform)),
+    Effect.provide(ConfigProvider.layer(provider(env, repo))),
+  );
 
 if (import.meta.main) {
   NodeRuntime.runMain(

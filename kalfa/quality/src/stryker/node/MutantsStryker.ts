@@ -7,7 +7,9 @@
 // when a nice is set, a child process in the layer's scope, so the scope ends it and what it started.
 import { Console, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { Guard } from "../Guard.ts";
 import { Mutants } from "../Mutants.ts";
+import type { Options } from "../Options.ts";
 import { Refused, Report } from "../Report.ts";
 
 const stuck = () => new Refused({ reason: "could_not_run", at: [] });
@@ -56,6 +58,7 @@ export const layer = (where: { readonly root: string; readonly nice: number }) =
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const guard = yield* Guard;
       const from = (specifier: string) => path.fromFileUrl(new URL(import.meta.resolve(specifier)));
       const plugin = yield* from("@stryker-mutator/vitest-runner").pipe(Effect.orDie);
       // The bin is not among the package's exports; its package.json is.
@@ -69,34 +72,39 @@ export const layer = (where: { readonly root: string; readonly nice: number }) =
           { cwd: where.root, extendEnv: true, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
         );
 
+      /** Stryker on `options`: its config written, its bin run, its JSON report read back. */
+      const start = (options: Options) =>
+        Effect.gen(function* () {
+          const config = path.join(path.dirname(options.jsonReporter.fileName), "stryker.json");
+
+          yield* fs.writeFileString(config, JSON.stringify(options));
+
+          const handle = yield* spawner.spawn(command(config));
+
+          // Stryker's own words go to stderr, so a run that fails says why and stdout keeps the record line.
+          yield* handle.all.pipe(
+            Stream.decodeText(),
+            Stream.splitLines,
+            Stream.runForEach((line) => Console.error(line)),
+          );
+          yield* handle.exitCode;
+
+          const text = yield* fs.readFileString(options.jsonReporter.fileName);
+
+          return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Report))(text);
+        }).pipe(Effect.scoped, Effect.mapError(stuck));
+
       return {
         plugin,
+        node: process.version,
         make: (file, text) =>
           instrument(file, text).pipe(
             Effect.map((mutants) =>
               mutants.map(({ mutatorName, replacement, location }) => ({ mutatorName, replacement, location })),
             ),
           ),
-        run: (options) =>
-          Effect.gen(function* () {
-            const config = path.join(path.dirname(options.jsonReporter.fileName), "stryker.json");
-
-            yield* fs.writeFileString(config, JSON.stringify(options));
-
-            const handle = yield* spawner.spawn(command(config));
-
-            // Stryker's own words go to stderr, so a run that fails says why and stdout keeps the record line.
-            yield* handle.all.pipe(
-              Stream.decodeText(),
-              Stream.splitLines,
-              Stream.runForEach((line) => Console.error(line)),
-            );
-            yield* handle.exitCode;
-
-            const text = yield* fs.readFileString(options.jsonReporter.fileName);
-
-            return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Report))(text);
-          }).pipe(Effect.scoped, Effect.mapError(stuck)),
+        // The host is asked about the test files Stryker is about to run, once, right before it runs them.
+        run: (options) => guard.allow(options.testFiles).pipe(Effect.andThen(start(options))),
       };
     }),
   );

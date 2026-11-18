@@ -12,6 +12,7 @@ import { Console, Effect, FileSystem, Path, Predicate, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import * as MutantsStryker from "./stryker/node/MutantsStryker.ts";
 import { Catalog } from "./stryker/Plant.ts";
+import { Answer } from "./stryker/Report.ts";
 import * as Run from "./stryker/Run.ts";
 import * as Settings from "./stryker/Settings.ts";
 
@@ -84,7 +85,7 @@ const plant = Command.make(
     yield* Console.log(text);
     yield* keep(out, text);
 
-    if (line.answer._tag !== "killed") {
+    if (!Answer.guards.killed(line.answer)) {
       return yield* new Unproven({ plant: name, answer: line.answer._tag });
     }
   }),

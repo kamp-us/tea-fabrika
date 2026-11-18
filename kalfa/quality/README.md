@@ -76,6 +76,10 @@ node .github/ci/plants.ts stryker survey .agents/skills/lead/scripts/boxnode.ts 
   --law .agents/skills/lead/scripts/flow/host.test.ts --from 120 --to 135
 ```
 
+The package holds no host rule of its own, but a host must give it one: the real layer asks the `Guard`
+service about the test files it is about to run, right before it runs them, and a refusal
+(`not_allowed`) stops the run. No command line, in any order or spelling, reaches Stryker unasked.
+
 On disposable CI, `gh workflow run plants.yaml --ref <branch> -f plant=host-pnpm-path`. The package's
 `./cli` export is an `effect/cli` command named `quality`, which a future `kalfa` finds through the
 `kalfa.cli` field of this `package.json` (0585).
@@ -108,7 +112,8 @@ makes a plant answer at all, and the report path and sandbox folder are a scoped
 | `src/stryker/Options.ts` | pure: Stryker's options for one target |
 | `src/stryker/Report.ts` | pure: read the JSON report, decide the answer, write the record |
 | `src/stryker/Mutants.ts` | the service contract: make mutants, run Stryker |
-| `src/stryker/node/MutantsStryker.ts` | the real layer: Stryker's instrumenter and its own bin |
+| `src/stryker/Guard.ts` | the service contract: the host says whether this machine may start the test files about to run |
+| `src/stryker/node/MutantsStryker.ts` | the real layer: Stryker's instrumenter and its own bin; asks the `Guard` right before it runs |
 | `src/stryker/MutantsMemory.ts` | the stand-in the laws run on |
 | `src/stryker/Run.ts` | `plant` and `survey` |
 | `src/cli.ts` | the `quality` command |

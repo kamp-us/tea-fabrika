@@ -81,6 +81,7 @@ export class Refused extends Schema.TaggedError<Refused, { readonly brand: uniqu
     "ambiguous",
     "within_not_once",
     "needs_in_place",
+    "not_allowed",
     "could_not_run",
   ]),
   /** Every place the shape matched, for `ambiguous`; empty for the others. */

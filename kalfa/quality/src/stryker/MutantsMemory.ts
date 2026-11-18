@@ -26,6 +26,7 @@ export const make = (script: {
     calls,
     layer: Layer.succeed(Mutants, {
       plugin: "/plugins/vitest-runner.js",
+      node: "v0.0.0",
       make: (file, text) =>
         Effect.sync(() => {
           calls.made.push({ file, text });

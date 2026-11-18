@@ -25,6 +25,8 @@ export class Mutants extends Context.Service<
   {
     /** Where the vitest runner plugin is, as a path Stryker can load. */
     readonly plugin: string;
+    /** The Node version Stryker runs on, for the record line. */
+    readonly node: string;
     /** Every mutant Stryker makes on the whole of `text`, a file named `file`. Nothing runs. */
     readonly make: (file: string, text: string) => Effect.Effect<ReadonlyArray<Made>, Refused>;
     /** Stryker on `options`, its JSON report read back. Fails as `could_not_run` when it never started or wrote none. */
