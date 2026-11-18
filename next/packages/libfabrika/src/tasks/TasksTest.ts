@@ -236,6 +236,18 @@ export const BAD_EXECUTOR: ReadonlyArray<readonly [string, unknown]> = [
   ["build", MISSING],
 ];
 
+/** Invalid executions for `started` and `finish`, one per pick: empty text, a number, `null`, nothing. Boxed, as `choose` refuses an `undefined` item. */
+const BAD_EXECUTION: ReadonlyArray<readonly [unknown]> = [[""], [7], [null], [undefined]];
+
+/** Invalid replacements for each field a collection decodes, one per pick. */
+const BAD_COLLECTION: ReadonlyArray<readonly [string, unknown]> = [
+  ["process", ""],
+  ["process", "not-a-process"],
+  ["process", MISSING],
+  ["letter", ""],
+  ["letter", MISSING],
+];
+
 export const BAD_RESULT: ReadonlyArray<readonly [string, unknown]> = [
   ["_tag", "succeeded"],
   ["_tag", MISSING],
@@ -321,7 +333,10 @@ type Move =
   | "collect_again"
   | "collect_conflict"
   | "collect_other"
-  | "collect_early";
+  | "collect_early"
+  | "start_bad"
+  | "finish_bad"
+  | "collect_bad";
 
 type Phase = "requested" | "assigned" | "started" | "finished" | "collected";
 
@@ -483,6 +498,9 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
     collect_conflict: collected,
     collect_other: done,
     collect_early: requested || assigned || started,
+    start_bad: any,
+    finish_bad: any,
+    collect_bad: any,
   };
 
   return Arr.filter(moves, (move) => can[move]);
@@ -815,6 +833,32 @@ const walk = (
           break;
         }
 
+        case "start_bad":
+        case "finish_bad": {
+          // A saved task in any phase, so no state refusal can answer before the decode does.
+          const saved = on(["requested", "assigned", "started", "finished", "collected"]);
+          // SAFETY: the execution is broken on purpose, so the law sees the store refuse it.
+          const [execution] = choose(BAD_EXECUTION, cell.variant) as readonly [string];
+
+          const answer =
+            move === "start_bad"
+              ? yield* tasks((j) => j.started(saved.request.id, execution, recorded))
+              : yield* tasks((j) => j.finish(saved.request.id, execution, cell.result, recorded));
+
+          refused(answer, "a start or a finish whose execution does not decode", "bad_input");
+          break;
+        }
+
+        case "collect_bad": {
+          const saved = on(["requested", "assigned", "started", "finished", "collected"]);
+          const good = { process: saved.request.process, letter: `${saved.request.id}/answer` };
+          // SAFETY: the collection is broken on purpose, so the law sees the store refuse it.
+          const collection = broken(good, cell.variant, BAD_COLLECTION) as Collection;
+          const answer = yield* tasks((j) => j.collected(saved.request.id, collection, recorded));
+          refused(answer, "a collect whose collection does not decode", "bad_input");
+          break;
+        }
+
         case "cut_before":
         case "cut_after": {
           fault.at = move === "cut_before" ? "before" : "after";
@@ -1064,6 +1108,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       open,
       [...LIFE, "bad"],
       ["bad", "request_new", "take_ok"],
+    );
+    // Plants (run once, never kept): `started` or `collected` keeps `Msg.cases.<case>.make` and throws; a `badInput`
+    // that answers `storage` instead of `bad_input`.
+    prop(
+      "L8b: a start, finish or collect whose execution or collection does not decode is refused bad_input and changes no task",
+      open,
+      [...LIFE, "collect_ok", "start_bad", "finish_bad", "collect_bad"],
+      ["start_bad", "finish_bad", "collect_bad", "take_ok", "reopen"],
     );
     prop(
       "J2: a collected event survives reopen; an equal retry answers the first receipt; a different collection is refused and writes nothing",
