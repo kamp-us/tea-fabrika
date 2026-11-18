@@ -636,9 +636,10 @@ describe("the real rule file on planted trees", () => {
 
   // scenario: the plan's plant for "no module imports another module on its own layer". `next-access`
   // is put on the runtime's layer (6 since T953): an import from the runtime to access, which went
-  // down, must now fail. Only access's pairs with the runtime and with `next-tezgah`, its neighbor on
-  // layer 5 (Desk S2a), change: tezgah's import of access, sideways before, is now upward, and
-  // access's import of tezgah now goes down and passes.
+  // down, must now fail. Only access's pairs with the runtime, with `next-email` (P36, also on layer
+  // 6) and with `next-tezgah`, its neighbor on layer 5 (Desk S2a), change: email and access go
+  // sideways both ways, tezgah's import of access, sideways before, is now upward, and access's
+  // import of tezgah now goes down and passes.
   it.effect("scenario: a module put beside the runtime refuses an import from the runtime", () =>
     Effect.gen(function* () {
       const realTree = yield* plantedReal;
@@ -652,11 +653,14 @@ describe("the real rule file on planted trees", () => {
       const after = rowEdges(realTree, { ...REAL, layers: beside });
       expect(after).toEqual(expectedEdges(beside));
       expect(Arr.filter(after, (edge) => !before.includes(edge))).toEqual([
+        "next-access -> next-email [sideways]",
         "next-access -> next-runtime [sideways]",
+        "next-email -> next-access [sideways]",
         "next-runtime -> next-access [sideways]",
         "next-tezgah -> next-access [upward]",
       ]);
       expect(Arr.filter(before, (edge) => !after.includes(edge))).toEqual([
+        "next-access -> next-email [upward]",
         "next-access -> next-runtime [upward]",
         "next-access -> next-tezgah [sideways]",
         "next-tezgah -> next-access [sideways]",
