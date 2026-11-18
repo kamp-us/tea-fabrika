@@ -1,12 +1,12 @@
 ---
 id: 0463
-title: next/ is React Compiler compatible from day one, on oxc's native port with no Babel, and today's app follows the same rules as a tryout
-status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
+title: next/ is React Compiler compatible from day one, on oxc's native port with no Babel
+status: accepted
 date: 2026-11-02
 tags: [react, compiler, oxc, build, next, today]
 ---
 
-# 0463: next/ is React Compiler compatible from day one, on oxc's native port with no Babel, and today's app follows the same rules as a tryout
+# 0463: next/ is React Compiler compatible from day one, on oxc's native port with no Babel
 
 ```ts
 // A sketch, from experiment 195: one step that the build and `pnpm lint:compiler` both call.
@@ -32,8 +32,6 @@ with [experiment 195](../experiments/195-oxc-toolchain.md).
 
 **Every `next/` window is Compiler compatible from its first `.tsx` file.**
 
-- Today's app follows the same rules, as the owner's tryout. What it teaches goes to `next/`
-  rethought, never copied.
 - No Babel in the build. The Compiler runs on oxc's native port, `oxc-transform-react`, pinned
   exact and bumped with oxlint.
 - The Compiler's yardstick is our planted files plus a real window run, never Babel's output.

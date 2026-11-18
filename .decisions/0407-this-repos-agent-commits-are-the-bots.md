@@ -1,12 +1,12 @@
 ---
 id: 0407
-title: In this repo every agent commit, the lead's own included, is authored by fabrikalfa[bot] with the owner as co-author on a fabrikalfa branch, and pull requests open as the owner
-status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md)
+title: In this repo every agent commit, the lead's own included, is authored by fabrikalfa[bot] with the owner as co-author on a fabrikalfa branch, and pull requests open as the bot
+status: accepted
 date: 2026-11-08
 tags: [lead, git, github, bot]
 ---
 
-# 0407: In this repo every agent commit, the lead's own included, is authored by fabrikalfa[bot] with the owner as co-author on a fabrikalfa branch, and pull requests open as the owner
+# 0407: In this repo every agent commit, the lead's own included, is authored by fabrikalfa[bot] with the owner as co-author on a fabrikalfa branch, and pull requests open as the bot
 
 **What this decides:** how [0401](0401-agents-commit-as-the-fabrikalfa-bot.md) is used in this
 repo today.
@@ -24,7 +24,8 @@ From [agents commit as a bot](../docs/direction/agents-commit-as-a-bot.md), deci
   commits included.
 - It goes on a `fabrikalfa/<name>` branch, pushed with a token that lasts one hour
   (`botpush.mjs`, [0056](0056-lead-runs-a-refused-step-itself.md)).
-- Pull requests still open as the owner.
+- Pull requests open as the bot ([0405](0405-pull-requests-open-as-person-or-bot.md)'s setting, set to
+  the bot for this repo).
 - A repo where the app is not installed is not covered.
 
 ## Consequences
