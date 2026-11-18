@@ -1080,7 +1080,8 @@ describe("measured", () => {
 // run named it; `jobs` maps each run's leg to its job id, because GitHub drops job logs after 90
 // days. Related leg 7 of run A, the second tooling leg, has no log in hand. This fixed snapshot
 // copies the observations, never the table's computed weights. The two Toml settings files are in no
-// sample: their rows are not this table's to move.
+// sample: their rows are not this table's to move. exam/no-promises.integration.test.ts's samples went
+// when 0591 moved its laws to oxlint-plugins/, with its full row.
 type Run = "A" | "B" | "C";
 const RUNS: readonly Run[] = ["A", "B", "C"];
 
@@ -1278,7 +1279,6 @@ const fullSamples: {
       B: ["tests-5", 101.0],
       C: ["tests-5", 101.1],
     },
-    "next/apps/fabrika/src/exam/no-promises.integration.test.ts": { A: ["related-4", 32.9], C: ["tests-4", 41.2] },
     "next/apps/fabrika/src/hands-launcher.integration.test.ts": { A: ["related-3", 39.5], C: ["tests-5", 49.2] },
     "next/apps/fabrika/src/input-recording.integration.test.ts": { A: ["related-4", 45.3], C: ["tests-4", 46.9] },
     "next/apps/fabrika/src/instance-one-file.integration.test.ts": { A: ["related-5", 34.1], B: ["tests-3", 49.2] },
