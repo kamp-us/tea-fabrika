@@ -53,4 +53,4 @@ is a projection of the left side.**
 - Not decided here: whether a piped value is always a list, how the reader folds chunks, and how
   the end of output is said. The note holds those as the design.
 - [0553](0553-a-pipe-sends-one-way.md) settles the first: every value travels as a list underneath,
-  and no program sees it. The rest of this file still holds.
+  and no program sees it.
