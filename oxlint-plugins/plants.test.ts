@@ -987,9 +987,11 @@ const viGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; reado
       : files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }));
   });
 
+/** The folder one glob names, such as `next/apps/fabrika/e2e` for `next/apps/fabrika/e2e/*` or `<folder>/**`. */
+const folderOf = (glob: string): string => glob.replace(/\/\*\*(\/\*)?$|\/\*(\.ts)?$/, "");
+
 /** A test file of one folder glob's own, such as `next/apps/fabrika/e2e/**` or `<folder>/*.ts`. */
-const testPlantPath = (glob: string, file: string): string =>
-  `${glob.replace(/\/\*\*(\/\*)?$|\/\*(\.ts)?$/, "")}/${file}`;
+const testPlantPath = (glob: string, file: string): string => `${folderOf(glob)}/${file}`;
 
 describe("M1 of the mock sweep: every folder a vi-methods block lists refuses the vi mocks", () => {
   // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a
@@ -1111,8 +1113,10 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
       // leftover list block, blocking or warning, makes a fourth or a second list. Each of the three
       // base blocks has one copy right after it for libfabrika's files but its tests, with the two
       // `process` entries added (M13), so the order is each block and then its copy, and client/'s
-      // copy comes after the warn block's. The two last are the mock sweep's `vi` lock for the app's
-      // e2e folder (ticket 1067), which write out the ban's entries again for the set each of its
+      // copy comes after the warn block's. Between the warn blocks and client/ sit the `vi` lock's two blocks
+      // for the libfabrika folders at zero (V1): they write out again the entries their folders took, at
+      // error, so no list of leftovers is among them. The two last are the mock sweep's `vi` lock for the
+      // app's e2e folder (ticket 1067), which write out the ban's entries again for the set each of its
       // file sets takes: the warn block's for the folder's own files, `next/**/*`'s for `node/`.
       expect(
         Arr.map(blocks, ({ files: globs }) => (globs.length === 1 ? globs[0] : "a list of folders")),
@@ -1122,6 +1126,8 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
         "next/packages/libfabrika/src/**",
         "a list of folders",
         "a list of folders",
+        "next/packages/libfabrika/src/node/repositories/**",
+        "next/packages/libfabrika/src/node/repositories/**",
         "next/packages/libfabrika/src/client/**",
         "next/packages/libfabrika/src/client/**",
         "next/apps/fabrika/e2e/*",
@@ -1137,7 +1143,7 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
 
           return Arr.isArray(setting) ? setting[0] : setting;
         }),
-      ).toEqual(["deny", "deny", "warn", "warn", "deny", "deny", "warn", "deny"]);
+      ).toEqual(["deny", "deny", "warn", "warn", "deny", "deny", "deny", "deny", "warn", "deny"]);
     });
   }, 120_000);
 });
@@ -1257,6 +1263,112 @@ describe("M12 and M13 (decision 0592): libfabrika writes output through Effect's
 
       for (const { plant, left, file } of planted) {
         expect(refusedIn(current, file, plant.code), file).toEqual(left ? [] : textOf(plant).want);
+      }
+    });
+  }, 180_000);
+});
+
+describe("V1 of the vi lock (decisions 0555, 0579): every folder of every block that sets the vitest rule holds it, and loses no entry", () => {
+  // V1. scenario: the repo's own config, read by oxlint's own --print-config. Each glob of each block that
+  // sets `vitest/no-restricted-vi-methods` gets a product file, a test-support file and a test file, each with
+  // the `vi` lines of VI_METHODS and VI_PROPERTIES. A line is held when either plant's rule refuses it, which
+  // is the pair. A block's options replace an earlier block's, so a folder that joins the lock must carry the
+  // entries it took before: REFLECT and TAGGED_ERROR everywhere, a JSON.parse line in next/ (blocking, since
+  // the lock's folders are at zero), and the two `process` entries in libfabrika's files but its `*.test.ts`
+  // (M13). No entry is lost, and none is gained.
+  // Plants: (a) drop the folder from the lock's `files`, and its lines are not held, red on the coverage;
+  // (b) drop the `vi` entries from `eslint/no-restricted-properties` in its blocks, and the chained lines are
+  // not held; (c) delete the `JSON.parse` entry or a `process` entry from one block, and that entry's line is
+  // not refused in that folder; (d) add the folder to the existing `oxlint-plugins/**` block instead, and the
+  // JSON.parse and `process` lines are not refused.
+  it("scenario: V1 the vi lines are held in a test, test-support and product path of each locked folder, and its other entries are kept", () => {
+    inConfigCopy(({ printed, lintFiles }) => {
+      const globs = Arr.dedupe(
+        Arr.flatMap(printed.overrides, ({ files, rules }) =>
+          rules["vitest/no-restricted-vi-methods"] === undefined ? [] : files,
+        ),
+      );
+
+      // Coverage: the tooling's folder, and the libfabrika folder that joined with node/repositories.
+      expect(globs).toEqual(expect.arrayContaining(["oxlint-plugins/**", `${LIBFABRIKA_SRC}/node/repositories/**`]));
+
+      const folders = Arr.dedupe(Arr.map(globs, folderOf));
+
+      const parse: Plant = {
+        code: PROCESS_OUTPUT.code,
+        prelude: [],
+        lines: [['export const parsed = JSON.parse("{}");', true]],
+      };
+
+      // What a folder's file took before the lock: the entry's plant, and whether that file took it.
+      const kept: ReadonlyArray<{
+        readonly plant: Plant;
+        readonly name: string;
+        readonly takes: (folder: string, kind: (typeof libfabrikaKinds)[number]) => boolean;
+      }> = [
+        { plant: REFLECT, name: "reflect", takes: () => true },
+        { plant: TAGGED_ERROR, name: "tagged", takes: () => true },
+        { plant: parse, name: "parse", takes: (folder) => Str.startsWith("next/")(folder) },
+        {
+          plant: PROCESS_OUTPUT,
+          name: "process",
+          takes: (folder, kind) => Str.startsWith(LIBFABRIKA_SRC)(folder) && !kind.left,
+        },
+      ];
+
+      const lock = [
+        { plant: VI_METHODS, code: "vitest(no-restricted-vi-methods)" },
+        { plant: VI_PROPERTIES, code: VI_PROPERTIES.code },
+      ];
+
+      const planted = Arr.flatMap(folders, (folder) =>
+        Arr.flatMap(libfabrikaKinds, (kind) => [
+          { folder, kind, name: "vi", file: `${folder}/vi-${kind.name}`, text: textOf(VI_METHODS).text },
+          ...Arr.map(kept, (entry) => ({
+            folder,
+            kind,
+            name: entry.name,
+            file: `${folder}/${entry.name}-${kind.name}`,
+            text: textOf(entry.plant).text,
+          })),
+        ]),
+      );
+
+      // Coverage: every folder and kind has the vi lines and each kept entry's lines.
+      expect(planted).toHaveLength(folders.length * libfabrikaKinds.length * (kept.length + 1));
+      // The two vi plants hold the same lines in the same order, so one line number is one line of each.
+      expect(textOf(VI_METHODS).text).toEqual(textOf(VI_PROPERTIES).text);
+
+      const current = lintFiles(Object.fromEntries(Arr.map(planted, ({ file, text }) => [file, text])));
+      const held = [...new Set([...textOf(VI_METHODS).want, ...textOf(VI_PROPERTIES).want])].sort((a, b) => a - b);
+
+      for (const { folder, kind, name, file } of planted) {
+        if (name === "vi") {
+          const refused = [...new Set(Arr.flatMap(lock, ({ code }) => refusedIn(current, file, code)))].sort(
+            (a, b) => a - b,
+          );
+
+          expect(refused, file).toEqual(held);
+          continue;
+        }
+
+        const entry = kept.find((candidate) => candidate.name === name)!;
+        expect(refusedIn(current, file, entry.plant.code), file).toEqual(
+          entry.takes(folder, kind) ? textOf(entry.plant).want : [],
+        );
+      }
+
+      // The level a folder took the JSON.parse entry at is kept for the tooling's none, and a libfabrika lock
+      // folder is at zero for it, so it blocks there: an error, never a warning (advice.ts: a warn line with no
+      // fire fails). The app's e2e lock keeps the level of the block it writes out again, which L10 holds.
+      for (const { folder, name, file } of planted) {
+        if (name === "parse" && Str.startsWith(LIBFABRIKA_SRC)(folder)) {
+          const fires = Arr.filter(current, (d) => d.filename === file && d.code === parse.code);
+          expect(
+            Arr.map(fires, (d) => d.severity),
+            file,
+          ).toEqual(["error"]);
+        }
       }
     });
   }, 180_000);

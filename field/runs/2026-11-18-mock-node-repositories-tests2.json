@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-node-repositories-tests2",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1647",
+  "started": "2026-11-18T14:36:00-08:00",
+  "ended": "2026-11-18T14:58:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Tests step for the lock, laws V1 and V2 of docs/plan/quests/mock-node-repositories-PLAN.md, in next/ and our lint tooling (branch fabrikalfa/mock-node-repositories). The folder next/packages/libfabrika/src/node/repositories joins the vi lock (0555, 0579) as option (b): two new override blocks in .oxlintrc.json, written after the JSON.parse warn blocks, not added to the oxlint-plugins/** block. On main that folder's test files take the six entries of the JSON.parse warn block (Data.TaggedError, JSON.parse, Reflect get/set/has, globalThis.Reflect) at warn, and its other files take the eight entries of the M13 copy (those six plus process.stdout and process.stderr) at warn. The oxlint-plugins/** block holds five entries at error with no JSON.parse and no process entry, so joining it would lose JSON.parse for every file and both process entries for product files. So block one covers the whole folder (vitest rule, six entries, five vi entries) and block two, for its files but *.test.ts, writes the eight entries plus the five vi ones. Both are at error and not warn as the plan's sketch says: a warn line with no fire left in its folder fails pnpm lint (advice.ts, stale), and the folder has no JSON.parse fire. So JSON.parse is blocking there now; it was advice only. V1 is one new scenario in oxlint-plugins/plants.test.ts that reads --print-config, takes every glob of every block that sets vitest/no-restricted-vi-methods, plants a product, a test-support and a test path in each, and holds the vi lines (the union of VI_METHODS and VI_PROPERTIES) and each entry the folder took before (REFLECT, TAGGED_ERROR, a JSON.parse line, PROCESS_OUTPUT in libfabrika's files but its tests), including the JSON.parse severity. V2: the plain alias v.spyOn(console, \"log\") after import { vi as v } is refused by the vitest rule (a planted line of V1, in VI_LOCK). The alias with a chained call, v.spyOn(console, \"warn\").mockImplementation(...), is refused by neither half of the pair: it is planted as a line that passes with a comment, and the gap is a finding row (in the report; the lead saves it). L10 of the Reflect ban in plants.test.ts lists the blocks that hold the ban for next/ in order, so it now lists the two new blocks before client/. README row for the lock updated. No commit and no push in this run: another pull request owns .oxlintrc.json, so the changes stay uncommitted for the lead.",
+  "note": "Node 26.13.0 from the scratchpad was first on PATH. Commands: nice -n 15 pnpm exec vitest run --maxWorkers=3 oxlint-plugins/plants.test.ts oxlint-plugins/advice.test.ts (287 passed); each plant run with -t V1 on the same file; pnpm format; pnpm lint (oxlint: 0 blocking, 1222 advice; every part passed except lint:promise-types, which the kernel killed for memory while the parts ran in parallel, and pnpm -s lint:promise-types alone then reports 0 findings); node next/apps/fabrika/src/exam/ratchet.ts --base <merge-base> exits 0; node .github/ci/field-check.ts --local. No pnpm typecheck (not in this step; plants.test.ts types not checked by tsc here). Plan gaps: the plan sketches the lock block at warn, which fails pnpm lint through the stale check; the plan says the lock's block writes out only the JSON.parse entry, but non-test files also take the two process entries (M13). The started and ended times are approximate. After this step, the lead merged main with pull request 1648 (the app's e2e vi lock) in: the conflicts in builtin-plants.ts, the Diagnostics type and L10's comment and level list kept both sides; V1 now turns each glob into its folder with 1648's helper (so next/apps/fabrika/e2e/* is planted in e2e/) and checks the JSON.parse level is error only in libfabrika lock folders, since the e2e lock keeps the warn level its block writes out (L10 holds it). The README line stays out, held by pull request 1497. Rerun by the lead: plants.test.ts and advice.test.ts 289 passed, plant (a) red, pnpm lint 0 blocking.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "plants.test.ts: scenario: V1 the vi lines are held in a test, test-support and product path of each locked folder, and its other entries are kept",
+      "plant": "(a) drop next/packages/libfabrika/src/node/repositories/** from the lock's blocks: red on the coverage (expected [ 'oxlint-plugins/**' ] to deeply equal ArrayContaining{...})",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: scenario: V1 the vi lines are held in a test, test-support and product path of each locked folder, and its other entries are kept",
+      "plant": "(b) drop the five `vi` entries from eslint/no-restricted-properties in the folder's two blocks, vitest rule kept: red (repositories/vi-planted.ts: expected [ 4, 5, 6, 7, 8, 9, 10 ] to deeply equal [ 4, 5, 6, 7, 8, 9, 10, 11, 12 ]; the two chained lines are not refused)",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: scenario: V1 the vi lines are held in a test, test-support and product path of each locked folder, and its other entries are kept",
+      "plant": "(c1) delete the JSON.parse entry from the folder's first block: red (repositories/parse-planted.test.ts: expected [] to deeply equal [ 1 ])",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: scenario: V1 the vi lines are held in a test, test-support and product path of each locked folder, and its other entries are kept",
+      "plant": "(c2) delete the two `process` entries from the folder's second block: red (repositories/process-planted.ts: expected [] to deeply equal [ 2, 3, 4, 5, 6 ])",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: scenario: V1 the vi lines are held in a test, test-support and product path of each locked folder, and its other entries are kept",
+      "plant": "(d) option (a) of the brief instead: add the folder to the existing oxlint-plugins/** lock block and drop the folder's two blocks: red, the folder loses JSON.parse (repositories/parse-planted.ts: expected [] to deeply equal [ 1 ]) and the two process entries",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: scenario: V1 the vi lines are held in a test, test-support and product path of each locked folder, and its other entries are kept",
+      "plant": "(e, V2) turn the vitest rule to \"off\" in the folder's first block, properties entries kept: red, the two alias lines are not refused (repositories/vi-planted.ts: expected [ 4, 6, 8, 9, 10, 11, 12 ] to deeply equal [ 4, 5, 6, 7, 8, 9, 10, 11, 12 ]; lines 5 and 7 are v.fn() and v.spyOn(...))",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: scenario: V1 the vi lines are held in a test, test-support and product path of each locked folder, and its other entries are kept",
+      "plant": "with every plant undone (.oxlintrc.json restored by copy and compared): plants.test.ts and advice.test.ts, 287 passed",
+      "result": "green"
+    }
+  ]
+}
