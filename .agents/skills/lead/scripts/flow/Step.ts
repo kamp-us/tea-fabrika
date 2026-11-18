@@ -24,7 +24,9 @@ export const Step = Schema.TaggedUnion({
   check: fields,
   judge: fields,
 });
+
 export type Step = typeof Step.Type;
+
 export type Kind = Step["_tag"];
 
 /** Options a step may take: `lead` for a step only the lead session may run. */

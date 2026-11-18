@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-17",
+  "stage": "harness",
+  "kind": "success",
+  "person": false,
+  "primitive": null,
+  "id": "2026-11-17-host-runtime-fault-exercises",
+  "quests": [
+    "tea-fabrika#1132",
+    "tea-fabrika#1133"
+  ],
+  "what": "Today's lead-tooling host scenarios passed, caught two deliberate faults at their intended assertions, then passed after exact restoration. Omitting pinned-environment preparation failed the versions equality; eager runtime discovery failed the existing elapsed-time assertion.",
+  "cause": "The exact-source pin scenario caught the preparation omission at host.test.ts:194:70. The discovery scenario caught the eager probe at host.test.ts:327:38 after 30042.328345 ms, against its unchanged less-than-10000 assertion. Neither red was a test timeout or startup failure.",
+  "fix": "The runner restored bytes and mode and verified head, index and complete file inventory. The original source reader accepted both narrow exercises. Ignoring the requested pin, omitting the native pnpm directory and reversing pinned-environment precedence still need their own fault evidence; ticket 1132 stays open.",
+  "test": "Pin run 44051591073: baseline 69.897995 ms, intended failure 73.213198 ms, restored 71.420154 ms. Discovery run 44051809503: baseline 141.513782 ms, intended failure 30042.328345 ms, restored 140.349748 ms. Each phase selected one active scenario with 17 filtered siblings. Earlier exact-source run 44028863371 selected the whole host file: all 18 passed, no skipped or pending host test. The leg's one pending test was elsewhere.",
+  "limits": "The pin scenario uses controlled pnpm and Volta stand-ins; it does not prove real older Node installation. Discovery's passing phases reached no-command and dead-PID assertions, but its broken phase stopped at the elapsed assertion. The child responds to TERM; resistant-child escalation is not proved. These records are not branch proof or a whole-product review.",
+  "source": "a1a3297d13b75ec5c755a4c8af5a8887f3285f97",
+  "runner": "9a748e3c165390ed4a3ecd8133326b24a1874a50",
+  "originalHash": "a4558e8324155ac65d40830418da6a410883386161b8d3068aec3a39a4bb32e8",
+  "index": "fc7e1c94e8fc009ea74d60178cede872aee28173",
+  "cases": [
+    {
+      "case": "host-pin",
+      "editedHash": "8373e0405f8d94beeca6ae9db646ebcd125ad5eaa234627aa352e6683d1f9005",
+      "diffHash": "d4af7e126c97e80ea16d3fcc67cd0eb5aeae08f1526ca649a7adf51dfe8097cc"
+    },
+    {
+      "case": "host-discovery-timeout",
+      "editedHash": "9b61d239340afec5895d393824660b9bd58779dfc1cfd76c511751b9b0ef66d5",
+      "diffHash": "044155f7ee2346384cad7e81ba6a8f3352db408b3ed686e8df15d0eeb8c65b11"
+    }
+  ],
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44051591073",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44051809503",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44028863371",
+    "https://github.com/kamp-us/tea-fabrika/pull/1545",
+    "https://github.com/kamp-us/tea-fabrika/pull/1553"
+  ]
+}

@@ -10,14 +10,23 @@ import { stepper, Step, type Admission, type Prepared, type ProgramDown } from "
 import { Saved } from "./State.ts";
 
 const SEED = 119120;
+
 const noSavedModel: [number, null] = [0, null];
+
 const savedModel: [number, { count: number }] = [2, { count: 2 }];
+
 const refusalBoundary: [number, { count: number }] = [3, { count: 3 }];
+
 const aboveRefusal: [number, null] = [6, null];
+
 const nullReply: [fc.JsonValue, boolean, string] = [null, false, "bad"];
+
 const missingModel: [fc.JsonValue, boolean, string] = [{ model: {} }, false, "bad"];
+
 const malformedModel: [fc.JsonValue, boolean, string] = [{ _tag: "stepped", model: 1 }, false, "bad"];
+
 const rejectedReply: [fc.JsonValue, boolean, string] = ["reject", true, "bad"];
+
 const upgradeAndReply: [number, number, number, string] = [2, 7, 42, "bad"];
 
 const rejectedRpc = async (): Promise<never> => {
@@ -25,6 +34,7 @@ const rejectedRpc = async (): Promise<never> => {
 };
 
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.Struct({ type: Schema.Literal("inc") });
 
 const work = Cmd.make("work", {
@@ -71,11 +81,14 @@ describe("P13 split execution", () => {
 
             for (const n of tape) {
               const phase = n % 2 === 0 ? "fresh" : "update";
+
               const available =
                 history.length === 0 ? ["ok", "rpc", "decode", "missing"] : ["ok", "rpc", "decode", "missing", "retry"];
+
               const mode = available[Math.floor(n / 2) % available.length]!;
               reached.add(`${phase}:${mode}`);
               let composed = 0;
+
               const invoke = (f: () => Result.Result<unknown, unknown>) => {
                 if (mode === "rpc") {
                   return rejectedRpc();
@@ -87,10 +100,12 @@ describe("P13 split execution", () => {
 
                 return Result.getOrThrow(f());
               };
+
               const calls = {
                 init: async (s: unknown) => pure.init(s),
                 step: async (s: unknown, m: unknown) => {
                   composed++;
+
                   return pure.step(s, m);
                 },
                 fresh: async (s: unknown, m: unknown) => invoke(() => pure.fresh(s, m)),
@@ -151,6 +166,7 @@ describe("P13 split execution", () => {
               const node = nodeExecution(declared);
               const failure = yield* Effect.flip(node.step({ count: "invalid" }, { type: "inc" }));
               const rpc = async () => (mode === "checked" ? executionFailure(failure) : null);
+
               const remote = workerExecution({
                 init: rpc,
                 step: rpc,
@@ -218,6 +234,7 @@ describe("P12 Effect execution adapter", () => {
             Effect.gen(function* () {
               const pure = yield* Effect.fromResult(stepper(declared));
               const node: Execution = nodeExecution(declared);
+
               // Independent pure implementation stays in P11. RPC introduces a genuine async boundary.
               const remote: Execution = workerExecution({
                 init: async (saved: unknown) => pure.init(saved),
@@ -232,6 +249,7 @@ describe("P12 Effect execution adapter", () => {
                 upgrade: async (saved: unknown) => Saved.upgrade(saved, declared.state, "build-a"),
                 reply: rejectedRpc,
               });
+
               expect(yield* node.init(saved)).toEqual(pure.init(saved));
               expect(yield* remote.init(saved)).toEqual(pure.init(saved));
 
@@ -258,6 +276,7 @@ describe("P12 Effect execution adapter", () => {
               const node: Execution = nodeExecution(declared);
               expect(Exit.isFailure(yield* Effect.exit(node.init({ count: bad })))).toBe(true);
               const rpc = reject ? rejectedRpc : async () => answer;
+
               const remote: Execution = workerExecution({
                 init: rpc,
                 step: rpc,
@@ -305,6 +324,7 @@ describe("P12 Effect execution adapter", () => {
                 ],
               },
             };
+
             const node: Execution = nodeExecution(upgraded, "build-b");
             const saved = { v: 1, build: "build-a", after, model: { total: n } };
             expect(yield* node.upgrade(saved)).toEqual(Saved.upgrade(saved, upgraded.state, "build-b"));

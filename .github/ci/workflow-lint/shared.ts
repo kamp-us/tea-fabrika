@@ -67,6 +67,7 @@ export const compact = (value: unknown) => {
 
   const trimmed = value.trim();
   const expression = trimmed.startsWith("${{") && trimmed.endsWith("}}") ? trimmed.slice(3, -2).trim() : trimmed;
+
   // Keep quoted strings and names intact. Only operator spacing cannot change meaning.
   return expression.replace(
     /'(?:[^']|'')*'|\s*(==|!=|&&|\|\|)\s*/g,
@@ -87,6 +88,12 @@ export const classifier = { ...env, DRAFT: `\${{ github.event.pull_request.draft
 // false in the merge queue and on main.
 export const VISUAL_LABEL = "contains(github.event.pull_request.labels.*.name, 'visual')";
 
+export const VISUAL_ROUTE =
+  "(github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')";
+
+export const RELATED =
+  "(github.event_name == 'merge_group' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && steps.diff.outputs.check != 'false'";
+
 // The token changes' classify step reads.
 export const TOKEN = `\${{ github.token }}`;
 
@@ -105,18 +112,21 @@ export const chromium =
 // The next job's machines. Each is a string, so a workflow `if` compares a string with a string.
 // The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
 // vitest.shards.test.ts (E4) pins N from measured seconds. The matrix is changes' size step's
-// `shards`, else its fallback: the full matrix on a pull request with the `visual` label, and the
-// vitest legs alone everywhere else, the merge queue and main among them (0536, legs.ts).
+// `shards`, else its fallback: the full matrix on the PR, queue and main line, and the
+// vitest legs alone on other events.
 export const E2E_PREFIX = "e2e-";
 
 export const ON_E2E = `startsWith(matrix.shard, '${E2E_PREFIX}')`;
+
 // Chromium is fetched only once a visual file exists.
 export const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
+
 const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
 const parsed = (text: string | undefined): unknown[] => {
   try {
     const value: unknown = JSON.parse(text ?? "");
+
     return Array.isArray(value) ? value : [];
   } catch {
     return [];
@@ -129,10 +139,11 @@ const parsed = (text: string | undefined): unknown[] => {
  */
 export const fallbacks = (job: Record<string, unknown>) => {
   const found = FALLBACKS.exec(compact(map(map(job["strategy"])["matrix"])["shard"]));
+
   return { when: found?.[1] ?? "", full: parsed(found?.[2]), plain: parsed(found?.[3]) };
 };
 
-/** The full fallback's legs: what a pull request with the `visual` label runs unsized. */
+/** The full fallback includes visual and in-memory legs. */
 export const legs = (job: Record<string, unknown>): unknown[] => fallbacks(job).full;
 
 /** The legs that run vitest: the ones written as a quoted whole number. */

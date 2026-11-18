@@ -1,11 +1,12 @@
 // L13 guard, next/. A host test never signals a group it does not own, and never group 0 or 1.
 // Plants: drop `row.group > 1`; drop the leader check; let a root of 1 through.
 import { expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as ProcessGroups from "./ProcessGroups.test-support.ts";
 
 const id = fc.integer({ min: -2, max: 40 });
+
 const rows = fc.array(fc.record({ pid: id, parent: id, group: id }), { maxLength: 60 });
 
 it("property: no table and no root yields a group of 1 or below", () => {
@@ -47,6 +48,7 @@ it("vector: the 2026-11-13 run, a service caught in launchd's group 1, keeps onl
     { pid: 72440, parent: 1, group: 1 },
     { pid: 72448, parent: 72440, group: 72448 },
   ];
+
   expect(ProcessGroups.descendants(table, 72440)).toEqual([72448]);
 });
 
@@ -58,6 +60,7 @@ it("scenario: a service that leads its own group, with a child in it and a child
     { pid: 902, parent: 900, group: 902 },
     { pid: 950, parent: 1, group: 950 },
   ];
+
   expect([...ProcessGroups.descendants(table, 900)].sort()).toEqual([900, 902]);
 });
 

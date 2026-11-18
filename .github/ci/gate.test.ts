@@ -18,8 +18,11 @@ import * as gate from "./gate.mjs";
 // `io` is { send, sleep, now }: the fetch, the wait between tries and the clock, each defaulting
 // to the real one.
 const options = { seed: 119120, numRuns: 100 };
+
 const MINUTE = 60_000;
+
 const BASE = Date.parse("2026-11-15T14:00:00Z");
+
 /** A time `minutes` after BASE, as GitHub writes one. */
 const at = (minutes: number) => new Date(BASE + minutes * MINUTE).toISOString();
 
@@ -45,14 +48,20 @@ type Run = {
 };
 
 type Init = { method?: string; headers?: Record<string, string>; signal?: unknown };
+
 type Call = { url: string; auth: string | undefined; signal: unknown };
+
 /** How one call fails: a status GitHub answers with, or a call that ran into its time limit. */
 type Failure = 500 | 403 | "timeout";
 
 const API = "https://api.example";
+
 const TOKEN = "ghs_made-up-token";
+
 const HEAD = "a".repeat(40);
+
 const OLD = ["b".repeat(40), "c".repeat(40)];
+
 const BRANCH = "fabrikalfa/probe";
 
 /** One call the gate makes, with every try of it: a try right after a failed try of the same URL. */
@@ -68,6 +77,7 @@ const github = (
 ) => {
   const calls: Call[] = [];
   const asks: Ask[] = [];
+
   const answer = (status: number, json: unknown) =>
     Promise.resolve({ ok: status < 300, status, json: () => Promise.resolve(json) });
 
@@ -103,6 +113,7 @@ const github = (
       }
 
       const status = query.get("status");
+
       const found = runs
         .filter(
           (run) =>
@@ -112,8 +123,10 @@ const github = (
             (status === null || run.status === status || run.conclusion === status),
         )
         .toSorted((a, b) => b.id - a.id);
+
       const size = Math.min(Number(query.get("per_page") ?? 30), 100);
       const page = Number(query.get("page") ?? 1);
+
       return answer(200, {
         total_count: found.length,
         workflow_runs: found.slice((page - 1) * size, page * size).map(({ jobs: _, ...run }) => run),
@@ -122,6 +135,7 @@ const github = (
 
     const jobs = /^actions\/runs\/(\d+)\/jobs$/.exec(path);
     const run = jobs === null ? undefined : runs.find((r) => r.id === Number(jobs[1]));
+
     return run === undefined
       ? answer(404, { message: "Not Found" })
       : answer(200, { total_count: run.jobs.length, jobs: run.jobs });
@@ -146,10 +160,13 @@ const envOf = (event: Event, sha: string, gap: number, token = TOKEN, ref = "ref
 /** No real wait between tries: each wait is recorded. */
 const waits = () => {
   const asked: number[] = [];
+
   const sleep = (ms: number) => {
     asked.push(ms);
+
     return Promise.resolve();
   };
+
   return { asked, sleep };
 };
 
@@ -171,9 +188,11 @@ const job = (name: string, conclusion: string | null, start: number | null, end:
 const jobsOf = (kind: "full" | "skipped" | "gate failed", start: number, gated: boolean): Job[] => {
   if (kind === "full") {
     const legs = gated ? start + 0.5 : start;
+
     const [e2e, next, tooling] = gated
       ? ["tests (e2e-1)", "tests (1)", "tests (tooling-1)"]
       : ["next (e2e-1)", "next (1)", "tooling (1)"];
+
     return [
       ...(gated ? [job("gate", "success", start, start + 0.5)] : []),
       job(e2e, "success", legs + 0.2, legs + 9),
@@ -243,6 +262,7 @@ it("G1 property: decide starts every hand start, and on a push or the catch-up s
               : since < gap * MINUTE
                 ? { _tag: "skip", reason: "too_soon" }
                 : { _tag: "start", reason: "due" };
+
         expect(decision).toEqual(expected);
       },
     ),
@@ -288,6 +308,7 @@ const runsOf = (
   const done = list.map((r, i): Run => {
     const created = i * 30;
     const conclusion = r.kind === "skipped" ? "success" : r.kind === "gate failed" ? "failure" : r.conclusion;
+
     return {
       id: 100 + i,
       head_branch: r.branch,
@@ -299,7 +320,9 @@ const runsOf = (
       jobs: jobsOf(r.kind, created + r.waited, r.gated || r.kind !== "full"),
     };
   });
+
   const now = list.length * 30;
+
   return [
     ...done,
     {
@@ -329,6 +352,7 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
       async (list, event, gap) => {
         const runs = runsOf(list);
         const { calls, send } = github(runs);
+
         const seen = await gate.read(envOf(event, HEAD, gap), {
           send,
           sleep: waits().sleep,
@@ -338,6 +362,7 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
         const mains = runs
           .filter((r) => r.head_branch === "main" && r.status === "completed")
           .toSorted((a, b) => b.id - a.id);
+
         const first = mains.findIndex((r) => r.jobs.some(isLeg));
         const walked = first === -1 ? mains : mains.slice(0, first + 1);
         const full = first === -1 ? undefined : mains[first];
@@ -361,6 +386,7 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
         const lists = calls
           .map((c) => new URL(c.url))
           .filter((u) => u.pathname.endsWith("/actions/workflows/scheduled.yaml/runs"));
+
         expect(lists).toHaveLength(2);
         expect(
           lists.every((u) => u.searchParams.get("branch") === "main" && u.searchParams.get("status") === "completed"),
@@ -371,8 +397,10 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
         // the head.
         const asked = calls.flatMap((c) => {
           const m = /\/actions\/runs\/(\d+)\/jobs$/.exec(new URL(c.url).pathname);
+
           return m === null ? [] : [Number(m[1])];
         });
+
         expect(walked.every((r) => asked.includes(r.id))).toBe(true);
         expect(asked.every((id) => walked.some((r) => r.id === id) || atHead.some((r) => r.id === id))).toBe(true);
         // Each run's jobs are read once: the head's runs that the walk read are not read again
@@ -425,7 +453,9 @@ type Ran = { id: number; event: Event; branch: string; sha: string; created: num
 const simulate = async (list: readonly Asked[], gap: number, minute: number, fires: (hour: number) => boolean) => {
   const runs: Run[] = [];
   const { send } = github(runs);
+
   type Queued = { event: Event; branch: string; created: number; length: number; sha?: string };
+
   const queued: Queued[] = [];
   let time = 0;
   let pushes = 0;
@@ -461,6 +491,7 @@ const simulate = async (list: readonly Asked[], gap: number, minute: number, fir
 
   const headAt = (minute: number) =>
     order.filter(({ q }) => q.event === "push" && q.created <= minute).at(-1)?.q.sha ?? "push-0";
+
   const ran: Ran[] = [];
   let free = 0;
 
@@ -470,6 +501,7 @@ const simulate = async (list: readonly Asked[], gap: number, minute: number, fir
     const begin = Math.max(q.created, free);
     // The runs behind this one are in the list too, still queued, with no jobs yet.
     const behind = order.slice(index + 1).filter(({ q: later }) => later.created <= begin);
+
     const waiting = behind.map(({ q: later }, k): Run => ({
       id: id + 1 + k + order.length,
       head_branch: later.branch,
@@ -480,6 +512,7 @@ const simulate = async (list: readonly Asked[], gap: number, minute: number, fir
       created_at: at(later.created),
       jobs: [],
     }));
+
     const self: Run = {
       id,
       head_branch: q.branch,
@@ -490,13 +523,16 @@ const simulate = async (list: readonly Asked[], gap: number, minute: number, fir
       created_at: at(q.created),
       jobs: [job("gate", null, begin, null)],
     };
+
     runs.push(self, ...waiting);
     const ref = q.branch === "main" ? "refs/heads/main" : `refs/heads/${q.branch}`;
+
     const result = await gate.main(envOf(q.event, sha, gap, TOKEN, ref), {
       send,
       sleep: waits().sleep,
       now: () => BASE + begin * MINUTE,
     });
+
     runs.splice(runs.length - waiting.length, waiting.length);
 
     if (result.code !== 0) {
@@ -598,11 +634,13 @@ it("G4 property: [secrets] the token goes only in the authorization header, and 
         const env = envOf(event, HEAD, 60, secret);
         const io = { send, sleep: waits().sleep, now: () => BASE + 9999 * MINUTE };
         const result = await gate.main(env, io);
+
         const thrown = await gate.read(env, io).then(
           () => "",
           (error: unknown) =>
             error instanceof Error ? `${error.name} ${error.message} ${String(error.stack)}` : String(error),
         );
+
         const forms = [secret, encodeURIComponent(secret), encodeURI(secret)];
         const outputs = { output: result.output, summary: result.summary, line: result.line, thrown };
 
@@ -653,10 +691,13 @@ it("G5 property: a call that fails is tried 3 times, and after the third failure
       async (list, event, plan) => {
         const runs = runsOf(list);
         const planOf = (index: number) => plan[index % plan.length]!;
+
         const { calls, asks, send } = github(runs, (index, attempt) => {
           const [fails, how] = planOf(index);
+
           return attempt < fails ? how : undefined;
         });
+
         const { asked, sleep } = waits();
         const result = await gate.main(envOf(event, HEAD, 60), { send, sleep, now: () => BASE + 9999 * MINUTE });
         let gaveUp = false;
@@ -728,12 +769,15 @@ it("G6 property: after K runs at the head whose gate said false, the gate makes 
           gated: true,
         })),
       ];
+
       const { calls, send } = github(runsOf(list));
+
       const result = await gate.main(envOf(event, HEAD, 60), {
         send,
         sleep: waits().sleep,
         now: () => BASE + 9999 * MINUTE,
       });
+
       expect(result.code).toBe(0);
       expect(calls).toHaveLength(k + 3);
     }),
@@ -748,6 +792,7 @@ const stepLimit = (() => {
   const workflow = parse(readFileSync(new URL("../workflows/scheduled.yaml", import.meta.url), "utf8"));
   const steps: { id?: string; "timeout-minutes"?: unknown }[] = workflow?.jobs?.gate?.steps ?? [];
   const limit = steps.find((step) => step.id === "decide")?.["timeout-minutes"];
+
   return typeof limit === "number" ? limit * MINUTE : Number.NaN;
 })();
 
@@ -767,6 +812,7 @@ it("G7 property: a gate whose calls would run past its step's time limit stops b
       fc.integer({ min: 100, max: 10_000 }),
       async (list, quiet, event, cost) => {
         let clock = BASE;
+
         const skipped = {
           kind: "skipped" as const,
           branch: "main",
@@ -776,15 +822,21 @@ it("G7 property: a gate whose calls would run past its step's time limit stops b
           waited: 0,
           gated: true,
         };
+
         const fake = github(runsOf([...list, ...Array.from({ length: quiet }, () => skipped)]));
+
         const send = (url: string, init?: Init) => {
           clock += cost;
+
           return fake.send(url, init);
         };
+
         const sleep = (ms: number) => {
           clock += ms;
+
           return Promise.resolve();
         };
+
         const result = await gate.main(envOf(event, HEAD, 60), { send, sleep, now: () => clock });
         const lines = result.output.split("\n").filter((l: string) => /^start=/.test(l));
 

@@ -4,17 +4,20 @@
 // the queue, `brain.records.sqlite`, delete it (`send` in `telemetry/Sink.ts`). A read that took
 // the records before the queue lost a span to a flush between the two: that turned L17 red on CI
 // run 43766158547. Each race here is certain, not timed.
-import { DatabaseSync } from "node:sqlite"; // edge: real SQLite files, as the brain and its records keep them
+import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { rebuildSpans, spanOutputs } from "./reload.test-support.ts";
 
 const SEED = 119120;
+
 const QUEUE = "brain.records.sqlite";
+
 // One sorts before the queue's file and one after, so no law leans on the listing's order.
 const RECORDS = [".alchemy/record.sqlite", "records/record.sqlite"] as const;
 
@@ -43,14 +46,19 @@ const rebuild = (spanId: string): SpanRow => ({
   ok: true,
 });
 
-/** Runs `work` on the SQLite file at `file`, made with its folder when it is not there yet. */
+/**
+ * Runs `work` on the SQLite file at `file`, made with its folder when it is not there yet. The file
+ * stands for one the brain or a record owns, so `TestDatabase.open` sets nothing and each writer sets
+ * its owner's pragmas itself.
+ */
 const withDatabase = Effect.fnUntraced(function* (file: string, work: (db: DatabaseSync) => void) {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(file.slice(0, file.lastIndexOf("/")), { recursive: true });
-  yield* Effect.acquireUseRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => work(db)),
-    (db) => Effect.sync(() => db.close()),
+  yield* Effect.scoped(
+    TestDatabase.open(file).pipe(
+      Effect.orDie,
+      Effect.flatMap((db) => Effect.sync(() => work(db))),
+    ),
   );
 });
 
@@ -146,6 +154,7 @@ describe("spanOutputs", () => {
                 }
 
                 let listings = 0;
+
                 const fs: FileSystem.FileSystem = {
                   ...real,
                   glob: (pattern, options) =>
@@ -162,6 +171,7 @@ describe("spanOutputs", () => {
                       return yield* real.glob(pattern, options);
                     }),
                 };
+
                 const outputs = yield* spanOutputs(home).pipe(Effect.provideService(FileSystem.FileSystem, fs));
 
                 expect(listings, "the flush landed during the read").toBeGreaterThanOrEqual(at);

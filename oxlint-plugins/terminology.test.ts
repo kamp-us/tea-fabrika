@@ -34,6 +34,7 @@ const OLD = [
 ] as const;
 
 const APP = "next/apps/fabrika/src/plant";
+
 const SRC = "next/packages/libfabrika/src";
 
 const file = (...lines: ReadonlyArray<string>): string => ["// planted", ...lines, ""].join("\n");
@@ -90,6 +91,7 @@ describe("eslint/id-denylist: the old library words as names in next/", async ()
     // The renamed rule, configured as `fabrika/modules`, on the plan's plant of 0043.
     [`${SRC}/processes/Mailbox.ts`]: file('export {Rev} from "../ledger/Log.ts";'),
   };
+
   const linted = await plant(files);
 
   // Plant: drop the `next/**` override from `.oxlintrc.json`, or drop a name from its list.

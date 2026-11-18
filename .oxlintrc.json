@@ -48,8 +48,19 @@
     // P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
     // All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
     "fabrika/door-is-library": "error",
-    // T518 A8: the only current match is P17a's second module, confirmed by hand.
-    "fabrika/one-id-module": "error",
+    // 0573: this entry stands beside `fabrika/no-data-taggederror` and the Effect checker's
+    // preferSchemaTaggedError, as extra cover for the value forms in every file oxlint lints. Ours
+    // stays, since only it refuses `Data.TaggedError` in a type position. An override replaces a
+    // rule's options, so every block that sets this rule writes the entry out again
+    // (oxlint-plugins/plants.test.ts, L2).
+    "eslint/no-restricted-properties": [
+      "error",
+      {
+        "object": "Data",
+        "property": "TaggedError",
+        "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+      }
+    ],
     "fabrika/outside-input-constructor": "error",
 
     // Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
@@ -648,7 +659,6 @@
       "rules": {
         "fabrika/no-promises": "error",
         "fabrika/no-ledger-sql": "error",
-        "fabrika/no-node-filesystem": "error",
         "fabrika/no-node-imports": "error",
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
@@ -750,11 +760,12 @@
               },
               {
                 // The library's shared suites and test kits: of our names, only the test primitives
-                // (0538), which they read their case counts from. Its own tests stay as the library's
-                // part has them: macOS matches these globs without case, so a `.test.ts` lands here.
+                // (0538), which they read their case counts from, and their SQLite module, which opens
+                // a test's file (ticket 1029). Its own tests stay as the library's part has them: macOS
+                // matches these globs without case, so a `.test.ts` lands here.
                 "name": "library suites",
                 "files": ["next/packages/libfabrika/**/*Test.ts", "next/packages/libfabrika/**/*.test-support.ts"],
-                "may": ["@kampus/vitest"],
+                "may": ["@kampus/vitest", "@kampus/vitest/TestDatabase"],
                 "tests": ["@kampus/libfabrika", "@kampus/vitest"]
               },
               {
@@ -846,10 +857,11 @@
               },
               {
                 // A program's shared suites and test kits: what the box may import, and the test
-                // primitives (0538), which they read their case counts from.
+                // primitives (0538), which they read their case counts from, with their SQLite module
+                // (ticket 1029).
                 "name": "program suites",
                 "files": ["next/programs/*/src/**/*Test.ts", "next/programs/*/src/**/*.test-support.ts"],
-                "may": ["@kampus/libfabrika", "@kampus/vitest"]
+                "may": ["@kampus/libfabrika", "@kampus/vitest", "@kampus/vitest/TestDatabase"]
               },
               {
                 // What the box loads: no tuval and no React. `pnpm lint:layers` refuses a box file
@@ -965,7 +977,6 @@
       "rules": {
         "fabrika/no-promises": "error",
         "fabrika/no-ledger-sql": "error",
-        "fabrika/no-node-filesystem": "error",
         "fabrika/no-node-imports": "error",
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
@@ -1136,6 +1147,14 @@
       // on experiment 292's classified tree: 73 files fired, 72 drive a resource (oxlint-plugins/README.md).
       "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
       "rules": { "fabrika/integration-test-name": "error" }
+    },
+    {
+      // Ticket 1029, decision 0538: a test, shared suite or test kit opens a SQLite file through
+      // `@kampus/vitest/TestDatabase`, `make` for a file it owns and `open` for one another party
+      // owns; only `":memory:"` keeps `new DatabaseSync`. Measured on `86a7668d6`: 62 calls in 53
+      // files, none right as it was once `open` exists, so it blocks (oxlint-plugins/README.md).
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/test-database": "error" }
     },
     {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
@@ -1323,6 +1342,7 @@
               "packs",
               "access",
               "runtime",
+              "mcp",
               "gateway",
               "schedules",
               "client",
@@ -1613,6 +1633,7 @@
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
+        "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/schedules/**",
@@ -1635,6 +1656,7 @@
         "next/packages/libfabrika/src/access/internal/**",
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",
+        "next/packages/libfabrika/src/mcp/internal/**",
         "next/packages/libfabrika/src/gateway/internal/**",
         "next/packages/libfabrika/src/settings/internal/**",
         "next/packages/libfabrika/src/schedules/internal/**",
@@ -1704,6 +1726,11 @@
         ],
         "eslint/no-restricted-properties": [
           "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
           { "property": "setBounds", "message": "Size a test window with TestWindow.size." },
           { "property": "setPosition", "message": "Size a test window with TestWindow.size." }
         ]
@@ -1745,6 +1772,11 @@
         "eslint/no-restricted-properties": [
           "error",
           {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
             "object": "JSON",
             "property": "parse",
             "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
@@ -1761,6 +1793,11 @@
       "rules": {
         "eslint/no-restricted-properties": [
           "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
           {
             "object": "JSON",
             "property": "parse",
@@ -2312,6 +2349,11 @@
         "eslint/no-restricted-properties": [
           "warn",
           {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
             "object": "JSON",
             "property": "parse",
             "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
@@ -2350,6 +2392,11 @@
       "rules": {
         "eslint/no-restricted-properties": [
           "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
           { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
           { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
           { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
@@ -2394,6 +2441,11 @@
         "eslint/no-restricted-properties": [
           "error",
           {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
             "object": "JSON",
             "property": "parse",
             "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
@@ -2434,6 +2486,11 @@
         "eslint/no-restricted-properties": [
           "warn",
           {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
             "object": "JSON",
             "property": "parse",
             "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
@@ -2456,6 +2513,11 @@
       "rules": {
         "eslint/no-restricted-properties": [
           "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
           {
             "object": "JSON",
             "property": "parse",
@@ -2514,6 +2576,59 @@
         "next/programs/pipeline/src/*{.test.ts,.test.tsx}"
       ],
       "rules": { "fabrika/prefer-schema-arbitrary": "warn" }
+    },
+    {
+      // E1 of the Effect-check sweep (0574): no doc block carries `@stability` until libfabrika's
+      // first release, and `pnpm format` deletes the line (`oxlint-plugins/no-stability-tag.ts`).
+      "files": ["next/**", ".agents/**", ".github/ci/**", "oxlint-plugins/**"],
+      "rules": { "fabrika/no-stability-tag": "error" }
+    },
+    {
+      // The 16 tagged files of pull request 1366 wait for it to land: E60 deletes them and this
+      // block with them (the plan's "What waits").
+      "files": [
+        "next/packages/libfabrika/src/cloudflare/runtime.ts",
+        "next/packages/libfabrika/src/gateway/Gateway.ts",
+        "next/packages/libfabrika/src/ledger/LedgerTransactionSql.ts",
+        "next/packages/libfabrika/src/ledger/Log.ts",
+        "next/packages/libfabrika/src/ledger/Referee.ts",
+        "next/packages/libfabrika/src/ledger/RefereeSql.ts",
+        "next/packages/libfabrika/src/processes/ProcessManager.ts",
+        "next/packages/libfabrika/src/processes/ProgramMail.ts",
+        "next/packages/libfabrika/src/processes/ProgramMailLedger.ts",
+        "next/packages/libfabrika/src/runtime/ProcessStore.ts",
+        "next/packages/libfabrika/src/runtime/RecoveryStore.ts",
+        "next/packages/libfabrika/src/runtime/RepliesSql.ts",
+        "next/packages/libfabrika/src/runtime/Runner.ts",
+        "next/packages/libfabrika/src/settings/Declarations.ts",
+        "next/packages/libfabrika/src/settings/JsonSchema.ts",
+        "next/packages/libfabrika/src/telemetry/Sink.ts"
+      ],
+      "rules": { "fabrika/no-stability-tag": "off" }
+    },
+    {
+      // E2 of the Effect-check sweep (0577): a library imports each Effect module by its path, and
+      // `pnpm format` writes the form (`oxlint-plugins/prefer-namespace-import.ts`). On for the
+      // folders libfabrika's and tuval's tsconfig hold at error for the same check; each later
+      // import slice adds its folders to both.
+      "files": [
+        "next/packages/libfabrika/src/*.ts",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/**",
+        "next/packages/vitest/**"
+      ],
+      "rules": { "fabrika/prefer-namespace-import": "error" }
     },
     {
       // E6 (0023, 0120): every public export of a next/ library has an Effect-shaped doc block, and
@@ -2703,8 +2818,7 @@
     // block lists the folders where its rule has no hit, and is on as an error there and nowhere
     // else. A pull request that brings a folder to zero adds it here, and a whole `pnpm lint` fails
     // until it does (oxlint-plugins/anti-slop.ts). A rule is never "off" or "warn". Once every folder
-    // is on a list, the list becomes the four globs of the scope. `anti-slop/require-readable-spacing`
-    // has no block yet: no folder is at zero for it, so its first block comes with the first sweep.
+    // is on a list, the list becomes the four globs of the scope.
     {
       // 0558: no ternary nests more than 2 deep.
       "files": [
@@ -2791,6 +2905,7 @@
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
@@ -2843,6 +2958,7 @@
       // 0567: a tagged value is matched by its union's matcher or Effect's Match, never by comparing `_tag`.
       "files": [
         "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/vitest/**",
         "next/programs/counter/**",
@@ -2868,6 +2984,39 @@
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }
+    },
+    {
+      // 0563, 0021: a blank line before a `return` and every control statement, around a multi-line
+      // binding, and between top-level statements, as the rule ships.
+      "files": [
+        ".agents/**",
+        ".github/ci/**",
+        "oxlint-plugins/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/tuval/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
+        "next/programs/inbox/**",
+        "next/programs/pipeline/**",
+        "next/programs/tezgah/**"
+      ],
+      "rules": { "anti-slop/require-readable-spacing": "error" }
     }
   ]
 }

@@ -8,16 +8,21 @@ import { noOf } from "./no-of.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: import.meta.dirname });
+
 const RUNS = { seed: 119120, numRuns: 100 };
 
 /** Which diagnostic a line gets: a declared name, or a named import of `of`. */
 type Message = "name" | "import";
+
 const MESSAGES: Record<Message, RegExp> = { name: /no bare `of` and no `xOf` names/, import: /imported by name/ };
 
 /** `of` exactly, an `xOf` name, a plain name, or one of the fixed near names (L6). */
 type Class = "of" | "xOf" | "plain" | "near";
+
 type Name = { readonly cls: Class; readonly base: string; readonly tail: string };
 
 /**
@@ -194,6 +199,7 @@ const filler = piece(
 /** The piece under test at a drawn position among 0 to 5 others. */
 const place = (main: Piece, others: readonly Piece[], at: number): readonly Piece[] => {
   const k = at % (others.length + 1);
+
   return [...others.slice(0, k), main, ...others.slice(k)];
 };
 
@@ -204,10 +210,12 @@ type Line = { readonly text: string; readonly fires: readonly Message[] };
 const check = (lines: readonly Line[]) => {
   const code = lines.map((l) => l.text).join("\n");
   const errors = lines.flatMap((l, i) => l.fires.map((m) => ({ line: i + 1, message: MESSAGES[m] })));
+
   const valid = lines
     .filter((l) => l.fires.length === 0)
     .map((l) => l.text)
     .join("\n");
+
   tester.run("no-of", noOf, {
     valid: [{ code: valid, filename: "case.ts" }],
     invalid: errors.length === 0 ? [] : [{ code, filename: "case.ts", errors }],
@@ -265,10 +273,12 @@ const once = (inner: readonly Inner[]): readonly Inner[] =>
  * member of the parameter's type, a nested const a second, required parameter.
  */
 type Outer = "object" | "function" | "declare" | "overload" | "local";
+
 const OUTERS: readonly Outer[] = ["object", "function", "declare", "overload", "local"];
 
 const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
   const fires = (p: Inner): readonly Message[] => (p.name.cls === "plain" ? [] : ["name"]);
+
   const line = (p: Inner, i: number, text: (n: string) => string): Line => ({
     text: text(spell(p.name, i)),
     fires: fires(p),
@@ -280,7 +290,9 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
       param: (n, i) => `  h${i}(${n}: number) { return ${n}; },`,
       const: (n, i) => `  h${i}: () => { const ${n} = ${i}; return ${n}; },`,
     };
+
     const body = inner.map((p, i) => line(p, i, (n) => entry[p.kind](n, i)));
+
     return [{ text: "export const of = {", fires: [] }, ...body, { text: "};", fires: [] }];
   }
 
@@ -290,6 +302,7 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
       param: (n) => `  ${n}: string,`,
       const: (n) => `  ${n}: number,`,
     };
+
     return [
       { text: head, fires: [] },
       ...inner.map((p, i) => line(p, i, (n) => entry[p.kind](n, i))),
@@ -306,6 +319,7 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
   }
 
   const params = inner.flatMap((p, i) => (p.kind === "param" ? [line(p, i, (n) => `  ${n}: string,`)] : []));
+
   const body = inner.flatMap((p, i) =>
     p.kind === "key"
       ? [line(p, i, (n) => `  const h${i} = { ${n}: ${i} };`)]
@@ -313,6 +327,7 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
         ? [line(p, i, (n) => `  const ${n} = ${i};`)]
         : [],
   );
+
   const implementation: readonly Line[] = [
     { text: "export function of(", fires: [] },
     ...params,
@@ -321,6 +336,7 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
     { text: "  return 0;", fires: [] },
     { text: "}", fires: [] },
   ];
+
   return outer === "overload" ? [...signature("export function of(", "): number;"), ...implementation] : implementation;
 };
 

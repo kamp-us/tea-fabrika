@@ -11,10 +11,13 @@ import { describe, expect, it } from "vitest";
 import { scanner } from "./twin.ts";
 
 const check = await Effect.runPromise(scanner.pipe(Effect.provide(NodeServices.layer)));
+
 const contract = 'export class Brain extends Cloudflare.Worker<Brain, {}, RecordPart>()("Brain") {}';
+
 const scan = (file: string, body: string) => check(file, body, contract);
 
 const stack = resolve(import.meta.dirname, "../../alchemy.run.ts");
+
 const text = () => readFileSync(stack, "utf8");
 
 const generated = fc.record({
@@ -142,6 +145,7 @@ describe("P12 local twin lint", () => {
   for (const wrap of ["assertion", "non-null", "parentheses", "satisfies", "nested wrappers"] as const) {
     law(`wrapped remote-only callee beside the valid stack: ${wrap}`, ({ name }) => {
       const resource = "Cloudflare.Zone.Zone";
+
       const callee = {
         assertion: `(${resource} as typeof ${resource})`,
         "non-null": `${resource}!`,
@@ -149,6 +153,7 @@ describe("P12 local twin lint", () => {
         satisfies: `(${resource} satisfies typeof ${resource})`,
         "nested wrappers": `(((${resource})! as typeof ${resource}))!`,
       }[wrap];
+
       const findings = scan(stack, `${text()}\n${callee}("Remote", {name: ${JSON.stringify(name)}});`);
       expect(findings.length).toBeGreaterThan(0);
       expect(findings.every((f) => /^(no local provider:|unsupported-case:)/.test(f.reason))).toBe(true);
@@ -163,10 +168,12 @@ describe("P12 local twin lint", () => {
         "non-null": "Alchemy.remote!",
         parentheses: "((Alchemy.remote))",
       }[wrap];
+
       const findings = scan(
         stack,
         `${text()}\nconst make${alias} = ${callee};\nCloudflare.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs"}).pipe(make${alias}());`,
       );
+
       expect(findings.length).toBeGreaterThan(0);
       expect(findings.some((f) => /remote|unsupported-case:/.test(f.reason))).toBe(true);
     });
@@ -178,6 +185,7 @@ describe("P12 local twin lint", () => {
         reason === "computed resource"
           ? `${alias}["Zone"]("Remote", {name: ${JSON.stringify(name)}});`
           : `const resourceAlias = ${alias}.Zone; resourceAlias("Remote", {name: ${JSON.stringify(name)}});`;
+
       const body = `${text()}\nimport {Zone as ${alias}} from "@alchemy.run/cloudflare";\n${call}`;
       expect(scan(stack, body).map((f) => f.reason)).toContainEqual(
         expect.stringContaining(`unsupported-case: ${reason}`),
@@ -207,6 +215,7 @@ describe("P12 local twin lint", () => {
     const source = (bindings: string | undefined, other = "") =>
       `import * as ${alias} from "@alchemy.run/cloudflare";
        ${alias}.Workers.Worker("Brain", {main:"brain.mjs", ${bindings === undefined ? "" : `env:{${bindings}}`}}); ${other}`;
+
     const binding = `${alias}.DurableObject("RecordPart")`;
     expect(scan("binding.ts", source(undefined).replace('"Brain"', '"Other"'))).toEqual([]);
     expect(
@@ -270,6 +279,7 @@ describe("P12 local twin lint", () => {
       `const remote = ${alias}.Zone.Zone("Zone", {name: ${JSON.stringify(name)}});`,
       "remote.pipe(Alchemy.remote());",
     ].join("\n");
+
     expect(scan("plant.ts", body).map((f) => f.reason)).toEqual([
       "no local provider: Cloudflare.Zone.Zone",
       "remote override",
@@ -292,6 +302,7 @@ describe("P12 local twin lint", () => {
       `const worker = ${alias}.Workers.Worker(${JSON.stringify(name)}, {main: "brain.mjs", env: {RecordPart: ${alias}.DurableObject("RecordPart")}});`,
       `const bucket = ${alias}.R2.Bucket("Measurements", {name: "measurements"});`,
     ].join("\n");
+
     expect(scan("plant.ts", body)).toEqual([]);
   });
   law("plant: aliased constructors, subpath imports and named remote overrides fail closed", ({ alias, name }) => {
@@ -313,9 +324,11 @@ describe("P12 local twin lint", () => {
         file,
         `import * as ${alias} from "@alchemy.run/cloudflare"; ${alias}.Zone.Zone(${JSON.stringify(name)}, {});`,
       );
+
       const ran = spawnSync(process.execPath, [join(import.meta.dirname, "twin.ts"), file], {
         encoding: "utf8",
       });
+
       expect(ran.status).toBe(1);
       expect(ran.stdout).toContain("lint:twin: 1 findings");
       expect(ran.stderr).toContain("no local provider: Cloudflare.Zone.Zone");
@@ -328,6 +341,7 @@ describe("P12 local twin lint", () => {
       cwd: resolve(import.meta.dirname, "../../../../.."),
       encoding: "utf8",
     });
+
     expect(ran.status).toBe(0);
     expect(ran.stdout).toContain("lint:twin: 0 findings");
   });

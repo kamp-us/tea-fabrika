@@ -7,9 +7,17 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
-import { TestClock } from "effect/testing";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -20,7 +28,9 @@ import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
 
 const SEED = 119120;
+
 const NAME = "control-test";
+
 // The brain's two settings as these laws start it: 0292's 500 MB mark and OTP's 5 s grace.
 const BRAIN = { memory: 500_000_000, grace: 5000 };
 
@@ -55,6 +65,7 @@ const Move = Schema.Struct({
   answer: Schema.Literals(["value", "remote"]),
   reason: Schema.Literals(["intensity", "restart_failed"]),
 });
+
 type Move = typeof Move.Type;
 
 const Walk = Schema.Struct({
@@ -63,9 +74,11 @@ const Walk = Schema.Struct({
   pid: between(30_000, 39_000),
   moves: Schema.Array(Move).check(Schema.isMaxLength(14)),
 });
+
 type Walk = typeof Walk.Type;
 
 type Row = typeof BrainEvent.Type;
+
 type Cause = { readonly reason: "open" | "crash" | "memory"; readonly bytes?: number };
 
 // What a row must say, before its start ids are known.
@@ -84,10 +97,12 @@ type Call = {
 };
 
 type Answer = { readonly _tag: "value"; readonly value: unknown } | { readonly _tag: "error"; readonly error: unknown };
+
 type Span = { readonly span: { name: string; ok: boolean; attributes: Record<string, unknown> } };
 
 // `replacing`: the sampler sent the old process its SIGTERM, and the walk's process ends by its exit.
 type Phase = "up" | "replacing" | "exited" | "waiting" | "braked";
+
 type Kind = "exit" | "restart" | "start" | "brake" | "kill" | "listen" | "call" | "block" | "release";
 
 // The walk's own view of the platform: what Alchemy and workerd did, never the instance's model.
@@ -197,6 +212,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   const answers = new Map<string, Move["answer"]>();
   // Calls that met a pending replacement, with their answers still to come.
   const waiting: Array<{ readonly index: number; readonly answered: Promise<Answer> }> = [];
+
   const world: World = {
     phase: "up",
     port: walk.port,
@@ -216,10 +232,12 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   const counted: TestClock.TestClock = {
     currentTimeMillis: Effect.sync(() => {
       reads.total++;
+
       return clock.currentTimeMillisUnsafe();
     }),
     currentTimeMillisUnsafe: () => {
       reads.total++;
+
       return clock.currentTimeMillisUnsafe();
     },
     sleep: (duration) => {
@@ -238,9 +256,11 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     setTime: (timestamp) => clock.setTime(timestamp),
     withLive: (effect) => clock.withLive(effect),
   };
+
   // Hold each pending-file rename, and acknowledge the write once its folder sync has closed: the
   // instance then runs to its next queue take without another file step.
   let synced = false;
+
   const gated: FileSystem.FileSystem = {
     ...fs,
     rename: (from, to) =>
@@ -261,6 +281,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       }
 
       synced = false;
+
       // Registered first, so it runs after the folder handle's own release.
       return Effect.addFinalizer(() => Effect.sync(() => Queue.offerUnsafe(acks, undefined))).pipe(
         Effect.andThen(fs.open(path, options)),
@@ -293,6 +314,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         }
 
         const answer = answers.get(body.name) ?? "value";
+
         return Response.json(
           answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
         );
@@ -304,6 +326,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
     Effect.sync(() =>
       vi.spyOn(process, "kill").mockImplementation((pid) => {
         Queue.offerUnsafe(killed, Number(pid));
+
         return true;
       }),
     ),
@@ -311,28 +334,34 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   );
 
   let observe: (event: RuntimeEvent) => void = () => {};
+
   let listen: (port: number) => Effect.Effect<unknown> = () => Effect.void;
 
   const startup = yield* Effect.scoped(
     Effect.gen(function* () {
       yield* TestClock.setTime(walk.base);
+
       const dev = yield* startDev({ name: NAME, port: 18787, build: "test", home, ...BRAIN }, (local) =>
         Effect.gen(function* () {
           observe = Context.get(local, RuntimeLifecycle);
+
           const plugin = [...local.mapUnsafe.values()].find(
             (value) => typeof value === "object" && value !== null && "sockets" in value,
           ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
+
           listen = (port) => plugin.start({ "fabrika-control": port });
           observe({ type: "start", worker: NAME, pid: walk.pid });
           yield* listen(walk.port);
         }),
       );
+
       // The startup flush delivered the first started row; its brain call keeps what it said.
       const startup = sent.find((call) => call.body.method === "brain")!.body.args[0] as Row;
       facts.push({ _tag: "started", at: walk.base, pid: walk.pid, cause: { reason: "open" } });
       world.cause = { reason: "crash" };
       mode = "walk";
       let ready = false;
+
       // Every call that waited gets its answer before the walk moves on, so no answer races a move.
       const wake = Effect.fnUntraced(function* (woken: Woken) {
         for (const { index, answered } of waiting.splice(0)) {
@@ -359,6 +388,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
         if (world.held !== null) {
           world.held++;
+
           return cause;
         }
 
@@ -456,6 +486,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
           });
           // @ts-expect-error ping is no method of a Process; this law fakes fetch, so any name reaches the wire
           const ping: () => Promise<unknown> = dev.process(name).ping;
+
           const answered = ping().then(
             (value): Answer => ({ _tag: "value", value }),
             (error: unknown): Answer => ({ _tag: "error", error }),
@@ -513,6 +544,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       world.now += 1;
       yield* TestClock.setTime(world.now);
       facts.push({ _tag: "stopped", at: world.now });
+
       return startup;
     }),
   ).pipe(
@@ -547,6 +579,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   const spans = sent
     .filter((call) => call.body.target === "record" && call.body.method === "write")
     .flatMap((call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
+
   return { startup, rows, facts, calls, restartReads, spans, world, kills };
 });
 

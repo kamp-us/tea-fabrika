@@ -537,11 +537,14 @@ const world = (
     deliveries: Array<Promise<"configured" | "failed">> = [],
     received: unknown[] = [],
     entered = gate(),
-    interrupted = gate();
+    interrupted = gate(),
+    // Each one looks again whenever a configure is asked for, so a wait on attempts polls no clock.
+    onAttempt = new Set<() => void>();
   let project: ProjectObject;
   let settingsRefused = false;
   let beforeCommit = async () => {};
   let afterMail = async () => {};
+  let beforeProject = (_method: string) => {};
   let signs = 0,
     commits = 0,
     newCalls = 0,
@@ -573,6 +576,7 @@ const world = (
     fire(0);
   };
   const call = (method: string) => async (args: ReadonlyArray<unknown>) => {
+    beforeProject(method);
     const work = () => callByName(project, method, args);
 
     if (method === "settingsStart" || method === "settingsRead") {
@@ -692,6 +696,10 @@ const world = (
             configure: async (descriptor: Descriptor) => {
               attempts.push(structuredClone(descriptor));
               entered.resolve();
+
+              for (const look of onAttempt) {
+                look();
+              }
 
               if (attempts.length === 1 && fault === "failed") {
                 throw new Error("configure failed before save");
@@ -884,6 +892,18 @@ const world = (
     },
     db,
     attempts,
+    /** Settles once `count` configures were asked for, on the ask itself. */
+    asked: (count: number) =>
+      new Promise<void>((done) => {
+        const look = () => {
+          if (attempts.length >= count) {
+            onAttempt.delete(look);
+            done();
+          }
+        };
+        onAttempt.add(look);
+        look();
+      }),
     received,
     entered: entered.promise,
     /** How each start the Project delivered ended at its object, once the first one has ended. */
@@ -930,6 +950,10 @@ const world = (
     },
     holdMail: (hold: () => Promise<void>) => {
       afterMail = hold;
+    },
+    /** Runs `hook` as each Project RPC reaches the stand-in transport, before the Project sees it. */
+    onProjectCall: (hook: (method: string) => void) => {
+      beforeProject = hook;
     },
     holdAlarm: (pid: string, held: boolean) => {
       const entry = processFor(pid);
@@ -1155,9 +1179,8 @@ StartsTest.law(
       // Desk S2a: the boot list's later entries, the checklist and the founder's tezgah, configure on
       // their own time and each pays its own first gate. Wait until all three were asked for and every
       // delivery has settled, so no other process's first gate lands inside a move counted below.
-      yield* Effect.promise(() =>
-        vi.waitFor(() => expect(w.attempts.length).toBeGreaterThanOrEqual(3), { timeout: 5_000 }),
-      );
+      // The wait ends on the third ask itself: a 50 ms poll here cost each of the 100 runs a sleep.
+      yield* Effect.promise(() => w.asked(3)).pipe(Effect.timeout("5 seconds"));
       yield* Effect.promise(() => w.delivered());
       let pid = first!.process;
       const client = yield* Effect.promise(() => w.admit());
@@ -1245,6 +1268,9 @@ StartsTest.law(
         expect(costs).toEqual(warm);
       }
     }),
+  // Each case builds a real Project and three Process runtimes on SQLite and walks 12 to 20 moves:
+  // about 0.6 s on a CI leg, so a law over real IO reads its count from the depth (decision 0535).
+  { runs: runsFor({ fast: 10, full: 100 }) },
 );
 
 describe("P12 Project configure recovery", () => {
@@ -2003,6 +2029,125 @@ describe("P34c live object accounting", () => {
           // A different checked program has its own room in the same Project.
           const counterPid = w.attempts.find((d) => d.name === "counter:1")!.id;
           expect(yield* send(counterPid, "other-program")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+        }),
+      ),
+    { timeout: 120_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },
+  );
+  // Ticket 404, the lead's ruling: a refusal is never charged a write, and the hour turning during
+  // one changes nothing. Finding 2026-11-15-door-law-hour-crossing-uncovered saw the program's local
+  // account go from 15 to 16 writes when a refused send crossed the hour; that run also moved the
+  // clock past the healthy mark's window (below), which is the write it saw.
+  effect.effect.prop(
+    "Q9/Q12 a refused send whose span crosses the hour charges the program's local account no write and no byte",
+    {
+      tape: QuotaTape,
+      cross: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 11 })),
+      // Milliseconds the frozen clock sits before the hour, and after it once the hour turns. Effect's
+      // span clock runs on the process's monotonic time from the last `Date.now()` it anchored to, and
+      // anchors again only past one second of drift, so a span reads at most one second past a frozen
+      // `Date.now()`. Over a second on each side keeps every span before the turn in the old hour, and
+      // makes the first read after it anchor in the new one, at any machine speed.
+      early: Schema.Int.check(Schema.isBetween({ minimum: 1100, maximum: 1900 })),
+      late: Schema.Int.check(Schema.isBetween({ minimum: 1000, maximum: 1900 })),
+    },
+    ({ tape, cross: pick, early, late }) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          // SENT is the top of an hour. The clock is frozen, and only this law moves it.
+          const hour = Date.parse(SENT);
+          const cross = pick % tape.length;
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              vi.useFakeTimers({ toFake: ["Date"] });
+              vi.setSystemTime(hour - early);
+            }),
+            () => Effect.sync(() => vi.useRealTimers()),
+          );
+          const w = yield* Effect.acquireRelease(
+            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
+            (w) => Effect.promise(() => w.close()),
+          );
+          yield* Effect.promise(() => w.project.info());
+          const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
+          const door = yield* Effect.acquireRelease(
+            Effect.promise(() => w.door()),
+            (door) => Effect.promise(() => door.close()),
+          );
+          // `letter` is the door's own key for the message id (0547 keeps wire names).
+          const send = (id: string) =>
+            Effect.promise(() =>
+              door.call("process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
+            );
+          expect(yield* send("paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+          expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
+            view: { count: 1 },
+          });
+          const local = yield* w.localUsage(pid);
+          expect(local.program.writes).toBeGreaterThan(0);
+
+          // The process's own healthy mark is saved on its first idle turn once its policy's reset
+          // window has passed, and its program pays for that write. This law moves the clock less
+          // than that window, so any write it sees is the refusal's or the hour's.
+          const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
+          const { policy } = Schema.decodeUnknownSync(
+            Schema.fromJsonString(
+              Schema.Struct({ policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Finite }) }) }),
+            ),
+          )(journal?.value);
+          expect(early + late, "the law moves the clock past the healthy mark's window").toBeLessThan(
+            policy.backoff.resetAfterMs,
+          );
+
+          // The door's refusal counts, by the hour its frame span ended in (0143).
+          const countedIn = (at: number) =>
+            door.db
+              .prepare("SELECT count FROM sums WHERE hour=?")
+              .all(at)
+              .reduce((sum, row) => sum + Number(row.count), 0);
+          let turned: number | null = null;
+
+          for (const [n, c] of tape.entries()) {
+            const spanEnds = n < cross ? hour - 3_600_000 : hour;
+            const other = n < cross ? hour : hour - 3_600_000;
+            const counted = { ended: countedIn(spanEnds), other: countedIn(other) };
+
+            if (n === cross) {
+              // The hour turns inside the refused send: after the door's frame span began and before
+              // the Project answers it, so that span starts in one hour and ends in the next.
+              w.onProjectCall((method) => {
+                if (method === "route" && turned === null) {
+                  turned = Date.now();
+                  vi.setSystemTime(hour + late);
+                }
+              });
+            }
+
+            // Plant (Gateway.ts: the room check never refuses): the send is accepted; red here.
+            expect(yield* send(`refused:${n}:${c.pick}`)).toMatchObject({ _tag: "refused", reason: "quota" });
+            w.onProjectCall(() => {});
+            expect(countedIn(spanEnds), `refusal ${n} was not counted in the hour its span ended`).toBeGreaterThan(
+              counted.ended,
+            );
+            expect(countedIn(other), `refusal ${n} was counted in the other hour`).toBe(counted.other);
+
+            // Plant (supervisor.ts: the healthy mark is also saved on the first idle turn in a new
+            // hour): the open after the crossing refusal charges one write of no bytes; red here.
+            expect(yield* w.localUsage(pid), `refusal ${n} changed the program's local account`).toEqual(local);
+            expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
+              view: { count: 1 },
+            });
+            expect(yield* w.localUsage(pid), `the read after refusal ${n} changed the program's local account`).toEqual(
+              local,
+            );
+
+            if (c.reopen) {
+              yield* Effect.promise(() => w.reopenAll());
+            }
+          }
+
+          // The required case: the hour turned inside a refused send, from the old hour.
+          expect(turned, "no refused send crossed the hour").not.toBeNull();
+          expect(turned).toBeLessThan(hour);
         }),
       ),
     { timeout: 120_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },

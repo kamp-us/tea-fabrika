@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-17-plancheck-child-compile-cache",
+  "date": "2026-11-17",
+  "quests": [
+    "tea-fabrika#1148"
+  ],
+  "stage": "harness",
+  "kind": "success",
+  "what": "Today's tooling: the unchanged K11 question-confidence law took 17.05 seconds without a child compile cache and 14.64 seconds with one, in one serial pair on Node 26.13.0. All 30 generated plans kept identical output bytes and exit codes. This measures one law, not a CI run.",
+  "cause": "The draft fixture starts sizecap and the installed fast-check export reader in fresh Node processes for each plan. Node's built-in module compile cache reused compiled code while all 60 Node child initializers and 60 Python calls still ran.",
+  "person": false,
+  "primitive": null,
+  "fix": "Give each draft test law its own temporary child compile cache and remove it after that law. Leave the cache off when NODE_V8_COVERAGE requests child coverage, and preserve Node's existing disable setting. The first cached call cost 698 ms against 565 ms without the cache; the remaining calls averaged 477 ms against 567 ms. The 4.18 MB cache and all plan folders were removed.",
+  "test": "The existing K11 checks each question's lean and percent, and the size confidence law passed once before and once after, with seed 321, three property runs, all 30 checks, and unchanged 5000 ms child limits. Raw results are kept in the owner's private archive, including source copies, process ids, times, input and output hashes, and cleanup records. The ordinary full draft test file then passed all 19 laws in 93.42 seconds, with no private preload and no pc-node cache folders left. This full-file run validates behavior only.",
+  "links": [
+    "https://nodejs.org/download/release/v26.13.0/docs/api/module.html#module-compile-cache"
+  ]
+}

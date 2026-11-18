@@ -29,6 +29,7 @@ import { type BrainOptions, checkedPut, type Env, processDescriptor, processRunt
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
@@ -79,6 +80,7 @@ const kept = (client: string, method: string, cause: unknown) => {
   }
 
   expect(cause, `${client}.${method} keeps Alchemy's RpcCallError`).toBeInstanceOf(RpcCallError);
+
   return cause instanceof RpcCallError ? cause.cause : undefined;
 };
 
@@ -102,12 +104,14 @@ describe("T695, the platform clients keep what the platform rejected with", () =
         for (const { call, failure } of steps) {
           const method = clients(failure)[call.client]?.[call.method];
           expect(method, `${call.client}.${call.method}`).toBeTypeOf("function");
+
           // A real Request, so a client that hands `fetch` to a typed stub has one to read.
           const error = yield* Effect.flip(
             (method as (request: Request) => Effect.Effect<unknown, LedgerError>)(
               new Request("http://127.0.0.1:8787/client/a/b"),
             ),
           );
+
           expect(error).toBeInstanceOf(LedgerError);
           expect(error.reason).toBe("unreachable");
           expect(kept(call.client, call.method, error.cause), `${call.client}.${call.method} keeps the rejection`).toBe(
@@ -142,6 +146,7 @@ describe("T695, the worker loader keeps why a program did not load", () => {
             programs,
           ).load("counter", process),
         );
+
         expect(error).toBeInstanceOf(ProgramDown);
         expect(error.reason).toBe("load");
         expect(error.cause).toBe(failure);
@@ -155,12 +160,14 @@ describe("T695, the worker loader keeps why a program did not load", () => {
     ({ name, v }) =>
       Effect.gen(function* () {
         const declared = { name, v, writes: {}, inputs: {}, cmds: [] };
+
         const error = yield* Effect.flip(
           workerLoader(
             loader(() => Promise.resolve(declared)),
             programs,
           ).load("counter", "p"),
         );
+
         expect(error.reason).toBe("load");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
       }),
@@ -174,9 +181,11 @@ describe("T695, the worker loader keeps why a program did not load", () => {
       Effect.gen(function* () {
         const Box = programBox({ name }, build);
         const box = new Box(undefined as never, undefined as never);
+
         const error = yield* Effect.flip(
           Effect.tryPromise({ try: () => box.describe(), catch: (cause) => cause as ProgramDown }),
         );
+
         expect(error).toBeInstanceOf(ProgramDown);
         expect((error as ProgramDown).reason).toBe("load");
         expect(Schema.isSchemaError((error as ProgramDown).cause), "the cause is the stepper's failure").toBe(true);
@@ -316,6 +325,7 @@ describe("T695, the object adapters keep what failed", () => {
       Effect.gen(function* () {
         // A connection's name is any string, so only a non-string fails it; a process needs a pair.
         const state = objectState(kind === "connection" && typeof name === "string" ? 7 : name);
+
         const error = yield* Effect.flip(
           kind === "process"
             ? Effect.acquireUseRelease(
@@ -329,6 +339,7 @@ describe("T695, the object adapters keep what failed", () => {
               )
             : Effect.scoped(Layer.build(connectionLayer(state, env, config))),
         );
+
         expect(error).toBeInstanceOf(LedgerError);
         const ledger = error instanceof LedgerError ? error : undefined;
         expect(ledger?.reason).toBe("bad_row");
@@ -347,6 +358,7 @@ describe("T695, the public route keeps what failed", () => {
         const request = new Request(`http://127.0.0.1:${8787}/grant/client/${head}${broken}`, {
           headers: { host: `127.0.0.1:${8787}` },
         });
+
         const error = yield* Effect.flip(fetch(request, env, config));
         expect(error).toBeInstanceOf(LedgerError);
         expect((error as LedgerError).reason).toBe("bad_row");

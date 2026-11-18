@@ -16,7 +16,9 @@ import * as FlowMachine from "./machine.ts";
 import * as Runners from "./Runners.ts";
 
 /** The command was used wrong, or its files do not fit: exit 2. */
-export class Usage extends Schema.TaggedError<Usage>()("Usage", { reason: Schema.String }) {
+export class Usage extends Schema.TaggedError<Usage, { readonly brand: unique symbol }>()("Usage", {
+  reason: Schema.String,
+}) {
   readonly [Runtime.errorExitCode] = 2;
 }
 
@@ -59,33 +61,34 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
   const missing = flow.steps.filter((s) => !runners.names.has(s.name)).map((s) => s.name);
 
   if (missing.length > 0) {
-    return yield* new Usage({ reason: `no runner for steps ${missing.join(", ")}` });
+    return yield* Usage.make({ reason: `no runner for steps ${missing.join(", ")}` });
   }
 
   const saved = yield* fs.exists(options.state).pipe(Effect.orElseSucceed(() => false));
 
   if (saved && !options.resume) {
-    return yield* new Usage({ reason: `${options.state} exists; pass --resume to go on from it` });
+    return yield* Usage.make({ reason: `${options.state} exists; pass --resume to go on from it` });
   }
 
   if (!saved && options.resume) {
-    return yield* new Usage({ reason: `${options.state} does not exist; there is nothing to resume` });
+    return yield* Usage.make({ reason: `${options.state} does not exist; there is nothing to resume` });
   }
 
   if (saved) {
     const text = yield* fs.readFileString(options.state).pipe(Effect.orElseSucceed(() => ""));
-    const model = Schema.decodeUnknownOption(Schema.fromJsonString(FlowMachine.Model))(text);
+    const model = Schema.decodeOption(Schema.fromJsonString(FlowMachine.Model))(text);
 
     if (Option.isNone(model)) {
-      return yield* new Usage({ reason: `${options.state} holds no flow Model` });
+      return yield* Usage.make({ reason: `${options.state} holds no flow Model` });
     }
 
     if (!Flow.equals(model.value.flow, flow)) {
-      return yield* new Usage({ reason: `the flow file changed since ${options.state} was saved; start a new flow` });
+      return yield* Usage.make({ reason: `the flow file changed since ${options.state} was saved; start a new flow` });
     }
   }
 
   const at = yield* Clock.currentTimeMillis;
+
   const handle = yield* run(FlowMachine.make({ lead: options.lead }), {
     ctx: { flow, at },
     store: fileStore(options.state, parse, { fenced: true }),
@@ -95,6 +98,8 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
     },
     terminal: (m) => m._tag !== "running",
   });
+
   const runtime = yield* handle.ready;
+
   return yield* runtime.done();
 }, Effect.scoped);

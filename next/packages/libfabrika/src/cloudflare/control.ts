@@ -1,8 +1,6 @@
 /**
  * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
  * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
- *
- * @stability unstable
  */
 import { Effect, Equal, Predicate, Redacted, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -71,7 +69,6 @@ const Commit = Schema.Struct({
  * Each schema needs no service and its encoded side is JSON. A method with no arguments takes the
  * empty tuple. The keys are the only names the door calls.
  *
- * @stability unstable
  * @category schemas
  */
 export const Payloads = {
@@ -130,8 +127,10 @@ const entries =
   ): Entry<C> =>
   (args) =>
     Schema.decodeEffect(payload)(args).pipe(
-      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-      Effect.map((decoded) => (client: C) => call(client, decoded)),
+      Effect.mapBoth({
+        onFailure: (cause) => new LedgerError({ reason: "bad_row", cause }),
+        onSuccess: (decoded) => (client: C) => call(client, decoded),
+      }),
     );
 
 const onProject = entries<ProjectClient["Service"]>();
@@ -214,6 +213,7 @@ const dispatch = Effect.fnUntraced(function* (
       const [key, bytes, checksum] = yield* Schema.decodeUnknownEffect(
         Schema.Tuple([Schema.String, Schema.Array(Schema.Number), Schema.String]),
       )(args).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+
       return yield* checkedPut(env.MEASUREMENTS, key, Uint8Array.from(bytes), checksum);
     }
 
@@ -221,6 +221,7 @@ const dispatch = Effect.fnUntraced(function* (
       const [key] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String]))(args).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
       );
+
       return yield* bucketHead(env.MEASUREMENTS, key);
     }
 
@@ -281,7 +282,6 @@ const dispatch = Effect.fnUntraced(function* (
  * reason `unknown_method`, and a Project `commit` that names its own `process` with reason
  * `reserved`. A success answers `{ value }`, and a failure a 500 with `{ error: { reason } }`.
  *
- * @stability unstable
  * @category combinators
  */
 export const control = Effect.fn("runtime.control")(function* (
@@ -305,6 +305,7 @@ export const control = Effect.fn("runtime.control")(function* (
   }
 
   const answer = yield* Effect.result(dispatch(env, programs, input.success));
+
   return Result.isSuccess(answer)
     ? Response.json({ value: answer.success ?? null })
     : Response.json(

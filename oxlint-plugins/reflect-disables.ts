@@ -26,7 +26,9 @@ import type { CreateRule, ESTree } from "@oxlint/plugins";
 import { pathIn } from "./match.ts";
 
 const START = { line: 1, column: 0 };
+
 const RULE = "no-restricted-properties";
+
 // The keyword, its form, and the rest up to the reason.
 const DIRECTIVE = /^\s*(?:oxlint|eslint)-(disable|enable)(-next-line|-line)?(?:\s+([^]*?))?\s*(?:--[^]*)?$/;
 
@@ -57,6 +59,7 @@ const reaches = (names: string | undefined): boolean => {
     .split(",")
     .map((name) => name.trim())
     .filter((name) => name !== "");
+
   return listed.length === 0 || listed.some((name) => name === RULE || name === `eslint/${RULE}`);
 };
 
@@ -83,6 +86,7 @@ export const reflectDisables: CreateRule = {
     const allowed = allowIn(context.options).get(pathIn(context)) ?? 0;
     // The lines that name Reflect in code.
     const named = new Set<number>();
+
     const mark = (node: ESTree.Node) => {
       named.add(node.loc.start.line);
     };
@@ -127,6 +131,7 @@ export const reflectDisables: CreateRule = {
 
           return false;
         };
+
         let used = 0;
 
         for (const [i, directive] of directives.entries()) {
@@ -136,8 +141,10 @@ export const reflectDisables: CreateRule = {
 
           const block = () => {
             const until = directives.slice(i + 1).find((d) => d.keyword === "enable" && d.form === "");
+
             return covers(directive.start, until === undefined ? lastLine : until.start);
           };
+
           const reflect =
             directive.form === "-next-line"
               ? covers(directive.end + 1, directive.end + 1)

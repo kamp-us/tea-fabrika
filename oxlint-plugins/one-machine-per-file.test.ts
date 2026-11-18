@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -11,13 +11,21 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
 
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: import.meta.dirname });
+
 const RUNS = { seed: 119120, numRuns: 100 };
+
 const CODE = "fabrika(one-machine-per-file)";
+
 const TEA = 'import { Machine } from "@demlik/tea/effect";';
+
 const COUNT = /at most one tea machine/;
+
 const OWN = /must be defined in this file/;
+
 const IO = /no input or output imports/;
 
 type ErrorAt = { readonly line: number; readonly message: RegExp };
@@ -62,6 +70,7 @@ it("L1: exactly the reached calls after the first fire, in source order", () => 
   fc.assert(
     fc.property(fc.array(fc.constantFrom(...PIECES), { minLength: 1, maxLength: 6 }), (pieces) => {
       let seen = 0;
+
       const errors = pieces.flatMap((p, i) => {
         const at: ErrorAt[] = [];
 
@@ -73,6 +82,7 @@ it("L1: exactly the reached calls after the first fire, in source order", () => 
 
         return at;
       });
+
       check([TEA, ...pieces.map((p, i) => p.text(i))].join("\n"), errors);
     }),
     { ...RUNS, numRuns: 200 },
@@ -121,6 +131,7 @@ it("L2: only a part whose value is an import or imported member fires", () => {
       }),
       (parts) => {
         const lines = Object.entries(parts).map(([key, value]) => `${key}: ${value},`);
+
         const errors = Object.entries(parts).flatMap(([key, value], i) =>
           [
             "Imported",
@@ -134,6 +145,7 @@ it("L2: only a part whose value is an import or imported member fires", () => {
             ? [{ line: i + 5, message: OWN }]
             : [],
         );
+
         check(
           [
             TEA,
@@ -384,6 +396,7 @@ it("pinned: L4 the two product blocks enforce the rule; the five test globs leav
     "next/example.test-support.ts",
     ".agents/example.test.ts",
   ];
+
   const result = await plant(Object.fromEntries(paths.map((p) => [p, DOUBLE])));
   paths.forEach((p, i) => {
     expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
@@ -420,6 +433,7 @@ it("scenario: L5 each real file copy refuses one added second export", async () 
   // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
   const originals = Object.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
   const clean = await plant(originals);
+
   const broken = await plant(
     Object.fromEntries(
       Object.entries(originals).map(([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
@@ -458,6 +472,7 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
         ],
       }),
     );
+
     const out = spawnSync(
       join(root, "node_modules/.bin/oxlint"),
       [
@@ -471,11 +486,99 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
       ],
       { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30, timeout: 120_000 },
     );
+
+    const parsed: unknown = (() => {
+      try {
+        return JSON.parse(out.stdout);
+      } catch {
+        return null;
+      }
+    })();
+
+    const diagnostics =
+      typeof parsed === "object" && parsed !== null && "diagnostics" in parsed && Array.isArray(parsed.diagnostics)
+        ? parsed.diagnostics
+        : null;
+
+    const findings =
+      diagnostics?.map((entry: unknown) => {
+        if (typeof entry !== "object" || entry === null) {
+          return { kind: "malformed_diagnostic", path: null, position: null };
+        }
+
+        const code = "code" in entry && typeof entry.code === "string" ? entry.code : null;
+        const filename = "filename" in entry && typeof entry.filename === "string" ? entry.filename : null;
+        const path = filename === null ? null : relative(root, resolve(root, filename));
+
+        const safePath =
+          path === null || path === "" || path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)
+            ? null
+            : path;
+
+        const labels = "labels" in entry && Array.isArray(entry.labels) ? entry.labels : [];
+        const label: unknown = labels[0];
+        const span = typeof label === "object" && label !== null && "span" in label ? label.span : null;
+
+        const line =
+          typeof span === "object" && span !== null && "line" in span && typeof span.line === "number"
+            ? span.line
+            : null;
+
+        const column =
+          typeof span === "object" && span !== null && "column" in span && typeof span.column === "number"
+            ? span.column
+            : null;
+
+        const position =
+          line !== null &&
+          Number.isInteger(line) &&
+          line > 0 &&
+          column !== null &&
+          Number.isInteger(column) &&
+          column >= 0
+            ? { line, column }
+            : null;
+
+        return {
+          kind: code === CODE ? "target_rule" : code === null ? "unknown_diagnostic" : "other_diagnostic",
+          path: safePath,
+          position,
+        };
+      }) ?? null;
+
+    const files =
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "number_of_files" in parsed &&
+      typeof parsed.number_of_files === "number" &&
+      Number.isInteger(parsed.number_of_files) &&
+      parsed.number_of_files >= 0
+        ? parsed.number_of_files
+        : null;
+
+    console.log(
+      JSON.stringify({
+        status: out.status,
+        kind:
+          out.error !== undefined
+            ? "spawn_error"
+            : diagnostics === null || files === null
+              ? "malformed_report"
+              : "report",
+        files,
+        diagnosticCount: diagnostics?.length ?? null,
+        diagnostics: findings?.slice(0, 50) ?? null,
+        truncated: diagnostics !== null && diagnostics.length > 50,
+      }),
+    );
+
     expect(out.error).toBeUndefined();
     expect(out.status).toBe(0);
+
     const report: { number_of_files: number; diagnostics: Array<{ code?: string; filename: string }> } = JSON.parse(
       out.stdout,
     );
+
     expect(report.number_of_files).toBeGreaterThan(0);
     const hits = report.diagnostics.filter((d) => d.code === CODE);
     console.log(JSON.stringify({ rule: CODE, files: report.number_of_files, hits: hits.length }));

@@ -11,13 +11,17 @@ import { lintScheduled } from "./scheduled.ts";
 // unrelated error cannot mask it. Each plant was also run once on workflow-lint.ts with its rule
 // dropped, and that turned this law red.
 const options = { seed: 119120, numRuns: 100 };
+
 const read = (path: string) => readFileSync(new URL(`../../workflows/${path}`, import.meta.url), "utf8");
+
 const check = read("check.yaml");
 
 type Step = Record<string, unknown> & { env?: Record<string, unknown>; with?: Record<string, unknown> };
 
 type Job = Record<string, unknown> & {
   steps: Step[];
+  outputs?: Record<string, unknown>;
+  concurrency?: Record<string, unknown>;
   strategy?: { "fail-fast"?: unknown; "max-parallel"?: unknown; matrix: { shard: unknown } };
   permissions?: unknown;
   needs?: unknown;
@@ -62,7 +66,7 @@ const step = (w: Workflow, job: string, name: string): Step => {
 
 // What may change without changing what the full run does: the catch-up's minute (0581 fixes the
 // cron hourly, and its minute stays a choice), the gap (a setting, 0069, an hour at least), the
-// concurrency group's name, how many legs run at once within the cap, and the spacing in an `if`,
+// workflow group's case and spacing, how many legs run at once within the cap, and the spacing in an `if`,
 // a job's or a step's. Each is varied only where the real workflow has it, so a part it lacks stays
 // missing.
 const spaced = (value: unknown, gap: string) =>
@@ -72,11 +76,13 @@ const scheduled = fc
   .tuple(
     fc.integer({ min: 1, max: 59 }),
     fc.integer({ min: 60, max: 1440 }),
-    fc.stringMatching(/^[a-z][a-z0-9-]{0,15}$/),
     fc.integer({ min: 1, max: 9 }),
     fc.constantFrom("", " ", "  "),
+    fc.shuffledSubarray(["1", "2", "3", "4", "5", "6", "7", "8", "9"], { minLength: 9, maxLength: 9 }),
+    fc.boolean(),
+    fc.boolean(),
   )
-  .map(([minute, minutes, group, most, gap]) => {
+  .map(([minute, minutes, most, gap, slots, numeric, upper]) => {
     const w = real();
     const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
 
@@ -90,8 +96,26 @@ const scheduled = fc
       w.env["GAP_MINUTES"] = minutes;
     }
 
-    w.concurrency["group"] = group;
+    w.concurrency["group"] = `${upper ? "SCHEDULED" : "scheduled"}-\${{${gap}github.ref${gap}}}`;
     w.jobs["tests"]!.strategy!["max-parallel"] = most;
+    // The most changed legs at once is one setting, MOST, the matrix's alias of it (0590).
+    w.jobs["changed"]!.strategy!["max-parallel"] = most;
+    step(w, "select", "set").env!["MOST"] = most;
+
+    const shards = w.jobs["tests"]!.strategy!.matrix.shard;
+    const full = w.jobs["tests"]!.concurrency;
+
+    if (Array.isArray(shards) && full !== undefined && "group" in full) {
+      const pairs = shards.map((shard, i) => [shard, numeric ? Number(slots[i]) : slots[i]]);
+      const values = Object.fromEntries(upper ? pairs.toReversed() : pairs);
+      full["group"] = `scheduled-test-\${{${gap}fromJSON('${JSON.stringify(values)}')[matrix.shard]${gap}}}`;
+    }
+
+    for (const job of Object.values(w.jobs)) {
+      if (upper && typeof job.concurrency?.["group"] === "string") {
+        job.concurrency["group"] = job.concurrency["group"].replace(/^scheduled-/, "SCHEDULED-");
+      }
+    }
 
     for (const job of Object.values(w.jobs)) {
       if ("if" in job) {
@@ -110,17 +134,69 @@ const scheduled = fc
 
 const lint = (w: Workflow) => lintScheduled(JSON.stringify(w), check);
 
+const rotationSlots = () =>
+  Object.fromEntries(Array.from({ length: 9 }, (_, index) => [String(index + 1), String(index + 1)]));
+
+const changedRotation = (w: Workflow, slots: unknown = rotationSlots()) => {
+  step(w, "select", "set").env!["RUN_NUMBER"] = `\${{ github.run_number }}`;
+  w.jobs["select"]!.outputs!["slots"] = `\${{ steps.set.outputs.slots }}`;
+  w.jobs["changed"]!.concurrency!["group"] =
+    `scheduled-test-\${{ fromJSON('${JSON.stringify(slots)}')[fromJSON(needs.select.outputs.slots)[matrix.shard]] || '1' }}`;
+
+  return w;
+};
+
+// Plant: keep the old direct-slot-only guard, so the bounded rotation cannot pass preflight.
+it("property: SC19 accepts the run-number rotation through a closed nine-slot lookup", () => {
+  fc.assert(
+    fc.property(scheduled, (w) => {
+      expect(lint(changedRotation(w))).toEqual([]);
+      w.jobs["changed"]!.concurrency!["group"] = `scheduled-test-\${{ matrix.shard }}`;
+      Reflect.deleteProperty(step(w, "select", "set").env!, "RUN_NUMBER");
+      Reflect.deleteProperty(w.jobs["select"]!.outputs!, "slots");
+      expect(lint(w)).toEqual([]);
+    }),
+    options,
+  );
+});
+
+/** Rebuilds the full matrix's closed slot map, then applies one isolated input mutation. */
+const remap = (w: Workflow, change: (slots: Record<string, string>) => void) => {
+  const shards = w.jobs["tests"]!.strategy!.matrix.shard;
+
+  if (!Array.isArray(shards) || !shards.every((shard) => typeof shard === "string")) {
+    throw new Error("the full matrix has no literal shard list");
+  }
+
+  const slots = Object.fromEntries(shards.map((shard, i) => [shard, String(i + 1)]));
+  change(slots);
+  w.jobs["tests"]!.concurrency!["group"] = `scheduled-test-\${{ fromJSON('${JSON.stringify(slots)}')[matrix.shard] }}`;
+};
+
+// SC18's message, which a scenario on the next limit expects beside SC13's.
+const CHANGED_RULE =
+  "SC18: changed runs only when select said changed with a leg, each leg its own list over every project at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
+
 it("pinned: the real scheduled.yaml passes, against the real check.yaml", () => {
   expect(lintScheduled(read("scheduled.yaml"), check)).toEqual([]);
 });
 
 it("property: a schedule varied only where its meaning holds passes", () => {
+  const reached = new Set<string>();
   fc.assert(
     fc.property(scheduled, (w) => {
+      const group = String(w.jobs["tests"]!.concurrency?.["group"]);
+      reached.add(group.startsWith("SCHEDULED-") ? "upper" : "lower");
+      reached.add(/:"[1-9]"/.test(group) ? "text" : "number");
+      reached.add(String(w.concurrency["group"]).includes(`\${{github.ref}}`) ? "compact" : "spaced");
       expect(lint(w)).toEqual([]);
     }),
     options,
   );
+  expect(
+    ["upper", "lower", "text", "number", "compact", "spaced"].every((kind) => reached.has(kind)),
+    [...reached].join(", "),
+  ).toBe(true);
 });
 
 // The step that ended each test job until 2026-11-15: after a failure it canceled the job's own
@@ -142,6 +218,73 @@ const gate = (w: Workflow): Job => {
 
   return job;
 };
+
+// Each fault starts from a valid rotation, including while main still uses direct slots.
+const rotationPlants: [string, (w: Workflow) => void][] = [
+  ["SC19: rotation has no run number", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "RUN_NUMBER")],
+  [
+    "SC19: rotation changes on retry",
+    (w) => (step(w, "select", "set").env!["RUN_NUMBER"] = `\${{ github.run_attempt }}`),
+  ],
+  [
+    "SC19: rotation reads a private run source",
+    (w) => (step(w, "select", "set").env!["RUN_NUMBER"] = `\${{ vars.RUN_NUMBER }}`),
+  ],
+  ["SC19: rotation has no slot output", (w) => Reflect.deleteProperty(w.jobs["select"]!.outputs!, "slots")],
+  [
+    "SC19: rotation reads another step's output",
+    (w) => (w.jobs["select"]!.outputs!["slots"] = `\${{ steps.other.outputs.slots }}`),
+  ],
+  ["SC19: rotation reaches a tenth slot", (w) => void changedRotation(w, { ...rotationSlots(), "1": "10" })],
+  ["SC19: rotation reuses a slot", (w) => void changedRotation(w, { ...rotationSlots(), "2": "1" })],
+  [
+    "SC19: rotation hides the recorded physical slots",
+    (w) => void changedRotation(w, { ...rotationSlots(), "1": "2", "2": "1" }),
+  ],
+  ["SC19: rotation adds another key", (w) => void changedRotation(w, { ...rotationSlots(), "10": "1" })],
+  [
+    "SC19: rotation loses a key",
+    (w) => {
+      const slots = rotationSlots();
+      Reflect.deleteProperty(slots, "1");
+      changedRotation(w, slots);
+    },
+  ],
+  ["SC19: rotation has a JSON list", (w) => void changedRotation(w, ["1", "2", "3", "4", "5", "6", "7", "8", "9"])],
+  [
+    "SC19: rotation has malformed JSON",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        '"1":"1"',
+        '"1":',
+      );
+    },
+  ],
+  [
+    "SC19: rotation takes a private suffix",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = `${String(w.jobs["changed"]!.concurrency!["group"])}-private`;
+    },
+  ],
+  [
+    "SC19: rotation reads arbitrary runtime slots",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        "needs.select.outputs.slots",
+        "vars.slots",
+      );
+    },
+  ],
+  [
+    "SC19: rotation falls back outside the shared slots",
+    (w) => {
+      w.jobs["changed"]!.concurrency!["group"] = String(w.jobs["changed"]!.concurrency!["group"]).replace(
+        "|| '1'",
+        "|| '10'",
+      );
+    },
+  ],
+];
 
 const plants: [string, (w: Workflow) => void][] = [
   // SC1: a push to main, the hourly catch-up and a hand start, nothing else (0581); no merge line
@@ -251,12 +394,100 @@ const plants: [string, (w: Workflow) => void][] = [
     (w) => (w.jobs["tests"]!["if"] = "needs.gate.outputs.start != 'false'"),
   ],
   ["SC15: the tests wait on nothing", (w) => Reflect.deleteProperty(w.jobs["tests"]!, "needs")],
-  // SC2: one run at a time, never cut short.
+  // SC2: one run per ref at a time, never cut short. Plants run once: the old literal-group
+  // guard rejects valid refs; dropping SC2 admits each break below. Restored after each run.
   ["SC2: a newer run cancels the running one", (w) => (w.concurrency["cancel-in-progress"] = true)],
-  ["SC2: one group per commit, so runs overlap", (w) => (w.concurrency["group"] = `scheduled-\${{ github.sha }}`)],
-  // SC12: a newer run never cancels a waiting one.
+  ["SC2: no group", (w) => Reflect.deleteProperty(w.concurrency, "group")],
+  ["SC2: no explicit cancellation policy", (w) => Reflect.deleteProperty(w.concurrency, "cancel-in-progress")],
+  ["SC2: one global group delays unrelated refs", (w) => (w.concurrency["group"] = "scheduled")],
+  ["SC2: one group per commit overlaps main runs", (w) => (w.concurrency["group"] = `scheduled-\${{ github.sha }}`)],
+  ["SC2: one group per run overlaps main runs", (w) => (w.concurrency["group"] = `scheduled-\${{ github.run_id }}`)],
+  ["SC2: a short ref can mix a branch and tag", (w) => (w.concurrency["group"] = `scheduled-\${{ github.ref_name }}`)],
+  [
+    "SC2: an event suffix separates main's triggers",
+    (w) => (w.concurrency["group"] = `scheduled-\${{ github.ref }}-\${{ github.event_name }}`),
+  ],
+  ["SC2: another prefix separates participating runs", (w) => (w.concurrency["group"] = `proof-\${{ github.ref }}`)],
+  // SC12: a newer run never cancels a waiting run on the same ref.
   ["SC12: no queue, so a newer run cancels the waiting one", (w) => Reflect.deleteProperty(w.concurrency, "queue")],
   ["SC12: one waiting run at most", (w) => (w.concurrency["queue"] = "single")],
+  // SC19: the same nine test groups and one control group across participating workflows.
+  // Plants, each run once with its new guard dropped and restored, must fail their own rule.
+  ...rotationPlants.map(([name, mutate]): [string, (w: Workflow) => void] => [
+    name,
+    (w) => {
+      changedRotation(w);
+      mutate(w);
+    },
+  ]),
+  ["SC19: an extra job has no shared slot", (w) => (w.jobs["extra"] = { "runs-on": "ubuntu-latest", steps: [] })],
+  [
+    "SC19: changed adds another matrix axis",
+    (w) => void Object.assign(w.jobs["changed"]!.strategy!.matrix, { extra: ["a", "b"] }),
+  ],
+  ["SC19: changed admits a fixed unmapped slot", (w) => (w.jobs["changed"]!.strategy!.matrix.shard = ["10"])],
+  [
+    "SC19: changed reads arbitrary slots",
+    (w) => (w.jobs["changed"]!.strategy!.matrix.shard = `\${{ fromJSON(vars.shards) }}`),
+  ],
+  [
+    "SC19: changed's parallel count differs from its slot selection",
+    (w) => (w.jobs["changed"]!.strategy!["max-parallel"] = 10),
+  ],
+  ...(["gate", "select", "report", "tests", "changed"] as const).flatMap((job): [string, (w: Workflow) => void][] => [
+    [`SC19: ${job} has no shared job group`, (w) => Reflect.deleteProperty(w.jobs[job]!, "concurrency")],
+    [`SC19: ${job} replaces a waiting job`, (w) => Reflect.deleteProperty(w.jobs[job]!.concurrency!, "queue")],
+    [`SC19: ${job} keeps only one waiting job`, (w) => (w.jobs[job]!.concurrency!["queue"] = "single")],
+    [`SC19: ${job} cancels a running job`, (w) => (w.jobs[job]!.concurrency!["cancel-in-progress"] = true)],
+    [
+      `SC19: ${job} has no explicit cancellation policy`,
+      (w) => Reflect.deleteProperty(w.jobs[job]!.concurrency!, "cancel-in-progress"),
+    ],
+    [
+      `SC19: ${job} has a group per ref`,
+      (w) => (w.jobs[job]!.concurrency!["group"] = `${String(w.jobs[job]!.concurrency!["group"])}-\${{ github.ref }}`),
+    ],
+    [
+      `SC19: ${job} has a group per source`,
+      (w) => (w.jobs[job]!.concurrency!["group"] = `${String(w.jobs[job]!.concurrency!["group"])}-\${{ github.sha }}`),
+    ],
+    [
+      `SC19: ${job} has a group per run`,
+      (w) =>
+        (w.jobs[job]!.concurrency!["group"] = `${String(w.jobs[job]!.concurrency!["group"])}-\${{ github.run_id }}`),
+    ],
+  ]),
+  ["SC19: gate uses another control group", (w) => (w.jobs["gate"]!.concurrency!["group"] = "scheduled-select")],
+  [
+    "SC19: changed uses its own slot namespace",
+    (w) => (w.jobs["changed"]!.concurrency!["group"] = `scheduled-changed-\${{ matrix.shard }}`),
+  ],
+  ["SC19: the full slot map loses a shard", (w) => remap(w, (slots) => Reflect.deleteProperty(slots, "e2e-1"))],
+  ["SC19: the full slot map adds a shard", (w) => remap(w, (slots) => (slots["extra"] = "1"))],
+  ["SC19: two full shards share one slot", (w) => remap(w, (slots) => (slots["e2e-2"] = slots["e2e-1"]!))],
+  ["SC19: the full slot map reaches a tenth test slot", (w) => remap(w, (slots) => (slots["e2e-1"] = "10"))],
+  [
+    "SC19: the full slot map is malformed JSON",
+    (w) => (w.jobs["tests"]!.concurrency!["group"] = `scheduled-test-\${{ fromJSON('{')[matrix.shard] }}`),
+  ],
+  [
+    "SC19: the full slot map is a JSON list",
+    (w) =>
+      (w.jobs["tests"]!.concurrency!["group"] = `scheduled-test-\${{ fromJSON('[1,2,3,4,5,6,7,8,9]')[matrix.shard] }}`),
+  ],
+  ["SC19: the workflow holds the control job's group", (w) => (w.concurrency["group"] = "SCHEDULED-CONTROL")],
+  ["SC19: the workflow holds a test job's group", (w) => (w.concurrency["group"] = "SCHEDULED-TEST-1")],
+  [
+    "SC19: the full matrix gains another dimension",
+    (w) => void Object.assign(w.jobs["tests"]!.strategy!.matrix, { extra: ["a", "b"] }),
+  ],
+  [
+    "SC19: changed can name a tenth test slot",
+    (w) => {
+      w.jobs["changed"]!.strategy!["max-parallel"] = 10;
+      step(w, "select", "set").env!["MOST"] = 10;
+    },
+  ],
   // SC3: the token, the gate's included.
   ["SC3: the gate's own token writes actions", (w) => (gate(w).permissions = { actions: "write" })],
   [
@@ -601,13 +832,15 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   // TT1 and TT2, as in check.yaml: each leg's time table and its timings file. A leg's steps are
   // copied before a plant, so a plant on one leg leaves the other's alias as it was.
-  ...(["tests"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+  ...(["tests", "changed"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
     const own = (w: Workflow, name: string) => {
       const list = w.jobs[job]!.steps;
       const at = list.indexOf(step(w, job, name));
       list[at] = structuredClone(list[at]!);
+
       return list[at]!;
     };
+
     return [
       [
         `TT1: ${job} drops its time table`,
@@ -637,6 +870,118 @@ const plants: [string, (w: Workflow) => void][] = [
   [
     "SC5: the results upload gets the token",
     (w) => (step(w, "tests", "results").env = { GITHUB_TOKEN: `\${{ github.token }}` }),
+  ], // SC15 and SC17, 0590: main's push, catch-up and hand start run every test. Plants, each run once
+  // on scheduled.ts and restored: SC15's `if` check dropped (red on SC15's first three here, and on
+  // its three older ones above); SC17's `if` check dropped (red on SC17's first three).
+  [
+    "SC15: the tests skip when select is skipped, so a push to main runs no test",
+    (w) =>
+      (w.jobs["tests"]!["if"] =
+        `\${{ !cancelled() && needs.gate.outputs.start == 'true' && needs.select.outputs.scope == 'full' }}`),
+  ],
+  [
+    "SC15: the tests run beside a changed set too",
+    (w) => (w.jobs["tests"]!["if"] = `\${{ !cancelled() && needs.gate.outputs.start == 'true' }}`),
+  ],
+  [
+    "SC15: the tests run after a select that failed",
+    (w) =>
+      (w.jobs["tests"]!["if"] =
+        `\${{ !cancelled() && needs.gate.outputs.start == 'true' && needs.select.outputs.scope != 'changed' }}`),
+  ],
+  ["SC15: the tests wait on the gate alone", (w) => (w.jobs["tests"]!.needs = ["gate"])],
+  [
+    "SC17: select runs on a push to main, so main's full run narrows",
+    (w) => (w.jobs["select"]!["if"] = "needs.gate.outputs.start == 'true' && github.ref != 'refs/heads/main'"),
+  ],
+  [
+    "SC17: select runs on a hand start on main",
+    (w) => (w.jobs["select"]!["if"] = "needs.gate.outputs.start == 'true' && github.event_name == 'workflow_dispatch'"),
+  ],
+  [
+    "SC17: select runs whatever the gate said",
+    (w) => (w.jobs["select"]!["if"] = "github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'"),
+  ],
+  ["SC17: select waits on nothing", (w) => Reflect.deleteProperty(w.jobs["select"]!, "needs")],
+  ["SC17: select runs another script", (w) => (step(w, "select", "set")["run"] = "node .github/ci/legs.ts")],
+  ["SC17: select's step can skip", (w) => (step(w, "select", "set")["if"] = "github.ref != 'refs/heads/x'")],
+  [
+    "SC17: select's step gets the token",
+    (w) => (step(w, "select", "set").env!["GITHUB_TOKEN"] = `\${{ github.token }}`),
+  ],
+  [
+    "SC17: select gives a fourth output",
+    (w) => (w.jobs["select"]!["outputs"] = { ...(w.jobs["select"]!["outputs"] as object), base: "x" }),
+  ],
+  [
+    "SC17: select checks out one commit, so it cannot diff with origin/main",
+    (w) =>
+      Reflect.deleteProperty(w.jobs["select"]!.steps.find((s) => typeof s["uses"] === "string")!.with!, "fetch-depth"),
+  ],
+  [
+    "SC17: select keeps no record",
+    (w) => void w.jobs["select"]!.steps.splice(w.jobs["select"]!.steps.indexOf(step(w, "select", "record")), 1),
+  ],
+  ["SC17: a red select loses its record", (w) => (step(w, "select", "record")["if"] = "success()")],
+  ["SC17: the record takes another name", (w) => (step(w, "select", "record").with!["name"] = "results-set")],
+  // SC18, 0590: a changed set's legs. Plants, each run once on scheduled.ts and restored: SC18's
+  // `if` check dropped (red on the first two); its command checks dropped (red on the next three);
+  // its limit checks dropped (red on the three limits).
+  ["SC18: the changed legs run on main too", (w) => (w.jobs["changed"]!["if"] = "needs.gate.outputs.start == 'true'")],
+  [
+    "SC18: the changed legs start on a set of zero files",
+    (w) => (w.jobs["changed"]!["if"] = "needs.gate.outputs.start == 'true' && needs.select.outputs.scope == 'changed'"),
+  ],
+  [
+    "SC18: a changed leg leaves out the real-resource laws",
+    (w) =>
+      (step(w, "changed", "vitest")["run"] = String(step(w, "changed", "vitest")["run"]).replace(
+        "--project next-integration ",
+        "",
+      )),
+  ],
+  [
+    "SC18: a changed leg leaves out the visual laws",
+    (w) =>
+      (step(w, "changed", "vitest")["run"] = String(step(w, "changed", "vitest")["run"]).replace(
+        "--project next-visual ",
+        "",
+      )),
+  ],
+  [
+    "SC18: a changed leg narrows again from origin/main",
+    (w) =>
+      (step(w, "changed", "vitest")["run"] = String(step(w, "changed", "vitest")["run"]).replace(
+        "$FILES",
+        "--changed origin/main",
+      )),
+  ],
+  [
+    "SC18: a changed leg is not told its list",
+    (w) => Reflect.deleteProperty(step(w, "changed", "vitest").env!, "FILES"),
+  ],
+  [
+    "SC18: a changed leg runs at fast depth",
+    (w) => Reflect.deleteProperty(step(w, "changed", "vitest").env!, "FABRIKA_TEST_DEPTH"),
+  ],
+  ["SC18: a changed leg's own step limit", (w) => (step(w, "changed", "vitest")["timeout-minutes"] = 30)],
+  ["SC18: the changed legs' job limit is no backstop", (w) => (w.jobs["changed"]!["timeout-minutes"] = 17)],
+  ["SC18: select sizes the legs for another limit", (w) => (step(w, "select", "set").env!["LIMIT"] = 30)],
+  ["SC18: chromium on every changed leg", (w) => Reflect.deleteProperty(step(w, "changed", "chromium"), "if")],
+  ["SC18: the changed legs are a fixed list", (w) => (w.jobs["changed"]!.strategy!.matrix.shard = ["1"])],
+  ["SC18: the changed legs wait on the gate alone", (w) => (w.jobs["changed"]!.needs = ["gate"])],
+  // SC6 and SC10 on the changed legs: one fail-fast, MOST at once, and the report kept.
+  [
+    "SC6: the changed legs hold their runners after a red leg",
+    (w) => (w.jobs["changed"]!.strategy!["fail-fast"] = false),
+  ],
+  [
+    "SC6: the changed matrix runs another count at once than proof.ts makes",
+    (w) => (w.jobs["changed"]!.strategy!["max-parallel"] = (Number(step(w, "select", "set").env!["MOST"]) % 9) + 1),
+  ],
+  [
+    "SC10: a changed leg keeps no report",
+    (w) => void w.jobs["changed"]!.steps.splice(w.jobs["changed"]!.steps.indexOf(step(w, "changed", "results")), 1),
   ],
 ];
 
@@ -684,7 +1029,7 @@ it("SC6 scenario: on the real scheduled.yaml, the tooling legs or the next legs 
   // 59 runner minutes, and a red next leg left the 2 tooling legs, up to about 14. Plant, run once
   // on scheduled.ts and restored: SC6's one-matrix check dropped (red on both splits).
   const ONE =
-    "scheduled.yaml: SC6: every test leg is in one matrix, the tests job, so its first red leg stops all the others";
+    "scheduled.yaml: SC6: every test leg a run starts is in one matrix, the tests job or the changed job, so its first red leg stops all the others";
 
   const toolingApart = real();
   split(toolingApart, (shard) => shard.startsWith("tooling-"));
@@ -699,7 +1044,10 @@ it("SC6 scenario: on the real scheduled.yaml, the tooling legs or the next legs 
   beside.jobs["tests"]!.strategy!["max-parallel"] = 8;
   beside.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
   (beside.jobs["report"]!.needs as string[]).push("extra");
-  expect(lint(beside)).toEqual([ONE]);
+  expect(lint(beside)).toEqual([
+    ONE,
+    "scheduled.yaml: SC19: every admitted job is one of the five jobs with shared slots",
+  ]);
 });
 
 it("SC13 scenario: on the real scheduled.yaml, a test step with no limit of its own, or a job limit that is no backstop, is named by SC13", () => {
@@ -708,8 +1056,13 @@ it("SC13 scenario: on the real scheduled.yaml, a test step with no limit of its 
   // run 43778586135). Plant, run once on scheduled.ts and restored: SC13 dropped (red on each case).
   const STEPS = (suite: string) => `scheduled.yaml: SC13: ${suite}'s test steps share one whole timeout-minutes`;
   const JOB = "scheduled.yaml: SC13: tests's own timeout-minutes is each leg's suite limit and 3 minutes more";
+
   const LIMIT_TEXT =
     "scheduled.yaml: SC5: the report runs node .github/ci/scheduled.mjs once, with the needs, the results, the token and each suite's time limit, and its failure shows";
+
+  // The changed legs run at next's limit (SC18), so a next limit that is no longer one names them too.
+  const CHANGED = `scheduled.yaml: ${CHANGED_RULE}`;
+
   const backstop = (tooling: number, next: number) =>
     `\${{ startsWith(matrix.shard, 'tooling-') && ${tooling} || ${next} }}`;
 
@@ -718,7 +1071,7 @@ it("SC13 scenario: on the real scheduled.yaml, a test step with no limit of its 
   Reflect.deleteProperty(step(onJob, "tests", "vitest"), "timeout-minutes");
   Reflect.deleteProperty(step(onJob, "tests", "end to end"), "timeout-minutes");
   onJob.jobs["tests"]!["timeout-minutes"] = 17;
-  expect(lint(onJob)).toEqual([LIMIT_TEXT, STEPS("next"), JOB]);
+  expect(lint(onJob)).toEqual([LIMIT_TEXT, CHANGED, STEPS("next"), JOB]);
 
   for (const [tooling, next] of [
     [30, 20],
@@ -740,7 +1093,7 @@ it("SC13 scenario: on the real scheduled.yaml, a test step with no limit of its 
 
   const apart = real();
   step(apart, "tests", "end to end")["timeout-minutes"] = 16;
-  expect(lint(apart)).toEqual([LIMIT_TEXT, STEPS("next"), JOB]);
+  expect(lint(apart)).toEqual([LIMIT_TEXT, CHANGED, STEPS("next"), JOB]);
 });
 
 // Each plant is named by its own law: a plant's name starts with the law it breaks, and that law's

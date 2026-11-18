@@ -2,10 +2,12 @@
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
 import { parse } from "yaml";
+import { relatedWorkload } from "./related.ts";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
 
 // Today's app: its package name, or its folder outside next/. No command in check.yaml runs it.
 const TODAYS_APP = /fabrika-app-old|(?<!next\/)apps\/fabrika\b/;
+
 // Today's promise checks: `pnpm promises`, however spelled, or its program by path. Their checks
 // and planted breaks test today's pipeline code, so no command in check.yaml runs them (0533).
 const TODAYS_PROMISES = /\bpnpm\s+(?:-\S+\s+|run\s+)*promises\b|packages\/promises\//;
@@ -32,6 +34,9 @@ const VITEST_VARS: Record<string, (value: unknown) => boolean> = {
 // A vitest flag that picks another config or root, which could hold projects of any name.
 const ELSEWHERE = /(?:^|\s)(?:--config|-c|--root|-r|--dir|--workspace)(?:[=\s]|$)/;
 
+// Only these complete literal conditions prove a job cannot run on a PR or merge group.
+const DISPATCH_ONLY = /^github\.event_name=='workflow_dispatch'(?:&&inputs\.suite=='[a-z][a-z0-9-]*')?$/;
+
 /** A step's script as shell commands: `\`-continued lines joined, then cut at every separator. */
 const shellCommands = (script: string) =>
   script
@@ -48,12 +53,18 @@ const shellCommands = (script: string) =>
  * argument leaves that folder. Either way it reads no shell value but RUNNER_TEMP, untouched, and
  * the step's own pinned `VITEST_VARS`, and no `${{ }}` or command substitution.
  */
-const toolingJobs = (workflow: Record<string, unknown>): string[] => {
+const toolingJobs = (workflow: Record<string, unknown>, automatic = false): string[] => {
   const outer = { ...map(workflow["env"]) };
+
   return Object.entries(map(workflow["jobs"]))
-    .filter(([, job]) =>
+    .filter(([, job]) => !DISPATCH_ONLY.test(compact(map(job)["if"])))
+    .filter(([name, job]) =>
       steps(map(job)).some((step) => {
         if (typeof step["run"] !== "string") {
+          return false;
+        }
+
+        if (automatic && relatedWorkload(workflow, name, map(job), step)) {
           return false;
         }
 
@@ -61,10 +72,12 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
         const set = { ...outer, ...map(map(job)["env"]), ...env };
         const parts = shellCommands(step["run"]);
         const folder = typeof step["working-directory"] === "string" ? step["working-directory"] : "";
+
         const inside =
           /^next\//.test(folder) &&
           !folder.split("/").includes("..") &&
           !parts.some((part) => /^(?:cd|pushd)\b/.test(part));
+
         return parts
           .filter((part) => VITEST_CALL.test(part))
           .some((part) => {
@@ -72,12 +85,17 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
               const name = braced ?? plain ?? "";
               const pinned = VITEST_VARS[name];
               const runner = name === "RUNNER_TEMP" && !(name in set);
+
               return runner || (pinned !== undefined && pinned(env[name])) ? "" : whole;
             });
+
             const projects = [...part.matchAll(/--project(?:=|\s+)(\S+)/g)].map((found) => found[1] ?? "");
+
             const named =
               projects.length > 0 && projects.every((project) => /^next(?:-|$)/.test(project)) && !ELSEWHERE.test(part);
+
             const kept = inside && !part.split(/\s+/).some((word) => /(?:^|[="'/])\.\.|^["']?[/~]/.test(word));
+
             return /[$`]/.test(bare) || !(named || kept);
           });
       }),
@@ -90,8 +108,11 @@ export const lintNoTooling = (path: string, text: string): string[] => {
   const workflow = map(parse(text));
   const on = workflow["on"];
   const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(map(on));
+
   return events.includes("pull_request") || events.includes("merge_group")
-    ? toolingJobs(workflow).map((job) => `${path}: T1: ${job} runs no tooling test (0539)`)
+    ? toolingJobs(workflow, path === ".github/workflows/check.yaml").map(
+        (job) => `${path}: T1: ${job} runs no tooling test (0539)`,
+      )
     : [];
 };
 
@@ -99,7 +120,7 @@ export const mergeLine: Rule = ({ workflow, jobs }, require) => {
   // T1 (0539). No event here runs a tooling test: their author runs the narrow ones on the laptop,
   // and the schedule runs them all (scheduled.yaml's tooling job, SC8). Today's version is frozen
   // (0525, 0533), so its tests run on no event either. `toolingJobs` says how a vitest call passes.
-  for (const name of toolingJobs(workflow)) {
+  for (const name of toolingJobs(workflow, true)) {
     require(false, `T1: ${name} runs no tooling test (0539)`);
   }
 

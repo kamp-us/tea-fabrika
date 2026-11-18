@@ -5,12 +5,17 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 /** The leak grep refused the commits, or could not run; nothing was pushed. */
-export class LeakGrepRefused extends Schema.TaggedError<LeakGrepRefused>()("LeakGrepRefused", {
-  reason: Schema.String,
-}) {}
+export class LeakGrepRefused extends Schema.TaggedError<LeakGrepRefused, { readonly brand: unique symbol }>()(
+  "LeakGrepRefused",
+  {
+    reason: Schema.String,
+  },
+) {}
 
 /** The push did not happen: refused by GitHub, no step notes, no key, or no network. */
-export class PushRefused extends Schema.TaggedError<PushRefused>()("PushRefused", { reason: Schema.String }) {}
+export class PushRefused extends Schema.TaggedError<PushRefused, { readonly brand: unique symbol }>()("PushRefused", {
+  reason: Schema.String,
+}) {}
 
 export class Pushes extends Context.Service<
   Pushes,

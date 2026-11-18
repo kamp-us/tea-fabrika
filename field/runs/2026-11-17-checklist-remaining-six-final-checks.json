@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-checklist-remaining-six-final-checks",
+  "ticket": "kamp-us/tea-fabrika#1126",
+  "pr": null,
+  "started": "2026-11-17T11:28:33.671Z",
+  "ended": "2026-11-17T11:31:04.136Z",
+  "parent": "2026-11-17-checklist-remaining-six-build",
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling integrated exact main73ee by root's ordinary merge1ffebad43. All eight approved source paths remain byte-identical to bf3, retaining nine checklist cases, sixteen policy choices and main's environment fix. One canonical normal format, whole compiler and full eighteen-part lint passed. All5214tracked bytes/modes and head/index stayed unchanged. Thirty compiler packages completed. No fix, retry or safe-unit rerun was needed. Both reserved slots explicitly released. No protected fixture, real checklist fault, signing, push or CI ran; publication and fresh remote proof remain root-owned.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Canonical checks used the real worktree, own frozen install and standard system lock/caches. Earlier unit evidence is reused by byte identity, not relabeled as a new execution.",
+  "costUsd": null,
+  "billed": null,
+  "head": "1ffebad43e8754efcd8d148f1782d6465739fdc9",
+  "checks": {
+    "format": true,
+    "compiler": true,
+    "compilerPackages": 30,
+    "fullLint": true,
+    "fullLintParts": 18,
+    "sourceFilesUnchanged": 5214,
+    "testsRerun": false,
+    "protectedRun": false,
+    "compilerSlotReleased": true,
+    "fullApiSlotReleased": true
+  },
+  "phases": [
+    {
+      "phase": "format",
+      "started": "2026-11-17T11:28:33.671Z",
+      "ended": "2026-11-17T11:29:09.246Z",
+      "pid": 61033,
+      "code": 0
+    },
+    {
+      "phase": "typecheck",
+      "started": "2026-11-17T11:29:35.477Z",
+      "ended": "2026-11-17T11:29:49.091Z",
+      "pid": 96432,
+      "code": 0
+    },
+    {
+      "phase": "lint",
+      "started": "2026-11-17T11:30:28.510Z",
+      "ended": "2026-11-17T11:31:04.136Z",
+      "pid": 11372,
+      "code": 0
+    }
+  ]
+}

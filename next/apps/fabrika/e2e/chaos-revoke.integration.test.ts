@@ -27,14 +27,20 @@ import * as NemesisLedger from "@kampus/libfabrika/runtime/NemesisLedger";
 import * as RevokeHold from "./chaos-revoke.test-support.ts";
 
 const PERSON = "person_0000000000e008000000000001";
+
 const PROJECT = "p17b-revoke";
+
 const SENT = "2026-11-12T00:00:00.000Z";
-class WireFailure extends Schema.TaggedError<WireFailure>()("WireFailure", { cause: Schema.Defect() }) {}
+
+class WireFailure extends Schema.TaggedError<WireFailure, { readonly brand: unique symbol }>()("WireFailure", {
+  cause: Schema.Defect(),
+}) {}
 
 const field = (raw: string | Uint8Array) => {
   const bytes = Buffer.from(raw);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(bytes.length);
+
   return Buffer.concat([size, bytes]);
 };
 
@@ -43,23 +49,27 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
   const pair = yield* Effect.acquireRelease(
     Effect.tryPromise({
       try: () => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]),
-      catch: (cause) => new WireFailure({ cause }),
+      catch: (cause) => WireFailure.make({ cause }),
     }),
     () => Effect.void,
   );
+
   const bytes = new Uint8Array(
     yield* Effect.tryPromise({
       try: () => crypto.subtle.exportKey("raw", pair.publicKey),
-      catch: (cause) => new WireFailure({ cause }),
+      catch: (cause) => WireFailure.make({ cause }),
     }),
   );
+
   const digest = yield* Effect.tryPromise({
     try: () => crypto.subtle.digest("SHA-256", bytes),
-    catch: (cause) => new WireFailure({ cause }),
+    catch: (cause) => WireFailure.make({ cause }),
   });
-  const line = Schema.decodeUnknownSync(KeyLine)(
+
+  const line = Schema.decodeSync(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`,
   );
+
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     fingerprint: `SHA256:${Buffer.from(digest).toString("base64").replace(/=+$/, "")}`,
@@ -72,14 +82,14 @@ const identity = Effect.fn("RevokeTest.identity")(function* () {
         sign: (bytes) =>
           Effect.tryPromise({
             try: () => crypto.subtle.sign("Ed25519", pair.privateKey, new Uint8Array(bytes)),
-            catch: (cause) => new WireFailure({ cause }),
+            catch: (cause) => WireFailure.make({ cause }),
           }).pipe(Effect.map((signed) => new Uint8Array(signed))),
       }),
   };
 });
 
 const Frame = Schema.Struct({
-  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number, Schema.Null])),
+  id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite, Schema.Null])),
   method: Schema.optionalKey(Schema.String),
   params: Schema.optionalKey(Schema.Unknown),
   result: Schema.optionalKey(Schema.Unknown),
@@ -115,21 +125,26 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   const address = new URL(url);
   const chunks = yield* Queue.unbounded<Buffer>();
   const closes: Array<number> = [];
+
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => createConnection({ host: address.hostname, port: Number(address.port), allowHalfOpen: true })),
     (held) => Effect.sync(() => held.destroy()),
   );
+
   const listen = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const data = (bytes: Buffer) => {
         Queue.offerUnsafe(chunks, bytes);
       };
+
       const error = () => {
         Queue.offerUnsafe(chunks, Buffer.alloc(0));
       };
+
       socket.on("data", data);
       socket.on("error", error);
       socket.on("end", error);
+
       return { data, error };
     }),
     ({ data, error }) =>
@@ -139,17 +154,19 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
         socket.off("end", error);
       }),
   );
+
   void listen;
   const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64");
   socket.write(
     `GET /client/${encodeURIComponent(key.fingerprint)}/${tab} HTTP/1.1\r\nHost: ${address.host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${nonce}\r\nOrigin: ${url}\r\n\r\n`,
   );
   let buffered = Buffer.alloc(0);
+
   const more = Effect.gen(function* () {
     const bytes = yield* Queue.take(chunks).pipe(Effect.timeout("20 seconds"));
 
     if (bytes.length === 0) {
-      return yield* new WireFailure({ cause: "transport closed" });
+      return yield* WireFailure.make({ cause: "transport closed" });
     }
 
     buffered = Buffer.concat([buffered, bytes]);
@@ -162,10 +179,11 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   const boundary = buffered.indexOf("\r\n\r\n");
 
   if (!/^HTTP\/1\.1 101 /.test(buffered.subarray(0, boundary).toString())) {
-    return yield* new WireFailure({ cause: "upgrade refused" });
+    return yield* WireFailure.make({ cause: "upgrade refused" });
   }
 
   buffered = buffered.subarray(boundary + 4);
+
   const frame = Effect.fnUntraced(function* () {
     while (true) {
       while (buffered.length < 2) {
@@ -184,7 +202,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
         short === 126 ? buffered.readUInt16BE(2) : short === 127 ? Number(buffered.readBigUInt64BE(2)) : short;
 
       if (!Number.isSafeInteger(size) || size > 1024 * 1024) {
-        return yield* new WireFailure({ cause: "oversized test frame" });
+        return yield* WireFailure.make({ cause: "oversized test frame" });
       }
 
       while (buffered.length < header + size) {
@@ -204,6 +222,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
       }
     }
   });
+
   const next = Effect.fnUntraced(function* (match: (value: typeof Frame.Type) => boolean) {
     while (true) {
       const value = yield* frame();
@@ -213,17 +232,23 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
       }
     }
   });
+
   // A JSON-RPC 2.0 id only has to be unique among this client's open requests.
   let calls = 0;
+
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
     const id = `call-${++calls}`;
     socket.write(encode({ jsonrpc: "2.0", id, method, params }));
+
     return yield* next((value) => value.id === id);
   });
+
   const challenge = yield* next((value) => value.method === "challenge");
+
   const { nonce: challengeNonce } = yield* Schema.decodeUnknownEffect(Schema.Struct({ nonce: Schema.String }))(
     challenge.params,
   );
+
   const first = yield* call("initialize", {
     versions: [1],
     has: ["seal"],
@@ -236,6 +261,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
     sentAt: SENT,
     signed: yield* key.proof(`fabrika-hello\n${url}\n${tab}\n${challengeNonce}`),
   });
+
   return {
     first,
     call,
@@ -247,7 +273,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
 const invoke = Effect.fn("RevokeTest.control")(function* <A>(call: () => Promise<A>) {
   return yield* Effect.tryPromise({
     try: call,
-    catch: (cause) => new WireFailure({ cause }),
+    catch: (cause) => WireFailure.make({ cause }),
   });
 });
 
@@ -262,9 +288,11 @@ const served = Effect.gen(function* () {
         alchemy: process.env.ALCHEMY_HOME,
         track: process.env.DO_NOT_TRACK,
       };
+
       process.env.FABRIKA_HOME = home;
       process.env.DO_NOT_TRACK = "1";
       delete process.env.TYPESAFE_API_KEY;
+
       return previous;
     }),
     (previous) =>
@@ -287,6 +315,7 @@ const served = Effect.gen(function* () {
   const other = yield* identity();
   const app = path.resolve(import.meta.dirname, "..");
   const repo = path.resolve(app, "../../..");
+
   const built = yield* build({
     root: repo,
     entry: path.join(app, "e2e/chaos-revoke.worker.test-support.ts"),
@@ -297,11 +326,14 @@ const served = Effect.gen(function* () {
     ledger: [],
     chaos: false,
   });
+
   const { localState } = yield* Effect.tryPromise({
     try: () => import("alchemy/State/LocalState"),
-    catch: (cause) => new WireFailure({ cause }),
+    catch: (cause) => WireFailure.make({ cause }),
   });
+
   const { port } = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
   const instance = yield* localInstance(
     built,
     RecordWireTest.settingsFixture({
@@ -313,6 +345,7 @@ const served = Effect.gen(function* () {
       port,
     }),
   ).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(localState()));
+
   const from = {
     by: root.fingerprint,
     for: PERSON,
@@ -322,6 +355,7 @@ const served = Effect.gen(function* () {
     traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
     build: built.build,
   };
+
   const source = built.programs["fabrika/checklist"];
 
   if (source === undefined) {
@@ -369,7 +403,9 @@ const until = Effect.fn("RevokeTest.until")(function* <A, E, R>(
 const RevokeTest = { PERSON, PROJECT, SENT, served, connect, invoke, until };
 
 const NAME = "chaos:revoke";
+
 const TARGET = "checklist:2";
+
 const SEED = 119120;
 
 it.live(
@@ -389,10 +425,13 @@ it.live(
 
         const calls: LedgerCalls = { append, read, wait };
         const ledger = LedgerRemote.layer(calls, { reader: "p17b-revoke-audit" });
+
         const rows = (stream: string) =>
           Ledger.use((service) => Stream.runCollect(service.read(stream, 0))).pipe(Effect.provide(ledger));
+
         const old = yield* RevokeTest.connect(instance.url, oldKey, "old");
         expect(old.first.error).toBeUndefined();
+
         const grant = grantText({
           id: "grant-other",
           key: otherKey.raw,
@@ -415,6 +454,7 @@ it.live(
         });
         const other = yield* RevokeTest.connect(instance.url, otherKey, "other");
         expect(other.first.error).toBeUndefined();
+
         const input = (letter: string, name: string) => ({
           pid,
           letter,
@@ -422,28 +462,33 @@ it.live(
           sentAt: RevokeTest.SENT,
           seen: 0,
         });
+
         const before = yield* old.call("process.send", input("old-before", "before"));
         expect(before.error).toBeUndefined();
         expect(before.result).toMatchObject({ _tag: "accepted" });
+
         const hold = (method: string, params: unknown = {}) =>
           RevokeTest.invoke(() =>
             // @ts-expect-error p90-control is no ConnectionId: only the test's control binding takes it (chaos-revoke.worker.test-support.ts:90)
             project.route("p90-control", method, params, "p90-control"),
           );
         yield* Effect.acquireRelease(hold("p90.arm", { process: pid }), () => hold("p90.release").pipe(Effect.orDie));
+
         const delayed = yield* Effect.forkScoped(
           old.call("process.send", input("old-delayed", "must-not-land")).pipe(Effect.exit),
         );
+
         expect(
           yield* RevokeTest.until(
             hold("p90.status"),
             (answer) =>
-              Schema.is(Schema.Struct({ _tag: Schema.Literal("ok"), result: RevokeHold.Model }))(answer) &&
+              Schema.is(Schema.TaggedStruct("ok", { result: RevokeHold.Model }))(answer) &&
               answer.result._tag === "held",
           ),
         ).toMatchObject({ result: { _tag: "held", process: pid } });
         // Nothing has been written yet. The real request has already passed online membership.
         expect((yield* rows("gateway/inputs")).filter((row) => row.by === oldKey.fingerprint)).toHaveLength(1);
+
         const binding = Chaos.Target.make({
           program: "fabrika/checklist",
           name: TARGET,
@@ -451,7 +496,8 @@ it.live(
           client: oldKey.fingerprint,
           key: oldKey.raw,
         });
-        const id = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000017");
+
+        const id = Schema.decodeSync(Chaos.ExperimentId)("chaos_0000000000e008000000000017");
         const start = Chaos.Start.make({ id, seed: SEED, target: binding, most: 64, gap: 1000 });
         let schedule = ChaosSchedule.seed(start.seed);
         let most = 0;
@@ -469,6 +515,7 @@ it.live(
 
         expect(most).toBeLessThan(start.most);
         const world = yield* ChaosTest.open;
+
         const fire: Handler<never> = (raw) =>
           Effect.gen(function* () {
             const request = yield* Schema.decodeUnknownEffect(Schema.toType(Chaos.Fire))(raw);
@@ -480,7 +527,7 @@ it.live(
             expect(request.target).toEqual(binding);
             expect(request.fault.key).toBe(oldKey.raw);
             const model = yield* world.snapshot(NAME);
-            const saved = Schema.decodeUnknownSync(chaos.state.schema)(model.model);
+            const saved = Schema.decodeSync(chaos.state.schema)(model.model);
             expect(saved.phase._tag).toBe("checking");
 
             if (saved.phase._tag !== "checking") {
@@ -491,6 +538,7 @@ it.live(
               ordinal: request.ordinal,
               fault: request.fault,
             });
+
             const text = revokeText({
               id: `revoke-${request.id}-${request.ordinal}`,
               key: request.fault.key,
@@ -505,23 +553,26 @@ it.live(
             });
             return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
           });
+
         const nemesis = NemesisLedger.layer(() => Effect.die("only the host fire handler revokes")).pipe(
           Layer.provide(ProcessHistoryLedger.layer),
           Layer.provide(ledger),
         );
+
         const handlers: Readonly<Record<string, Handler<never>>> = {
           now: () => Clock.currentTimeMillis.pipe(Effect.map(Outcome.ok)),
           fire,
           inspect: () =>
             Nemesis.use((service) => service.check(binding)).pipe(Effect.provide(nemesis), Effect.map(Outcome.ok)),
         };
+
         yield* Effect.scoped(
           Effect.gen(function* () {
             const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
             expect((yield* runner.msg(world.letter(1, { type: "start", ...start, most })))._tag).toBe("accepted");
 
             for (let n = 0; n < most; n++) {
-              const saved = Schema.decodeUnknownSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
+              const saved = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
               const deadline = chaos.wake(saved);
 
               if (deadline === null) {
@@ -532,7 +583,7 @@ it.live(
             }
           }),
         );
-        const final = Schema.decodeUnknownSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
+        const final = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
         expect(final.phase._tag).toBe("done");
         const revoked = (yield* rows("gateway/access")).find((row) => row._tag === "revoked");
         expect(revoked).toBeDefined();
@@ -564,9 +615,11 @@ it.live(
         const live = yield* other.call("process.send", input("other-after", "other-still-works"));
         expect(live.error).toBeUndefined();
         expect(live.result).toMatchObject({ _tag: "accepted" });
+
         const inbox = yield* RevokeTest.until(rows(`${TARGET}/inbox`), (entries) =>
           entries.some((entry) => entry.id === "other-after"),
         );
+
         const sends = inbox.filter((row) => row._tag === "send");
         const clientKeys = new Set([oldKey.fingerprint, otherKey.fingerprint]);
         expect(sends.filter((row) => clientKeys.has(row.by)).map((row) => ({ id: row.id, by: row.by }))).toEqual([
@@ -581,6 +634,7 @@ it.live(
               m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
             }),
           )(row.body);
+
           // The timer follows the inbox position whose model asked for this wake.
           expect(row.id).toBe(`${pid}/due/${m.at}/${row.pos - 1}`);
           expect(row).toMatchObject({ by: root.fingerprint, for: RevokeTest.PERSON, parent: null });
@@ -610,7 +664,7 @@ it.live(
             const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
             yield* runner.open("reopen");
             yield* runner.due(Number.MAX_SAFE_INTEGER);
-            expect(Schema.decodeUnknownSync(chaos.state.schema)((yield* world.snapshot(NAME)).model)).toEqual(final);
+            expect(Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model)).toEqual(final);
           }),
         );
         expect((yield* rows("gateway/access")).filter((row) => row._tag === "revoked")).toHaveLength(1);

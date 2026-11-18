@@ -2,11 +2,10 @@
  * A program: a pure tea machine and the declarations the runner checks it by. A program gets no
  * sender, key, ledger or service. `stepper` steps it by hand, as Elm's runtime would, and never
  * runs a Cmd: the runner does that, after the input is saved.
- *
- * @stability unstable
  */
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
 import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 
@@ -16,7 +15,9 @@ type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"]
 
 /** A schema a program declares. It decodes and encodes without services. */
 type Declared = Schema.Codec<unknown, unknown>;
+
 const isDeclared = (u: unknown): u is Declared => Schema.isSchema(u);
+
 const isCode = <F>(u: unknown): u is F => Predicate.isFunction(u);
 
 const code = <F>(expected: string) => Schema.declare((u: unknown): u is F => isCode<F>(u), { expected });
@@ -44,7 +45,6 @@ const Schemas = Schema.declare(isDeclared, { expected: "a schema" });
 /**
  * Schema for a program's refusal: a `reason`, and the numbers that explain it.
  *
- * @stability unstable
  * @category schemas
  */
 export const Refusal = Schema.Struct({
@@ -52,10 +52,10 @@ export const Refusal = Schema.Struct({
   now: Schema.optionalKey(Schema.Number),
   most: Schema.optionalKey(Schema.Number),
 });
+
 /**
  * A program's own no to a fresh Msg, as `Refusal` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Refusal = typeof Refusal.Type;
@@ -70,7 +70,6 @@ const Upgrade = Schema.Struct({
 /**
  * Schema for the saved model's shape: its version, its schema and the named upgrades that reach it.
  *
- * @stability unstable
  * @category schemas
  */
 export const State = Schema.Struct({
@@ -78,10 +77,10 @@ export const State = Schema.Struct({
   schema: Schemas,
   upgrades: Schema.Array(Upgrade),
 });
+
 /**
  * The saved model's shape, as `State` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type State = typeof State.Type;
@@ -107,7 +106,6 @@ const InputSchema = Schema.TaggedUnion({
  * One input port of a program: a write port, which takes an input, or a read port, which answers
  * from the view.
  *
- * @stability unstable
  * @category models
  */
 export type Input = typeof InputSchema.Type;
@@ -119,6 +117,7 @@ type ReadPort<Q extends Declared, A> = Omit<typeof InputSchema.cases.read.Type, 
 };
 
 const readInput = InputSchema.cases.read.make;
+
 const writeInput = InputSchema.cases.write.make;
 
 const readPort = <Q extends Declared, A extends (view: never, input: NoInfer<Q["Type"]>) => unknown>(
@@ -147,6 +146,7 @@ const writeCase = Schema.make<InputConstructors["cases"]["write"]>(InputSchema.c
 });
 
 Object.defineProperty(readCase, "make", { value: readPort });
+
 Object.defineProperty(writeCase, "make", { value: writePort });
 
 /**
@@ -160,7 +160,6 @@ Object.defineProperty(writeCase, "make", { value: writePort });
  * keep the port's own schema type, so TypeScript checks a read port's `answer` against the input
  * that port declares.
  *
- * @stability unstable
  * @category schemas
  */
 export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
@@ -172,14 +171,13 @@ export const Input = Schema.make<InputConstructors>(InputSchema.ast, {
  * Schema for an event a program may write: its schema, and whether only a person's input may cause
  * it. This is the trusted policy the door checks. Elm outputs never authorize a ledger write.
  *
- * @stability unstable
  * @category schemas
  */
 export const EventPolicy = Schema.Struct({ schema: Schemas, personOnly: Schema.Boolean });
+
 /**
  * One row of a program's `writes`, as `EventPolicy` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type EventPolicy = typeof EventPolicy.Type;
@@ -306,7 +304,6 @@ type FilledPorts<T extends ProgramMachine, I> = {
  * output ports, its audit selector and refusal check, and the events it may write. Concrete types
  * stay with authored programs. The loader uses the checked, erased declaration.
  *
- * @stability unstable
  * @category models
  */
 export type Program<
@@ -340,7 +337,6 @@ export type Program<
  * which carries its program's name (`tezgah.split_right`), its keys, its shell word and its
  * palette label. A window is handed a program's rows as a value and loads them into its key table.
  *
- * @stability unstable
  * @category models
  */
 export type Binding = {
@@ -377,7 +373,9 @@ const Authoring = Schema.Struct({
 });
 
 const decodeDeclaration = Schema.decodeUnknownResult(Declaration);
+
 const decodeLoadable = Schema.decodeUnknownResult(Loadable);
+
 const decodeAuthoring = Schema.decodeUnknownResult(Authoring);
 
 const construct = (raw: unknown) =>
@@ -466,10 +464,87 @@ const makeEffect = Effect.fn("program.make")(function* <
  * A spec writes nothing twice: the model's schema and the Msg schema come from the machine, and a
  * write port given as a description takes the machine's Msg schema.
  *
- * @stability unstable
  * @category constructors
  */
 export const Program = { schema: Declaration, make, makeEffect };
+
+type PortFields<M, K extends string> = M extends Typed ? (K extends M["type"] ? Omit<M, "type"> : never) : never;
+
+type PortSchema<P extends typeof Declaration.Type, K extends string> = string extends K
+  ? Declared
+  : K extends keyof P["inputs"]
+    ? P["inputs"][K] extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
+        readonly schema: infer S extends Declared;
+      }
+      ? S
+      : unknown extends P["msg"]["Type"]
+        ? Declared
+        : Schema.Codec<PortFields<P["msg"]["Type"], K>, unknown>
+    : Declared;
+
+const Payload = Schema.Record(Schema.String, Schema.Json).check(
+  Schema.makeFilter((value) => !Object.hasOwn(value, "type")),
+);
+
+const Fields = Schema.Record(Schema.String, Schema.Unknown);
+
+/** Narrows a JSON value to its object case. `Predicate.isObject` alone leaves a type no rest pattern takes. */
+const isJsonObject = (u: Schema.Json): u is Schema.JsonObject => Predicate.isObject(u);
+
+// Keep the Msg's codecs and checks intact. Only add and remove the port's discriminator.
+const writePortCodec = (msg: Declared, key: string) =>
+  Payload.pipe(
+    Schema.decodeTo(
+      Schema.toCodecJson(msg),
+      SchemaTransformation.transform<Schema.Json, Readonly<Record<string, Schema.Json>>>({
+        decode: (value) => ({ ...value, type: key }),
+        encode: (wire) => {
+          if (!isJsonObject(wire)) {
+            return {};
+          }
+
+          const { type: _, ...value } = wire;
+          return value;
+        },
+      }),
+    ),
+    Schema.decodeTo(Fields.check(Schema.makeFilter((m) => m.type === key))),
+    Schema.decodeTo(
+      Fields,
+      SchemaTransformation.transform({
+        decode: (m) => {
+          const { type: _, ...fields } = Predicate.isObject(m) ? m : {};
+          return fields;
+        },
+        encode: (fields) => ({ ...fields, type: key }),
+      }),
+    ),
+  );
+
+/**
+ * Returns the schema of one of a program's ports, or none when the program declares no port by
+ * that name. A read port gives its own schema. A write port gives a codec for its Msg's fields
+ * without `type`, which decodes and checks them with the Msg's own JSON codec.
+ *
+ * @category getters
+ */
+export function port<P extends typeof Declaration.Type, K extends string>(
+  program: P,
+  key: K,
+): Option.Option<PortSchema<P, K>>;
+export function port(program: typeof Declaration.Type, key: string): Option.Option<Declared> {
+  const input = Object.hasOwn(program.inputs, key) ? program.inputs[key] : undefined;
+
+  if (input === undefined) {
+    return Option.none();
+  }
+
+  if (Input.isAnyOf(["read"])(input)) {
+    return Option.some(input.schema);
+  }
+
+  return Option.some(writePortCodec(program.msg, key));
+}
 
 /** A JSON object: an event as it travels inside a write. Its declared schema gives its `_tag`. */
 const Event = Schema.Record(Schema.String, Schema.Json);
@@ -478,17 +553,16 @@ const Event = Schema.Record(Schema.String, Schema.Json);
  * Schema for what a program asks to write: caused by an earlier input it names, or explicitly its
  * own.
  *
- * @stability unstable
  * @category schemas
  */
 export const Write = Schema.TaggedUnion({
   caused: { parent: ParentText, event: Event },
   own: { event: Event },
 });
+
 /**
  * What a program asks the runner to write, as `Write` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Write = typeof Write.Type;
@@ -497,7 +571,6 @@ export type Write = typeof Write.Type;
  * Schema for one pure step's answer: `stepped`, with the next model, view and Cmds as JSON and the
  * wake time, or `refused`.
  *
- * @stability unstable
  * @category schemas
  */
 export const Step = Schema.TaggedUnion({
@@ -509,10 +582,10 @@ export const Step = Schema.TaggedUnion({
   },
   refused: Refusal.fields,
 });
+
 /**
  * One pure step's answer, as `Step` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Step = typeof Step.Type;
@@ -522,14 +595,13 @@ export type Step = typeof Step.Type;
  * input), or `refused` with the program's refusal. A fresh check decides admission without
  * preparing a model or running update.
  *
- * @stability unstable
  * @category schemas
  */
 export const Admission = Schema.TaggedUnion({ admitted: {}, invalid: {}, refused: Refusal.fields });
+
 /**
  * An admission answer, as `Admission` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Admission = typeof Admission.Type;
@@ -537,7 +609,6 @@ export type Admission = typeof Admission.Type;
 /**
  * An update's checked model, view, Cmds and wake time.
  *
- * @stability unstable
  * @category models
  */
 export type Prepared = typeof Step.cases.stepped.Type;
@@ -553,7 +624,6 @@ export type Prepared = typeof Step.cases.stepped.Type;
  * input, so it must be retried. `errorClass` names the thrown class, or the `error` text when one was
  * kept.
  *
- * @stability unstable
  * @category errors
  */
 export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
@@ -571,6 +641,7 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
     }
 
     const original = Object.hasOwn(this, "cause") ? this.cause : this;
+
     return original instanceof Error ? original.constructor.name : original === null ? "null" : typeof original;
   }
 }
@@ -584,7 +655,6 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
  * Each step answers a `Step` as JSON and runs no Cmd. They are plain functions: a failure is
  * thrown as `ProgramDown`, never returned.
  *
- * @stability unstable
  * @category models
  */
 export type Stepper = {
@@ -600,6 +670,7 @@ export type Stepper = {
 };
 
 const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
+
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const isTyped = (u: unknown): u is Typed =>
@@ -663,6 +734,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
   }
 
   const error = Predicate.hasProperty(msg, "error") ? msg.error : undefined;
+
   return Option.some(isTagged(error));
 };
 
@@ -683,7 +755,6 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
  * must be a number or null, and a declared Cmd must match its input schema. A throw or bad data is
  * a `ProgramDown`, whose reason says where: `load`, `step`, `saved_state` or `saved_letter`.
  *
- * @stability unstable
  * @category constructors
  */
 export const stepper = (declared: unknown): Result.Result<Stepper, Schema.SchemaError> => {
@@ -700,7 +771,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
   const decodeModel = Schema.decodeUnknownResult(program.state.schema);
   const encodeModel = Schema.encodeUnknownResult(program.state.schema);
   const encodeView = Schema.encodeUnknownResult(program.view.data);
-  const decodeMsg = Schema.decodeUnknownResult(program.msg);
+  const decodeMsg = Schema.decodeUnknownResult(Schema.toCodecJson(program.msg));
 
   /** A model as the program's own value, or ProgramDown with `reason`. */
   const model = (raw: unknown, reason: ProgramDown["reason"]): unknown => {
@@ -713,7 +784,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     return decoded.success;
   };
 
-  /** A Msg as the machine takes it: a settled Cmd Msg, or one the program's Msg schema decodes. */
+  /** A Msg as the machine takes it: a settled Cmd Msg, or one the Msg schema's JSON codec decodes. */
   const message = (raw: unknown, saved: boolean): Option.Option<Typed> => {
     const typed = decodeTyped(raw);
 
@@ -733,6 +804,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     }
 
     const decoded = decodeMsg(raw);
+
     return Result.isSuccess(decoded) && isTyped(decoded.success) ? Option.some(decoded.success) : Option.none();
   };
 
@@ -751,6 +823,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     }
 
     const schemas: object = def.schema;
+
     return "input" in schemas && accepts(schemas.input, cmd);
   };
 
@@ -785,6 +858,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       try: f,
       catch: (cause) => (Schema.is(ProgramDown)(cause) ? cause : new ProgramDown({ reason: "step", cause })),
     });
+
   const fresh: Stepper["fresh"] = (raw, msg) =>
     checked(() => {
       const now = model(raw, "saved_state");
@@ -804,6 +878,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
         ? Admission.cases.admitted.make({})
         : Admission.cases.refused.make(refusal.success);
     });
+
   const update: Stepper["update"] = (raw, msg) =>
     checked(() => {
       const now = model(raw, "saved_state");
@@ -814,6 +889,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       }
 
       const [next, cmds] = guard("step", () => applyCell(machine, now, m.value));
+
       return prepare(next, cmds, "step");
     });
 
@@ -824,6 +900,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     init: (saved) => {
       const start = saved === null ? null : model(saved, "saved_state");
       const [next] = guard("load", () => machine.init(start, {}));
+
       return prepare(next, [], "load");
     },
     step: (raw, msg) => {
@@ -865,6 +942,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       }
 
       const [next, cmds] = guard("saved_letter", () => applyCell(machine, now, m.value));
+
       return prepare(next, cmds, "saved_letter");
     },
   });

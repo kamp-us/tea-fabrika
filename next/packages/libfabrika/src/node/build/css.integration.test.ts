@@ -8,7 +8,10 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, type FileSystem, type Path, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -34,6 +37,7 @@ type Build = {
 const product = async <A>(file: string, name: string) => {
   const path = join(import.meta.dirname, file);
   assert(existsSync(path), `P16 not built: ${name} absent`);
+
   return vi.importActual<A>(pathToFileURL(path).href);
 };
 
@@ -51,7 +55,9 @@ const build: Build["build"] = (options) =>
   Effect.promise(() => product<Build>("./build.ts", "libfabrika/build")).pipe(Effect.flatMap((m) => m.build(options)));
 
 const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 30 }) };
+
 const ids = fc.integer({ min: 0, max: 10000 });
+
 const homes: string[] = [];
 
 // Inspect the parsed rules before printing can merge or normalize them. Only locations differ.
@@ -66,6 +72,7 @@ const cssRules = (css: string) => {
       },
     },
   });
+
   return rules;
 };
 
@@ -77,12 +84,14 @@ const fixture = (id: number) => {
   homes.push(home);
   const body = `.child${id} { color: red; }`;
   writeFileSync(join(home, `child${id}.css`), body);
+
   return {
     home,
     body,
     read: (css: string) => {
       const file = join(home, "root.css");
       writeFileSync(file, css);
+
       return inlineStylesheet(file);
     },
   };
@@ -97,6 +106,7 @@ const failure = async (stylesheet: Effect.Effect<string, unknown>) => {
   }
 
   expect(result.failure).toMatchObject({ _tag: "BuildError", reason: "bundle" });
+
   return result.failure;
 };
 
@@ -117,6 +127,7 @@ const graphFixture = (graph: CssGraph, mixed: boolean) => {
     statement = "@layer a, b;",
     body = (n: number) => {
       const rule = (layer: string) => `.same.source${n}${layer} { --winner: source${n}-${graph.id}; }`;
+
       return mixed ? rule("") : `@layer b {${rule("b")}} @layer a {${rule("a")}}`;
     },
     wrapped = (n: number) => (graph.named ? `@layer ${n % 2 === 0 ? "a" : "b"} {${body(n)}}` : body(n)),
@@ -146,8 +157,10 @@ const graphFixture = (graph: CssGraph, mixed: boolean) => {
 
     return parts.join("\n");
   };
+
   const file = join(f.home, "root.css");
   writeFileSync(file, render(false));
+
   const oracle = async (path: string) =>
     (
       await bundleAsync({
@@ -158,11 +171,14 @@ const graphFixture = (graph: CssGraph, mixed: boolean) => {
         },
       })
     ).code.toString();
+
   const expanded = (css: string) => {
     const path = join(f.home, "expanded.css");
     writeFileSync(path, css);
+
     return bundle({ filename: path }).code.toString();
   };
+
   return { ...f, file, order, render, oracle, expanded };
 };
 
@@ -188,6 +204,7 @@ const refusedBuild = async (home: string) => {
   writeFileSync(join(pkg, "program.ts"), 'export {counter as program} from "@kampus/counter";');
   writeFileSync(join(pkg, "window.js"), `import ${JSON.stringify(join(home, "root.css"))};`);
   writeFileSync(join(home, "brain.ts"), "export const ready = true;");
+
   const attempt = build({
     root: home,
     out: join(home, "dist"),
@@ -197,6 +214,7 @@ const refusedBuild = async (home: string) => {
     ledger: [],
     chaos: false,
   }).pipe(Effect.result, Effect.provide(NodeServices.layer));
+
   const file = join(home, "root.css"),
     original = readFileSync(file, "utf8");
 
@@ -234,6 +252,7 @@ describe("P16 CSS tokens", () => {
               span(options) {
                 const span = new Tracer.NativeSpan(options);
                 spans.push(span);
+
                 return span;
               },
             }),
@@ -280,14 +299,17 @@ describe("P16 CSS tokens", () => {
             between: kind === "between" || (kind !== "before" && generated.between),
             named: kind === "named",
           };
+
           const f = graphFixture(graph, kind === "mixed");
           // 1.33.0 rejects a statement between imports, although Cascade 5 allows it.
           // For that parser gap, bundle the fixture's literal expansion in source order.
           const expected = graph.between ? f.expanded(f.render(true)) : await f.oracle(f.file);
+
           const verify = (css: string) =>
             expect(meaning(cssRules(css)), "cascade layer priority and source rule order").toEqual(
               meaning(cssRules(expected)),
             );
+
           // Plants: lose a source; reverse rules that compete in the same layer; move declarations.
           expect(() => verify(f.expanded(f.render(true, f.order.slice(0, -1))))).toThrow("cascade layer priority");
 
@@ -316,6 +338,7 @@ describe("P16 CSS tokens", () => {
               _tag: "Failure",
               failure: { _tag: "BuildError", reason: "bundle" },
             });
+
             return;
           }
 
@@ -340,6 +363,7 @@ describe("P16 CSS tokens", () => {
       meaning(cssRules(`.child${id} { color: red; }`)),
     );
   };
+
   const imported = (css: string, id: number) => {
     verifyImport(css, id);
 
@@ -348,6 +372,7 @@ describe("P16 CSS tokens", () => {
       expect(() => verifyImport(plant, id)).toThrow("imported rule");
     }
   };
+
   it("escaped at-keywords import the same file as their unescaped spelling", async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -356,6 +381,7 @@ describe("P16 CSS tokens", () => {
         async (id, keyword) => {
           const f = fixture(id),
             css = `@${keyword} "./child${id}.css";`;
+
           // Plant the review bug: leave the import in the served text without its child.
           expect(() => verifyImport(css, id)).toThrow("imported rule");
           imported(await Effect.runPromise(f.read(css)), id);
@@ -373,6 +399,7 @@ describe("P16 CSS tokens", () => {
         async (id, url, quote) => {
           const f = fixture(id),
             css = `@import ${url}(${quote}./child${id}.css${quote});`;
+
           expect(() => verifyImport(css, id)).toThrow("imported rule");
           imported(await Effect.runPromise(f.read(css)), id);
         },
@@ -394,6 +421,7 @@ describe("P16 CSS tokens", () => {
         fc.asyncProperty(ids, fc.constantFrom('"', "'"), async (id, quote) => {
           const f = fixture(id),
             css = `@import ${quote}./chi\\${newline}ld${id}.css${quote};`;
+
           expect(() => verifyImport(css, id)).toThrow("imported rule");
           imported(await Effect.runPromise(f.read(css)), id);
         }),
@@ -514,13 +542,16 @@ describe("P16 CSS tokens", () => {
       fc.asyncProperty(ids, fc.constantFrom("", "note", "* longer *", "line\nnext"), async (id, note) => {
         const f = fixture(id),
           last = `.root${id} { color: blue; }`;
+
         const rules = cssRules(
           await Effect.runPromise(f.read(`@import "child${id}.css" print/*${note}*/and/*${note}*/(color);${last}`)),
         );
+
         const verify = (actual: readonly Rule[]) =>
           expect(meaning(actual), "imported rules keep their order and media condition").toEqual(
             meaning(cssRules(`@media print and (color) {${f.body}}${last}`)),
           );
+
         verify(rules);
         const media = rules[0]!;
         expect(media.type).toBe("media");
@@ -566,10 +597,12 @@ describe("P16 CSS tokens", () => {
         const f = fixture(id),
           first = `@import "child${id}.css";${gap}`,
           last = `.root${id} { color: blue; }`;
+
         const verify = async (condition: string) =>
           expect(await failure(f.read(`${first}@import "child${id}.css" ${condition};${gap}${last}`))).toMatchObject({
             message: expect.stringContaining("unsupported @import condition"),
           });
+
         await verify("layer");
         // Removing the unsupported condition must make this refusal check fail.
         await expect(verify("")).rejects.toThrow("expected stylesheet failure");
@@ -584,11 +617,14 @@ describe("P16 CSS tokens", () => {
         const f = fixture(id),
           remote = `@import url("https://test.invalid/theme${id}.css") ${media};`,
           last = `.root${id} { color: blue; }`;
+
         writeFileSync(join(f.home, `child${id}.css`), `${remote}\n${f.body}`);
+
         const verify = (css: string) =>
           expect(meaning(cssRules(css)), "nested imports keep their URLs, order and conditions").toEqual(
             meaning(cssRules(`${remote}\n${f.body}\n${last}`)),
           );
+
         verify(await Effect.runPromise(f.read(`@import "child${id}.css";\n${last}`)));
 
         for (const plant of [
@@ -606,13 +642,16 @@ describe("P16 CSS tokens", () => {
     await fc.assert(
       fc.asyncProperty(ids, fc.constantFrom("string", "url()", "@import"), async (id, token) => {
         const f = fixture(id);
+
         const css =
           token === "string"
             ? `@import "child\n${id}.css";`
             : token === "url()"
               ? `a { background: url(https://test.invalid/a ${id}); }`
               : `@import ("child${id}.css");`;
+
         const error = await failure(f.read(css));
+
         const verify = (actual: unknown) => {
           expect(actual).toMatchObject({
             _tag: "BuildError",
@@ -620,6 +659,7 @@ describe("P16 CSS tokens", () => {
             message: expect.stringContaining(`stylesheet has a broken ${token}`),
           });
         };
+
         verify(error);
 
         for (const plant of [undefined, new Error("wrong reason")]) {
@@ -671,9 +711,12 @@ describe("P16 CSS tokens", () => {
       fc.asyncProperty(ids, fc.constantFrom("61", "000061", "62", "000062"), async (id, hex) => {
         const f = fixture(id),
           css = `a { --value: \\${hex}url(./file${id}.png); }`;
+
         const expected = cssRules(`a { --value: ${hex.endsWith("61") ? "a" : "b"}url(./file${id}.png); }`);
+
         const verify = (rules: readonly Rule[]) =>
           expect(meaning(rules), "the escaped function and its argument must remain").toEqual(meaning(expected));
+
         const rules = cssRules(await Effect.runPromise(f.read(css)));
         verify(rules);
 

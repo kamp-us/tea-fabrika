@@ -143,6 +143,7 @@ export const serviceId: CreateRule = {
     const isContext = (node: Node): boolean => {
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return (
           at !== null &&
           ((at.from === "effect" && at.name === "Context") || (at.from === "effect/Context" && at.name === "*"))
@@ -151,6 +152,7 @@ export const serviceId: CreateRule = {
 
       if (node.type === "MemberExpression" && memberName(node) === "Context" && node.object.type === "Identifier") {
         const at = imported(resolve(node.object));
+
         return at !== null && at.from === "effect" && at.name === "*";
       }
 
@@ -163,11 +165,13 @@ export const serviceId: CreateRule = {
 
       if (node.type === "MemberExpression") {
         const name = memberName(node);
+
         return (name === "Service" || name === "Reference") && isContext(node.object) ? name : null;
       }
 
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return at !== null && at.from === "effect/Context" && (at.name === "Service" || at.name === "Reference")
           ? at.name
           : null;
@@ -179,8 +183,10 @@ export const serviceId: CreateRule = {
     const check = (call: ESTree.CallExpression, id: Node | undefined) => {
       // A class names its service; the rule trusts no other name.
       const parent = (call as Node & { readonly parent?: Node }).parent;
+
       const named =
         parent?.type === "ClassDeclaration" || parent?.type === "ClassExpression" ? parent.id?.name : undefined;
+
       const text = literal(id);
       const at = id ?? call;
 
@@ -189,10 +195,12 @@ export const serviceId: CreateRule = {
           node: at,
           message: `This service ID is not a string the rule can read, so it cannot show the ID is ${base} or ${base}.Name (decision 0023, oxlint-plugins/service-id.ts).`,
         });
+
         return;
       }
 
       const expected = named === undefined ? null : named === stem ? base : `${base}.${named}`;
+
       const fits =
         expected === null
           ? text === base || (text.startsWith(`${base}.`) && /^[A-Za-z_$][\w$]*$/.test(text.slice(base.length + 1)))

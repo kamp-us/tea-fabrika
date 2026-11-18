@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-host-reporter-environment-correction",
+  "corrects": "2026-11-17-host-runtime-remaining-faults-build",
+  "ticket": "kamp-us/tea-fabrika#1132",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1559",
+  "started": "2026-11-17T10:14:14Z",
+  "ended": "2026-11-17T10:14:32.870Z",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling fixture explicitly extends the child environment while supplying its closed PLANT_CASE. The installed child-process service otherwise replaces PATH and CI because extendEnv defaults false. This correction changes only that child option and preserves phases, assertions, counts and selection. Scoped format and lint passed. The protected fixture did not run locally; actual reporter transport and cleanup remain unproved pending eligible disposable CI. No compiler, full lint, push or CI ran.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "billed": null
+}

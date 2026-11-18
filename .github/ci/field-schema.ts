@@ -6,11 +6,13 @@
 import { Schema } from "effect";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
+
 export type Log = typeof Log.Type;
 
 /** The log a path holds rows of: its old `.jsonl` file, or anything in its folder. */
 export const logOf = (file: string): Log | null => {
   const log = /^field\/([^/]+)(?:\.jsonl$|\/)/.exec(file)?.[1];
+
   return Schema.is(Log)(log) ? log : null;
 };
 
@@ -23,12 +25,15 @@ export const inFolder = (file: string) => /^field\/(?:notes|runs|findings)\//.te
 const dated = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const Day = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/));
+
 const Text = Schema.NullOr(Schema.String);
+
 const Count = Schema.NullOr(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
 
 // A note lists its quests (0546). A row written before the rename lists them as `lanes`, and a row
 // is never edited, so a note holds exactly one of the two keys, checked in `checkRow`.
 const Quests = Schema.Array(Schema.Unknown);
+
 const questKeys = ["quests", "lanes"] as const;
 
 const Note = Schema.Struct({
@@ -77,8 +82,7 @@ const Run = Schema.Struct({
 // A finding and its rating (decision 0035). The fields table is field/README.md, "A finding".
 const Words = Schema.String.check(Schema.isPattern(/\S/));
 
-const Found = Schema.Struct({
-  _tag: Schema.Literal("finding"),
+const Found = Schema.TaggedStruct("finding", {
   id: Schema.String,
   date: Day,
   by: Words,
@@ -96,8 +100,7 @@ const Found = Schema.Struct({
   pr: Text,
 });
 
-const Rated = Schema.Struct({
-  _tag: Schema.Literal("rated"),
+const Rated = Schema.TaggedStruct("rated", {
   finding: Schema.String,
   says: Schema.Literals(["fix", "noise"]),
   by: Words,
@@ -107,12 +110,13 @@ const Rated = Schema.Struct({
 
 const fields = {
   file: Schema.String,
-  line: Schema.Number,
+  line: Schema.Finite,
   field: Schema.String,
   reason: Schema.String,
 };
 
 export const Finding = Schema.TaggedUnion({ error: fields, warning: fields });
+
 export type Finding = typeof Finding.Type;
 
 const words: Record<string, readonly string[]> = {
@@ -211,6 +215,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   }
 
   const note = log === "notes";
+
   const metadata = note
     ? ["cause", "person", "primitive", "test", "links"]
     : ["run", "ticket", "pr", "started", "ended", "parent", "active", "driver_caused", "costUsd", "billed"];

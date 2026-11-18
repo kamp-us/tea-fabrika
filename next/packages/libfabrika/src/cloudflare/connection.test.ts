@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 // next/, 0140. Only the platform and project answer are fake. The call handler and sink are real.
 // node:sqlite is the edge: Effect has no synchronous in-memory SQLite handle.
 import { DatabaseSync } from "node:sqlite";
+import { Machine } from "@demlik/tea/effect";
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
@@ -9,11 +10,18 @@ import { TestClock } from "effect/testing";
 import type * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { hash } from "../runtime/Built.ts";
+import { ProgramLoader } from "../runtime/Entry.ts";
+import { News, Published } from "../runtime/News.ts";
+import { Program } from "../runtime/Program.ts";
+import type { Descriptor } from "../runtime/Runner.ts";
+import { Publication } from "../runtime/WatcherManager.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { targetStream } from "../tasks/Tasks.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
 import * as Trace from "../telemetry/Trace.ts";
 import { Answer, Attached, type Wait } from "../transport/Wire.ts";
+import type { GatewayCalls } from "./bindings.ts";
 import { ConnectionService, connectionLayer } from "./connection.ts";
 import { ProjectClient } from "./platform.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
@@ -21,12 +29,12 @@ import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
 
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Clock, Context, Exit, Layer, Scope, Stream } from "effect";
+import { Arbitrary, Cause, Clock, Context, Exit, Layer, Option, Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { PAGE as DOOR_PAGE } from "../ledger/Log.ts";
 import { Archive } from "../telemetry/Archive.ts";
-import { RecordManager } from "../telemetry/Records.ts";
+import { RecordManager, Written } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { PAGE as WINDOW_PAGE } from "../transport/Wire.ts";
@@ -45,7 +53,9 @@ it("pinned: the page size the door cuts by is the page size the window reads, so
 const sendable = (code: number) => code === 1000 || (code >= 3000 && code <= 4999);
 
 const HOUR = 3_600_000;
+
 const H = 1_790_002_800_000;
+
 const fake = <A>(value: object): A => value as A;
 
 const database = Effect.acquireRelease(
@@ -56,6 +66,7 @@ const database = Effect.acquireRelease(
 const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "unreachable") => {
   const base = nodeSql(db);
   let settingsReads = 0;
+
   const sql = {
     ...base,
     exec: (query: string, ...args: Parameters<typeof base.exec> extends [string, ...infer A] ? A : never) => {
@@ -66,9 +77,11 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       return base.exec(query, ...args);
     },
   };
+
   const input = StartsTest.fixture({ name: "test-project", port: 8787 }, (algorithm, data) =>
     createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
   );
+
   let attached: typeof Attached.Type = Attached.cases.online.make({
     client: "test-client",
     identity: { key: "test-key", person: "test-person", as: "window" },
@@ -77,10 +90,14 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     watching: false,
     busy: false,
   });
+
   const frames: Array<string> = [];
   const closes: Array<number> = [];
   const left: Array<string> = [];
+  /** What the Connection object handed the Project's `publish`, in order. */
+  const published: Array<{ client: string; update: unknown }> = [];
   let gone = false;
+
   const socket = fake<WebSocket>({
     deserializeAttachment: () => attached,
     serializeAttachment: (next: typeof Attached.Type) => {
@@ -96,6 +113,28 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       closes.push(code);
     },
   });
+  const sockets = [socket];
+  /** One more online socket on this object, for another client. It keeps what it is sent. */
+  const join = (client: string) => {
+    const mine = { frames: new Array<string>(), closes: new Array<number>() };
+    const other = Attached.cases.online.make({
+      client,
+      identity: { key: `${client}-key`, person: `${client}-person`, as: "window" },
+      version: 1,
+      waits: [],
+      watching: false,
+      busy: false,
+    });
+    sockets.push(
+      fake<WebSocket>({
+        deserializeAttachment: () => other,
+        serializeAttachment: () => {},
+        send: (frame: string) => mine.frames.push(frame),
+        close: (code: number) => mine.closes.push(code),
+      }),
+    );
+    return mine;
+  };
   const state = fake<DurableObjectState>({
     id: { name: "test-connection" },
     storage: {
@@ -107,16 +146,18 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       },
       transactionSync: sql.transaction,
     },
-    getWebSockets: () => [socket],
+    getWebSockets: () => sockets,
     getTags: () => ["test-session", "test-tab", "test-key"],
     getWebSocketAutoResponseTimestamp: () => null,
   });
+
   let answer: typeof Answer.Type = Answer.cases.refused.make({ reason: "reserved" });
   const calls: Array<{ method: string; params: unknown }> = [];
   /** The object each routed call names as the one a parked wait rings, by method. */
   const readers: Array<{ method: string; reader: string | undefined }> = [];
   const saved: Array<SpanRow> = [];
   const stats = { writes: 0, archives: 0 };
+
   const env = fake<Env>({
     INSTANCE: JSON.stringify(input),
     PROJECT: {
@@ -125,16 +166,26 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
         route: (_client: string, method: string, params: unknown, reader?: string) => {
           calls.push({ method, params });
           readers.push({ method, reader });
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve(answer);
         },
+        // A knock is answered as any routed call is here: with the answer the law set.
+        knock: () => Promise.resolve(answer),
+        publish: (client: string, update: unknown) => {
+          published.push({ client, update });
+          // edge: the platform RPC returns a Promise
+          return Promise.resolve(Publication.cases.sent.make({}));
+        },
         leave: (client: string) => {
           left.push(`leave ${client}`);
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve();
         },
         disconnect: (client: string) => {
           left.push(`disconnect ${client}`);
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve();
         },
@@ -145,6 +196,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
         write: (_chain: unknown, _part: number, rows: ReadonlyArray<{ span: SpanRow }>) => {
           stats.writes++;
           saved.push(...rows.map((row) => row.span));
+
           // edge: the platform record RPC returns a Promise
           return Promise.resolve({ _tag: "written" });
         },
@@ -153,6 +205,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     MEASUREMENTS: {
       put: () => {
         stats.archives++;
+
         // edge: the platform bucket returns a Promise
         return archiveFailure === "unreachable" ? Promise.reject(new Error("archive unavailable")) : Promise.resolve();
       },
@@ -160,13 +213,17 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       head: () => Promise.resolve(null),
     },
   });
+
   const config = fake<BrainOptions>(input);
   const recorded = SettingsRecorded.layer(input).pipe(Layer.provide(SettingsStartsLedger.layer(sql)));
+
   return {
     socket,
     frames,
     closes,
     left,
+    published,
+    join,
     /** From now on the socket is already closed: it takes no frame. */
     lose: () => {
       gone = true;
@@ -205,18 +262,23 @@ StartsTest.law(
       const db = yield* database;
       let hour = H;
       yield* TestClock.setTime(hour - 16 * 24 * HOUR);
+
       const open = Effect.fnUntraced(function* () {
         const scope = yield* Effect.acquireRelease(Scope.make(), (owned) => Scope.close(owned, Exit.void));
         const w = world(db, archiveFailure);
         const context = yield* Layer.build(w.layer).pipe(Effect.provideService(Scope.Scope, scope));
+
         return { scope, w, context, service: Context.get(context, ConnectionService) };
       });
+
       let owner = yield* open();
       owner.w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
+
       const accepted = () =>
         owner.service
           .message(owner.w.socket, JSON.stringify({ jsonrpc: "2.0", id: "prime", method: "process.send", params: {} }))
           .pipe(Effect.provideContext(owner.context));
+
       yield* accepted();
       yield* TestClock.setTime(hour + 1000);
       yield* accepted();
@@ -345,8 +407,10 @@ it.effect.prop(
       yield* TestClock.setTime(H - 16 * 24 * HOUR);
       yield* Effect.gen(function* () {
         const service = yield* ConnectionService;
+
         const send = (id: number, params: unknown) =>
           service.message(w.socket, JSON.stringify({ jsonrpc: "2.0", id, method: "process.send", params }));
+
         w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
         yield* send(0, {});
         yield* TestClock.setTime(H + 1000);
@@ -474,6 +538,7 @@ const T864Draw = Schema.Struct({
 });
 
 const t864Draws = Arbitrary.array(Arbitrary.schema(T864Draw), { minLength: 4, maxLength: 12 });
+
 const T864Due = Schema.Array(Schema.Struct({ day: Schema.String, rows: Schema.Int, part: Schema.Int }));
 
 const t864Pending = (db: DatabaseSync) =>
@@ -506,6 +571,7 @@ const t864Tables = (db: DatabaseSync) =>
 const t864Delivered = Effect.gen(function* () {
   const records = yield* RecordManager;
   const spans = yield* Stream.runCollect(records.read(Chain.cases.spans.make({})));
+
   return Array.from(spans, (span) => span.spanId);
 });
 
@@ -535,6 +601,7 @@ const t864Prepare = Effect.fnUntraced(function* (db: DatabaseSync, draw: typeof 
     AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)`)
       .get(Math.floor(((yield* Clock.currentTimeMillis) - 15 * T864_DAY) / T864_DAY) * T864_DAY)?.n,
   ).toBe(0);
+
   return { pending, due };
 });
 
@@ -593,9 +660,11 @@ it.effect.prop(
           const outcome = choices[draw.pick % choices.length]!;
           const answer = Answer.cases.ok.make({ result: draw.value });
           const failure = new LedgerError({ reason: "unreachable" });
+
           const exit = yield* Effect.exit(
             Runtime.complete(outcome === "success" ? Effect.succeed(answer) : Effect.fail(failure)),
           );
+
           const delivered = yield* t864Delivered;
 
           for (const id of pending) {
@@ -674,7 +743,9 @@ const answerCategories = ["ok", "parked", "parked_full", "reserved", "bad_input"
  * and 16,384 bytes of saved attachment as UTF-8 JSON. L1 keeps its own count against them.
  */
 const MAX_WAITS = 64;
+
 const MAX_BYTES = 16_384;
+
 /** A parked answer whose stream is this long fits once, and two of them never fit. */
 const FULL = 9_000;
 
@@ -687,6 +758,7 @@ const readAttachment = (w: ReturnType<typeof world>) =>
 
 const ordinaryFrame = Effect.fnUntraced(function* (state: typeof Attached.Type, seed: number, index: number) {
   const input = yield* sample(Schema.Struct({ id: Schema.String, params: Schema.Json }), seed);
+
   return {
     jsonrpc: "2.0",
     id: `${state.client}:${index}:${input.id}`,
@@ -701,11 +773,13 @@ const observeRpc = Effect.fnUntraced(function* (spans: Array<Tracer.Span>) {
     Effect.sync(() =>
       vi.spyOn(ProjectClient, "make").mockImplementation((stub) => {
         const client = make(stub);
+
         return {
           ...client,
           route: (...args) =>
             Effect.gen(function* () {
               spans.push(yield* Effect.currentSpan.pipe(Effect.orDie));
+
               return yield* client.route(...args);
             }),
         };
@@ -739,6 +813,7 @@ it.effect.prop(
         // world's attachment before any call, and each wait L1 expects kept since.
         const start = readAttachment(w);
         const kept: Array<typeof Wait.Type> = [];
+
         // A wait is saved while the call is out, so the attachment it must fit in is marked busy.
         const fits = (wait: typeof Wait.Type) =>
           kept.length + 1 <= MAX_WAITS &&
@@ -749,16 +824,20 @@ it.effect.prop(
           const state = readAttachment(w);
           expect(state._tag).toBe("online");
           const remaining = answerCategories.filter((key) => !reached.has(key));
+
           // Every category once, then a full wait until one has no room left.
           const category: keyof typeof answerCases =
             remaining.length === 0 && !reached.has("too_many_waits")
               ? "parked_full"
               : yield* sample(Schema.Literals(remaining.length > 0 ? remaining : answerCategories), walk.seed + i * 3);
+
           const sampled = yield* sample(answerCases[category], walk.seed + i * 3 + 1);
+
           const answer =
             category === "parked_full" && sampled._tag === "parked"
               ? { ...sampled, stream: sampled.stream.padEnd(FULL, "s") }
               : sampled;
+
           const request = yield* ordinaryFrame(state, walk.seed + i * 3 + 2, i);
           w.answer(answer);
           const replies = w.frames.length;
@@ -766,6 +845,7 @@ it.effect.prop(
           const wait = answer._tag === "parked" ? { id: request.id, stream: answer.stream, after: answer.after } : null;
           const keeps = wait !== null && fits(wait);
           yield* service.message(w.socket, JSON.stringify(request));
+
           // Under the limits, a call answered parked is kept as a wait on the stream the answer
           // names and registered again through the wait path, as a parked ledger.wait is (P39 slice
           // 4a): one more routed call. At them, it is refused `too_many_waits` and nothing more.
@@ -777,6 +857,7 @@ it.effect.prop(
                     ? { method: "tasks.wait", params: { after: wait.after } }
                     : { method: "ledger.wait", params: { stream: wait.stream, after: wait.after } },
                 ];
+
           expect(w.calls.slice(before)).toEqual([{ method: request.method, params: request.params }, ...again]);
           expect(spans).toHaveLength(w.calls.length);
 
@@ -960,4 +1041,403 @@ it.effect.prop(
       }).pipe(Effect.provide(w.layer));
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 60 }) } },
+);
+
+// Ticket 1053 slice 1, next/: L2, L8 and L9 of the plan (docs/plan/quests/t1053-PLAN.md), written
+// before the build. What a client's socket is told is one Schema, `News` (runtime/News.ts), and the
+// Connection object's `notify` is its door: it decodes the value once and tells the cases apart
+// once.
+//
+// The contract these laws pin, in cloudflare/connection.ts:
+//   `notify(client, news)` decodes `news` as `News`, and fails with `LedgerError` `bad_row` when it
+//     is not one, with nothing sent and nothing closed
+//   `close`   closes each of the client's sockets with its code, and sends nothing
+//   `granted` sends `{"jsonrpc":"2.0","method":"client.granted","params":{"nonce"}}`
+//   `view`    sends method `view.whole` or `view.patch`, by the update's `type`, with the update as
+//             its params, pid included
+//   the `connection.notify` span carries `fab.gateway.news`, the name of the case
+// and in cloudflare/runtime.ts: the Project's `publish` decodes its update as `Published` and fails
+// the same way when it is not one.
+//
+// Generator contract: every run draws one news of each case from the case's own Schema, and one
+// update of each `type`, so each case reaches the door in every run and none can go unreached.
+const anyPublished = Arbitrary.schema(Published);
+
+const EachNews = {
+  close: News.cases.close,
+  granted: News.cases.granted,
+  whole: anyPublished.pipe(Arbitrary.filter((u) => u.type === "whole")),
+  patch: anyPublished.pipe(Arbitrary.filter((u) => u.type === "patch")),
+};
+
+/** A frame's text as the JSON value a client reads. */
+const read = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+/** A value as it is once it has been a frame: what `JSON.stringify` keeps of it. */
+const wired = (value: unknown) => read(JSON.stringify(value));
+
+/**
+ * The door as another object's call reaches it. The type says `News`, and the platform's RPC hands
+ * over whatever the caller sent: a caller on an older build sends an older shape.
+ */
+const overWire = (service: ConnectionService["Service"], client: string, news: unknown) =>
+  // SAFETY: the law hands the door a value that may not be News on purpose, as an RPC from an object
+  // on another build may; the door decodes it and must refuse it.
+  service.notify(client, news as News);
+
+/** One Connection object with the test client's socket and another client's, told one news. */
+const told = Effect.fnUntraced(function* (news: unknown) {
+  const db = yield* database;
+  const w = world(db);
+  yield* TestClock.setTime(H + 1000);
+  const context = yield* Layer.build(w.layer);
+  const other = w.join("other-client");
+  const before = w.saved.length;
+  const exit = yield* Effect.exit(overWire(Context.get(context, ConnectionService), "test-client", news));
+  return { w, other, exit, spans: w.saved.slice(before).filter((row) => row.name === "connection.notify") };
+});
+
+// Plant: send a patch as `view.whole`.
+it.effect.prop(
+  "L2: the frame a socket is sent is today's wire JSON: granted is client.granted with params holding only the nonce, a whole view is view.whole and a patch is view.patch, each with params equal to the update, pid included",
+  EachNews,
+  ({ granted, whole, patch }) =>
+    Effect.gen(function* () {
+      const frames = new Array<Schema.Json>();
+
+      for (const news of [granted, ...[whole, patch].map((update) => News.cases.view.make({ update }))]) {
+        const { w, exit } = yield* told(news);
+        expect(Exit.isSuccess(exit), "a News is taken").toBe(true);
+        expect(w.frames, "one frame for one news").toHaveLength(1);
+        frames.push(read(w.frames[0]!));
+      }
+
+      expect(frames).toEqual([
+        { jsonrpc: "2.0", method: "client.granted", params: { nonce: granted.nonce } },
+        wired({ jsonrpc: "2.0", method: "view.whole", params: whole }),
+        wired({ jsonrpc: "2.0", method: "view.patch", params: patch }),
+      ]);
+      // The pid is on the wire: a client finds the tile an update belongs to by it.
+      expect(frames.slice(1)).toMatchObject([{ params: { pid: whole.pid } }, { params: { pid: patch.pid } }]);
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
+);
+
+// Plant: send a frame for a `close` too.
+it.effect.prop(
+  "L8: a close closes the client's sockets with its code and sends nothing, any other news sends exactly one text frame and closes nothing, another client's socket gets nothing, and the span carries fab.gateway.news with the case",
+  EachNews,
+  ({ close, granted, whole, patch }) =>
+    Effect.gen(function* () {
+      const closed = yield* told(close);
+      expect(Exit.isSuccess(closed.exit), "a close is taken").toBe(true);
+      expect(closed.w.closes, "the client's socket is closed with the news's code").toEqual([close.code]);
+      expect(closed.w.frames, "a close sends no frame").toEqual([]);
+      expect([closed.other.frames, closed.other.closes], "another client's socket is left alone").toEqual([[], []]);
+      expect(
+        closed.spans.map((row) => row.attributes["fab.gateway.news"]),
+        "the span names the case",
+      ).toEqual([close._tag]);
+
+      for (const news of [granted, ...[whole, patch].map((update) => News.cases.view.make({ update }))]) {
+        const sent = yield* told(news);
+        expect(Exit.isSuccess(sent.exit), "a News is taken").toBe(true);
+        expect(sent.w.frames, "exactly one frame").toHaveLength(1);
+        expect(typeof sent.w.frames[0], "a text frame").toBe("string");
+        expect(sent.w.closes, "nothing is closed").toEqual([]);
+        expect([sent.other.frames, sent.other.closes], "another client's socket is left alone").toEqual([[], []]);
+        expect(
+          sent.spans.map((row) => row.attributes["fab.gateway.news"]),
+          "the span names the case",
+        ).toEqual([news._tag]);
+      }
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 50 }) } },
+);
+
+/** No Schema.Json value: what a field holds once a caller got its type wrong. */
+const WRONG = 1n;
+
+/**
+ * Every way to break one field of a value: each of its fields removed, and each one holding the
+ * wrong type. Every field of News, Published and Update is required, so none of these is the value's
+ * Schema any more, whatever the Schema says: a law refuses all of them without asking it.
+ */
+const damaged = (value: object): Array<object> => {
+  const fields = Object.entries(value);
+  return fields.flatMap(([name]) =>
+    (["removed", "retyped"] as const).map((mode) =>
+      Object.fromEntries(
+        fields.flatMap(([key, held]) => (key !== name ? [[key, held]] : mode === "removed" ? [] : [[key, WRONG]])),
+      ),
+    ),
+  );
+};
+
+/** How many broken values `damaged` makes of a value: two per field. */
+const damages = (...values: Array<object>) => values.reduce((sum, value) => sum + 2 * Object.keys(value).length, 0);
+
+/**
+ * Close codes no News may carry, one of each kind in every run: a whole number below 4000, one above
+ * 4999, and a number between them that is not whole.
+ */
+const BadCodes = {
+  below: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3999 })),
+  above: Schema.Int.check(Schema.isBetween({ minimum: 5000, maximum: 65_535 })),
+  fraction: Schema.Number.check(
+    Schema.isBetween({ minimum: 4000.25, maximum: 4999.75 }),
+    Schema.makeFilter((n) => !Number.isInteger(n)),
+  ),
+};
+
+// Plant: forward the raw value when the decode fails.
+it.effect.prop(
+  "L9: a value that is not News fails the Connection's notify with LedgerError bad_row, and nothing is sent or closed on any socket",
+  { ...EachNews, ...BadCodes, json: Schema.Json },
+  ({ close, granted, whole, patch, below, above, fraction, json }) =>
+    Effect.gen(function* () {
+      const views = [whole, patch].map((update) => News.cases.view.make({ update }));
+      const made = [
+        // A News with each field removed or retyped in turn, its tag included.
+        ...[close, granted, ...views].flatMap(damaged),
+        // A view whose update has each field removed or retyped in turn. Its pid removed is the update
+        // a watcher is sent, before the Project adds one.
+        ...[whole, patch].flatMap((update) => damaged(update).map((broken) => ({ ...views[0]!, update: broken }))),
+        // A close whose code no app may send.
+        ...[below, above, fraction].map((code) => ({ ...close, code })),
+        // A value that holds what the old door read by hand.
+        { close: close.code },
+        { method: "client.granted", params: { nonce: granted.nonce } },
+      ];
+      expect(made, "every broken field, the three codes and the two old shapes are reached").toHaveLength(
+        damages(close, granted, ...views, whole, patch) + 5,
+      );
+      // Only the freely drawn JSON is asked whether it happens to be News: every other value is no
+      // News by construction, so a loosened Schema cannot drop one.
+      const bad = Schema.is(News)(json) ? made : [json, ...made];
+
+      for (const value of bad) {
+        const { w, other, exit, spans } = yield* told(value);
+        const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+        expect(Option.getOrNull(failure), "the door refuses it as a bad row").toBeInstanceOf(LedgerError);
+        expect(Option.getOrNull(failure)).toMatchObject({ reason: "bad_row" });
+        expect([w.frames, w.closes, other.frames, other.closes], "nothing is sent or closed").toEqual([[], [], [], []]);
+        expect(
+          spans.map((row) => row.ok),
+          "the refused notify is a failed span",
+        ).toEqual([false]);
+      }
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 50 }) } },
+);
+
+/**
+ * One booted Project over in-memory SQLite, as the Process object reaches it. Only the platform's
+ * handles are doubles: the Connection binding keeps each `notify` the Project makes, and the door
+ * is not under test, so the Project boots with no program and no door call.
+ */
+const PROGRAM = "fabrika/counter";
+/** The program as Worker Loader would run it. */
+const SOURCE = "export default {};\n";
+
+/** The boot list's one program, as leave.laws.test.ts declares it: a boot needs one entry. */
+const declaration = () => {
+  const machine = Machine.make({
+    model: Schema.Struct({ count: Schema.Int }),
+    msg: Schema.Struct({ type: Schema.Literal("inc") }),
+    cmds: [],
+    init: (kept) => [kept ?? { count: 0 }, []],
+    update: { inc: (s) => [{ count: s.count + 1 }, []] },
+  });
+  const program = Program.make({
+    name: PROGRAM,
+    machine,
+    state: { v: 1, upgrades: [] },
+    view: (s) => s,
+    refuse: () => null,
+    inputs: { inc: "Add" },
+    outputs: {},
+    writes: {},
+    wake: () => null,
+  });
+  return ProgramLoader.use((loader) => loader.load(PROGRAM)).pipe(
+    Effect.provide(ProgramLoader.layer<never>({ [PROGRAM]: program }, {})),
+    Effect.map((loaded) => loaded.declaration),
+  );
+};
+
+const project = Effect.fnUntraced(function* () {
+  const db = yield* database;
+  const sql = nodeSql(db);
+  const values = new Map<string, unknown>();
+  const start = StartsTest.fixture(
+    {
+      name: "project-test",
+      person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+      // A public key line made from 32 fixed bytes: no private key exists for it.
+      founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH",
+      window: null,
+      port: 18787,
+      build: "brain-build-test",
+    },
+    (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  );
+  const notified: Array<{ connection: string; client: string; news: unknown }> = [];
+  const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
+  const ctx = fake<DurableObjectState>({
+    id: { name: "project-test" },
+    storage: {
+      sql: {
+        exec: sql.exec,
+        get databaseSize() {
+          return sql.size();
+        },
+      },
+      transactionSync: sql.transaction,
+      // edge: the platform's key-value storage answers through a Promise
+      get: (key: string) => Promise.resolve(values.get(key)),
+      put: (key: string, value: unknown) => {
+        values.set(key, value);
+        // edge: the platform's key-value storage answers through a Promise
+        return Promise.resolve();
+      },
+    },
+    exports: { IsolateTail: () => ({ fetch: () => Promise.resolve(new Response()) }) },
+  });
+  const env = fake<Env>({
+    INSTANCE: JSON.stringify(start),
+    PROJECT: { getByName: () => ({}) },
+    PROCESS: {
+      getByName: (key: string) => ({
+        configure: (d: Pick<Descriptor, "id" | "name" | "build" | "program">) => {
+          descriptors.set(key, d);
+          // edge: the platform RPC returns a Promise
+          return Promise.resolve();
+        },
+        descriptor: (pid?: string) => {
+          const d = descriptors.get(key)!;
+          // edge: the platform RPC returns a Promise
+          return Promise.resolve({ ...d, id: pid ?? d.id });
+        },
+      }),
+    },
+    CONNECTION: {
+      getByName: (connection: string) => ({
+        notify: (client: string, news: unknown) => {
+          notified.push({ connection, client, news });
+          // edge: the platform RPC returns a Promise
+          return Promise.resolve();
+        },
+      }),
+    },
+    RECORD: { getByName: () => ({ write: () => Promise.resolve(Written.cases.written.make({})) }) },
+    MEASUREMENTS: {},
+    LOADER: { get: () => ({ getEntrypoint: () => ({ describe: () => Effect.runPromise(declaration()) }) }) },
+  });
+  const context = yield* Layer.build(
+    Runtime.projectLayer(ctx, env, {
+      programs: { [PROGRAM]: { hash: yield* hash(SOURCE), source: SOURCE } },
+      bootstrap: [{ name: "counter:1", id: "counter:1", program: PROGRAM }],
+      door: () => Effect.succeed(fake<GatewayCalls>({ retire: () => Effect.void })),
+    }),
+  );
+  return { service: Context.get(context, Runtime.ProjectService), notified };
+});
+
+/**
+ * The Project's `publish` as the Process object's call reaches it: the type says `Published`, and
+ * the platform's RPC hands over whatever the caller sent.
+ */
+const publishOverWire = (service: Runtime.ProjectService["Service"], client: string, update: unknown) =>
+  // SAFETY: the law hands the Project a value that may not be Published on purpose, as an RPC from a
+  // Process object on another build may; the Project decodes it and must refuse it.
+  service.publish(client, update as Published);
+
+// Plant: forward the raw value when the decode fails.
+it.live.prop(
+  "L9: a value that is not Published fails the Project's publish with LedgerError bad_row and no Connection object is told, while a Published reaches the client's Connection object as one view news",
+  { whole: EachNews.whole, patch: EachNews.patch, json: Schema.Json, granted: News.cases.granted },
+  ({ whole, patch, json, granted }) =>
+    Effect.gen(function* () {
+      const { service, notified } = yield* project();
+      yield* service.register("test-client", "test-connection", "test-session");
+      const made = [
+        // An update with each field removed or retyped in turn. Its pid removed is the update a
+        // watcher is sent: the Project is handed it with one.
+        ...[whole, patch].flatMap(damaged),
+        // A News is not a view update: only `notify` carries one.
+        granted,
+        News.cases.view.make({ update: whole }),
+        // What the old `publish` passed on by hand.
+        { method: "client.granted", params: { nonce: granted.nonce } },
+      ];
+      expect(made, "every broken field and the three other shapes are reached").toHaveLength(damages(whole, patch) + 3);
+      // Only the freely drawn JSON is asked whether it happens to be Published: every other value is
+      // no Published by construction, so a loosened Schema cannot drop one.
+      const bad = Schema.is(Published)(json) ? made : [json, ...made];
+
+      for (const value of bad) {
+        const exit = yield* Effect.exit(publishOverWire(service, "test-client", value));
+        const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+        expect(Option.getOrNull(failure), "the Project refuses it as a bad row").toBeInstanceOf(LedgerError);
+        expect(Option.getOrNull(failure)).toMatchObject({ reason: "bad_row" });
+        expect(notified, "no Connection object is told").toEqual([]);
+      }
+
+      // The route is live: the same call with a Published is sent on, so the refusals above are the decode's.
+      for (const update of [whole, patch]) {
+        notified.length = 0;
+        expect(yield* service.publish("test-client", update)).toEqual(Publication.cases.sent.make({}));
+        expect(notified).toEqual([
+          { connection: "test-connection", client: "test-client", news: News.cases.view.make({ update }) },
+        ]);
+      }
+    }).pipe(Effect.scoped),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 50 }) } },
+);
+
+// The plan's gap, named in the tests step's report: the waiting room's notice. A knock the door
+// answers `ok` is told `gateway.waiting` today by handing `{ method, params }` to the Project's
+// `publish` (cloudflare/connection.ts, the `gateway.knock` branch), which now takes only a
+// `Published`. The wire stays as it is: the knocking socket is sent the notice, and `publish` is
+// handed nothing that is not a view update.
+//
+// Generator contract: the label, the code and the time are drawn from their Schemas in every run.
+// Plant: drop the waiting notice from the knock branch.
+it.effect.prop(
+  "L10: a knock the door lets wait sends the knocking socket gateway.waiting with params holding its code and until, beside the answer, and hands the Project's publish no value that is not a view update",
+  {
+    label: Schema.String,
+    code: Schema.String,
+    until: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4_102_444_800_000 })),
+  },
+  ({ label, code, until }) =>
+    Effect.gen(function* () {
+      const db = yield* database;
+      const w = world(db);
+      yield* TestClock.setTime(H + 1000);
+      const service = Context.get(yield* Layer.build(w.layer), ConnectionService);
+      w.answer(Answer.cases.ok.make({ result: { code, until } }));
+      yield* service.message(
+        w.socket,
+        JSON.stringify({ jsonrpc: "2.0", id: 1, method: "gateway.knock", params: { label } }),
+      );
+      const frames = w.frames.map((frame) => read(frame));
+      expect(frames, "the waiting notice, once, as today's wire JSON").toContainEqual({
+        jsonrpc: "2.0",
+        method: "gateway.waiting",
+        params: { code, until },
+      });
+      expect(
+        frames.filter(Schema.is(Schema.Struct({ method: Schema.Literal("gateway.waiting") }))),
+        "once",
+      ).toHaveLength(1);
+      expect(frames, "the knock is answered with the same code and time").toContainEqual(
+        expect.objectContaining({ id: 1, result: { code, until } }),
+      );
+      expect(
+        w.published.filter((one) => !Schema.is(Published)(one.update)),
+        "publish carries only view updates",
+      ).toEqual([]);
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
 );

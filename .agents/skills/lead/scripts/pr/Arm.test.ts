@@ -9,7 +9,7 @@ import { Recorder } from "@kampus/vitest";
 import { Effect, Layer, Schema } from "effect";
 import { FileSystem } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
-import type { Job, Run } from "../ci/Runs.ts";
+import { type Job, type Run, Runs } from "../ci/Runs.ts";
 import * as RunsGh from "../ci/RunsGh.ts";
 import * as RunsTest from "../ci/RunsTest.ts";
 import * as Arm from "./Arm.ts";
@@ -18,10 +18,15 @@ import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
 
 const oid = "e42d1dce6a74f4ccb246ed19b4db04ad72c0d899";
+
 const older = "0123456789abcdef0123456789abcdef01234567";
+
 const branch = "fabrikalfa/p34c-s4";
+
 const repo = "fixture/repo";
+
 const RED = 43776563690;
+
 const fixtures = `${import.meta.dirname}/../ci/fixtures`;
 
 /** The fixture files, read once per law through the platform's file system. */
@@ -29,12 +34,39 @@ const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const jobs = yield* RunsGh.jobsIn(yield* fs.readFileString(`${fixtures}/run-${RED}-jobs.json`));
   const log = yield* fs.readFileString(`${fixtures}/run-${RED}-next-2.log`);
+
   return { jobs, log };
 }).pipe(Effect.provide(NodeServices.layer));
 
-/** The same jobs as a branch run that went green: every job a success, and the report skipped. */
+/** The same jobs as a branch run that went green: every job a success, the report too. */
 const allGreen = (jobs: ReadonlyArray<Job>): ReadonlyArray<Job> =>
-  jobs.map((job) => ({ ...job, conclusion: job.name === "report" ? "skipped" : "success" }));
+  jobs.map((job) => ({ ...job, conclusion: "success" }));
+
+/** A job of a run in today's shape (0590), with no step: only its name and how it ended are read. */
+const job = (id: number, name: string, conclusion: string): Job => ({
+  id,
+  name,
+  status: "completed",
+  conclusion,
+  steps: [],
+});
+
+/**
+ * A green proof run's jobs, by what `select` chose: the full set on `tests`, a changed set on
+ * `changed`, or a changed set of zero files, with no leg. The matrix it did not start is one skipped
+ * job with no leg in its name, as GitHub lists it.
+ */
+const shaped = (kind: "full" | "changed" | "zero", report = "success"): ReadonlyArray<Job> => [
+  job(1, "gate", "success"),
+  job(2, "select", "success"),
+  ...(kind === "full"
+    ? [job(3, "tests (1)", "success"), job(4, "tests (tooling-1)", "success")]
+    : [job(3, "tests", "skipped")]),
+  ...(kind === "changed"
+    ? [job(5, "changed (1)", "success"), job(6, "changed (2)", "success")]
+    : [job(5, "changed", "skipped")]),
+  job(7, "report", report),
+];
 
 /** How the branch's full runs stand, as a law sets them: at the head, or only at an older head. */
 const Stands = Schema.Literals([
@@ -47,9 +79,12 @@ const Stands = Schema.Literals([
   "older_red",
   "older_running",
 ]);
+
 type Stands = typeof Stands.Type;
 
 type World = {
+  readonly branch?: string;
+  readonly head?: string;
   readonly stands?: Stands;
   readonly state?: "OPEN" | "CLOSED" | "MERGED";
   readonly draft?: boolean;
@@ -58,14 +93,20 @@ type World = {
   readonly files?: ReadonlyArray<string>;
   /** The jobs of the run that is read, for a law that builds its own. */
   readonly jobs?: ReadonlyArray<Job>;
+  readonly automatic?: ReadonlyArray<Run>;
+  readonly automaticJobs?: ReadonlyArray<Job>;
   /** Which leak check refuses, as PushesTest.layer takes it; none when absent. */
   readonly leak?: PushesTest.Failing;
 };
 
 const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log: string }) => {
+  const name = w.branch ?? branch;
+  const head = w.head ?? oid;
+
   const github = PullRequestsTest.world([
-    { number: 1092, head: branch, oid, state: w.state ?? "OPEN", draft: w.draft ?? false },
+    { number: 1092, head: name, oid: head, state: w.state ?? "OPEN", draft: w.draft ?? false },
   ]);
+
   github.more.set(1092, {
     base: w.base ?? "main",
     title: w.title ?? "Per-program quotas, in next/ (P34c slice 4)",
@@ -75,26 +116,50 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
   const actions = RunsTest.world();
   const stands = w.stands ?? "green";
   const run = (head: string, status: string, conclusion: string | null): Run => ({ id: RED, head, status, conclusion });
+
   const runs: Record<Stands, ReadonlyArray<Run>> = {
-    green: [run(oid, "completed", "success")],
-    red: [run(oid, "completed", "cancelled")],
-    in_progress: [run(oid, "in_progress", null)],
-    queued: [run(oid, "queued", null)],
+    green: [run(head, "completed", "success")],
+    red: [run(head, "completed", "cancelled")],
+    in_progress: [run(head, "in_progress", null)],
+    queued: [run(head, "queued", null)],
     none: [],
     older: [run(older, "completed", "success")],
     older_red: [run(older, "completed", "cancelled")],
     older_running: [run(older, "in_progress", null)],
   };
-  actions.runs.set(branch, runs[stands]);
+
+  actions.runs.set(name, runs[stands]);
   const isRed = stands === "red" || stands === "older_red";
   actions.jobs.set(RED, w.jobs ?? (isRed ? red.jobs : allGreen(red.jobs)));
   const remote = PushesTest.remote();
+
   const layer = Layer.mergeAll(
     PullRequestsTest.layer(github),
     PushesTest.layer(remote, w.leak),
-    RunsTest.layer(actions),
+    Layer.effect(
+      Runs,
+      Effect.map(Runs, (scheduled) =>
+        Runs.of({
+          ...scheduled,
+          on: (workflow, branch) => {
+            if (workflow === Arm.WORKFLOW) {
+              return scheduled.on(workflow, branch);
+            }
+
+            actions.asked.push(`runs ${workflow} ${branch}`);
+
+            return Effect.succeed(w.automatic ?? []);
+          },
+        }),
+      ),
+    ).pipe(Layer.provide(RunsTest.layer(actions))),
     ChecksTest.layer([], red.log),
   );
+
+  for (const run of w.automatic ?? []) {
+    actions.jobs.set(run.id, w.automaticJobs ?? []);
+  }
+
   return { github, actions, layer };
 };
 
@@ -104,12 +169,14 @@ const arm = (m: ReturnType<typeof memory>) => Arm.arm({ repo, dir: ".", pr: 1092
 const armed = (m: ReturnType<typeof memory>) =>
   Effect.gen(function* () {
     const answer = yield* Effect.result(Arm.arm({ repo, dir: ".", pr: 1092 }));
+
     return { answer, leaks: yield* Recorder.calls(Pushes) };
   }).pipe(Effect.provide(m.layer));
 
 /** Which leak check refuses, by its method's name, or none. */
 const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
-const hit = new LeakGrepRefused({ reason: "leakgrep.sh exited 1" });
+
+const hit = LeakGrepRefused.make({ reason: "leakgrep.sh exited 1" });
 
 /** The one leak check that refuses, with the error it refuses with. */
 const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
@@ -158,6 +225,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       Effect.gen(function* () {
         const red = yield* fixture;
         const url = `https://github.com/${repo}/actions/runs/${RED}`;
+
         const said = {
           in_progress: `pr 1092: at this head: the full run ${url} is in_progress, not ended; arm it once it is green`,
           queued: `pr 1092: at this head: the full run ${url} is queued, not ended; arm it once it is green`,
@@ -174,9 +242,9 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       }),
   );
 
-  // vector: 0544's path, word for word: no run at the head arms, with one line and the way to start one.
+  // vector: 0544's path, word for word: fallback guidance describes automatic CI without starting local work.
   it.effect(
-    "vector: no full run arms with the 0544 line and the command that starts one; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
+    "vector: no full run arms with the 0544 line and automatic CI guidance; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -184,11 +252,11 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const tail = `merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`;
         const none = memory({ stands: "none" }, red);
         expect(Arm.line(yield* arm(none))).toBe(
-          `pr 1092: no full run at ${head}; arming as 0544 allows (to start one: gh workflow run scheduled.yaml --ref ${branch}); ${tail}`,
+          `pr 1092: no full run at ${head}; arming as 0544 allows (automatic ready and queue CI provide the required checks); ${tail}`,
         );
         const stale = memory({ stands: "older" }, red);
         expect(Arm.line(yield* arm(stale))).toBe(
-          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (to start one: gh workflow run scheduled.yaml --ref ${branch}); ${tail}`,
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (automatic ready and queue CI provide the required checks); ${tail}`,
         );
         const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".glossary/TERMS.md"] }, red);
         expect(Arm.line(yield* arm(docs))).toBe(
@@ -202,9 +270,54 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       }),
   );
 
+  // Plant owed on CI: call preflight while composing guidance; its recorded call must fail this law.
+  it.effect.prop(
+    "property: fallback guidance performs no local preflight while existing head evidence keeps its meaning",
+    {
+      branch: Schema.String.check(Schema.isPattern(/^fabrikalfa\/[a-z][a-z0-9_-]{0,24}$/)),
+      head: Schema.String.check(
+        Schema.isPattern(/^[0-9a-f]{40}$/),
+        Schema.makeFilter((head) => head !== older),
+      ),
+      reason: Schema.NonEmptyString,
+    },
+    ({ branch, head, reason }) =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const missing = memory({ stands: "none", branch, head }, red);
+        missing.actions.preflight = reason;
+        const line = Arm.line(yield* arm(missing));
+        expect(line).toContain("automatic ready and queue CI provide the required checks");
+        expect(line).not.toContain("preflight.ts");
+        expect(line).not.toContain("workflow run");
+        expect(missing.actions.asked).toEqual([`runs scheduled.yaml ${branch}`, `runs check.yaml ${branch}`]);
+        expect(missing.github.calls).toEqual([{ _tag: "arm", number: 1092, oid: head }]);
+
+        const existing = memory({ stands: "green", jobs: shaped("changed"), branch, head }, red);
+        existing.actions.preflight = reason;
+        expect(Arm.line(yield* arm(existing))).toContain(
+          `changed-set run ${RED} green on every job at ${head.slice(0, 12)}`,
+        );
+        expect(existing.actions.asked).toEqual([`runs scheduled.yaml ${branch}`, `jobs ${RED}`]);
+        expect(existing.github.calls).toEqual([{ _tag: "arm", number: 1092, oid: head }]);
+
+        const stale = memory({ stands: "older", jobs: shaped("changed"), branch, head }, red);
+        stale.actions.preflight = reason;
+        expect((yield* Effect.flip(arm(stale))).reason).toContain(
+          "automatic ready and queue CI provide the required checks",
+        );
+        expect(stale.actions.asked).toEqual([
+          `runs scheduled.yaml ${branch}`,
+          `runs check.yaml ${branch}`,
+          `jobs ${RED}`,
+        ]);
+        expect(stale.github.calls).toEqual([]);
+      }),
+  );
+
   // scenario: the green path, as the lead runs it on a reviewed draft.
   it.effect(
-    "scenario: a draft whose full run is green on every job, the report skipped as on every branch, is marked ready, then armed pinned to its head",
+    "scenario: a draft whose full run is green on every job is marked ready, then armed pinned to its head",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -234,10 +347,11 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
     ({ stands, state, base, plan, docsOnly, skipped }) =>
       Effect.gen(function* () {
         const red = yield* fixture;
-        // The report skipped as on every branch, or a success, or another job skipped in its place.
-        const skips = (job: Job) => job.name === skipped || (job.name === "report" && skipped === "report");
-        const withSkip = red.jobs.map((job) => ({ ...job, conclusion: skips(job) ? "skipped" : "success" }));
+        // Every job a success, or one skipped that no run skips by design: the report, which runs on
+        // every branch run since pull request 1404, or a leg.
+        const withSkip = red.jobs.map((job) => ({ ...job, conclusion: job.name === skipped ? "skipped" : "success" }));
         const isRed = stands === "red" || stands === "older_red";
+
         const m = memory(
           {
             stands,
@@ -249,14 +363,77 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
           },
           red,
         );
+
         const answer = yield* Effect.result(arm(m));
         const open = state === "OPEN" && base === "main" && !plan;
-        const green = (stands === "green" || stands === "older") && skipped !== "tooling (1)";
+        const green = (stands === "green" || stands === "older") && skipped === "none";
         const arms = open && (green || stands === "none");
         expect(m.github.calls).toEqual(arms ? armedAt : []);
         expect(answer._tag).toBe(arms ? "Success" : "Failure");
       }),
   );
+
+  // 0590: a branch's proof run tests the full set or the changed set. Plants, each run once on
+  // Arm.ts and restored: `kind` reads every run as full (red: the changed-set run at the older head
+  // arms); a changed-set run at an older head arms with the note as a full one does (red: the same);
+  // the report skips by design, as before pull request 1404 (red: the runs with a skipped report arm).
+  it.effect(
+    "scenario: a changed-set run green at the head arms, and one at an older head refuses, a zero-file set included; a full run of today's shape at an older head still arms with 0544's note",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const head = oid.slice(0, 12);
+        const url = `https://github.com/${repo}/actions/runs/${RED}`;
+
+        for (const kind of ["changed", "zero"] as const) {
+          const at = memory({ stands: "green", jobs: shaped(kind) }, red);
+          expect(Arm.line(yield* arm(at)), kind).toBe(
+            `pr 1092: changed-set run ${RED} green on every job at ${head}, the tests this change reaches (0590); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+          );
+          expect(at.github.calls, kind).toEqual(armedAt);
+
+          const stale = memory({ stands: "older", jobs: shaped(kind) }, red);
+          const refused = yield* Effect.flip(arm(stale));
+          expect(refused.reason, kind).toBe(
+            `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the changed-set run ${url} tested that head's change, not this one (0590); automatic ready and queue CI provide the required checks`,
+          );
+          expect(stale.github.calls, kind).toEqual([]);
+        }
+
+        const full = memory({ stands: "older", jobs: shaped("full") }, red);
+        expect(Arm.line(yield* arm(full))).toBe(
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (automatic ready and queue CI provide the required checks); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+        );
+        const fullAt = memory({ stands: "green", jobs: shaped("full") }, red);
+        expect(Arm.line(yield* arm(fullAt))).toContain(`full run ${RED} green on every job at ${head}`);
+      }),
+  );
+
+  it.effect(
+    "scenario: a run whose report failed, was canceled or never ran refuses at the head, whatever its matrices did",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+
+        for (const report of ["failure", "skipped", "cancelled"]) {
+          for (const kind of ["full", "changed", "zero"] as const) {
+            const m = memory({ stands: "green", jobs: shaped(kind, report) }, red);
+            const refused = yield* Effect.flip(arm(m));
+            expect(refused.reason, `${kind} ${report}`).toContain("is not green on every job:");
+            expect(refused.reason, `${kind} ${report}`).toContain(`  report: ${report}`);
+            expect(m.github.calls).toEqual([]);
+          }
+        }
+      }),
+  );
+
+  it("vector: a run's kind is full when a leg of the full set ran, of today's shape or the older two-job one, and changed otherwise", () => {
+    expect(Arm.kind(shaped("full"))).toBe("full");
+    expect(Arm.kind(shaped("changed"))).toBe("changed");
+    expect(Arm.kind(shaped("zero"))).toBe("changed");
+    expect(Arm.kind([job(1, "next (2)", "success"), job(2, "tooling (1)", "success")])).toBe("full");
+    expect(Arm.kind([job(1, "tests", "skipped"), job(2, "changed (1)", "success")])).toBe("changed");
+  });
 
   // vector: a plan's pull request, and a merged one.
   it.effect(
@@ -278,10 +455,12 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
+
         const patch = {
           path: "next/apps/fabrika/src/worker-quotas.ts",
           patch: "@@ -0,0 +1 @@\n+export const Quota = 1;",
         };
+
         const bare = memory({}, red);
         bare.github.patches.set(1092, [patch]);
         const refused = yield* Effect.flip(arm(bare));
@@ -312,12 +491,224 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const { answer, leaks } = yield* armed(m);
         expect(m.github.calls).toEqual(leak === "clean" ? [{ _tag: "ready", number: 1092 }, ...armedAt] : []);
         expect(answer._tag === "Failure" && answer.failure._tag).toBe(leak === "clean" ? false : "LeakGrepRefused");
+
         const ran = [
           { method: "leakChange", args: [".", oid] },
           { method: "leakGrep", args: [".", oid] },
           { method: "leakText", args: [".", "Per-program quotas, in next/ (P34c slice 4)\n\n\n"] },
         ];
+
         expect(leaks).toEqual(ran.slice(0, { clean: 3, leakChange: 1, leakGrep: 2, leakText: 3 }[leak]));
+      }),
+  );
+});
+
+const automaticRun = (head: string, id = RED + 1): Run => ({
+  id,
+  head,
+  status: "completed",
+  conclusion: "success",
+  source: { event: "pull_request", path: ".github/workflows/check.yaml", repository: 7, headRepository: 7 },
+});
+
+const automaticJobs = (count: number): ReadonlyArray<Job> => [
+  job(101, "changes", "success"),
+  job(102, "select", "success"),
+  ...(count === 0
+    ? [job(103, "related", "skipped")]
+    : Array.from({ length: count }, (_, i) => job(103 + i, `related (${i + 1})`, "success"))),
+  job(120, "ci-required", "success"),
+];
+
+const Head = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
+
+const automaticFixture = { jobs: shaped("changed"), log: "" };
+
+describe("automatic ready CI as the current-head resource proof", () => {
+  // Plant owed on CI: omit the automatic lookup; older changed/red history would refuse again.
+  it.effect.prop(
+    "property: complete ready CI, including an explicitly empty related set, supersedes older scheduled history and arms the exact head",
+    {
+      head: Head,
+      count: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 9 })),
+      stands: Schema.Literals(["older", "older_red", "older_running", "none"]),
+    },
+    ({ head, count, stands }) =>
+      Effect.gen(function* () {
+        const run = automaticRun(head);
+
+        const m = memory(
+          {
+            head,
+            stands,
+            jobs: stands === "older_red" ? [job(1, "tests (1)", "failure")] : shaped("changed"),
+            automatic: [automaticRun(`other-${head}`, run.id + 1), run],
+            automaticJobs: automaticJobs(count),
+          },
+          automaticFixture,
+        );
+
+        const answer = yield* arm(m);
+        expect(answer._tag).toBe("armed");
+        expect(m.github.calls).toEqual([{ _tag: "arm", number: 1092, oid: head }]);
+        expect(m.actions.asked).toEqual([
+          `runs scheduled.yaml ${branch}`,
+          `runs check.yaml ${branch}`,
+          `jobs ${run.id}`,
+        ]);
+      }),
+  );
+
+  // Plant owed on CI: trust ci-required alone, omit source checks, or accept one passing matrix leg.
+  it.effect.prop(
+    "property: legacy, draft, foreign, incomplete and malformed automatic evidence cannot replace the older changed-set refusal",
+    { head: Head, repository: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000000 })) },
+    ({ head, repository }) =>
+      Effect.gen(function* () {
+        const run = automaticRun(head);
+
+        const source = {
+          event: "pull_request",
+          path: ".github/workflows/check.yaml",
+          repository,
+          headRepository: repository,
+        };
+
+        const good = automaticJobs(2);
+
+        const replace = (name: string, conclusion: string) =>
+          good.map((j) => (j.name === name ? { ...j, conclusion } : j));
+
+        const candidates: ReadonlyArray<{ readonly run: Run; readonly jobs: ReadonlyArray<Job> }> = [
+          { run: { id: run.id, head, status: "completed", conclusion: "success" }, jobs: good },
+          ...[
+            { ...source, event: "push" },
+            { ...source, path: ".github/workflows/legacy.yaml" },
+            { ...source, headRepository: repository + 1 },
+            { ...source, repository: 0, headRepository: 0 },
+            { ...source, repository: -1, headRepository: -1 },
+            { ...source, repository: Number.MAX_SAFE_INTEGER + 1, headRepository: Number.MAX_SAFE_INTEGER + 1 },
+          ].map((source) => ({ run: { ...run, source }, jobs: good })),
+          { run: { ...run, head: `other-${head}` }, jobs: good },
+          { run, jobs: [job(1, "ci-required", "success")] },
+          { run, jobs: [...good.filter((j) => j.name !== "ci-required"), job(1, "ci-required (draft)", "success")] },
+          { run, jobs: good.filter((j) => j.name !== "ci-required") },
+          { run, jobs: replace("ci-required", "skipped") },
+          { run, jobs: replace("ci-required", "failure") },
+          { run, jobs: good.map((j) => (j.name === "ci-required" ? { ...j, status: "in_progress" } : j)) },
+          { run, jobs: replace("select", "skipped") },
+          { run, jobs: good.filter((j) => j.name !== "select") },
+          { run, jobs: automaticJobs(0).filter((j) => j.name !== "related") },
+          { run, jobs: replace("related (2)", "failure") },
+          { run, jobs: replace("related (2)", "skipped") },
+          { run, jobs: good.map((j) => (j.name === "related (2)" ? { ...j, name: "related (3)" } : j)) },
+          { run, jobs: [...good, job(200, "related (10)", "success")] },
+          { run, jobs: [...good, job(200, "related (2)", "success")] },
+          { run, jobs: [...good, job(200, "related", "skipped")] },
+          { run, jobs: good.map((j) => (j.name === "related (2)" ? { ...j, status: "queued" } : j)) },
+          { run: { ...run, conclusion: "failure" }, jobs: good },
+        ];
+
+        for (const candidate of candidates) {
+          const m = memory(
+            { head, stands: "older", automatic: [candidate.run], automaticJobs: candidate.jobs },
+            automaticFixture,
+          );
+
+          expect((yield* Effect.result(arm(m)))._tag).toBe("Failure");
+          expect(m.github.calls).toEqual([]);
+        }
+      }),
+  );
+
+  // Plant owed on CI: treat a missing required job as absent proof and arm through the no-run fallback.
+  it.effect.prop(
+    "property: incomplete new-route coverage explicitly refuses even with no scheduled history",
+    { head: Head, missing: Schema.Literals(["select", "ci-required", "related (1)"]) },
+    ({ head, missing }) =>
+      Effect.gen(function* () {
+        const run = automaticRun(head);
+
+        const m = memory(
+          { head, stands: "none", automatic: [run], automaticJobs: automaticJobs(1).filter((j) => j.name !== missing) },
+          automaticFixture,
+        );
+
+        const refused = yield* Effect.flip(arm(m));
+        expect(refused.reason).toContain(`/actions/runs/${run.id}`);
+        expect(m.github.calls).toEqual([]);
+      }),
+  );
+
+  // Plant owed on CI: let a failed completed run reach the markerless legacy fallback.
+  it.effect.prop(
+    "property: a completed failed automatic run refuses with empty or markerless jobs despite absent or green older scheduled history",
+    { head: Head, conclusion: Schema.NullOr(Schema.Literals(["failure", "cancelled", "timed_out"])) },
+    ({ head, conclusion }) =>
+      Effect.gen(function* () {
+        const run = { ...automaticRun(head), conclusion };
+
+        for (const stands of ["none", "older"] as const) {
+          for (const automaticJobs of [[], [job(1, "ci-required", "success")]]) {
+            const m = memory({ head, stands, jobs: shaped("full"), automatic: [run], automaticJobs }, automaticFixture);
+            const refused = yield* Effect.flip(arm(m));
+            expect(refused.reason).toContain(`/actions/runs/${run.id}`);
+            expect(m.github.calls).toEqual([]);
+            expect(m.actions.asked).not.toContain(`jobs ${RED}`);
+          }
+        }
+      }),
+  );
+
+  // Plant owed on CI: choose the newest successful run instead of the newest exact-head run.
+  it.effect.prop(
+    "property: a newer red or unfinished ready run refuses explicitly instead of falling back to an older green run",
+    { head: Head, status: Schema.Literals(["completed", "queued", "in_progress"]), visible: Schema.Boolean },
+    ({ head, status, visible }) =>
+      Effect.gen(function* () {
+        const newest = {
+          ...automaticRun(head, RED + 2),
+          status,
+          conclusion: status === "completed" ? "failure" : null,
+        };
+
+        const m = memory(
+          {
+            head,
+            stands: "none",
+            automatic: [automaticRun(head), newest],
+            automaticJobs: status === "completed" || visible ? automaticJobs(1) : [],
+          },
+          automaticFixture,
+        );
+
+        const refused = yield* Effect.flip(arm(m));
+        expect(refused.reason).toContain(`/actions/runs/${newest.id}`);
+        expect(m.github.calls).toEqual([]);
+        expect(m.actions.asked).not.toContain(`jobs ${RED + 1}`);
+      }),
+  );
+
+  // Plant owed on CI: read automatic CI before the scheduled run at the current head.
+  it.effect.prop(
+    "property: a current-head scheduled red or unfinished run still refuses despite green automatic CI",
+    { head: Head, stands: Schema.Literals(["red", "queued", "in_progress"]) },
+    ({ head, stands }) =>
+      Effect.gen(function* () {
+        const m = memory(
+          {
+            head,
+            stands,
+            jobs: [job(1, "tests (1)", "failure")],
+            automatic: [automaticRun(head)],
+            automaticJobs: automaticJobs(1),
+          },
+          automaticFixture,
+        );
+
+        yield* Effect.flip(arm(m));
+        expect(m.github.calls).toEqual([]);
+        expect(m.actions.asked).not.toContain(`runs check.yaml ${branch}`);
       }),
   );
 });
@@ -373,6 +764,39 @@ describe("RunsGh: the shapes GitHub answers", () => {
       }),
   );
 
+  // Plant owed on CI: discard source identity while decoding GitHub's run body.
+  it.effect.prop(
+    "property: GitHub source identity is retained as one complete object and incomplete source data never gains identity",
+    { head: Head, repository: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000000 })) },
+    ({ head, repository }) =>
+      Effect.gen(function* () {
+        const base = { id: 1, head_sha: head, status: "completed", conclusion: "success" };
+
+        const metadata = {
+          event: "pull_request",
+          path: ".github/workflows/check.yaml",
+          repository: { id: repository },
+          head_repository: { id: repository },
+        };
+
+        const bodies = [
+          { ...base, ...metadata },
+          { ...base, event: metadata.event, path: metadata.path, repository: metadata.repository },
+          { ...base, ...metadata, head_repository: null },
+          base,
+        ];
+
+        const decoded = yield* RunsGh.runsIn(JSON.stringify({ workflow_runs: bodies }));
+        expect(decoded[0]?.source).toEqual({
+          event: metadata.event,
+          path: metadata.path,
+          repository,
+          headRepository: repository,
+        });
+        expect(decoded.slice(1).every((run) => run.source === undefined)).toBe(true);
+      }),
+  );
+
   // format: a runs body, newest first, with a run not ended yet.
   it.effect("format: a workflow's runs body reads each run's id, head, status and conclusion", () =>
     Effect.gen(function* () {
@@ -383,6 +807,7 @@ describe("RunsGh: the shapes GitHub answers", () => {
           { id: 1, head_sha: older, status: "completed", conclusion: "success", name: "scheduled" },
         ],
       });
+
       expect(yield* RunsGh.runsIn(body)).toEqual([
         { id: 2, head: oid, status: "in_progress", conclusion: null },
         { id: 1, head: older, status: "completed", conclusion: "success" },

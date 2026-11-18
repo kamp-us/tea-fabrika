@@ -1,18 +1,18 @@
 /**
  * A fixture for the local brain driver's tests: the memory sample's command, answered without
  * starting an OS process.
- *
- * @stability unstable
  */
-import { Effect, Layer, Sink, Stream } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 
 /**
  * Layer that provides a `ChildProcessSpawner` whose every command exits with 0 at once and prints
  * `sample()` on stdout, so the driver's memory check reads a chosen number and no OS process
  * starts. `onSpawn`, when given, hears each standard command with its arguments.
  *
- * @stability unstable
  * @category layers
  */
 export const rssLayer = (sample: () => number, onSpawn?: (command: string, args: ReadonlyArray<unknown>) => void) =>
@@ -25,6 +25,7 @@ export const rssLayer = (sample: () => number, onSpawn?: (command: string, args:
         }
 
         const stdout = Stream.make(new TextEncoder().encode(String(sample())));
+
         return ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(27000),
           exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),

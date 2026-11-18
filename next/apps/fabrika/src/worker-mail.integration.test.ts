@@ -16,24 +16,32 @@ import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-09T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const PROJECT = "p41-workers";
+
 // Bounded waits tied to observable facts. Backoff is 100 to 800 ms, so this is generous.
 const WAIT = 25_000;
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
     n = Buffer.alloc(4);
+
   n.writeUInt32BE(body.length);
+
   return Buffer.concat([n, body]);
 };
 
 const identity = () => {
   const pair = generateKeyPairSync("ed25519"),
     raw = pair.publicKey.export({ format: "jwk" }).x!;
+
   const bytes = Buffer.from(raw, "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -46,8 +54,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const v = Buffer.alloc(4);
       v.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         v,
@@ -57,6 +67,7 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)!
@@ -168,6 +179,7 @@ const mailDiagnostics = () => {
   const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
   const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
   note("start");
+
   const read = async (label: string, call: () => Promise<unknown>) => {
     const start = stamp();
     let value: unknown = null;
@@ -184,6 +196,7 @@ const mailDiagnostics = () => {
 
     return value;
   };
+
   return {
     note,
     frame: (raw: string) => frames.push({ ...stamp(), raw }),
@@ -211,6 +224,7 @@ const mailDiagnostics = () => {
           const page = await read(`spans/${pid}/${part}/${after}`, () =>
             instance.record(PROJECT, `job/${pid}/${part}`).read({ _tag: "job", process: pid }, part, after),
           );
+
           const decoded = Schema.decodeUnknownSync(
             Schema.NullOr(
               Schema.Struct({ after: Schema.Int, rolled: Schema.Boolean, spans: Schema.Array(Schema.Json) }),
@@ -253,17 +267,20 @@ const world = async (
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
+
   return Effect.runPromise(
     Effect.gen(function* () {
       const home = yield* Effect.acquireRelease(
         Effect.sync(() => mkdtempSync(join(tmpdir(), "p41w-"))),
         (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
       );
+
       const key = identity();
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const previous = process.env.FABRIKA_HOME;
           process.env.FABRIKA_HOME = home;
+
           return previous;
         }),
         (previous) =>
@@ -298,6 +315,7 @@ const world = async (
       yield* Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
         const instance = yield* localInstance(
           built,
           RecordWireTest.startupFixture({
@@ -319,7 +337,9 @@ const world = async (
             },
           }),
         );
+
         const scope = yield* Effect.scope;
+
         const from: From = {
           by: key.fingerprint,
           for: PERSON,
@@ -329,6 +349,7 @@ const world = async (
           traceId: TRACE,
           build: built.build,
         };
+
         yield* Effect.promise(() =>
           test(instance, key, {
             from,
@@ -346,6 +367,7 @@ const world = async (
                     ),
                     (socket) => Effect.sync(() => socket.close()),
                   );
+
                   return yield* Effect.promise(() => wire(instance, key, tab, socket, diagnostics));
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
@@ -362,6 +384,7 @@ const world = async (
                 },
                 from,
               );
+
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             },
           }),
@@ -416,8 +439,10 @@ const wire = async (
 ) => {
   const frames: any[] = [];
   let initialized = false;
+
   let closeCode: number | undefined,
     serial = 0;
+
   socket.addEventListener("message", (event) => {
     if (diagnostics !== undefined) {
       const raw = String(event.data);
@@ -425,7 +450,7 @@ const wire = async (
       diagnostics.frame(
         initialized || raw === "pong"
           ? raw
-          : JSON.stringify(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(raw), (name, value) =>
+          : JSON.stringify(Schema.decodeSync(Schema.fromJsonString(Schema.Json))(raw), (name, value) =>
               ["key", "nonce", "signed", "token"].includes(name) ? "[redacted]" : value,
             ),
       );
@@ -441,6 +466,7 @@ const wire = async (
   socket.addEventListener("error", () => {
     closeCode ??= 1006;
   });
+
   const next = async (match: (frame: any) => boolean) => {
     const end = Date.now() + WAIT;
     diagnostics?.note("wait.start", { end });
@@ -450,6 +476,7 @@ const wire = async (
 
       if (index >= 0) {
         diagnostics?.note("consumed", { id: frames[index].id, method: frames[index].method });
+
         return frames.splice(index, 1)[0];
       }
 
@@ -462,11 +489,14 @@ const wire = async (
 
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
+
   const call = async (method: string, params: unknown) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return next((frame) => frame.id === id);
   };
+
   const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
   expect(
     (
@@ -485,6 +515,7 @@ const wire = async (
     ).error,
   ).toBeUndefined();
   initialized = true;
+
   return { call, next };
 };
 
@@ -642,12 +673,14 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
           sentAt: SENT,
           seen: 0,
         });
+
         const rows = await until(
           "restart or brake",
           () => facts(instance, "processes/responder:1"),
           (rows) =>
             rows.some((r) => r._tag === "down") || rows.some((r) => r._tag === "restarted" && r.after === responder),
         );
+
         down = rows.find((r) => r._tag === "down");
 
         if (down === undefined) {
@@ -660,9 +693,11 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
       await client.call("view.open", { pid: other });
       await client.call("process.send", request(other, "healthy"));
       await changed(client, "answered");
+
       const healthy = (await answer(instance, "requester:2", "healthy")).filter(
         (r) => r.m?.type === "answer" && r.m.ref === "healthy",
       );
+
       expect(healthy).toHaveLength(1);
       expect(healthy[0].m.value).toBe(8);
       expect(down.rev).toBeLessThan(healthy[0].rev);
@@ -700,6 +735,7 @@ const checklistWorld = async (
         Effect.sync(() => {
           const previous = process.env.FABRIKA_HOME;
           process.env.FABRIKA_HOME = home;
+
           return previous;
         }),
         (previous) =>
@@ -720,6 +756,7 @@ const checklistWorld = async (
       const built = yield* build({ out: join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
       const key = identity();
       const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
+
       const instance = yield* localInstance(
         built,
         RecordWireTest.startupFixture({
@@ -731,7 +768,9 @@ const checklistWorld = async (
           port: held.port,
         }),
       );
+
       const scope = yield* Effect.scope;
+
       const from: From = {
         by: key.fingerprint,
         for: PERSON,
@@ -741,6 +780,7 @@ const checklistWorld = async (
         traceId: TRACE,
         build: built.build,
       };
+
       yield* Effect.promise(() =>
         test({
           start: async (name, program = "fabrika/checklist") => {
@@ -755,12 +795,14 @@ const checklistWorld = async (
               },
               from,
             );
+
             return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
           },
           connect: () =>
             Effect.runPromise(
               Effect.gen(function* () {
                 const tab = "immediate-wake";
+
                 const socket = yield* Effect.acquireRelease(
                   Effect.sync(
                     () =>
@@ -770,6 +812,7 @@ const checklistWorld = async (
                   ),
                   (socket) => Effect.sync(() => socket.close()),
                 );
+
                 return yield* Effect.promise(() => wire(instance, key, tab, socket));
               }).pipe(Effect.provideService(Scope.Scope, scope)),
             ),
@@ -876,10 +919,12 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         Effect.sync(() => mkdtempSync(join(tmpdir(), "t1041-"))),
         (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
       );
+
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const previous = process.env.FABRIKA_HOME;
           process.env.FABRIKA_HOME = home;
+
           return previous;
         }),
         (previous) =>
@@ -903,6 +948,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
       const built = yield* build({ out: join(home, "dist"), programs: selections });
       const key = identity();
       const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
       // The repo's own file, `[mail] unread = 2`, as its parse gives it (only the settings module
       // and start code read TOML, lint L15), resolved in the common source order and saved as the
       // start's snapshot.
@@ -919,10 +965,13 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         }),
         person: Sources.file("~/.fabrika/fabrika.toml", { value: {}, spans: [] }),
       });
+
       const loaded = {
         snapshot: yield* Snapshot.make(Declarations.all, resolved).pipe(Effect.provide(Digest.layerWebCrypto)),
       };
+
       expect(resolved.values.mailUnread, "the repo file's value is read").toBe(2);
+
       const instance = yield* localInstance(built, {
         ...RecordWireTest.startupFixture({
           home,
@@ -935,7 +984,9 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         }),
         settings: loaded.snapshot,
       });
+
       const scope = yield* Effect.scope;
+
       const from: From = {
         by: key.fingerprint,
         for: PERSON,
@@ -945,24 +996,28 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         traceId: TRACE,
         build: built.build,
       };
+
       yield* Effect.promise(async () => {
         const project = instance.project(PROJECT);
         const start = async (request: Start) =>
           Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(await project.start(request, from))
             .process;
         const code = (role: string) => ({ program: `t1041/${role}`, hash: built.programs[`t1041/${role}`]!.hash });
+
         const writer = await start({
           _tag: "first",
           id: "start-writer",
           name: "writer:1",
           code: code("writer"),
         });
+
         const reader = await start({
           _tag: "first",
           id: "start-reader",
           name: "reader:1",
           code: code("reader"),
         });
+
         const client = await Effect.runPromise(
           Effect.gen(function* () {
             const socket = yield* Effect.acquireRelease(
@@ -974,10 +1029,13 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
               ),
               (socket) => Effect.sync(() => socket.close()),
             );
+
             return yield* Effect.promise(() => wire(instance, key, "cap", socket));
           }).pipe(Effect.provideService(Scope.Scope, scope)),
         );
+
         let sent = 0;
+
         // One send at a time: the writer's newest answer is this letter's.
         const send = async (n: number) => {
           sent += 1;
@@ -990,16 +1048,21 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
               seen: 0,
             }),
           ).toMatchObject({ result: { _tag: "accepted" } });
+
           const view = await until(
             `the writer's answer for send ${sent}`,
             async () => (await client.call("view.open", { pid: writer })).result?.view,
             (v) => v?.answers?.length === sent,
           );
+
           return view.answers.at(-1).answer;
         };
+
         const lifecycle = () => facts(instance, "processes/reader:1");
+
         const letters = async () =>
           (await facts(instance, "reader:1/inbox")).filter((r) => r.m?.type === "letter").map((r) => r.m.n);
+
         const last = async (stream: string) =>
           Math.max(
             0,
@@ -1007,6 +1070,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
               (row) => row.body.pos ?? row.pos,
             ),
           );
+
         // The reader crashes inside the door's call, and its supervisor holds the successor for
         // BACKOFF ms: nothing reads while the writer sends.
         expect(

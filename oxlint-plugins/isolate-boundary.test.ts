@@ -5,6 +5,7 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
 
 const CODE = "fabrika(isolate-boundary)";
+
 const stem = fc.stringMatching(/^[a-z]{1,8}$/);
 
 const uses = [
@@ -18,7 +19,9 @@ const uses = [
 
 // Run each generated check now, so fast-check can shrink its failure.
 RuleTester.describe = (_name, body) => body();
+
 RuleTester.it = (_name, body) => body();
+
 const tester = new RuleTester({ cwd: process.cwd() });
 
 it("U11 keeps platform names at the Cloudflare edge, including tests and optional reads", () => {

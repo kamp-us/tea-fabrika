@@ -9,8 +9,6 @@
  * write the rows and answer `written`. The size is checked before the write, so a resend after a
  * lost answer never lands in two parts. Nothing but content is ever deleted, and content only by
  * `deleteContent`.
- *
- * @stability unstable
  */
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
 import type { Sql } from "../Sql.ts";
@@ -20,17 +18,16 @@ import { type Chain, Content, partName, Rolled, SinkError, SpanRow, sinkError } 
  * Schema for a part's answer to a write: `written`, or `rolled` with the next part's name. `had`
  * lists the batch's span ids this part already holds, so the sender sends only the rest on.
  *
- * @stability unstable
  * @category schemas
  */
 export const Written = Schema.TaggedUnion({
   written: {},
   rolled: { next: Schema.String, had: Schema.Array(Schema.String) },
 });
+
 /**
  * A part's answer to a write: `written` or `rolled`.
  *
- * @stability unstable
  * @category models
  */
 export type Written = typeof Written.Type;
@@ -38,7 +35,6 @@ export type Written = typeof Written.Type;
 /**
  * Schema for one span as the sink sends it, with its failure's message when it failed.
  *
- * @stability unstable
  * @category schemas
  */
 export const Sent = Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) });
@@ -50,6 +46,7 @@ const Page = Schema.Struct({
   after: Schema.Int,
   rolled: Schema.Boolean,
 });
+
 type Page = typeof Page.Type;
 
 /** Where a span's content is: in this part (with none when it never failed), or not here. */
@@ -57,12 +54,12 @@ const Lookup = Schema.TaggedUnion({
   found: { content: Schema.NullOr(Content) },
   absent: { rolled: Schema.Boolean },
 });
+
 type Lookup = typeof Lookup.Type;
 
 /**
  * Schema for who deleted a content row, when on the caller's clock, and why.
  *
- * @stability unstable
  * @category schemas
  */
 export const Deletion = Schema.Struct({ by: Schema.String, at: Schema.Int, reason: Schema.String });
@@ -75,7 +72,6 @@ const PAGE = 500;
  * The four calls a record part's object answers across an object call. The answers are unchecked:
  * `RecordManager.remote` decodes each one.
  *
- * @stability unstable
  * @category models
  */
 export type RecordCalls = {
@@ -106,21 +102,25 @@ interface Store {
 /** A part's four calls over its store: the write's steps, a page, a lookup and a delete. */
 const part = (store: Store, chain: Chain, at: number, cap: number) => {
   const isRolled = () => Option.isSome(store.rolled());
+
   const lookup = (spanId: string): Lookup =>
     store.holds([spanId]).has(spanId)
       ? Lookup.cases.found.make({ content: Option.getOrNull(store.content(spanId)) })
       : Lookup.cases.absent.make({ rolled: isRolled() });
+
   return {
     write: (rows: ReadonlyArray<Sent>): Written =>
       store.atomic(() => {
         const held = store.holds(rows.map((row) => row.span.spanId));
         const seen = new Set(held);
+
         const left = rows.filter((row) => {
           if (seen.has(row.span.spanId)) {
             return false;
           }
 
           seen.add(row.span.spanId);
+
           return true;
         });
 
@@ -129,6 +129,7 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
         }
 
         const had = rows.map((row) => row.span.spanId).filter((id) => held.has(id));
+
         const rolled = Option.getOrElse(store.rolled(), () => {
           const bytes = store.size();
 
@@ -138,6 +139,7 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
 
           const made = Rolled.make({ part: at, next: partName(chain, at + 1), bytes });
           store.roll(made);
+
           return made;
         });
 
@@ -146,6 +148,7 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
         }
 
         store.insert(left);
+
         return Written.cases.written.make({});
       }),
     page: (after: number): Page => store.atomic(() => ({ ...store.page(after), rolled: isRolled() })),
@@ -174,6 +177,7 @@ const local = (made: ReturnType<typeof part>): Calls => {
   const attempt = Effect.fnUntraced(function* <A>(step: () => A) {
     return yield* Effect.try({ try: step, catch: sinkError });
   });
+
   return {
     write: (rows) => attempt(() => made.write(rows)),
     page: (after) => attempt(() => made.page(after)),
@@ -192,10 +196,11 @@ const walk = Effect.fnUntraced(function* (
     return yield* Effect.flatMap(ask(calls(chain, at)), (answer) =>
       Lookup.match(answer, {
         found: ({ content }) => Effect.succeed(Option.fromNullOr(content)),
-        absent: ({ rolled }) => (rolled ? from(at + 1) : Effect.succeed(Option.none())),
+        absent: ({ rolled }) => (rolled ? from(at + 1) : Effect.succeedNone),
       }),
     );
   });
+
   return yield* from(0);
 });
 
@@ -221,6 +226,7 @@ const manager = (calls: (chain: Chain, part: number) => Calls): (typeof RecordMa
   deleteContent: (chain, spanId, { by, reason }) =>
     Effect.clockWith((clock) => {
       const deletion = { by, reason, at: clock.currentTimeMillisUnsafe() };
+
       return walk(calls, chain, (one) => one.erase(spanId, deletion));
     }).pipe(Effect.asVoid),
 });
@@ -248,6 +254,7 @@ const SpanColumns = Schema.Struct({
 });
 
 const decodeSpan = Schema.decodeUnknownSync(SpanColumns);
+
 const decodeSeq = Schema.decodeUnknownSync(Schema.Struct({ seq: Schema.Int }));
 
 /** A content row: `state` says which case its other columns hold. */
@@ -266,8 +273,10 @@ const decodeRolled = Schema.decodeUnknownSync(
 /** A part on its own SQLite. Building it touches nothing: the tables come with the first call. */
 const sqlStore = (sql: Sql): Store => {
   let ready = false;
+
   const one = (query: string, ...params: ReadonlyArray<string | number>) =>
     Option.fromUndefinedOr(sql.exec(query, ...params)[0]);
+
   return {
     atomic: (step) =>
       sql.transaction(() => {
@@ -278,6 +287,7 @@ const sqlStore = (sql: Sql): Store => {
         }
 
         ready = true;
+
         return step();
       }),
     holds: (ids) => {
@@ -323,20 +333,22 @@ const sqlStore = (sql: Sql): Store => {
     page: (after) => {
       const rows = sql.exec(`SELECT rowid AS seq, * FROM spans WHERE rowid > ? ORDER BY rowid LIMIT ?`, after, PAGE);
       const last = rows.at(-1);
+
       return {
         spans: rows.map((row) => {
           const { ok, ...span } = decodeSpan(row);
+
           return { ...span, ok: ok === 1 };
         }),
         after: last === undefined ? after : decodeSeq(last).seq,
       };
     },
     content: (spanId) =>
-      Option.map(one(`SELECT * FROM content WHERE "spanId" = ?`, spanId), (row) => {
-        return decodeState(row).state === "kept"
+      Option.map(one(`SELECT * FROM content WHERE "spanId" = ?`, spanId), (row) =>
+        decodeState(row).state === "kept"
           ? Content.cases.kept.make(decodeKept(row))
-          : Content.cases.deleted.make(decodeDeleted(row));
-      }),
+          : Content.cases.deleted.make(decodeDeleted(row)),
+      ),
     erase: (spanId, { by, at, reason }) =>
       void sql.exec(
         `UPDATE content SET state = 'deleted', message = NULL, "by" = ?, at = ?, reason = ?
@@ -359,11 +371,11 @@ const sqlStore = (sql: Sql): Store => {
  * Building it touches nothing: the tables come with the first call. A throw from storage is a
  * `SinkError`.
  *
- * @stability unstable
  * @category constructors
  */
 export const recordPart = (sql: Sql, chain: Chain, at: number, cap: number) => {
   const calls = local(part(sqlStore(sql), chain, at, cap));
+
   return {
     write: Effect.fnUntraced(function* (rows: ReadonlyArray<Sent>) {
       return yield* calls.write(rows);
@@ -389,6 +401,7 @@ const memoryStore = (): Store => {
   const contents = new Map<string, Content>();
   let rolled = Option.none<Rolled>();
   let bytes = 0;
+
   return {
     atomic: (step) => step(),
     holds: (ids) => new Set(ids.filter((id) => spans.has(id))),
@@ -411,6 +424,7 @@ const memoryStore = (): Store => {
     },
     page: (after) => {
       const page = order.slice(after, after + PAGE);
+
       return { spans: page, after: after + page.length };
     },
     content: (spanId) => Option.fromUndefinedOr(contents.get(spanId)),
@@ -427,6 +441,7 @@ const memoryStore = (): Store => {
 /** One part, by name, built the first time it is asked for. */
 const parts = (make: (name: string) => Store, cap: number) => {
   const known = new Map<string, Calls>();
+
   return (chain: Chain, at: number): Calls => {
     const name = partName(chain, at);
     const found = known.get(name);
@@ -437,6 +452,7 @@ const parts = (make: (name: string) => Store, cap: number) => {
 
     const made = local(part(make(name), chain, at, cap));
     known.set(name, made);
+
     return made;
   };
 };
@@ -451,7 +467,6 @@ const parts = (make: (name: string) => Store, cap: number) => {
  * after a lost answer never lands a span in two parts: a part drops the spans it already holds,
  * and it checks its size before it writes.
  *
- * @stability unstable
  * @category services
  */
 export class RecordManager extends Context.Service<
@@ -494,9 +509,11 @@ export class RecordManager extends Context.Service<
     ): Effect.fn.Return<A, SinkError> {
       const fail = (cause: unknown) => new SinkError({ reason: "unreachable", held: 0, cause });
       const rpc = yield* Effect.try({ try: () => stub(name), catch: fail });
+
       const io: Effect.Effect<unknown, SinkError> = Reflect.apply(rpc[method], rpc, args).pipe(
         Effect.mapError((cause: unknown) => (Schema.is(SinkError)(cause) ? cause : fail(cause))),
       );
+
       return yield* io.pipe(
         Effect.flatMap((raw) =>
           Schema.decodeUnknownEffect(answer)(raw).pipe(
@@ -505,10 +522,12 @@ export class RecordManager extends Context.Service<
         ),
       );
     });
+
     return Layer.succeed(
       RecordManager,
       manager((chain, at) => {
         const name = partName(chain, at);
+
         return {
           write: (rows) => ask(Written, name, "write", chain, at, rows),
           page: (after) => ask(Page, name, "read", chain, at, after),

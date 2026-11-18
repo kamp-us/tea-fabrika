@@ -16,12 +16,14 @@
 // Plants (after build, run at review): type the client as the bare record of functions again, and
 // every check below is red; drop `restart` from `DevProcess`'s `Pick`, and the Process keys are red.
 import { describe, expectTypeOf, it } from "@effect/vitest";
-import type { Effect } from "effect";
+import type * as Effect from "effect/Effect";
 import type { ProcessBinding, ProjectBinding } from "../../cloudflare/bindings.ts";
 import type { startDev } from "./dev.ts";
 
 type Dev = Effect.Success<ReturnType<typeof startDev>>;
+
 type Project = ReturnType<Dev["project"]>;
+
 type Process = ReturnType<Dev["process"]>;
 
 /** The control door's Project names, `methods.project` in cloudflare/control.ts. */
@@ -62,6 +64,7 @@ type Answers<T> = { -readonly [K in keyof T]-?: T[K] extends (...args: never) =>
 type Rest<F> = F extends (first: never, ...rest: infer R) => unknown ? R : never;
 
 type Gateways = Project["gateways"];
+
 type ForProcess = ReturnType<Project["forProcess"]>;
 
 describe("Reflect ban L7: the dev client names its methods", () => {

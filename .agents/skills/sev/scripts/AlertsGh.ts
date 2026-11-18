@@ -17,12 +17,12 @@ export const LABEL = "ci-scheduled";
 const LIMIT = 100;
 
 const Listed = Schema.fromJsonString(
-  Schema.Array(Schema.Struct({ number: Schema.Number, title: Schema.String, createdAt: Schema.String })),
+  Schema.Array(Schema.Struct({ number: Schema.Finite, title: Schema.String, createdAt: Schema.String })),
 );
 
 /** `gh issue list --json`'s rows, as `Alert`s, oldest first. */
 export const alertsIn = (out: string): Effect.Effect<ReadonlyArray<Alert>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(Listed)(out.trim() || "[]"), (rows) =>
+  Effect.map(Schema.decodeEffect(Listed)(out.trim() || "[]"), (rows) =>
     rows
       .map((r): Alert => ({ number: r.number, title: r.title, since: r.createdAt }))
       .toSorted((a, b) => a.number - b.number),
@@ -40,16 +40,16 @@ export const layer = (repo: string, cwd: string): Layer.Layer<Alerts, never, Chi
         const ran = yield* run("gh", [...args, "--json", "number,title,createdAt", "-L", String(LIMIT)], cwd);
 
         if (ran.code !== 0) {
-          return yield* new AlertsError({ reason: `gh issue list exited ${ran.code}: ${lastLine(ran)}` });
+          return yield* AlertsError.make({ reason: `gh issue list exited ${ran.code}: ${lastLine(ran)}` });
         }
 
         return yield* alertsIn(ran.out).pipe(
-          Effect.mapError(() => new AlertsError({ reason: "gh issue list answered a shape we do not read" })),
+          Effect.mapError(() => AlertsError.make({ reason: "gh issue list answered a shape we do not read" })),
         );
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new AlertsError({ reason: `gh could not start: ${e.message}` })),
+          Effect.fail(AlertsError.make({ reason: `gh could not start: ${e.message}` })),
         ),
       );
 

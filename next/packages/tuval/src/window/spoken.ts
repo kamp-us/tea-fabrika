@@ -13,6 +13,7 @@ import { tileWords } from "./Layout.tsx";
 export type TileWindow = WindowRegistration<any, ReactNode, AnyTile>;
 
 type Refusal = NonNullable<WindowModel["tiles"][number]["refusal"]>;
+
 type StatusMessage = WindowModel["said"]["messages"][number];
 
 /** The desk tile a status message names, as much of it as the words need. */
@@ -25,6 +26,7 @@ export const refusalFor = (registration: TileWindow | null, refusal: Refusal | n
   }
 
   const reason = /^[a-z_]{1,40}$/.test(refusal.reason) ? refusal.reason : "";
+
   return registration?.refused?.(refusal.m, reason) ?? (reason === "" ? "Not done." : `Not done (${reason}).`);
 };
 
@@ -42,6 +44,7 @@ const wordsFor = <T extends Named>(
   }
 
   const { program, handle } = tileWords(tile);
+
   return message._tag === "ended" ? `${program} in ${handle} ended` : refusalFor(windowFor(tile), message);
 };
 

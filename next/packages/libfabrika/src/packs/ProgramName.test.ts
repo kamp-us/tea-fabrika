@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -19,19 +20,25 @@ const load = async () => {
   const file = join(import.meta.dirname, "ProgramName.ts");
   assert(existsSync(file), "P40 not built: packs/ProgramName.ts, the qualified name schema, is absent");
   vi.resetModules();
+
   return vi.importActual<Api>(pathToFileURL(file).href);
 };
 
 const MAX = 256;
+
 const FIRST = "ABCXYZabcxyz_";
+
 const REST = `${FIRST}0123456789-`;
+
 // Text that must never sit inside a segment: separators, path text, quotes, controls and wide text.
 const FOREIGN = [" ", ".", ":", '"', "'", "\n", "\\", "@", "#", "%", "?", "雪", "\0", "\t", "+", "~"];
 
 type Name = { readonly pack: string; readonly program: string };
+
 type Step = { readonly name: string; readonly accepted: boolean; readonly move: string };
 
 const pick = <A>(xs: ReadonlyArray<A>, n: number): A => xs[n % xs.length]!;
+
 const text = (name: Name) => `${name.pack}/${name.program}`;
 
 // A fresh valid segment, spelled from the decision.
@@ -57,11 +64,13 @@ const grow = (name: Name, n: number): { name: Name; move: string } => {
     // Fill to the bound now and then, so the 256th character is reached, not only approached.
     const add = n % 5 === 0 ? space : 1 + (n % Math.min(space, 4));
     const tail = Array.from({ length: add }, (_, i) => pick([...REST], n + i)).join("");
+
     return { name: { ...name, [key]: name[key] + tail }, move: `grow ${key} by ${add}` };
   }
 
   const fresh = segment(n);
   const other = key === "pack" ? name.program : name.pack;
+
   return other.length + 1 + fresh.length <= MAX
     ? { name: { ...name, [key]: fresh }, move: `replace ${key}` }
     : { name: { pack: segment(n), program: segment(n + 1) }, move: "replace both" };
@@ -72,6 +81,7 @@ const grow = (name: Name, n: number): { name: Name; move: string } => {
 const breaks = (name: Name): ReadonlyArray<(n: number) => string> => {
   const { pack, program } = name;
   const full = text(name);
+
   return [
     () => program, // the bare name main accepted
     () => pack,
@@ -91,6 +101,7 @@ const breaks = (name: Name): ReadonlyArray<(n: number) => string> => {
       const key = side(n);
       const at = n % (name[key].length + 1);
       const broken = name[key].slice(0, at) + pick(FOREIGN, n) + name[key].slice(at);
+
       return key === "pack" ? `${broken}/${program}` : `${pack}/${broken}`;
     },
     (n) =>

@@ -25,6 +25,7 @@ export const run = Effect.fnUntraced(function* (
     stdin: given.stdin === undefined ? "ignore" : Stream.make(new TextEncoder().encode(given.stdin)),
     ...(given.env === undefined ? {} : { env: given.env, extendEnv: true }),
   });
+
   const [out, err, code] = yield* Effect.all(
     [
       Stream.mkString(Stream.decodeText(handle.stdout)),
@@ -33,5 +34,6 @@ export const run = Effect.fnUntraced(function* (
     ],
     { concurrency: 3 },
   );
+
   return { out, err, code: Number(code) } satisfies Ran;
 }, Effect.scoped);

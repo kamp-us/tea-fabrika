@@ -1,8 +1,6 @@
 /**
  * Mail wakeups: how a sender tells a name's runner that mail is waiting. This file holds the
  * contract only (0095).
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
@@ -10,7 +8,6 @@ import type { Effect } from "effect";
 /**
  * Error for a wake whose schedule was not saved. The same wake may be asked again.
  *
- * @stability unstable
  * @category errors
  */
 export class MailWakeupsError extends Schema.TaggedError<MailWakeupsError>()("MailWakeupsError", {
@@ -32,7 +29,6 @@ export class MailWakeupsError extends Schema.TaggedError<MailWakeupsError>()("Ma
  * It never runs the recipient inside the caller's turn, and never starts a name its supervisor has
  * not started.
  *
- * @stability unstable
  * @category services
  */
 export class MailWakeups extends Context.Service<

@@ -13,6 +13,7 @@ import { Schema } from "effect";
  * test of this file would have to declare them all.
  */
 const SavedPlant = Schema.Struct({ law: Schema.String, plant: Schema.String, result: Schema.String });
+
 type SavedPlant = typeof SavedPlant.Type;
 
 /** A tests entry in the quest's state file that named plants; other entries are not read. */
@@ -123,6 +124,7 @@ export const section = (records: ReadonlyArray<LawRecord>, build: string | null)
   }
 
   const short = (s: string) => s.slice(0, 8);
+
   const lines = [
     "## Plant records",
     "",

@@ -42,7 +42,9 @@ const deadInput = {
 const dead = Dead.make({ process: A, program: "counter", name: "counter:1", ...deadInput });
 
 const processId = fcProcessIds;
+
 const text = fc.string({ minLength: 1, maxLength: 256 });
+
 const name = fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/);
 
 const input = fc
@@ -95,6 +97,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
     const started = yield* ProcessManager.use((p) =>
       p.start(first(`start:${i}`, h.names[i]!, { program: h.programs[i]!, hash: "build-a" }), from()),
     ).pipe(Effect.provide(layer()));
+
     current[i] = started.process;
   }
 
@@ -103,6 +106,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
       const p = yield* ProcessManager;
       const after = current[i]!;
       yield* p.exit(after, CRASHED, from());
+
       const started = yield* p.start(
         Start.cases.again.make({
           id: `restart:${after}`,
@@ -113,6 +117,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
         }),
         from(),
       );
+
       current[i] = started.process;
     }).pipe(Effect.provide(layer()));
 
@@ -135,6 +140,7 @@ describe("T319, next/ dead-letter identity", () => {
     await fc.assert(
       fc.asyncProperty(invalidInputs, (values) => {
         const disk = storage();
+
         return Effect.runPromise(
           Effect.gen(function* () {
             const processes = yield* ProcessManager;
@@ -215,6 +221,7 @@ describe("T319, next/ dead-letter identity", () => {
 
             for (const started of w.starts) {
               const other = w.starts.find((s) => s.name !== started.name)!;
+
               const forged = {
                 ...h.input,
                 _tag: "dead" as const,
@@ -222,6 +229,7 @@ describe("T319, next/ dead-letter identity", () => {
                 program: other.program,
                 name: other.name,
               };
+
               yield* ProcessManager.use((p) => p.dead(started.process, forged, from())).pipe(Effect.provide(w.layer()));
 
               if (h.reopen) {
@@ -248,6 +256,7 @@ describe("T319, next/ dead-letter identity", () => {
                   program: "ignored",
                   name: "ignored",
                 };
+
                 yield* ProcessManager.use((p) => p.dead(started.process, changed, from())).pipe(
                   Effect.provide(w.layer()),
                 );

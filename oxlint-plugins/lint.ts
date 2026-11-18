@@ -71,49 +71,61 @@ if (!hidden.ok) {
 // The one config at the top of the repo, on purpose. On its own, oxlint obeys a config in any folder
 // and a `.eslintignore` where it runs, and either could take a folder out of the checks. The config's
 // own `ignorePatterns` still apply, and those are read in review.
-const ran = spawnSync(
-  join(ROOT, "node_modules", ".bin", "oxlint"),
-  [
-    `--config=${join(ROOT, ".oxlintrc.json")}`,
-    "--disable-nested-config",
-    "--no-ignore",
-    "--format=json",
-    ...process.argv.slice(2),
-  ],
-  { cwd: process.cwd(), encoding: "utf8", maxBuffer: 2 ** 30 },
-);
-
 /** What oxlint said, or `null` when it did not finish and report: that must never read as clean. */
-const read = (): readonly Diagnostic[] | null => {
+const lint = (args: readonly string[]): readonly Diagnostic[] | null => {
+  const ran = spawnSync(
+    join(ROOT, "node_modules", ".bin", "oxlint"),
+    [`--config=${join(ROOT, ".oxlintrc.json")}`, "--disable-nested-config", "--no-ignore", "--format=json", ...args],
+    { cwd: process.cwd(), encoding: "utf8", maxBuffer: 2 ** 30 },
+  );
+
   try {
     const report: {
       readonly diagnostics?: readonly Diagnostic[];
       readonly number_of_files?: number;
     } = JSON.parse(ran.stdout);
-    return report.diagnostics !== undefined && report.number_of_files !== 0 ? report.diagnostics : null;
+
+    if (report.diagnostics !== undefined && report.number_of_files !== 0) {
+      return report.diagnostics;
+    }
   } catch {
-    return null;
+    // A failed run must not prune entries as though it found nothing.
   }
+
+  console.error(`oxlint did not finish: status ${ran.status}\n${ran.stdout}\n${ran.stderr}`);
+
+  return null;
 };
 
-const diagnostics = read();
+// Oxlint's fix report keeps positions from before its edits. Read fresh diagnostics against the
+// rewritten files before fingerprinting lines or pruning entries. A plain lint run still runs once.
+const FIXES = new Set(["--fix", "--fix-suggestions", "--fix-dangerously"]);
+
+const args = process.argv.slice(2);
+
+const fixed = lint(args);
+
+const diagnostics =
+  fixed === null || !args.some((arg) => FIXES.has(arg)) ? fixed : lint(args.filter((arg) => !FIXES.has(arg)));
 
 if (diagnostics === null) {
-  console.error(`oxlint did not finish: status ${ran.status}\n${ran.stdout}\n${ran.stderr}`);
   process.exit(2);
 }
 
 const where = ({ filename, labels }: Diagnostic) => {
   const at = labels?.[0]?.span;
+
   return at === undefined ? (filename ?? "") : `${filename}:${at.line}:${at.column}`;
 };
 
 // What a folder broke the day a rule joined it, which only shrinks (ledger.ts).
 const ledgers = LEDGERS.map((ledger) => {
   const path = join(ROOT, ledger.file);
+
   const read: { readonly entries: readonly Finding[] } = existsSync(path)
     ? JSON.parse(readFileSync(path, "utf8"))
     : { entries: [] };
+
   return { ...ledger, path, entries: read.entries, refused: outside(read.entries, ledger.root) };
 });
 
@@ -134,6 +146,7 @@ const finding = (d: Diagnostic): Finding => {
   }
 
   const line = d.labels?.[0]?.span.line;
+
   return {
     file,
     rule: d.code ?? "",
@@ -142,6 +155,7 @@ const finding = (d: Diagnostic): Finding => {
 };
 
 const found = diagnostics.filter((d) => !advises(d));
+
 const findings = found.map(finding);
 
 // Each ledger settles what the one before left blocking. A file sits in at most one ledger's folder,
@@ -151,6 +165,7 @@ let open: readonly Finding[] = findings;
 const settled = ledgers.map((ledger) => {
   const result = settle(ledger.entries, open, ledger.root);
   open = result.blocks;
+
   return { ...ledger, ...result };
 });
 
@@ -158,10 +173,12 @@ const waived = new Set(settled.flatMap((ledger) => ledger.waived));
 
 const blocks = found.filter((_, i) => {
   const at = findings[i];
+
   return at === undefined || !waived.has(at);
 });
 
 const advised = diagnostics.filter((d) => advises(d));
+
 // The hint oxlint keeps apart from the message, such as the JSON.parse rule's Schema hint.
 const text = (d: Diagnostic) => (d.help === undefined ? d.message : `${d.message} ${d.help}`);
 
@@ -239,4 +256,4 @@ const clean =
   vendored.length === 0 &&
   ledgers.every(({ refused }) => refused.length === 0);
 
-process.exit(clean ? 0 : 1);
+process.exitCode = clean ? 0 : 1;

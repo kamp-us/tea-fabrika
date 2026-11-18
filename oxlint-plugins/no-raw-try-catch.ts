@@ -33,6 +33,7 @@ const named = (specifier: Node): boolean =>
 export const noRawTryCatch: CreateRule = {
   create(context) {
     let imports = false;
+
     return {
       Program(program) {
         imports = program.body.some(

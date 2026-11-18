@@ -118,38 +118,45 @@ describe("T325 K9 machine caps, today's tooling", () => {
   it("R5 refuses mismatched or missing local Node versions and lets CI run", () => {
     const pinned = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).engines?.node;
     expect(pinned).toBe("26.13.0");
-    fc.assert(
-      fc.property(fc.tuple(fc.integer({ min: 20, max: 30 }), fc.nat({ max: 30 }), fc.nat({ max: 30 })), (parts) => {
-        const different = parts.join(".") === pinned ? `${parts[0]}.0.99` : parts.join(".");
+    const cache = mkdtempSync(join(tmpdir(), "caps-compile-"));
 
-        for (const version of [pinned, different, undefined]) {
-          for (const ci of [undefined, "1"]) {
-            const ran = probe(root, ["run", "--maxWorkers=1", "scripts/caps.test.ts"], {
-              CI: ci,
-              TEST_NODE_VERSION: version,
-              TEST_NODE_MISSING: version === undefined ? "1" : undefined,
-            });
-            const refused = !ci && version !== pinned;
-            expect(ran.status, ran.stderr).toBe(refused ? 1 : 0);
+    try {
+      fc.assert(
+        fc.property(fc.tuple(fc.integer({ min: 20, max: 30 }), fc.nat({ max: 30 }), fc.nat({ max: 30 })), (parts) => {
+          const different = parts.join(".") === pinned ? `${parts[0]}.0.99` : parts.join(".");
 
-            if (refused) {
-              const lines = ran.stderr.split("\n").filter((line) => line.includes("Local test run refused"));
-              expect(lines).toHaveLength(1);
-              expect(lines[0]).toContain(version === undefined ? process.version : `v${version}`);
-              expect(lines[0]).toContain(`v${pinned}`);
-              expect(lines[0]).toContain(`volta run --node ${pinned}`);
+          for (const version of [pinned, different, undefined]) {
+            for (const ci of [undefined, "1"]) {
+              const ran = probe(root, ["run", "--maxWorkers=1", "scripts/caps.test.ts"], {
+                CI: ci,
+                NODE_COMPILE_CACHE: process.env.NODE_V8_COVERAGE ? undefined : cache,
+                TEST_NODE_VERSION: version,
+                TEST_NODE_MISSING: version === undefined ? "1" : undefined,
+              });
+              const refused = !ci && version !== pinned;
+              expect(ran.status, ran.stderr).toBe(refused ? 1 : 0);
+
+              if (refused) {
+                const lines = ran.stderr.split("\n").filter((line) => line.includes("Local test run refused"));
+                expect(lines).toHaveLength(1);
+                expect(lines[0]).toContain(version === undefined ? process.version : `v${version}`);
+                expect(lines[0]).toContain(`v${pinned}`);
+                expect(lines[0]).toContain(`volta run --node ${pinned}`);
+              }
             }
           }
-        }
-      }),
-      {
-        ...options,
-        seed: 119120,
-        numRuns: 5,
-        endOnFailure: true,
-        examples: [[[26, 13, 1]], [[26, 0, 0]]],
-      },
-    );
+        }),
+        {
+          ...options,
+          seed: 119120,
+          numRuns: 5,
+          endOnFailure: true,
+          examples: [[[26, 13, 1]], [[26, 0, 0]]],
+        },
+      );
+    } finally {
+      rmSync(cache, { recursive: true, force: true });
+    }
   });
 
   // R4 finding 4. With no lock named, every shell gets the same system file, whatever its TMPDIR.
@@ -1070,9 +1077,9 @@ describe("host-only laws stay off the laptop", () => {
     expect(ran.status, ran.stdout).not.toBe(0);
     expect(ran.stderr).toContain("Local host-only test run refused (decision 0178)");
     expect(ran.stderr).toContain(`  ${path}\n`);
-    expect(ran.stderr).toContain("Prove the law in a cloud box");
-    expect(ran.stderr).toContain("gh workflow run scheduled.yaml --ref <branch>");
-    expect(ran.stderr).toContain("FABRIKA_HOST_RUN_OWNER_APPROVED=1");
+    expect(ran.stderr).toContain("Use eligible disposable CI for the selected laws (0594).");
+    expect(ran.stderr).toContain("Portable signal laws may use Linux; Mac-specific laws need macOS.");
+    expect(ran.stderr).not.toContain("FABRIKA_HOST_RUN_OWNER_APPROVED=1");
     expect(ran.stdout).not.toContain(path);
   };
 
@@ -1135,9 +1142,16 @@ describe("host-only laws stay off the laptop", () => {
 
   // Plant: refuse every local run, not only one that reaches a host-only file.
   it("scenario: a local list of a plain unit file still runs", () => {
-    const ran = list(root, ["scripts/caps.test.ts"]);
+    const plain = "vitest.hostrun.test.ts";
+    const ran = list(root, [plain]);
     expect(ran.status, ran.stderr).toBe(0);
-    expect(ran.stdout).toContain("scripts/caps.test.ts");
+    expect(ran.stdout).toContain(plain);
+
+    // These plain names contain real signal calls. Listing them never executes their laws.
+    for (const path of ["scripts/caps.test.ts", ".agents/skills/lead/scripts/box.test.ts"]) {
+      refused(list(root, [path]), path);
+      refused(list(root, [path], { FABRIKA_HOST_RUN_OWNER_APPROVED: "1" }), path);
+    }
   });
 
   // Plants: refuse when CI is set; ignore the owner's named way in.

@@ -23,24 +23,24 @@
 // Plants, each run once and undone (recorded in this round's field row): the hello carries `d` as
 // an extra field; a span attribute holds the JWK; an error message includes the JWK text.
 import { describe, expect, it, vi } from "@effect/vitest";
-import {
-  Cause,
-  ConfigProvider,
-  Context,
-  Effect,
-  Exit,
-  Layer,
-  Logger,
-  Option,
-  Path,
-  References,
-  Schema,
-  Scope,
-  Tracer,
-} from "effect";
-import { Base64, Base64Url, Hex } from "effect/encoding";
+import * as Cause from "effect/Cause";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Hex from "effect/encoding/Hex";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
-import { TestClock } from "effect/testing";
+import * as References from "effect/References";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { brain, door, type Gate, HelloAnswer } from "../../client/HandsDoor.test-support.ts";
 import { start } from "../../client/HandsStart.ts";
@@ -56,8 +56,11 @@ import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import { type Child, fresh, spawner } from "./Spawner.test-support.ts";
 
 const FOLDER = "/fabrika-home/hands";
+
 const FILE = `${FOLDER}/key.json`;
+
 const ORIGIN = "http://127.0.0.1:18787";
+
 /** The name the scripted brain keeps the hands' tasks under; the door admits whatever key dials. */
 const TARGET = "SHA256:hands-secrets-target-0000000000000000000000";
 
@@ -74,6 +77,7 @@ const forms = (d: string): ReadonlyArray<string> => {
   }
 
   const padded = Base64.encode(bytes.success);
+
   return [d, Base64Url.encode(bytes.success), padded, padded.replace(/=+$/, ""), Hex.encode(bytes.success)];
 };
 
@@ -124,6 +128,7 @@ const CHILDREN: ReadonlyArray<readonly [string, Child]> = [
 
 /** What can happen to the key file between two processes. */
 const CHANGES = ["none", "none", "replace", "replace", "damage", "widen", "unreadable", "delete"] as const;
+
 type Change = (typeof CHANGES)[number];
 
 const Cell = fc.record({ move: fc.nat(), pick: fc.nat(), ms: fc.integer({ min: 0, max: 40_000 }) });
@@ -142,6 +147,7 @@ const Flow = fc.record({
   processes: fc.uniqueArray(fcTypeId("process"), { minLength: 1, maxLength: 3 }),
   cells: fc.array(Cell, { minLength: 10, maxLength: 40, size: "max" }),
 });
+
 type Flow = typeof Flow extends fc.Arbitrary<infer A> ? A : never;
 
 /** Lets the run go on: virtual time moves `ms`, and real work (WebCrypto, the hello's hashing) gets its turn. */
@@ -166,6 +172,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
   Effect.gen(function* () {
     const disk = MemoryFiles.disk([FOLDER, "/usr/bin"]);
     MemoryFiles.put(disk, "/usr/bin/git", new Uint8Array([0x7f, 0x45, 0x4c, 0x46]), 0o755);
+
     /** The private half the key file holds now, kept: the scan looks for every one ever stored. */
     const remember = () => {
       const file = MemoryFiles.read(disk, FILE);
@@ -177,25 +184,31 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
 
       return file;
     };
+
     // The door's answer to each hello and knock, as the walk sets it.
     let hello: typeof HelloAnswer.Type = f.granted
       ? HelloAnswer.cases.admit.make({})
       : HelloAnswer.cases.not_granted.make({});
+
     let knocked = 0;
+
     const gate: Gate = {
       hello: () => hello,
       knock: () => {
         const said = f.knocks[knocked++ % f.knocks.length] ?? { reason: "not_allowed" };
         done.add("reason" in said ? "knock:refused" : "knock:code");
+
         return said;
       },
     };
+
     const b = brain();
     const d = door(b, TARGET, gate);
     // The journal file outlives every process, as the real file does.
     const journal = yield* Layer.build(JournalSqlite.layer({ file: ":memory:" }));
     const files = Layer.mergeAll(MemoryFiles.layer(disk), Path.layer);
     const keyFile = KeyFile.layer({ file: FILE }).pipe(Layer.provide(files));
+
     const commands = (child: Child) =>
       CommandsNode.layer.pipe(
         Layer.provide(
@@ -219,6 +232,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
         done.add(`child:${name}`);
         const before = MemoryFiles.read(disk, FILE);
         const scope = yield* Scope.make();
+
         const layers = Layer.mergeAll(
           d.socket,
           keyFile,
@@ -226,27 +240,32 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
           JournalStore.layer.pipe(Layer.provide(Layer.succeedContext(journal))),
           Id.Generator.layer,
         );
+
         const booted = yield* start({ origin: ORIGIN, build: "hands-build", label: "hands", os: "macos" }).pipe(
           Effect.flatMap((booting) => booting.ready),
           Effect.provide(layers),
           Scope.provide(scope),
           Effect.exit,
         );
+
         const after = remember();
 
         if (Exit.isFailure(booted)) {
           out.errors.push(exitText(booted));
           done.add("start:failed");
           yield* Scope.close(scope, Exit.void);
+
           return null;
         }
 
         done.add(before === null && after !== null ? "key:created" : "key:reused");
+
         return { scope, run: booted.value };
       });
 
     let starts = 0;
     let live = yield* boot(0);
+
     const stop = Effect.gen(function* () {
       if (live !== null) {
         out.states.push(live.run.getState());
@@ -254,6 +273,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
         live = null;
       }
     });
+
     const current = (rejected: string | null) =>
       ClientKey.use((keys) => keys.current(rejected)).pipe(Effect.provide(keyFile), Effect.exit);
 
@@ -293,6 +313,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
       done.add(`link:${link ?? "stopped"}`);
       const open = b.all().filter((t) => t.phase !== "finished");
       const free = f.processes.filter((p) => !open.some((t) => t.request.process === p));
+
       const options: ReadonlyArray<string> =
         live === null
           ? ["restart"]
@@ -304,6 +325,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
               ...(link === "online" && free.length > 0 ? ["request", "request", "request"] : []),
               ...(link === "online" ? ["remove", "refuse", "drop"] : []),
             ];
+
       const move = options[cell.move % options.length] ?? "time";
 
       if (move === "time") {
@@ -380,13 +402,16 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
             Effect.gen(function* () {
               const out: Outputs = { frames: [], spans: [], logs: [], errors: [], states: [], rows: [] };
               const secrets = new Set<string>();
+
               const tracer = Tracer.make({
                 span: (init) => {
                   const span = new Tracer.NativeSpan(init);
                   out.spans.push(span);
+
                   return span;
                 },
               });
+
               const logger = Logger.layer([Logger.map(Logger.formatStructured, (entry) => void out.logs.push(entry))]);
               // What reaches the console or the process's own output outside Effect's logger, tea's
               // own error sink included, is a log line too.
@@ -411,6 +436,7 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
                 Effect.provideService(References.MinimumLogLevel, "All"),
                 Effect.provide(TestClock.layer()),
               );
+
               const outputs: Record<string, ReadonlyArray<string>> = {
                 frames: out.frames,
                 spans: out.spans.map(spanText),
@@ -419,6 +445,7 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
                 journal: out.rows.map(text),
                 states: out.states.map(text),
               };
+
               expect(secrets.size, "S2: the flow stored at least one key to look for").toBeGreaterThan(0);
 
               for (const [name, texts] of Object.entries(outputs)) {

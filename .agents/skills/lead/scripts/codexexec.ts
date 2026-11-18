@@ -17,7 +17,8 @@
 // What it gives up next to the ACP row, on purpose (owner, 2026-11-11: make it work first, it only
 // runs on his own laptop): no private Codex home, no permission profile of ours, no keep-list of
 // the environment, and the user's own config, skills and rules. Its only fence is Codex's own
-// sandbox: `workspace-write` (the folder and temp folders, no network) or `read-only`.
+// sandbox: `workspace-write` (the folder and temp folders, no network) or `read-only` by default.
+// An explicit `danger-full-access` setting gives any step full physical access; its role stays the same.
 //
 // A turn is done when Codex wrote a last message (`-o`), as the shell wrapper it copies says. The
 // last message file lives in a temp folder the turn's scope gives back.
@@ -39,8 +40,11 @@ import { holdsPin, NODE_PROBE } from "./boxnode.ts";
 /** What a turn may do in its folder: change it, or only read it (a plan, a review). */
 export type Access = "write" | "read";
 
+export type Sandbox = "danger-full-access";
+
 export interface CodexExecConfig {
   readonly access: Access;
+  readonly sandbox?: Sandbox | undefined;
   /** The whole environment Codex runs in: the caller's, as `boxEnv` gives it. */
   readonly env: Readonly<Record<string, string | undefined>>;
   /**
@@ -62,17 +66,19 @@ const tomlText = (text: string) => JSON.stringify(text).replaceAll("\x7f", "\\u0
  * How Codex runs a command, the same for a turn and for its probe: the sandbox, and a shell that
  * is never a login shell, so no profile sets the PATH again (see the top).
  */
-export const routeArgs = (access: Access): string[] => [
+export const routeArgs = (access: Access, sandbox?: Sandbox): string[] => [
   "-c",
-  `sandbox_mode=${tomlText(access === "write" ? "workspace-write" : "read-only")}`,
+  `sandbox_mode=${tomlText(sandbox ?? (access === "write" ? "workspace-write" : "read-only"))}`,
   "-c",
   "allow_login_shell=false",
+  "-c",
+  'approval_policy="never"',
 ];
 
 /** The probe's command line: `NODE_PROBE` in `shell`, in Codex's own sandbox, on `routeArgs`. */
-export const probeArgs = (access: Access, shell: string): string[] => [
+export const probeArgs = (access: Access, shell: string, sandbox?: Sandbox): string[] => [
   "sandbox",
-  ...routeArgs(access),
+  ...routeArgs(access, sandbox),
   "--",
   shell,
   "-c",
@@ -81,6 +87,7 @@ export const probeArgs = (access: Access, shell: string): string[] => [
 
 export interface ExecAsk {
   readonly access: Access;
+  readonly sandbox?: Sandbox | undefined;
   readonly folder: string;
   readonly prompt: string;
   /** Codex's own thread to carry on, or `null` to start one. */
@@ -108,15 +115,14 @@ export const execArgs = (a: ExecAsk): string[] => [
   a.folder,
   ...(a.model === null ? [] : ["-m", a.model]),
   ...(a.effort === null ? [] : ["-c", `model_reasoning_effort=${tomlText(a.effort)}`]),
-  ...routeArgs(a.access),
-  "-c",
-  'approval_policy="never"',
+  ...routeArgs(a.access, a.sandbox),
   ...(a.system === null || a.system.trim() === "" ? [] : ["-c", `developer_instructions=${tomlText(a.system)}`]),
   ...(a.resume === null ? [] : ["resume", a.resume]),
   a.prompt.startsWith("-") ? `\n${a.prompt}` : a.prompt,
 ];
 
 const ErrorEvent = Schema.Struct({ type: Schema.Literal("error"), message: Schema.String });
+
 const readError = Schema.decodeUnknownOption(Schema.fromJsonString(ErrorEvent));
 
 // Today's library's `Raw` is a plain union with no Schema maker, so its two values here are written out.
@@ -142,7 +148,8 @@ const probe = (config: CodexExecConfig, folder: string) =>
     }
 
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const args = probeArgs(config.access, config.env.SHELL ?? "/bin/sh");
+    const args = probeArgs(config.access, config.env.SHELL ?? "/bin/sh", config.sandbox);
+
     const said = yield* spawner
       .string(
         ChildProcess.make(config.codex ?? "codex", args, {
@@ -158,12 +165,10 @@ const probe = (config: CodexExecConfig, folder: string) =>
       );
 
     if (!holdsPin(said, config.pin)) {
-      return yield* Effect.fail(
-        Agent.failed(
-          "start",
-          `the box's shell finds no Node ${config.pin}, so a test run there would be refused: ` +
-            `\`${NODE_PROBE}\` printed ${JSON.stringify(said.trim())}`,
-        ),
+      return yield* Agent.failed(
+        "start",
+        `the box's shell finds no Node ${config.pin}, so a test run there would be refused: ` +
+          `\`${NODE_PROBE}\` printed ${JSON.stringify(said.trim())}`,
       );
     }
   });
@@ -175,6 +180,7 @@ export const codexExecAdapter = (
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fs = yield* FileSystem.FileSystem;
+
     return {
       name: "codex-exec",
       // No dollar cap on a plan. No `--output-schema`: it would make the last message the answer
@@ -184,7 +190,7 @@ export const codexExecAdapter = (
       start: (turn) =>
         Effect.gen(function* () {
           if (turn.system._tag === "replace") {
-            return yield* Effect.fail(Agent.failed("start", "codex-exec takes only an append system prompt"));
+            return yield* Agent.failed("start", "codex-exec takes only an append system prompt");
           }
 
           yield* probe(config, turn.folder).pipe(
@@ -194,9 +200,12 @@ export const codexExecAdapter = (
           const dir = yield* fs
             .makeTempDirectoryScoped({ prefix: "codex-exec-" })
             .pipe(Effect.mapError((e) => Agent.failed("start", String(e))));
+
           const last = `${dir}/last.md`;
+
           const args = execArgs({
             access: config.access,
+            sandbox: config.sandbox,
             folder: turn.folder,
             prompt: turn.prompt,
             resume: turn.resume,
@@ -205,6 +214,7 @@ export const codexExecAdapter = (
             system: turn.system.text,
             last,
           });
+
           const handle = yield* spawner
             .spawn(
               ChildProcess.make(config.codex ?? "codex", args, {
@@ -221,6 +231,7 @@ export const codexExecAdapter = (
               // that could not start, never a defect that ends the run that asked.
               Effect.catchDefect((defect) => Effect.fail(Agent.failed("start", String(defect)))),
             );
+
           // What went wrong, from both sides: Codex's `error` events (it says capacity there) and its stderr.
           const said = { errors: "", stderr: "", ended: null as Agent.Raw | null };
           const trouble = () => `${said.errors}\n${said.stderr}`.trim().slice(-TAIL);
@@ -234,6 +245,7 @@ export const codexExecAdapter = (
             Effect.ignore,
             Effect.forkScoped,
           );
+
           const updates = handle.stdout.pipe(
             Stream.decodeText(),
             Stream.splitLines,
@@ -253,23 +265,24 @@ export const codexExecAdapter = (
 
               // The end waits for the last message file, which Codex writes on its way out.
               said.ended = raws.find((r) => r._tag === "ended") ?? said.ended;
+
               return Effect.succeed(raws.filter((r) => r._tag !== "ended"));
             }),
             Stream.flattenIterable,
           );
+
           // Done means a last message exists. Its text is the turn's last word, then the end.
           const finish = Effect.gen(function* () {
             const code = yield* handle.exitCode.pipe(Effect.orElseSucceed(() => -1));
             const text = yield* fs.readFileString(last).pipe(Effect.orElseSucceed(() => ""));
 
             if (text.trim() === "") {
-              return yield* Effect.fail(
-                Agent.failed("broke", `codex exited (${code}) with no last message: ${trouble()}`),
-              );
+              return yield* Agent.failed("broke", `codex exited (${code}) with no last message: ${trouble()}`);
             }
 
             return [lastWord(text), said.ended ?? ENDED];
           });
+
           return {
             updates: Stream.concat(updates, Stream.fromEffect(finish).pipe(Stream.flattenIterable)),
             pid: handle.pid,

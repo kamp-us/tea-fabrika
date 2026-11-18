@@ -15,7 +15,15 @@
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -23,6 +31,7 @@ import type * as Dev from "./dev.ts";
 import { watchPrograms } from "./watch.ts";
 
 const SEED = 119120;
+
 const ROOT = new URL("../../../../../../", import.meta.url).pathname;
 
 /** Every real Rolldown watcher and result the laws saw, and which were closed. */
@@ -33,6 +42,7 @@ const opened = vi.hoisted(() => ({
 
 vi.mock("rolldown", async (original) => {
   const actual = await original<typeof import("rolldown")>();
+
   return {
     ...actual,
     watch: (...args: Parameters<typeof actual.watch>) => {
@@ -42,14 +52,17 @@ vi.mock("rolldown", async (original) => {
       const close = watcher.close.bind(watcher);
       watcher.close = () => {
         seen.closed = true;
+
         return close();
       };
+
       const on = watcher.on.bind(watcher);
       watcher.on = ((
         name: "event",
         listener: (event: import("rolldown").RolldownWatcherEvent) => void | Promise<void>,
       ) => {
         let cycle: Array<import("rolldown").RolldownWatcherEvent> = [];
+
         return on(name, (event) => {
           if (event.code === "START") {
             cycle = [];
@@ -87,6 +100,7 @@ vi.mock("rolldown", async (original) => {
             const done = event.result.close.bind(event.result);
             event.result.close = () => {
               result.closed = true;
+
               return done();
             };
           }
@@ -94,13 +108,16 @@ vi.mock("rolldown", async (original) => {
           return listener(event);
         });
       }) as typeof watcher.on;
+
       return watcher;
     },
   };
 });
 
 type Options = Parameters<typeof watchPrograms>[0];
+
 type Install = Parameters<Options["install"]>[0];
+
 type Failed = Parameters<Options["failed"]>[0];
 
 // 0135: the install restated here is the watcher's own parameter.
@@ -113,8 +130,10 @@ type InstallShape = {
 };
 
 expectTypeOf<Install>().toEqualTypeOf<InstallShape>();
+
 // L20 (type): the install answer is a closed union a caller must match whole.
 expectTypeOf<Effect.Success<ReturnType<Options["install"]>>["_tag"]>().toEqualTypeOf<"same" | "failed" | "loaded">();
+
 // The handle `startDev` answers installs over its control socket in the watcher's own shape.
 expectTypeOf<Effect.Success<ReturnType<typeof Dev.startDev>>["install"]>().toEqualTypeOf<Options["install"]>();
 
@@ -159,6 +178,7 @@ const fixture = Effect.gen(function* () {
     "shared/shared.ts": ["p15/one", "p15/two"],
     "shared/unused.ts": [],
   };
+
   return {
     home,
     reaches,
@@ -171,6 +191,7 @@ const brain = Effect.gen(function* () {
   const installs = yield* Queue.unbounded<Install>();
   const failures = yield* Queue.unbounded<Failed>();
   const running = new Map<string, string>();
+
   return {
     installs,
     failures,
@@ -179,6 +200,7 @@ const brain = Effect.gen(function* () {
         yield* Queue.offer(installs, code);
         const same = running.get(code.program) === code.hash;
         running.set(code.program, code.hash);
+
         return same ? { _tag: "same" as const } : { _tag: "loaded" as const, processes: [] };
       }),
     failed: (fact: Failed) => Queue.offer(failures, fact).pipe(Effect.asVoid),
@@ -204,13 +226,16 @@ const drain = <A>(queue: Queue.Queue<A>, ms: number) =>
 describe("P15 slice 1: the watcher", () => {
   it("L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures, without leaking source through warnings or repeating a failure for unchanged bytes", async () => {
     const seen = new Set<string>();
+
     const Save = fc.record({
       program: fc.nat(),
       sentinel: fc.stringMatching(/^[A-Z]{12}$/),
       move: fc.constantFrom("fit", "syntax", "compiler"),
       repeats: fc.integer({ min: 1, max: 3 }),
     });
+
     type Save = typeof Save extends fc.Arbitrary<infer A> ? A : never;
+
     const moves: ReadonlyArray<Save["move"]> = ["fit", "syntax", "compiler"];
     // One save of each move runs before the random tail: three seeded runs at the fast depth drew no
     // compiler move, so the reach check below failed while every rebuild was fine
@@ -229,10 +254,12 @@ describe("P15 slice 1: the watcher", () => {
               const file = path.join(home, "programs", short, "program.ts");
               const original = yield* fs.readFileString(file);
               const sentinel = `P15SECRET${save.sentinel}`;
+
               const warnings = yield* Effect.acquireRelease(
                 Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => {})),
                 (spy) => Effect.sync(() => spy.mockRestore()),
               );
+
               const move = save.move;
               // A duplicate key makes Rolldown warn with a source excerpt while the program still builds.
               let text = `${original}\nglobalThis.__p15Secret = {${JSON.stringify(sentinel)}: 1, ${JSON.stringify(sentinel)}: 2};\n`;
@@ -249,13 +276,16 @@ describe("P15 slice 1: the watcher", () => {
 
               yield* fs.writeFileString(file, text);
               const spans: Array<Tracer.NativeSpan> = [];
+
               const tracer = Tracer.make({
                 span(options) {
                   const span = new Tracer.NativeSpan(options);
                   spans.push(span);
+
                   return span;
                 },
               });
+
               const installs: Array<Install> = [];
               const failures: Array<Failed> = [];
               const answers = yield* Queue.unbounded<Stream.Success<ReturnType<typeof watchPrograms>>>();
@@ -272,6 +302,7 @@ describe("P15 slice 1: the watcher", () => {
                         installs.push(code);
                         const same = running.get(code.program) === code.hash;
                         running.set(code.program, code.hash);
+
                         return same ? { _tag: "same" as const } : { _tag: "loaded" as const, processes: [] };
                       }),
                     failed: (fact) =>
@@ -381,13 +412,16 @@ describe("P15 slice 1: the watcher", () => {
               const b = yield* brain;
               const answers = yield* Queue.unbounded<unknown>();
               const spans: Array<Tracer.NativeSpan> = [];
+
               const tracer = Tracer.make({
                 span(options) {
                   const span = new Tracer.NativeSpan(options);
                   spans.push(span);
+
                   return span;
                 },
               });
+
               const firstResult = opened.results.length;
               yield* Effect.forkScoped(
                 Stream.runForEach(
@@ -426,12 +460,14 @@ describe("P15 slice 1: the watcher", () => {
                     ? `export const own = ${JSON.stringify(sentinel)} +; // ${value}\n`
                     : `export const own = ${value};\n`,
                 );
+
                 const answer = yield* Queue.take(answers).pipe(
                   Effect.timeoutOrElse({
                     duration: "3 seconds",
                     orElse: () => Effect.die(new Error("the watcher did not report the saved module's rebuild")),
                   }),
                 );
+
                 expect(answer).toMatchObject(broken ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" });
                 const acquired = opened.results.slice(results);
                 expect(acquired.some((result) => result.code === (broken ? "ERROR" : "BUNDLE_END"))).toBe(true);
@@ -510,6 +546,7 @@ describe("P15 slice 1: the watcher", () => {
               const path = yield* Path.Path;
               const { home, reaches, programs } = yield* fixture;
               const b = yield* brain;
+
               const stream = watchPrograms({
                 root: home,
                 entry: path.join(home, "brain.ts"),
@@ -517,6 +554,7 @@ describe("P15 slice 1: the watcher", () => {
                 install: b.install,
                 failed: b.failed,
               });
+
               yield* Effect.forkScoped(Stream.runDrain(stream));
               // The start: every program installs once, from the boot.
               const first = yield* drain(b.installs, 3000);
@@ -582,8 +620,10 @@ describe("P15 slice 1: the watcher", () => {
                 const b = yield* brain;
                 const reached = yield* Deferred.make<void>();
                 let events = 0;
+
                 const count = <A, E>(work: Effect.Effect<A, E>) =>
                   Effect.tap(work, () => (++events >= cut ? Deferred.succeed(reached, undefined) : Effect.void));
+
                 const run = yield* Effect.forkScoped(
                   Stream.runDrain(
                     watchPrograms({

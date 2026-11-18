@@ -27,6 +27,7 @@ export const checkPromiseTypes = (
   const { checker, program } = project;
   const found = new Map<string, PromiseFinding>();
   const memo = new Map<number, boolean>();
+
   const carries = (type: Type | undefined, seen = new Set<number>()): boolean => {
     if (type === undefined || type.isErrorType()) {
       return false;
@@ -45,6 +46,7 @@ export const checkPromiseTypes = (
     seen.add(type.id);
     const then = checker.getPropertyOfType(type, "then");
     const thenType = then === undefined ? undefined : checker.getTypeOfSymbol(then);
+
     const yes =
       type.isUnionType() || type.isIntersectionType()
         ? (type.getTypes() ?? []).some((t) => carries(t, seen))
@@ -52,9 +54,12 @@ export const checkPromiseTypes = (
           checker
             .getSignaturesOfType(type, SignatureKind.Call)
             .some((signature) => carries(checker.getReturnTypeOfSignature(signature), seen));
+
     memo.set(type.id, yes);
+
     return yes;
   };
+
   const unwrap = (expression: ts.Expression): ts.Expression => {
     while (
       ts.isParenthesizedExpression(expression) ||
@@ -68,6 +73,7 @@ export const checkPromiseTypes = (
 
     return expression;
   };
+
   const keyNames = (type: Type | undefined): readonly string[] | undefined => {
     if (type?.isStringLiteralType()) {
       return [type.value];
@@ -78,14 +84,17 @@ export const checkPromiseTypes = (
     }
 
     const names = type.getTypes().map(keyNames);
+
     return names.every((name) => name !== undefined) ? names.flat() : undefined;
   };
+
   const bridgeProperty = (
     object: ts.Expression,
     names: readonly string[] | undefined,
     seen: ReadonlySet<number>,
   ): boolean => {
     const type = checker.getTypeAtLocation(object);
+
     // A key that may select anything else cannot prove this is an Effect bridge.
     // Promise-typed values are still checked; untyped/never calls get no guess.
     return (
@@ -95,6 +104,7 @@ export const checkPromiseTypes = (
       names.every((name) => bridgeSymbol(checker.getPropertyOfType(type, name), seen))
     );
   };
+
   const bridgeSymbol = (symbol: Symbol | undefined, seen: ReadonlySet<number>): boolean => {
     if (symbol === undefined) {
       return false;
@@ -161,6 +171,7 @@ export const checkPromiseTypes = (
 
     return false;
   };
+
   const isPromiseBridge = (expression: ts.Expression, seen: ReadonlySet<number> = new Set()): boolean => {
     const callee = unwrap(expression);
 
@@ -189,6 +200,7 @@ export const checkPromiseTypes = (
 
     const candidates = new Map<ts.Node, string>();
     const promiseInputs = new Set<ts.Node>();
+
     const visit = (node: ts.Node, inPromise = false): void => {
       if (inPromise) {
         promiseInputs.add(node);
@@ -229,14 +241,17 @@ export const checkPromiseTypes = (
 
       node.forEachChild((child) => visit(child, inPromise || (bridge && node.arguments.some((arg) => arg === child))));
     };
+
     visit(source);
     const nodes = [...candidates.keys()];
     const types = checker.getTypeAtLocation(nodes);
     const lines = source.text.split("\n");
+
     const marked = (line: number): boolean => {
       // A marker covers only the next physical line, even inside a wrapped statement.
       const edge = /^\s*\/\/ oxlint-disable-next-line (.+?) -- edge: \S/.exec(lines[line - 1] ?? "");
       const rules = new Set(edge?.[1]?.split(/[,\s]+/));
+
       // Oxlint separately checks that each comment is used.
       return rules.has("fabrika/no-promises") || rules.has("fabrika/no-effect-run-outside-edge");
     };
@@ -249,6 +264,7 @@ export const checkPromiseTypes = (
       }
 
       const type = types[i];
+
       // Workers RPC can resolve to never. Only Effect's own Promise inputs provide
       // evidence that an untyped call needs an edge; ordinary throw helpers do not.
       const unresolved =
@@ -302,6 +318,7 @@ const main = Effect.gen(function* () {
     }))
       .filter((file) => !file.includes("node_modules/"))
       .map((file) => path.join(root, file));
+
     const snapshot = api.updateSnapshot({ openProjects: configs });
 
     try {

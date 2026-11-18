@@ -13,7 +13,7 @@ const Setting = Schema.String.check(
 );
 
 const setting = (value: string) =>
-  Schema.decodeUnknownEffect(Setting)(value).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+  Schema.decodeEffect(Setting)(value).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 
 // The stack runs the completed brain file as it is (`bundle: false`); no code rides in its env.
 export const stack = (
@@ -30,11 +30,13 @@ export const stack = (
     Effect.gen(function* () {
       const settings = checked.input;
       const instance = yield* setting(JSON.stringify(settings));
+
       const measurements = yield* Cloudflare.R2.Bucket("Measurements", {
         name: "fabrika-measurements",
         lifecycleRules: [],
         locks: [],
       });
+
       const brain = yield* Cloudflare.Workers.Worker("Brain", {
         name: settings.name,
         main: built.brain,
@@ -55,6 +57,7 @@ export const stack = (
           INSTANCE: instance,
         },
       });
+
       return { url: brain.url };
     }),
   );

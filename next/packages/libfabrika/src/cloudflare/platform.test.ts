@@ -10,6 +10,7 @@ import { assert, expect } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Activity } from "../processes/Process.ts";
+import { News } from "../runtime/News.ts";
 import * as RepliesTest from "../runtime/RepliesTest.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient, rejected } from "./platform.ts";
@@ -169,6 +170,7 @@ it.effect.prop(
           ),
         ),
       );
+
       expect(typed).toBeInstanceOf(LedgerError);
       expect(typed).toMatchObject({ reason });
       assert(typed instanceof LedgerError);
@@ -225,14 +227,19 @@ it.effect.prop(
           headers: { [header]: encodeURIComponent(value) },
           ...(method === "GET" ? {} : { body }),
         });
+
       const request = ask();
+
       const answered = upgrade
         ? upgraded()
         : new Response(text, { status, headers: { "x-answer": encodeURIComponent(text) } });
+
       const received: Array<{ request: Request; signal: unknown }> = [];
+
       const answering = {
         fetch: async (input: Request, init?: RequestInit) => {
           received.push({ request: input, signal: init?.signal });
+
           return answered;
         },
       };
@@ -260,17 +267,21 @@ it.effect.prop(
 
       // The caller stops waiting: the request into the object is aborted, not left running.
       const reached = yield* Deferred.make<AbortSignal | undefined>();
+
       const waiting = {
         fetch: (_: Request, init?: RequestInit) => {
           Deferred.doneUnsafe(reached, Effect.succeed(init?.signal ?? undefined));
+
           return new Promise<Response>(() => {});
         },
       };
+
       const pending = yield* Effect.forkChild(
         GatewayClient.make(
           Stub.make<ConnectionBinding>(() => thrower(new Error("only fetch is called")), waiting),
         ).fetch(ask()),
       );
+
       const signal = yield* Deferred.await(reached);
       yield* Fiber.interrupt(pending);
       expect(signal?.aborted, "the caller's interruption aborts the request into the object").toBe(true);
@@ -293,7 +304,7 @@ const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
  *  values where it takes others, and nothing where it takes nothing. */
 const letter = (call: string, secret: string): ReadonlyArray<unknown> => {
   const given: Record<string, ReadonlyArray<unknown>> = {
-    "Gateway.notify": ["client-1", { news: secret }],
+    "Gateway.notify": ["client-1", News.cases.granted.make({ nonce: secret })],
     "Gateway.ring": ["stream-1", 1],
     "Gateway.probe": ["session-1"],
     "Process.msg": [{ text: secret }],
@@ -314,6 +325,7 @@ const letter = (call: string, secret: string): ReadonlyArray<unknown> => {
     "Process.due": [1_700_000_000_000],
     "Process.restart": [{ id: PID, build: "build-2" }],
   };
+
   return given[call] ?? [];
 };
 
@@ -327,10 +339,13 @@ it.effect.prop(
   ({ call, secret, name }) =>
     Effect.gen(function* () {
       const fault = faults.find((kind) => kind.name === name);
+
       const thrown: unknown =
         fault !== undefined ? fault.make(secret) : name === "text" ? secret : { message: secret, news: secret };
+
       const captured = RepliesTest.capture();
       const [client = "", method = ""] = call.split(".");
+
       const service =
         client === "Gateway"
           ? GatewayClient.make(Stub.make<ConnectionBinding>(() => thrower(thrown)))
@@ -340,6 +355,7 @@ it.effect.prop(
         undefined,
         letter(call, secret),
       );
+
       const failure = yield* Effect.flip(lost).pipe(Effect.withTracer(captured.tracer));
 
       // The text did go through: the caller gets the lost call, with what the platform threw inside.

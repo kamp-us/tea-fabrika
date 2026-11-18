@@ -28,22 +28,26 @@ export const SPILL = 1;
 const CONCURRENCY = 6;
 
 const HOUR = 3_600_000;
+
 const iso = (ms: number) => new Date(ms).toISOString();
 
 /** The measure over the `hours` before `now` (epoch ms), from GitHub's runs, jobs and merged PRs. */
 export const measure = Effect.fn("ciSpeed.measure")(function* (now: number, hours: number) {
   const history = yield* History;
   const from = now - hours * HOUR;
+
   const [pulls, runs] = yield* Effect.all(
     [history.merged(iso(from)), history.runs(iso(from - LOOKBACK * HOUR), iso(now))],
     {
       concurrency: 2,
     },
   );
+
   const check = runs.filter((run) => run.workflow === "check");
   const busy = runs.filter((run) => run.created >= iso(from - SPILL * HOUR)).map((run) => run.id);
   const ids = [...new Set([...busy, ...readyRuns(pulls, check)])];
   const jobs = yield* Effect.forEach(ids, (id) => history.jobs(id), { concurrency: CONCURRENCY });
+
   return report({ now, hours, pulls, runs: check, jobs: jobs.flat() });
 });
 
@@ -73,6 +77,7 @@ const cli = Command.make(
   },
   Effect.fn("ciSpeed.cli")(function* ({ hours, issue, repo }) {
     const now = DateTime.toEpochMillis(yield* DateTime.now);
+
     const run = Effect.gen(function* () {
       const r = yield* measure(now, hours);
       yield* Console.log(markdown(r));
@@ -82,6 +87,7 @@ const cli = Command.make(
         yield* Console.log(`\nIssue: ${move._tag}`);
       }
     });
+
     yield* run.pipe(Effect.provide(Layer.provide(HistoryGh.layer(repo), NodeServices.layer)));
   }),
 );
