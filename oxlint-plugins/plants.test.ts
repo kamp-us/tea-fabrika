@@ -28,6 +28,7 @@ import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect } from "vitest";
+import { advises } from "./advice.ts";
 import {
   BUILTIN_PLANTS,
   GRANT_NO_CONSOLE,
@@ -798,6 +799,8 @@ type Printed = {
 /** One fire of an oxlint JSON report. */
 type Diagnostics = ReadonlyArray<{
   readonly code?: string;
+  readonly severity?: string;
+  readonly message?: string;
   readonly filename: string;
   readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
 }>;
@@ -974,14 +977,100 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   }, 120_000);
 });
 
+/** The globs of every override that sets `vitest/no-restricted-vi-methods`, each with its level there. */
+const viGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
+  printed.overrides.flatMap(({ files, rules }) => {
+    const setting = rules["vitest/no-restricted-vi-methods"];
+
+    return setting === undefined
+      ? []
+      : files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }));
+  });
+
+/** A test file of one folder glob's own, such as `next/apps/fabrika/e2e/**` or `<folder>/*.ts`. */
+const testPlantPath = (glob: string, file: string): string =>
+  `${glob.replace(/\/\*\*(\/\*)?$|\/\*(\.ts)?$/, "")}/${file}`;
+
+describe("M1 of the mock sweep: every folder a vi-methods block lists refuses the vi mocks", () => {
+  // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a
+  // `vitest/no-restricted-vi-methods` block lists today gets VI_METHODS' lines in a test file of its
+  // own, a later slice's folder included (decisions 0555, 0579; the app-e2e plan's L4).
+  // Plant: delete `next/apps/fabrika/e2e/*` from its block's `files`, and that folder's lines are not refused.
+  it("scenario: VI_METHODS' lines are refused exactly, in every folder of every vi-methods block", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = viGlobs(printed);
+      // Coverage: the app's e2e folder, the first to reach zero in this slice, in both of its
+      // blocks, and every block blocks.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining(["next/apps/fabrika/e2e/*", "next/apps/fabrika/e2e/node/**"]),
+      );
+
+      for (const { glob, level } of globs) {
+        expect(level, glob).toBe("deny");
+      }
+
+      const { text, want } = textOf(VI_METHODS);
+      const files = globs.map(({ glob }) => testPlantPath(glob, VI_METHODS.file ?? "planted.test.ts"));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      expect(
+        files.filter((file) => file.includes("*")),
+        "each glob names a folder",
+      ).toEqual([]);
+      const diagnostics = lint(text, files);
+
+      for (const file of files) {
+        expect(refusedIn(diagnostics, file, VI_METHODS.code), file).toEqual(want);
+      }
+    });
+  }, 120_000);
+
+  // The lock's other half (the app-e2e plan's amendment of 2026-11-16, lead ruling). scenario: the
+  // same folders, read the same way, get VI_PROPERTIES' lines, under `no-restricted-properties`,
+  // which refuses the calls chained onto a vi call that the vitest rule misses
+  // (https://github.com/oxc-project/oxc/issues/29656). A vi fire blocks even where the rule's level
+  // is "warn" for its JSON.parse entry, since `pnpm lint` lets only a JSON.parse fire advise.
+  // Plant: drop the `vi` entries from a block's `no-restricted-properties`, and the chained lines are
+  // not refused in that folder.
+  it("scenario: VI_PROPERTIES' lines are refused exactly, and every vi fire blocks, in every folder of every vi-methods block", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = viGlobs(printed);
+      // Coverage: the chained lines VI_METHODS takes are lines this plant refuses.
+      const call = (line: string) => line.replace(/^(export )?const \w+ = /, "");
+      const chained = VI_METHODS.lines.filter(([line, refused]) => !refused && /^vi\.\w+\(.*\)\./.test(call(line)));
+      const held = VI_PROPERTIES.lines.filter(([, refused]) => refused).map(([line]) => call(line));
+      expect(chained.length).toBeGreaterThan(0);
+
+      for (const [line] of chained) {
+        expect(held, line).toContain(call(line));
+      }
+
+      const { text, want } = textOf(VI_PROPERTIES);
+      const files = globs.map(({ glob }) => testPlantPath(glob, VI_PROPERTIES.file ?? "planted.test.ts"));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      const diagnostics = lint(text, files);
+
+      for (const file of files) {
+        expect(refusedIn(diagnostics, file, VI_PROPERTIES.code), file).toEqual(want);
+      }
+
+      const fires = diagnostics.filter((d) => d.code === VI_PROPERTIES.code && files.includes(d.filename));
+      // Coverage: a folder where the rule's level is "warn" is reached, and one where it is "error".
+      expect(fires.some((d) => d.severity === "warning")).toBe(true);
+      expect(fires.some((d) => d.severity === "error")).toBe(true);
+      expect(fires.filter(advises), "a vi fire is never advice").toEqual([]);
+    });
+  }, 120_000);
+});
+
 describe("L10 of the Reflect ban: after the fold the base blocks hold it for all of next/, and no list block is left", () => {
   // scenario: the repo's own config, read by oxlint's own --print-config, and one oxlint run over
   // REFLECT's lines planted in folders that no block names, at generated names under each shape in
   // REFLECT_NEW_FOLDERS. The prefix keeps a name from being a folder that exists. The second half
   // reads the blocks, in order: of the overrides that name a next/ folder and hold the ban, one is next/
-  // whole, then comes the JSON.parse warn block, the only list there is, and client/ comes last. A file
-  // takes the last block that matches it, so client/ after the warn block means no glob added to the
-  // warn block can strip client/'s retry entries or turn its JSON.parse into advice (L4 holds the files).
+  // whole, then comes the JSON.parse warn block, the only list there is, then client/, and last the
+  // mock sweep's two e2e lock blocks, which match no client/ file. A file takes the last block that
+  // matches it, so client/ after the warn block means no glob added to the warn block can strip
+  // client/'s retry entries or turn its JSON.parse into advice (L4 holds the files).
   // Plant: leave the four Reflect entries out of the next/ block, and the folders are not refused
   // and the blocks are two; put one of the three deleted list blocks back, and the blocks are four;
   // move client/'s block back before the warn block, and the order is red.
@@ -1022,7 +1111,9 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
       // leftover list block, blocking or warning, makes a fourth or a second list. Each of the three
       // base blocks has one copy right after it for libfabrika's files but its tests, with the two
       // `process` entries added (M13), so the order is each block and then its copy, and client/'s
-      // copy is last.
+      // copy comes after the warn block's. The two last are the mock sweep's `vi` lock for the app's
+      // e2e folder (ticket 1067), which write out the ban's entries again for the set each of its
+      // file sets takes: the warn block's for the folder's own files, `next/**/*`'s for `node/`.
       expect(
         Arr.map(blocks, ({ files: globs }) => (globs.length === 1 ? globs[0] : "a list of folders")),
         "the blocks that hold the ban for next/, in the order oxlint applies them",
@@ -1033,17 +1124,20 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
         "a list of folders",
         "next/packages/libfabrika/src/client/**",
         "next/packages/libfabrika/src/client/**",
+        "next/apps/fabrika/e2e/*",
+        "next/apps/fabrika/e2e/node/**",
       ]);
 
       // The list is the JSON.parse warn block and its copy: they advise for that entry alone, and the
-      // rest of their fires block (advice.test.ts).
+      // rest of their fires block (advice.test.ts). The e2e lock keeps the level of the block it
+      // writes out again.
       expect(
         Arr.map(blocks, ({ rules }) => {
           const setting = rules["no-restricted-properties"];
 
           return Arr.isArray(setting) ? setting[0] : setting;
         }),
-      ).toEqual(["deny", "deny", "warn", "warn", "deny", "deny"]);
+      ).toEqual(["deny", "deny", "warn", "warn", "deny", "deny", "warn", "deny"]);
     });
   }, 120_000);
 });

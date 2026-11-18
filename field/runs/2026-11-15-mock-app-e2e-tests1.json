@@ -1,0 +1,95 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-app-e2e-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T23:12:28-08:00",
+  "ended": "2026-11-15T23:39:53-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for the mock sweep's app-e2e slice, ticket 1067 (0555, 0579), in next/ and our tooling, plan docs/plan/quests/mock-app-e2e-PLAN.md at 14e9b3134, branch fabrikalfa/mock-app-e2e-s1. Upstream Effect has no warn reader: main's packages/effect/src/testing/TestConsole.ts and the 4.1.4 release have only logLines and errorLines, and no Effect-TS/effect issue or pull request names warnLines. So pnpm patch added TestConsole.warnLines to patches/effect@4.1.3.patch in src, dist and the .d.ts, in errorLines' shape, and pnpm-workspace.yaml's comment names it; the upstream issue is the lead's to file. L1 (next/packages/libfabrika/src/node/build/bundle-warnings.test.ts) is red now: one Console.warn line per kept warning: expected [] to have a length of 3 but got +0, since bundle still prints through Rolldown's handler and the global console. L2 (L17 in next/apps/fabrika/e2e/reload.visual.test.ts) ran here, the 0178 guard allowed it on this Linux box: red, the unresolved import warning is still printed: expected false to be true, for the same reason. L3 (scripts/effect-testconsole.test.ts) and L4 (VI_METHODS in oxlint-plugins/builtin-plants.ts, scenario in plants.test.ts) are green. L5 is not done: oxlint's vitest/no-restricted-vi-methods misses a call chained onto the vi call, so the old spy put back passes pnpm lint. To run L1's and L2's plants, a stand-in onLog printing through Console was put in bundle.ts, L1 and L2 were seen green on it, each plant ran on it, and bundle.ts was restored by copy before the commit.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Plan and code differ in two places, code wins. L1 is a plain .test.ts, not .integration.: lint:kind (oxlint-plugins/test-kind.ts) says it reaches no real thing, since its files come from a plugin. The lock block's messages are node's plan's five, word for word, so a later fold merges the two blocks as a union of files. Plan gaps: Rolldown already writes these messages relative to cwd, so the plan's first plant (print log.message before the replacement) stays green on L17 and on L1's first draft; L1 now has a plugin warn from transform with the module's absolute id, which only bundle's replacement makes relative. And vitest/no-restricted-vi-methods misses vi.spyOn(...).mockImplementation(...) and vi.fn().mockReturnValue(...) in oxlint 1.90.0 and 1.93.0 alike, though the same call in parentheses is refused; VI_METHODS lists the miss as REFLECT lists its alias miss.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "today's bundle.ts, which hands each log to Rolldown's handler and the global console.warn: expected [] to have a length of 3",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "stand-in onLog in bundle.ts that prints through Console.warn in Rolldown's format: L1 passes; bundle.ts restored by copy",
+      "result": "green"
+    },
+    {
+      "law": "L1",
+      "plant": "on the stand-in, print log.message before the relative replacement: a printed warning holds an absolute path; restored",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "on the stand-in, print through the global console.warn: expected [] to have a length of 3; restored",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "on the stand-in, print log.loc.file without making it relative: a printed warning holds an absolute path; restored",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "today's bundle.ts: the unresolved import warning is still printed: expected false to be true",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "stand-in onLog in bundle.ts: L17 passes; bundle.ts restored by copy",
+      "result": "green"
+    },
+    {
+      "law": "L2",
+      "plant": "the plan's plant, on the stand-in: print log.message before the relative replacement. L17 stays green, since Rolldown already writes these messages relative to cwd; L1 holds this plant",
+      "result": "green"
+    },
+    {
+      "law": "L2",
+      "plant": "on the stand-in, drop the case's Effect.provide(TestConsole.layer): Not a valid effect: undefined; restored",
+      "result": "red"
+    },
+    {
+      "law": "L2",
+      "plant": "on the stand-in, print log.loc.file without making it relative: a printed warning holds an absolute path; restored",
+      "result": "red"
+    },
+    {
+      "law": "L3",
+      "plant": "warnLines filters on error in the installed patched TestConsole, dist and src: counterexample [{method: warn, parameters: ['']}]; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "delete next/apps/fabrika/e2e/** from the block's files: expected [] to contain the folder; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "delete fn from the block's options: the folder's fn lines 4, 11 and 12 are not refused; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "L5",
+      "plant": "put the old vi.spyOn(console, \"warn\").mockImplementation(() => {}) back in reload.visual.test.ts: oxlint-plugins/lint.ts gives 0 blocking, the rule misses a chained call; restored by copy",
+      "result": "green"
+    }
+  ],
+  "step": "tests"
+}

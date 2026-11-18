@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-app-e2e-build2",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-16T01:13:13-08:00",
+  "ended": "2026-11-16T01:19:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Docs fix in next/AGENTS.md, slice 1 of the mock sweep's app-e2e plan, in next/. The 'What lint holds' row for the vi ban named only vitest/no-restricted-vi-methods and said the rule misses chained calls. It now names the pair: that rule refuses the call and a renamed import, and eslint/no-restricted-properties with object vi entries refuses a chained call (oxc issue 29656). It says both are on per folder at zero, next/apps/fabrika/e2e first, and keeps the 0555 and 0579 replacements. pnpm format touched only this file. pnpm lint passed on 17 of 18 parts; lint:promise-types died with EPIPE in the full run and passed alone (0 findings). No code changed, so no typecheck and no law ran.",
+  "laws": [],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "One file changed besides this row: next/AGENTS.md. The README anchor the row links to was left as it was.",
+  "step": "build"
+}

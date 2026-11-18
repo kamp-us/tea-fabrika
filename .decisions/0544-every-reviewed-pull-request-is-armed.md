@@ -48,7 +48,8 @@ included, and runs no full run on its branch first.**
   `.github/workflows/scheduled.yaml`'s `on.push` and `on.schedule`
   ([0581](0581-main-full-run-starts-on-push-and-hourly.md)). If that run is too slow or misses a
   break, the cure is in the run, never a wait in front of a merge.
-- A sev1 fix still goes ahead of other changes: the lead turns the others off until it has landed.
+- A sev1 fix goes ahead of other changes by admin merge, one at a time
+  ([0611](0611-sev-runbooks-fixes-reserve-priority.md)); the others stay armed.
 
 ## Consequences
 

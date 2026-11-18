@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-app-e2e-tests3",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-16T00:48:43-08:00",
+  "ended": "2026-11-16T01:10:26-08:00",
+  "parent": "2026-11-16-mock-app-e2e-tests2",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests L5 round for the mock sweep's app-e2e slice 1, ticket 1067, in our lint tooling for next/, branch fabrikalfa/mock-app-e2e-s1, on the plan's amendment of 2026-11-16 (the lock is a pair). .oxlintrc.json: the one vitest block over next/apps/fabrika/e2e/** became two, one per set of no-restricted-properties entries those files take on the merged tree: e2e/* at warn (Data.TaggedError, JSON.parse, and the five vi entries) and e2e/node/** at error (Data.TaggedError, JSON.parse, the four Reflect entries, and the five vi entries); each also keeps vitest/no-restricted-vi-methods at error, with the same five messages, and the comment cites oxc#29656. oxlint-plugins/builtin-plants.ts: a new VI_PROPERTIES plant under eslint(no-restricted-properties), refusing the two chained calls, L17's old spy word for word, a plain call of each banned member, a computed key and an optional call, and taking vi.hoisted, vi.waitFor, a comment, a string, other.fn() and a renamed import; VI_METHODS keeps its chained lines false, with its comment pointing at the pair. oxlint-plugins/plants.test.ts: a VI_PROPERTIES scenario on inConfigCopy and refusedIn over every glob of every vitest-rule block, which also checks that every chained line VI_METHODS takes is refused by VI_PROPERTIES, that a warn-level and an error-level folder are both reached, and that no vi fire is advice by advice.ts's advises(); the VI_METHODS scenario's coverage now names both e2e globs; the REFLECT scenario plants a glob two blocks list once. oxlint-plugins/README.md: the section names the pair, its shape, the two blocks and oxc#29656. advice.ts lets only a fire whose message starts with 'JSON.parse' advise, so a vi fire at warn blocks; the L5 plant confirmed it. pnpm format; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint passed, 18 of 18 parts, no EPIPE this time (a tsgo of the other agent was running when it started, against the box rule; lint passed anyway). A second full lint after the run row and finding row were written failed 4 of 18 parts under load (lint:promise-types EPIPE from Snapshot.dispose, lint:kind and lint:dead EPIPE, oxlint-plugins/lint.ts 'oxlint did not finish: status null'), each passing when rerun alone with no tsgo running (lint:promise-types 0 findings); that sighting is added to field/findings/2026-11-16-promise-types-epipe-in-full-lint.json, and field-check --local passed in that run. The list ratchet exits 0. Laws run: oxlint-plugins/plants.test.ts 255 passed, bundle-warnings.test.ts (L1) and scripts/effect-testconsole.test.ts (L3) passed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "next/AGENTS.md's 'What lint holds' row (a build file, not edited here) still says the rule misses chained calls and the review reads for that shape, and names only vitest/no-restricted-vi-methods; with the pair it misstates the lock.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "L4 (VI_PROPERTIES), red first",
+      "plant": "drop the five vi entries from the e2e/* block's no-restricted-properties: next/apps/fabrika/e2e/planted.test.ts expected [] to deeply equal [4..13]",
+      "result": "red"
+    },
+    {
+      "law": "L4 (VI_PROPERTIES), restored",
+      "plant": "the vi entries back by copy: the scenario passes",
+      "result": "green"
+    },
+    {
+      "law": "L5",
+      "plant": "vi.spyOn(console, \"warn\").mockImplementation(() => {}) and the vi import back in next/apps/fabrika/e2e/reload.visual.test.ts: lint.ts exit 1, one blocking fire, eslint(no-restricted-properties) 'vi.spyOn' at 302:27 in the warn block, and no vitest fire",
+      "result": "red"
+    },
+    {
+      "law": "L4 (VI_METHODS), still holds",
+      "plant": "drop spyOn from the e2e/* block's vitest/no-restricted-vi-methods options: next/apps/fabrika/e2e/planted.test.ts expected [4,5,6,8,11,12] to deeply equal [4..12,21]",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
