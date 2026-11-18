@@ -46,7 +46,7 @@ export type Entry = typeof Entry.Type;
 
 /**
  * A journal call failed. `storage`: the store could not read or write. `bad_entry`: a saved value
- * that is no entry. `cause` keeps the store's error underneath, when there is one.
+ * that is no entry. `cause` keeps the store's error underneath.
  *
  * @category errors
  */
@@ -54,7 +54,7 @@ export class JournalError extends Schema.TaggedError<JournalError, { readonly br
   "JournalError",
   {
     reason: Schema.Literals(["storage", "bad_entry"]),
-    cause: Schema.optionalKey(Schema.Defect()),
+    cause: Schema.Defect(),
   },
 ) {}
 
