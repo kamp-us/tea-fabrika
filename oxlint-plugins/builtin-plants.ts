@@ -1323,3 +1323,58 @@ export const GRANT_NO_CONSOLE = {
   ].join("\n"),
   lines: [3, 4],
 } as const;
+
+/**
+ * M12 (decision 0592): libfabrika's product code writes output through Effect's `Console`, so a raw
+ * `console` call is refused in a libfabrika path that is not a `*.test.ts` file, by oxlint's own
+ * `no-console`, and Effect's `Console` passes. plants.test.ts runs these lines in every folder of
+ * `next/packages/libfabrika/src`, in a product path, a `*.test-support.ts` path and a `*.test.ts`
+ * path, where the last must pass them.
+ * Plant: drop the libfabrika glob from the `no-console` block of `.oxlintrc.json`, and a product path
+ * takes `console.log(secret)`.
+ */
+export const LIBFABRIKA_NO_CONSOLE: Plant = {
+  code: "eslint(no-console)",
+  prelude: ['import {Console} from "effect";', "declare const secret: string;"],
+  lines: [
+    ["console.log(secret);", true],
+    ["console.error(secret);", true],
+    ["console.warn(secret);", true],
+    ["console.info(secret);", true],
+    ["console.debug(secret);", true],
+    ["export const nested = () => console.log(secret);", true],
+    ["export const allowed = Console.log(secret);", false],
+    ["// console.log(secret) in a comment", false],
+    ['export const text = "console.log";', false],
+  ],
+};
+
+/**
+ * M13 (decision 0592, owner ruling 2026-11-15): a raw `process.stdout` or `process.stderr` access is
+ * refused in libfabrika's files but its `*.test.ts`, in each form oxlint's `no-restricted-properties`
+ * resolves, and the rest of `process` passes. plants.test.ts runs these lines in every folder of
+ * `next/packages/libfabrika/src`, in a product path and a `*.test-support.ts` path, which must refuse
+ * them, and in a `*.test.ts` path, which must pass them.
+ * Plant: drop the two `process` entries from one block of `.oxlintrc.json` that reaches libfabrika,
+ * and a product path in that block's folders takes `process.stdout.write(secret)`.
+ */
+export const PROCESS_OUTPUT: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: ["declare const secret: string;"],
+  lines: [
+    ["process.stdout.write(secret);", true],
+    ["process.stderr.write(secret);", true],
+    ['export const out = process["stdout"];', true],
+    ["export const { stderr } = process;", true],
+    ["export const written = () => process?.stdout;", true],
+    // The rest of `process` is not this rule's.
+    ["export const args = process.argv;", false],
+    ["export const env = process.env;", false],
+    ["export const exit = () => process.exit(1);", false],
+    // Not an access: a comment, a string, a type, another object's member.
+    ["// process.stdout.write(secret) in a comment", false],
+    ['export const text = "process.stdout";', false],
+    ["export type Out = typeof process.stdout;", false],
+    ["export const own = { stdout: secret }.stdout;", false],
+  ],
+};

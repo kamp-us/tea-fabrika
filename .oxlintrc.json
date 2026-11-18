@@ -1480,6 +1480,13 @@
       "rules": { "eslint/no-console": "error" }
     },
     {
+      // M12 (0592): libfabrika writes output only through Effect's Console, so a raw `console` call is refused
+      // in its files but its `*.test.ts`, whose laws may read what a spied console is given. oxlint's own rule.
+      "files": ["next/packages/libfabrika/src/**"],
+      "excludeFiles": ["next/packages/libfabrika/src/**/*.test.ts"],
+      "rules": { "eslint/no-console": "error" }
+    },
+    {
       // Product code reads the time through Effect's `Clock` or `DateTime`, so a test sets it with
       // `TestClock`. A `.tsx` file has `no-clock-in-view`, which refuses more. Tests are left out below.
       "files": ["next/**/*.ts", "kalfa/**/*.ts"],
@@ -2273,6 +2280,49 @@
       }
     },
     {
+      // M13 (0592, owner ruling 2026-11-15): libfabrika writes output through Effect's Console, so a raw
+      // `process.stdout` or `process.stderr` access is refused in its files but its `*.test.ts`, which may read
+      // a child's output. Each of the three blocks that set this rule for libfabrika (next/**/*, the warn list and
+      // client/**) has one copy of itself for those files, placed after it, with the two `process` entries added.
+      // It is a copy, since an override replaces a rule's options and a file takes the last one that matches it
+      // (plants.test.ts, M13). This is the copy of the next/**/* block.
+      "files": ["next/packages/libfabrika/src/**"],
+      "excludeFiles": ["next/packages/libfabrika/src/**/*.test.ts"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          },
+          {
+            "object": "process",
+            "property": "stdout",
+            "message": "Write through Effect's Console; a raw stdout or stderr write takes a disable line with its reason (owner ruling, 2026-11-15)."
+          },
+          {
+            "object": "process",
+            "property": "stderr",
+            "message": "Write through Effect's Console; a raw stdout or stderr write takes a disable line with its reason (owner ruling, 2026-11-15)."
+          }
+        ]
+      }
+    },
+    {
       // S1: after next/**, since an override replaces options. Keep its import bans too.
       "files": ["next/programs/inbox/src/**/program.ts", "next/programs/inbox/src/**/tile.ts"],
       "rules": {
@@ -2850,12 +2900,65 @@
       }
     },
     {
+      // M13: the copy of the warn block above for libfabrika's files but its `*.test.ts`, with the two `process`
+      // entries added. The warn level stays, so JSON.parse still advises here, and lint.ts blocks a `process` fire
+      // at any level (advice.ts).
+      "files": [
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/cloudflare/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**"
+      ],
+      "excludeFiles": ["next/packages/libfabrika/src/**/*.test.ts"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          },
+          {
+            "object": "process",
+            "property": "stdout",
+            "message": "Write through Effect's Console; a raw stdout or stderr write takes a disable line with its reason (owner ruling, 2026-11-15)."
+          },
+          {
+            "object": "process",
+            "property": "stderr",
+            "message": "Write through Effect's Console; a raw stdout or stderr write takes a disable line with its reason (owner ruling, 2026-11-15)."
+          }
+        ]
+      }
+    },
+    {
       // P18 L4: a window client's reconnects are the Link machine's (`transport/Link.ts`, `backoff`), so
       // nothing in the client retries a dial itself. This block comes after next/** and after the
       // JSON.parse warn block above, on purpose: an override replaces options and a file takes the last
       // override that matches it, so no glob added to the warn block can strip these retry entries or
       // turn JSON.parse into advice here, where the folder starts at zero. Keep it the last block that
-      // sets this rule for next/ (L4 of the Reflect ban holds it, and L10 holds the order).
+      // sets this rule for next/ but the copy right after it, which leaves test files out (M13; L4 of the Reflect ban holds it,
+      // and L10 holds the order).
       "files": ["next/packages/libfabrika/src/client/**"],
       "rules": {
         "eslint/no-restricted-properties": [
@@ -2887,6 +2990,55 @@
             "object": "globalThis",
             "property": "Reflect",
             "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
+      // M13: the copy of the client/ block above for its files but its `*.test.ts`, with the two `process`
+      // entries added. It stays the last block that sets this rule for next/ (plants.test.ts, L10).
+      "files": ["next/packages/libfabrika/src/client/**"],
+      "excludeFiles": ["next/packages/libfabrika/src/**/*.test.ts"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          {
+            "object": "Effect",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
+          },
+          {
+            "object": "Stream",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          },
+          {
+            "object": "process",
+            "property": "stdout",
+            "message": "Write through Effect's Console; a raw stdout or stderr write takes a disable line with its reason (owner ruling, 2026-11-15)."
+          },
+          {
+            "object": "process",
+            "property": "stderr",
+            "message": "Write through Effect's Console; a raw stdout or stderr write takes a disable line with its reason (owner ruling, 2026-11-15)."
           }
         ]
       }

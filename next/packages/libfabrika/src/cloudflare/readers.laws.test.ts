@@ -7,7 +7,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Recorder, runsFor } from "@kampus/vitest";
+import { Recorder, runsFor, Stub } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Match, Redacted, Schema } from "effect";
 
 import * as Digest from "effect/crypto/Digest";
@@ -24,6 +24,7 @@ import { News } from "../runtime/News.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
+import type { ProjectBinding, RecordBinding } from "./bindings.ts";
 import { ConnectionService, connectionRuntime, GatewayWaits, gatewayLayer, gatewayProject } from "./connection.ts";
 import { control } from "./control.ts";
 import { Dispatcher } from "./Dispatcher.ts";
@@ -65,6 +66,32 @@ const freshPublicKey = Signature.Signature.use((signature) => signature.generate
 const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 const malformed = (schema: Schema.Top) => fc.jsonValue().filter((value) => !Schema.is(schema)(value));
+
+/** A platform member any call to which fails the law: the world gives only what the readers use. */
+const unexpected = (member: string): never => {
+  throw new Error(`the world gives no platform member ${member}`);
+};
+
+/** The one member Alchemy's `fromDurableObjectState` reads as it wraps an object, which these objects lack:
+ *  `container` answers nothing, and any other member the world did not give fails the law. */
+const absent = (member: string) => (member === "container" ? undefined : unexpected(member));
+
+/** A platform member built from plain parts, as workerd's type promises it. */
+// SAFETY: each caller hands `fake` the one part the readers use, and the readers use nothing else of it.
+const fake = <A>(value: object): A => value as A;
+
+/** A saved value a law has damaged on purpose: workerd's type promises better, so the readers check it. */
+// SAFETY: the damage is the law's point. Every reader decodes the value before it uses it.
+const saved = <A>(value: unknown): A => value as A;
+
+/** The world's bindings with another `INSTANCE` text, the one binding a law changes. */
+const withInstance = (env: Env, instance: string) =>
+  Stub.make<Env>(unexpected, {
+    INSTANCE: instance,
+    PROJECT: env.PROJECT,
+    RECORD: env.RECORD,
+    MEASUREMENTS: env.MEASUREMENTS,
+  });
 
 const entryPaths = ["Project", "Process", "Connection", "HTTP", "RecordPart"] as const;
 
@@ -116,45 +143,48 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
 
             const sql = w.ctx.storage.sql;
 
-            const ctx = {
-              ...w.ctx,
-              id: {
-                ...w.ctx.id,
+            const ctx = Stub.make<DurableObjectState>(absent, {
+              id: Stub.make<DurableObjectId>(unexpected, {
                 name: Match.value(path).pipe(
                   Match.when("Process", () => Formatter.formatJson(["settings-law", "worker"])),
                   Match.when("RecordPart", () => Formatter.formatJson(["settings-law", "spans/0"])),
                   Match.orElse(() => "settings-law"),
                 ),
-              },
+              }),
               getWebSockets: () => {
                 consumers++;
 
                 return [];
               },
+              getTags: w.ctx.getTags,
+              getWebSocketAutoResponseTimestamp: w.ctx.getWebSocketAutoResponseTimestamp,
+              acceptWebSocket: w.ctx.acceptWebSocket,
+              setWebSocketAutoResponse: w.ctx.setWebSocketAutoResponse,
               // The storage, with each read a consumer could make counted: `get`, and `sql.exec`.
-              storage: {
-                ...w.ctx.storage,
-                get: (...args: unknown[]) => {
+              storage: Stub.make<DurableObjectStorage>(unexpected, {
+                // Alchemy's `fromDurableObjectStorage` hands `kv` on as it wraps the storage, and these objects keep nothing in it.
+                kv: Stub.make<SyncKvStorage>(unexpected),
+                get: fake<DurableObjectStorage["get"]>((...args: ReadonlyArray<unknown>) => {
                   consumers++;
 
                   return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
-                },
-                sql: {
-                  ...sql,
-                  exec: (...args: unknown[]) => {
+                }),
+                transactionSync: w.ctx.storage.transactionSync,
+                sql: Stub.make<SqlStorage>(unexpected, {
+                  exec: fake<SqlStorage["exec"]>((...args: ReadonlyArray<unknown>) => {
                     consumers++;
 
                     return Reflect.apply(sql.exec, sql, args);
-                  },
+                  }),
                   get databaseSize() {
                     return sql.databaseSize;
                   },
-                },
-              },
-            };
+                }),
+              }),
+            });
 
             // The world's Project stub counts each `settingsStart` and answers the start it is given.
-            const env = { ...w.env, INSTANCE: Formatter.formatJson(bad) };
+            const env = withInstance(w.env, Formatter.formatJson(bad));
 
             const local = {
               ...config,
@@ -268,9 +298,17 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
   });
 };
 
+// M4 (mock sweep slice 1). Every platform object here is a `Stub.make` fake, so a call the world does
+// not give fails the law. Plants, each run once: the fake socket's `send` drops its frame (the ready
+// law is red: no `bad_row` reply in `sent`); `gatewayLogic` calls `ctx.storage.list()` (`unexpected`
+// throws, and the laws that build a connection are red).
 /** In-memory platform handles over one SQLite database. The Project stub's `settingsStart` answers
- *  as `settingsStart` says, the good start by default. */
-const world = (settingsStart: (wire: StartsTest.Input) => Promise<unknown> = async () => StartsTest.reply(config)) => {
+ *  as `settingsStart` says, the good start by default, its `route` answers what `answer` last set, and
+ *  the object state's `storage.get` answers `read` says. `sent` holds each frame the socket was sent. */
+const world = (
+  settingsStart: (wire: StartsTest.Input) => Promise<unknown> = async () => StartsTest.reply(config),
+  read?: (key: string) => Promise<unknown>,
+) => {
   const db = new DatabaseSync(":memory:"),
     sql = nodeSql(db);
 
@@ -284,72 +322,79 @@ const world = (settingsStart: (wire: StartsTest.Input) => Promise<unknown> = asy
   });
 
   let tags: unknown = ["session", "tab", "key"],
-    name: unknown = "gateway";
+    name: unknown = "gateway",
+    answered: unknown = { _tag: "parked", stream: "stream", after: 0 };
 
-  const ws = {
+  const sent: Array<string> = [];
+
+  const socket = Stub.make<WebSocket>(unexpected, {
     deserializeAttachment: () => attached,
     serializeAttachment: (value: unknown) => {
       attached = value;
     },
-    send: vi.fn(),
-    close: vi.fn(),
-  };
-
-  // SAFETY: the readers use only the socket's attachment, `send` and `close`, which `ws` holds.
-  // oxlint-disable-next-line fabrika/no-type-assertions -- the socket double supplies attachment, send and close; workerd owns the complete WebSocket
-  const socket = ws as unknown as WebSocket;
-
-  // SAFETY: the readers call only the object's id, SQL storage and these socket methods, all given below.
-  // oxlint-disable-next-line fabrika/no-type-assertions -- only workerd constructs a complete DurableObjectState; these are the handles the real readers use
-  const ctx = {
-    id: {
-      get name() {
-        return name;
-      },
+    send: (text) => {
+      sent.push(String(text));
     },
-    storage: {
-      sql: {
-        exec: sql.exec,
+    close: () => {},
+  });
+
+  const ctx = Stub.make<DurableObjectState>(absent, {
+    id: Stub.make<DurableObjectId>(unexpected, {
+      get name() {
+        return saved<string>(name);
+      },
+    }),
+    storage: Stub.make<DurableObjectStorage>(unexpected, {
+      // Alchemy's `fromDurableObjectStorage` hands `kv` on as it wraps the storage, and these objects keep nothing in it.
+      kv: Stub.make<SyncKvStorage>(unexpected),
+      sql: Stub.make<SqlStorage>(unexpected, {
+        // workerd answers a cursor, which the readers take with `Array.from`, as they take these rows.
+        exec: fake<SqlStorage["exec"]>(sql.exec),
         get databaseSize() {
           return sql.size();
         },
-      },
-      transactionSync: sql.transaction,
-    },
-    getWebSockets: () => [socket],
-    getTags: () => tags,
-    getWebSocketAutoResponseTimestamp: () => null,
-    acceptWebSocket: vi.fn(),
-    setWebSocketAutoResponse: vi.fn(),
-  } as unknown as DurableObjectState;
-
-  const route = vi.fn(async (): Promise<object> => ({ _tag: "parked", stream: "stream", after: 0 }));
-
-  // SAFETY: these readers reach INSTANCE, PROJECT's settings and session calls, and RECORD's `write`, all doubled here.
-  // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
-  const env = {
-    INSTANCE: JSON.stringify(config),
-    PROJECT: {
-      getByName: () => ({
-        settingsStart,
-        route,
-        leave: async () => {},
-        disconnect: async () => {},
-        clientConnect: async () => "client",
-        challenge: async () => "nonce",
       }),
-    },
-    RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
-    MEASUREMENTS: {},
-  } as unknown as Env;
+      transactionSync: sql.transaction,
+      ...(read === undefined ? {} : { get: fake<DurableObjectStorage["get"]>(read) }),
+    }),
+    getWebSockets: () => [socket],
+    getTags: () => saved<Array<string>>(tags),
+    getWebSocketAutoResponseTimestamp: () => null,
+    acceptWebSocket: () => {},
+    setWebSocketAutoResponse: () => {},
+  });
+
+  const project = Stub.make<DurableObjectStub<ProjectBinding>>(unexpected, {
+    settingsStart: fake<DurableObjectStub<ProjectBinding>["settingsStart"]>(settingsStart),
+    route: fake<DurableObjectStub<ProjectBinding>["route"]>(async () => answered),
+    leave: fake<DurableObjectStub<ProjectBinding>["leave"]>(async () => {}),
+    disconnect: fake<DurableObjectStub<ProjectBinding>["disconnect"]>(async () => {}),
+    clientConnect: fake<DurableObjectStub<ProjectBinding>["clientConnect"]>(async () => "client"),
+    challenge: fake<DurableObjectStub<ProjectBinding>["challenge"]>(async () => "nonce"),
+  });
+
+  const env = Stub.make<Env>(unexpected, {
+    INSTANCE: JSON.stringify(config),
+    PROJECT: Stub.make<Env["PROJECT"]>(unexpected, { getByName: () => project }),
+    RECORD: Stub.make<Env["RECORD"]>(unexpected, {
+      getByName: () =>
+        Stub.make<DurableObjectStub<RecordBinding>>(unexpected, {
+          write: fake<DurableObjectStub<RecordBinding>["write"]>(async () => ({ _tag: "written" })),
+        }),
+    }),
+    MEASUREMENTS: Stub.make<R2Bucket>(unexpected),
+  });
 
   return {
     ctx,
     env,
-    ws,
     socket,
+    sent,
     db,
-    route,
+    /** What the Project's `route` answers from now on. */
+    answer: (value: unknown) => {
+      answered = value;
+    },
     attached: (value: unknown) => {
       attached = value;
     },
@@ -421,17 +466,9 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
 
 // The live members the two Recorder laws below wrap, read once from each service's live layer, the
 // sibling file 0095 keeps apart from the contract.
-const liveWaits = Effect.runSync(
-  Effect.gen(function* () {
-    return yield* Waits;
-  }).pipe(Effect.provide(WaitsLive.layer)),
-);
+const liveWaits = Effect.runSync(Waits.pipe(Effect.provide(WaitsLive.layer)));
 
-const liveDispatcher = Effect.runSync(
-  Effect.gen(function* () {
-    return yield* Dispatcher;
-  }).pipe(Effect.provide(DispatcherLive.layer)),
-);
+const liveDispatcher = Effect.runSync(Dispatcher.pipe(Effect.provide(DispatcherLive.layer)));
 
 // M1 (mock sweep slice 2). The wait asks the `Waits` service for the ready decode once, with the
 // raw answer the project gave, and the live decode fails in the typed channel. The Recorder holds
@@ -488,7 +525,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
 
       try {
         const gateway = await runtime.runPromise(ConnectionService);
-        w.route.mockResolvedValue({ _tag: "ok", result: raw });
+        w.answer({ _tag: "ok", result: raw });
         await runtime.runPromise(
           gateway
             .message(
@@ -511,7 +548,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
         ).toEqual([[raw]]);
         expect(decodes, "the one decode ran once and failed").toHaveLength(1);
         typed(decodes[0]!);
-        expect(w.ws.send.mock.calls.map(([text]) => JSON.parse(text))).toContainEqual(
+        expect(w.sent.map((text) => JSON.parse(text))).toContainEqual(
           expect.objectContaining({
             id: "wait",
             error: expect.objectContaining({ data: { reason: "bad_row" } }),
@@ -686,6 +723,8 @@ for (const service of ["process", "record"] as const) {
   });
 }
 
+// M3 (mock sweep slice 1). Plant, run once: `processDescriptor` returns `storage.get`'s value without its
+// decode (red: a malformed descriptor is no typed `bad_row` failure).
 it("processDescriptor checks the saved value before returning it to a caller", async () => {
   const descriptor = Schema.Struct({
     id: Schema.String,
@@ -697,9 +736,7 @@ it("processDescriptor checks the saved value before returning it to a caller", a
 
   await fc.assert(
     fc.asyncProperty(malformed(descriptor), async (raw) => {
-      const w = world();
-      const get = vi.fn(async () => raw);
-      Object.assign(w.ctx.storage, { get });
+      const w = world(undefined, async () => raw);
 
       try {
         typed(await Effect.runPromiseExit(processDescriptor(w.ctx)));
@@ -778,19 +815,18 @@ StartsTest.law(
       let size = 0;
       const raw = w.ctx.storage.sql;
 
-      const ctx = {
-        ...w.ctx,
-        id: { ...w.ctx.id, name: Formatter.formatJson(["settings-law", "spans/0"]) },
-        storage: {
-          ...w.ctx.storage,
-          sql: {
-            ...raw,
+      const ctx = Stub.make<DurableObjectState>(unexpected, {
+        id: Stub.make<DurableObjectId>(unexpected, { name: Formatter.formatJson(["settings-law", "spans/0"]) }),
+        storage: Stub.make<DurableObjectStorage>(unexpected, {
+          transactionSync: w.ctx.storage.transactionSync,
+          sql: Stub.make<SqlStorage>(unexpected, {
+            exec: raw.exec,
             get databaseSize() {
               return size;
             },
-          },
-        },
-      };
+          }),
+        }),
+      });
 
       const chain = Chain.cases.spans.make({});
 

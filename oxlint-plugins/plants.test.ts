@@ -31,8 +31,10 @@ import { afterAll, describe, expect } from "vitest";
 import {
   BUILTIN_PLANTS,
   GRANT_NO_CONSOLE,
+  LIBFABRIKA_NO_CONSOLE,
   NEXT_TSX_PLANTS,
   type Plant,
+  PROCESS_OUTPUT,
   REFLECT,
   REFLECT_NEW_FOLDERS,
   TAGGED_ERROR,
@@ -121,6 +123,24 @@ const withoutGrantNoConsole = (text: string): LintConfig => {
       config.overrides.splice(index, 1);
     }
   }
+
+  return config;
+};
+
+/** The config without one rule on the override whose only glob is `glob`: the control a plant is read against. */
+const withoutRuleOn = (text: string, glob: string, rule: string): LintConfig => {
+  const config = readLintConfig(text);
+
+  const matches = config.overrides.filter(
+    (override) =>
+      override.files.length === 1 &&
+      override.files[0] === glob &&
+      override.rules !== undefined &&
+      Object.hasOwn(override.rules, rule),
+  );
+
+  expect(matches).toHaveLength(1);
+  delete matches[0]!.rules![rule];
 
   return config;
 };
@@ -912,8 +932,8 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
       expect(Arr.some(globs, ({ glob, level }) => Str.startsWith("next/")(glob) && level === "warn")).toBe(true);
 
       const { text, want } = textOf(REFLECT);
-      const files = Arr.map(globs, ({ glob }) => plantPath(glob));
-      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      // A glob a later block copies for another set of files, such as libfabrika's for M13, shares its file.
+      const files = Arr.dedupe(Arr.map(globs, ({ glob }) => plantPath(glob)));
       const diagnostics = lint(text, files);
 
       for (const file of files) {
@@ -968,23 +988,149 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
       );
 
       // One block names one glob and another names the folders of the JSON.parse warn block, so a
-      // leftover list block, blocking or warning, makes a fourth or a second list. client/ is last.
+      // leftover list block, blocking or warning, makes a fourth or a second list. Each of the three
+      // base blocks has one copy right after it for libfabrika's files but its tests, with the two
+      // `process` entries added (M13), so the order is each block and then its copy, and client/'s
+      // copy is last.
       expect(
         Arr.map(blocks, ({ files: globs }) => (globs.length === 1 ? globs[0] : "a list of folders")),
         "the blocks that hold the ban for next/, in the order oxlint applies them",
-      ).toEqual(["next/**/*", "a list of folders", "next/packages/libfabrika/src/client/**"]);
+      ).toEqual([
+        "next/**/*",
+        "next/packages/libfabrika/src/**",
+        "a list of folders",
+        "a list of folders",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/client/**",
+      ]);
 
-      // The list is the JSON.parse warn block: it advises for that entry alone, and the rest of its
-      // fires block (advice.test.ts).
+      // The list is the JSON.parse warn block and its copy: they advise for that entry alone, and the
+      // rest of their fires block (advice.test.ts).
       expect(
         Arr.map(blocks, ({ rules }) => {
           const setting = rules["no-restricted-properties"];
 
           return Arr.isArray(setting) ? setting[0] : setting;
         }),
-      ).toEqual(["deny", "warn", "deny"]);
+      ).toEqual(["deny", "deny", "warn", "warn", "deny", "deny"]);
     });
   }, 120_000);
+});
+
+/** libfabrika's source folder, and its top, as the folders a law plants a file in, a new folder included. */
+const LIBFABRIKA_SRC = "next/packages/libfabrika/src";
+
+const libfabrikaFolders: ReadonlyArray<string> = [
+  LIBFABRIKA_SRC,
+  ...Arr.map(
+    Arr.filter(readdirSync(join(ROOT, LIBFABRIKA_SRC), { withFileTypes: true }), (entry) => entry.isDirectory()),
+    (entry) => `${LIBFABRIKA_SRC}/${entry.name}`,
+  ),
+  `${LIBFABRIKA_SRC}/node/client`,
+];
+
+/** The three kinds of file a libfabrika folder holds that the two rules below tell apart. */
+const libfabrikaKinds = [
+  { kind: "product", name: "planted.ts", left: false },
+  { kind: "test-support", name: "planted.test-support.ts", left: false },
+  { kind: "test", name: "planted.test.ts", left: true },
+] as const;
+
+describe("M12 and M13 (decision 0592): libfabrika writes output through Effect's Console", () => {
+  // M12. scenario: the repo's own config, with the lines of LIBFABRIKA_NO_CONSOLE planted in each
+  // libfabrika folder as a product file, a test-support file and a test file, and in a folder outside it.
+  // Plant: drop the libfabrika glob from the `no-console` block of `.oxlintrc.json`, and a product
+  // path takes `console.log(secret)`: the control below, which does it, takes them all.
+  it("scenario: M12 raw console calls are refused in libfabrika's product and test-support files, and taken in its test files and outside it", () => {
+    const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
+    const control = withoutRuleOn(config, `${LIBFABRIKA_SRC}/**`, "eslint/no-console");
+    const { text, want } = textOf(LIBFABRIKA_NO_CONSOLE);
+
+    const planted = Arr.flatMap(libfabrikaFolders, (folder) =>
+      Arr.map(libfabrikaKinds, (kind) => ({ ...kind, file: `${folder}/${kind.name}` })),
+    );
+
+    const outside = ["next/apps/fabrika/src/planted.ts", "next/packages/tuval/src/planted.ts"];
+
+    const sources = Object.fromEntries(
+      [...Arr.map(planted, ({ file }) => file), ...outside].map((file) => [file, text]),
+    );
+
+    // Coverage: libfabrika's top and its folders, each with three kinds of file.
+    expect(libfabrikaFolders.length).toBeGreaterThan(10);
+
+    inConfigCopy(({ lintFiles, lintWithConfig }) => {
+      const current = lintFiles(sources);
+      const dropped = lintWithConfig(control, sources);
+
+      for (const { file, left } of planted) {
+        expect(refusedIn(current, file, LIBFABRIKA_NO_CONSOLE.code), file).toEqual(left ? [] : want);
+        expect(refusedIn(dropped, file, LIBFABRIKA_NO_CONSOLE.code), `${file} with the block dropped`).toEqual([]);
+      }
+
+      for (const file of outside) {
+        expect(refusedIn(current, file, LIBFABRIKA_NO_CONSOLE.code), file).toEqual([]);
+      }
+    });
+  }, 120_000);
+
+  // M13. scenario: the repo's own config, with PROCESS_OUTPUT's lines planted in each libfabrika
+  // folder as a product file, a test-support file and a test file, beside the entries every block
+  // writes out again: REFLECT, TAGGED_ERROR, a JSON.parse line, and in client/ the two retry entries.
+  // None of them may be lost, since an override replaces a rule's options.
+  // Plants: (a) drop the two `process` entries from one block that reaches libfabrika, and a product
+  // path in that block's folders takes the planted write; (b) add a block for libfabrika after the
+  // others that lists only the two `process` entries, and the other entries' lines are taken in its
+  // paths; (c) add `process.stdout.write(cause)` to a product file, and `pnpm lint` is red.
+  it("scenario: M13 process stdout and stderr are refused in libfabrika's product and test-support files, taken in its test files, and no other entry is lost", () => {
+    const retries: Plant = {
+      code: PROCESS_OUTPUT.code,
+      prelude: ['import {Effect, Stream} from "effect";'],
+      lines: [
+        ["export const effectRetry = Effect.retry;", true],
+        ["export const streamRetry = Stream.retry;", true],
+      ],
+    };
+
+    const parse: Plant = {
+      code: PROCESS_OUTPUT.code,
+      prelude: [],
+      lines: [['export const parsed = JSON.parse("{}");', true]],
+    };
+
+    const kept = [
+      { plant: REFLECT, name: "reflect", folders: libfabrikaFolders },
+      { plant: TAGGED_ERROR, name: "tagged", folders: libfabrikaFolders },
+      { plant: parse, name: "parse", folders: libfabrikaFolders },
+      { plant: retries, name: "retries", folders: [`${LIBFABRIKA_SRC}/client`] },
+    ] as const;
+
+    const planted = Arr.flatMap(libfabrikaFolders, (folder) =>
+      Arr.flatMap(libfabrikaKinds, (kind) => [
+        { plant: PROCESS_OUTPUT, name: "process", left: kind.left, file: `${folder}/process-${kind.name}` },
+        ...Arr.flatMap(kept, ({ plant, name, folders }) =>
+          folders.includes(folder) ? [{ plant, name, left: false, file: `${folder}/${name}-${kind.name}` }] : [],
+        ),
+      ]),
+    );
+
+    // Coverage: every folder and kind has the process lines, and client/ has its retry lines.
+    expect(Arr.filter(planted, ({ name }) => name === "process")).toHaveLength(
+      libfabrikaFolders.length * libfabrikaKinds.length,
+    );
+
+    expect(Arr.filter(planted, ({ name }) => name === "retries")).toHaveLength(libfabrikaKinds.length);
+
+    const sources = Object.fromEntries(Arr.map(planted, ({ plant, file }) => [file, textOf(plant).text]));
+
+    inConfigCopy(({ lintFiles }) => {
+      const current = lintFiles(sources);
+
+      for (const { plant, left, file } of planted) {
+        expect(refusedIn(current, file, plant.code), file).toEqual(left ? [] : textOf(plant).want);
+      }
+    });
+  }, 180_000);
 });
 
 describe("the Data.TaggedError entry, which stands beside fabrika/no-data-taggederror (0573)", () => {

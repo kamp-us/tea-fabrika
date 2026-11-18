@@ -7,7 +7,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Exit, Layer, Match, Predicate, Schema, Scope, Tracer } from "effect";
+import { Context, Effect, Exit, Layer, Match, Predicate, Schema, Scope } from "effect";
 
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -172,39 +172,24 @@ SettingsTest.suite((recipe, secret) =>
       return reply;
     });
 
+    // The `console` spy stays this round (mock sweep slice 1): this law reads all five methods (`log`,
+    // `info`, `warn`, `error`, `debug`), and Effect's `TestConsole` reads back only `log` and `error`
+    // lines on the lockfile's patch, so the spy goes when the patch adds readers for the other three.
+    // The spies on `process.stdout`, `process.stderr` and a span's `attribute` are gone. A raw write
+    // to either stream, or a raw `console` call, cannot land in libfabrika's product code, since lint
+    // refuses it (M13, M12), so the `stdout` and `stderr` channels stay empty. A span attribute that
+    // can leave the object leaves in the spans rows or a Record call, which this law reads below.
+    // Plants, run once: `Effect.logError` of the cause on a refused start in
+    // `SettingsStartsLedger.ts` is red through `logs`; the cause's text set as a span attribute there
+    // is red through `spans`.
     yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const attribute = Tracer.NativeSpan.prototype.attribute;
-
-        const spies = [
-          vi.spyOn(Tracer.NativeSpan.prototype, "attribute").mockImplementation(function (
-            this: Tracer.NativeSpan,
-            key,
-            value,
-          ) {
-            captured["span attributes"].push({ key, value });
-
-            return Reflect.apply(attribute, this, [key, value]);
+      Effect.sync(() =>
+        (["log", "info", "warn", "error", "debug"] as const).map((method) =>
+          vi.spyOn(console, method).mockImplementation((...args) => {
+            captured.logs.push(args);
           }),
-          vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-            captured.stdout.push(String(chunk));
-
-            return true;
-          }),
-          vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
-            captured.stderr.push(String(chunk));
-
-            return true;
-          }),
-          ...(["log", "info", "warn", "error", "debug"] as const).map((method) =>
-            vi.spyOn(console, method).mockImplementation((...args) => {
-              captured.logs.push(args);
-            }),
-          ),
-        ];
-
-        return spies;
-      }),
+        ),
+      ),
       (spies) =>
         Effect.sync(() => {
           for (const spy of spies) {
