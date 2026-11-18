@@ -57,6 +57,12 @@
 //  23. a Docker call never answers                 stopped at its DOCKER_SECONDS bound (TERM,
 //                                                  then KILL), stuck docker_timeout; in gc, one
 //                                                  line and exit 0, so the chain goes on
+// 24. the host has CI set (GitHub's runner does)  `--env CI=<value>` is passed, the one host
+//                                                  variable that crosses, so the container's host
+//                                                  guard (vitest.hostrun.ts) lets `.integration.`
+//                                                  laws start on that disposable runner (0594);
+//                                                  with no CI, or an empty one, none is passed and
+//                                                  the guard refuses, as on the laptop
 // Every report carries `reach`, the line "the sample reached N of M changed files", naming each
 // file with zero mutants (ticket 655).
 
@@ -191,6 +197,8 @@ export const runArgs = (ask: {
   readonly build: string;
   readonly related: ReadonlyArray<string>;
   readonly lock: string;
+  /** The host's own `CI` marker, or `null` when it has none: the only host variable that crosses. */
+  readonly ci: string | null;
 }): Array<string> => [
   "run",
   "--rm",
@@ -229,6 +237,7 @@ export const runArgs = (ask: {
   `BUILD=${ask.build}`,
   "--env",
   `RELATED=${ask.related.join(",")}`,
+  ...(ask.ci === null ? [] : ["--env", `CI=${ask.ci}`]),
   ask.image,
   "nice",
   "-n",
@@ -1065,6 +1074,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
       build,
       related,
       lock: ask.lock,
+      ci: process.env.CI === undefined || process.env.CI === "" ? null : process.env.CI,
     }),
   ).pipe(Effect.timeoutOption(`${limit} seconds`));
 
