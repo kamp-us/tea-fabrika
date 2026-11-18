@@ -483,7 +483,226 @@ it.effect.prop(
   { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } },
 );
 
-it("TT8: ignores pending placeholders and rejects jobs without valid queue timing", async () => {
+// A job's queue wait exists exactly when GitHub started a real job with a valid, ordered pair of
+// times. Every field is drawn from a weighted table (a pick is an index into it), so the good
+// choice is common and each bad one is still reached. The oracle below reads the draw, never the
+// product's helpers. Plants, each run once on time-table.ts and restored, each turned this red:
+// the status gate narrowed to `status === "pending"`; the `runner_id == null` check dropped; the
+// calendar check in `timestamp` dropped; the zone part of `timestamp`'s regex dropped.
+const statuses = [
+  ...Array.from({ length: 4 }, () => "in_progress"),
+  ...Array.from({ length: 4 }, () => "completed"),
+  "queued",
+  "waiting",
+  "requested",
+  "pending",
+  undefined,
+] as const;
+
+const conclusions = [null, null, "success", "success", "failure", "cancelled", "skipped", undefined] as const;
+
+// Runner pick: below 6 a real runner (its id from the draw), then null, then absent.
+const runnerPicks = 8;
+
+const timeKinds = [
+  ...Array.from({ length: 4 }, () => "z"),
+  "z",
+  "fraction",
+  "fraction",
+  "offset",
+  "offset",
+  "impossible",
+  "zoneless",
+  "garbage",
+  "null",
+  "absent",
+] as const;
+
+const impossibleDays = [
+  "2026-02-30T09:59:56Z",
+  "2026-02-31T10:00:00Z",
+  "2026-04-31T10:00:00Z",
+  "2026-06-31T10:00:00Z",
+  "2026-11-31T10:00:00Z",
+  "2027-02-29T10:00:00Z",
+  "2100-02-29T10:00:00Z",
+];
+
+const zoneless = ["2026-11-14T09:59:56", "2026-11-14T10:00:00.250", "2026-11-14T10:00:00"];
+
+const garbage = ["bad", "", "yesterday", "2026-11-14", "2026-11-14 10:00:00Z", "2026-13-01T00:00:00Z", "10:00:00Z"];
+
+/** A time field from its kind: the text GitHub would send (or absent) and its instant in ms, if valid. */
+const timeField = (kind: (typeof timeKinds)[number], seconds: number, alt: number) => {
+  switch (kind) {
+    case "z":
+      return { text: iso(seconds), ms: seconds * 1000 };
+    case "fraction":
+      return { text: iso(seconds).replace("Z", ".250Z"), ms: seconds * 1000 + 250 };
+    case "offset":
+      return {
+        text: DateTime.formatIso(DateTime.makeUnsafe((seconds + 3 * 3600) * 1000)).replace(".000Z", "+03:00"),
+        ms: seconds * 1000,
+      };
+    case "impossible":
+      return { text: impossibleDays[alt % impossibleDays.length]!, ms: undefined };
+    case "zoneless":
+      return { text: zoneless[alt % zoneless.length]!, ms: undefined };
+    case "garbage":
+      return { text: garbage[alt % garbage.length]!, ms: undefined };
+    case "null":
+      return { text: null, ms: undefined };
+    case "absent":
+      return { text: undefined, ms: undefined };
+  }
+};
+
+// Which cases the draws reached, and the case count so far, to fail loudly if a required case was
+// never drawn.
+const reached = new Set<string>();
+
+let drawn = 0;
+
+const queueRuns = runsFor({ fast: 100, full: 100 });
+
+const required = [
+  "some",
+  "none",
+  "status:in_progress",
+  "status:completed",
+  "status:queued",
+  "status:waiting",
+  "status:requested",
+  "status:pending",
+  "status:absent",
+  "conclusion:skipped",
+  "runner:null",
+  "runner:absent",
+  "created:impossible",
+  "created:zoneless",
+  "created:garbage",
+  "created:null",
+  "created:absent",
+  "started:impossible",
+  "started:zoneless",
+  "started:garbage",
+  "started:null",
+  "started:absent",
+  "order:reversed",
+  "order:equal",
+  "started-job-with-times",
+];
+
+it.effect.prop(
+  "TT8: a queue wait exists exactly for a started, non-skipped job with a runner and valid ordered times",
+  {
+    status: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: statuses.length - 1 })),
+    conclusion: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: conclusions.length - 1 })),
+    runner: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: runnerPicks - 1 })),
+    runnerId: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 2_000_000_000 })),
+    createdKind: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: timeKinds.length - 1 })),
+    startedKind: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: timeKinds.length - 1 })),
+    created: Schema.Int.check(Schema.isBetween({ minimum: 1_790_000_000, maximum: 1_800_000_000 })),
+    wait: Schema.Int.check(Schema.isBetween({ minimum: -4, maximum: 4 })),
+    alt: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000 })),
+  },
+  (draw) => {
+    const status = statuses[draw.status];
+    const conclusion = conclusions[draw.conclusion];
+    const runner = draw.runner < 6 ? draw.runnerId : draw.runner === 6 ? null : undefined;
+    const created = timeField(timeKinds[draw.createdKind]!, draw.created, draw.alt);
+    const started = timeField(timeKinds[draw.startedKind]!, draw.created + draw.wait, draw.alt + 1);
+
+    // The jobs API answer: a key is absent when its value is undefined.
+    const fields = {
+      status,
+      conclusion,
+      runner_id: runner,
+      created_at: created.text,
+      started_at: started.text,
+    };
+
+    const answer = {
+      steps: job.steps,
+      ...Rec.filter(fields, (value) => value !== undefined),
+    };
+
+    // The oracle, from the draw alone.
+    const real = (status === "in_progress" || status === "completed") && conclusion !== "skipped" && runner != null;
+    const ordered = created.ms !== undefined && started.ms !== undefined && started.ms >= created.ms;
+
+    const expected =
+      real && ordered
+        ? {
+            created: created.text!,
+            started: started.text!,
+            seconds: (started.ms! - created.ms!) / 1000,
+          }
+        : undefined;
+
+    drawn += 1;
+    reached.add(expected ? "some" : "none");
+    reached.add(`status:${status ?? "absent"}`);
+    reached.add(`created:${timeKinds[draw.createdKind]}`);
+    reached.add(`started:${timeKinds[draw.startedKind]}`);
+
+    if (conclusion === "skipped") {
+      reached.add("conclusion:skipped");
+    }
+
+    if (runner === null) {
+      reached.add("runner:null");
+    }
+
+    if (runner === undefined) {
+      reached.add("runner:absent");
+    }
+
+    if (real && created.ms !== undefined && started.ms !== undefined) {
+      reached.add(started.ms < created.ms ? "order:reversed" : started.ms === created.ms ? "order:equal" : "order:ok");
+    }
+
+    if (real && created.text != null && started.text != null) {
+      reached.add("started-job-with-times");
+    }
+
+    return Effect.gen(function* () {
+      const timings = yield* collect(
+        env,
+        root,
+        io(
+          () => answer,
+          () => "{}",
+        ),
+        0,
+      );
+
+      expect(readQueueWait(answer)).toEqual(expected);
+      expect(timings.queueWait).toEqual(expected);
+      expect(Object.hasOwn(timings, "queueWait")).toBe(expected !== undefined);
+      expect(JSON.stringify(timings).includes('"queueWait"')).toBe(expected !== undefined);
+
+      const text = markdown(timings);
+
+      if (expected) {
+        expect(text).toContain(`### Queue wait\n\n${expected.seconds.toFixed(3)} s`);
+        expect(text).not.toContain("Unavailable: no valid job queue timing");
+      } else {
+        expect(text).toContain("### Queue wait\n\nUnavailable: no valid job queue timing");
+      }
+
+      if (drawn === queueRuns) {
+        expect(required.filter((name) => !reached.has(name))).toEqual([]);
+      }
+    });
+  },
+  { arbitrary: { runs: queueRuns, size: 30, concurrency: 1, seed: options.seed } },
+);
+
+// vector: real jobs and placeholders as GitHub wrote them (a job still queued, waiting, requested
+// or pending with no start; a skipped job that never got a runner; a real completed job, 705 s in
+// the queue), kept beside the property above.
+it("vector: ignores pending placeholders and rejects jobs without valid queue timing", async () => {
   const created = "2026-11-14T09:59:56Z";
   const started = "2026-11-14T10:00:00Z";
   const realRunner = { runner_id: 1_000_332_569 };
