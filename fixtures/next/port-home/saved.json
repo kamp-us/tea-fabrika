@@ -1,27 +1,31 @@
 {
   "founding": {
     "person": "person_01m6v5270hf3c8x2q7w9z4k5mn",
-    "founder": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBQcgBfMvyfxZjqg0tC5jAj9x5hiL3USTpnE9VNcGm6h",
-    "window": "FByAF8y_J_FmOqDS0LmMCP3HmGIvdRJOmcT1U1wabqE"
+    "founder": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF5MU2lz6bL+YZracfqG0I0fEstMFSH1vhuDlLOLNx66",
+    "window": "XkxTaXPpsv5hmtpx-obQjR8Sy0wVIfW-G4OUs4s3Hro"
   },
   "key": {
     "note": "test key: made fresh for this fixture by its writer in port-home.laws.test.ts; it guards nothing",
     "jwk": {
       "kty": "OKP",
       "crv": "Ed25519",
-      "x": "FByAF8y_J_FmOqDS0LmMCP3HmGIvdRJOmcT1U1wabqE",
-      "d": "9lG3jOfsVyFxdrs5kGCTEC98HFK2_byaM1ssVTLCn2g"
+      "x": "XkxTaXPpsv5hmtpx-obQjR8Sy0wVIfW-G4OUs4s3Hro",
+      "d": "qx0j6fVSmOQAagKLwe4PyJLjn-5Du8HzrXnyYLhCpe0"
     }
   },
   "seen": {
     "table": [
       {
         "name": "checklist:1",
-        "process": "process_01m7d9vbqmfbns226eb2ye5hcp"
+        "process": "process_01m7qctbv9f2eb8d60bn1jbt00"
       },
       {
         "name": "counter:1",
-        "process": "process_01m7d9vbpvfhca8tm879770rce"
+        "process": "process_01m7qctbsgfrdrr67v5vh3k8hn"
+      },
+      {
+        "name": "tezgah:01m6v5270hf3c8x2q7w9z4k5mn",
+        "process": "process_01m7qctbx8fjcrwxq0vhvwk5h6"
       }
     ],
     "streams": {
@@ -30,21 +34,21 @@
           "id": "counter:1",
           "stream": "processes/counter:1",
           "pos": 1,
-          "rev": 3,
-          "arrivedAt": 1794669129436,
+          "rev": 7,
+          "arrivedAt": 1795007786801,
           "by": "brain:port-home",
           "for": "person_01m6v5270hf3c8x2q7w9z4k5mn",
-          "sentAt": "2026-11-14T15:12:09.411Z",
+          "sentAt": "2026-11-18T13:16:26.749Z",
           "seen": 0,
           "parent": null,
-          "traceId": "a2165ac4d7280771cf361fb5bf994123",
-          "build": "3a66a10b35ed418bede3938ddb7c01148202dc54e336782ca38cae6404283c73",
+          "traceId": "a417018f02e2bce89976ce0e124f57c7",
+          "build": "c6c901e688c19a4330f8e33b6a271e1c87bbaaca6de76ede4bda99b4cbd220ef",
           "_tag": "started",
           "body": {
-            "process": "process_01m7d9vbpvfhca8tm879770rce",
+            "process": "process_01m7qctbsgfrdrr67v5vh3k8hn",
             "name": "counter:1",
             "program": "fabrika/counter",
-            "hash": "bad7aafc7f097fd27069f9ea312d86a69e549dbf31ba23c514dcadf5011034ef",
+            "hash": "aeda82b74b19b77d59834d53746ccbe061dd1a4c44b57bebc423f7941aced5bc",
             "asked": "brain:port-home"
           }
         }
@@ -54,21 +58,21 @@
           "id": "checklist:1",
           "stream": "processes/checklist:1",
           "pos": 1,
-          "rev": 5,
-          "arrivedAt": 1794669129460,
+          "rev": 9,
+          "arrivedAt": 1795007786858,
           "by": "brain:port-home",
           "for": "person_01m6v5270hf3c8x2q7w9z4k5mn",
-          "sentAt": "2026-11-14T15:12:09.436Z",
+          "sentAt": "2026-11-18T13:16:26.802Z",
           "seen": 0,
           "parent": null,
-          "traceId": "a2165ac4d7280771cf361fb5bf994123",
-          "build": "3a66a10b35ed418bede3938ddb7c01148202dc54e336782ca38cae6404283c73",
+          "traceId": "a417018f02e2bce89976ce0e124f57c7",
+          "build": "c6c901e688c19a4330f8e33b6a271e1c87bbaaca6de76ede4bda99b4cbd220ef",
           "_tag": "started",
           "body": {
-            "process": "process_01m7d9vbqmfbns226eb2ye5hcp",
+            "process": "process_01m7qctbv9f2eb8d60bn1jbt00",
             "name": "checklist:1",
             "program": "fabrika/checklist",
-            "hash": "96e835290ee77d88f25c644efb8dfb25f5242c6f9141eaa41451c5615231c566",
+            "hash": "aee04309322a68ce2ad46176a6cb20377838ed7dac969c59f627467772cc9814",
             "asked": "brain:port-home"
           }
         }
