@@ -624,7 +624,9 @@ it.prop(
 // positional argument keeps the files whose path holds it, `--changed` the files the change reaches) and a
 // real git repository for the change. Each run starts a process, so the count is small and every
 // route is also held by a scenario below.
-const INTEGRATION_READER = "next/apps/fabrika/src/settings-generated.integration.test.ts";
+// A next-integration file the readers list names. settings-generated.test.ts was one until 0591 made
+// it plain, so the build law stands in.
+const INTEGRATION_READER = "next/apps/fabrika/src/build.integration.test.ts";
 
 const STAND_IN = (node: string) => `#!${node}
 const { readFileSync, writeFileSync } = require("node:fs");

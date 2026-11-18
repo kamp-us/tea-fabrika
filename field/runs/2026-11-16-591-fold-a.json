@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-fold-a",
+  "ticket": "591",
+  "pr": 1504,
+  "started": "2026-11-16T01:05:00-08:00",
+  "ended": "2026-11-16T01:20:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "lead",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "folded",
+  "why": "The coordinator folds slice A of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md), reviewed done at 0195a28, into fabrikalfa/exam-to-lint (PR 1504) with git merge --no-edit, on top of slice F (0b02152). Slice A's branch took origin/main once, at 2621967, so this fold is the sweep branch's one take of main. Three files conflicted. oxlint-plugins/settings-imports.test.ts: both slices moved L9 there; the fold keeps slice A's copy, as slice A's review ruled, because it imports ./plant.ts (slice F's imported the exam path that slice A removes) and adds the check that every start file is drawn taking the adapter. next/apps/fabrika/src/settings-generated.test.ts: slice A's header, which says the file is plain again since L9 left. vitest.shards.test.ts: the L5 title counts 267 next rows, slice A's 268 less slice F's deleted build.test.ts row. One edit the merge did not flag: oxlint-plugins/one-page-runtime.test.ts (slice F) imported plant from the old exam path, now ./plant.ts.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Ran at the merged tree, under nice -n 19 with --maxWorkers=1: oxlint-plugins/one-page-runtime.test.ts, oxlint-plugins/settings-imports.test.ts, next/apps/fabrika/src/settings-generated.test.ts, vitest.shards.test.ts and .github/ci/changes.test.ts, 5 files, 98 tests, all passed. changes.test.ts had not run in slice A's box, where the worktree check refuses a path holding the word git; it ran here in the main checkout. pnpm format, then pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 17 of 18 parts passed; lint:promise-types died in the tsgo API channel while another agent ran, the memory pattern seen all day, and passed alone with 0 findings. No pnpm typecheck here: CI runs it on the push (0133).",
+  "step": "lead"
+}

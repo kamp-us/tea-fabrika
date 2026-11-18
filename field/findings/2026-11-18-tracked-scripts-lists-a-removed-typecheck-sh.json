@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tracked-scripts-lists-a-removed-typecheck-sh",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "oxlint-plugins/tracked-scripts.ts",
+    "line": 35
+  },
+  "says": "`pnpm lint` fails on main because tracked-scripts.ts still lists scripts/typecheck.sh on NOT_YET_PORTED after the ticket 766 pull request removed that script from git.",
+  "proof": "`node oxlint-plugins/tracked-scripts.ts` prints \"scripts/typecheck.sh is on NOT_YET_PORTED, and git does not track it: delete its line in oxlint-plugins/tracked-scripts.ts, since the list only shrinks.\" and exits 1; `git ls-tree origin/main scripts/typecheck.sh` prints nothing at 4909b55df, and oxlint-plugins/tracked-scripts.ts:35 still reads \"scripts/typecheck.sh\".",
+  "cost": "Every branch's local `pnpm lint` fails on a part its change did not touch, so a real lint failure can hide behind it.",
+  "head": "4909b55df880ce09d9667a0e1cd3d782e5bb354d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1629"
+}

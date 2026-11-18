@@ -23,21 +23,22 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { it } from "@effect/vitest";
-import { Array as Arr, Effect, pipe, Predicate, Record as Rec, Schema, Order, String as Str } from "effect";
+import { Array as Arr, Effect, Formatter, pipe, Predicate, Record as Rec, Schema, Order, String as Str } from "effect";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect } from "vitest";
-import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
 import {
   BUILTIN_PLANTS,
   GRANT_NO_CONSOLE,
+  NEXT_TSX_PLANTS,
   type Plant,
   REFLECT,
   REFLECT_NEW_FOLDERS,
   TAGGED_ERROR,
 } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
+import { plant as lintCopies } from "./plant.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
 class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
@@ -479,6 +480,20 @@ describe("each rule refuses what it is there to refuse", () => {
     expect([...new Set(firesInPlanted(poll, "vitest(require-awaited-expect-poll)"))]).toEqual([2]);
   });
 
+  // The React rules on only in next/'s .tsx files, linted whole at their next/ paths (0591).
+  it.each(Arr.map(NEXT_TSX_PLANTS, (p) => [Arr.join(Rec.keys(p.fires), ", "), p] as const))(
+    "built in, on in next/'s .tsx files: %s",
+    async (_codes, p) => {
+      const result = await lintCopies(p.files);
+
+      for (const [code, want] of Rec.toEntries(p.fires)) {
+        for (const file of Rec.keys(p.files)) {
+          expect([code, file, result(code, file)]).toEqual([code, file, want[file] ?? []]);
+        }
+      }
+    },
+  );
+
   it("A3b: raw console calls in the grant entry are refused by its exact override", () => {
     const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
     const control = withoutGrantNoConsole(config);
@@ -501,7 +516,12 @@ describe("each rule refuses what it is there to refuse", () => {
   }, 120_000);
 
   it("each built-in rule is planted once", () => {
-    const codes = [...Arr.map(BUILTIN_PLANTS, (p) => p.code), GRANT_NO_CONSOLE.code];
+    const codes = [
+      ...Arr.map(BUILTIN_PLANTS, (p) => p.code),
+      GRANT_NO_CONSOLE.code,
+      ...Arr.flatMap(NEXT_TSX_PLANTS, (p) => Rec.keys(p.fires)),
+    ];
+
     expect(new Set(codes).size).toBe(codes.length);
   });
 
@@ -530,7 +550,8 @@ describe("each rule refuses what it is there to refuse", () => {
         "service-contract", // P19 plants the three desktop contracts and a native import below.
         // Generated files and their fix in padding-line-between-statements.test.ts.
         "padding-line-between-statements",
-        // next/'s exam rules, planted at next/ paths in next/apps/fabrika/src/exam/.
+        // next/'s exam rules, planted at next/ paths through plant.ts, each in its own <rule>.test.ts here
+        // (0591 moved them from next/apps/fabrika/src/exam/; no-of's path laws are in no-of.test.ts).
         "no-promises",
         "no-effect-run-outside-edge",
         "edge-comment",
@@ -539,6 +560,8 @@ describe("each rule refuses what it is there to refuse", () => {
         "no-hand-tag",
         "one-store-hook",
         "no-clock-in-view",
+        // p65's import half, planted as the exam's deps trees at next/ paths in package-deps.test.ts (0591).
+        "package-deps",
         // Generated ledger-sql.test.ts plants run at next/ paths with the real lint config.
         "no-ledger-sql",
         "no-node-imports",
@@ -578,6 +601,8 @@ describe("each rule refuses what it is there to refuse", () => {
         "test-database",
         // 0535's rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
         "runs-from-depth",
+        // P12's rule is on for the page entry alone: one-page-runtime.test.ts plants each break there.
+        "one-page-runtime",
         // The Reflect ban's L5 counts ignore comments per file, so reflect-disables.test.ts generates
         // its files at next/ and tooling paths and runs them with the real lint config.
         "reflect-disables",
@@ -633,6 +658,44 @@ it.live("scenario: T877 L10 only the TOML adapter imports the parser and seriali
     expect(result("eslint(no-restricted-imports)", adapter)).toEqual([]);
   }),
 );
+
+// T502 PR 2, next/: the exam's object-imports law (next/apps/fabrika/src/exam/object-imports.integration.test.ts),
+// moved here by 0591. The installed no-restricted-imports rule, in the `cloudflare/objects.ts` block of the
+// real config, refuses a value import and a side-effect import of anything but Alchemy, for each drawn
+// module, and passes erased types. Plant: drop the block's pattern group, and lines 1 and 6 pass.
+const OBJECT_MODULES = ["./runtime.ts", "./record.ts", "effect", "node:fs"] as const;
+
+it("object contracts load only Alchemy; erased types do not load services", async () => {
+  const drawn = new Set<string>();
+
+  await fc.assert(
+    fc.asyncProperty(fc.constantFrom(...OBJECT_MODULES), async (module) => {
+      drawn.add(module);
+      const file = "next/packages/libfabrika/src/cloudflare/objects.ts";
+
+      const fires = await lintCopies({
+        [file]: Arr.join(
+          [
+            `import { value } from ${Formatter.formatJson(module)};`,
+            `import type { Shape } from ${Formatter.formatJson(module)};`,
+            'import * as Cloudflare from "@alchemy.run/cloudflare";',
+            'import type { Other } from "./runtime.ts";',
+            'import { type Mixed } from "./runtime.ts";',
+            'import "./runtime.ts";',
+            "export { value, Cloudflare }; export type { Shape, Other, Mixed };",
+          ],
+          "\n",
+        ),
+      });
+
+      expect([...new Set(fires("eslint(no-restricted-imports)", file))]).toEqual([1, 6]);
+    }),
+    // fast-check counts examples inside numRuns, so the four runs are the four modules, each once.
+    { seed: 119120, numRuns: 4, examples: Arr.map(OBJECT_MODULES, (module) => [module] as [string]) },
+  );
+
+  expect([...drawn].sort()).toEqual([...OBJECT_MODULES].sort());
+});
 
 // scenario: U11 is path-scoped, so its planted line must run under next/ with the real config.
 it.live("scenario: the isolate-boundary rule refuses a platform type outside cloudflare/", () =>

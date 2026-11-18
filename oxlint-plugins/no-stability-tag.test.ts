@@ -7,8 +7,8 @@ import { join } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noStabilityTag } from "./no-stability-tag.ts";
+import { plant } from "./plant.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
 

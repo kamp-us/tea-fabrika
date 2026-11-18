@@ -35,8 +35,8 @@ import { dirname, join, resolve } from "node:path";
 import { Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { MESSAGE, TYPE_MESSAGE } from "./law-shape.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(law-shape)";
 
@@ -397,17 +397,25 @@ it(
   120_000,
 );
 
-/** Runs `pnpm lint`'s own runner on one planted law at `next/unit.test.ts`, in a clean git checkout under `next/`. */
+/**
+ * Runs `pnpm lint`'s own runner on one planted law at `next/apps/unit/unit.test.ts`, in a clean git
+ * checkout under `next/`. The law sits in a package that lists vitest, so `fabrika/package-deps`
+ * (p65) has nothing to say and the count is the law's own.
+ */
 const lintOne = (text: string) => {
   const dir = realpathSync(mkdtempSync(join(ROOT, "next", ".law-shape-")));
 
   try {
     spawnSync("git", ["init", "-q", dir]);
-    const file = join(dir, "next/unit.test.ts");
+    const file = join(dir, "next/apps/unit/unit.test.ts");
     mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(
+      join(dir, "next/apps/unit/package.json"),
+      JSON.stringify({ name: "@kampus/unit", devDependencies: { vitest: "catalog:" } }),
+    );
     writeFileSync(file, text);
 
-    return spawnSync(process.execPath, [join(ROOT, "oxlint-plugins/lint.ts"), "next/unit.test.ts"], {
+    return spawnSync(process.execPath, [join(ROOT, "oxlint-plugins/lint.ts"), "next/apps/unit/unit.test.ts"], {
       cwd: dir,
       encoding: "utf8",
       timeout: 20_000,

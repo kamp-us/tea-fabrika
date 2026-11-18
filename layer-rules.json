@@ -255,7 +255,8 @@
     {
       "name": "next-email",
       "layer": 6,
-      "paths": ["next/packages/libfabrika/src/email"]
+      "paths": ["next/packages/libfabrika/src/email"],
+      "imports": ["next-access", "next-ledger", "next-transport", "next-shared"]
     },
     {
       "name": "next-access",

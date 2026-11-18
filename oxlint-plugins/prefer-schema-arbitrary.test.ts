@@ -80,7 +80,8 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
     const ran = spawnSync(
       runner ? process.execPath : oxlint,
       runner
-        ? [join(root, "oxlint-plugins/lint.ts"), ...args, ...Rec.keys(files)]
+        ? // A planted manifest is written, not linted.
+          [join(root, "oxlint-plugins/lint.ts"), ...args, ...Arr.filter(Rec.keys(files), (f) => !f.endsWith(".json"))]
         : [
             `--config=${join(dir, ".oxlintrc.json")}`,
             "--disable-nested-config",
@@ -346,11 +347,25 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
         });
 
         expect(hits).toHaveLength(1);
-        const blocked = lint({ [`next/unit.test.${ext}`]: text }, true).ran;
+
+        // The runner's law sits in a package that lists what it imports, so `fabrika/package-deps`
+        // (p65) has nothing to say and the count is this rule's own.
+        const unit = {
+          "next/apps/unit/package.json": JSON.stringify({
+            name: "@kampus/unit",
+            devDependencies: { effect: "catalog:", "fast-check": "catalog:" },
+          }),
+        };
+
+        const blocked = lint({ ...unit, [`next/apps/unit/unit.test.${ext}`]: text }, true).ran;
         expect(blocked.stdout).toContain(code);
         expect(blocked.stdout).toContain("1 blocking, 0 advice");
         expect(blocked.status, blocked.stdout + blocked.stderr).toBe(1);
-        const warned = lint({ [`next/unit.test.${ext}`]: `${text}\ndebugger;\n` }, true, ["--warn=no-debugger"]).ran;
+
+        const warned = lint({ ...unit, [`next/apps/unit/unit.test.${ext}`]: `${text}\ndebugger;\n` }, true, [
+          "--warn=no-debugger",
+        ]).ran;
+
         expect(warned.stdout).toContain("no-debugger");
         expect(warned.stdout).toContain("2 blocking, 0 advice");
         expect(warned.status).toBe(1);
