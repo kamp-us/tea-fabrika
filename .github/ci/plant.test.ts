@@ -85,15 +85,14 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
   });
 };
 
-const position = (key: Request["case"], line = 17, column = 23) => {
-  return key === "host-requested-pin"
+const position = (key: Request["case"], line = 17, column = 23) =>
+  key === "host-requested-pin"
     ? { line: 195, column: 62 }
     : key === "host-pnpm-path"
       ? { line: 194, column: 70 }
       : key === "host-env-order"
         ? { line: 197, column: 24 }
         : { line, column };
-};
 
 const message = (key: Request["case"], content = "", syntax = false) => {
   const error = matcher(key, content, syntax);
