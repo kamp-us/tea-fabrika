@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds slice 1 of the sev runbooks (0571, 0603), as the lead (fabrikaa-merger) approved it, open question 1 answered no, keeping 0595; body 9637522634de
 Plancheck-Version: 3
 
 # Sev runbooks, sev fixes admin-merged in both levels, and a runner reserve while a sev is open, in today's lead tooling and CI (slice 2, priority classes and preemption, is a @kalfa/ci plan)
