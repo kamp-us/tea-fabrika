@@ -32,6 +32,8 @@ const layers = (code: number) => {
 
 const oid = (number: number) => String(number % 10).repeat(40);
 
+const commandArgs = (command: ChildProcess.StandardCommand) => command.args.map(String);
+
 const detail = (number: number, state: "OPEN" | "MERGED" = "OPEN", mergeCommit: string | null = null) => ({
   number,
   head: `fabrikalfa/layer-${number}`,
@@ -79,7 +81,7 @@ const stackLayer = (fixture: StackFixture) => {
         return Effect.die("expected a standard command");
       }
 
-      const args = command.args;
+      const args = commandArgs(command);
 
       if (args.some((part) => part.includes("/stacks"))) {
         return Effect.succeed(handle(0, JSON.stringify({ number: selected.number, base: selected.base, prs: held })));
@@ -164,7 +166,7 @@ type SpawnCalls = ReadonlyArray<readonly [ChildProcess.Command]>;
 
 const asyncRequest = (calls: SpawnCalls): ChildProcess.StandardCommand | undefined => {
   for (const [command] of calls) {
-    if (ChildProcess.isStandardCommand(command) && command.args.some((part) => part.endsWith("/merge-async"))) {
+    if (ChildProcess.isStandardCommand(command) && commandArgs(command).some((part) => part.endsWith("/merge-async"))) {
       return command;
     }
   }
@@ -200,7 +202,7 @@ describe("PullRequestsGh draft actor selection", () => {
 
         if (branch.startsWith("fabrikalfa/")) {
           expect(command.command).toBe("node");
-          expect(command.args).toEqual([
+          expect(commandArgs(command)).toEqual([
             expect.stringMatching(/\/botpush\.mjs$/),
             "--draft",
             "owner/repo",
@@ -216,7 +218,7 @@ describe("PullRequestsGh draft actor selection", () => {
           expect(yield* Stream.mkString(Stream.decodeText(input))).toBe(JSON.stringify(text));
         } else {
           expect(command.command).toBe("gh");
-          expect(command.args).toEqual([
+          expect(commandArgs(command)).toEqual([
             "pr",
             "create",
             "-R",
@@ -263,7 +265,14 @@ describe("PullRequestsGh native stack merge", () => {
         const request = asyncRequest(calls);
 
         expect(answer._tag).toBe("enqueued");
-        expect(request?.args).toEqual(["api", "-X", "PUT", "repos/owner/repo/pulls/13/merge-async", "--input", "-"]);
+        expect(request === undefined ? undefined : commandArgs(request)).toEqual([
+          "api",
+          "-X",
+          "PUT",
+          "repos/owner/repo/pulls/13/merge-async",
+          "--input",
+          "-",
+        ]);
         expect(request === undefined ? "" : JSON.parse(yield* asyncBody(request))).toEqual({
           sha: oid(13),
           merge_action: "merge_queue",
@@ -311,7 +320,7 @@ describe("PullRequestsGh native stack merge", () => {
         const answer = yield* runStack(fixture);
         const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
         const command = calls.find(
-          ([spawned]) => ChildProcess.isStandardCommand(spawned) && spawned.args[1] === "graphql",
+          ([spawned]) => ChildProcess.isStandardCommand(spawned) && commandArgs(spawned)[1] === "graphql",
         )?.[0];
 
         if (command === undefined || !ChildProcess.isStandardCommand(command)) {
@@ -319,8 +328,10 @@ describe("PullRequestsGh native stack merge", () => {
         }
 
         expect(answer._tag).toBe("enqueued");
+        const args = commandArgs(command);
+
         for (const value of ["owner=owner", "name=repo", "branch=false"]) {
-          expect(command.args[command.args.indexOf(value) - 1]).toBe("-f");
+          expect(args[args.indexOf(value) - 1]).toBe("-f");
         }
       }),
     );
