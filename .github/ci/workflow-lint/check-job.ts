@@ -38,6 +38,7 @@ export const checkJob: Rule = ({ jobs }, require) => {
   for (const step of checkSteps) {
     const slow = step["run"] === "pnpm build";
     const setup = typeof step["uses"] === "string";
+
     const expected = slow
       ? BUILD
       : rows.includes(step) || plants.includes(step)
@@ -45,6 +46,7 @@ export const checkJob: Rule = ({ jobs }, require) => {
         : rowInstall.includes(step)
           ? ROWS_ALONE
           : CHECK;
+
     require(setup
       ? !("if" in step)
       : compact(step["if"]) ===
