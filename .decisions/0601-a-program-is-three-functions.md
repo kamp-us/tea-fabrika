@@ -3,7 +3,7 @@ id: 0601
 title: "In next/ and kalfa/, a program is three functions, init, update and select, that Program.make in @kalfa/program turns into flags => Stream of inputs => Stream of outputs, with tea underneath and never in its API"
 status: accepted
 date: 2026-11-17
-tags: [programs, program-core, program-make, init, update, select, flags, stream, runner, tea, effect, kalfa, next]
+tags: [programs, program-core, init, update, select, flags, stream, runner, tea, kalfa]
 ---
 
 # 0601: In next/ and kalfa/, a program is three functions, init, update and select, that Program.make in @kalfa/program turns into flags => Stream of inputs => Stream of outputs, with tea underneath and never in its API
@@ -103,9 +103,9 @@ this record does not touch today's version.
 
 ## Decision
 
-**A program is three functions, `init`, `update` and `select`. `Program.make({ init, update, select })`
-turns them into a `Program`: a function from flags to a function from a stream of inputs to a stream
-of outputs (owner, 2026-11-17).**
+**A program is three functions, `init`, `update` and `select`.
+`Program.make({ init, update, select })` turns them into a `Program`: a function from flags to a
+function from a stream of inputs to a stream of outputs (owner, 2026-11-17).**
 
 ### The three functions
 
@@ -113,15 +113,15 @@ of outputs (owner, 2026-11-17).**
   word for what `init` is started with.
 - `update: (state, input: In) => Effect<State, Err, Req>` takes one input and answers the next
   state. It is the one place a program decides.
-- `select: (state) => Effect<Out, Err, Req>` picks the output from the state. It is an Effect, so it
-  has the same shape as `update`.
+- `select: (state) => Effect<Out, Err, Req>` picks the output from the state. It is an Effect, so
+  it has the same shape as `update`.
 - **The state is private.** Nothing outside the program reads it or writes it. Others see only its
   outputs.
 
 ### Schemas first
 
-- Inputs and outputs are tagged unions, made with Effect's `Schema.TaggedUnion`, with the same shape
-  on both sides.
+- Inputs and outputs are tagged unions, made with Effect's `Schema.TaggedUnion`, with the same
+  shape on both sides.
 - The schemas come first, so every type is inferred from them. Nobody writes a type by hand.
 
 ### Programs compose as streams
@@ -132,25 +132,51 @@ of outputs (owner, 2026-11-17).**
 - A test is a stream of inputs in and the collected outputs out.
 
 ```ts
-// A sketch: a counter.
-const In = Schema.TaggedUnion({ add: { n: Schema.Int }, reset: {} });
-const Out = Schema.TaggedUnion({ count: { n: Schema.Int } });
+// A sketch: a small checklist.
+const In = Schema.TaggedUnion({
+  add: { name: Schema.String },
+  check: { name: Schema.String },
+});
+const Out = Schema.TaggedUnion({ progress: { left: Schema.Number } });
+const Item = Schema.Struct({ name: Schema.String, done: Schema.Boolean });
+const State = Schema.Struct({ title: Schema.String, items: Schema.Array(Item) });
 
-export const counter = Program.make({
-  init: (flags: { readonly start: number }) => ({ n: flags.start }),
-  update: (state, input: typeof In.Type) =>
-    Effect.succeed(
-      In.match(input, {
-        add: ({ n }) => ({ n: state.n + n }),
-        reset: () => ({ n: 0 }),
-      }),
-    ),
-  select: (state) => Effect.succeed(Out.cases.count.make({ n: state.n })),
+class NotFound extends Schema.TaggedError<NotFound>()("NotFound", {
+  name: Schema.String,
+}) {}
+
+export const checklist = Program.make({
+  init: (flags: { readonly title: string }): typeof State.Type => ({
+    title: flags.title,
+    items: [],
+  }),
+  update: (state: typeof State.Type, input: typeof In.Type) =>
+    In.match(input, {
+      add: ({ name }) =>
+        Effect.succeed({ ...state, items: [...state.items, { name, done: false }] }),
+      check: ({ name }) =>
+        Effect.gen(function* () {
+          if (!state.items.some((item) => item.name === name)) {
+            return yield* new NotFound({ name });
+          }
+          const items = state.items.map((item) =>
+            item.name === name ? { name, done: true } : item,
+          );
+          return { ...state, items };
+        }),
+    }),
+  select: (state) => {
+    const left = state.items.filter((item) => !item.done).length;
+    return Effect.succeed(Out.cases.progress.make({ left }));
+  },
 });
 
 // The test: a stream of inputs in, the outputs collected.
-const inputs = Stream.make(In.cases.add.make({ n: 2 }), In.cases.reset.make({}));
-const outputs = inputs.pipe(counter({ start: 1 }), Stream.runCollect);
+const inputs = Stream.make(
+  In.cases.add.make({ name: "tests" }),
+  In.cases.check.make({ name: "tests" }),
+);
+const outputs = inputs.pipe(checklist({ title: "release" }), Stream.runCollect);
 ```
 
 ### tea underneath, never in the API
@@ -159,8 +185,8 @@ const outputs = inputs.pipe(counter({ start: 1 }), Stream.runCollect);
   `Step`.
 - tea is how it runs. `make` makes a small tea machine. It runs the Effect `update` inside one tea
   Cmd, the step, and the step's logged answer installs the new state.
-- Long work uses tea's `owed()`: the step's handler answers owed, and the answer comes later through
-  `dispatch(msg, { answerTo })`.
+- Long work uses tea's `owed()`: the step's handler answers owed, and the answer comes later
+  through `dispatch(msg, { answerTo })`.
 - People may still import tea for their own needs.
 - **The escape hatch.** A program may reach its own machine through a `Context.Service`, `Machine`,
   which `make` provides for each running program, as raw SQL sits under an ORM. It shows in
@@ -194,9 +220,9 @@ const outputs = inputs.pipe(counter({ start: 1 }), Stream.runCollect);
 These are the lead's reading of what follows from the ruling. They are not the owner's words.
 
 - **`@kalfa/program` gets its own plan,** with type tests that settle the exact generics and how
-  `make` takes the schemas, so the hand-written annotations in the counter sketch go too.
-- **The installed tea, 0.27.0, has neither `owed()` nor `answerTo`.** They are on demlik's main. The
-  build takes the release that ships them, or patches tea locally until then
+  `make` takes the schemas, so the hand-written annotations in the checklist sketch go too.
+- **The installed tea, 0.27.0, has neither `owed()` nor `answerTo`.** They are on demlik's main.
+  The build takes the release that ships them, or patches tea locally until then
   ([patch upstream locally](../docs/direction/patch-upstream-locally.md)).
 - **Each program in `next/` moves onto the core** in its own slices, in the lead's order. Today's
   version is not touched ([0217](0217-next-grows-beside-today.md)).
