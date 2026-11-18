@@ -38,7 +38,7 @@ const usage = (input: number, write5m: number, write1h: number, cached: number, 
 });
 
 /** One assistant line of a transcript. */
-const assistant = (at: string, id: string, model: string, said: unknown, content: unknown = []) =>
+const assistant = (at: string, id: string, model: string, said: Schema.Json, content: Schema.Json = []) =>
   JSON.stringify({ type: "assistant", uuid: `u-${at}`, timestamp: at, message: { id, model, content, usage: said } });
 
 const OPUS = "claude-opus-5-5";
@@ -109,7 +109,7 @@ const open = Arr.join(
 );
 
 /** A line whose message has no id, so its `uuid` is its key. */
-const unnamed = (at: string, uuid: string | undefined, said: unknown) =>
+const unnamed = (at: string, uuid: string | undefined, said: Schema.Json) =>
   JSON.stringify({
     type: "assistant",
     uuid,

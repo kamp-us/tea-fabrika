@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's fail fast (ticket 990): every job but ci-required
 // ends with the stop step (F1), only ci-required runs on always() (F2), the token may cancel the run
 // and no job sets its own (F3), and no checkout keeps the token in .git/config (F4).
@@ -17,7 +17,7 @@ export const failFast: Rule = ({ workflow, jobs }, require) => {
 
   for (const [name, job] of Rec.toEntries(jobs).filter(([name]) => name !== "ci-required")) {
     const list = allSteps(map(job));
-    const cancels = list.filter((step) => typeof step["run"] === "string" && step["run"].includes("run cancel"));
+    const cancels = list.filter((step) => Predicate.isString(step["run"]) && step["run"].includes("run cancel"));
     // F1. Last, so `failure()` has seen every other step of the job. The one step that cancels, so
     // no second one can stop a push to main.
     require(list.length > 0 &&
@@ -37,7 +37,7 @@ export const failFast: Rule = ({ workflow, jobs }, require) => {
   // fetches read a public repository, so no checkout needs it.
   for (const [name, job] of Rec.toEntries(jobs)) {
     for (const step of allSteps(map(job)).filter(
-      (s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"),
+      (s) => Predicate.isString(s["uses"]) && s["uses"].startsWith("actions/checkout@"),
     )) {
       require(map(step["with"])["persist-credentials"] ===
         false, `F4: ${name}'s checkout sets persist-credentials: false, so the token stays out of .git/config`);

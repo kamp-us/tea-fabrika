@@ -7,6 +7,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -59,7 +60,7 @@ type Event =
     }
   | { readonly _tag: "call"; readonly method: string; readonly params: unknown; readonly saved: Saved };
 
-const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const bytes = (value: Saved) => new TextEncoder().encode(JSON.stringify(value)).length;
 
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
 
@@ -75,7 +76,7 @@ const online = (busy = false, waits: ReadonlyArray<W> = []) =>
     busy,
   });
 
-const waitFrame = (id: string | number, params: unknown) =>
+const waitFrame = (id: string | number, params: Schema.Json) =>
   JSON.stringify({ jsonrpc: "2.0", id, method: "ledger.wait", params });
 
 const callFrame = (id: string | number, method: string) => JSON.stringify({ jsonrpc: "2.0", id, method, params: {} });
@@ -588,7 +589,8 @@ describe("T703 connection driver laws", () => {
   );
 });
 
-const isRev = (result: unknown) => typeof result === "object" && result !== null && "rev" in result;
+const isRev = (result: unknown): result is { readonly rev: unknown } =>
+  Predicate.isObjectOrArray(result) && "rev" in result;
 
 const no = (id: string | number, reason: string) => ({
   _tag: "send",
@@ -633,7 +635,7 @@ const OldRead = Schema.Struct({ stream: Schema.String, after: Schema.Int.check(S
 const oldFrame = (text: string) =>
   Result.flatMap(
     // oxlint-disable-next-line eslint/no-restricted-properties -- oracle: the old parse this law compares against
-    Result.try({ try: (): unknown => JSON.parse(text), catch: () => null }),
+    Result.try({ try: (): Schema.Json => JSON.parse(text), catch: () => null }),
     (parsed) => Result.mapError(Schema.decodeUnknownResult(OldRequest)(parsed), () => null),
   );
 
@@ -807,7 +809,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
     }
   })();
 
-  if (!f.proxy || (typeof target !== "object" && typeof target !== "function") || target === null) {
+  if (!f.proxy || !Predicate.isObjectKeyword(target)) {
     return target;
   }
 

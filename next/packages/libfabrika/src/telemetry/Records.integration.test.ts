@@ -32,6 +32,7 @@ import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -209,7 +210,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
             const values = Rec.values(rolled[0] ?? {});
             expect(values, "rolled names the next part").toContain(part(p + 1));
             expect(
-              Arr.some(values, (v) => typeof v === "number" && v >= CAP),
+              Arr.some(values, (v) => Predicate.isNumber(v) && v >= CAP),
               "rolled keeps the part's size then, at or past the cap",
             ).toBe(true);
           }

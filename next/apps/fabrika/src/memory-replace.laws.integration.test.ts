@@ -147,6 +147,7 @@ type Fact = { readonly _tag: string; readonly body: Record<string, unknown> };
 /** The brain's facts on `gateway/brain`, or null while the call cannot be answered. */
 const brain = async (instance: Instance): Promise<ReadonlyArray<Fact> | null> => {
   try {
+    // SAFETY: the audit read answers the stream's rows as an array.
     return Arr.map((await instance.project(PROJECT).read("gateway/brain", 0, "audit")) as Array<any>, (row) => ({
       _tag: row._tag,
       body: row.body,
@@ -174,9 +175,9 @@ const watch = async <A>(look: () => Promise<A>, done: (value: A) => boolean, ms:
 type Outcome = "answered" | "offline" | "refused" | "other";
 
 // Every message and code down a failure's chain of causes.
-const chain = (value: unknown): string =>
-  `${String(value)} ${Predicate.hasProperty(value, "code") ? String(value.code) : ""} ${
-    Predicate.hasProperty(value, "cause") && value.cause !== value ? chain(value.cause) : ""
+const chain = (cause: unknown): string =>
+  `${String(cause)} ${Predicate.hasProperty(cause, "code") ? String(cause.code) : ""} ${
+    Predicate.hasProperty(cause, "cause") && cause.cause !== cause ? chain(cause.cause) : ""
   }`;
 
 const outcome = async (instance: Instance): Promise<Outcome> => {

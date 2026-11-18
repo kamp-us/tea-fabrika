@@ -3,11 +3,11 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import { Array as Arr, pipe, Option, Record as Rec, Result } from "effect";
+import { Array as Arr, pipe, Option, Predicate, Record as Rec, Result } from "effect";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 
-const map = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Arr.isArray(x);
+const map = (x: unknown): x is Record<string, unknown> => Predicate.isObject(x);
 
 const declaration = (file: string) => /\.d\.[cm]?ts$/.test(file);
 
@@ -62,7 +62,7 @@ const resolverFor = (conditions: readonly string[]) => {
 // judges every target a runtime condition names, so it lists the condition paths itself: an
 // object's keys (never TypeScript's `types`), each element of a fallback array, nothing for null.
 const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] =>
-  typeof x === "string"
+  Predicate.isString(x)
     ? [[...path]]
     : Arr.isArray(x)
       ? Arr.flatMap(x, (target) => conditionPaths(target, path))
@@ -74,7 +74,7 @@ const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] =>
 
 // Every target string an export value names under a runtime condition.
 const targetStrings = (x: unknown): string[] =>
-  typeof x === "string"
+  Predicate.isString(x)
     ? [x]
     : Arr.isArray(x)
       ? Arr.flatMap(x, targetStrings)
@@ -171,7 +171,7 @@ const valueLink = (
 const workerClass = (node: unknown): boolean =>
   map(node) &&
   (node.type === "Identifier"
-    ? typeof node.name === "string" && /^(?:WorkerEntrypoint|DurableObject|WorkflowEntrypoint)$/.test(node.name)
+    ? Predicate.isString(node.name) && /^(?:WorkerEntrypoint|DurableObject|WorkflowEntrypoint)$/.test(node.name)
     : node.type === "MemberExpression" && workerClass(node.property));
 
 // A string a link names as written: a string literal or a template literal with no `${}`.
@@ -179,7 +179,7 @@ const literal = (node: unknown): string | undefined =>
   !map(node)
     ? undefined
     : node.type === "Literal"
-      ? typeof node.value === "string"
+      ? Predicate.isString(node.value)
         ? node.value
         : undefined
       : node.type === "TemplateLiteral" &&
@@ -188,7 +188,7 @@ const literal = (node: unknown): string | undefined =>
           Arr.isArray(node.quasis) &&
           map(node.quasis[0]) &&
           map(node.quasis[0].value) &&
-          typeof node.quasis[0].value.cooked === "string"
+          Predicate.isString(node.quasis[0].value.cooked)
         ? node.quasis[0].value.cooked
         : undefined;
 
@@ -203,18 +203,24 @@ const windowFile = (file: string) => /\.[jt]sx$/.test(file) && !/\.test\.[jt]sx$
 
 const isFile = (path: string) => existsSync(path) && statSync(path).isFile();
 
-// Unwrap what TypeScript adds around a value: `satisfies`, `as`, `<T>x`, `x!` and parentheses.
-const value = (node: unknown): unknown =>
-  map(node) &&
-  /^(?:TSSatisfiesExpression|TSAsExpression|TSTypeAssertion|TSNonNullExpression|ParenthesizedExpression)$/.test(
-    String(node.type),
-  )
-    ? value(node.expression)
-    : node;
+// Unwrap what TypeScript adds around a value: `satisfies`, `as`, `<T>x`, `x!` and parentheses. What
+// is no node is undefined, as every caller reads only a node.
+const value = (node: unknown): Record<string, unknown> | undefined =>
+  !map(node)
+    ? undefined
+    : /^(?:TSSatisfiesExpression|TSAsExpression|TSTypeAssertion|TSNonNullExpression|ParenthesizedExpression)$/.test(
+          String(node.type),
+        )
+      ? value(node.expression)
+      : node;
 
 // An object literal naming a handler, directly or through a spread of another such object
 // (`export default {...app}`). `named` follows a name to its value in the same file.
-const handlerObject = (node: unknown, named: (node: unknown) => unknown, seen = new Set<unknown>()): boolean => {
+const handlerObject = (
+  node: unknown,
+  named: (node: unknown) => Record<string, unknown> | undefined,
+  seen = new Set<unknown>(),
+): boolean => {
   const object = named(node);
 
   if (!map(object) || object.type !== "ObjectExpression" || seen.has(object)) {
@@ -339,7 +345,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
       const seen = new Set<string>();
       let at = value(node);
 
-      while (map(at) && at.type === "Identifier" && typeof at.name === "string") {
+      while (map(at) && at.type === "Identifier" && Predicate.isString(at.name)) {
         if (seen.has(at.name)) {
           return undefined;
         }
@@ -361,7 +367,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
           return true;
         }
 
-        if (at.type !== "Identifier" || typeof at.name !== "string" || seen.has(at.name)) {
+        if (at.type !== "Identifier" || !Predicate.isString(at.name) || seen.has(at.name)) {
           return false;
         }
 
@@ -374,12 +380,12 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
 
     new Visitor({
       ImportDeclaration(node) {
-        if (valueLink(node.importKind, node.specifiers) && typeof node.source.value === "string") {
+        if (valueLink(node.importKind, node.specifiers) && Predicate.isString(node.source.value)) {
           link(node.source.value);
         }
       },
       ExportNamedDeclaration(node) {
-        if (valueLink(node.exportKind, node.specifiers) && typeof node.source?.value === "string") {
+        if (valueLink(node.exportKind, node.specifiers) && Predicate.isString(node.source?.value)) {
           link(node.source.value);
         }
 
@@ -399,7 +405,7 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
         }
       },
       ExportAllDeclaration(node) {
-        if (node.exportKind !== "type" && typeof node.source.value === "string") {
+        if (node.exportKind !== "type" && Predicate.isString(node.source.value)) {
           link(node.source.value);
         }
       },
@@ -546,7 +552,7 @@ export const programPackageLayout: CreateRule = {
     // The resolver finds the package by its own name, as Node's self-reference does (11.24.2
     // matches any string name). With no name the package's exports cannot be asked, and every
     // subpath a pattern matches counts as offered.
-    const name = map(manifest) && typeof manifest.name === "string" ? manifest.name : "";
+    const name = map(manifest) && Predicate.isString(manifest.name) ? manifest.name : "";
     const raw = map(manifest) ? manifest.exports : undefined;
 
     const names: Names = {
@@ -713,7 +719,7 @@ export const programPackageLayout: CreateRule = {
         if (
           pure.has(file) &&
           valueLink(node.importKind, node.specifiers) &&
-          typeof node.source.value === "string" &&
+          Predicate.isString(node.source.value) &&
           runtimeName(names, node.source.value)
         ) {
           context.report({ node, message: "Pure program code cannot import Worker runtime APIs." });
@@ -723,7 +729,7 @@ export const programPackageLayout: CreateRule = {
         if (
           pure.has(file) &&
           valueLink(node.exportKind, node.specifiers) &&
-          typeof node.source?.value === "string" &&
+          Predicate.isString(node.source?.value) &&
           runtimeName(names, node.source.value)
         ) {
           context.report({ node, message: "Pure program code cannot export Worker runtime APIs." });
@@ -733,7 +739,7 @@ export const programPackageLayout: CreateRule = {
         if (
           pure.has(file) &&
           node.exportKind !== "type" &&
-          typeof node.source.value === "string" &&
+          Predicate.isString(node.source.value) &&
           runtimeName(names, node.source.value)
         ) {
           context.report({ node, message: "Pure program code cannot export Worker runtime APIs." });

@@ -188,7 +188,11 @@ export const verdict = (ended: Ended, errors: ReadonlyArray<Found>, exam: Readon
 
 /** One line for the quest's log: green, red with where it goes and its first line, or why not. */
 export const summary = (v: Verdict): string =>
-  v._tag === "green" ? "green" : v._tag === "red" ? `red, to ${v.to}: ${v.lines[0] ?? ""}` : `no answer: ${v.reason}`;
+  Verdict.match(v, {
+    green: () => "green",
+    red: (v) => `red, to ${v.to}: ${v.lines[0] ?? ""}`,
+    skipped: (v) => `no answer: ${v.reason}`,
+  });
 
 /** What one wait needs: the main checkout (for exam-paths.json), the head, the limits. */
 export type Args = {

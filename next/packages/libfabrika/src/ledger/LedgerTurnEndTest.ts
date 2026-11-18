@@ -11,6 +11,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
@@ -51,7 +52,7 @@ const counted = (sql: Sql) => {
       if (state.on) {
         for (const row of rows) {
           for (const value of Rec.values(row)) {
-            state.bytes += typeof value === "string" ? encoder.encode(value).length : 8;
+            state.bytes += Predicate.isString(value) ? encoder.encode(value).length : 8;
           }
         }
       }

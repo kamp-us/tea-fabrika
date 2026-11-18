@@ -30,14 +30,15 @@ import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Str from "effect/String";
-
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { lineFor } from "../ledger/Log.ts";
@@ -179,6 +180,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     },
   };
 
+  // SAFETY: the reload path reads the Project's name, its storage and the tail export, which this fixture gives.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
@@ -224,6 +226,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
   let doorPolicy: ProjectDoorOptions["policy"];
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => Effect.suspend(() => Effect.provide(work, context));
 
+  // SAFETY: the composition calls PROJECT's code install, failure and object calls and PROCESS's lifecycle calls, doubled below.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: Formatter.formatJson(START),
@@ -379,6 +382,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
         door: (options) => {
           doorPolicy = options.policy;
 
+          // SAFETY: `door` holds each door method the Project calls, built from a list of names, which drops its type.
           return Effect.succeed(door as never);
         },
       }),
@@ -451,6 +455,7 @@ const install = Effect.fnUntraced(function* (i: Instance, id: string, f: Fixture
   const source = sourceFor(f, pad);
   const digest = yield* hash(source);
   i.sources.set(digest, source);
+  // SAFETY: no caller passes `from`, so it is always "watch", one of the origins the From schema takes.
   const answer = yield* i.run(i.p.codeInstall({ id, program: PROGRAM, hash: digest, source, from: from as never }));
 
   return { digest, answer };
@@ -618,8 +623,11 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       // A new process starts on the selected code, never on a failed one.
       expect(i.descriptors.get(name)?.build).toBe(selected);
     } else {
-      const bad: Fixture =
-        move === "load" ? { ...next, throws: true } : move === "name" ? { ...next, name: "fabrika/other" } : next;
+      const bad: Fixture = Match.value(move).pipe(
+        Match.when("load", () => ({ ...next, throws: true })),
+        Match.when("name", () => ({ ...next, name: "fabrika/other" })),
+        Match.orElse(() => next),
+      );
 
       const pad = move === "too_large" ? MOST + 1 : 0;
       const { digest, answer } = yield* install(i, `install_${n}`, bad, pad);
@@ -659,7 +667,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 
 // edge: the control boundary answers with a platform Response.
 const json = (response: Response) =>
-  Effect.tryPromise({ try: (): Promise<unknown> => response.json(), catch: rejected });
+  Effect.tryPromise({ try: (): Promise<Schema.Json> => response.json(), catch: rejected });
 
 describe("P15 slice 1: the brain installs and selects code", () => {
   it.live(
@@ -1301,9 +1309,10 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             expect(loaded[0]?.body).toMatchObject({ program: PROGRAM, hash: i.builtHash, was: null, from: "boot" });
 
             for (const e of entries) {
+              // SAFETY: a start entry's body may carry the `code` it starts on, an object with its `hash`, or none; `typeof` below checks it.
               const start = e.body.code as { readonly hash?: string } | undefined;
 
-              if (Str.startsWith("processes/")(e.stream) && typeof start?.hash === "string") {
+              if (Str.startsWith("processes/")(e.stream) && Predicate.isString(start?.hash)) {
                 expect(earlier(start.hash, e.rev), `${e.stream} ${e.id} starts on ${start.hash}`).toBe(true);
               }
 
@@ -1366,6 +1375,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 if (move === "control") {
                   const response = yield* ask("project", "codeInstall", TOKEN);
                   expect(response.status).toBe(200);
+                  // SAFETY: a 200 from codeInstall carries the installed answer under `value`, tagged loaded or same.
                   const answer = ((yield* json(response)) as { value: { _tag: string } }).value;
                   expect(["loaded", "same"]).toContain(answer._tag);
                 } else if (move === "wrong_target") {

@@ -23,6 +23,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
@@ -158,6 +159,7 @@ const stack = (sql: Sql, changes: ReadonlyArray<Relation.Change>, inputs: Readon
       ProcessManager.layer(
         {
           owner: Owner.cases.brain.make({}),
+          // SAFETY: PIDS holds 40 ids, so the brain's session at index 39 is present.
           recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[39] as string }),
           by: BRAIN,
         },
@@ -224,6 +226,7 @@ const world = Effect.fnUntraced(function* (
                 stream,
                 id: e.id,
                 tag: e._tag,
+                // SAFETY: every ledger row's body is a JSON object here, and an absent body reads as the empty object.
                 body: (e.body ?? {}) as Row["body"],
               })),
             ),
@@ -303,6 +306,7 @@ const world = Effect.fnUntraced(function* (
       ),
     ).pipe(
       Effect.exit,
+      // SAFETY: the exit holds what `monitor` answers or fails with, which is the `Answer` exit type.
       Effect.map((answer) => ({ id, answer: answer as Answer })),
     );
 
@@ -354,6 +358,7 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's map takes a plain value, so one sample is drawn here
     const [value] = Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }));
 
+    // SAFETY: the sample is drawn from `Arbitrary.schema(schema)`, so it is a value of the schema's type.
     return value as S["Type"];
   });
 
@@ -567,12 +572,14 @@ const m6 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ...(recorded === undefined ? {} : { member: recorded }),
     });
 
-    const target =
-      c.pair === "child"
-        ? { name: "child:1", life: yield* w.start("child:1", { requester: watcher }) }
-        : c.pair === "starter"
-          ? { name: "parent:1", life: starter as string }
-          : { name: "other:1", life: yield* w.start("other:1") };
+    // SAFETY: in the starter case `starter` was set by the start above, so it holds that process id.
+    const target = yield* Match.value(c.pair).pipe(
+      Match.when("child", () =>
+        w.start("child:1", { requester: watcher }).pipe(Effect.map((life) => ({ name: "child:1", life }))),
+      ),
+      Match.when("starter", () => Effect.succeed({ name: "parent:1", life: starter as string })),
+      Match.orElse(() => w.start("other:1").pipe(Effect.map((life) => ({ name: "other:1", life })))),
+    );
 
     const sender = c.sender === "none" ? undefined : senderFrom(c.sender, c.as);
     const parent = sender === undefined ? null : w.deliver(watcher, sender);

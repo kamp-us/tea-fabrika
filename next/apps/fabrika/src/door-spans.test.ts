@@ -60,8 +60,8 @@ const text = fc.string({ minLength: 1, maxLength: 100 });
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 // SQL columns and span fields can hold another JSON document.
-const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
-  if (typeof value === "string") {
+const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+  if (Predicate.isString(value)) {
     const prior = cache.get(value);
 
     if (prior !== undefined) {
@@ -86,10 +86,12 @@ const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): Reado
     return result;
   }
 
-  return Arr.isArray(value)
+  return Array.isArray(value)
     ? Arr.flatMap(value, (part) => texts(part, cache))
     : Predicate.isObject(value)
-      ? Arr.flatMap(Rec.values(value), (part) => texts(part, cache))
+      ? // SAFETY: Array.isArray above took every array at runtime, but TypeScript keeps a readonly array in
+        // this branch, so the cast says what the value is here: a Json object, whose values are Json.
+        Arr.flatMap(Rec.values(value as { readonly [key: string]: Schema.Json }), (part) => texts(part, cache))
       : [];
 };
 
@@ -250,7 +252,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
             audit: {
               data: Schema.Struct({ type: Schema.Literal("comment") }),
               select: () => {
-                const m = Schema.decodeUnknownSync(Input)(message);
+                const m = Schema.decodeSync(Input)(message);
 
                 if (controls.audit === "selector") {
                   throw new Error(m.text);
@@ -419,7 +421,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                 );
                 const shown = yield* Schema.encodeEffect(
                   Schema.fromJsonString(Schema.Unknown, {
-                    replacer: (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+                    replacer: (_k, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
                   }),
                 )({
                   spans: Arr.map(tracer.spans, (s) => ({ name: s.name, tags: [...s.attributes] })),

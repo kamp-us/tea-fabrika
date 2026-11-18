@@ -19,12 +19,12 @@ import {
   Effect,
   FileSystem,
   Formatter,
+  Match,
   Option,
   Path,
   Schema,
   Record as Rec,
 } from "effect";
-
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -160,7 +160,11 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
         insert.run(note, body, data);
 
         if (target && plant !== null && planted !== null) {
-          const column = plant.place === "cell" ? "note" : plant.place === "overflow" ? "body" : "data";
+          const column = Match.value(plant.place).pipe(
+            Match.when("cell", () => "note"),
+            Match.when("overflow", () => "body"),
+            Match.orElse(() => "data"),
+          );
           expected = {
             file: name,
             place: Place.cases.cell.make({ table: tableName, row, column }),

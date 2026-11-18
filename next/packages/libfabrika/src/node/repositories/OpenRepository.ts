@@ -6,6 +6,7 @@ import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Function from "effect/Function";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -43,16 +44,20 @@ class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError, { read
 
 const failed = (reason: "storage" | "document" | "read", cause: unknown, message?: string) =>
   OpenRepositoryError.make({
-    reason: (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed).make({
-      cause: Redacted.make(cause),
-    }),
+    reason: Match.value(reason)
+      .pipe(
+        Match.when("storage", () => Storage),
+        Match.when("document", () => InvalidDocument),
+        Match.orElse(() => ReadFailed),
+      )
+      .make({ cause: Redacted.make(cause) }),
     message:
       message ??
-      (reason === "document"
-        ? "Selected repository: settings document is invalid."
-        : reason === "read"
-          ? "Selected repository: read failed."
-          : "Selected repository: trust could not be saved."),
+      Match.value(reason).pipe(
+        Match.when("document", () => "Selected repository: settings document is invalid."),
+        Match.when("read", () => "Selected repository: read failed."),
+        Match.orElse(() => "Selected repository: trust could not be saved."),
+      ),
   });
 
 // A settings error's messages can include rejected values and parser input. Keep only known labels and keys.

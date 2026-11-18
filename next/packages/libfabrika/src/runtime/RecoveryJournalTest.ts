@@ -146,16 +146,17 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
     error: "TypeError",
     savedThrows: false,
     transport: false,
-    cut: "" as string,
-    hits: [] as Array<string>,
+    cut: "",
+    hits: Array.of<string>(),
     /** Fail every write to the state store while set: the recovery save cannot commit. */
     saveFail: false,
     /** The store goes down the moment the step throws: its observation cannot commit. */
     dropStore: false,
     /** Fail the next ledger entry insert after skipping this many: a lifecycle write is lost. */
+    // SAFETY: loseEntry starts unset; a law sets it to the number of inserts to skip.
     loseEntry: null as number | null,
     steps: new Map<string, number>(),
-    inits: [] as Array<unknown>,
+    inits: Array.of<unknown>(),
   };
 
   let alarm: number | null = null;
@@ -762,6 +763,7 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
   const exits = Arr.map(
     Arr.map(
       Arr.filter(lifecycle, (row) => row.event === "exited"),
+      // SAFETY: an `exited` row's body names the process and its reason.
       (row) => row.body as { process: string; reason: unknown },
     ),
     ({ process, reason }) => ({ process, reason }),
@@ -800,6 +802,7 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
         result: l.dead === null ? null : DEAD,
       });
       // J9: a failed delivery keeps its original input.
+      // SAFETY: the expect above matched the receipt as a receipt object, which holds an `input`.
       expect((receipt as { input: unknown } | null)?.input, `letter ${id} keeps its input`).not.toBeNull();
     }
 
@@ -825,6 +828,7 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
 
   for (const id of a.saved) {
     expect(inbox).toContain(id);
+    // SAFETY: a dead row's body holds the letter id under `m`, read as unknown.
     expect(Arr.some(dead, (row) => (row.body as { m?: unknown }).m === id)).toBe(false);
   }
 

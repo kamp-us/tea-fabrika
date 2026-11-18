@@ -37,6 +37,7 @@ import {
   FileSystem,
   Option,
   Path,
+  Predicate,
   Queue,
   Schema,
   Stream,
@@ -435,7 +436,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                   for (const [name, value] of Rec.toEntries(outputs)) {
                     const text = yield* Schema.encodeEffect(
                       Schema.fromJsonString(Schema.Unknown, {
-                        replacer: (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+                        replacer: (_k, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
                       }),
                     )(value);
 

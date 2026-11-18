@@ -103,7 +103,7 @@ describe("P12 local brain life", () => {
 
                   return bytes;
                 }),
-              replace: (reason: unknown) =>
+              replace: (reason) =>
                 Effect.sync(() => {
                   requests.push(reason);
                 }),
@@ -132,7 +132,7 @@ describe("P12 local brain life", () => {
             expect(yield* outbox.pending).toEqual([event]);
             expect(readFileSync(join(folder, "brain.pending.jsonl"), "utf8")).not.toContain("private control failure");
             const sent: Array<unknown> = [];
-            yield* outbox.flush((row: unknown) =>
+            yield* outbox.flush((row) =>
               Effect.sync(() => {
                 sent.push(row);
               }),
@@ -140,7 +140,7 @@ describe("P12 local brain life", () => {
             expect(sent).toEqual([event]);
             expect(yield* outbox.pending).toEqual([]);
             yield* outbox.add(event);
-            yield* outbox.flush((row: unknown) =>
+            yield* outbox.flush((row) =>
               Effect.sync(() => {
                 sent.push(row);
               }),
@@ -202,7 +202,7 @@ describe("P12 durable brain outbox", () => {
             const calls: Array<unknown> = [];
             const joins: Array<ReadonlyArray<string>> = [];
 
-            const note = (call: unknown) =>
+            const note = (call: readonly [string, string]) =>
               Effect.sync(() => {
                 calls.push(call);
               });

@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's triggers: the events that start a run, the paths
 // a pull request ignores, what cancels a run, and a draft's own check names.
 import { ignored } from "../changes.mjs";
@@ -42,7 +42,7 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
   const skipped = pr["paths-ignore"];
   require(Array.isArray(skipped) &&
     skipped.every(
-      (pattern) => typeof pattern === "string" && /^[\w.-]+(?:\/[\w.*-]+)+$/.test(pattern) && !pattern.includes("**"),
+      (pattern) => Predicate.isString(pattern) && /^[\w.-]+(?:\/[\w.*-]+)+$/.test(pattern) && !pattern.includes("**"),
     ), "ignored paths use no wildcard but a single *");
 
   require(!("branches" in pr), "all PR bases remain enabled");

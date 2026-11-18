@@ -49,6 +49,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
@@ -170,6 +171,8 @@ const isWrite = (c: Cmd): c is Write => c.type === "write";
 /** A saved Model as it mounts: the polite region's burst is empty, and its id is kept (0504). */
 const mounted = (s: WindowModel): WindowModel => ({ ...s, said: { id: s.said.id, messages: [] } });
 
+// SAFETY: a `record` Cmd's input is `{ record: ClientRecord }`
+// (WindowMachine.ts), a tagged union, so its `record` is a Row.
 const recordIn = (c: Cmd): Row | null => (c.type === "record" ? (c["record"] as Row) : null);
 
 /** The fields of a loose value these laws read: a ledger entry, its body, a letter or a sub's deps. */
@@ -263,6 +266,8 @@ const OUTCOMES = ["accepted", "refused"] as const;
  * `wait_err {error}`, `monitor_ok {value: null, ms}` and `monitor_err {error}`, each on its write's
  * `{id, dial}`. Built by the walk from what is waiting, then handed to the real update.
  */
+// SAFETY: the walk passes only the slice-2 answer cases this doc names, each with its
+// write's id and dial, the fields Own declares for that case (WindowMachine.ts).
 const answerMsg = (m: { readonly type: string; readonly [key: string]: unknown }): WindowMsg => m as WindowMsg;
 
 /** A walk's own answers to a flight, in place of the slice 1 brain's; none leaves them to it. */
@@ -465,15 +470,18 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     const f = w.old[c.pick % w.old.length]!;
     const on = { id: f.id, dial: f.dial };
     out.push(() =>
-      f.call._tag === "open"
-        ? { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms }
-        : f.call._tag === "send"
-          ? { type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
-          : f.call._tag === "wait"
-            ? answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })
-            : f.call._tag === "monitor"
-              ? answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms })
-              : { type: "read_ok", ...on, value: [], ms: c.ms },
+      Match.value(f.call).pipe(
+        Match.tag("open", (): WindowMsg => ({ type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms })),
+        Match.tag("send", (): WindowMsg => ({
+          type: "send_ok",
+          ...on,
+          value: { _tag: "accepted", rev: 1, pos: 1 },
+          ms: c.ms,
+        })),
+        Match.tag("wait", (): WindowMsg => answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })),
+        Match.tag("monitor", (): WindowMsg => answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms })),
+        Match.orElse((): WindowMsg => ({ type: "read_ok", ...on, value: [], ms: c.ms })),
+      ),
     );
     const current = w.flights[c.aux % Math.max(1, w.flights.length)];
     const oldDial = Option.getOrUndefined(Arr.findFirst(w.old, (old) => old.dial !== current?.dial))?.dial;
@@ -481,11 +489,23 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     if (current !== undefined && oldDial !== undefined) {
       // A current id on an ended dial must not match. Ids alone are insufficient.
       out.push(() =>
-        current.call._tag === "open"
-          ? { type: "open_ok", id: current.id, dial: oldDial, value: { rev: 0, view: EMPTY }, ms: c.ms }
-          : current.call._tag === "send"
-            ? { type: "send_ok", id: current.id, dial: oldDial, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
-            : { type: "read_ok", id: current.id, dial: oldDial, value: [], ms: c.ms },
+        Match.value(current.call).pipe(
+          Match.tag("open", (): WindowMsg => ({
+            type: "open_ok",
+            id: current.id,
+            dial: oldDial,
+            value: { rev: 0, view: EMPTY },
+            ms: c.ms,
+          })),
+          Match.tag("send", (): WindowMsg => ({
+            type: "send_ok",
+            id: current.id,
+            dial: oldDial,
+            value: { _tag: "accepted", rev: 1, pos: 1 },
+            ms: c.ms,
+          })),
+          Match.orElse((): WindowMsg => ({ type: "read_ok", id: current.id, dial: oldDial, value: [], ms: c.ms })),
+        ),
       );
     }
   }
@@ -497,6 +517,8 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     const cmd = available[c.pick % available.length]!;
     const ok = c.aux % 5 !== 0;
 
+    // SAFETY: `cmd` is a Cmd the window handed out and tea has not answered; every Cmd type `t` the window
+    // makes has a `t_ok` Msg with `cmd` and `value` and a `t_err` Msg with `cmd` and `error`.
     const answer = (value: unknown, error: unknown) => (): WindowMsg =>
       (ok ? { type: `${cmd.type}_ok`, cmd, value } : { type: `${cmd.type}_err`, cmd, error }) as WindowMsg;
 
@@ -611,7 +633,7 @@ const walk = <W extends World, C extends Choice>(
       w.old.push(...(lost === undefined ? [] : [lost]));
     }
 
-    if ("id" in m && typeof m.id === "number" && "dial" in m) {
+    if ("id" in m && Predicate.isNumber(m.id) && "dial" in m) {
       const answer = m;
 
       const answered = Option.getOrUndefined(
@@ -633,11 +655,18 @@ const walk = <W extends World, C extends Choice>(
 
     // A new letter is from the tile that pressed it, by a button or through its own machine's press.
     for (const p of Arr.filter(next.client.pending, (p) => p.n >= prev.client.written)) {
-      w.from.set(p.n, m.type === "press" ? m.tile : m.type === "tile" ? m.id : "?");
+      w.from.set(
+        p.n,
+        Match.value(m).pipe(
+          Match.discriminator("type")("press", (press) => press.tile),
+          Match.discriminator("type")("tile", (tile) => tile.id),
+          Match.orElse(() => "?"),
+        ),
+      );
 
       if (m.type === "tile") {
         const sent = loose(p.m).name;
-        w.submitted.add(typeof sent === "string" ? sent : "");
+        w.submitted.add(Predicate.isString(sent) ? sent : "");
       }
     }
 
@@ -861,6 +890,8 @@ describe("L8: the window parent's connection", () => {
             return;
           }
 
+          // SAFETY: the guard above lets through only read, open and send answers, and each of those
+          // cases carries its write's `id` and `dial` (OnWrite in WindowMachine.ts).
           const on = m as { readonly id: number; readonly dial: number };
 
           if (Arr.some(prev.flight, (f) => f.id === on.id && f.dial === on.dial)) {
@@ -910,10 +941,18 @@ describe("L8: the window parent's connection", () => {
               const view = (
                 [
                   { items: null, left: 0 },
+                  // SAFETY: the window decodes every view it keeps with `decode`,
+                  // which is ListView's decoder here (`machine` above).
                   { ...(shown.view as ListView), left: c.word },
                   { items: [{ name: c.word, state: "invalid" }], left: 1 },
                 ] satisfies readonly [Schema.Json, Schema.Json, Schema.Json]
-              )[index === 0 ? 0 : index === 1 ? 1 : 2];
+              )[
+                Match.value(index).pipe(
+                  Match.when(0, (): 0 => 0),
+                  Match.when(1, (): 1 => 1),
+                  Match.orElse((): 2 => 2),
+                )
+              ];
 
               const value = { rev: shown.rev + 1, view };
 
@@ -929,6 +968,8 @@ describe("L8: the window parent's connection", () => {
               state = after;
             }
 
+            // SAFETY: the window decodes every view it keeps with `decode`,
+            // which is ListView's decoder here (`machine` above).
             const value = { rev: shown.rev + 1, view: listEdit(shown.view as ListView, episode, "recovered") };
             const [after] = step(state, { type: "view", pid, note: { type: "whole", ...value } });
             expect(after.client.views[pid]).toEqual(value);
@@ -1019,6 +1060,8 @@ describe("L8: the window parent's connection", () => {
           const before = Option.getOrThrow(Arr.findFirst(prev.tiles, (t) => t.id === m.id));
           const tileMachine = tileFor(before.name)!;
 
+          // SAFETY: a tile Msg is stepped only by its own tile's machine, so `before.own` is that machine's
+          // model and `m.msg` its Msg; a tile machine's step answers its model and a list of Cmds.
           const [own, out] = applyCell(tileMachine, before.own as never, m.msg as never) as readonly [
             unknown,
             ReadonlyArray<Cmd>,
@@ -1087,7 +1130,7 @@ describe("L8: the window parent's connection", () => {
           const answer = m;
 
           const flight =
-            "id" in answer && typeof answer.id === "number" && "dial" in answer
+            "id" in answer && Predicate.isNumber(answer.id) && "dial" in answer
               ? Option.getOrUndefined(Arr.findFirst(prev.flight, (f) => f.id === answer.id && f.dial === answer.dial))
               : undefined;
 
@@ -1102,7 +1145,12 @@ describe("L8: the window parent's connection", () => {
 
           const owner = refusedLetter === undefined ? undefined : world.from.get(refusedLetter.n);
           const made = Arr.filter(next.client.pending, (p) => p.n >= prev.client.written);
-          const aimed = m.type === "press" ? m.tile : m.type === "tile" ? m.id : null;
+
+          const aimed = Match.value(m).pipe(
+            Match.discriminator("type")("press", (press) => press.tile),
+            Match.discriminator("type")("tile", (tile) => tile.id),
+            Match.orElse(() => null),
+          );
 
           for (const t of next.tiles) {
             const was = Option.getOrThrow(Arr.findFirst(prev.tiles, (x) => x.id === t.id)).refusal;
@@ -1118,6 +1166,8 @@ describe("L8: the window parent's connection", () => {
                   [
                     {
                       m: refusedLetter.m,
+                      // SAFETY: `refusedLetter` is set only when `m` is a `send_ok` whose
+                      // value is `refused`, and a refused Sent carries its reason.
                       reason: (m as { readonly value: { readonly reason: string } }).value.reason,
                     },
                   ],
@@ -1375,6 +1425,8 @@ describe("L9: the records the window emits", () => {
 
           for (const pid of changed) {
             const whole =
+              // SAFETY: `m.type === "view"` here, and a view Msg's note is an object
+              // from the door's view notice; only its `type` is read.
               m.type === "open_ok" || (m.type === "view" && (m.note as { type?: unknown }).type === "whole");
 
             expect(Arr.filter(rows, (r) => r["pid"] === pid && r["result"] === "whole")).toHaveLength(whole ? 1 : 0);
@@ -1484,6 +1536,7 @@ type FrameEvent = {
 const handshakeIn = (s: WindowModel): { readonly _tag: string; readonly dial?: number; readonly id?: string } =>
   s.handshake;
 
+// SAFETY: the frame case of Own is exactly `{type, dial, text, at, ms?}`, the fields this builds.
 const frame = (w: FrameWorld, dial: number, text: string, ms?: number): WindowMsg =>
   ({ type: "frame", dial, text, at: w.at, ...(ms === undefined ? {} : { ms }) }) as WindowMsg;
 
@@ -1557,18 +1610,20 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     const cmd = from[c.pick % from.length]!;
 
     const ok = (value: unknown) => (): readonly [WindowMsg, Expect] => [
+      // SAFETY: `cmd` is a Cmd still waiting, and each Cmd type `t` has a `t_ok` Msg of `cmd` and `value`.
       { type: `${cmd.type}_ok`, cmd, value } as WindowMsg,
       none,
     ];
 
     out.push(
-      cmd.type === "key"
-        ? ok({ found: cmd["rejected"] === null ? "created" : "replaced", fingerprint: `SHA256:${c.word}` })
-        : cmd.type === "now"
-          ? ok({ letter: `letter_${c.word}_${c.ms}`, sentAt: "2026-11-13T00:00:00.000Z" })
-          : cmd.type === "persist"
-            ? ok(c.aux % 2 === 0)
-            : ok(null),
+      Match.value(cmd.type).pipe(
+        Match.when("key", () =>
+          ok({ found: cmd["rejected"] === null ? "created" : "replaced", fingerprint: `SHA256:${c.word}` }),
+        ),
+        Match.when("now", () => ok({ letter: `letter_${c.word}_${c.ms}`, sentAt: "2026-11-13T00:00:00.000Z" })),
+        Match.when("persist", () => ok(c.aux % 2 === 0)),
+        Match.orElse(() => ok(null)),
+      ),
     );
   }
 
@@ -1614,6 +1669,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
 
     // The live socket closes now and then, like its timer, so a dial lives long enough to go online.
     if (c.aux % 4 === 0) {
+      // SAFETY: the socket_closed case of Own is exactly `{type, dial, code, at}`, the fields this builds.
       out.push(() => [{ type: "socket_closed", dial: d, code: c.code, at: w.at } as WindowMsg, none]);
     }
 
@@ -1621,16 +1677,15 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     // a dial not challenged yet, an admission of the live hello (or now and then `not_granted`, so
     // walks also wait for a grant), a code for the live knock, and a grant to a waiting dial.
     if (hs.dial === d) {
-      const next =
-        hs._tag === "opened"
-          ? rpc({ method: "challenge", params: { nonce } })
-          : hs._tag === "initializing"
-            ? rpc(c.aux % 3 === 0 ? { id: hs.id, error: NOT_GRANTED } : { id: hs.id, result: ADMITTED })
-            : hs._tag === "knocking"
-              ? rpc({ id: hs.id, result: { code: c.word, until: c.ms } })
-              : hs._tag === "waiting"
-                ? rpc({ method: "client.granted", params: { nonce } })
-                : null;
+      const next = Match.value(hs).pipe(
+        Match.tag("opened", () => rpc({ method: "challenge", params: { nonce } })),
+        Match.tag("initializing", () =>
+          rpc(c.aux % 3 === 0 ? { id: hs.id, error: NOT_GRANTED } : { id: hs.id, result: ADMITTED }),
+        ),
+        Match.tag("knocking", () => rpc({ id: hs.id, result: { code: c.word, until: c.ms } })),
+        Match.tag("waiting", () => rpc({ method: "client.granted", params: { nonce } })),
+        Match.orElse(() => null),
+      );
 
       if (next !== null) {
         const move = (): readonly [WindowMsg, Expect] => [frame(w, d, next), { _tag: "handshake" }];
@@ -1667,6 +1722,8 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
       const good = goodAnswer(f, c, hs);
       const reason = ERROR_REASONS[c.aux % ERROR_REASONS.length]!;
 
+      // SAFETY: every flight's call kind (read, open, send, knock, wait, monitor) has a `<kind>_err` case of its
+      // write's id and dial and a CallError, and `unreachable` and `unknown` are CallError tags.
       const error: WindowMsg = {
         type: `${f.call._tag}_err`,
         id: f.id,
@@ -1737,6 +1794,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     out.push(
       () => [frame(w, d, "pong"), nothing],
       () => [frame(w, d, rpc({ method: "challenge", params: { nonce: `old_${c.word}` } })), nothing],
+      // SAFETY: the socket_closed case of Own is exactly `{type, dial, code, at}`, the fields this builds.
       () => [{ type: "socket_closed", dial: d, code: c.code, at: w.at } as WindowMsg, none],
     );
 
@@ -1827,7 +1885,7 @@ const verdict = (
 
   const named = Option.getOrUndefined(answerId(m.text))?.id;
 
-  if (e._tag === "handshake" && !(typeof named === "string" && named !== handshakeIn(prev).id)) {
+  if (e._tag === "handshake" && !(Predicate.isString(named) && named !== handshakeIn(prev).id)) {
     return [
       `${m.text}: a handshake frame settled a flight`,
       Arr.filter(after[0].flight, (x) => prev.flight.includes(x)),
@@ -2065,9 +2123,11 @@ const door = {
     const [s, cmds] = machine.init(null, ctx);
     const key = Option.getOrUndefined(Arr.findFirst(cmds, (c) => c.type === "key"));
 
+    // SAFETY: `key` is the key Cmd this boot handed out, and `{found, fingerprint}` is the key Cmd's ok value.
     return step(s, { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:fp" } } as WindowMsg)[0];
   },
   frame: (s: WindowModel, text: string, ms?: number) =>
+    // SAFETY: the frame case of Own is exactly `{type, dial, text, at, ms?}`, the fields this builds.
     step(s, { type: "frame", dial: 1, text, at: 1_000, ...(ms === undefined ? {} : { ms }) } as WindowMsg),
   /** After a challenge: `initialize` is out with the handshake's live id. */
   initializing: (): WindowModel => door.frame(door.boot(), rpc({ method: "challenge", params: { nonce: "n1" } }))[0],
@@ -2104,6 +2164,7 @@ const door = {
     const [pressed, cmds] = step(shown, { type: "press", tile: "tile_1", m: { type: "add", name: "milk" } });
     const now = Option.getOrUndefined(Arr.findFirst(cmds, (c) => c.type === "now"));
 
+    // SAFETY: `now` is the now Cmd the press handed out, and `{letter, sentAt}` is the now Cmd's ok value.
     return step(pressed, {
       type: "now_ok",
       cmd: now,
@@ -2293,6 +2354,8 @@ describe("P18 L10: every frame family the parent reads decodes or reaches its ty
         // Arbitrary may make, such as `-0`, so the owner's Msg is built from the value JSON carries.
         const value = Schema.decodeSync(Json)(Schema.encodeSync(Json)(generated));
         const prev = family.from();
+        // SAFETY: every family's schema but Monitored's decodes to an object; Monitored's
+        // null has no `sent` and is only passed on as the frame's result.
         const sent = (family.sent ?? ((v) => v))(value as Record<string, unknown>);
         const [text, ms] = family.text(prev, sent);
         family.good(prev, door.frame(prev, text, ms), value);
@@ -2345,7 +2408,7 @@ const BRAIN_BY = "brain:p18";
 const PERSON_BY = "SHA256:person";
 
 const trusted = (by: unknown) =>
-  typeof by === "string" && (by === "brain" || Function.pipe(by, Str.startsWith("brain:")));
+  Predicate.isString(by) && (by === "brain" || Function.pipe(by, Str.startsWith("brain:")));
 
 /** Real process ids, one per life the brain places, so a DOWN for one decodes as `Down`. */
 const processAt = (n: number) => `process_0000000000e00800${Function.pipe(String(n), Str.padStart(10, "0"))}`;
@@ -2417,6 +2480,7 @@ const holds = (r: ReachView) => r._tag === "opening" || r._tag === "open";
 
 /** A Msg's type and the write it answers, read the same for the Msgs slice 2 adds. */
 const msgKey = (m: WindowMsg) => ({
+  // SAFETY: every WindowMsg case's `type` is a string literal.
   type: m.type as string,
   id: Predicate.hasProperty(m, "id") ? m.id : undefined,
   dial: Predicate.hasProperty(m, "dial") ? m.dial : undefined,
@@ -2535,21 +2599,26 @@ const brainStep = (w: Follow, c: FollowChoice) => {
     append(
       w,
       lifeFacts(w, name),
-      kind === 0
-        ? { _tag: "exited", by: PERSON_BY, id: `forged:${w.rev}`, body: { process: pid, reason: EXITS[0]! } }
-        : kind === 1
-          ? {
-              _tag: "started",
-              by: PERSON_BY,
-              id: `forged:${w.rev}`,
-              body: { process: processAt(w.next++), name, program: "fabrika/checklist", hash: "h" },
-            }
-          : {
-              _tag: "down",
-              by: BRAIN_BY,
-              id: JSON.stringify(["down", pid, w.rev]),
-              body: { process: pid, reason: "too_many", crashes: 1, until: 0 },
-            },
+      Match.value(kind).pipe(
+        Match.when(0, () => ({
+          _tag: "exited",
+          by: PERSON_BY,
+          id: `forged:${w.rev}`,
+          body: { process: pid, reason: EXITS[0]! },
+        })),
+        Match.when(1, () => ({
+          _tag: "started",
+          by: PERSON_BY,
+          id: `forged:${w.rev}`,
+          body: { process: processAt(w.next++), name, program: "fabrika/checklist", hash: "h" },
+        })),
+        Match.orElse(() => ({
+          _tag: "down",
+          by: BRAIN_BY,
+          id: JSON.stringify(["down", pid, w.rev]),
+          body: { process: pid, reason: "too_many", crashes: 1, until: 0 },
+        })),
+      ),
     );
   } else if (k <= 7) {
     forge(w, c);
@@ -2561,7 +2630,7 @@ const forge = (w: Follow, c: FollowChoice) => {
   const held = Arr.flatMap(w.s.tiles, (t) => {
     const r: ReachView = t.reach;
 
-    return holds(r) && typeof r.ref === "string" && r.pid !== undefined ? [{ ref: r.ref, pid: r.pid }] : [];
+    return holds(r) && Predicate.isString(r.ref) && r.pid !== undefined ? [{ ref: r.ref, pid: r.pid }] : [];
   });
 
   if (held.length === 0) {
@@ -2742,11 +2811,11 @@ const readName = (entries: ReadonlyArray<unknown>, name: string) => {
   for (const raw of entries) {
     const entry = loose(raw);
     const rev = entry.rev;
-    after = typeof rev === "number" ? Math.max(after, rev) : after;
+    after = Predicate.isNumber(rev) ? Math.max(after, rev) : after;
     const body = loose(entry.body);
     const process = body.process;
 
-    if (!trusted(entry.by) || typeof process !== "string") {
+    if (!trusted(entry.by) || !Predicate.isString(process)) {
       continue;
     }
 
@@ -2771,7 +2840,7 @@ const takenOn = (s: WindowModel, letter: unknown) => {
   const id = entry.id;
   const m = loose(entry.body).m;
 
-  if (!trusted(entry.by) || typeof id !== "string" || !inSignalSpace(id) || !Schema.is(Down)(m)) {
+  if (!trusted(entry.by) || !Predicate.isString(id) || !inSignalSpace(id) || !Schema.is(Down)(m)) {
     return null;
   }
 
@@ -2794,7 +2863,7 @@ const ignoredAs = (s: WindowModel, letter: unknown): string => {
 
   return !trusted(entry.by)
     ? "writer"
-    : typeof id !== "string" || !inSignalSpace(id)
+    : !Predicate.isString(id) || !inSignalSpace(id)
       ? "plain"
       : !Schema.is(Down)(m)
         ? "shape"
@@ -2954,7 +3023,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               const now: ReachView = t.reach;
               seen.held += holds(now) ? 1 : 0;
               expect(
-                !holds(now) || (typeof now.ref === "string" && refs.has(now.ref)),
+                !holds(now) || (Predicate.isString(now.ref) && refs.has(now.ref)),
                 `${t.id} ${now._tag} holds no ref a monitor wrote`,
               ).toBe(true);
               expect(holds(was) && holds(now) && was.pid === now.pid ? now.ref : null, `${t.id}'s ref changed`).toBe(
@@ -3114,6 +3183,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
 
     const armed = (s: WindowModel): boolean =>
       Arr.some(machine.subs ?? [], (sub) => {
+        // SAFETY: `s` is a model this same `machine` made, the model each of its subs' `deps` reads.
         const deps: unknown = sub.deps(s as never);
         const msg = loose(loose(deps).msg);
 
@@ -3193,6 +3263,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
                         : [{ calls: [], now: was }, "other"];
 
           if (label !== "other") {
+            // SAFETY: every label but "other" is one of the counters in `seen`, and "other" is skipped above.
             seen[label as keyof typeof seen]++;
           }
 
@@ -3604,6 +3675,7 @@ const deskTiles = (d: Desk) => Arr.map(d.spaces.get(1) ?? [], (id) => ({ id, nam
 /** Steps the desk window and keeps every Cmd it hands out until it is answered. */
 const deskStep = (w: DeskWorld, m: WindowMsg, machine: typeof deskWindow, each: (e: DeskEvent) => void) => {
   const prev = w.s;
+  // SAFETY: `machine` is a desk window, whose model is WindowModel and whose Cmds each have a `type`.
   const [next, cmds] = applyCell(machine, prev, m) as readonly [WindowModel, ReadonlyArray<Cmd>];
   w.waiting = [...Arr.filter(w.waiting, (cmd) => !("cmd" in m) || m.cmd !== cmd), ...cmds];
   w.s = next;
@@ -3617,15 +3689,18 @@ const goOnline = (w: DeskWorld, machine: typeof deskWindow, each: (e: DeskEvent)
   if (key !== undefined) {
     deskStep(
       w,
+      // SAFETY: `key` is the key Cmd the boot handed out, and `{found, fingerprint}` is the key Cmd's ok value.
       { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:k" } } as WindowMsg,
       machine,
       each,
     );
   }
 
+  // SAFETY: the socket_opened case of Own is exactly `{type, dial, at}`, the fields this builds.
   deskStep(w, { type: "socket_opened", dial, at: 0 } as WindowMsg, machine, each);
   deskStep(
     w,
+    // SAFETY: the frame case of Own is `{type, dial, text, at, ms?}`, and this builds it without `ms`.
     { type: "frame", dial, text: rpc({ method: "challenge", params: { nonce: `n0nce${dial}` } }), at: 1 } as WindowMsg,
     machine,
     each,
@@ -3633,9 +3708,11 @@ const goOnline = (w: DeskWorld, machine: typeof deskWindow, each: (e: DeskEvent)
   const hello = Option.getOrUndefined(Arr.findFirst(w.waiting, (c) => c.type === "hello" && c["dial"] === dial));
 
   if (hello !== undefined) {
+    // SAFETY: `hello` is the hello Cmd the window handed out, whose ok value is null.
     deskStep(w, { type: "hello_ok", cmd: hello, value: null } as WindowMsg, machine, each);
     deskStep(
       w,
+      // SAFETY: the frame case of Own is `{type, dial, text, at, ms?}`, and this builds it without `ms`.
       { type: "frame", dial, text: rpc({ id: hello["id"], result: DESK_ADMITTED }), at: 2 } as WindowMsg,
       machine,
       each,
@@ -3658,6 +3735,7 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
 
     w.shown = deskTiles(d);
 
+    // SAFETY: the view case of Own is `{type, pid, note}` with any note, and this note is tezgah's whole view.
     return {
       type: "view",
       pid: TEZGAH_PID,
@@ -3674,6 +3752,7 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
         // A stream no process was ever started on reads as the brain sends it: no entries.
         const none = Function.pipe(name, Str.startsWith("tezgah:")) && !w.up;
 
+        // SAFETY: this flight is a read, and read_ok is its write's id and dial, an array of entries and ms.
         return {
           type: "read_ok",
           ...on,
@@ -3687,32 +3766,37 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
           w.subscribed = true;
           w.shown = deskTiles(d);
 
+          // SAFETY: this flight is an open of tezgah's pid, and open_ok's value is `{rev, view}` with a JSON view.
           return { type: "open_ok", ...on, value: { rev: d.rev, view: deskView(d) }, ms: c.ms } as WindowMsg;
         }
 
+        // SAFETY: this flight is an open, and open_ok's value is `{rev, view}` with a JSON view.
         return { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms } as WindowMsg;
       }
 
       if (f.call._tag === "send") {
+        // SAFETY: this flight is a send, and an accepted Sent is `{_tag, rev, pos}`.
         return { type: "send_ok", ...on, value: { _tag: "accepted", rev: c.ms, pos: c.pick }, ms: c.ms } as WindowMsg;
       }
 
+      // SAFETY: knock_ok is its write's id and dial, a null value and ms, the fields this builds.
       return { type: "knock_ok", ...on, value: null, ms: c.ms } as WindowMsg;
     });
   }
 
   for (const cmd of Arr.filter(w.waiting, (x) => ["now", "record", "persist", "write", "ping"].includes(x.type))) {
     out.push(
+      // SAFETY: `cmd` is a waiting now, record, persist, write or ping Cmd, and each has a `<type>_ok` Msg of
+      // `cmd` and `value`: `{letter, sentAt}` for now, a boolean for persist, null for the rest.
       () =>
         ({
           type: `${cmd.type}_ok`,
           cmd,
-          value:
-            cmd.type === "now"
-              ? { letter: `letter_${c.pick}`, sentAt: "2026-11-14T00:00:00.000Z" }
-              : cmd.type === "persist"
-                ? true
-                : null,
+          value: Match.value(cmd.type).pipe(
+            Match.when("now", () => ({ letter: `letter_${c.pick}`, sentAt: "2026-11-14T00:00:00.000Z" })),
+            Match.when("persist", () => true),
+            Match.orElse(() => null),
+          ),
         }) as WindowMsg,
     );
   }
@@ -3723,6 +3807,7 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
     out.push(() => {
       w.subscribed = false;
 
+      // SAFETY: the socket_closed case of Own is exactly `{type, dial, code, at}`, the fields this builds.
       return { type: "socket_closed", dial, code: 1006, at: 3 } as WindowMsg;
     });
   }
@@ -3794,8 +3879,11 @@ const deskFold = (
   };
 
   const ctx = withDesk ? { tiles: GIVEN, tab: TAB, tezgah: { workspace: 1 } } : { tiles: GIVEN, tab: TAB };
+  // SAFETY: both shapes are the window's WindowCtx (its tiles, its tab, and with a
+  // desk tezgah's workspace), a type WindowMachine.ts does not export.
   const [s0, cmds0] = machine.init(null, ctx as never);
   const w: DeskWorld = { s: s0, waiting: [...cmds0], desk, shown: null, subscribed: false, up };
+  // SAFETY: the seen case of Own is exactly `{type, rev}`, the fields this builds.
   each({ prev: s0, m: { type: "seen", rev: 0 } as WindowMsg, next: s0, cmds: cmds0, w });
   goOnline(w, machine, each);
   const dialed = new Set([1]);
@@ -4034,14 +4122,12 @@ const resolved = (s: WindowModel, to: FocusTo): string | null => {
   const tiles = Layout.order(space.layout);
   const i = tiles.indexOf(space.focus);
 
-  const found =
-    to === "next"
-      ? tiles[(i + 1) % tiles.length]
-      : to === "previous"
-        ? tiles[(i - 1 + tiles.length) % tiles.length]
-        : to === "last"
-          ? space.recent[1]
-          : (Layout.neighbor(space.layout, space.focus, to) ?? undefined);
+  const found = Match.value(to).pipe(
+    Match.when("next", () => tiles[(i + 1) % tiles.length]),
+    Match.when("previous", () => tiles[(i - 1 + tiles.length) % tiles.length]),
+    Match.when("last", () => space.recent[1]),
+    Match.orElse((side) => Layout.neighbor(space.layout, space.focus, side) ?? undefined),
+  );
 
   return found === undefined || found === space.focus ? null : found;
 };
@@ -4058,6 +4144,7 @@ type FocusWorld = DeskWorld & {
 
 /** A workspace split by `cuts`, focus on the tile `focus` picks. */
 const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
+  // SAFETY: `typeId` spells a canonical TypeID with the `tile` prefix, which is what TileId decodes.
   const first = typeId("tile", 1) as TileId;
 
   let w: Workspace = Schema.decodeSync(Workspace)({
@@ -4070,6 +4157,8 @@ const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boo
 
   const tiles: Array<Tile> = [];
 
+  // SAFETY: the id is a canonical tile TypeID from `typeId`, each show is a process name,
+  // and `failed` is a Keep, so each row holds the Tile schema's fields.
   const row = (id: string, n: number) =>
     ({
       id,
@@ -4085,6 +4174,7 @@ const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boo
 
   for (const [k, cut] of cuts.entries()) {
     const at = Layout.order(w.layout)[cut.at % Layout.order(w.layout).length]!;
+    // SAFETY: `typeId` spells a canonical TypeID with the `tile` prefix, which is what TileId decodes.
     const id = typeId("tile", k + 2) as TileId;
     w = Layout.split(w, at, cut.down ? "column" : "row", id);
     tiles.push(row(id, k + 2));
@@ -4123,6 +4213,7 @@ const focusMoves = (
         const started = { _tag: "started", by: "brain", body: { process, name }, rev: 1 };
         const ended = ends && !Function.pipe(name, Str.startsWith("tezgah:")) && c.pick % 2 === 1;
         const reason = EXITS[c.pick % EXITS.length]!;
+        // SAFETY: this flight is a read, and read_ok is its write's id and dial, an array of entries and ms.
         send({
           type: "read_ok",
           ...on,
@@ -4131,11 +4222,14 @@ const focusMoves = (
         } as WindowMsg);
       } else if (f.call._tag === "open" && f.call.pid === TEZGAH_PID) {
         w.subscribed = true;
+        // SAFETY: this flight is an open of tezgah's pid, and open_ok's value is `{rev, view}` with a JSON view.
         send({ type: "open_ok", ...on, value: { rev: w.pos, view: w.view }, ms: c.ms } as WindowMsg);
       } else if (f.call._tag === "open") {
+        // SAFETY: this flight is an open, and open_ok's value is `{rev, view}` with a JSON view.
         send({ type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms } as WindowMsg);
       } else if (f.call._tag === "send") {
         const pos = w.took.indexOf(f.call.letter) + 2;
+        // SAFETY: this flight is a send, and an accepted Sent is `{_tag, rev, pos}`.
         send({
           type: "send_ok",
           ...on,
@@ -4144,8 +4238,11 @@ const focusMoves = (
         } as WindowMsg);
       } else if (f.call._tag === "monitor") {
         // P18 slice 2: the door's process.monitor answers null.
+        // SAFETY: this flight is a monitor, and monitor_ok is its write's id and dial, a null value and ms.
         send({ type: "monitor_ok", ...on, value: null, ms: c.ms } as WindowMsg);
       } else {
+        // SAFETY: waits are left out above, so this flight is a knock, and
+        // knock_ok is its id, dial, a null value and ms.
         send({ type: "knock_ok", ...on, value: null, ms: c.ms } as WindowMsg);
       }
     });
@@ -4153,15 +4250,16 @@ const focusMoves = (
 
   for (const cmd of Arr.filter(w.waiting, (x) => ["now", "record", "persist", "write", "ping"].includes(x.type))) {
     out.push(() =>
+      // SAFETY: `cmd` is a waiting now, record, persist, write or ping Cmd, and each has a `<type>_ok` Msg of
+      // `cmd` and `value`: `{letter, sentAt}` for now, a boolean for persist, null for the rest.
       send({
         type: `${cmd.type}_ok`,
         cmd,
-        value:
-          cmd.type === "now"
-            ? { letter: `letter_${++w.letters}`, sentAt: "2026-11-14T00:00:00.000Z" }
-            : cmd.type === "persist"
-              ? true
-              : null,
+        value: Match.value(cmd.type).pipe(
+          Match.when("now", () => ({ letter: `letter_${++w.letters}`, sentAt: "2026-11-14T00:00:00.000Z" })),
+          Match.when("persist", () => true),
+          Match.orElse(() => null),
+        ),
       } as WindowMsg),
     );
   }
@@ -4171,6 +4269,7 @@ const focusMoves = (
     out.push(() => {
       w.subscribed = false;
       w.notices = [];
+      // SAFETY: the socket_closed case of Own is exactly `{type, dial, code, at}`, the fields this builds.
       send({ type: "socket_closed", dial, code: 1006, at: 3 } as WindowMsg);
     });
   }
@@ -4187,6 +4286,7 @@ const focusMoves = (
     w.notices.unshift(n);
     out.push(() => {
       w.notices.shift();
+      // SAFETY: the view case of Own is `{type, pid, note}` with any note, and this note is tezgah's whole view.
       send({
         type: "view",
         pid: TEZGAH_PID,
@@ -4209,6 +4309,7 @@ const focusMoves = (
           }
         }
 
+        // SAFETY: the key case of Own is exactly `{type, key, at}`, the fields this builds.
         send({ type: "key", key, at: 10 } as WindowMsg);
       }
     });
@@ -4227,6 +4328,7 @@ const focusMoves = (
       w.moves.push({ to: tile, letter: null });
     }
 
+    // SAFETY: the focus case of Own is `{type, tile, cursor}`, and "item:milk" is within CursorKey's 256 chars.
     send({ type: "focus", tile, cursor: c.pick % 2 === 0 ? "item:milk" : null } as WindowMsg);
   });
 
@@ -4243,6 +4345,8 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
         arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
         (cuts, focus, picks) => {
           const view = focusDesk(cuts, focus);
+          // SAFETY: this is the window's WindowCtx (no tiles, its tab, tezgah's
+          // workspace 1), a type WindowMachine.ts does not export.
           const [s0, cmds0] = focusWindow.init(null, { tiles: [], tab: TAB, tezgah: { workspace: 1 } } as never);
 
           const w: FocusWorld = {
@@ -4263,12 +4367,15 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
           /** tezgah takes a letter as the socket hands it over, in order: a move to a tile on its
            *  workspace focuses it, and its view goes to the window while it is subscribed. */
           const take = (letter: string, m: unknown) => {
+            // SAFETY: `m` is the Msg of a letter sent to tezgah; only its
+            // `to` is read, and it is checked below before use.
             const did = m as { readonly to?: string };
             const space = w.view.workspaces[0]!;
 
             if (
               w.took.includes(letter) ||
               did.to === undefined ||
+              // SAFETY: `includes` only looks the value up: a string that is not a tile of the layout is not found.
               !Layout.order(space.layout).includes(did.to as TileId)
             ) {
               return;
@@ -4276,6 +4383,7 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
 
             w.took.push(letter);
             w.pos++;
+            // SAFETY: the check above found `did.to` in the layout's tile order, so it is one of its TileIds.
             const to = did.to as TileId;
             w.view = {
               ...w.view,
@@ -4378,6 +4486,8 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
               const n = w.notices.shift()!;
               deskStep(
                 w,
+                // SAFETY: the view case of Own is `{type, pid, note}` with any
+                // note, and this note is tezgah's whole view.
                 {
                   type: "view",
                   pid: TEZGAH_PID,
@@ -4388,6 +4498,7 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
               );
             } else {
               const timer = linkTimer(s.link);
+              // SAFETY: the resend case of Own is exactly `{type, dial}`, the fields this builds.
               const resend = { type: "resend", dial: s.link._tag === "online" ? s.link.dial : 0 } as WindowMsg;
               deskStep(w, s.link._tag === "online" ? resend : timer!.msg, focusWindow, each);
             }
@@ -4445,6 +4556,8 @@ describe("S9: an ended tile's end is said only when the tile has no focus", () =
         fc.nat(),
         arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }),
         (cuts, focus, picks) => {
+          // SAFETY: this is the window's WindowCtx (no tiles, its tab, tezgah's
+          // workspace 1), a type WindowMachine.ts does not export.
           const [s0, cmds0] = focusWindow.init(null, { tiles: [], tab: TAB, tezgah: { workspace: 1 } } as never);
 
           const w: FocusWorld = {
@@ -4541,7 +4654,7 @@ const FOLD_SMALLEST = { width: 220, height: 120 } as const;
 const FOLD_ACROSS = { row: 22, column: 20 } as const;
 
 const foldTiles = (node: Workspace["layout"]): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : Arr.flatMap(node.parts, (p) => foldTiles(p.inner));
+  Predicate.isString(node) ? [node] : Arr.flatMap(node.parts, (p) => foldTiles(p.inner));
 
 type Extent = { readonly width: number; readonly height: number };
 
@@ -4553,7 +4666,7 @@ const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): Rea
   const out = new Map<string, Extent>();
 
   const walk = (node: Workspace["layout"], box: Extent): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       out.set(node, box);
 
       return;
@@ -4583,7 +4696,7 @@ const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): Rea
     }
 
     for (const [i, p] of node.parts.entries()) {
-      if (fixed[i] !== true || typeof p.inner === "string") {
+      if (fixed[i] !== true || Predicate.isString(p.inner)) {
         walk(p.inner, row ? { width: shares[i]!, height: box.height } : { width: box.width, height: shares[i]! });
       }
     }
@@ -4629,7 +4742,11 @@ const stripsNow = (s: WindowModel): ReadonlyArray<string> | null => {
 
 /** The record and Msg fields a law reads by their schema: every object case of a union. */
 const objectsIn = (ast: SchemaAST.AST): ReadonlyArray<SchemaAST.Objects> =>
-  ast._tag === "Union" ? Arr.flatMap(ast.types, objectsIn) : ast._tag === "Objects" ? [ast] : [];
+  Match.value(ast).pipe(
+    Match.tag("Union", (ast) => Arr.flatMap(ast.types, objectsIn)),
+    Match.tag("Objects", (ast) => [ast]),
+    Match.orElse(() => []),
+  );
 
 const fieldIn = (o: SchemaAST.Objects | undefined, name: string) =>
   Option.getOrUndefined(
@@ -4650,7 +4767,7 @@ const msgCase = (t: string) =>
 const keysIn = (v: unknown): ReadonlyArray<string> =>
   Arr.isArray(v)
     ? Arr.flatMap(v, keysIn)
-    : v !== null && typeof v === "object"
+    : Predicate.isObject(v)
       ? Arr.flatMap(Rec.toEntries(v), ([k, x]) => [k, ...keysIn(x)])
       : [];
 
@@ -4670,6 +4787,8 @@ const foldWalk = (
   check: (e: DeskEvent) => void,
 ) => {
   const view = focusDesk(cuts, focus);
+  // SAFETY: this is the window's WindowCtx (no tiles, its tab, tezgah's
+  // workspace 1), a type WindowMachine.ts does not export.
   const [s0, cmds0] = focusWindow.init(null, { tiles: [], tab: TAB, tezgah: { workspace: 1 } } as never);
 
   const w: FocusWorld = {
@@ -4697,12 +4816,14 @@ const foldWalk = (
       if (
         c.call._tag === "send" &&
         c.call["pid"] === TEZGAH_PID &&
-        typeof to === "string" &&
+        Predicate.isString(to) &&
         !w.took.includes(letter) &&
+        // SAFETY: `includes` only looks the value up: a string that is not a tile of the layout is not found.
         Layout.order(space.layout).includes(to as TileId)
       ) {
         w.took.push(letter);
         w.pos++;
+        // SAFETY: the check above found `to` in the layout's tile order, so it is one of its TileIds.
         w.view = { ...w.view, workspaces: [Layout.focus(space, to as TileId)] };
 
         if (w.subscribed) {
@@ -4734,8 +4855,11 @@ const foldWalk = (
 
     const options = [
       ...focusMoves(w, c, each),
+      // SAFETY: the size case of Own is `{type, width, height}`, and both are finite and at least 240 here.
       () => deskStep(w, { type: "size", ...size } as WindowMsg, focusWindow, each),
+      // SAFETY: the size case of Own is `{type, width, height}`, and both are finite and at least 240 here.
       () => deskStep(w, { type: "size", ...size } as WindowMsg, focusWindow, each),
+      // SAFETY: the size case of Own is `{type, width, height}`: the model's last size, else one at least 240.
       () => deskStep(w, { type: "size", ...(w.s.size ?? size) } as WindowMsg, focusWindow, each),
     ];
 

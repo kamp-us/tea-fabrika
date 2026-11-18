@@ -105,7 +105,7 @@ const client = async (instance: Instance, key: Key, tab: string) => {
     throw new Error(`no frame in ${WAIT} ms`);
   };
 
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -143,9 +143,11 @@ const client = async (instance: Instance, key: Key, tab: string) => {
 
 /** The project's rows of one stream, through the instance's private local capability. */
 const rows = async (instance: Instance, stream: string): Promise<Array<any>> =>
+  // SAFETY: the audit read answers the stream's rows as an array.
   (await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>;
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
+  // SAFETY: info answers the project's process rows as an array.
   Option.getOrUndefined(
     Arr.findFirst((await instance.project(PROJECT).info()) as Array<any>, (row) => row.name === name),
   )?.process;

@@ -2,6 +2,7 @@
 // Plants: duplicate forwarding spans, missing argument tags, or recovery inside ledger.call.
 import { Cause, Effect, Exit, Option, Stream, Tracer } from "effect";
 import * as Arr from "effect/Array";
+import * as Match from "effect/Match";
 import * as Rec from "effect/Record";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
@@ -200,12 +201,11 @@ describe("ledger.call, next/ tracing keep-laws", () => {
               Effect.gen(function* () {
                 const ledger = yield* Ledger;
 
-                const operation: Effect.Effect<unknown, LedgerError> =
-                  c.method === "read"
-                    ? Stream.runCollect(ledger.read(stream, 0))
-                    : c.method === "wait"
-                      ? ledger.wait(stream, 0)
-                      : ledger.append(stream, "id", line(parent.traceId, "body"));
+                const operation: Effect.Effect<unknown, LedgerError> = Match.value(c.method).pipe(
+                  Match.when("read", () => Stream.runCollect(ledger.read(stream, 0))),
+                  Match.when("wait", () => ledger.wait(stream, 0)),
+                  Match.orElse(() => ledger.append(stream, "id", line(parent.traceId, "body"))),
+                );
 
                 return yield* Effect.exit(operation);
               }).pipe(

@@ -17,7 +17,7 @@
 //
 // The shots (plan, "Show it running"; AGENTS.md, "Shoot more than one layout") go to the folder
 // `SHOTS` names, only when it is set, named `tezgah-focus-<state>-<layout>.png`.
-import { String as Str, pipe, Array as Arr, Effect, Option } from "effect";
+import { String as Str, pipe, Array as Arr, Effect, Option, Predicate } from "effect";
 
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, tile, waiting } from "./p14.test-support.ts";
@@ -89,7 +89,7 @@ type Page = Parameters<typeof drawn>[0];
  *  column: `above` split down. */
 const splitBelow = (view: View, above: string, under: string): boolean => {
   const holds = (node: View["workspaces"][number]["layout"]): boolean =>
-    typeof node !== "string" &&
+    !Predicate.isString(node) &&
     ((node.dir === "column" &&
       node.parts.length === 2 &&
       node.parts[0]!.inner === above &&
@@ -263,11 +263,11 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
 
               return (
                 n === 4 &&
-                typeof l !== "string" &&
+                !Predicate.isString(l) &&
                 l.dir === "column" &&
                 Arr.every(
                   l.parts,
-                  (p) => typeof p.inner !== "string" && p.inner.dir === "row" && p.inner.parts.length === 2,
+                  (p) => !Predicate.isString(p.inner) && p.inner.dir === "row" && p.inner.parts.length === 2,
                 )
               );
             },

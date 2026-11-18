@@ -26,7 +26,9 @@ import {
   Effect,
   Exit,
   Layer,
+  Match,
   Option,
+  Predicate,
   Schedule,
   Schema,
   Scope,
@@ -50,6 +52,7 @@ class ReopenError extends Schema.TaggedError<ReopenError, { readonly brand: uniq
   cause: Schema.Defect(),
 }) {}
 
+// SAFETY: the table starts with no program, and the code below writes only `{ hash, source }` rows into it.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 
 vi.mock("./table.ts", () => table);
@@ -203,7 +206,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
   // on a laptop, and no law reads the file. A reopen keeps this same handle.
   const db = new DatabaseSync(":memory:");
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
     storage: storage(db),
@@ -224,7 +227,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
 
   let onRing: () => Promise<void> = async () => {};
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
       await Effect.runPromise(
@@ -243,6 +246,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
       // Ticket 402 keys a Process object by its registered name, so the stub key may be a
       // name: descriptors are keyed by their own process ID, and delivery names that ID.
       getByName: (name: string) => {
+        // SAFETY: the name is the JSON pair of namespace and storage key that the runtime writes for getByName.
         const [, storageKey] = JSON.parse(name) as [string, string];
 
         const owned = () =>
@@ -685,7 +689,7 @@ describe("P12 Project authority", () => {
 
     const pending = w.send(pid, "inc", letter).then(
       (answer) => ({ answer }),
-      (error: unknown) => ({ error }),
+      (cause: unknown) => ({ error: cause }),
     );
 
     await Effect.runPromise(Deferred.await(entered));
@@ -705,14 +709,12 @@ describe("P12 Project authority", () => {
       const w = await open(),
         pid = w.p.boot.process;
 
-      const stream =
-        operation === "own"
-          ? "events"
-          : operation === "inbox"
-            ? "counter:1/inbox"
-            : operation === "start"
-              ? "processes/approvals:1"
-              : "processes/counter:1";
+      const stream = Match.value(operation).pipe(
+        Match.when("own", () => "events"),
+        Match.when("inbox", () => "counter:1/inbox"),
+        Match.when("start", () => "processes/approvals:1"),
+        Match.orElse(() => "processes/counter:1"),
+      );
 
       const after = (await w.run(w.p.read(stream, 0, "audit"))).at(-1)?.rev ?? 0;
       await w.run(w.p.wait(stream, after, "gateway-test"));
@@ -816,7 +818,7 @@ describe("P12 Project authority", () => {
 });
 
 describe("P12 Project saved and wire readers", () => {
-  const malformed = fc.jsonValue().filter((value) => typeof value !== "string");
+  const malformed = fc.jsonValue().filter((value) => !Predicate.isString(value));
 
   const typed = (exit: Exit.Exit<unknown, unknown>) => {
     expect(Exit.isFailure(exit)).toBe(true);
@@ -936,7 +938,7 @@ describe("P12 WebCrypto failures", () => {
                   reason: "crypto",
                 });
               } else {
-                // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
+                // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: the digest must fail before any R2 method runs
                 const bucket = { put } as unknown as R2Bucket;
                 await expect(bucketCalls(bucket).put("measurements", body, Str.repeat(64)("0"))).rejects.toMatchObject({
                   _tag: "LedgerError",
@@ -989,7 +991,7 @@ describe("P12 Connection recording", () => {
         close: () => {},
       };
 
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Connection
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node fixture supplies the hibernating socket and SQL members consumed by Connection
       const ctx = {
         id: { name: "gateway-test" },
         storage: storage(db),
@@ -998,7 +1000,7 @@ describe("P12 Connection recording", () => {
         getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
       } as unknown as DurableObjectState;
 
-      // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: this Node RPC double has no workerd namespace brand
       const project = {
         getByName: () => ({
           settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
@@ -1007,7 +1009,7 @@ describe("P12 Connection recording", () => {
         }),
       } as unknown as Env["PROJECT"];
 
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node socket double implements attachment, send and close without workerd's socket brand
       const socket = ws as unknown as WebSocket;
       const config = await Effect.runPromise(settings(w.env));
       const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, config);
@@ -1078,7 +1080,7 @@ describe("P12 Connection recording", () => {
       close: () => {},
     };
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Gateway
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node fixture supplies the hibernating socket and SQL members consumed by Gateway
     const ctx = {
       id: { name: "gateway-test" },
       storage: storage(db),
@@ -1087,7 +1089,7 @@ describe("P12 Connection recording", () => {
       getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
     } as unknown as DurableObjectState;
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: this Node RPC double has no workerd namespace brand
     const project = {
       getByName: () => ({
         settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
@@ -1097,7 +1099,7 @@ describe("P12 Connection recording", () => {
       }),
     } as unknown as Env["PROJECT"];
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node socket double implements attachment, send and close without workerd's socket brand
     const socket = ws as unknown as WebSocket;
     const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, await Effect.runPromise(settings(w.env)));
 
@@ -1145,7 +1147,7 @@ describe("P12 Connection recording", () => {
           expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
           // Failure text is deletable content (P37), never a span tag.
           expect(
-            Arr.filter(Rec.values(refused[0]!.attributes), (tag) => typeof tag === "string" && Str.includes(text)(tag)),
+            Arr.filter(Rec.values(refused[0]!.attributes), (tag) => Predicate.isString(tag) && Str.includes(text)(tag)),
           ).toEqual([]);
         }, signal),
       ),

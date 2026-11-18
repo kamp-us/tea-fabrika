@@ -6,6 +6,7 @@
 import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
@@ -34,12 +35,12 @@ type Msg =
   | { readonly type: "waited"; readonly wait: W }
   | { readonly type: "answered"; readonly wait: W };
 
-const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const bytes = (value: Saved) => new TextEncoder().encode(JSON.stringify(value)).length;
 
 const same = (a: W, b: W) => a.id === b.id && a.stream === b.stream && a.after === b.after;
 
 /** The named state an attachment stands for: busy lives only in the tag. */
-const expected = (saved: Saved | null): unknown => {
+const expected = (saved: Saved | null): object => {
   if (saved === null) {
     return { _tag: "unloaded" };
   }
@@ -405,7 +406,7 @@ describe("T703 connection machine laws", () => {
           }
 
           if (duplicate) {
-            sides.add(`duplicate:${typeof msg.wait.id}`);
+            sides.add(`duplicate:${Predicate.isString(msg.wait.id) ? "string" : "number"}`);
           }
         });
       }),
@@ -455,7 +456,7 @@ describe("T703 connection machine laws", () => {
           const reused = Arr.some(from.waits, (w) => w.id === msg.wait.id) && !matching;
           const late = Arr.some(fold.completed, (w) => same(w, msg.wait)) && !matching;
           seen.add(matching ? "matching" : reused ? "reused" : late ? "late" : "absent");
-          seen.add(`id:${typeof msg.wait.id}:${answered}`);
+          seen.add(`id:${Predicate.isString(msg.wait.id) ? "string" : "number"}:${answered}`);
         });
       }),
       options,

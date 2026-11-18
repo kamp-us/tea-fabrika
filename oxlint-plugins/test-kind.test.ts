@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { Array as Arr, pipe } from "effect";
+import { Array as Arr, pipe, Match } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import type { Tag } from "./starters.ts";
@@ -166,7 +166,12 @@ const plant = (chains: ReadonlyArray<Chain>) => {
       const name = `c${i}m${k + 1}`;
       // A relative hop stays in the importer's package; a workspace hop goes into the library.
       const next = hop === "relative" ? `${dirname(at)}/${name}.ts` : `${LIB}/src/${name}.ts`;
-      const specifier = hop === "relative" ? `./${name}.ts` : hop === "exact" ? `@t/lib/${name}` : `@t/lib/p/${name}`;
+
+      const specifier = Match.value(hop).pipe(
+        Match.when("relative", () => `./${name}.ts`),
+        Match.when("exact", () => `@t/lib/${name}`),
+        Match.orElse(() => `@t/lib/p/${name}`),
+      );
 
       if (hop === "exact") {
         exports[`./${name}`] = `./src/${name}.ts`;

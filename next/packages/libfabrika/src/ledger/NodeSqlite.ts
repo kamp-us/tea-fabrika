@@ -5,17 +5,18 @@
  */
 import type { DatabaseSync, SQLOutputValue, StatementSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import type { Sql, SqlValue } from "../Sql.ts";
 
 /** The ledger writes text, integers and nulls only. A blob or a big integer is a row it never wrote. */
 const value = (column: SQLOutputValue): SqlValue => {
-  if (typeof column === "string" || typeof column === "number" || column === null) {
+  if (Predicate.isString(column) || Predicate.isNumber(column) || column === null) {
     return column;
   }
 
-  throw new TypeError(`a ${typeof column} column, which the ledger never writes`);
+  throw new TypeError(`a ${Predicate.isBigInt(column) ? "big integer" : "blob"} column, which the ledger never writes`);
 };
 
 /**

@@ -2,7 +2,7 @@
 // No window export exists until P14. No copied counter implementation lives in the library.
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema, String as Str } from "effect";
+import { Effect, Match, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -52,7 +52,7 @@ describe("P11 real counter laws", () => {
               msgs: list,
               encode: Schema.encodeSync(counter.state.schema),
               decode: Schema.decodeUnknownSync(counter.state.schema),
-              equals: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
+              equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
               seed: SEED,
             },
           );
@@ -79,7 +79,11 @@ describe("P11 real counter laws", () => {
           next: { count: number };
           cmds: ReadonlyArray<unknown>;
         }) => {
-          const expected = msg.type === "inc" ? prev.count + 1 : msg.type === "dec" ? prev.count - 1 : 0;
+          const expected = Match.value(msg.type).pipe(
+            Match.when("inc", () => prev.count + 1),
+            Match.when("dec", () => prev.count - 1),
+            Match.orElse(() => 0),
+          );
 
           return next.count === expected && cmds.length === 0;
         },

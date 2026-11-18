@@ -64,7 +64,7 @@ const runs = { seed: 119120, numRuns: 3 };
 const hash = (value: string | Uint8Array) =>
   Effect.runPromise(
     Digest.Digest.use((digest) =>
-      digest.digestHex(Digest.sha256, typeof value === "string" ? new TextEncoder().encode(value) : value),
+      digest.digestHex(Digest.sha256, Predicate.isString(value) ? new TextEncoder().encode(value) : value),
     ).pipe(Effect.provide(Digest.layerWebCrypto)),
   );
 
@@ -163,7 +163,8 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
   const ranges: Array<{ start: number; end: number }> = [];
 
   const visit = (node: any): void => {
-    if (node === null || typeof node !== "object") {
+    // `not` keeps `node` a parsed node past the guard, as the old typeof check did.
+    if (Predicate.not(Predicate.isObjectOrArray)(node)) {
       return;
     }
 
@@ -376,6 +377,7 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
     assert(bar.sizes.window > 0, "window bytes missing for a program with a window");
   }
 
+  // SAFETY: every bar the law passes is decoded with Bar, or a copy of one with `caps` kept, and a Struct decode keeps only the keys Metrics declares.
   for (const key of Rec.keys(bar.caps) as Array<keyof typeof bar.caps>) {
     assert(Number.isFinite(bar.caps[key]) && bar.caps[key] > 0, "recorded cap missing");
 
@@ -453,7 +455,7 @@ describe("P16 stack and sealed loader", () => {
             expect(name).not.toMatch(/WINDOW_JS|PROGRAM_SOURCE/);
             expect(JSON.stringify(value)).not.toContain("program-marker");
 
-            if (typeof value === "string") {
+            if (Predicate.isString(value)) {
               expect(Buffer.byteLength(value), "setting under 5 KB encoded").toBeLessThan(5 * 1024);
             } else {
               expect(value).toHaveProperty("type");
@@ -559,7 +561,7 @@ describe("P16 stack and sealed loader", () => {
           });
           expect(calls).toHaveLength(1);
           const config = calls[0]!.config;
-          const sealed = (value: unknown) => assert.deepEqual(value, config);
+          const sealed = (value: typeof config) => assert.deepEqual(value, config);
 
           for (const plant of [
             { ...Object(config), env: { PLANTED: source } },
@@ -610,7 +612,7 @@ class Client {
     }
   }
 
-  async call(method: string, params: unknown) {
+  async call(method: string, params: Schema.Json) {
     const id = ++this.serial;
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -823,8 +825,8 @@ describe("P16 copied-file real instance, serial", () => {
                               model = (await turn(SealedTurn, program, "step", [model, { type: "read" }])).model;
                             }
 
-                            const closed = (model: unknown) =>
-                              assert.deepEqual(model, { keys: [], outbound: "denied" });
+                            const closed = (seen: typeof model) =>
+                              assert.deepEqual(seen, { keys: [], outbound: "denied" });
 
                             if (mode === "sealed") {
                               closed(model);

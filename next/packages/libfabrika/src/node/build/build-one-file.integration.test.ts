@@ -34,6 +34,7 @@ import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Rec from "effect/Record";
@@ -269,15 +270,15 @@ const strings = (source: string) => {
   const found: string[] = [];
 
   const visit = (x: unknown): void => {
-    if (x === null || typeof x !== "object") {
+    if (!Predicate.isObjectOrArray(x)) {
       return;
     }
 
-    if ("type" in x && x.type === "Literal" && "value" in x && typeof x.value === "string") {
+    if ("type" in x && x.type === "Literal" && "value" in x && Predicate.isString(x.value)) {
       found.push(x.value);
     }
 
-    for (const child of Rec.values(x)) {
+    for (const child of Arr.isArray(x) ? x : Rec.values(x)) {
       visit(child);
     }
   };
@@ -344,7 +345,7 @@ const observe = async () => {
             emitted.push(
               item.type === "chunk"
                 ? item.code
-                : typeof item.source === "string"
+                : Predicate.isString(item.source)
                   ? item.source
                   : new TextDecoder().decode(item.source),
             );
@@ -611,7 +612,7 @@ const utf8 = (s: string) => Buffer.byteLength(s, "utf8");
  *  or Node's `getBuiltinModule`, as Effect's async-hooks probe names one. A minified `{node:n}` key is not. */
 const NODE_NAME = /(?:\b(?:from|import|require|getBuiltinModule)\s*\(?\s*|\?\.\s*\(\s*)["'`]node:/;
 
-const parsedRules = (css: string): unknown => {
+const parsedRules = (css: string): Schema.Json => {
   let rules: Rule[] = [];
   transform({
     filename: "law.css",
@@ -627,7 +628,7 @@ const parsedRules = (css: string): unknown => {
 };
 
 /** The rules of every `<style>` in the page, in document order, as one list. */
-const pageRules = (page: string): unknown =>
+const pageRules = (page: string): Schema.Json =>
   parsedRules(
     Arr.join(
       Arr.map([...Function.pipe(page, Str.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi))], (m) => m[1] ?? ""),
@@ -674,7 +675,7 @@ const observeCalls = async () => {
               text:
                 item.type === "chunk"
                   ? item.code
-                  : typeof item.source === "string"
+                  : Predicate.isString(item.source)
                     ? item.source
                     : new TextDecoder().decode(item.source),
             })),
@@ -978,6 +979,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                 );
 
                 expect(result._tag, `${chosen} builds`).toBe("Success");
+                // SAFETY: the expect above failed the law unless the result is a Success, which holds the Built.
                 const built = (result as { readonly success: Built }).success;
                 checkCarried(built, { tab, entry: f.entry, styles }, calls.slice(start), spans, f.options.out);
 
@@ -1243,7 +1245,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                     events: s.events,
                     status: s.status,
                   })),
-                  (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+                  (_key, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
                 );
 
                 if (result._tag === "Failure") {
@@ -1255,6 +1257,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                   continue;
                 }
 
+                // SAFETY: the Failure branch above ended with `continue`, so this result is a Success.
                 const built = (result as { readonly success: Built }).success;
                 const page = built.assets[PAGE]?.body ?? "";
 
@@ -1289,7 +1292,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                   getByName: () => ({ settingsStart: () => Promise.resolve(StartsTest.reply(config)) }),
                 };
 
-                // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
+                // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node doubles implement only what file routes touch
                 const env = {
                   INSTANCE: JSON.stringify(config),
                   PROJECT: binding,

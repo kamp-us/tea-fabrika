@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 
 import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
@@ -123,6 +124,7 @@ describe("P16 checked built tables", () => {
         fc.constantFrom("text/html", "application/json", "text/javascript"),
         fc.oneof(fc.integer(), fc.boolean(), fc.constant(null)),
         async (rows, assets, junk, route, type, other) => {
+          // SAFETY: the rows generator above draws at least two rows.
           const [a, b] = rows as [(typeof rows)[0], (typeof rows)[0]];
           const asset = assets[0]!;
 
@@ -160,7 +162,7 @@ describe("P16 checked built tables", () => {
               assets: { [asset.route]: { hash: await sha(String(other)), type: asset.type, body: other } },
             },
           ]) {
-            if (raw === junk && typeof junk === "object" && junk !== null) {
+            if (raw === junk && Predicate.isObjectOrArray(junk)) {
               continue;
             }
 

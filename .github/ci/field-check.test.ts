@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Arbitrary, DateTime, Effect, Record as Rec, Schema, Struct } from "effect";
+import { Arbitrary, DateTime, Effect, Match, Record as Rec, Schema, Struct } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as checker from "./field-check.ts";
@@ -611,7 +611,7 @@ const Rated = Schema.TaggedStruct("rated", {
   ticket: Text,
 });
 
-const errorsOf = (row: unknown) => {
+const errorsOf = (row: object) => {
   const report = checker.checkFile(fileOf("findings"), "", `${JSON.stringify(row)}\n`);
 
   return {
@@ -895,14 +895,11 @@ it("the field job reads the old logs and every path in a log's folder", () => {
 
   const run = (args: string[]) => ({
     status: 0,
-    stdout:
-      args[0] === "diff"
-        ? `${paths.join("\0")}\0`
-        : args[0] === "ls-tree"
-          ? args[4] === head
-            ? `${paths.join("\0")}\0`
-            : ""
-          : "{}",
+    stdout: Match.value(args[0]).pipe(
+      Match.when("diff", () => `${paths.join("\0")}\0`),
+      Match.when("ls-tree", () => (args[4] === head ? `${paths.join("\0")}\0` : "")),
+      Match.orElse(() => "{}"),
+    ),
   });
 
   expect(checker.readFieldFiles(base, head, "push", run).map((input) => input.file)).toEqual(

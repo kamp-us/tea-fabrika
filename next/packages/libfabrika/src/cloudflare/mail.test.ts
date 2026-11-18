@@ -19,6 +19,8 @@ import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as References from "effect/References";
 import * as Result from "effect/Result";
@@ -26,7 +28,6 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 
 import * as Tracer from "effect/Tracer";
-
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { NORMAL, PIDS } from "../processes/Process.test-support.ts";
@@ -78,6 +79,7 @@ it.effect("R1: RPC refusals keep their reason; failed transport and undecodable 
     const check = Effect.fnUntraced(function* (choice: typeof Cases extends fc.Arbitrary<infer A> ? A : never) {
       let wakes = 0;
 
+      // SAFETY: this mail layer calls only PROJECT's `mail` and PROCESS's `mailed`, the two methods doubled here.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
       const env = {
         PROJECT: {
@@ -190,12 +192,11 @@ for (const flow of [
           pos: fields.pos,
         };
 
-        const rejection =
-          rejected === "error"
-            ? new Error(secret)
-            : rejected === "text"
-              ? secret
-              : { message: secret, mail: receipt.m };
+        const rejection = Match.value(rejected).pipe(
+          Match.when("error", () => new Error(secret)),
+          Match.when("text", () => secret),
+          Match.orElse(() => ({ message: secret, mail: receipt.m })),
+        );
 
         const spans: Array<Tracer.Span> = [];
         const captured = RepliesTest.capture();
@@ -204,7 +205,7 @@ for (const flow of [
         const logger = Logger.layer([
           Logger.make((options) => {
             // Effect 4 keeps a line's annotations on its fiber; a logger that throws would hide the line.
-            const plain = (_: string, value: unknown) => (typeof value === "bigint" ? value.toString() : value);
+            const plain = (_: string, value: unknown) => (Predicate.isBigInt(value) ? value.toString() : value);
             outputs.push(
               JSON.stringify(options.message, plain),
               JSON.stringify(options.fiber.getRef(References.CurrentLogAnnotations), plain),
@@ -224,6 +225,7 @@ for (const flow of [
 
         const wakes: Array<{ readonly traceId: string; readonly spanId: string } | undefined> = [];
 
+        // SAFETY: the traced mail path calls PROJECT's `mail` and PROCESS's `mailed` and nothing else on the env.
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROJECT: {
@@ -345,36 +347,39 @@ it.effect(
       const check = Effect.fnUntraced(function* (choice: "full" | "ok" | "forbidden", unread: number, cap: number) {
         const woken: Array<unknown> = [];
 
+        // SAFETY: the cap law reaches only PROJECT's `mail` and the keyed PROCESS `mailed`, both doubled below.
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROJECT: {
             getByName: () => ({
               mail: async () =>
-                choice === "full"
-                  ? FullReply.make({ unread, cap })
-                  : choice === "ok"
-                    ? MailOk.make({
-                        receipt: {
-                          id: `${delivery.command}/mail`,
-                          command: delivery.command,
-                          source: delivery.source,
-                          to: {
-                            name: delivery.to,
-                            state: State.cases.live.make({
-                              process: "process_01jc9q4w7zfm8s5r2t6v0xkb4d",
-                              code: { program: "responder", hash: "mail-test" },
-                            }),
-                          },
-                          m: delivery.m,
-                          ref: "r1",
-                          grant: { source: delivery.source.name, to: delivery.to },
-                          from: delivery.from,
-                          arrivedAt: 1,
-                          rev: unread + 1,
-                          pos: unread + 1,
+                Match.value(choice).pipe(
+                  Match.when("full", () => FullReply.make({ unread, cap })),
+                  Match.when("ok", () =>
+                    MailOk.make({
+                      receipt: {
+                        id: `${delivery.command}/mail`,
+                        command: delivery.command,
+                        source: delivery.source,
+                        to: {
+                          name: delivery.to,
+                          state: State.cases.live.make({
+                            process: "process_01jc9q4w7zfm8s5r2t6v0xkb4d",
+                            code: { program: "responder", hash: "mail-test" },
+                          }),
                         },
-                      })
-                    : Refused.make({ reason: choice }),
+                        m: delivery.m,
+                        ref: "r1",
+                        grant: { source: delivery.source.name, to: delivery.to },
+                        from: delivery.from,
+                        arrivedAt: 1,
+                        rev: unread + 1,
+                        pos: unread + 1,
+                      },
+                    }),
+                  ),
+                  Match.orElse(() => Refused.make({ reason: choice })),
+                ),
             }),
           },
           PROCESS: {
@@ -489,6 +494,7 @@ const project = Effect.fnUntraced(function* () {
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
 
+  // SAFETY: the Project under test reads its name, SQL, key-value storage and tail exports, as given here.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
@@ -510,6 +516,7 @@ const project = Effect.fnUntraced(function* () {
 
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
 
+  // SAFETY: this composition calls only configure, descriptor, msg, swap and mailed on PROCESS, and CONNECTION's ring and notify.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: Formatter.formatJson(START),
@@ -549,6 +556,7 @@ const project = Effect.fnUntraced(function* () {
       bootstrap: [{ name: "counter:1", id: "counter:1", program: COUNTER }],
       door: () =>
         Effect.succeed(
+          // SAFETY: the door holds every method name the Project may call, each a stub; built from names, its type is lost.
           Rec.fromEntries(
             [
               "connect",
@@ -616,6 +624,7 @@ it.live(
           }
 
           // A stranger: a process id no start in this walk reached.
+          // SAFETY: PIDS holds 40 ids (Process.test-support.ts), so index 30 is present, and no start in this walk uses it.
           const asker = move % 4 === 2 ? (PIDS[30] as string) : live;
           yield* i.project.processAck(asker, pos, brainOrigin).pipe(Effect.result);
           const after = i.acks("counter:1");
@@ -659,6 +668,7 @@ it.effect(
         const objects: Array<string> = [];
         const traces: Array<unknown> = [];
 
+        // SAFETY: the process mail path calls only PROCESS's `getByName`, the one binding this double has.
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROCESS: {

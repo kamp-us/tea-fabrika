@@ -9,6 +9,7 @@ import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
@@ -319,8 +320,8 @@ const mint = Cmd.make("mint", {
   err: ["entropy"],
 });
 
-const platformFailure = (error: unknown) => {
-  const decoded = Schema.decodeUnknownResult(Schema.Union([ClientKeyError, ClientRowsError]))(error);
+const platformFailure = (cause: unknown) => {
+  const decoded = Schema.decodeUnknownResult(Schema.Union([ClientKeyError, ClientRowsError]))(cause);
 
   return Result.isSuccess(decoded) ? decoded.success.error : ("other" as const);
 };
@@ -375,13 +376,13 @@ type Out = ReadonlyArray<
 
 const RpcAnswer = Schema.Struct({
   id: Schema.Union([Schema.String, Schema.Finite]),
-  result: Schema.optionalKey(Schema.Unknown),
+  result: Schema.optionalKey(Schema.Json),
   error: Schema.optionalKey(
     Schema.Struct({ data: Schema.optionalKey(Schema.Struct({ reason: Schema.optionalKey(Schema.String) })) }),
   ),
 });
 
-const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Unknown) });
+const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Json) });
 
 const decodeFrame = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Union([RpcAnswer, Notice])));
 
@@ -1017,14 +1018,12 @@ const aimed = (space: Workspace, aim: Aim): TileId | null => {
   const tiles = order(space.layout);
   const at = tiles.indexOf(space.focus);
 
-  const found =
-    aim === "next"
-      ? tiles[(at + 1) % tiles.length]
-      : aim === "previous"
-        ? tiles[(at - 1 + tiles.length) % tiles.length]
-        : aim === "last"
-          ? space.recent[1]
-          : neighbor(space.layout, space.focus, aim);
+  const found = Match.value(aim).pipe(
+    Match.when("next", () => tiles[(at + 1) % tiles.length]),
+    Match.when("previous", () => tiles[(at - 1 + tiles.length) % tiles.length]),
+    Match.when("last", () => space.recent[1]),
+    Match.orElse((aim) => neighbor(space.layout, space.focus, aim)),
+  );
 
   return found === undefined || found === null || found === space.focus ? null : found;
 };
@@ -1356,6 +1355,8 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   return [flushed, [...out, ...firsts, ...reads, ...waits, ...sends, ...(askPersist ? [persist({})] : [])]];
 };
 
+// SAFETY: the list names each of LinkMsg's eleven `type` literals once (transport/Link.ts), and
+// `linked` takes any LinkMsg, so each entry also takes the one case its key names.
 const linkUpdate = Rec.fromEntries(
   Arr.map(
     [
@@ -1457,7 +1458,7 @@ type Frame = Extract<typeof Own.Type, { readonly type: "frame" }>;
 const answerTo = (
   call: Call["_tag"],
   on: { readonly id: number; readonly dial: number },
-  result: unknown,
+  result: Schema.Json | undefined,
   ms: number,
   fingerprint: string,
   handshake: Handshake,
@@ -1638,6 +1639,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     model: WindowModel,
     msg: Schema.Union([LinkMsg, Own]),
     cmds: [key, now, write, persist, record, ping, hello, enroll, mint],
+    // SAFETY: tea's `types` slot only carries the ctx and Sub types; tea never reads these empty
+    // values (0561).
     types: { ctx: {} as WindowCtx, sub: {} as SocketSub },
     init: (loaded, ctx) => [
       loaded === null
@@ -2053,12 +2056,15 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         s,
         [
           record({
-            record:
-              m.error._tag === "unsupported"
-                ? ClientRecord.cases.failure.make({ op: "persist", error: "NotSupportedError" })
-                : m.error._tag === "ClientKeyError"
-                  ? ClientRecord.cases.failure.make({ op: "persist", error: platformFailure(m.error) })
-                  : ClientRecord.cases.persist.make({ result: "failed" }),
+            record: Match.value(m.error).pipe(
+              Match.tag("unsupported", () =>
+                ClientRecord.cases.failure.make({ op: "persist", error: "NotSupportedError" }),
+              ),
+              Match.tag("ClientKeyError", (error) =>
+                ClientRecord.cases.failure.make({ op: "persist", error: platformFailure(error) }),
+              ),
+              Match.orElse(() => ClientRecord.cases.persist.make({ result: "failed" })),
+            ),
           }),
         ],
       ],
@@ -2141,6 +2147,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
   });
 
   // Every step, whatever its Msg, records a change of the window's strips (the plan's `fold` row).
+  // SAFETY: the entries are machine.update's own, key for key, and each new cell takes the same
+  // `s` and `m` and returns `folded`'s Step, so the object keeps machine.update's type.
   const update = Rec.fromEntries(
     Arr.map(Rec.toEntries(machine.update), ([type, cell]: [string, (s: WindowModel, m: never) => Step]) => [
       type,

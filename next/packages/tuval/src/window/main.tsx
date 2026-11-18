@@ -30,6 +30,7 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -376,7 +377,7 @@ const Desk = (props: PageProps) => {
     tileName(focused)
   );
 
-  const said = typeof line === "string" ? <span className="says">{line}</span> : line;
+  const said = Predicate.isString(line) ? <span className="says">{line}</span> : line;
 
   return (
     <>

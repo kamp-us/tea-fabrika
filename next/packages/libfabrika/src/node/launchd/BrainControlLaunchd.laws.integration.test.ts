@@ -13,6 +13,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -661,25 +662,22 @@ it.effect.prop(
   ],
   ([word, corruption, field]) =>
     Effect.gen(function* () {
-      const value =
-        corruption === "quote"
-          ? `${word}"tail`
-          : corruption === "backslash"
-            ? `${word}\\tail`
-            : corruption === "brace"
-              ? `${word}{tail}`
-              : corruption === "leading"
-                ? ` ${word}`
-                : `${word} `;
+      const value = Match.value(corruption).pipe(
+        Match.when("quote", () => `${word}"tail`),
+        Match.when("backslash", () => `${word}\\tail`),
+        Match.when("brace", () => `${word}{tail}`),
+        Match.when("leading", () => ` ${word}`),
+        Match.orElse(() => `${word} `),
+      );
 
-      const input =
-        field === "args"
-          ? { args: [value] }
-          : field === "executable"
-            ? { executable: corruption === "leading" ? `/test/${word} ` : `/test/${value}` }
-            : field === "build"
-              ? { build: value }
-              : {};
+      const input = Match.value(field).pipe(
+        Match.when("args", () => ({ args: [value] })),
+        Match.when("executable", () => ({
+          executable: corruption === "leading" ? `/test/${word} ` : `/test/${value}`,
+        })),
+        Match.when("build", () => ({ build: value })),
+        Match.orElse(() => ({})),
+      );
 
       const opened: Array<Effect.Success<ReturnType<typeof LaunchdTest.open>>> = [];
 

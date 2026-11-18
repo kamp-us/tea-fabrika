@@ -12,7 +12,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -236,18 +238,14 @@ describe("T285, ledger tracing keep-laws", () => {
                       head++;
                     }
 
-                    const changed =
-                      call.op === "bad_line"
-                        ? { ...input, by: "" }
-                        : call.op === "bad_parent"
-                          ? { ...input, parent: "bad" }
-                          : call.op === "bad_trace"
-                            ? { ...input, traceId: "bad" }
-                            : call.op === "seen_ahead"
-                              ? { ...input, seen: head + 1 }
-                              : call.op === "id_reused"
-                                ? { ...input, body: { changed: a.value } }
-                                : input;
+                    const changed = Match.value(call.op).pipe(
+                      Match.when("bad_line", () => ({ ...input, by: "" })),
+                      Match.when("bad_parent", () => ({ ...input, parent: "bad" })),
+                      Match.when("bad_trace", () => ({ ...input, traceId: "bad" })),
+                      Match.when("seen_ahead", () => ({ ...input, seen: head + 1 })),
+                      Match.when("id_reused", () => ({ ...input, body: { changed: a.value } })),
+                      Match.orElse(() => input),
+                    );
 
                     const answer = yield* ledger.append(a.stream, id, changed);
                     const accepted = call.op === "append";
@@ -396,12 +394,11 @@ describe("T285, ledger tracing keep-laws", () => {
                   const before = c.spans.length;
                   const parent = yield* Effect.currentSpan;
 
-                  const work: Effect.Effect<unknown, LedgerError> =
-                    op === "append"
-                      ? ledger.append(a.stream, `${a.id}/${i}`, line(a, ctx.traceId))
-                      : op === "read"
-                        ? Stream.runCollect(ledger.read(a.stream, 0))
-                        : ledger.wait(a.stream, 0);
+                  const work: Effect.Effect<unknown, LedgerError> = Match.value(op).pipe(
+                    Match.when("append", () => ledger.append(a.stream, `${a.id}/${i}`, line(a, ctx.traceId))),
+                    Match.when("read", () => Stream.runCollect(ledger.read(a.stream, 0))),
+                    Match.orElse(() => ledger.wait(a.stream, 0)),
+                  );
 
                   const exit = yield* Effect.exit(work);
                   expect(Exit.isFailure(exit)).toBe(true);
@@ -745,7 +742,7 @@ describe("T285, sink keep-law", () => {
                     BigInt(sample.ms) * 1_000_000n,
                   );
                   expect(row.attributes).toEqual({
-                    ...(typeof sample.value === "string"
+                    ...(Predicate.isString(sample.value)
                       ? cut("test.value", sample.value)
                       : { "test.value": sample.value }),
                     ...(job ? { "fab.process": PROCESS } : {}),
@@ -1308,12 +1305,11 @@ describe("T285, runner tracing keep-laws", () => {
                   const op =
                     call.op === "open" || call.op === "bad_client" ? "open" : call.op === "due" ? "due" : "step";
 
-                  const body: Effect.Effect<unknown, unknown> =
-                    op === "open"
-                      ? runner.open(call.op === "bad_client" ? "" : call.client)
-                      : op === "due"
-                        ? runner.due(call.value)
-                        : runner.msg(call.op === "bad_input" ? { value: call.value } : input);
+                  const body: Effect.Effect<unknown, unknown> = Match.value(op).pipe(
+                    Match.when("open", () => runner.open(call.op === "bad_client" ? "" : call.client)),
+                    Match.when("due", () => runner.due(call.value)),
+                    Match.orElse(() => runner.msg(call.op === "bad_input" ? { value: call.value } : input)),
+                  );
 
                   const before = w.spans.length;
                   const flushes = w.flushes.length;

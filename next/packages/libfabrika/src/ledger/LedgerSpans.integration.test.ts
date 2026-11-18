@@ -25,6 +25,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -150,7 +151,7 @@ const heldShort = (span: Record<string, unknown>, key: string, full: string) => 
     return;
   }
 
-  expect(typeof span[key], key).toBe("string");
+  expect(span[key], key).toBeTypeOf("string");
   expect(String(span[key]).length, key).toBeLessThanOrEqual(MOST);
   expect(span[`${key}.length`], `${key}.length`).toBe(full.length);
 };
@@ -349,7 +350,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           expect(tags("ledger.ring")).toHaveLength(1);
 
           const texts = Arr.map(
-            Arr.filter(all(), (value) => typeof value === "string"),
+            Arr.filter(all(), (value) => Predicate.isString(value)),
             (value) => String(value),
           );
 

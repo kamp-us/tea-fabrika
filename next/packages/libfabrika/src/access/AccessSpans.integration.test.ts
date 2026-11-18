@@ -20,6 +20,7 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -167,7 +168,7 @@ const tagged = (span: Tracer.NativeSpan, word: string): unknown =>
     Option.getOrUndefined,
   );
 
-const holds = (span: Tracer.NativeSpan, value: unknown): boolean => Rec.values(tags(span)).includes(value);
+const holds = (span: Tracer.NativeSpan, value: string): boolean => Rec.values(tags(span)).includes(value);
 
 /** Whether `outer` is above `span`, walking its parents. */
 const within = (span: Tracer.NativeSpan, outer: Tracer.NativeSpan): boolean => {
@@ -270,13 +271,13 @@ const write = (event: MemberEvent) => ClientManager.use((clients) => clients.wri
 const clean = (spans: ReadonlyArray<Tracer.NativeSpan>) => {
   for (const span of spans) {
     for (const [key, value] of Rec.toEntries(tags(span))) {
-      const text = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
+      const text = Predicate.isString(value) ? value : (JSON.stringify(value) ?? "");
 
       for (const mark of MARKS) {
         expect(Str.includes(mark)(text), `${span.name} ${key}`).toBe(false);
       }
 
-      expect(typeof value === "string" ? value.length : 0, `${span.name} ${key}`).toBeLessThanOrEqual(MOST);
+      expect(Predicate.isString(value) ? value.length : 0, `${span.name} ${key}`).toBeLessThanOrEqual(MOST);
     }
   }
 };
@@ -446,8 +447,8 @@ describe("p97, member spans", () => {
 
         const events = yield* Stream.runCollect((yield* Ledger).read("gateway/access", 0));
         expect(tagged(read, "events")).toBe(events.length);
-        expect(typeof tagged(read, "keys")).toBe("number");
-        expect(typeof tagged(read, "live")).toBe("number");
+        expect(tagged(read, "keys")).toBeTypeOf("number");
+        expect(tagged(read, "live")).toBeTypeOf("number");
         expect(tagged(read, "ignored")).toBe(0);
         clean(spans);
       }).pipe(Effect.provide(all()), Effect.withTracer(tracer));

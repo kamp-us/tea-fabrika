@@ -121,6 +121,7 @@ describe("spanOutputs", () => {
               yield* deliver(home, RECORDS[1], rebuild(late));
 
               const outputs = yield* spanOutputs(home);
+              // SAFETY: this home holds only the `unsent` and `spans` tables the law made above, and both have a text `spanId` column.
               const order = Arr.map(outputs, (output) => (output as { readonly spanId: string }).spanId);
 
               expect(order[0], "the queue is read first").toBe(waiting);

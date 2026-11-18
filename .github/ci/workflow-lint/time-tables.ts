@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. TT1 and TT2: each test leg's time table (time-table.ts) and
 // its timings upload, in check.yaml and scheduled.yaml.
 import { fileName, STEP } from "../time-table.ts";
@@ -44,7 +44,7 @@ export const isTimings = (step: Record<string, unknown>): boolean => {
       Rec.toEntries(given).filter(([key]) => key !== "retention-days"),
       Rec.toEntries(TIMINGS),
     ) &&
-    typeof kept === "number" &&
+    Predicate.isNumber(kept) &&
     kept >= 1
   );
 };

@@ -10,7 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Array as Arr, pipe, Record as Rec, Result } from "effect";
+import { Array as Arr, pipe, Predicate, Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
@@ -21,8 +21,7 @@ const LEFT_OUT = /^next\//;
 
 const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
-const isMap = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Arr.isArray(value);
+const isMap = (value: unknown): value is Record<string, unknown> => Predicate.isObject(value);
 
 /** A pnpm-workspace.yaml glob as a test on a folder: `*` is one path part, as pnpm reads it here. */
 const matcher = (glob: string): RegExp =>
@@ -50,7 +49,7 @@ const read = (file: string): Manifest => {
     return isMap(map) ? Rec.keys(map) : [];
   });
 
-  return { name: typeof manifest["name"] === "string" ? manifest["name"] : null, deps };
+  return { name: Predicate.isString(manifest["name"]) ? manifest["name"] : null, deps };
 };
 
 const tracked = spawnSync("git", ["ls-files", "-z", "--", "package.json", "**/package.json"], {
@@ -74,7 +73,7 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
 
   const members = pipe(
     globs,
-    Arr.filter((g): g is string => typeof g === "string"),
+    Arr.filter((g): g is string => Predicate.isString(g)),
     Arr.map(matcher),
   );
 

@@ -50,7 +50,7 @@
 //
 // `modules.test.ts` plants each of these at its real path, with the repo's own config.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
-import { Array as Arr, Option } from "effect";
+import { Array as Arr, Option, Predicate } from "effect";
 import { pathIn } from "./match.ts";
 
 interface Lists {
@@ -64,17 +64,17 @@ interface Lists {
 const START = { line: 1, column: 0 };
 
 const words = (value: unknown): ReadonlySet<string> =>
-  new Set(Arr.isArray(value) ? Arr.filter(value, (word) => typeof word === "string") : []);
+  new Set(Arr.isArray(value) ? Arr.filter(value, (word) => Predicate.isString(word)) : []);
 
 /** The config's lists, or `null` when the rule was given none. */
 const lists = (options: ReadonlyArray<unknown>): Lists | null => {
   const [given] = options;
 
-  if (typeof given !== "object" || given === null || !("src" in given)) {
+  if (!Predicate.isObjectOrArray(given) || !("src" in given)) {
     return null;
   }
 
-  if (typeof given.src !== "string") {
+  if (!Predicate.isString(given.src)) {
     return null;
   }
 

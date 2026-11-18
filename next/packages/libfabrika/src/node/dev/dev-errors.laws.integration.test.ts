@@ -17,6 +17,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -44,11 +45,9 @@ const failure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 
 const deploy = (port: number) => (local: Context.Context<never>) =>
   Effect.gen(function* () {
+    // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
     const plugin = Option.getOrUndefined(
-      Arr.findFirst(
-        [...local.mapUnsafe.values()],
-        (value) => typeof value === "object" && value !== null && "sockets" in value,
-      ),
+      Arr.findFirst([...local.mapUnsafe.values()], (value) => Predicate.isObjectOrArray(value) && "sockets" in value),
     ) as { start: (ports: Record<string, number>) => Effect.Effect<unknown> };
 
     Context.get(local, RuntimeLifecycle)({ type: "start", worker: "errors", pid: 27001 });

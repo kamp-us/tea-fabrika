@@ -6,6 +6,7 @@ import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
@@ -81,6 +82,7 @@ const downs = (letters: ReadonlyArray<{ readonly m: unknown }>) =>
   });
 
 /** A request as a client sends it: raw, never passed through a schema's `make`. */
+// SAFETY: the law builds raw requests on purpose, with fields past the schema's caps, as a client may send them.
 const raw = (request: object) => request as Start;
 
 /** The call fails with a ProcessError and the ledger holds exactly what it held before. */
@@ -103,7 +105,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
   const cases: ReadonlyArray<{
     readonly name: string;
     readonly schema: Schema.Top;
-    readonly value: (text: string) => unknown;
+    readonly value: (text: string) => object;
   }> = [
     {
       name: "Start first id",
@@ -302,6 +304,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
 
         const client = {
           owner: Owner.cases.brain.make({}),
+          // SAFETY: the client name `over` is past the cap on purpose, so this recipient skips `make` to reach the refusal.
           recipient: { _tag: "client", client: over, session: X } as typeof Recipient.Type,
         };
 
@@ -482,11 +485,11 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
   ).pipe(Arbitrary.map(([unit, length]) => Str.repeat(Math.ceil(length / unit.length))(unit)));
   const unicodeRef = Arbitrary.schema(Schema.Literals([0, 1, 2])).pipe(
     Arbitrary.flatMap((kind) =>
-      kind === 0
-        ? graphemes("grapheme", 1, 40)
-        : kind === 1
-          ? graphemes("grapheme-composite", CAP - 4, CAP + 4)
-          : repeated,
+      Match.value(kind).pipe(
+        Match.when(0, () => graphemes("grapheme", 1, 40)),
+        Match.when(1, () => graphemes("grapheme-composite", CAP - 4, CAP + 4)),
+        Match.orElse(() => repeated),
+      ),
     ),
   );
 

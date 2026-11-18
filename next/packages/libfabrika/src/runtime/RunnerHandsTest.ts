@@ -49,6 +49,7 @@ import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -240,7 +241,7 @@ type World = {
   gate?: { readonly entered: Deferred.Deferred<void>; readonly release: Deferred.Deferred<void> } | undefined;
 };
 
-const strings = (params: ReadonlyArray<SqlValue>) => Arr.filter(params, (p): p is string => typeof p === "string");
+const strings = (params: ReadonlyArray<SqlValue>) => Arr.filter(params, (p): p is string => Predicate.isString(p));
 const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 
 /** The ledger's Sql with the letter cut: the statement after a saved hands answer letter fails. */

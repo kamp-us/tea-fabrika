@@ -1,6 +1,7 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 // P14 slice 1, next/ (ticket 698): the Worker serves a built tab's page at `/` (S1.3). Later slices
 // add the control and bootstrap laws here.
 //
@@ -66,6 +67,8 @@ const world = (input: Awaited<ReturnType<typeof config>>) => {
     calls.push(`${to}.${method}`);
     return { _tag: "ok" };
   };
+
+  // SAFETY: these routes reach only these four namespaces, and each answers with a Stub of its binding that records any call.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members these routes call
   const env = {
     INSTANCE: JSON.stringify(input),
@@ -172,7 +175,11 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
             const path = choices[s.pick % choices.length]!;
             const method = METHODS[s.method % METHODS.length]!;
             const wrongHost = s.host % 5 === 0;
-            const originHeader = s.origin % 5 === 0 ? "http://evil.example" : s.origin % 5 === 1 ? origin : null;
+            const originHeader = Match.value(s.origin % 5).pipe(
+              Match.when(0, () => "http://evil.example"),
+              Match.when(1, () => origin),
+              Match.orElse(() => null),
+            );
             const target = path === "/" ? (current !== undefined && Rec.has(current, PAGE) ? PAGE : null) : path;
 
             const asset =

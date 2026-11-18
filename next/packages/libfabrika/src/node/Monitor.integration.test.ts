@@ -90,6 +90,7 @@ const databases = Effect.gen(function* () {
               stream,
               id: e.id,
               tag: e._tag,
+              // SAFETY: MonitorTest.Row's body names only optional fields of unknown type, which the suite reads one by one; a row with no body reads as `{}`.
               body: (e.body ?? {}) as MonitorTest.Row["body"],
             })),
           ),

@@ -3,6 +3,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Effect, Exit, Schema } from "effect";
 import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import * as Audit from "./Audit.ts";
 import { nodeExecution, workerExecution } from "./Execution.ts";
@@ -33,7 +34,7 @@ const Tape = fc.array(fc.record({ pick: fc.noBias(fc.nat()), move: fc.noBias(fc.
 
 const Samples = Arbitrary.array(Arbitrary.schema(Save), { minLength: 8, maxLength: 32 });
 
-const declared = (select: (msg: typeof Save.Type) => unknown, data: Schema.Codec<unknown, unknown> = Metadata) => ({
+const declared = <A>(select: (msg: typeof Save.Type) => A, data: Schema.Codec<unknown, unknown> = Metadata) => ({
   name: "audit-fixture",
   machine: Machine.make({
     model: Model,
@@ -124,14 +125,12 @@ describe("P13 safe audit", () => {
                 const mode = modes[cell.move % modes.length]!;
                 reached.add(mode);
 
-                const program =
-                  mode === "selector"
-                    ? declared(() => raised(body))
-                    : mode === "output"
-                      ? declared(() => ({ type: "save", note, base: body }))
-                      : mode === "json"
-                        ? declared(() => ({ hidden: 1n }), Schema.Unknown)
-                        : declared(metadata);
+                const program = Match.value(mode).pipe(
+                  Match.when("selector", () => declared(() => raised(body))),
+                  Match.when("output", () => declared(() => ({ type: "save", note, base: body }))),
+                  Match.when("json", () => declared(() => ({ hidden: 1n }), Schema.Unknown)),
+                  Match.orElse(() => declared(metadata)),
+                );
 
                 const node = nodeExecution(program);
 

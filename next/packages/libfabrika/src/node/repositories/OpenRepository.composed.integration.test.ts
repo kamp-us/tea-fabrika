@@ -18,8 +18,10 @@ import * as Formatter from "effect/Formatter";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
@@ -421,16 +423,16 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 const request = requests[index * 2 + 1]!;
                 const source = c.pick % 9;
 
-                const body =
-                  source === 0
-                    ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${Formatter.formatJson(secret)}\n`
-                    : source === 3
-                      ? `fabrika-version = ${Formatter.formatJson(secret)}\n`
-                      : source === 4
-                        ? `[${Formatter.formatJson(secret)}]\nvalue = true\n`
-                        : source === 5
-                          ? `fabrika-version = ${Formatter.formatJson(secret)} [\n`
-                          : 'fabrika-version = "0.0.0"\n';
+                const body = Match.value(source).pipe(
+                  Match.when(
+                    0,
+                    () => `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${Formatter.formatJson(secret)}\n`,
+                  ),
+                  Match.when(3, () => `fabrika-version = ${Formatter.formatJson(secret)}\n`),
+                  Match.when(4, () => `[${Formatter.formatJson(secret)}]\nvalue = true\n`),
+                  Match.when(5, () => `fabrika-version = ${Formatter.formatJson(secret)} [\n`),
+                  Match.orElse(() => 'fabrika-version = "0.0.0"\n'),
+                );
 
                 const fs = FileSystem.layerNoop({
                   realPath: (location) => Effect.succeed(location),
@@ -583,7 +585,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
 
           const output =
             JSON.stringify(values, (_key: string, value: unknown) =>
-              typeof value === "bigint" ? value.toString() : value,
+              Predicate.isBigInt(value) ? value.toString() : value,
             ) + inspect(values, { depth: null });
 
           for (const spelling of Arr.flatMap([secret, folder, url], forms)) {

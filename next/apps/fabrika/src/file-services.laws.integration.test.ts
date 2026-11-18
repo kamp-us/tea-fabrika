@@ -17,6 +17,7 @@ import {
   Option,
   Path,
   PlatformError,
+  Predicate,
   Record as Rec,
   References,
   Schema,
@@ -49,7 +50,9 @@ const removeFolder = (folder: string) => Effect.runPromise(disk.remove(folder, {
 const writeText = (file: string, text: string) => Effect.runPromise(disk.writeFileString(file, text));
 
 const cli = vi.hoisted(() => ({
+  // SAFETY: work starts unset; the CLI mock below stores the Effect it was handed.
   work: undefined as Effect.Effect<unknown, unknown> | undefined,
+  // SAFETY: layer starts unset; each law sets it to the layer it runs the handed work on, one of these two.
   layer: undefined as
     | Layer.Layer<FileSystem.FileSystem | Path.Path>
     | Layer.Layer<FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner>
@@ -265,7 +268,7 @@ vi.mock("./exam/compiler.ts", async (original) => ({
 }));
 
 // The instance records each start's options, so a law sees the port it was started with.
-const instances = vi.hoisted(() => [] as Array<{ readonly port: number }>);
+const instances = vi.hoisted(() => Array.of<{ readonly port: number }>());
 
 vi.mock("./local-instance.ts", () => ({
   localInstance: (
@@ -548,6 +551,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         const selected = Arr.filter(
           Rec.toEntries(overrides),
           ([field]) =>
+            // SAFETY: `field` comes from Object.entries(overrides), so it is one of overrides' own keys.
             choices[field as keyof typeof overrides] ||
             (!choices.saved && ["name", "person", "founder"].includes(field)),
         );
@@ -800,7 +804,7 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
       try {
         const raw: unknown = JSON.parse(text);
 
-        return typeof raw !== "object" || raw === null || !("name" in raw);
+        return !Predicate.isObjectOrArray(raw) || !("name" in raw);
       } catch {
         return true;
       }

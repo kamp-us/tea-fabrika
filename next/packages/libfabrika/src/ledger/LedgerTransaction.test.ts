@@ -4,6 +4,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
 import * as Arr from "effect/Array";
+import * as Match from "effect/Match";
 import * as Str from "effect/String";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
@@ -192,12 +193,11 @@ describe("p79, LedgerTransaction", () => {
                 const tx = yield* LedgerTransaction;
                 yield* ledger.append("a", "one", line(1));
 
-                const refused =
-                  reason === "seen_ahead"
-                    ? { ...line(3), seen: 900 }
-                    : reason === "bad_trace"
-                      ? { ...line(3), traceId: "wrong" }
-                      : line(3);
+                const refused = Match.value(reason).pipe(
+                  Match.when("seen_ahead", () => ({ ...line(3), seen: 900 })),
+                  Match.when("bad_trace", () => ({ ...line(3), traceId: "wrong" })),
+                  Match.orElse(() => line(3)),
+                );
 
                 expect(
                   (yield* Effect.flip(

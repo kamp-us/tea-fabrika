@@ -323,11 +323,9 @@ export const control = Effect.fn("runtime.control")(function* (
         {
           error: {
             reason:
-              typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
+              Predicate.isObjectOrArray(answer.failure) && "reason" in answer.failure
                 ? answer.failure.reason
-                : typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
-                  ? answer.failure.reason
-                  : "unreachable",
+                : "unreachable",
           },
         },
         { status: 500 },

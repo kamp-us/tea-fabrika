@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import type * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -233,11 +234,11 @@ describe("P34 recovery storage", () => {
 
               for (const row of disk.sql.exec(`SELECT rowid, * FROM ${table}`)) {
                 for (const [column, value] of Rec.toEntries(row)) {
-                  if (typeof value === "string" && Str.includes('"journal"')(value)) {
+                  if (Predicate.isString(value) && Str.includes('"journal"')(value)) {
                     disk.sql.exec(
                       `UPDATE ${table} SET ${quote(column)}=? WHERE rowid=?`,
                       // An old saved shape fails explicitly too: it is never silently reset (P34c slice 2).
-                      Formatter.formatJson(typeof corrupt === "string" ? { v: 999, journal: corrupt } : corrupt),
+                      Formatter.formatJson(Predicate.isString(corrupt) ? { v: 999, journal: corrupt } : corrupt),
                       row.rowid!,
                     );
                     planted++;
@@ -396,6 +397,7 @@ describe("P34 recovery storage", () => {
                 expect(yield* s.receipt(r.letter)).toEqual(r);
               }
 
+              // SAFETY: the store's load answers its saved receipts and its sequence number.
               const loaded = (yield* s.load) as { receipts: ReadonlyArray<unknown>; seq: number };
               expect(loaded.seq).toBe(4);
               expect(loaded.receipts).toHaveLength(all.length);

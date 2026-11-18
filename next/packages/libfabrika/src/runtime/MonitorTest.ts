@@ -42,6 +42,7 @@ import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -245,6 +246,7 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's map takes a plain value, so one sample is drawn here
     const [value] = Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }));
 
+    // SAFETY: sampleEffect was asked for one value, so the first element is there.
     return value as S["Type"];
   });
 
@@ -327,6 +329,7 @@ const savedLog = Effect.fnUntraced(function* (
 
   const model = Option.getOrUndefined(decodeModel(saved?.saved.model ?? null));
 
+  // SAFETY: ReaderModel types `log` as Json, but every entry the reader's update logs (with `logged` above) is an object with a string `type`, and Logged names the fields the suite reads; `[]` stands for no model.
   return (model?.log ?? []) as ReadonlyArray<Logged>;
 });
 
@@ -345,7 +348,7 @@ const cutting = (sql: Sql, world: World): Sql => ({
     if (
       world.fault.cut &&
       /^\s*INSERT\b/i.test(query) &&
-      Arr.some(params, (p) => typeof p === "string" && Str.startsWith('["DOWN",')(p))
+      Arr.some(params, (p) => Predicate.isString(p) && Str.startsWith('["DOWN",')(p))
     ) {
       world.fault.cut = false;
       world.done.add("cut:fired");
@@ -552,7 +555,7 @@ const host = Effect.fnUntraced(function* (
       ProgramLoader.layer(PROGRAMS, {
         ping: (cmd: unknown) =>
           Effect.sync(() => {
-            const ref = typeof cmd === "object" && cmd !== null && "ref" in cmd ? String(cmd.ref) : "";
+            const ref = Predicate.isObjectOrArray(cmd) && "ref" in cmd ? String(cmd.ref) : "";
             world.pings.push(ref);
 
             return Outcome.ok(ref);

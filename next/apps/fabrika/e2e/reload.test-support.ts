@@ -134,11 +134,7 @@ export const instance = (copy: Effect.Success<typeof fixture>) =>
   });
 
 /** Wait for an answer that belongs to the save, within one deadline, including skipped no-ops. */
-export const nextAnswer = (
-  answers: Queue.Queue<unknown>,
-  ms = 60_000,
-  accept: (answer: unknown) => boolean = () => true,
-) =>
+export const nextAnswer = <A>(answers: Queue.Queue<A>, ms = 60_000, accept: (answer: A) => boolean = () => true) =>
   Effect.gen(function* () {
     while (true) {
       const answer = yield* Queue.take(answers);

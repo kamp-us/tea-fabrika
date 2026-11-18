@@ -9,6 +9,7 @@ import {
   Fiber,
   Formatter,
   Logger,
+  Match,
   Option,
   Predicate,
   Redacted,
@@ -123,8 +124,11 @@ const secret = Arbitrary.schema(
 
     return {
       token,
-      text:
-        form === "bearer" ? `Bearer ${token}` : form === "url" ? `https://invalid.test/?access_token=${token}` : token,
+      text: Match.value(form).pipe(
+        Match.when("bearer", () => `Bearer ${token}`),
+        Match.when("url", () => `https://invalid.test/?access_token=${token}`),
+        Match.orElse(() => token),
+      ),
     };
   }),
 );

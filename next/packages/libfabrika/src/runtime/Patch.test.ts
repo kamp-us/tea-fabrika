@@ -110,7 +110,7 @@ const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyAr
     for (const [i, one] of value.entries()) {
       out.push(...paths(one, [...at, String(i)]));
     }
-  } else if (typeof value === "object" && value !== null) {
+  } else if (Predicate.isObject(value)) {
     for (const [key, one] of Rec.toEntries(value)) {
       out.push(...paths(one, [...at, key]));
     }
@@ -137,6 +137,7 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
     return copy;
   }
 
+  // SAFETY: change walks only paths that `paths` listed, which step only into arrays and non-null objects, and the array case returned above.
   return {
     ...(value as Record<string, unknown>),
     [key]: change(Predicate.hasProperty(value, key) ? value[key] : undefined, rest, f),
@@ -176,7 +177,7 @@ const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
       );
     }
 
-    return typeof here === "object" && here !== null
+    return Predicate.isObjectOrArray(here)
       ? change(value, at, (p) => (Arr.isArray(p) ? [...p, e.value] : { ...Object(p), [e.key]: e.value }))
       : change(value, at, () => e.value);
   });
@@ -191,6 +192,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
         // A view key that names a prototype is refused by the next law, so these pairs hold none.
         fc.pre(
           !Arr.some([...paths(before), ...paths(after)], (p) =>
+            // SAFETY: the wider element type only lets `includes` take any key; the list is read, never written.
             Arr.some(p, (k) => (UNSAFE as ReadonlyArray<string>).includes(k)),
           ),
         );

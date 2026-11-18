@@ -42,6 +42,7 @@ import {
   Effect,
   Exit,
   Layer,
+  Predicate,
   Queue,
   Record as Rec,
   Schema,
@@ -622,7 +623,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     for (const [name, value] of focus === "S1" ? Rec.toEntries(outputs) : []) {
       const encoded = yield* Schema.encodeEffect(
         Schema.fromJsonString(Schema.Unknown, {
-          replacer: (_key, item: unknown) => (typeof item === "bigint" ? String(item) : item),
+          replacer: (_key, item: unknown) => (Predicate.isBigInt(item) ? String(item) : item),
         }),
       )(value);
 

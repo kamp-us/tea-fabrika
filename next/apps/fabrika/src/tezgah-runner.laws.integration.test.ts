@@ -36,6 +36,7 @@ import {
   FileSystem,
   Layer,
   Path,
+  Predicate,
   Schema,
   DateTime,
   Option,
@@ -189,6 +190,7 @@ const calls = (instance: Instance) => {
   return {
     info: async (): Promise<Array<any>> => project().info(),
     facts: async (stream: string): Promise<Array<any>> =>
+      // SAFETY: the audit read answers the stream's rows as an array.
       Arr.map((await project().read(stream, 0, "audit")) as Array<any>, (row) => ({ ...row.body, _tag: row._tag })),
   };
 };
@@ -248,7 +250,7 @@ RunnerTest.suite(open);
 
 /** What L12 reads of tezgah's view: workspace 1's tiles in reading order. */
 const order = (node: any): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : (node?.parts ?? []).flatMap((p: any) => order(p.inner));
+  Predicate.isString(node) ? [node] : (node?.parts ?? []).flatMap((p: any) => order(p.inner));
 
 const shown = (view: any) => {
   const space = (view?.workspaces ?? []).find((w: any) => w.n === 1);

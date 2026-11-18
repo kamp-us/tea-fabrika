@@ -75,6 +75,7 @@ const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
     { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
 
+  // SAFETY: oxlint's `--format=json` report holds these fields for each diagnostic.
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };

@@ -14,7 +14,19 @@
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
 // not a sha, git fails, or the base's own file does not read (main is broken, so it fails closed).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { String as Str, pipe, Array as Arr, Console, Effect, Exit, Formatter, Option, Schema, Stream } from "effect";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Console,
+  Effect,
+  Exit,
+  Formatter,
+  Option,
+  Predicate,
+  Schema,
+  Stream,
+} from "effect";
 import type { PlatformError } from "effect";
 import { ChildProcess } from "effect/process";
 
@@ -259,7 +271,7 @@ if (import.meta.main) {
     ),
     {
       disableErrorReporting: true,
-      teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) && typeof exit.value === "number" ? exit.value : 2),
+      teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) && Predicate.isNumber(exit.value) ? exit.value : 2),
     },
   );
 }

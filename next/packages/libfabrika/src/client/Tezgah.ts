@@ -173,6 +173,8 @@ export const tezgahMachine = Machine.make({
   model: TezgahClient,
   msg: Msg,
   cmds: [ask, settled],
+  // SAFETY: tea's `types` slot only carries the ctx type, the workspace's number; tea never reads
+  // this empty value (0561).
   types: { ctx: {} as { readonly workspace: number } },
   init: (loaded, ctx) => [
     loaded ?? TezgahClient.make({ workspace: ctx.workspace, serverState: null, rev: 0, pendingMutations: [] }),

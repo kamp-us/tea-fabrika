@@ -57,10 +57,12 @@ describe("P39 slice 1: the task's schemas", () => {
           [Result, result],
           [Recorded, recorded],
         ] as const) {
+          // SAFETY: each schema in the list above decodes from and to plain JSON values, so reading it as an unknown codec loses no check here.
           const back = through(schema as Schema.Codec<unknown, unknown>, value);
           expect(R.isSuccess(back), `decodes: ${JSON.stringify(value)}`).toBe(true);
           // Every key the caller gave comes back with its value: none dropped, none renamed.
           expect(R.getOrThrow(back)).toEqual(value);
+          // SAFETY: the `isSuccess` check above proved `back` decoded to one of these struct schemas, so it holds an object.
           expect(Rec.keys(R.getOrThrow(back) as object).sort()).toEqual(Struct.keys(value).sort());
         }
       }),
@@ -87,6 +89,7 @@ describe("P39 slice 1: the task's schemas", () => {
           [State, collected],
           [Event, event],
         ] as const) {
+          // SAFETY: the collection, state and event schemas all decode JSON values, so `through` may take them as unknown codecs.
           const back = through(schema as Schema.Codec<unknown, unknown>, value);
           expect(R.isSuccess(back), `decodes: ${JSON.stringify(value)}`).toBe(true);
           expect(R.getOrThrow(back)).toEqual(value);
@@ -112,6 +115,8 @@ describe("P39 slice 1: the task's schemas", () => {
   it("L8: one invalid or missing field of a request, an executor, a result or a record is refused", () => {
     fc.assert(
       fc.property(Values, ({ request, executor, result, recorded, pick }) => {
+        // SAFETY: the four task schemas below are each read only as a decoder of unknown input, which is
+        // what this law asks of them.
         const cases: ReadonlyArray<readonly [Schema.Codec<unknown, unknown>, unknown]> = [
           [Request as Schema.Codec<unknown, unknown>, broken(request, pick, BAD_REQUEST)],
           [Executor as Schema.Codec<unknown, unknown>, broken(executor, pick, BAD_EXECUTOR)],

@@ -187,7 +187,7 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
             }
           });
 
-          const sent = (read: (turn: LedgerTurn) => unknown) =>
+          const sent = <A>(read: (turn: LedgerTurn) => A) =>
             Effect.gen(function* () {
               const from = store.seen.length;
               yield* tx.transact((turn) => {

@@ -58,7 +58,7 @@ const refusal = (attached: typeof Attached.cases.online.Type): string | null =>
  */
 export const waitOn = (
   attached: typeof Attached.cases.online.Type,
-  input: unknown,
+  input: Schema.Json | undefined,
 ): Result.Result<{ readonly stream: string; readonly after: Rev }, string> => {
   const refused = refusal(attached);
 
@@ -85,7 +85,12 @@ const ok = (result: Schema.Json, wake: string | null = null): Routed => ({
  * @category routing
  */
 export const route = Effect.fn("gateway.tasks")(
-  function* (tasks: Tasks["Service"], attached: typeof Attached.cases.online.Type, method: string, input: unknown) {
+  function* (
+    tasks: Tasks["Service"],
+    attached: typeof Attached.cases.online.Type,
+    method: string,
+    input: Schema.Json | undefined,
+  ) {
     const { identity, has, build, client } = attached;
     const refused = refusal(attached);
 

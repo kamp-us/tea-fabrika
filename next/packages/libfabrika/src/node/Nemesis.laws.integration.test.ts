@@ -10,7 +10,9 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
@@ -296,7 +298,7 @@ NemesisTest.suite({
 
         const health = Arr.filter(
           sql.exec("SELECT * FROM measurements"),
-          (row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]),
+          (row) => Predicate.isString(row["piece"]) && /nemesis/i.test(row["piece"]),
         );
 
         return { rows, health };
@@ -314,7 +316,11 @@ NemesisTest.suite({
     } else {
       sql.exec(
         "UPDATE entries SET pos=? WHERE stream=? AND id=?",
-        kind === "zero" ? 0 : kind === "negative" ? -1 : 1.5,
+        Match.value(kind).pipe(
+          Match.when("zero", () => 0),
+          Match.when("negative", () => -1),
+          Match.orElse(() => 1.5),
+        ),
         inbox("checklist:1"),
         key,
       );

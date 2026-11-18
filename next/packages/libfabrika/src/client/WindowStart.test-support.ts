@@ -2,6 +2,7 @@ import * as Arr from "effect/Array";
 // P18 slice 1, next/ (ticket 290): the window start's test socket. One in-memory WebSocket that
 // Effect's own `Socket.fromWebSocket` reads through an injected `Socket.WebSocketConstructor`, so
 // the start's laws run on Effect's real reader and writer, never on a socket of our own making.
+import * as Predicate from "effect/Predicate";
 import type * as Socket from "effect/socket/Socket";
 
 type Kind = "open" | "message" | "error" | "close";
@@ -79,7 +80,7 @@ export class MemorySocket implements Socket.WebSocketLike {
       return;
     }
 
-    const text = typeof data === "string" ? data : new TextDecoder().decode(data);
+    const text = Predicate.isString(data) ? data : new TextDecoder().decode(data);
     this.sent.push(text);
     this.hooks.send?.(text, this);
   }

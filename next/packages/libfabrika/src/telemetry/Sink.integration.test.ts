@@ -35,6 +35,7 @@ import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -139,7 +140,7 @@ const places = (db: DatabaseSync, marker: string): Array<string> => {
   for (const { name } of tables) {
     for (const row of db.prepare(`SELECT * FROM "${String(name)}"`).all()) {
       for (const [column, value] of Rec.toEntries(row)) {
-        if (typeof value === "string" && Str.includes(marker)(value)) {
+        if (Predicate.isString(value) && Str.includes(marker)(value)) {
           found.add(`${String(name)}.${column}`);
         }
       }
@@ -1336,7 +1337,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               let dropped = 0;
 
               for (const [k, v] of Rec.toEntries(tags)) {
-                if (typeof v === "string") {
+                if (Predicate.isString(v)) {
                   if (v.length <= 128) {
                     expect(kept[k]).toBe(v);
                   } else {
@@ -1344,7 +1345,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
                     expect(String(kept[k]).length).toBeLessThanOrEqual(128);
                     expect(kept[`${k}.length`]).toBe(v.length);
                   }
-                } else if (typeof v === "number" || typeof v === "boolean") {
+                } else if (Predicate.isNumber(v) || Predicate.isBoolean(v)) {
                   expect(kept[k]).toBe(v);
                 } else if (Redacted.isRedacted(v)) {
                   expect(kept[k]).toBe("<redacted>");
@@ -1357,9 +1358,12 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               expect(kept["fab.sink.dropped"] ?? 0).toBe(dropped);
 
               for (const v of Rec.values(kept)) {
-                expect(["string", "number", "boolean"]).toContain(typeof v);
+                expect(
+                  Predicate.isString(v) || Predicate.isNumber(v) || Predicate.isBoolean(v),
+                  `${String(v)} is a string, a number or a boolean`,
+                ).toBe(true);
 
-                if (typeof v === "string") {
+                if (Predicate.isString(v)) {
                   expect(v.length).toBeLessThanOrEqual(128);
                   expect(v).not.toContain(SECRET);
                 }

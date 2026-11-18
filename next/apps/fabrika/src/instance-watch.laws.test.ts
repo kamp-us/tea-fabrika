@@ -31,6 +31,7 @@ describe("T421 the dev instance's watch on the build folder", () => {
             const file = { path: "brain.mjs", content, hash: yield* sha(content) };
             Queue.offerUnsafe(reads, file.hash);
 
+            // SAFETY: the array literal holds exactly this one file.
             return { files: [file] as [typeof file], hash: file.hash };
           });
 

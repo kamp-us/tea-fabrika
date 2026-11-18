@@ -31,7 +31,9 @@ import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as References from "effect/References";
 import * as Result from "effect/Result";
@@ -143,6 +145,7 @@ const requesterName = (k: Pair) => `requester:${k}`;
 
 const responderName = (k: Pair) => `responder:${k}`;
 
+// SAFETY: PAIRS.map gives one entry for each Pair, so the record has every Pair key.
 const REQUESTERS = Rec.fromEntries(
   Arr.map(PAIRS, (k) => [String(k), mailRequester({ self: requesterName(k), peer: responderName(k) })]),
 ) as Record<Pair, ReturnType<typeof mailRequester>>;
@@ -289,7 +292,7 @@ const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
   const logger = Logger.layer([
     Logger.make((options) => {
       // Effect 4 keeps a line's annotations on its fiber; a logger that throws would hide the line.
-      const plain = (_: string, value: unknown) => (typeof value === "bigint" ? value.toString() : value);
+      const plain = (_: string, value: unknown) => (Predicate.isBigInt(value) ? value.toString() : value);
       logs.push(
         JSON.stringify(options.message, plain),
         JSON.stringify(options.fiber.getRef(References.CurrentLogAnnotations), plain),
@@ -394,7 +397,7 @@ type World = {
 };
 
 /** The public JSON a client sends or reads, written out by hand because the shape itself is the law. */
-const wire = (tag: string, fields: object): unknown =>
+const wire = (tag: string, fields: object): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- format: L13 pins the encoded JSON other clients decode
   ({ _tag: tag, ...fields });
 
@@ -410,7 +413,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 
 /** The ledger's Sql, with the two cuts a send can meet: its mail save and its acknowledgement. */
 const faulting = (sql: Sql, fault: World["fault"]) => {
-  const strings = (params: ReadonlyArray<SqlValue>) => Arr.filter(params, (p): p is string => typeof p === "string");
+  const strings = (params: ReadonlyArray<SqlValue>) => Arr.filter(params, (p): p is string => Predicate.isString(p));
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\b/i.test(query)) {
@@ -467,6 +470,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         );
         const stall = pair === undefined ? undefined : world.stalled.get(pair);
 
+        // SAFETY: stall is defined only when pair was found above.
         if (stall !== undefined && name === responderName(pair as Pair)) {
           yield* Deferred.succeed(stall.entered, undefined);
           yield* Deferred.await(stall.release);
@@ -917,13 +921,18 @@ const walk = (
                 ? "forbidden"
                 : "missing";
 
-          const input =
-            kind === "normal"
-              ? { type: "start", ref, value: cell.value }
-              : kind === "forbidden"
-                ? // Aimed at the other requester, claiming to be that requester's own responder.
-                  { type: "start", ref, value: cell.value, to: requesterName(other), claim: responderName(other) }
-                : { type: "start", ref, value: cell.value, to: GHOST };
+          const input = Match.value(kind).pipe(
+            Match.when("normal", () => ({ type: "start", ref, value: cell.value })),
+            // Aimed at the other requester, claiming to be that requester's own responder.
+            Match.when("forbidden", () => ({
+              type: "start",
+              ref,
+              value: cell.value,
+              to: requesterName(other),
+              claim: responderName(other),
+            })),
+            Match.orElse(() => ({ type: "start", ref, value: cell.value, to: GHOST })),
+          );
 
           const incoming: Incoming = {
             id: `letter-${world.n}`,
@@ -1027,7 +1036,11 @@ const walk = (
           }
 
           if (Arr.some(yield* letters(requesterName(k)), (l) => l.id === incoming.id)) {
-            const to = kind === "normal" ? responderName(k) : kind === "forbidden" ? requesterName(other) : GHOST;
+            const to = Match.value(kind).pipe(
+              Match.when("normal", () => responderName(k)),
+              Match.when("forbidden", () => requesterName(other)),
+              Match.orElse(() => GHOST),
+            );
             world.current.set(k, { ref, value: cell.value, kind, to });
             world.history.get(k)?.push(ref);
 
@@ -1754,7 +1767,7 @@ const ackFaulting = (sql: Sql, fault: Pipe["fault"]): Sql => ({
     if (
       fault.ack &&
       /^\s*INSERT\b/i.test(query) &&
-      Arr.some(params, (p) => typeof p === "string" && /\/acked\/[0-9]+$/.test(p))
+      Arr.some(params, (p) => Predicate.isString(p) && /\/acked\/[0-9]+$/.test(p))
     ) {
       fault.ack = false;
       throw new Error("SQLITE_FULL planted at the ack write");

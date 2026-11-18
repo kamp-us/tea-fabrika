@@ -9,7 +9,19 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Array as Arr, pipe, Record as Rec, String as Str, Effect, Option, Result, Schema } from "effect";
+import {
+  Array as Arr,
+  flow,
+  Match,
+  pipe,
+  Predicate,
+  Record as Rec,
+  String as Str,
+  Effect,
+  Option,
+  Result,
+  Schema,
+} from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -253,7 +265,11 @@ const reached = (machine: ChecklistMachine) =>
       .record({ type: fc.constantFrom("add", "rename", "remove", "check", "uncheck"), name, to: any })
       .map(({ type, name, to }): { model: Model; msg: Fresh } => ({
         model,
-        msg: type === "rename" ? { type, name, to } : type === "add" ? { type, name: to } : { type, name },
+        msg: Match.value(type).pipe(
+          Match.when("rename", (type) => ({ type, name, to })),
+          Match.when("add", (type) => ({ type, name: to })),
+          Match.orElse((type) => ({ type, name })),
+        ),
       }));
   });
 
@@ -286,12 +302,12 @@ const folded = (machine: ChecklistMachine, msgs: ReadonlyArray<Msg>) => {
 /** One saved item made wrong in one field: a name off the 1 to 80 wall, an unknown state, a `since`
  *  that is no integer, a note that is no string. */
 const Broken = fc.constantFrom(
-  (i: Item): unknown => ({ ...i, name: "" }),
-  (i: Item): unknown => ({ ...i, name: Str.repeat(81)("x") }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "gone" } }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "open", since: 1.5 } }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "checked", note: 7 } }),
-  (i: Item): unknown => ({ name: i.name }),
+  (i: Item): object => ({ ...i, name: "" }),
+  (i: Item): object => ({ ...i, name: Str.repeat(81)("x") }),
+  (i: Item): object => ({ ...i, state: { _tag: "gone" } }),
+  (i: Item): object => ({ ...i, state: { _tag: "open", since: 1.5 } }),
+  (i: Item): object => ({ ...i, state: { _tag: "checked", note: 7 } }),
+  (i: Item): object => ({ name: i.name }),
 );
 
 /** A Msg one field outside the plan's shape, on an otherwise good `check` or `rename`. */
@@ -341,7 +357,7 @@ describe("ticket 806 the checklist's laws", () => {
               msgs,
               encode: Schema.encodeSync(checklist.state.schema),
               decode: Schema.decodeUnknownSync(checklist.state.schema),
-              equals: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
+              equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
               seed: SEED,
             },
           );
@@ -482,7 +498,7 @@ describe("ticket 806 the checklist's laws", () => {
 
             return (
               (Number.isInteger(answer) &&
-                typeof answer === "number" &&
+                Predicate.isNumber(answer) &&
                 answer >= 0 &&
                 view.left === left(next) &&
                 answer === left(next)) ||
@@ -498,7 +514,7 @@ describe("ticket 806 the checklist's laws", () => {
   it.live("L8: finished is a Done exactly when there is an item and all are checked, and it decodes by Done", () =>
     Effect.gen(function* () {
       const { checklistMachine, finished, Done } = yield* promised(() => load());
-      const roundTrip = (d: unknown) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
+      const roundTrip = (d: typeof Done.Type) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
       propertyInvariant(
         checklistMachine,
         {},
@@ -551,7 +567,7 @@ describe("ticket 806 the checklist's laws", () => {
         const { checklist } = yield* promised(() => load());
         const model = checklist.state.schema;
         const roundTrip = (m: Model) => Schema.decodeUnknownSync(model)(Schema.encodeSync(model)(m));
-        const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(model)(u));
+        const decodes = flow(Schema.decodeUnknownResult(model), Result.isSuccess);
         expect(checklist.state.v).toBe(1);
         fc.assert(
           fc.property(walked(checklist.machine), Broken, fc.nat(), ({ msgs }, broken, pick) => {
@@ -587,7 +603,7 @@ describe("ticket 806 the checklist's laws", () => {
     () =>
       Effect.gen(function* () {
         const { checklist } = yield* promised(() => load());
-        const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(checklist.msg)(u));
+        const decodes = flow(Schema.decodeUnknownResult(checklist.msg), Result.isSuccess);
         fc.assert(
           fc.property(Bad, (bad) => {
             expect(decodes(bad), JSON.stringify(bad)).toBe(false);

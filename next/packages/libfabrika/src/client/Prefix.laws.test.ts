@@ -35,7 +35,9 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -130,8 +132,11 @@ type World = {
   sent: Array<{ readonly win: number; readonly m: unknown }>;
 };
 
+// SAFETY: with a tile TypeID, a process name in `shows`, a Keep of `failed` and
+// a null cursor, the row holds every field the Tile schema has.
 const tileRow = (id: string, n: number, child: boolean): Tile =>
   ({
+    // SAFETY: every caller passes an id that `typeId("tile", n)` spelled or that the window minted from one.
     id: id as TileId,
     n,
     shows: child ? `checklist:t${n}` : "checklist:1",
@@ -143,11 +148,13 @@ const tileRow = (id: string, n: number, child: boolean): Tile =>
 
 const step = (world: World, i: number, m: WindowMsg): ReadonlyArray<Cmd> => {
   const w = world.wins[i]!;
+  // SAFETY: `machine` is a window machine, whose model is WindowModel and whose Cmds each have a `type`.
   const [next, cmds] = applyCell(machine, w.s, m) as readonly [WindowModel, ReadonlyArray<Cmd>];
   w.waiting = [...Arr.filter(w.waiting, (c) => !("cmd" in m) || m.cmd !== c), ...cmds];
   w.s = next;
 
   for (const c of cmds) {
+    // SAFETY: only a write Cmd has a `call`, a tagged Call (WindowMachine.ts), and other Cmds have none.
     const call = c["call"] as Call | undefined;
 
     if (c.type === "write" && call?._tag === "send" && call["pid"] === TEZGAH_PID) {
@@ -161,9 +168,11 @@ const step = (world: World, i: number, m: WindowMsg): ReadonlyArray<Cmd> => {
 
 /** tezgah takes one letter: a split or a close, with the library's own geometry, then sends its view. */
 const apply = (world: World, m: unknown) => {
+  // SAFETY: a letter's `m` is the Msg it carried; the check below reads `type === "did"` before any other field.
   const did = m as Did;
   const w = world.view.workspaces[0]!;
 
+  // SAFETY: `includes` only looks the value up: a string that is not a tile of the layout is not found.
   if (did?.type !== "did" || !Layout.order(w.layout).includes(did.from as TileId)) {
     return;
   }
@@ -172,10 +181,13 @@ const apply = (world: World, m: unknown) => {
   let tiles = world.view.tiles;
 
   if (did.does === "tezgah.close") {
+    // SAFETY: the check at the top found `did.from` in the layout's tile order, so it is one of its TileIds.
     next = Layout.remove(w, did.from as TileId);
     tiles = Arr.filter(tiles, (t) => t.id !== did.from || next === w);
   } else if (did.tile !== undefined && !Arr.some(tiles, (t) => t.id === did.tile)) {
     const dir = did.does === "tezgah.split_down" ? "column" : "row";
+    // SAFETY: `did.from` is in the layout (checked at the top), and `did.tile` is the
+    // id the window's mint answered, which `typeId("tile", n)` spelled.
     next = Layout.split(w, did.from as TileId, dir, did.tile as TileId);
     tiles = [...tiles, tileRow(did.tile, Math.max(...Arr.map(tiles, (t) => t.n)) + 1, true)];
   }
@@ -191,6 +203,7 @@ const apply = (world: World, m: unknown) => {
     if (win.subscribed) {
       pending.push([
         i,
+        // SAFETY: the view case is `{type, pid, note}` with any note, and this note is tezgah's whole view.
         {
           type: "view",
           pid: TEZGAH_PID,
@@ -221,6 +234,7 @@ const drain = (world: World, i: number) => {
       if (flight.call._tag === "read") {
         const name = Function.pipe(flight.call.stream, Str.replace(/^processes\//, ""));
         const process = Function.pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
+        // SAFETY: this flight is a read, and read_ok is its write's id and dial, an array of entries and ms.
         step(world, i, {
           type: "read_ok",
           ...on,
@@ -229,10 +243,14 @@ const drain = (world: World, i: number) => {
         } as WindowMsg);
       } else if (flight.call._tag === "open" && flight.call.pid === TEZGAH_PID) {
         w.subscribed = true;
+        // SAFETY: this flight is an open of tezgah's pid, and open_ok's value is `{rev, view}` with a JSON view.
         step(world, i, { type: "open_ok", ...on, value: { rev: world.rev, view: world.view }, ms: 1 } as WindowMsg);
       } else if (flight.call._tag === "open") {
+        // SAFETY: this flight is an open, and open_ok's value is `{rev, view}` with a JSON view.
         step(world, i, { type: "open_ok", ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg);
       } else {
+        // SAFETY: sends are left out above, and the window's other calls here are
+        // knocks: knock_ok is its id, dial, a null value and ms.
         step(world, i, { type: "knock_ok", ...on, value: null, ms: 1 } as WindowMsg);
       }
 
@@ -244,15 +262,15 @@ const drain = (world: World, i: number) => {
     );
 
     if (cmd !== undefined) {
-      const value =
-        cmd.type === "now"
-          ? { letter: `letter_${++world.letters}`, sentAt: "2026-11-14T00:00:00.000Z" }
-          : cmd.type === "mint"
-            ? { tile: typeId("tile", 5_000 + ++world.minted) }
-            : cmd.type === "persist"
-              ? true
-              : null;
+      const value = Match.value(cmd.type).pipe(
+        Match.when("now", () => ({ letter: `letter_${++world.letters}`, sentAt: "2026-11-14T00:00:00.000Z" })),
+        Match.when("mint", () => ({ tile: typeId("tile", 5_000 + ++world.minted) })),
+        Match.when("persist", () => true),
+        Match.orElse(() => null),
+      );
 
+      // SAFETY: `cmd` is a waiting now, record, write, persist, ping or mint Cmd, and each has a `<type>_ok` Msg of
+      // `cmd` and `value`: `{letter, sentAt}` for now, `{tile}` for mint, a boolean for persist, null for the rest.
       step(world, i, { type: `${cmd.type}_ok`, cmd, value } as WindowMsg);
       continue;
     }
@@ -285,10 +303,13 @@ const online = (world: World, i: number) => {
   const key = Option.getOrUndefined(Arr.findFirst(w.waiting, (c) => c.type === "key"));
 
   if (key !== undefined) {
+    // SAFETY: `key` is the key Cmd the window handed out, and `{found, fingerprint}` is the key Cmd's ok value.
     step(world, i, { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:k" } } as WindowMsg);
   }
 
+  // SAFETY: the socket_opened case is exactly `{type, dial, at}`, the fields this builds.
   step(world, i, { type: "socket_opened", dial: 1, at: 0 } as WindowMsg);
+  // SAFETY: the frame case is `{type, dial, text, at, ms?}`, and this builds it without `ms`.
   step(world, i, {
     type: "frame",
     dial: 1,
@@ -298,7 +319,9 @@ const online = (world: World, i: number) => {
   const hello = Option.getOrUndefined(Arr.findFirst(world.wins[i]!.waiting, (c) => c.type === "hello"));
 
   if (hello !== undefined) {
+    // SAFETY: `hello` is the hello Cmd the window handed out, whose ok value is null.
     step(world, i, { type: "hello_ok", cmd: hello, value: null } as WindowMsg);
+    // SAFETY: the frame case is `{type, dial, text, at, ms?}`, and this builds it without `ms`.
     step(world, i, { type: "frame", dial: 1, text: rpc({ id: hello["id"], result: ADMITTED }), at: 2 } as WindowMsg);
   }
 
@@ -308,6 +331,7 @@ const online = (world: World, i: number) => {
 /** A workspace of `count` tiles split by `cuts`, focus on the tile `focus` picks; tile 1 shows the
  *  boot list's `checklist:1`, every other tile a process tezgah started. */
 const desk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
+  // SAFETY: `typeId` spells a canonical TypeID with the `tile` prefix, which is what TileId decodes.
   const first = typeId("tile", 1) as TileId;
 
   let w: Workspace = Schema.decodeSync(Workspace)({
@@ -322,6 +346,7 @@ const desk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean 
 
   for (const [k, cut] of cuts.entries()) {
     const at = Layout.order(w.layout)[cut.at % Layout.order(w.layout).length]!;
+    // SAFETY: `typeId` spells a canonical TypeID with the `tile` prefix, which is what TileId decodes.
     const id = typeId("tile", k + 2) as TileId;
     w = Layout.split(w, at, cut.down ? "column" : "row", id);
     tiles.push(tileRow(id, k + 2, true));
@@ -339,6 +364,8 @@ const world = (view: TezgahView, count: number, size = { width: 1440, height: 86
   const out: World = { rev: 1, view, wins: [], minted: 0, letters: 0, sent: [] };
 
   for (let i = 0; i < count; i++) {
+    // SAFETY: this is the window's WindowCtx (no tiles, a tab, tezgah's workspace 1), which
+    // WindowMachine.ts does not export; `init` answers its WindowModel and Cmds, each with a `type`.
     const [s, cmds] = machine.init(null, {
       tiles: [],
       tab: `tab_${i + 1}`,
@@ -346,6 +373,7 @@ const world = (view: TezgahView, count: number, size = { width: 1440, height: 86
     } as never) as readonly [WindowModel, ReadonlyArray<Cmd>];
 
     out.wins.push({ s, waiting: [...cmds], subscribed: false, answered: new Set() });
+    // SAFETY: the size case is exactly `{type, width, height}`, and every size given here is finite and not negative.
     step(out, i, { type: "size", ...size } as WindowMsg);
     online(out, i);
   }
@@ -365,18 +393,22 @@ let clock = 10;
 /** One press in window `i`: the key's own step, then everything it set waiting, answered. */
 const press = (w: World, i: number, key: string) => {
   const before = w.sent.length;
+  // SAFETY: the key case is exactly `{type, key, at}`, the fields this builds.
   const cmds = step(w, i, { type: "key", key, at: (clock += 10) } as WindowMsg);
   drain(w, i);
 
   return { cmds, sent: w.sent.slice(before) };
 };
 
+// SAFETY: WindowModel already has `prefix: Prefix` (WindowMachine.ts); the intersection names that same field.
 const prefix = (s: WindowModel) => (s as WindowModel & { readonly prefix: Prefix }).prefix;
 
+// SAFETY: WindowModel already has `polite` (WindowMachine.ts); the intersection names that same field.
 const polite = (s: WindowModel) => (s as WindowModel & { readonly polite: unknown }).polite;
 
 const focused = (w: World) => w.view.workspaces[0]!.focus;
 
+// SAFETY: every `sent` entry is the `m` of a send to tezgah's pid, and the window writes tezgah only `did` Msgs.
 const dids = (sent: World["sent"]) => Arr.map(sent, (x) => x.m as Did);
 
 /** The gap the frame draws between two parts, and its padding: 0492's 4px divider (plan amendment 7). */
@@ -394,14 +426,14 @@ type Size = { readonly width: number; readonly height: number };
 const ACROSS = { row: 22, column: 20 } as const;
 
 const tilesIn = (node: Workspace["layout"]): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : Arr.flatMap(node.parts, (p) => tilesIn(p.inner));
+  Predicate.isString(node) ? [node] : Arr.flatMap(node.parts, (p) => tilesIn(p.inner));
 
 /** Each open tile's drawn size under amendment 13 when `strips` are strips. */
 const drawnWith = (w: Workspace, size: Size, strips: ReadonlySet<string>): ReadonlyMap<string, Size> => {
   const out = new Map<string, Size>();
 
   const walk = (node: Workspace["layout"], box: Size): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       out.set(node, box);
 
       return;
@@ -425,7 +457,7 @@ const drawnWith = (w: Workspace, size: Size, strips: ReadonlySet<string>): Reado
     }
 
     for (const [i, p] of node.parts.entries()) {
-      if (fixed[i] !== true || typeof p.inner === "string") {
+      if (fixed[i] !== true || Predicate.isString(p.inner)) {
         walk(p.inner, row ? { width: shares[i]!, height: box.height } : { width: box.width, height: shares[i]! });
       }
     }
@@ -463,6 +495,7 @@ const foldedAt = (w: Workspace, size: Size) => {
   }
 };
 
+// SAFETY: `typeId` spells a canonical TypeID with the `tile` prefix, which is what TileId decodes.
 const FRESH = typeId("tile", 9_999) as TileId;
 
 /** Whether a split of `at` in `dir` folds no tile at once in the area `size`, and whether that
@@ -797,7 +830,7 @@ const FOLDED = /fold|strip/i;
 const keysIn = (v: unknown): ReadonlyArray<string> =>
   Arr.isArray(v)
     ? Arr.flatMap(v, keysIn)
-    : v !== null && typeof v === "object"
+    : Predicate.isObject(v)
       ? Arr.flatMap(Rec.toEntries(v), ([k, x]) => [k, ...keysIn(x)])
       : [];
 

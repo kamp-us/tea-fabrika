@@ -10,6 +10,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Exit, Schema } from "effect";
+import * as Match from "effect/Match";
 import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { SettingsError } from "./Files.ts";
@@ -60,8 +61,16 @@ const encodedError = fc
   .map(({ name, message }) => Schema.encodeUnknownSync(Schema.Defect())(Object.assign(new Error(message), { name })));
 
 /** The cause in each form, or no key at all. */
-const causeKey = (form: Form, json: fc.JsonValue, error: unknown): { cause?: unknown } =>
-  form === "absent" ? {} : { cause: form === "undefined" ? undefined : form === "json" ? json : error };
+const causeKey = (form: Form, json: fc.JsonValue, cause: unknown): { cause?: unknown } =>
+  form === "absent"
+    ? {}
+    : {
+        cause: Match.value(form).pipe(
+          Match.when("undefined", () => undefined),
+          Match.when("json", () => json),
+          Match.orElse(() => cause),
+        ),
+      };
 
 /** One encoded value of a drawn error, its cause in a drawn form. */
 const encoded = fc

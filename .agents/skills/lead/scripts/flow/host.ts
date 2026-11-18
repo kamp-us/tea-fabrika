@@ -451,7 +451,11 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
  * so readers of that file need no second shape.
  */
 export const outcomeName = (o: Outcome.Outcome): string =>
-  o._tag === "done" ? "done" : o._tag === "send" ? `send:${o.to}:host_failed` : `${o._tag}:host`;
+  Outcome.Outcome.matchOrElse(
+    o,
+    { done: () => "done", send: (o) => `send:${o.to}:host_failed` },
+    (o) => `${o._tag}:host`,
+  );
 
 /**
  * Write the host step's entry into the quest's state file (`state/<quest>.json`, drive.ts's), as a
@@ -467,7 +471,7 @@ export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
   const state = path.join(a.boxes, "state", `${a.quest}.json`);
   const text = yield* fs.readFileString(state).pipe(Effect.orElseSucceed(() => ""));
 
-  const saved: typeof QuestFile.Type = Schema.decodeOption(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+  const saved: typeof QuestFile.Type = Schema.decodeOption(Schema.fromJsonString(Schema.Json))(text).pipe(
     Option.map(questKeyed),
     Option.flatMap(Schema.decodeUnknownOption(QuestFile)),
     Option.getOrElse(() => ({ quest: a.quest, steps: [] })),

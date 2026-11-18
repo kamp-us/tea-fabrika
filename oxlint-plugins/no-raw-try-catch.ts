@@ -25,8 +25,7 @@ import type { CreateRule } from "@oxlint/plugins";
 import { Array as Arr } from "effect";
 import type { Node } from "./match.ts";
 
-const isEffect = (text: unknown): boolean =>
-  typeof text === "string" && (text === "effect" || text.startsWith("effect/"));
+const isEffect = (text: string): boolean => text === "effect" || text.startsWith("effect/");
 
 const named = (specifier: Node): boolean =>
   specifier.type === "ImportSpecifier" && specifier.imported.type === "Literal" && isEffect(specifier.imported.value);

@@ -16,6 +16,8 @@ import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
@@ -71,13 +73,14 @@ StartsTest.law(
 
           return [
             declaration.path,
-            source === 0
-              ? Sources.Origin.cases.default.make({})
-              : source === 1
-                ? Sources.Origin.cases.flag.make({ name: `--${declaration.path}` })
-                : source === 2
-                  ? Sources.Origin.cases.env.make({ name: declaration.env })
-                  : Sources.Origin.cases.file.make({ file: files[choice % files.length]!, line: 1 + (choice % 1000) }),
+            Match.value(source).pipe(
+              Match.when(0, () => Sources.Origin.cases.default.make({})),
+              Match.when(1, () => Sources.Origin.cases.flag.make({ name: `--${declaration.path}` })),
+              Match.when(2, () => Sources.Origin.cases.env.make({ name: declaration.env })),
+              Match.orElse(() =>
+                Sources.Origin.cases.file.make({ file: files[choice % files.length]!, line: 1 + (choice % 1000) }),
+              ),
+            ),
           ];
         }),
       );
@@ -142,11 +145,11 @@ const save = (v: SavedFlow) => {
   const origins = Rec.fromEntries(
     group.declarations.map((d) => [
       d.path,
-      v.source === "file"
-        ? Sources.Origin.cases.file.make({ file: REPO, line: 2 })
-        : v.source === "env"
-          ? Sources.Origin.cases.env.make({ name: d.env })
-          : Sources.Origin.cases.default.make({}),
+      Match.value(v.source).pipe(
+        Match.when("file", () => Sources.Origin.cases.file.make({ file: REPO, line: 2 })),
+        Match.when("env", () => Sources.Origin.cases.env.make({ name: d.env })),
+        Match.orElse(() => Sources.Origin.cases.default.make({})),
+      ),
     ]),
   );
 
@@ -434,7 +437,7 @@ const secret = fc
  * as its digits and every other value as JSON does: the search still reads every value.
  */
 const printed = (value: unknown) =>
-  JSON.stringify(value, (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v));
+  JSON.stringify(value, (_key, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v));
 
 const spans = () => {
   const ended: Array<Tracer.NativeSpan> = [];
@@ -549,14 +552,12 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
 
-        const input =
-          field === "value"
-            ? { ...made, values: { ...made.values, "limits.record": word } }
-            : field === "extra"
-              ? { ...made, values: { ...made.values, unrelated: word } }
-              : field === "origin"
-                ? { ...made, origins: { ...made.origins, "limits.record": { _tag: word } } }
-                : { ...made, hash: word };
+        const input = Match.value(field).pipe(
+          Match.when("value", () => ({ ...made, values: { ...made.values, "limits.record": word } })),
+          Match.when("extra", () => ({ ...made, values: { ...made.values, unrelated: word } })),
+          Match.when("origin", () => ({ ...made, origins: { ...made.origins, "limits.record": { _tag: word } } })),
+          Match.orElse(() => ({ ...made, hash: word })),
+        );
 
         const traced = spans();
         const entries: Array<string> = [];

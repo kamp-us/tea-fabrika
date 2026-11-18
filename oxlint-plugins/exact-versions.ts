@@ -10,7 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { Array as Arr, pipe, Record as Rec, Result } from "effect";
+import { Array as Arr, pipe, Predicate, Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -28,10 +28,9 @@ const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optional
 const OVERRIDES = ["overrides", "resolutions"];
 
 const passes = (version: unknown): boolean =>
-  typeof version === "string" && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
+  Predicate.isString(version) && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
 
-const isMap = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Arr.isArray(value);
+const isMap = (value: unknown): value is Record<string, unknown> => Predicate.isObject(value);
 
 /** One line per name in `map` whose version does not pass. */
 const refused = (file: string, field: string, map: unknown): readonly string[] =>

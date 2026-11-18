@@ -19,6 +19,7 @@
  */
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -100,7 +101,7 @@ const saysNoMemo = (body: Tree): boolean => {
   }
 
   for (const s of body.body) {
-    if (s.type !== "ExpressionStatement" || typeof s.directive !== "string") {
+    if (s.type !== "ExpressionStatement" || !Predicate.isString(s.directive)) {
       return false;
     }
 
@@ -127,10 +128,13 @@ const opensWithCache = (body: Tree): boolean => {
 const functions = (file: string, text: string): readonly Fn[] => {
   const found: Fn[] = [];
 
-  const walk = (node: Tree, bound: string | null, depth: number, inJsx: { on: boolean }) => {
-    if (node === null || typeof node !== "object") {
+  const walk = (input: Tree, bound: string | null, depth: number, inJsx: { on: boolean }) => {
+    if (!Predicate.isObjectOrArray(input)) {
       return;
     }
+
+    // The guard only rules out a leaf: the walk goes on reading the node loosely, as `Tree` says.
+    const node: Tree = input;
 
     if (Arr.isArray(node)) {
       for (const n of node) {

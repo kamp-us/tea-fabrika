@@ -193,7 +193,7 @@ const LISTED = [
 // and objects are walked.
 type Tree = any;
 
-const toValue = (node: Tree): unknown => {
+const toValue = (node: Tree): Schema.Json => {
   if (node.type === "ObjectExpression") {
     return Rec.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }
@@ -214,6 +214,7 @@ const configured = (): readonly string[] => {
   const text = readFileSync(join(root, ".oxlintrc.json"), "utf8");
   const tree: Tree = parseSync("oxlintrc.ts", `export default ${text}`).program;
 
+  // SAFETY: `.oxlintrc.json` holds an `overrides` list whose blocks each carry `files` and `rules`.
   const config = toValue(tree.body[0].declaration) as {
     readonly overrides: ReadonlyArray<{ readonly files: readonly string[]; readonly rules: Record<string, unknown> }>;
   };

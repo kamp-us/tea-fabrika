@@ -5,6 +5,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 
@@ -41,7 +42,7 @@ const machine = Machine.make({
   },
 });
 
-const equals = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const equals = <A>(a: A, b: A) => JSON.stringify(a) === JSON.stringify(b);
 
 const encode = Schema.encodeSync(Model);
 
@@ -203,12 +204,11 @@ describe("p69 senderTest catches its plants", () => {
       Effect.gen(function* () {
         const { senderTest } = yield* promised(() => import("./Testing.ts"));
 
-        const wrong =
-          fault === "missing"
-            ? writes.slice(1)
-            : fault === "duplicate"
-              ? [...writes, writes[0]!]
-              : [...writes, { ...writes[0]!, id: "unexpected" }];
+        const wrong = Match.value(fault).pipe(
+          Match.when("missing", () => writes.slice(1)),
+          Match.when("duplicate", () => [...writes, writes[0]!]),
+          Match.orElse(() => [...writes, { ...writes[0]!, id: "unexpected" }]),
+        );
 
         expect(() => senderTest({ inputs, expected, writes: wrong, owner, seed: SEED })).toThrow();
       }),

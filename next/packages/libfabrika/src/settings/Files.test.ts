@@ -22,6 +22,7 @@ import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -217,7 +218,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
             });
 
             const saved = yield* Snapshot.make(group, resolved);
-            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
+            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(
               Formatter.formatJson(saved),
             );
             const checked = yield* Snapshot.read(group, transported);
@@ -356,11 +357,11 @@ describe("L10, the three S5 messages, word for word", () => {
       .map(([at, letter, edit]) => {
         const word = "port";
 
-        return edit === "swap"
-          ? Str.slice(0, at)(word) + letter + Str.slice(at + 1)(word)
-          : edit === "add"
-            ? Str.slice(0, at)(word) + letter + Str.slice(at)(word)
-            : Str.slice(0, at)(word) + Str.slice(at + 1)(word);
+        return Match.value(edit).pipe(
+          Match.when("swap", () => Str.slice(0, at)(word) + letter + Str.slice(at + 1)(word)),
+          Match.when("add", () => Str.slice(0, at)(word) + letter + Str.slice(at)(word)),
+          Match.orElse(() => Str.slice(0, at)(word) + Str.slice(at + 1)(word)),
+        );
       })
       .filter((w) => w !== "port" && w.length > 0);
     return fc.assert(
@@ -437,7 +438,7 @@ const document = (ds: Declared) =>
       ...ds.map((d) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
-          KINDS[d.kind].valid.map((value: unknown) => ({ _tag: "valid" as const, value })),
+          KINDS[d.kind].valid.map((value: number | string | boolean) => ({ _tag: "valid" as const, value })),
           KINDS[d.kind].invalid.map((value) => ({ _tag: "invalid" as const, value })),
         ),
       ),

@@ -23,6 +23,7 @@ import {
   Effect,
   Exit,
   Formatter,
+  Match,
   Option,
   Order,
   Record as Rec,
@@ -137,20 +138,28 @@ const recorded = (
     problem: null,
   };
 
+  // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read (drive.ts); no
+  // cell in drive.ts reads the `cmd` a real answer also carries.
   const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: typed, spent: NO_SPENT }, {
     type: "step_read_ok",
     value,
   } as never);
 
   if (read.phase !== "pushing") {
+    // SAFETY: the step did not push, so it ended in `recordIt`, whose one Cmd is
+    // the record of an Entry with `keep`, `reason` and `plants`.
     return { state: read, cmd: cmds[0] as Recorded };
   }
 
+  // SAFETY: `backup_push_ok` reads only `m.value`, here the push's ok and detail;
+  // no cell in drive.ts reads the `cmd` a real answer also carries.
   const [state, after] = machine.update.backup_push_ok(read, {
     type: "backup_push_ok",
     value: { ok: pushed, detail: pushed ? "" : "rejected" },
   } as never);
 
+  // SAFETY: `backup_push_ok` always ends in `recordIt`, whose one Cmd is the
+  // record of an Entry with `keep`, `reason` and `plants`.
   return { state, cmd: after[0] as Recorded };
 };
 
@@ -213,10 +222,13 @@ describe("drive keeps a box that holds work, today's tooling", () => {
 describe("drive takes a skip answer, today's tooling", () => {
   const reason = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);
 
+  // SAFETY: `constantFrom` draws only the four step names it is given.
   const steps = fc.constantFrom("tests", "build", "mutation", "review") as fc.Arbitrary<
     "tests" | "build" | "mutation" | "review"
   >;
 
+  // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read with no commits;
+  // no cell in drive.ts reads the `cmd` a real answer also carries.
   const read = (step: "tests" | "build" | "mutation" | "review", report: string) =>
     machine.update.step_read_ok({ phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT }, {
       type: "step_read_ok",
@@ -250,6 +262,8 @@ describe("drive takes a skip answer, today's tooling", () => {
         expect(s.outcome).toEqual({ kind: "skip", why: "step_said" });
         expect(s.reason).toBe(text);
         expect(s.kept).toBe(false);
+        // SAFETY: with no commits the step ends in `recordIt`, whose one Cmd is
+        // the record of an Entry with `outcome`, `exit` and `keep`.
         const cmd = cmds[0] as { outcome: string; exit: number; keep: boolean };
         expect(cmd.outcome).toBe("skip:step_said");
         expect(cmd.exit).toBe(40);
@@ -272,6 +286,8 @@ describe("drive takes a skip answer, today's tooling", () => {
     ];
 
     for (const name of names) {
+      // SAFETY: the lookup only reads: a first word that is none of the four
+      // keys answers undefined, which `?? "stopped"` takes.
       const want = { done: "pass", send: "fail", ask: "parked", skip: "skip" }[Str.split(name, ":")[0] as "done"];
       expect(rowOf(name)).toBe(want ?? "stopped");
     }
@@ -294,6 +310,7 @@ describe("drive takes a skip answer, today's tooling", () => {
     ]) {
       // A review's done also needs its merge-ready verdict line (ticket 557), so this reads a mutation step.
       const [, cmds] = read("mutation", line);
+      // SAFETY: with no commits the step ends in `recordIt`, whose one Cmd is the record of an Entry with `exit`.
       exits.set(line, (cmds[0] as { exit: number }).exit);
     }
 
@@ -359,6 +376,8 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   const ended = (step: Step, report: string) => {
     const [state, cmds] = machine.update.step_read_ok(
       { phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT },
+      // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read with no commits;
+      // no cell in drive.ts reads the `cmd` a real answer also carries.
       {
         type: "step_read_ok",
         value: {
@@ -370,6 +389,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
           left: [],
           manifests: [],
           plancheck: null,
+          changed: 0,
           report,
           problem: null,
         },
@@ -378,6 +398,8 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
 
     expect(state.phase).toBe("recording");
 
+    // SAFETY: the phase is "recording" (checked above), reached by `recordIt`, whose one Cmd
+    // is the record of an Entry with `outcome`, `exit`, `keep` and `reason`.
     return cmds[0] as { outcome: string; exit: number; keep: boolean; reason: string };
   };
 
@@ -567,6 +589,8 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   const detail = fc.stringMatching(/^[a-z0-9](?:[a-z0-9 /|.-]{0,40}[a-z0-9])?$/);
   const noise = fc.array(fc.stringMatching(/^[a-z ]{0,20}$/), { maxLength: 3 });
 
+  // SAFETY: `box_new_ok` reads only `m.value`, which each caller gives as one of box.sh's
+  // started answers; no cell in drive.ts reads the `cmd` a real answer also carries.
   const boxNewOk = (value: ReturnType<typeof startedOf>) =>
     machine.update.box_new_ok({ phase: "starting", ask: { ...ask, step: "tests" } }, {
       type: "box_new_ok",
@@ -605,6 +629,8 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
         const [state, cmds] = boxNewOk({ _tag: "refused", check: c, detail: d });
         expect(state.phase).toBe("recording");
 
+        // SAFETY: a refused box ends in `recordIt`, whose one Cmd is the record
+        // of an Entry with `outcome`, `exit`, `keep` and `reason`.
         const cmd = cmds[0] as {
           outcome: string;
           exit: number;
@@ -628,6 +654,8 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
     fc.assert(
       fc.property(detail, (d) => {
         const [, cmds] = boxNewOk({ _tag: "failed", detail: d });
+        // SAFETY: a failed box ends in `recordIt`, whose one Cmd is the
+        // record of an Entry with `outcome`, `exit` and `keep`.
         const cmd = cmds[0] as { outcome: string; exit: number; keep: boolean };
         expect(cmd.outcome).toBe("stuck:box_failed");
         expect(cmd.exit).toBe(30);
@@ -815,7 +843,9 @@ describe("0161 a missing signature never holds a step, and the kept checks still
     head: pipe("c", Str.repeat(40)),
     commits,
     unsigned,
+    // SAFETY: an empty array holds no element, so it is a string array.
     exam: [] as string[],
+    // SAFETY: an empty array holds no element, so it is a string array.
     leaks: [] as string[],
     left: [],
     manifests: [],
@@ -894,6 +924,8 @@ describe("0161 a missing signature never holds a step, and the kept checks still
 });
 
 describe("drive asks the lead for the lockfile, today's tooling", () => {
+  // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read with one commit;
+  // no cell in drive.ts reads the `cmd` a real answer also carries.
   const read = (report: string, manifests: readonly string[]) =>
     machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
       type: "step_read_ok",
@@ -1058,6 +1090,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
 
 describe("T341 a step commit's subject says what the step did, today's tooling", () => {
   const text = fc.stringMatching(/^[A-Za-z][A-Za-z0-9 ,.]{0,100}[a-z]$/);
+  // SAFETY: `constantFrom` draws only the three step names it is given.
   const step = fc.constantFrom("tests", "build", "mutation") as fc.Arbitrary<"tests" | "build" | "mutation">;
 
   // The dry run of 2026-11-10 (ticket 522): a report that was the JSON answer alone gave the
@@ -1326,10 +1359,12 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
       return { code: 0, out: Formatter.formatJson({ outcome: "done", reason: "", detail: "" }) };
     });
 
+  // SAFETY: `constantFrom` draws only the five step names it is given.
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
 
+  // SAFETY: `constantFrom` draws only the two agent names it is given.
   const agent = fc.constantFrom("codex", "claude") as fc.Arbitrary<"codex" | "claude">;
   const quest = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
 
@@ -1359,6 +1394,8 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
         },
       };
 
+      // SAFETY: `agentsDraft` reads only `sub.deps` (drive.ts), and here that
+      // is the step's whole Ask with its step, agent and box.
       yield* Stream.runDrain(agentsDraft(env, agents, boxed)(sub as never));
 
       return rows;
@@ -1502,6 +1539,8 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
           problem: null,
         };
 
+        // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read; no cell
+        // in drive.ts reads the `cmd` a real answer also carries.
         const [read] = machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
           type: "step_read_ok",
           value,
@@ -1514,11 +1553,15 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
           return;
         }
 
+        // SAFETY: `backup_push_ok` reads only `m.value`, here the push's ok and detail;
+        // no cell in drive.ts reads the `cmd` a real answer also carries.
         const [state, cmds] = machine.update.backup_push_ok(read, {
           type: "backup_push_ok",
           value: { ok: landed, detail: landed ? "pushed" : "botpush: push refused" },
         } as never);
 
+        // SAFETY: the push answer ends in `recordIt`, whose one Cmd is
+        // the record of an Entry with `outcome` and `head`.
         const cmd = cmds[0] as { outcome: string; head: string };
         expect(state.phase).toBe("recording");
         expect(cmd.head).toBe(value.head);
@@ -1535,6 +1578,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 });
 
 describe("a step is told its owned paths first, today's tooling (ticket 430)", () => {
+  // SAFETY: `constantFrom` draws only the five step names it is given.
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
@@ -1626,6 +1670,7 @@ describe("a step is never offered itself as a send's to, today's tooling", () =>
 });
 
 describe("drive holds the Electron lock outside the box, today's tooling", () => {
+  // SAFETY: `constantFrom` draws only the five step names it is given.
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
@@ -1889,12 +1934,11 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         fc.constantFrom("line", "exit", "silent"),
         fc.constantFrom(0, 1, 30, 137),
         (name, reason, detail, method, exit) => {
-          const said =
-            method === "line"
-              ? { code: exit, out: `noise\n${line("stuck", reason, detail)}\n` }
-              : method === "exit"
-                ? { code: 30, out: `${line("done", "", "")}\n` }
-                : { code: exit, out: "not a line" };
+          const said = Match.value(method).pipe(
+            Match.when("line", () => ({ code: exit, out: `noise\n${line("stuck", reason, detail)}\n` })),
+            Match.when("exit", () => ({ code: 30, out: `${line("done", "", "")}\n` })),
+            Match.orElse(() => ({ code: exit, out: "not a line" })),
+          );
 
           return drafted(
             (args) =>

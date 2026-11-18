@@ -202,7 +202,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
 
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -230,15 +230,16 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   };
 
   // A socket whose hello fails is closed here: no caller holds it to close.
-  await hello().catch((error: unknown) => {
+  await hello().catch((cause: unknown) => {
     socket.close();
-    throw error;
+    throw cause;
   });
 
   return { call, close: () => socket.close() };
 };
 
 const facts = async (instance: Instance, stream: string) =>
+  // SAFETY: the audit read answers the stream's rows as an array.
   Arr.map((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>, (row) => ({
     ...row.body,
     _tag: row._tag,
@@ -248,6 +249,7 @@ const restarts = async (instance: Instance, name: string) =>
   Arr.filter(await facts(instance, `processes/${name}`), (fact) => fact._tag === "restarted");
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
+  // SAFETY: info answers the project's process rows as an array.
   Option.getOrUndefined(
     Arr.findFirst((await instance.project(PROJECT).info()) as Array<any>, (row) => row.name === name),
   )?.process;
@@ -350,6 +352,7 @@ const reconnected = (instance: Instance, key: Key, tab: string) =>
 
 /** The raw rows of a stream, as the audit reader gives them: id, tag and body. */
 const rows = async (instance: Instance, stream: string) =>
+  // SAFETY: the audit read answers each row with its id, tag and body.
   (await instance.project(PROJECT).read(stream, 0, "audit")) as Array<{ id: string; _tag: string; body: any }>;
 
 /** Waits with `ledger.wait` after the last rev seen for `restarted {after}` on a process name. No such
@@ -364,6 +367,7 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
     while (now() < end) {
       const read = await c.call("ledger.read", { stream: `processes/${name}`, after: seen });
       expect(read.error, `reading processes/${name}`).toBeUndefined();
+      // SAFETY: the read had no error, and ledger.read answers `{ entries }`, an array of rows.
       const found = Option.getOrUndefined(
         Arr.findFirst(
           read.result.entries as Array<any>,
@@ -372,6 +376,7 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
       );
 
       if (found !== undefined) {
+        // SAFETY: found is a row of processes/<name>, a ledger row with a tag, a rev and the process body.
         return found as { _tag: string; rev: number; body: { process: string; after: string; name: string } };
       }
 

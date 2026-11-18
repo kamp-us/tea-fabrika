@@ -24,6 +24,7 @@ import {
   Layer,
   Option,
   Path,
+  Predicate,
   Schedule,
   Schema,
   Stream,
@@ -54,7 +55,7 @@ import {
 declare global {
   interface Window {
     readonly p15: {
-      readonly call: (method: string, params: unknown) => Promise<any>;
+      readonly call: (method: string, params: Schema.Json) => Promise<any>;
       readonly frames: Array<{ readonly method?: string }>;
     };
   }
@@ -147,7 +148,7 @@ const driver = (p: Page, url: string, tab: string) =>
         let socket: WebSocket;
         const pending = new Map<number, (frame: unknown) => void>();
 
-        const call = (method: string, params: unknown) =>
+        const call = (method: string, params: Schema.Json) =>
           // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
           new Promise<any>((done) => {
             const id = ++serial;
@@ -205,7 +206,7 @@ const driver = (p: Page, url: string, tab: string) =>
   );
 
 /** One JSON-RPC call through the page's driver. */
-const rpc = (p: Page, method: string, params: unknown) =>
+const rpc = (p: Page, method: string, params: Schema.Json) =>
   browserCall(() => p.evaluate(async ({ method, params }) => window.p15.call(method, params), { method, params }));
 
 /** The page's key, granted by the founder through grant.ts, as a person does it. */
@@ -252,15 +253,20 @@ const scoped = <A, E>(
 
 /** Every object in a JSON value, depth first, so an answer is read by its shape, never its text. */
 const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
-  typeof value !== "object" || value === null
+  !Predicate.isObjectOrArray(value)
     ? []
     : Arr.isArray(value)
       ? Arr.flatMap(value, objects)
-      : [value as Record<string, unknown>, ...Arr.flatMap(Rec.values(value), objects)];
+      : [
+          // SAFETY: the two branches above ruled out a non-object, null and an array.
+          value as Record<string, unknown>,
+          ...Arr.flatMap(Rec.values(value), objects),
+        ];
 
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {
   const loaded = Option.getOrUndefined(Arr.findFirst(objects(answer), (o) => Arr.isArray(o.processes)));
+  // SAFETY: a watcher answer's `processes` is the brain's `Installed.loaded` list (runtime/Code.ts), each a name and its tagged `Swapped` outcome.
   const row = Option.getOrUndefined(
     Arr.findFirst(
       (loaded?.processes ?? []) as ReadonlyArray<{ name: string; outcome: { _tag: string; reason?: string } }>,
@@ -283,7 +289,7 @@ const session = (url: string, key: string) =>
 
     return {
       pid,
-      call: (method: string, params: unknown) => rpc(p, method, params),
+      call: (method: string, params: Schema.Json) => rpc(p, method, params),
       press: (type: "inc" | "dec") =>
         rpc(p, "process.send", {
           pid,
@@ -294,6 +300,7 @@ const session = (url: string, key: string) =>
         }),
       view: () => Effect.map(rpc(p, "view.open", { pid }), (r) => r.result.view),
       read: (stream: string) =>
+        // SAFETY: ledger.read answers `{ entries }`, an array of ledger rows, and the laws read them by field.
         Effect.map(rpc(p, "ledger.read", { stream, after: 0 }), (r) => (r.result?.entries ?? []) as ReadonlyArray<any>),
     };
   });
@@ -460,7 +467,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
             expect(outcome(yield* changed())).toMatchObject({ _tag: "failed", reason: "bundle" });
             const failed = Arr.filter(yield* s.read("gateway/code"), (e) => e._tag === "code.failed").at(-1);
             expect(failed?.body).toMatchObject({ program: PROGRAM, hash: null, reason: "bundle", path: copy.relative });
-            expect(typeof failed?.body.line).toBe("number");
+            expect(Predicate.isNumber(failed?.body.line)).toBe(true);
             yield* s.press("inc");
             expect(yield* s.view()).toEqual({ count: 9 });
 

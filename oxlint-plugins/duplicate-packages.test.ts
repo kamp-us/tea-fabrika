@@ -9,7 +9,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Array as Arr, pipe, Option, Record as Rec } from "effect";
+import { Array as Arr, pipe, Option, Predicate, Record as Rec, type Schema } from "effect";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -18,11 +18,15 @@ const ROOT = join(import.meta.dirname, "..");
 const KEY = "allowedDuplicatedPackages";
 
 /** A JSON value from the parsed config, comments dropped. */
-const value = (node: Expression): unknown => {
+const value = (node: Expression): Schema.Json => {
   switch (node.type) {
     case "ParenthesizedExpression":
       return value(node.expression);
     case "Literal":
+      if (Predicate.isBigInt(node.value) || Predicate.isRegExp(node.value)) {
+        throw new Error(`tsconfig.base.json holds a ${node.type} that is not JSON`);
+      }
+
       return node.value;
     case "ArrayExpression":
       return Arr.map(node.elements, (element) =>
@@ -42,7 +46,7 @@ const value = (node: Expression): unknown => {
 };
 
 const record = (x: unknown): Record<string, unknown> =>
-  typeof x === "object" && x !== null && !Arr.isArray(x) ? Rec.fromEntries(Rec.toEntries(x)) : {};
+  Predicate.isObject(x) ? Rec.fromEntries(Rec.toEntries(x)) : {};
 
 const list = (x: unknown): ReadonlyArray<unknown> => (Arr.isArray(x) ? x : []);
 
@@ -81,7 +85,7 @@ it("format: E3, `@demlik/tea` may appear twice only in one checker override scop
 
   const include = list(holders[0]?.include);
   expect(include.length).toBeGreaterThan(0);
-  expect(Arr.filter(include, (glob) => typeof glob !== "string" || !glob.startsWith(".agents/"))).toEqual([]);
+  expect(Arr.filter(include, (glob) => !Predicate.isString(glob) || !glob.startsWith(".agents/"))).toEqual([]);
 
   const tracked = spawnSync("git", ["ls-files", "-z", "--", "tsconfig*.json", "**/tsconfig*.json"], {
     cwd: ROOT,

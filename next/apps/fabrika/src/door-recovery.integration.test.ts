@@ -27,7 +27,7 @@ import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Layer, Path, Schema, Scope, Stream, Array as Arr, String as Str } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, Schema, Scope, Stream, Array as Arr, String as Str } from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 
@@ -316,7 +316,7 @@ const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>
       if (
         controls.cutRecorded &&
         Str.startsWith("UPDATE gateway_bindings")(query) &&
-        Arr.some(args, (arg) => typeof arg === "string" && Str.includes('"_tag":"recorded"')(arg))
+        Arr.some(args, (arg) => Predicate.isString(arg) && Str.includes('"_tag":"recorded"')(arg))
       ) {
         controls.cutRecorded = false;
         controls.cuts++;
@@ -326,7 +326,7 @@ const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>
       if (
         controls.cutRetryable &&
         Str.startsWith("UPDATE gateway_bindings")(query) &&
-        Arr.some(args, (arg) => typeof arg === "string" && Str.includes('"_tag":"retryable"')(arg))
+        Arr.some(args, (arg) => Predicate.isString(arg) && Str.includes('"_tag":"retryable"')(arg))
       ) {
         controls.cutRetryable = false;
         controls.retryableCuts++;

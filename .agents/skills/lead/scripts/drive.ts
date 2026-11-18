@@ -116,8 +116,10 @@ import {
   FileSystem,
   Formatter,
   Layer,
+  Match,
   Option,
   Order,
+  Predicate,
   Record as Rec,
   Config,
   ConfigProvider,
@@ -337,7 +339,11 @@ const exitOf = (o: End): number => {
     case "done":
       return 0;
     case "send":
-      return o.to === "tests" ? 10 : o.to === "build" ? 11 : 12;
+      return Match.value(o.to).pipe(
+        Match.when("tests", () => 10),
+        Match.when("build", () => 11),
+        Match.orElse(() => 12),
+      );
     case "ask":
       return 20;
     case "skip":
@@ -696,7 +702,10 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
 
       return { outcome: { kind: "done", part: false, head: read.head }, reason: said.reason };
     case "send": {
-      const to = said.to === "tests" ? "tests" : said.to === "plan" ? "plan" : "build";
+      const to = Match.value(said.to).pipe(
+        Match.when(Match.is("tests", "plan"), (to) => to),
+        Match.orElse((): "build" => "build"),
+      );
 
       return { outcome: { kind: "send", to, why: "step_said" }, reason: said.reason };
     }
@@ -757,9 +766,11 @@ const recordIt = (
 const draft: DepKeyedSub<Model, DraftSub> = {
   type: "draft",
   deps: (s: Model) => (s.phase === "drafting" ? s.ask : null),
-} as DepKeyedSub<Model, DraftSub>;
+};
 
 export const machine = defineMachine({
+  // SAFETY: tea's `types` slot only carries the Model, Msg and Sub types; tea never reads these
+  // empty values (0561).
   types: { model: {} as Model, msg: {} as Msg, sub: {} as DraftSub, ctx: undefined },
   cmds: [boxNew, stepRead, backupPush, record],
   init: (): Step => [{ phase: "idle" }, []],
@@ -1181,12 +1192,14 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
   const status = boxGit(env, box, "status", "--porcelain=v1", "-z", "--untracked-files=all");
 
   if (status.code !== 0) {
+    // SAFETY: an empty array holds no Change, so it is a Change[]; a failed status lists none.
     return { ...status, changes: [] as Change[] };
   }
 
   const listed = boxGit(env, box, "ls-files", "--cached", "-z");
 
   if (listed.code !== 0) {
+    // SAFETY: an empty array holds no Change, so it is a Change[]; a failed ls-files lists none.
     return { ...listed, changes: [] as Change[] };
   }
 
@@ -1424,6 +1437,8 @@ const handlers = (env: Env, started: readonly Phase[], path: string) => {
           unsigned: [],
           exam: [],
           leaks: [],
+          // SAFETY: an empty array is a string[]; the cast only widens `left` so a Read built from
+          // `empty` can carry the held work's lines.
           left: [] as string[],
           manifests: [],
           plancheck: null,
@@ -1696,12 +1711,18 @@ const handlers = (env: Env, started: readonly Phase[], path: string) => {
 export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
   const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts in a box. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
 
-  const commit =
-    ask.step === "plan"
-      ? "Change no file. Your final message is the plan.\n"
-      : ask.step === "review"
-        ? "Change no file: a review that leaves a changed file is stuck. git reads work in your box (diff, log, show). Run no command that writes, not even a scratch copy or a temp file: your box refuses it, and a refused command ends your turn with no answer.\n"
-        : "git only reads in your box (status, diff, log, show): its data is outside, where the box lets nothing write. Do not try to stage, stash, check out or commit, run stepcommit or pnpm commits sign; you hold no step key. Leave every change in the tree, and drive.ts commits and signs all of it as one step commit when you answer. Never push.\n";
+  const commit = Match.value(ask.step).pipe(
+    Match.when("plan", () => "Change no file. Your final message is the plan.\n"),
+    Match.when(
+      "review",
+      () =>
+        "Change no file: a review that leaves a changed file is stuck. git reads work in your box (diff, log, show). Run no command that writes, not even a scratch copy or a temp file: your box refuses it, and a refused command ends your turn with no answer.\n",
+    ),
+    Match.orElse(
+      () =>
+        "git only reads in your box (status, diff, log, show): its data is outside, where the box lets nothing write. Do not try to stage, stash, check out or commit, run stepcommit or pnpm commits sign; you hold no step key. Leave every change in the tree, and drive.ts commits and signs all of it as one step commit when you answer. Never push.\n",
+    ),
+  );
 
   const lock = holdsElectron(ask.step, electron)
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
@@ -1791,7 +1812,7 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
   }
 
   const report = pipe(
-    Arr.findLast(steps, (s) => s.step === "mutation" && typeof s.report === "string"),
+    Arr.findLast(steps, (s) => s.step === "mutation" && Predicate.isString(s.report)),
     Option.flatMapNullishOr((s) => s.report),
     Option.filter((r) => r !== ""),
   );
@@ -1998,6 +2019,8 @@ type Quest = {
  * `quest`.
  */
 const savedQuest = (path: string): Quest | null =>
+  // SAFETY: drive's record Cmd writes this file from a Quest, and questKeyed only renames an older
+  // file's `lane` key to `quest`.
   existsSync(path) ? (questKeyed(JSON.parse(readFileSync(path, "utf8"))) as Quest) : null;
 
 // ---------------------------------------------------------------- the command
@@ -2096,6 +2119,8 @@ const isAlive = (pid: number) =>
     {
       onSuccess: () => true,
       // EPERM: the process exists and is someone else's.
+      // SAFETY: process.kill throws Node's system errors, which carry an errno `code`; an error
+      // without one reads `code` as undefined and answers false.
       onFailure: (error) => (error as NodeJS.ErrnoException).code === "EPERM",
     },
   );
@@ -2622,6 +2647,8 @@ const main = () => {
   const agent = flag(args, "--agent") ?? "codex";
   const sandbox = flag(args, "--sandbox");
 
+  // SAFETY: widening STEPS and AGENTS to readonly strings only lets `includes` take the raw
+  // arguments; both arrays are only read.
   if (
     !(STEPS as readonly string[]).includes(step) ||
     !(AGENTS as readonly string[]).includes(agent) ||
@@ -2665,6 +2692,8 @@ const main = () => {
 
   // The start checks run inside the program, so DRIVE_MINUTES is read through Config.
   const program = Effect.gen(function* () {
+    // SAFETY: usage() above exits the process unless `step` is one of STEPS and `agent` one of
+    // AGENTS, so both casts below hold.
     const prepared = prepare(env, {
       quest,
       step: step as StepName,

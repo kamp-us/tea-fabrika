@@ -5,6 +5,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Function from "effect/Function";
+import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -204,23 +205,24 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
       ({ mutation, word }) => {
         const text = print(word, 81);
 
-        const broken =
-          mutation === "missing-program"
-            ? Function.pipe(text, Str.replace(/\tprogram = .*\n/, ""))
-            : mutation === "duplicate-program"
-              ? Function.pipe(text, Str.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`))
-              : mutation === "nested-program"
-                ? Function.pipe(
-                    text,
-                    Str.replace(/\tprogram = .*\n/, `\tunrelated = {\n\t\tprogram = /test/${word}/Electron\n\t}\n`),
-                  )
-                : mutation === "argument"
-                  ? Function.pipe(text, Str.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument'))
-                  : mutation === "target"
-                    ? Function.pipe(text, Str.replace(target, "gui/502/foreign"))
-                    : mutation === "duplicate-pid"
-                      ? Function.pipe(text, Str.replace("\tpid = 81", "\tpid = 82\n\tpid = 81"))
-                      : Function.pipe(text, Str.slice(0, -3));
+        const broken = Match.value(mutation).pipe(
+          Match.when("missing-program", () => Function.pipe(text, Str.replace(/\tprogram = .*\n/, ""))),
+          Match.when("duplicate-program", () =>
+            Function.pipe(text, Str.replace("\ttype =", `\tprogram = /test/${word}/Electron\n\ttype =`)),
+          ),
+          Match.when("nested-program", () =>
+            Function.pipe(
+              text,
+              Str.replace(/\tprogram = .*\n/, `\tunrelated = {\n\t\tprogram = /test/${word}/Electron\n\t}\n`),
+            ),
+          ),
+          Match.when("argument", () =>
+            Function.pipe(text, Str.replace(`/test/${word}/brain.mjs`, 'unbalanced "argument')),
+          ),
+          Match.when("target", () => Function.pipe(text, Str.replace(target, "gui/502/foreign"))),
+          Match.when("duplicate-pid", () => Function.pipe(text, Str.replace("\tpid = 81", "\tpid = 82\n\tpid = 81"))),
+          Match.orElse(() => Function.pipe(text, Str.slice(0, -3))),
+        );
 
         const exit = Effect.runSync(decode(0, broken).pipe(Effect.exit));
         expect(error(exit)).toMatchObject({

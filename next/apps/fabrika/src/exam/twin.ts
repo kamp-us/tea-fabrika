@@ -1,8 +1,7 @@
 // P12, next/. Read the real stack and the installed provider registrations.
 // This exam fails closed on syntax it cannot follow. It does not keep a second resource list.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { String as Str, pipe, Array as Arr, Record as Rec, Console, Effect, FileSystem, Path } from "effect";
-
+import { String as Str, pipe, Array as Arr, Record as Rec, Console, Effect, FileSystem, Path, Predicate } from "effect";
 import { parseSync, type ModuleExportName } from "oxc-parser";
 
 type Tree = any;
@@ -25,7 +24,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
   };
   const source = (file: string, spec: string) => resolve(dirname(file), pipe(spec, Str.replace(/\.js$/, ".ts")));
   const nodes = (node: Tree, visit: (node: Tree) => void): void => {
-    if (node === null || typeof node !== "object") {
+    if (!Predicate.isObjectOrArray(node)) {
       return;
     }
 
@@ -484,7 +483,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
           const host = contracts[0].arguments?.[0];
 
-          if (host?.type !== "Literal" || typeof host.value !== "string") {
+          if (host?.type !== "Literal" || !Predicate.isString(host.value)) {
             throw new Error("unsupported host name");
           }
 
@@ -513,7 +512,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
         const workerName = node.arguments[0];
 
-        if (workerName?.type !== "Literal" || typeof workerName.value !== "string") {
+        if (workerName?.type !== "Literal" || !Predicate.isString(workerName.value)) {
           report(node, "unsupported-case: Worker name is not a string literal");
         } else if (workerName.value === hostName) {
           if (!literalKeys(props)) {
@@ -545,7 +544,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
               ) {
                 const name = value.arguments[0];
 
-                if (name?.type !== "Literal" || typeof name.value !== "string") {
+                if (name?.type !== "Literal" || !Predicate.isString(name.value)) {
                   report(binding, "unsupported-case: dynamic class-name binding");
                 } else {
                   objects.set(String(key(binding)), name.value);
@@ -598,7 +597,8 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
     });
 
     const references = (node: Tree): void => {
-      if (node === null || typeof node !== "object") {
+      // `not` keeps `node` a Tree past the guard, as the old typeof check did.
+      if (Predicate.not(Predicate.isObjectOrArray)(node)) {
         return;
       }
 

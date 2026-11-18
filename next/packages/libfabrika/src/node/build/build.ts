@@ -16,6 +16,7 @@ import * as Formatter from "effect/Formatter";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -125,7 +126,7 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
 
       const exports = manifest.exports;
 
-      return typeof exports === "object" && Rec.has(exports, "./window")
+      return Predicate.isObjectOrArray(exports) && Rec.has(exports, "./window")
         ? Option.some(`${selected}/window`)
         : Option.none<string>();
     }
@@ -158,7 +159,7 @@ const collect = Effect.fn("build.collect")(function* (output: ReadonlyArray<Outp
     const body =
       item.type === "chunk"
         ? item.code
-        : typeof item.source === "string"
+        : Predicate.isString(item.source)
           ? item.source
           : new TextDecoder().decode(item.source);
 
@@ -357,7 +358,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
 
   const html = Arr.findFirst(output.output, (o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
 
-  if (Option.isNone(html) || typeof html.value.source !== "string") {
+  if (Option.isNone(html) || !Predicate.isString(html.value.source)) {
     return yield* BuildError.make({ reason: "bundle", message: "the tab's call emitted no page" });
   }
 

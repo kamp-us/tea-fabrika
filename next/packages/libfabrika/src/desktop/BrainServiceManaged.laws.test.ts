@@ -9,6 +9,7 @@ import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
@@ -96,15 +97,14 @@ it.effect.prop(
   [schedule],
   ([v]) =>
     Effect.gen(function* () {
-      const job =
-        v.initial === "absent"
-          ? Outside.absent
-          : v.initial === "foreign"
-            ? {
-                ...Outside.foreign,
-                args: v.sameArity ? Arr.map(Outside.spec.args, (arg) => `${arg}.foreign`) : Outside.foreign.args,
-              }
-            : Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81);
+      const job = Match.value(v.initial).pipe(
+        Match.when("absent", () => Outside.absent),
+        Match.when("foreign", () => ({
+          ...Outside.foreign,
+          args: v.sameArity ? Arr.map(Outside.spec.args, (arg) => `${arg}.foreign`) : Outside.foreign.args,
+        })),
+        Match.orElse(() => Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81)),
+      );
 
       const outside = yield* Outside.make({
         job,

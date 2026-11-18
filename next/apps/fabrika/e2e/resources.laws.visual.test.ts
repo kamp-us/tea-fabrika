@@ -133,6 +133,7 @@ const alive = (pid: number) => {
 
     return true;
   } catch (error) {
+    // SAFETY: process.kill throws Node's system error, an ErrnoException that carries `code`.
     return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 };
@@ -299,6 +300,7 @@ const walk = async (target: Target, context: TestContext) => {
           // Only an acquisition the real run reached is a fault point; a test failure comes after all.
           const at = kind === "test" ? reached[reached.length - 1]! : reached[pick % reached.length]!;
           kinds.add(kind);
+          // SAFETY: the generator above draws only "SIGTERM" or "SIGINT", both NodeJS.Signals.
           await scopedSuite(run({ at, kind }, signal as NodeJS.Signals, target), context);
         }
       },

@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Scope from "effect/Scope";
 import * as ScopedRef from "effect/ScopedRef";
 import * as Stream from "effect/Stream";
@@ -83,7 +84,7 @@ export const databases = Effect.gen(function* () {
           const size = Arr.reduce(
             params,
             0,
-            (total, value) => total + (typeof value === "string" ? bytes.encode(value).byteLength : 8),
+            (total, value) => total + (Predicate.isString(value) ? bytes.encode(value).byteLength : 8),
           );
 
           if (size > ROW_BYTES) {

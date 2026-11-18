@@ -13,6 +13,7 @@ import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
@@ -88,7 +89,7 @@ const world = Effect.fnUntraced(function* () {
 
   const controls = {
     cut: "",
-    hits: [] as string[],
+    hits: Array.of<string>(),
     steps: 0,
     commands: 0,
     owns: 0,
@@ -364,7 +365,7 @@ describe("P34 interrupted recovery", () => {
                 for (let n = 0; n < 8 && w.controls.hits.length === 0; n++) {
                   const deadline = w.alarms.at(-1);
 
-                  if (typeof deadline !== "number") {
+                  if (!Predicate.isNumber(deadline)) {
                     break;
                   }
 
@@ -384,7 +385,7 @@ describe("P34 interrupted recovery", () => {
                   );
                   const deadline = w.alarms.at(-1);
 
-                  if (typeof deadline === "number") {
+                  if (Predicate.isNumber(deadline)) {
                     yield* TestClock.setTime(deadline);
                     yield* ProgramRunner.use((r) => Effect.exit(r.due(deadline))).pipe(Effect.provide(w.layer()));
                   }
@@ -399,7 +400,7 @@ describe("P34 interrupted recovery", () => {
                 for (let n = 0; n < 2; n++) {
                   const at = w.alarms.at(-1);
 
-                  if (typeof at !== "number") {
+                  if (!Predicate.isNumber(at)) {
                     break;
                   }
 

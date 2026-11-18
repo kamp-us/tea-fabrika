@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { Array as Arr, pipe, Record as Rec } from "effect";
+import { Array as Arr, pipe, Match, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
@@ -93,11 +93,16 @@ type State =
 const state: fc.Arbitrary<State> = fc.oneof(
   fc.boolean().map((tagged) => ({ _tag: "right", tagged }) as const),
   fc.constant({ _tag: "missing" } as const),
+  // SAFETY: `Object.keys` of the WRONG table answers exactly its keys, which `Wrong` names.
   fc.constantFrom(...(Rec.keys(WRONG) as Wrong[])).map((way) => ({ _tag: "wrong", way }) as const),
 );
 
 const blockFor = (s: State): string | null =>
-  s._tag === "right" ? (s.tagged ? RIGHT_TAGGED : RIGHT) : s._tag === "missing" ? null : WRONG[s.way];
+  Match.valueTags(s, {
+    right: ({ tagged }) => (tagged ? RIGHT_TAGGED : RIGHT),
+    missing: () => null,
+    wrong: ({ way }) => WRONG[way],
+  });
 
 /**
  * One piece of a file. `text` writes it with the block (or `null`) where its export takes one, and
@@ -160,6 +165,7 @@ const PIECES = {
 
 type Kind = keyof typeof PIECES;
 
+// SAFETY: `Object.keys` of PIECES answers its own keys, which is what `Kind` is.
 const KINDS = Rec.keys(PIECES) as Kind[];
 
 /** A `//` line between a block and its export is skipped (case 16). */
@@ -462,6 +468,7 @@ describe("law 8: on Effect 4.1.3's own source, with since required", () => {
       { cwd: src, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
     );
 
+    // SAFETY: oxlint's JSON report has the `Report` shape: a list of diagnostics with code, file and spans.
     const report = JSON.parse(ran.stdout) as Report;
     const fired = new Map<string, number>();
 
@@ -492,6 +499,7 @@ const printed = spawnSync(
   { cwd: ROOT, encoding: "utf8", timeout: 60_000 },
 );
 
+// SAFETY: `oxlint --print-config` prints the resolved config, whose overrides each carry `files` and `rules`.
 const config = JSON.parse(printed.stdout) as {
   readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: Record<string, unknown> }>;
 };

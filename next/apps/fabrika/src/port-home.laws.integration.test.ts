@@ -175,7 +175,7 @@ const press = Effect.fnUntraced(function* (
 
   let serial = 0;
 
-  const ask = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const ask = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const n = ++serial;
     socket.send(Formatter.formatJson({ jsonrpc: "2.0", id: n, method, params }));
     return yield* next((frame) => frame.id === n);
@@ -238,7 +238,7 @@ class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError",
 const services = Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto);
 
 /** One call on the live instance, its answer read as `answer`, a rejection kept as an `InstanceError`. */
-const call = <S extends Schema.Top>(method: string, answer: S, run: () => Promise<unknown>) =>
+const call = <S extends Schema.Top, A>(method: string, answer: S, run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => new InstanceError({ method, cause }) }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(answer)),
   );
@@ -375,7 +375,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     const props = resource["props"];
     const main = Predicate.isObject(props) && "main" in props ? props.main : undefined;
 
-    if (!Predicate.isObject(props) || typeof main !== "string") {
+    if (!Predicate.isObject(props) || !Predicate.isString(main)) {
       continue;
     }
 
@@ -666,7 +666,7 @@ const writtenBy = Effect.fnUntraced(function* (
     for (const job of Arr.filter(rows, (row) => BigInt(row.startTimeUnixNano) >= since)) {
       const a = job.attributes;
 
-      if ((a["process"] === saved.id || a["fab.process"] === saved.id) && typeof a["build"] === "string") {
+      if ((a["process"] === saved.id || a["fab.process"] === saved.id) && Predicate.isString(a["build"])) {
         named.push({ record: `job ${job.name}`, build: a["build"] });
       }
     }

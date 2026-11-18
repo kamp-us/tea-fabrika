@@ -77,8 +77,10 @@ expectTypeOf<(typeof Code.CodeEvent.cases)["code.failed"]["Type"]["reason"]>().t
 expectTypeOf<(typeof Code.CodeEvent.Type)["_tag"]>().toEqualTypeOf<"code.loaded" | "code.failed">();
 
 const step = (model: Model, msg: Msg): readonly [Model, ReadonlyArray<Cmd>] => {
+  // SAFETY: each Msg the walk sends is one of the code cell's own `checked` or `loaded` messages.
   const [next, cmds] = applyCell(Code.code, model, msg as never);
 
+  // SAFETY: every Cmd the code cell returns is a record with a string `type`, which is all Cmd here says.
   return [next, cmds as ReadonlyArray<Cmd>];
 };
 

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import type * as ClientKey from "./ClientKey.ts";
@@ -55,7 +56,7 @@ export const u32 = (n: number): Uint8Array => {
 };
 
 export const str = (s: Uint8Array | string): Uint8Array => {
-  const bytes = typeof s === "string" ? utf8(s) : s;
+  const bytes = Predicate.isString(s) ? utf8(s) : s;
 
   return join8(u32(bytes.length), bytes);
 };

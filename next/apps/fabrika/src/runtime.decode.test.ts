@@ -13,7 +13,7 @@ import { assert, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings as decodeSettings } from "./runtime.ts";
 
-const held = vi.hoisted(() => ({ project: [] as Array<unknown>, door: [] as Array<unknown> }));
+const held = vi.hoisted(() => ({ project: Array.of<unknown>(), door: Array.of<unknown>() }));
 
 vi.mock("virtual:fabrika-built", () => ({ programs: {}, assets: {} }));
 
@@ -30,7 +30,7 @@ vi.mock("@kampus/libfabrika/workers/runtime", async (original) => ({
 
 vi.mock("./door.ts", () => ({
   Gateway: {
-    pipe: (f: (self: Effect.Effect<void>) => unknown) => f(Effect.void),
+    pipe: <A>(f: (self: Effect.Effect<void>) => A) => f(Effect.void),
     layer: (options: unknown) => {
       held.door.push(options);
 
@@ -74,7 +74,7 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   await runtime.dispose();
   const project = held.project.at(-1);
   const door = Predicate.hasProperty(project, "door") ? project.door : undefined;
-  expect(typeof door).toBe("function");
+  expect(Predicate.isFunction(door)).toBe(true);
   assert(Predicate.isFunction(door));
   const checked = await Effect.runPromise(readSettings(env));
 
@@ -89,13 +89,13 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const options = held.door.at(-1);
   const inputs = Predicate.hasProperty(options, "inputs") ? options.inputs : undefined;
   const name = Predicate.hasProperty(inputs, "name") ? inputs.name : undefined;
-  expect(typeof name).toBe("function");
+  expect(Predicate.isFunction(name)).toBe(true);
   assert(Predicate.isFunction(name));
   return (m) => Reflect.apply(name, undefined, [m]);
 };
 
 const oldName = (m: unknown) =>
-  typeof m === "object" && m !== null && "type" in m && typeof m.type === "string" ? m.type : undefined;
+  Predicate.isObjectOrArray(m) && "type" in m && Predicate.isString(m.type) ? m.type : undefined;
 
 class Sent {
   readonly extra = 1;
@@ -158,7 +158,7 @@ const message = (r: Message, trace: Array<string>): unknown => {
     }
   })();
 
-  if (!r.proxy || (typeof target !== "object" && typeof target !== "function") || target === null) {
+  if (!r.proxy || !Predicate.isObjectKeyword(target)) {
     return target;
   }
 

@@ -15,7 +15,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as Struct from "effect/Struct";
-import type { Sql } from "../../Sql.ts";
+import type { Sql, SqlValue } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
 import { type Measurements, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
 
@@ -107,7 +107,7 @@ const decodeSummary = Schema.decodeUnknownSync(
 const healthRows = (sql: Sql, query: string, ...params: ReadonlyArray<number>): Array<Measurements> =>
   Arr.map(sql.exec(query, ...params), (row) => toHealth(row));
 
-const toHealth = (row: unknown): Measurements => {
+const toHealth = (row: Record<string, SqlValue>): Measurements => {
   const { ok, ...rest } = decodeHealth(row);
 
   return { ...rest, ok: ok === 1 };

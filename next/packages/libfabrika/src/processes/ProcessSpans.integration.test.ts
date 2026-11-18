@@ -6,6 +6,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -125,7 +126,7 @@ const leakFree = (rows: ReadonlyArray<SpanRow>, marks: ReadonlyArray<string>) =>
     }
 
     for (const value of Rec.values(row.attributes)) {
-      if (typeof value === "string") {
+      if (Predicate.isString(value)) {
         expect(value.length, row.name).toBeLessThanOrEqual(128);
       }
     }

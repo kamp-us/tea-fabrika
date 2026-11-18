@@ -5,6 +5,7 @@
 import * as Arr from "effect/Array";
 
 import * as Function from "effect/Function";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -32,9 +33,13 @@ export type Patch = typeof Patch.Type;
 const token = (key: string | number): string =>
   Function.pipe(String(key), Str.replaceAll("~", "~0"), Str.replaceAll("/", "~1"));
 
-type Plain = { [key: string]: unknown };
-
-const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Arr.isArray(u);
+/**
+ * Narrows a JSON value to its object case: an object, not an array or a leaf. `Predicate.isObject`
+ * alone narrows to a plain record, which no rest pattern over `Schema.JsonObject` takes.
+ *
+ * @category guards
+ */
+export const isJsonObject = (json: Schema.Json): json is Schema.JsonObject => Predicate.isObject(json);
 
 /** The value an object holds under `key` as its own, never one from its prototype. */
 const own = (object: Schema.JsonObject, key: string): Schema.Json | undefined =>
@@ -47,7 +52,7 @@ const same = (a: Schema.Json, b: Schema.Json): boolean => {
     return a.length === b.length && Arr.every(a, (one, i) => same(one, b[i]));
   }
 
-  if (isPlain(a) && isPlain(b)) {
+  if (isJsonObject(a) && isJsonObject(b)) {
     // `Schema.JsonObject` has no symbol index, which the `Rec` operations ask of their record.
     const entries = Object.entries(a);
     return (
@@ -85,7 +90,7 @@ const walk = (path: string, before: Schema.Json, after: Schema.Json, out: Array<
     return;
   }
 
-  if (isPlain(before) && isPlain(after)) {
+  if (isJsonObject(before) && isJsonObject(after)) {
     for (const key of Object.keys(before)) {
       if (!Object.hasOwn(after, key)) {
         out.push({ op: "remove", path: `${path}/${token(key)}` });
@@ -180,7 +185,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
         }
 
         parent = parent[Number(part)] ?? null;
-      } else if (isPlain(parent) && Rec.has(parent, part)) {
+      } else if (Predicate.isObject(parent) && Rec.has(parent, part)) {
         parent = parent[part];
       } else {
         return invalid();
@@ -203,7 +208,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
       } else {
         parent[index] = structuredClone(op.value);
       }
-    } else if (isPlain(parent)) {
+    } else if (Predicate.isObject(parent)) {
       if (op.op !== "add" && !Rec.has(parent, key)) {
         return invalid();
       }

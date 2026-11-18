@@ -8,6 +8,7 @@
 import { applyCell } from "@demlik/tea";
 import * as Equal from "effect/Equal";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -752,7 +753,7 @@ export class ProcessTable {
    * its own recipient, and only while its watch is live. Anything else is plain mail.
    */
   deliver(entry: Entry, m: unknown, process: string): "mail" | "signal" | "drop" {
-    if (typeof m !== "object" || m === null || !("_tag" in m) || m._tag !== "DOWN") {
+    if (!Predicate.isTagged(m, "DOWN")) {
       return "mail";
     }
 

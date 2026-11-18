@@ -21,7 +21,7 @@
 // own config.
 import { matchesGlob } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import { Array as Arr, pipe, Option } from "effect";
+import { Array as Arr, pipe, Option, Predicate } from "effect";
 import { pathIn, type Node } from "./match.ts";
 
 interface Part {
@@ -38,15 +38,15 @@ interface Table {
 }
 
 const strings = (value: unknown): ReadonlyArray<string> =>
-  Arr.isArray(value) ? Arr.filter(value, (item) => typeof item === "string") : [];
+  Arr.isArray(value) ? Arr.filter(value, (item) => Predicate.isString(item)) : [];
 
-const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+const record = (value: unknown): value is Record<string, unknown> => Predicate.isObjectOrArray(value);
 
 /** The config's table, or `null` when the rule was given none. */
 const tableIn = (options: ReadonlyArray<unknown>): Table | null => {
   const [given] = options;
 
-  if (!record(given) || typeof given.scope !== "string" || !Arr.isArray(given.parts)) {
+  if (!record(given) || !Predicate.isString(given.scope) || !Arr.isArray(given.parts)) {
     return null;
   }
 
@@ -56,7 +56,7 @@ const tableIn = (options: ReadonlyArray<unknown>): Table | null => {
       given.parts,
       Arr.filter(record),
       Arr.map((part) => ({
-        name: typeof part.name === "string" ? part.name : "",
+        name: Predicate.isString(part.name) ? part.name : "",
         files: strings(part.files),
         may: new Set(strings(part.may)),
         tests: Arr.isArray(part.tests) ? strings(part.tests) : null,
@@ -74,7 +74,7 @@ const within = (packages: ReadonlyArray<string>, name: string): boolean =>
 /** A plain string a module source holds: a literal, or a template with no `${}`. */
 const written = (source: Node | null | undefined): string | null => {
   if (source?.type === "Literal") {
-    return typeof source.value === "string" ? source.value : null;
+    return Predicate.isString(source.value) ? source.value : null;
   }
 
   return source?.type === "TemplateLiteral" && source.expressions.length === 0

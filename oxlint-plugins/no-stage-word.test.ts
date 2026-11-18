@@ -226,6 +226,7 @@ it("absolute, relative and Windows spellings of a path get the same next/-only s
         const filename = absolute ? `${cwd.replace(/[\\/]$/, "")}${sep}${relative}` : relative;
         // The scope check reads only the two paths; the rest of the Context is never touched for it.
         const context: Pick<Context, "cwd" | "filename"> = { cwd, filename };
+        // SAFETY: the scope check reads only `cwd` and `filename`, which this stand-in has.
         const visitor = noStageWord.create(context as Context);
         expect(Rec.keys(visitor).length > 0, `${cwd} ${filename}`).toBe(top === "next");
       },

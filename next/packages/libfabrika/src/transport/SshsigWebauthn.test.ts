@@ -9,6 +9,8 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Function from "effect/Function";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 
@@ -27,7 +29,7 @@ const u32 = (n: number) => {
 };
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
 
   return Buffer.concat([u32(b.length), b]);
 };
@@ -589,7 +591,14 @@ describe("P10 WebAuthn SSHSIG", () => {
             let bytes = blob();
 
             if (kind === "version") {
-              bytes.writeUInt32BE(change === 0 ? 2 : change === 1 ? 0 : change, 6);
+              bytes.writeUInt32BE(
+                Match.value(change).pipe(
+                  Match.when(0, () => 2),
+                  Match.when(1, () => 0),
+                  Match.orElse(() => change),
+                ),
+                6,
+              );
             }
 
             if (kind === "key length") {

@@ -7,7 +7,7 @@
 // Review keeps control-state judgment, relative/workspace I/O, globals, dynamic imports, hand edits
 // of another file's Model, and whether a factory returns its machine or receives a service.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
-import { Array as Arr } from "effect";
+import { Array as Arr, Predicate } from "effect";
 import { ancestors, below, type Node } from "./match.ts";
 
 const TEA = new Set(["@demlik/tea", "@demlik/tea/effect"]);
@@ -59,7 +59,7 @@ const IO_MODULES = [
 const member = (node: ESTree.MemberExpression): string | null =>
   !node.computed && node.property.type === "Identifier"
     ? node.property.name
-    : node.computed && node.property.type === "Literal" && typeof node.property.value === "string"
+    : node.computed && node.property.type === "Literal" && Predicate.isString(node.property.value)
       ? node.property.value
       : null;
 

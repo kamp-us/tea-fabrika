@@ -3,9 +3,9 @@ import { RpcCallError } from "alchemy/Rpc";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
-
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
 // Only the platform is fake: each stub, storage, bucket, loader and object state is a plain value
@@ -55,6 +55,7 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 const rejects = (failure: unknown) => () => Promise.reject(failure);
 
 /** A platform value built from plain parts: the adapter reads only the parts each law gives. */
+// SAFETY: each law hands `fake` the parts the adapter reads for it, and the adapter reads nothing else.
 const fake = <A>(value: object): A => value as A;
 
 /** One client member: a call, or an Effect that needs no service, where the call takes nothing (the
@@ -138,7 +139,7 @@ describe("T695, the platform clients keep what the platform rejected with", () =
 });
 
 /** A Worker Loader whose program's `describe` answers `describe()`. */
-const loader = (describe: () => Promise<unknown>): WorkerLoader =>
+const loader = <A>(describe: () => Promise<A>): WorkerLoader =>
   fake({ get: () => ({ getEntrypoint: () => ({ describe }) }) });
 
 const programs = {
@@ -195,14 +196,18 @@ describe("T695, the worker loader keeps why a program did not load", () => {
     ({ name, build }) =>
       Effect.gen(function* () {
         const Box = programBox({ name }, build);
+        // SAFETY: `describe` fails on the damaged declaration and never reads the object's state or env.
         const box = new Box(undefined as never, undefined as never);
 
         const error = yield* Effect.flip(
+          // SAFETY: the box's `describe` rejects only with the ProgramDown that `programBox` maps a bad declaration to.
           Effect.tryPromise({ try: () => box.describe(), catch: (cause) => cause as ProgramDown }),
         );
 
         expect(error).toBeInstanceOf(ProgramDown);
+        // SAFETY: the `toBeInstanceOf(ProgramDown)` check just above holds for `error`.
         expect((error as ProgramDown).reason).toBe("load");
+        // SAFETY: `error` was checked to be a ProgramDown two lines up.
         expect(Schema.isSchemaError((error as ProgramDown).cause), "the cause is the stepper's failure").toBe(true);
       }),
   );
@@ -215,7 +220,7 @@ const objectState = (name: unknown, saved: unknown = undefined): DurableObjectSt
     storage: {
       get: () => Promise.resolve(saved),
       sql: { exec: () => ({ toArray: () => [], raw: () => [] }) },
-      transactionSync: (step: () => unknown) => step(),
+      transactionSync: <A>(step: () => A) => step(),
     },
   });
 
@@ -340,7 +345,7 @@ describe("T695, the object adapters keep what failed", () => {
     ({ kind, name }) =>
       Effect.gen(function* () {
         // A connection's name is any string, so only a non-string fails it; a process needs a pair.
-        const state = objectState(kind === "connection" && typeof name === "string" ? 7 : name);
+        const state = objectState(kind === "connection" && Predicate.isString(name) ? 7 : name);
 
         const error = yield* Effect.flip(
           kind === "process"
@@ -349,6 +354,7 @@ describe("T695, the object adapters keep what failed", () => {
                 (runtime) =>
                   Effect.tryPromise({
                     try: () => runtime.runPromise(Effect.void),
+                    // SAFETY: a failed boot of the process runtime rejects with the LedgerError its storage read raised.
                     catch: (cause) => cause as LedgerError,
                   }),
                 (runtime) => Effect.promise(() => runtime.dispose()),
@@ -377,7 +383,9 @@ describe("T695, the public route keeps what failed", () => {
 
         const error = yield* Effect.flip(fetch(request, env, config));
         expect(error).toBeInstanceOf(LedgerError);
+        // SAFETY: the `toBeInstanceOf(LedgerError)` above holds for `error`.
         expect((error as LedgerError).reason).toBe("bad_row");
+        // SAFETY: `error` was checked to be a LedgerError two lines up, before its cause is read.
         expect((error as LedgerError).cause).toBeInstanceOf(URIError);
       }),
   );

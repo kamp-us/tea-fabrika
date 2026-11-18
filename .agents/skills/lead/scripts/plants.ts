@@ -86,10 +86,11 @@ export const failuresIn = (report: string, law: string): string[] => {
  */
 export const records = (steps: ReadonlyArray<unknown>, read: (path: string) => string | null): LawRecord[] => {
   const lastBuild = Arr.findLastIndex(steps, Schema.is(BuildEntry));
+  const lastEntry = Arr.findLast(steps, Schema.is(BuildEntry));
 
-  const buildHead = Option.match(lastBuild, {
+  const buildHead = Option.match(lastEntry, {
     onNone: () => null,
-    onSome: (at) => (steps[at] as typeof BuildEntry.Type).head,
+    onSome: (entry) => entry.head,
   });
 
   const byLaw = new Map<string, LawRecord>();

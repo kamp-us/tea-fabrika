@@ -9,7 +9,7 @@ import {
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Recorder, runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Match, Option, Redacted, Schema } from "effect";
 
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -150,12 +150,11 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               ...w.ctx,
               id: {
                 ...w.ctx.id,
-                name:
-                  path === "Process"
-                    ? Formatter.formatJson(["settings-law", "worker"])
-                    : path === "RecordPart"
-                      ? Formatter.formatJson(["settings-law", "spans/0"])
-                      : "settings-law",
+                name: Match.value(path).pipe(
+                  Match.when("Process", () => Formatter.formatJson(["settings-law", "worker"])),
+                  Match.when("RecordPart", () => Formatter.formatJson(["settings-law", "spans/0"])),
+                  Match.orElse(() => "settings-law"),
+                ),
               },
               getWebSockets: () => {
                 consumers++;
@@ -218,6 +217,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                   Effect.provideService(WorkerEnvironment, env),
                   Effect.provideService(
                     ObjectState,
+                    // SAFETY: `ctx` holds the handles `fromDurableObjectState` reads; only the Request brands of the two types differ.
                     // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy and the global Worker types disagree on raw Request brands; this double supplies the same storage handles
                     fromDurableObjectState(ctx as unknown as Parameters<typeof fromDurableObjectState>[0]),
                   ),
@@ -323,9 +323,11 @@ const world = (settingsStart: (wire: StartsTest.Input) => Promise<unknown> = asy
     close: vi.fn(),
   };
 
+  // SAFETY: the readers use only the socket's attachment, `send` and `close`, which `ws` holds.
   // oxlint-disable-next-line fabrika/no-type-assertions -- the socket double supplies attachment, send and close; workerd owns the complete WebSocket
   const socket = ws as unknown as WebSocket;
 
+  // SAFETY: the readers call only the object's id, SQL storage and these socket methods, all given below.
   // oxlint-disable-next-line fabrika/no-type-assertions -- only workerd constructs a complete DurableObjectState; these are the handles the real readers use
   const ctx = {
     id: {
@@ -349,8 +351,9 @@ const world = (settingsStart: (wire: StartsTest.Input) => Promise<unknown> = asy
     setWebSocketAutoResponse: vi.fn(),
   } as unknown as DurableObjectState;
 
-  const route = vi.fn(async (): Promise<unknown> => ({ _tag: "parked", stream: "stream", after: 0 }));
+  const route = vi.fn(async (): Promise<object> => ({ _tag: "parked", stream: "stream", after: 0 }));
 
+  // SAFETY: these readers reach INSTANCE, PROJECT's settings and session calls, and RECORD's `write`, all doubled here.
   // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
   const env = {
     INSTANCE: JSON.stringify(config),

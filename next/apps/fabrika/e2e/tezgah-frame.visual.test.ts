@@ -17,7 +17,7 @@
 //
 // The shots (plan, "Show it running"; AGENTS.md, "Shoot more than one layout") go to the folder
 // `SHOTS` names, only when it is set, named `tezgah-<state>-<layout>.png`.
-import { String as Str, pipe, Array as Arr, Effect, Formatter, Option } from "effect";
+import { String as Str, pipe, Array as Arr, Effect, Formatter, Option, Predicate } from "effect";
 
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, waiting } from "./p14.test-support.ts";
@@ -151,7 +151,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           yield* keys(page, "Control+b", "%");
 
           const side = yield* drawnAs(
-            (n, v) => n === 2 && typeof v.workspaces[0]!.layout !== "string" && v.workspaces[0]!.layout.dir === "row",
+            (n, v) => n === 2 && !Predicate.isString(v.workspaces[0]!.layout) && v.workspaces[0]!.layout.dir === "row",
             "two side by side",
           );
 
@@ -176,7 +176,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           yield* keys(page, "Control+b", '"');
           yield* drawnAs(
             (n, v) =>
-              n === 2 && typeof v.workspaces[0]!.layout !== "string" && v.workspaces[0]!.layout.dir === "column",
+              n === 2 && !Predicate.isString(v.workspaces[0]!.layout) && v.workspaces[0]!.layout.dir === "column",
             "two stacked",
           );
           yield* shoot(page, "split-down", "stacked");
@@ -205,11 +205,11 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
 
             return (
               n === 4 &&
-              typeof l !== "string" &&
+              !Predicate.isString(l) &&
               l.dir === "column" &&
               Arr.every(
                 l.parts,
-                (p) => typeof p.inner !== "string" && p.inner.dir === "row" && p.inner.parts.length === 2,
+                (p) => !Predicate.isString(p.inner) && p.inner.dir === "row" && p.inner.parts.length === 2,
               )
             );
           }, "a 2x2");
@@ -286,8 +286,8 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
           const wire = {
             hide: true,
             /** Per socket, the tezgah streams the tab read on it, in order. */
-            reads: [] as Array<Array<string>>,
-            sockets: [] as Array<{ close: () => Promise<void> }>,
+            reads: Array.of<Array<string>>(),
+            sockets: Array.of<{ close: () => Promise<void> }>(),
           };
 
           yield* promised(() =>
@@ -297,9 +297,9 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
               wire.reads.push(read);
               wire.sockets.push({ close: () => ws.close({ code: 4000, reason: "the law drops the socket" }) });
               ws.onMessage((message) => {
-                const found = typeof message === "string" ? TEZGAH_READ.exec(message) : null;
+                const found = Predicate.isString(message) ? TEZGAH_READ.exec(message) : null;
 
-                if (typeof message !== "string" || found === null) {
+                if (!Predicate.isString(message) || found === null) {
                   server.send(message);
 
                   return;

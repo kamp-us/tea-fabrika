@@ -33,7 +33,7 @@
 // helper that wraps `it` is read at its own `it` only when that one is a property. Under-reporting
 // is the safe side for a rule that blocks.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
-import { Array as Arr, pipe, Option } from "effect";
+import { Array as Arr, pipe, Option, Predicate } from "effect";
 import { below, dotted, type Node } from "./match.ts";
 
 const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;
@@ -129,7 +129,7 @@ const leading = (text: string): Label | "none" => {
 
 /** The label a written title starts with, `"none"`, or `null` when the source does not say. */
 const labelOf = (title: Node | undefined): Label | "none" | null => {
-  if (title?.type === "Literal" && typeof title.value === "string") {
+  if (title?.type === "Literal" && Predicate.isString(title.value)) {
     return leading(title.value);
   }
 

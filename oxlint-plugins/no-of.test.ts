@@ -1,4 +1,4 @@
-import { Array as Arr, pipe } from "effect";
+import { Array as Arr, Match, pipe } from "effect";
 // `fabrika/no-of` against generated modules, in process through oxlint's RuleTester (0029). Each
 // module is 1 to 6 pieces, one per line; the oracle is the plan's case table: the lines that fire,
 // each with its message. The valid case is the same module with every firing line taken out.
@@ -185,7 +185,11 @@ const EXPORTS: readonly Shape[] = [
 ];
 
 const hits = (shape: Shape, n: Name): readonly Message[] =>
-  n.cls === "of" ? shape.of : n.cls === "xOf" ? shape.xOf : [];
+  Match.value(n.cls).pipe(
+    Match.when("of", () => shape.of),
+    Match.when("xOf", () => shape.xOf),
+    Match.orElse(() => []),
+  );
 
 type Piece = { readonly shape: Shape; readonly name: Name; readonly from: string };
 
@@ -332,11 +336,11 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
   const params = Arr.flatMap(inner, (p, i) => (p.kind === "param" ? [line(p, i, (n) => `  ${n}: string,`)] : []));
 
   const body = Arr.flatMap(inner, (p, i) =>
-    p.kind === "key"
-      ? [line(p, i, (n) => `  const h${i} = { ${n}: ${i} };`)]
-      : p.kind === "const"
-        ? [line(p, i, (n) => `  const ${n} = ${i};`)]
-        : [],
+    Match.value(p.kind).pipe(
+      Match.when("key", () => [line(p, i, (n) => `  const h${i} = { ${n}: ${i} };`)]),
+      Match.when("const", () => [line(p, i, (n) => `  const ${n} = ${i};`)]),
+      Match.orElse(() => []),
+    ),
   );
 
   const implementation: readonly Line[] = [

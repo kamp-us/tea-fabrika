@@ -22,7 +22,7 @@
 import { statSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import { Array as Arr } from "effect";
+import { Array as Arr, Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 const RELATIVE = /^\.\.?(?:\/|$)/;
@@ -54,7 +54,7 @@ const namesItsFile = (from: string, written: string): boolean => {
 export const useImportExtensions: CreateRule = {
   create(context) {
     const check = (source: Node | null | undefined) => {
-      if (source == null || source.type !== "Literal" || typeof source.value !== "string") {
+      if (source == null || source.type !== "Literal" || !Predicate.isString(source.value)) {
         return;
       }
 

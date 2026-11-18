@@ -5,7 +5,19 @@ import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, String as Str, Arbitrary, Deferred, Effect, Fiber, Formatter, Option, Schema } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Arbitrary,
+  Deferred,
+  Effect,
+  Fiber,
+  flow,
+  Formatter,
+  Match,
+  Option,
+  Schema,
+} from "effect";
 import type { Scope } from "effect";
 import { chaos } from "./program.ts";
 
@@ -63,7 +75,7 @@ export type Open = Effect.Effect<
       }>
     >;
     readonly check: (target: Chaos.Target) => Effect.Effect<Chaos.Report, Nemesis.NemesisError>;
-    readonly letter: (n: number, input: unknown) => Incoming;
+    readonly letter: (n: number, input: Schema.Json) => Incoming;
   },
   never,
   Scope.Scope
@@ -95,7 +107,7 @@ const now = () => Effect.succeed(Outcome.ok(100));
 
 const read = (world: World, binding: Chaos.Target) => () => world.check(binding).pipe(Effect.map(Outcome.ok));
 
-const phase = (raw: unknown) => Schema.decodeUnknownSync(chaos.state.schema)(raw);
+const phase = Schema.decodeUnknownSync(chaos.state.schema);
 
 const target = (process: string) =>
   Chaos.Target.make({
@@ -122,8 +134,7 @@ const nextDeadline = Effect.fnUntraced(function* (world: World) {
   return chaos.wake(phase(saved.model));
 });
 
-const noLeak = (value: unknown, marker: string, output: string) => {
-  const json = JSON.stringify(value);
+const noLeak = (json: string, marker: string, output: string) => {
   expect(json, `${output} has a concrete output`).toBeTypeOf("string");
 
   for (const encoded of [
@@ -602,13 +613,11 @@ export const suite = (open: Open, checklist: unknown) =>
               });
 
             const handlers = {
-              now: (raw: unknown) => {
-                const request = Schema.decodeUnknownSync(Schema.Struct({ id: Chaos.ExperimentId }))(raw);
-
-                return Effect.succeed(
+              now: flow(Schema.decodeUnknownSync(Schema.Struct({ id: Chaos.ExperimentId })), (request) =>
+                Effect.succeed(
                   Outcome.ok(request.id === nextId ? 100 + (input.most + 1) * (input.gap + input.late) : 100),
-                );
-              },
+                ),
+              ),
               fire,
               inspect: read(world, binding),
             };
@@ -863,21 +872,27 @@ export const suite = (open: Open, checklist: unknown) =>
               const handlers: Readonly<Record<string, Handler<never>>> = {
                 now,
                 fire: () =>
-                  mode === "off"
-                    ? Effect.succeed(
+                  Match.value(mode).pipe(
+                    Match.when("off", () =>
+                      Effect.succeed(
                         Outcome.err(
                           Nemesis.NemesisError.make({ reason: Nemesis.Off.make({ cause: new Error(marker) }) }),
                         ),
-                      )
-                    : mode === "failed"
-                      ? Effect.die(new URIError(`https://invalid.test/?private=${encodeURIComponent(marker)}`))
-                      : Effect.succeed(
-                          Outcome.ok(
-                            mode === "refused"
-                              ? Chaos.Fired.cases.refused.make({ reason: "stale" })
-                              : Chaos.Fired.cases.fired.make({ hit: null }),
-                          ),
+                      ),
+                    ),
+                    Match.when("failed", () =>
+                      Effect.die(new URIError(`https://invalid.test/?private=${encodeURIComponent(marker)}`)),
+                    ),
+                    Match.orElse(() =>
+                      Effect.succeed(
+                        Outcome.ok(
+                          mode === "refused"
+                            ? Chaos.Fired.cases.refused.make({ reason: "stale" })
+                            : Chaos.Fired.cases.fired.make({ hit: null }),
                         ),
+                      ),
+                    ),
+                  ),
                 inspect: read(world, binding),
               };
 
@@ -938,7 +953,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 health,
               };
 
-              noLeak(outputs[output], marker, output);
+              noLeak(JSON.stringify(outputs[output]), marker, output);
 
               if (mode === "failed") {
                 expect(Arr.some(commands, (row) => row.attributes["error.type"] === "URIError")).toBe(true);

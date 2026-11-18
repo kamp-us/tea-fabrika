@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
-import { DateTime, Effect, Record as Rec, Schema } from "effect";
+import { DateTime, Effect, Match, Predicate, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect } from "vitest";
 import { parse } from "yaml";
@@ -89,7 +89,7 @@ const github = (
   const calls: Call[] = [];
   const asks: Ask[] = [];
 
-  const answer = (status: number, json: unknown) =>
+  const answer = <J>(status: number, json: J) =>
     Promise.resolve({ ok: status < 300, status, json: () => Promise.resolve(json) });
 
   const send = (url: string, init: Init = {}) => {
@@ -318,7 +318,12 @@ const runsOf = (
 ): Run[] => {
   const done = list.map((r, i): Run => {
     const created = i * 30;
-    const conclusion = r.kind === "skipped" ? "success" : r.kind === "gate failed" ? "failure" : r.conclusion;
+
+    const conclusion = Match.value(r.kind).pipe(
+      Match.when("skipped", () => "success"),
+      Match.when("gate failed", () => "failure"),
+      Match.orElse(() => r.conclusion),
+    );
 
     return {
       id: 100 + i,
@@ -670,8 +675,8 @@ it.live(
 
               const thrown = await gate.read(env, io).then(
                 () => "",
-                (error: unknown) =>
-                  error instanceof Error ? `${error.name} ${error.message} ${String(error.stack)}` : String(error),
+                (cause: unknown) =>
+                  cause instanceof Error ? `${cause.name} ${cause.message} ${String(cause.stack)}` : String(cause),
               );
 
               const forms = [secret, encodeURIComponent(secret), encodeURI(secret)];
@@ -905,7 +910,7 @@ const stepLimit = (() => {
   const steps: { id?: string; "timeout-minutes"?: unknown }[] = workflow?.jobs?.gate?.steps ?? [];
   const limit = steps.find((step) => step.id === "decide")?.["timeout-minutes"];
 
-  return typeof limit === "number" ? limit * MINUTE : Number.NaN;
+  return Predicate.isNumber(limit) ? limit * MINUTE : Number.NaN;
 })();
 
 it.live(

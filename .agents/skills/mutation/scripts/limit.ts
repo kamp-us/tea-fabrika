@@ -26,7 +26,7 @@
  * - Not a vitest JSON report: an error, never the floor, so a broken baseline is seen.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Schema, Array as Arr } from "effect";
+import { Console, Effect, FileSystem, Predicate, Schema, Array as Arr } from "effect";
 import { Argument, Command } from "effect/cli";
 
 /** The decided fast check's test limit, in ms. */
@@ -57,7 +57,7 @@ export const slowest = (report: typeof Report.Type): number =>
     0,
     ...Arr.flatMap(report.testResults, (file) => {
       const tests = Arr.flatMap(file.assertionResults, (test) =>
-        typeof test.duration === "number" ? [test.duration] : [],
+        Predicate.isNumber(test.duration) ? [test.duration] : [],
       );
 
       const span = file.startTime === undefined || file.endTime === undefined ? 0 : file.endTime - file.startTime;

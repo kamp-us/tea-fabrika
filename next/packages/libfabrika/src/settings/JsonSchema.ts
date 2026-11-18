@@ -75,7 +75,7 @@ const printed = (value: unknown, indent: string, taken: number): string => {
       return "[]";
     }
 
-    const flat = value.every((item) => item === null || typeof item !== "object");
+    const flat = value.every((item) => !Predicate.isObjectOrArray(item));
     const line = `[${value.map((item) => JSON.stringify(item)).join(", ")}]`;
 
     if (flat && indent.length + taken + line.length <= WIDTH) {

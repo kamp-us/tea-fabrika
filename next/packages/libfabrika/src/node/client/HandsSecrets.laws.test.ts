@@ -39,6 +39,7 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
@@ -96,7 +97,7 @@ const forms = (d: string): ReadonlyArray<string> => {
 /** Any value as text, Maps, bigints and errors included, so a scan reads every field. */
 const text = (value: unknown): string =>
   JSON.stringify(value, (_k, v: unknown) =>
-    typeof v === "bigint"
+    Predicate.isBigInt(v)
       ? String(v)
       : v instanceof Map
         ? Rec.fromEntries(v)

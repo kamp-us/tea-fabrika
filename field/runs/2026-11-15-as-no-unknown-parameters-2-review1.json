@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-as-no-unknown-parameters-2-review1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:09:51-08:00",
+  "ended": "2026-11-15T23:19:14-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Review of anti-slop judgment slice AS-no-unknown-parameters-2 (ticket 1057, anti-slop/no-unknown-parameters, in next/ and our tooling) at c1fc52cb1: changes 1, findings 2, send build. Class 1, an unknown parameter spelled through an indexed type so the rule no longer sees it, with no ignore line, against 0563's rule C (an exception is one inline ignore with its reason): next/apps/fabrika/src/brain.ts:69, 76, 86, 141, 160 and 182 each read Parameters<ContextProject[...]>[n], which is unknown at next/packages/libfabrika/src/cloudflare/bindings.ts:172 and :198 and cloudflare/runtime.ts:2030, :2038, :2081 and :2099; and next/apps/fabrika/src/memory-replace.laws.integration.test.ts:263 reads Fact[\"body\"][\"start\"], unknown by line 160's Record<string, unknown>. The fix puts unknown back on all seven and lists them as left (the brain's six follow the ProjectService contract in cloudflare/runtime.ts, another slice's product), or gives each the 0563 ignore line with a reason about its own line; line 263 is an exam path, so it goes through the tests step. Counts hold: the rule forced on in a scratch config meets 347 at the merge base 58314e423 and 204 at c1fc52cb1, which is 147 exam, 13 product and 44 in pull request 1366's files. The Schema.Unknown to Schema.Json swaps change one decode answer the build row says is unchanged: a number literal outside the double range, which JSON.parse makes into Infinity, is refused by Schema.Json and was taken by Schema.Unknown; no law and no writer of ours reaches it (finding row). The casts removed in client/Tezgah.laws.test.ts are replaced by the machine's real types and the law's assertions are unchanged. loosening.sh: three removed-expect hits, each the same assertion reformatted or with a non-null mark the law's own earlier expect justifies; the rest are signature lines; no law is loosened. A merge of origin/main (b510ed2e8, which holds 1366 and 1508) is clean, and none of 1366's 70 files is touched.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "Run here at c1fc52cb1 on Node 26.13.0, one file at a time with nice -n 19 pnpm exec vitest run --maxWorkers=1, all green: libfabrika client/HandsMachine.laws (3), client/WindowMachine.laws (51), client/HandsStart.laws (3), client/Tezgah.laws (10), Id (29), Testing (11), settings/Files (9), settings/Snapshot (10), settings/TomlEdit (17), node/dev/local-dev.laws (3); .agents clauderow (15), flow/host (16), quest (13), chain (63), flow/walk (6); oxlint-plugins/program-package-layout (17); .github/ci/gate (7). next/packages/libfabrika tsc --noEmit -p . passes. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passes, 18 parts. A scratch decode in effect 4.1.3 showed fromJsonString(Struct{result: optionalKey(Json)}) gives None for {\"id\":1,\"result\":1e400} where Unknown gives Some. Not run: every .integration. and .visual. law the diff reaches (the branch does not hold pull request 1508, so the 0178 guard refuses them here).",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

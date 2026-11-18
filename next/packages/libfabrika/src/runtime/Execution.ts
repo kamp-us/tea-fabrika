@@ -8,6 +8,7 @@ import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
@@ -25,8 +26,7 @@ const Outcome = Schema.TaggedUnion({
   Ok: { value: Schema.Unknown, at: Schema.Number },
   Err: {
     error: Schema.declare<Tagged>(
-      (value): value is Tagged =>
-        typeof value === "object" && value !== null && "_tag" in value && typeof value._tag === "string",
+      (value): value is Tagged => Predicate.isObjectOrArray(value) && "_tag" in value && Predicate.isString(value._tag),
     ),
     at: Schema.Number,
   },

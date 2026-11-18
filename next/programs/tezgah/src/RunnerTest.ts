@@ -42,7 +42,7 @@ const typeId = (prefix: string, n: number): string => {
  *  state: whether it is live now, and the exit reasons of its lives that exited. */
 export type Open = Effect.Effect<
   {
-    readonly send: (m: unknown) => Effect.Effect<unknown>;
+    readonly send: (m: Schema.Json) => Effect.Effect<unknown>;
     readonly view: Effect.Effect<unknown>;
     readonly process: (
       name: string,
@@ -59,25 +59,29 @@ const Answer = Schema.TaggedUnion({
   error: { reason: Schema.String },
 });
 
-const answered = (u: unknown) => Schema.decodeUnknownSync(Answer)(u);
+const answered = Schema.decodeUnknownSync(Answer);
 
 /** The keybindings note's Via, as the window sends it. */
 const Via = Schema.TaggedUnion({ key: { keys: Schema.String } });
 
+/** What the law reads of a layout: a tile's id, or a container's parts, each holding a layout. */
+type Node = string | { readonly parts: ReadonlyArray<{ readonly inner: Node }> };
+
+const Node: Schema.Codec<Node> = Schema.Union([
+  Schema.String,
+  Schema.Struct({ parts: Schema.Array(Schema.Struct({ inner: Schema.suspend((): Schema.Codec<Node> => Node) })) }),
+]);
+
 /** What the law reads of tezgah's view: each workspace's tiles in reading order, and each tile. */
 const View = Schema.Struct({
-  workspaces: Schema.Array(Schema.Struct({ n: Schema.Int, layout: Schema.Unknown })),
+  workspaces: Schema.Array(Schema.Struct({ n: Schema.Int, layout: Node })),
   tiles: Schema.Array(Schema.Struct({ id: Schema.String, shows: Schema.String, child: Schema.Boolean })),
 });
 
 type View = typeof View.Type;
 
-const order = (node: unknown): ReadonlyArray<string> =>
-  Predicate.isString(node)
-    ? [node]
-    : Predicate.hasProperty(node, "parts") && Arr.isArray(node.parts)
-      ? Arr.flatMap(node.parts, (p: unknown) => (Predicate.hasProperty(p, "inner") ? order(p.inner) : []))
-      : [];
+const order = (node: Node): ReadonlyArray<string> =>
+  Predicate.isString(node) ? [node] : Arr.flatMap(node.parts, (p) => order(p.inner));
 
 const tilesOn = (v: View, n: number) =>
   Option.match(

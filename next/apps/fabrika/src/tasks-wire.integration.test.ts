@@ -70,7 +70,7 @@ const socket = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identit
 
   let next = 0;
 
-  const call = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     if (closed !== undefined) {
       return yield* closed;
     }

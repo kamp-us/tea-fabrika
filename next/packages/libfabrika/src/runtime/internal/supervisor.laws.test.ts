@@ -24,8 +24,10 @@ import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -66,17 +68,18 @@ const policy = {
 
 const ctx = (p: Policy = policy) => ({ policy: p, process: A, name: NAME, build: BUILD, at: 0 });
 
+// SAFETY: the walk builds each msg from a move the supervisor accepts in the folded model, so it is one of the supervisor's own messages.
 const step = (model: Model, msg: Msg): Model => applyCell(supervisor, model, msg as never)[0];
 
 const valid = (model: unknown): boolean => Schema.is(Supervision)(model);
 
-const roundTrip = (model: Model): unknown =>
+const roundTrip = (model: Model): Schema.Json =>
   Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(Schema.encodeSync(Supervision)(model)));
 
 /** JSON text with sorted keys: a decoded copy may order its fields differently. */
 const canon = (value: unknown): string =>
   JSON.stringify(value, (_key, v: unknown) =>
-    v !== null && typeof v === "object" && !Arr.isArray(v)
+    Predicate.isObject(v)
       ? Rec.fromEntries(
           Arr.sort(
             Rec.toEntries(v),
@@ -219,14 +222,12 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
   // A swap names the process the journal holds, or one it does not, with a build the fold makes.
   const j = w.model.journal;
 
-  const own =
-    j._tag === "idle"
-      ? j.process
-      : j._tag === "stepping"
-        ? j.attempt.process
-        : j._tag === "writing_exit"
-          ? j.process
-          : w.process;
+  const own = Match.value(j).pipe(
+    Match.tag("idle", (j) => j.process),
+    Match.tag("stepping", (j) => j.attempt.process),
+    Match.tag("writing_exit", (j) => j.process),
+    Match.orElse(() => w.process),
+  );
 
   const build = `build-swap-${cell.pick % 4}`;
 
@@ -1074,6 +1075,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           msgs.push(move.msg);
         });
         syncTest(supervisor, ctx(p), {
+          // SAFETY: these msgs are the walk's moves, each one of the supervisor's own messages.
           msgs: msgs as never,
           seed: SEED,
           encode: (model) => Schema.encodeSync(Supervision)(model),
@@ -1088,6 +1090,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
 /** Invalid copies of one saved model: a wrong tag, a missing payload, an old version, a broken identity. */
 const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
+  // SAFETY: saved is an encoded Supervision model, which holds a journal and a list of receipts.
   const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
   const journal = raw.journal;
   const fields = Arr.filter(Rec.keys(journal), (key) => key !== "_tag");
@@ -1100,6 +1103,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   ];
 
   if (journal._tag === "writing_dead") {
+    // SAFETY: a writing_dead journal holds its `failure`, a fresh Failure (internal/recovery.ts), which names its `letter`.
     const failure = journal.failure as { letter: string };
     // The exact fresh failure's receipt must be there, terminal and its own.
     broken.push({ ...raw, receipts: Arr.filter(raw.receipts, (r) => r.letter !== failure.letter) });
@@ -1121,10 +1125,14 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   }
 
   if (journal._tag === "stepping") {
+    // SAFETY: a stepping journal holds its attempt, an object.
     broken.push({ ...raw, journal: { ...journal, attempt: { ...(journal.attempt as object), seq: 0 } } });
   }
 
   // A crash origin names the process its journal replaces; a foreign failure process is refused.
+  // SAFETY: in supervisor.ts's Journal, the writing_exit, writing_down, waiting_recovery, waiting_start and
+  // checkpointing cases hold `origin`, an Origin (crash with its failure, or manual with its request); the
+  // other seven cases have none and read `undefined`, which is why the next line reads `origin?._tag`.
   const origin = journal.origin as { _tag: string; failure?: object; request?: { id: string; build: string } };
 
   if (origin?._tag === "crash") {
@@ -1134,6 +1142,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
 
   // A person's restart starts with its own saved request ID and build.
   if (journal._tag === "waiting_start" && origin._tag === "manual") {
+    // SAFETY: every waiting_start journal holds its `request`, a Start `again` (processes/internal/processTable.ts) with its id and code.
     const request = journal.request as { id: string; code: Record<string, unknown> };
     broken.push({ ...raw, journal: { ...journal, request: { ...request, id: `${request.id}:other` } } });
     broken.push({
@@ -1278,6 +1287,7 @@ describe("P13 A11 saved admission work", () => {
               Option.getOrUndefined(Arr.findFirst(after.receipts, (r) => r.letter === message.receipt.letter))?.input,
             ).toEqual(message.receipt.input);
             expect(
+              // SAFETY: roundTrip answers an encoded Supervision model, an object.
               decodes({ ...(roundTrip(after) as object), receipts: [] }),
               "fresh stepping without the admitted input cannot load",
             ).toBe(false);

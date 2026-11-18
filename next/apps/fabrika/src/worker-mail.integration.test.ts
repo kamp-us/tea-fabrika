@@ -138,10 +138,10 @@ const mailDiagnostics = () => {
   const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
   const events: Array<{ at: number; elapsed: number; event: string; value: unknown }> = [];
   const stamp = () => ({ at: DateTime.toEpochMillis(DateTime.nowUnsafe()), elapsed: performance.now() });
-  const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
+  const note = (event: string, value: object | null = null) => events.push({ ...stamp(), event, value });
   note("start");
 
-  const read = async (label: string, call: () => Promise<unknown>) => {
+  const read = async <A>(label: string, call: () => Promise<A>) => {
     const start = stamp();
     let value: unknown = null;
 
@@ -436,7 +436,7 @@ const wire = async (
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
 
-  const call = async (method: string, params: unknown) => {
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
@@ -466,6 +466,7 @@ const wire = async (
 };
 
 const facts = async (instance: Instance, stream: string) =>
+  // SAFETY: the audit read answers the stream's rows as an array.
   Arr.map((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>, (row) => ({
     ...row.body,
     _tag: row._tag,
@@ -545,10 +546,10 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
             .then((value: unknown) => {
               fixture.diagnostics?.note("abort.result", { status: "fulfilled", value: value ?? null });
             })
-            .catch((error: unknown) => {
+            .catch((cause: unknown) => {
               fixture.diagnostics?.note("abort.result", {
                 status: "rejected",
-                error: error instanceof Error ? error.name : "unknown",
+                error: cause instanceof Error ? cause.name : "unknown",
               });
             });
           fixture.diagnostics.note("abort.end");
@@ -988,6 +989,8 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
             Arr.filter(await facts(instance, "reader:1/inbox"), (r) => r.m?.type === "letter"),
             (r) => r.m.n,
           );
+
+        // SAFETY: Instance is `any`, so the law can reach the instance's private local `project`, whose audit read answers the stream's rows as an array.
         const last = async (stream: string) =>
           Math.max(
             0,

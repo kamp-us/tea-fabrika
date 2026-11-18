@@ -32,6 +32,8 @@ import {
   Exit,
   FileSystem,
   Layer,
+  Match,
+  Predicate,
   Schema,
   Stream,
 } from "effect";
@@ -278,7 +280,11 @@ it.effect.prop(
 
         const req = {
           ...request(c.body),
-          letter: `letter_0000000000e00800000000000${role === "person" ? 1 : role === "window" ? 2 : 3}`,
+          letter: `letter_0000000000e00800000000000${Match.value(role).pipe(
+            Match.when("person", () => 1),
+            Match.when("window", () => 2),
+            Match.orElse(() => 3),
+          )}`,
         };
 
         expect(yield* w.door.route(client, "process.send", req)).toMatchObject({ _tag: "ok" });
@@ -540,7 +546,7 @@ const presence = (files: ReadonlySet<string>, load: () => PolicyDoor): PolicyDoo
   const p = load();
 
   for (const name of ["call", "install", "personCall", "checklistInputs", "knock"] as const) {
-    if (typeof p[name] !== "function") {
+    if (!Predicate.isFunction(p[name])) {
       throw new Error(`missing policy binding: ${name}`);
     }
   }

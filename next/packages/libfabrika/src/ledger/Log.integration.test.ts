@@ -278,7 +278,7 @@ describe("p92, every entry has every field: at the referee", () => {
         ["w-1", "notes:1", 1, 1],
         ["w-3", "notes:1", 3, 2],
       ]);
-      expect(Arr.map(entries, (entry) => typeof entry.arrivedAt)).toEqual(["number", "number"]);
+      expect(Arr.map(entries, (entry) => entry.arrivedAt)).toEqual([expect.any(Number), expect.any(Number)]);
       expect(entries[1]).toMatchObject({ ...full, seen: 2 });
     }).pipe(Effect.provide(onLedger(fresh()))),
   );

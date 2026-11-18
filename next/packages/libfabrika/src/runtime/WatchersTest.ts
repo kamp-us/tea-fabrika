@@ -9,7 +9,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -223,7 +225,11 @@ export const suite = (database: Database) =>
             yield* watches.open("held", whole);
 
             for (const [i, step] of walk.entries()) {
-              const mode = i % 3 === 0 ? "read" : i % 3 === 1 ? "save" : "cleanup";
+              const mode = Match.value(i % 3).pipe(
+                Match.when(0, () => "read" as const),
+                Match.when(1, () => "save" as const),
+                Match.orElse(() => "cleanup" as const),
+              );
               armed = mode;
               hit = false;
               frames.length = 0;
@@ -243,7 +249,7 @@ export const suite = (database: Database) =>
               const column = Option.getOrUndefined(
                 Arr.findFirst(
                   Rec.keys(row ?? {}),
-                  (k) => typeof (row ?? {})[k] === "string" && Str.startsWith("{")(String((row ?? {})[k])),
+                  (k) => Predicate.isString((row ?? {})[k]) && Str.startsWith("{")(String((row ?? {})[k])),
                 ),
               );
 

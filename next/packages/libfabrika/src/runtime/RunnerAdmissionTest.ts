@@ -11,7 +11,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -109,7 +111,7 @@ const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json)
 
 // SQL columns and span fields can hold another JSON document.
 const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     const prior = cache.get(value);
 
     if (prior !== undefined) {
@@ -135,9 +137,7 @@ const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): Reado
   }
 
   // An array's values are its items, in order, so one branch reads arrays and objects alike.
-  return value !== null && typeof value === "object"
-    ? Arr.flatMap(Rec.values(value), (part) => texts(part, cache))
-    : [];
+  return Predicate.isObjectKeyword(value) ? Arr.flatMap(Rec.values(value), (part) => texts(part, cache)) : [];
 };
 
 const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: ReadonlyArray<Cell>, reached: Set<string>) {
@@ -180,16 +180,13 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
   for (const [n, cell] of tape.entries()) {
     const j = model.journal;
 
-    const options =
-      j._tag === "idle"
-        ? ["begin", "crash"]
-        : j._tag === "checking"
-          ? ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]
-          : j._tag === "stepping"
-            ? ["finished", "crash"]
-            : j._tag === "writing_reply"
-              ? ["reply_written", "crash"]
-              : ["attempt_cleared", "crash"];
+    const options = Match.value(j).pipe(
+      Match.tag("idle", () => ["begin", "crash"]),
+      Match.tag("checking", () => ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]),
+      Match.tag("stepping", () => ["finished", "crash"]),
+      Match.tag("writing_reply", () => ["reply_written", "crash"]),
+      Match.orElse(() => ["attempt_cleared", "crash"]),
+    );
 
     const move = nth(options, cell.move);
     reached.add(`${move}:${j._tag}`);
@@ -338,6 +335,7 @@ const walk = Effect.fnUntraced(function* (
     build: "test",
   };
 
+  // SAFETY: expected starts unset; a law sets it to the Incoming it waits for.
   const control = { cut: "", hits: 0, checks: 0, updates: 0, mode: "", expected: null as Incoming | null };
   let serial = 0;
   let booted = false;
@@ -354,24 +352,24 @@ const walk = Effect.fnUntraced(function* (
 
         const admission =
           /process_recovery/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"stepping"')(p));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"stepping"')(p));
         const reply = /process_replies/.test(query);
 
         const cleanup =
           /process_activity/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"idle"')(p));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"idle"')(p));
         const activity =
           /process_activity/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"stepping"')(p));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"stepping"')(p));
         const refusal =
           /process_recovery/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"writing_reply"')(p));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"writing_reply"')(p));
         const abandonment =
           /process_recovery/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"clearing_attempt"')(p));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"clearing_attempt"')(p));
         const replyComplete =
           /process_recovery/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"idle"')(p));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"idle"')(p));
 
         if (
           control.cut === "all" ||
@@ -752,29 +750,28 @@ const walk = Effect.fnUntraced(function* (
       const prior = nth(answers, cell.pick);
       const component = Math.floor(cell.pick / answers.length) % 4;
 
-      const changed =
-        component === 0
-          ? { ...prior.input, seen: prior.input.seen + 1 }
-          : component === 1
-            ? { ...prior.input, sentAt: "2026-11-11T00:00:01Z" }
-            : component === 2
-              ? {
-                  ...prior.input,
-                  envelope: {
-                    ...prior.input.envelope,
-                    input: {
-                      ...(yield* Schema.decodeUnknownEffect(Save)(prior.input.envelope.input)),
-                      body: `changed-${cell.pick}`,
-                    },
-                  },
-                }
-              : {
-                  ...prior.input,
-                  envelope: {
-                    ...prior.input.envelope,
-                    by: Writer.cases.person.make({ key: owner.key, for: "different-fixture-writer" }),
-                  },
-                };
+      const changed = yield* Match.value(component).pipe(
+        Match.when(0, () => Effect.succeed({ ...prior.input, seen: prior.input.seen + 1 })),
+        Match.when(1, () => Effect.succeed({ ...prior.input, sentAt: "2026-11-11T00:00:01Z" })),
+        Match.when(2, () =>
+          Effect.map(Schema.decodeUnknownEffect(Save)(prior.input.envelope.input), (save) => ({
+            ...prior.input,
+            envelope: {
+              ...prior.input.envelope,
+              input: { ...save, body: `changed-${cell.pick}` },
+            },
+          })),
+        ),
+        Match.orElse(() =>
+          Effect.succeed({
+            ...prior.input,
+            envelope: {
+              ...prior.input.envelope,
+              by: Writer.cases.person.make({ key: owner.key, for: "different-fixture-writer" }),
+            },
+          }),
+        ),
+      );
 
       const retried = move === "retry" ? prior.input : changed;
       // Accepted placement permits new clocks on a resend; its body stays bound.

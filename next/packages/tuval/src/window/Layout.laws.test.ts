@@ -19,6 +19,7 @@ import { type Tile, type TileId, Workspace } from "@kampus/libfabrika/tezgah/Wor
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 
@@ -112,13 +113,13 @@ const parse = (html: string): Node => {
 
 const all = (node: Node): ReadonlyArray<Node> => [
   node,
-  ...Arr.flatMap(node.children, (c) => (typeof c === "string" ? [] : all(c))),
+  ...Arr.flatMap(node.children, (c) => (Predicate.isString(c) ? [] : all(c))),
 ];
 
 const text = (node: Node): string =>
   Function.pipe(
     node.children,
-    Arr.map((c) => (typeof c === "string" ? c : text(c))),
+    Arr.map((c) => (Predicate.isString(c) ? c : text(c))),
     Arr.join(""),
   );
 
@@ -211,7 +212,7 @@ const check = (d: Desk, seen: { regions: number; nested: number }) => {
 
   seen.regions = Math.max(seen.regions, regions.length);
   seen.nested +=
-    typeof d.w.layout !== "string" && Arr.some(d.w.layout.parts, (p) => typeof p.inner !== "string") ? 1 : 0;
+    !Predicate.isString(d.w.layout) && Arr.some(d.w.layout.parts, (p) => !Predicate.isString(p.inner)) ? 1 : 0;
 };
 
 class Split implements fc.Command<Desk, Desk> {
@@ -383,7 +384,7 @@ const pathTo = (root: Node, node: Node): ReadonlyArray<Node> => {
   }
 
   for (const c of root.children) {
-    const below = typeof c === "string" ? [] : pathTo(c, node);
+    const below = Predicate.isString(c) ? [] : pathTo(c, node);
 
     if (below.length > 0) {
       return [root, ...below];
@@ -543,8 +544,8 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
         seen.open += folded.length > 0 && open.length > 1 ? 1 : 0;
         seen.nested +=
           folded.length > 0 &&
-          typeof w.layout !== "string" &&
-          Arr.some(w.layout.parts, (p) => typeof p.inner !== "string")
+          !Predicate.isString(w.layout) &&
+          Arr.some(w.layout.parts, (p) => !Predicate.isString(p.inner))
             ? 1
             : 0;
       }),

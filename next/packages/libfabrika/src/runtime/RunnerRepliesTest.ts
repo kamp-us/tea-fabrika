@@ -15,6 +15,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -211,7 +213,7 @@ const replyRows = (sql: Sql, id: string) =>
     (table) =>
       Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) =>
         Arr.flatMap(Rec.toEntries(row), ([column, value]) =>
-          typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
+          Predicate.isString(value) && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
         ),
       ),
   );
@@ -229,7 +231,7 @@ const replyCells = (sql: Sql): ReadonlyArray<string> =>
       ),
       (table) => Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) => Rec.values(row)),
     ),
-    (cell): cell is string => typeof cell === "string",
+    (cell): cell is string => Predicate.isString(cell),
   );
 
 let counter = 0;
@@ -391,6 +393,7 @@ const walk = (
     });
 
     const sorted = (view: unknown) => {
+      // SAFETY: the view compared here is this program's own model, which holds `notes`.
       const notes = (view as Model).notes;
       return { notes: Rec.fromEntries(Rec.toEntries(notes).sort(([a], [b]) => Str.localeCompare(b)(a))) };
     };
@@ -455,6 +458,7 @@ const walk = (
         errors.push(Cause.pretty(exit.cause));
         // A throw or defect is not a typed failure.
         expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
+        // SAFETY: the expect above failed the law unless the cause holds a typed failure, a RunnerFailure, and the next expect fails it unless that failure is a RepliesError.
         const error = Cause.squash(exit.cause) as RepliesError;
         expect(error._tag).toBe("RepliesError");
         expect(error.reason).toBe("bad_row");
@@ -503,6 +507,7 @@ const walk = (
       } else if (move === "reuse") {
         // The same letter with one bound part changed: its payload, or for a refusal its caller.
         const prior = nth(intact, step.kind);
+        // SAFETY: this letter was a Save the walk sent, so its input is a Save.
         const input = prior.letter.envelope.input as typeof Save.Type;
         const parts = prior.first._tag === "refused" ? 3 : 1;
         const part = step.pick % parts;
@@ -584,6 +589,7 @@ const walk = (
         const prior = nth(stored, step.kind);
         const located = replyRows(live.inbox, prior.letter.id);
         expect(located, "one stored JSON value holds the refusal").toHaveLength(1);
+        // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
         const json = yield* Schema.decodeUnknownEffect(
           Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
@@ -591,18 +597,21 @@ const walk = (
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
 
-        const cell =
-          kind === "json"
-            ? `${Str.slice(0, -1)(value)}${step.secret}`
-            : kind === "missing"
-              ? Formatter.formatJson(
-                  Rec.fromEntries(Arr.filter(Rec.toEntries(json), ([f]) => f !== fields[n % fields.length])),
-                )
-              : kind === "key"
-                ? Formatter.formatJson({ ...json, id: `${prior.letter.id}-other` })
-                : kind === "accepted"
-                  ? Formatter.formatJson({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
-                  : Formatter.formatJson({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) });
+        const cell = Match.value(kind).pipe(
+          Match.when("json", () => `${Str.slice(0, -1)(value)}${step.secret}`),
+          Match.when("missing", () =>
+            Formatter.formatJson(
+              Rec.fromEntries(Arr.filter(Rec.toEntries(json), ([f]) => f !== fields[n % fields.length])),
+            ),
+          ),
+          Match.when("key", () => Formatter.formatJson({ ...json, id: `${prior.letter.id}-other` })),
+          Match.when("accepted", () =>
+            Formatter.formatJson({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) }),
+          ),
+          Match.orElse(() =>
+            Formatter.formatJson({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) }),
+          ),
+        );
 
         secrets.push(step.secret);
         live.inbox.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, cell, value);

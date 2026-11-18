@@ -79,6 +79,7 @@ class Probe extends Context.Service<Probe, { readonly port: number }>()(
 ) {}
 
 /** A platform value built from plain parts: the layers read only the parts each law gives. */
+// SAFETY: each call gives `fake` what the code under its law reads: a real Request, the implementation `Process.make` was handed, or the id, storage, bindings and context members listed at the call.
 const fake = <A>(value: object): A => value as A;
 
 /** The instance setting as the stack hands it in, and a Project that records any start as `saved`. */

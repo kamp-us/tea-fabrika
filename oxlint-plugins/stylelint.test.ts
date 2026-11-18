@@ -269,11 +269,15 @@ const settingsProblems = (config: stylelint.Config | undefined, base: stylelint.
 };
 
 const warningPaths = (value: unknown, path = "config"): string[] => {
-  if (value === null || typeof value !== "object") {
+  if (!Predicate.isObjectOrArray(value)) {
     return [];
   }
 
-  return Arr.flatMap(Rec.toEntries(value), ([key, item]) => [
+  const entries = Arr.isArray(value)
+    ? Arr.map(value, (item, at): [string, unknown] => [`${at}`, item])
+    : Rec.toEntries(value);
+
+  return Arr.flatMap(entries, ([key, item]) => [
     ...((key === "severity" || key === "defaultSeverity") && item === "warning" ? [`${path}.${key}`] : []),
     ...warningPaths(item, `${path}.${key}`),
   ]);

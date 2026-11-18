@@ -16,6 +16,7 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 
@@ -100,8 +101,8 @@ const segments = fc.array(segment, { minLength: 1, maxLength: 4 });
 const ports = fc.integer({ min: 1, max: 65535 });
 
 /** `value` placed at `path` in nested tables. */
-const nest = (path: ReadonlyArray<string>, value: unknown): unknown =>
-  path.reduceRight<unknown>((inner, key) => ({ [key]: inner }), value);
+const nest = <A>(path: ReadonlyArray<string>, value: A): A | Record<string, unknown> =>
+  path.reduceRight<A | Record<string, unknown>>((inner, key) => ({ [key]: inner }), value);
 
 /** What a provider holds at the setting's path: nothing, a valid port, or a value that must fail. */
 const supplied = fc.oneof(
@@ -184,7 +185,7 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
       Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], reload: "restart", since: 1 }),
     ];
 
-    expect(typeof refused).toBe("function");
+    expect(refused).toBeTypeOf("function");
   });
 
   // oxlint-disable-next-line fabrika/law-shape -- a type law: its expectTypeOf lines are the check, so it is neither a property nor an example
@@ -223,7 +224,11 @@ describe("L3, absence gives the default, and an invalid present value never does
         // An explicit empty string is supplied, not absent: it must fail, never become the default.
         const exit = await run(setting.parse(ConfigProvider.fromUnknown(root, { preserveEmptyStrings: true })));
 
-        const want = value._tag === "absent" ? DEFAULT : value._tag === "valid" ? value.expected : "a failure";
+        const want = Match.value(value).pipe(
+          Match.tag("absent", () => DEFAULT),
+          Match.tag("valid", (value) => value.expected),
+          Match.orElse(() => "a failure"),
+        );
         expect(Exit.isSuccess(exit) ? exit.value : "a failure").toBe(want);
       }),
       check,

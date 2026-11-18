@@ -26,6 +26,7 @@ import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Str from "effect/String";
@@ -90,7 +91,13 @@ const openStep = (rejected: "none" | "stored" | "other"): Step => ({
 
     return Effect.gen(function* () {
       const before = MemoryFiles.read(r.disk, FILE);
-      const fp = rejected === "stored" ? m.fingerprint : rejected === "other" ? "SHA256:not-this-key" : null;
+
+      const fp = Match.value(rejected).pipe(
+        Match.when("stored", () => m.fingerprint),
+        Match.when("other", () => "SHA256:not-this-key"),
+        Match.orElse(() => null),
+      );
+
       const exit = yield* open(r, fp);
 
       if (m.file === null) {
@@ -161,17 +168,19 @@ const damageStep = (form: "bytes" | "truncated" | "empty-object" | "other-key-ty
       }
 
       const text = new TextDecoder().decode(entry.bytes);
-      entry.bytes =
-        form === "truncated"
-          ? entry.bytes.slice(0, Math.max(0, Math.min(entry.bytes.length - 2, bytes.length)))
-          : form === "empty-object"
-            ? new TextEncoder().encode("{}")
-            : form === "other-key-type"
-              ? new TextEncoder().encode(
-                  Function.pipe(text, Str.replace('"OKP"', '"RSA"'), Str.replace('"Ed25519"', '"P-256"')),
-                )
-              : // Leading 0xFF: never JSON, whatever follows.
-                new Uint8Array([0xff, ...bytes]);
+      entry.bytes = Match.value(form).pipe(
+        Match.when("truncated", () =>
+          entry.bytes.slice(0, Math.max(0, Math.min(entry.bytes.length - 2, bytes.length))),
+        ),
+        Match.when("empty-object", () => new TextEncoder().encode("{}")),
+        Match.when("other-key-type", () =>
+          new TextEncoder().encode(
+            Function.pipe(text, Str.replace('"OKP"', '"RSA"'), Str.replace('"Ed25519"', '"P-256"')),
+          ),
+        ),
+        // Leading 0xFF: never JSON, whatever follows.
+        Match.orElse(() => new Uint8Array([0xff, ...bytes])),
+      );
       m.file.damaged = true;
 
       return "damage";

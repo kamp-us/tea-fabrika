@@ -152,10 +152,10 @@ const sev = Command.make("sev").pipe(
 );
 
 /** A refusal or a failed GitHub call ends the command with its reason and exit 1. */
-const told = (e: unknown) =>
-  Predicate.hasProperty(e, "reason") && Predicate.isString(e.reason)
+const told = (cause: unknown) =>
+  Predicate.hasProperty(cause, "reason") && Predicate.isString(cause.reason)
     ? Effect.andThen(
-        Console.error(`sev: ${e.reason}`),
+        Console.error(`sev: ${cause.reason}`),
         Effect.sync(() => {
           process.exitCode = 1;
         }),

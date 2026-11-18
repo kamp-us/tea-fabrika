@@ -16,6 +16,7 @@ import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
@@ -200,8 +201,9 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                     ) {
                       hits++;
 
-                      const bytes =
-                        typeof fault.output === "string" ? new TextEncoder().encode(fault.output) : fault.output;
+                      const bytes = Predicate.isString(fault.output)
+                        ? new TextEncoder().encode(fault.output)
+                        : fault.output;
 
                       return Effect.succeed(
                         ChildProcessSpawner.makeHandle({

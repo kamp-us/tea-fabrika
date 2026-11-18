@@ -185,6 +185,7 @@ const stack = (
       ProcessManager.layer(
         {
           owner: Owner.cases.brain.make({}),
+          // SAFETY: PIDS in Process.test-support.ts holds 40 ids, so its last one, at index 39, is there.
           recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[39] as string }),
           by: BRAIN,
         },

@@ -59,7 +59,7 @@ const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   // The values are encoded JSON already, so a failure here is a bug, as in `make`'s own encode.
   const text = yield* Schema.encodeUnknownEffect(
     Schema.fromJsonString(Schema.Unknown, {
-      replacer: (_key, value: unknown) =>
+      replacer: (_key, value: Schema.Json) =>
         Predicate.isObject(value) ? Rec.fromEntries(Rec.toEntries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
     }),
   )(sorted).pipe(Effect.orDie);
@@ -140,7 +140,7 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
  */
 export const read = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(
   group: Setting.Group<A, R>,
-  input: unknown,
+  input: Schema.Json,
 ) {
   const strict = { onExcessProperty: "error" } as const;
   const paths = group.declarations.map((d) => d.path);

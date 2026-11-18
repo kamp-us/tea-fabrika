@@ -85,7 +85,7 @@ describe("T753 shared codecs", () => {
         }
 
         const encoded = Schema.encodeSync(file)(ByteSize.bytes(count));
-        expect(typeof encoded).toBe("string");
+        expect(encoded).toBeTypeOf("string");
         expect(Schema.decodeUnknownSync(file)(encoded)).toBe(ByteSize.bytes(count));
       }),
       check,

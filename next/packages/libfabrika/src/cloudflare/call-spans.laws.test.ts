@@ -208,14 +208,14 @@ const open = Effect.fnUntraced(function* () {
   const Box = programBox(counter, CODE.hash);
   const programs = { [PROGRAM]: CODE };
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the platform handles the real Project reads
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: projectRuntime reads only id.name, storage and the IsolateTail export of its state, the three this literal gives; only workerd builds a whole DurableObjectState
   const projectCtx = {
     id: { name: "project-test" },
     storage: projectHandles.storage,
     exports: { IsolateTail: () => ({ fetch: () => Promise.resolve(new Response()) }) },
   } as unknown as DurableObjectState;
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the platform handles the real Process reads
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: processRuntime, configureProcess and processDescriptor read only id.name (the JSON [project, process] pair processRuntime decodes), storage and the IsolateTail export, all given here
   const processCtx = {
     id: { name: JSON.stringify(["project-test", NAME]) },
     storage: processHandles.storage,
@@ -259,7 +259,7 @@ const open = Effect.fnUntraced(function* () {
     return runtime.runPromise(ProcessService.use((service) => member(service, method, args)));
   });
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node namespaces call the real services but have no workerd brands
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: each binding answers the calls this law's two runtimes make on it (getByName, ring, notify, probe, write, getEntrypoint); MEASUREMENTS is never called here, and workerd's brands are never read
   const env = {
     INSTANCE: JSON.stringify(START),
     PROJECT: { getByName: () => projectStub },
@@ -290,6 +290,7 @@ const open = Effect.fnUntraced(function* () {
     bootstrap: [{ id: NAME, name: NAME, program: PROGRAM }],
     // No gateway runs here: the door's two calls a Process makes, the check of a letter and the retiring of an
     // ended process's session, accept at once.
+    // SAFETY: no client dials this Project, so those two are the only GatewayCalls members called on the door.
     door: () => Effect.succeed({ checkDelivery: () => Effect.void, retire: () => Effect.void } as never),
   });
   const process = processRuntime(processCtx, env, programs);

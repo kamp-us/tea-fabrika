@@ -4,7 +4,7 @@
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
 // deleted.
 import { matchesGlob } from "node:path";
-import { Array as Arr, Record as Rec } from "effect";
+import { Array as Arr, Predicate, Record as Rec } from "effect";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
@@ -70,11 +70,10 @@ export interface WarnLine {
 /** What a whole run says about a warn line: its folder has no fire left, or it names a file. */
 type Stale = { readonly _tag: "zero"; readonly line: WarnLine } | { readonly _tag: "file"; readonly line: WarnLine };
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Arr.isArray(value);
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => Predicate.isObject(value);
 
-/** A rule's level: the setting itself, or the first item of `[level, ...options]`. */
-const level = (setting: unknown): unknown => (Arr.isArray(setting) ? setting[0] : setting);
+/** Whether a rule's level is warn: the setting itself, or the first item of `[level, ...options]`. */
+const warns = (setting: unknown): boolean => (Arr.isArray(setting) ? setting[0] : setting) === "warn";
 
 /** The warn lines for the six, read from `oxlint --print-config`, oxlint's own reading of the config. */
 export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
@@ -87,13 +86,13 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
 
     const globs = Arr.filter(
       override.files,
-      (glob: unknown): glob is string => typeof glob === "string" && !FROZEN.has(glob),
+      (glob: unknown): glob is string => Predicate.isString(glob) && !FROZEN.has(glob),
     );
 
     return Arr.flatMap(Rec.toEntries(override.rules), ([key, setting]) => {
       const rule = CODES.get(key);
 
-      return rule !== undefined && level(setting) === "warn" ? Arr.map(globs, (glob) => ({ rule, glob })) : [];
+      return rule !== undefined && warns(setting) ? Arr.map(globs, (glob) => ({ rule, glob })) : [];
     });
   });
 };

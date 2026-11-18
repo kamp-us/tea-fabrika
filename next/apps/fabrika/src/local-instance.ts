@@ -13,12 +13,12 @@ class PortError extends Schema.TaggedError<PortError>()("PortError", { message: 
 
 // The runtime refuses a taken port as a ConfigError with subtag AddressInUse, and Node as EADDRINUSE;
 // either may arrive as the cause of another error.
-const addressInUse = (error: unknown): boolean =>
-  (Predicate.isTagged(error, "ConfigError") &&
-    Predicate.hasProperty(error, "subtag") &&
-    error.subtag === "AddressInUse") ||
-  (Predicate.hasProperty(error, "code") && error.code === "EADDRINUSE") ||
-  (Predicate.hasProperty(error, "cause") && error.cause !== error && addressInUse(error.cause));
+const addressInUse = (cause: unknown): boolean =>
+  (Predicate.isTagged(cause, "ConfigError") &&
+    Predicate.hasProperty(cause, "subtag") &&
+    cause.subtag === "AddressInUse") ||
+  (Predicate.hasProperty(cause, "code") && cause.code === "EADDRINUSE") ||
+  (Predicate.hasProperty(cause, "cause") && cause.cause !== cause && addressInUse(cause.cause));
 
 const portTaken = (cause: Cause.Cause<unknown>) =>
   Arr.some(

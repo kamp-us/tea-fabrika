@@ -9,6 +9,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -364,7 +365,11 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
 
             const translated = yield* failed(
               nemesis.check(target),
-              reason === "unreachable" ? "Unreachable" : reason === "bad_row" ? "BadRow" : "Storage",
+              Match.value(reason).pipe(
+                Match.when("unreachable", () => "Unreachable" as const),
+                Match.when("bad_row", () => "BadRow" as const),
+                Match.orElse(() => "Storage" as const),
+              ),
             );
 
             // Each service owns its error. Nemesis retains ProcessHistory's error, which retains Ledger's.

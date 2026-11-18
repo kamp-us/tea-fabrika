@@ -32,6 +32,7 @@ for (const [name, plant, error] of [
   ],
   [
     "K1: every five minutes",
+    // SAFETY: ci-speed.yaml's `on.schedule` is a list of maps with a `cron` key; the parse leaves it untyped.
     (w: SpeedFile) => void ((w.on["schedule"] as Record<string, string>[])[0]!["cron"] = "*/5 * * * *"),
     "K1: it runs on one daily schedule and by hand, nothing else",
   ],
@@ -49,11 +50,13 @@ for (const [name, plant, error] of [
   ],
   [
     "K3: the job may write contents",
+    // SAFETY: the speed job's `permissions` in ci-speed.yaml is a map of scope names to levels.
     (w: SpeedFile) => void ((speedJob(w)["permissions"] as Record<string, string>)["contents"] = "write"),
     "K3: the job's token reads actions, contents and pull requests and writes issues, nothing more",
   ],
   [
     "K4: the checkout keeps its token",
+    // SAFETY: the speed job's first step is the checkout, whose `with` block is a map holding persist-credentials.
     (w: SpeedFile) => void delete (speedJob(w).steps[0]!["with"] as Record<string, unknown>)["persist-credentials"],
     "K4: its checkout sets persist-credentials: false",
   ],

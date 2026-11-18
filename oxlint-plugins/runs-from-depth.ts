@@ -38,7 +38,7 @@
 // - a count passed as a plain argument to a helper (`prop(name, ..., 200)`, `runs(25)`);
 // - a count built by an expression (`numRuns: n * 2`) or read from another file.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
-import { Array as Arr, Option } from "effect";
+import { Array as Arr, Option, Predicate } from "effect";
 import { ancestors, below, pathIn, type Node } from "./match.ts";
 
 /** Modules whose every name is real IO. */
@@ -64,10 +64,11 @@ const MESSAGE = `A law over real IO reads its case count from the test depth (de
 
 type Parented = Node & { readonly parent?: Node | null };
 
+// SAFETY: oxlint sets `parent` on each node it visits, and on the Program it is null, which `?? null` keeps.
 const parentOf = (node: Node): Node | null => (node as Parented).parent ?? null;
 
 const numberIn = (node: Node | null | undefined): number | null =>
-  node?.type === "Literal" && typeof node.value === "number" ? node.value : null;
+  node?.type === "Literal" && Predicate.isNumber(node.value) ? node.value : null;
 
 /** A key and its value as the parser hands it: in an object literal, a pattern or an assignment target. */
 type Pair = Extract<Node, { readonly type: "Property" }>;
@@ -77,13 +78,13 @@ const keyName = (property: Pair): string | null =>
     ? null
     : property.key.type === "Identifier"
       ? property.key.name
-      : property.key.type === "Literal" && typeof property.key.value === "string"
+      : property.key.type === "Literal" && Predicate.isString(property.key.value)
         ? property.key.value
         : null;
 
 /** The written module name of an import's source, or null when it is built at run time. */
 const moduleName = (source: Node | null | undefined): string | null =>
-  source?.type === "Literal" && typeof source.value === "string"
+  source?.type === "Literal" && Predicate.isString(source.value)
     ? source.value
     : source?.type === "TemplateLiteral" && source.expressions.length === 0
       ? (source.quasis[0]?.value.cooked ?? null)
@@ -132,6 +133,7 @@ const overridden = (node: Node): boolean => {
     return false;
   }
 
+  // SAFETY: the check above found `spread`'s type is SpreadElement, which TypeScript does not narrow from `parentOf`.
   const after = object.properties.slice(object.properties.indexOf(spread as ESTree.SpreadElement) + 1);
 
   return Arr.some(after, (property) => property.type === "Property" && keyName(property) === "numRuns");
@@ -325,6 +327,7 @@ export const runsFromDepth: CreateRule = {
 
         for (const node of nodes) {
           if (node.type === "VariableDeclarator" && node.id.type === "Identifier") {
+            // SAFETY: a VariableDeclarator's `parent` is always its VariableDeclaration, which holds `kind`.
             const constant = (node as Node & { readonly parent: ESTree.VariableDeclaration }).parent.kind === "const";
             const value = numberIn(node.init);
 

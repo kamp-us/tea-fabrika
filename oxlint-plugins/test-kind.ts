@@ -20,7 +20,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Array as Arr, pipe, Option, Schema } from "effect";
+import { Array as Arr, pipe, Option, Predicate, Schema } from "effect";
 import { type Argument, type Expression, parseSync, Visitor } from "oxc-parser";
 import { DRIVES, reader, type Open, type Receiver } from "./starters.ts";
 
@@ -92,7 +92,7 @@ const receiver = (callee: Expression): Receiver | null => {
 
 /** A string literal, or a template's text before its first placeholder. */
 const literal = (node: Argument | undefined): string | null =>
-  node?.type === "Literal" && typeof node.value === "string"
+  node?.type === "Literal" && Predicate.isString(node.value)
     ? node.value
     : node?.type === "TemplateLiteral"
       ? (node.quasis[0]?.value.cooked ?? null)

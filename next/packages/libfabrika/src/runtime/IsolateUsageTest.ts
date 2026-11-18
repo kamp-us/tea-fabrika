@@ -9,6 +9,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as Rec from "effect/Record";
 import * as Ref from "effect/Ref";
 import * as References from "effect/References";
@@ -366,12 +367,13 @@ export const suite = (rig: Rig) =>
                   },
                 });
 
-                const response: Effect.Effect<void, unknown> =
-                  behavior === "hang"
-                    ? Effect.never
-                    : behavior === "fail"
-                      ? Effect.fail(new DeliveryError({ message: `PRIVATE_DELIVERY_${cell.error}_END` }))
-                      : Effect.void;
+                const response: Effect.Effect<void, unknown> = Match.value(behavior).pipe(
+                  Match.when("hang", () => Effect.never),
+                  Match.when("fail", () =>
+                    Effect.fail(new DeliveryError({ message: `PRIVATE_DELIVERY_${cell.error}_END` })),
+                  ),
+                  Match.orElse(() => Effect.void),
+                );
 
                 const delivery = rig.deliver(
                   { project: "project-test", name: "checklist:1", process: pid(1) },

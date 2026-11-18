@@ -102,9 +102,11 @@ const proof = fc.oneof(
           steps: [...before, { name, conclusion: "failure", start: null, end }, ...after],
         },
       ],
+      // SAFETY: an empty list, given its element type so the arbitrary's two branches agree.
       failed: [] as string[],
     })),
   fc.array(fc.stringMatching(/^[a-z]{1,8}\.test\.ts > [a-z]{1,8}$/), { minLength: 1, maxLength: 3 }).map((failed) => ({
+    // SAFETY: an empty jobs list, given the type `verdict` reads so this branch matches the other one.
     jobs: [] as Jobs,
     failed,
   })),
@@ -174,6 +176,7 @@ it("property: any set of legs with one that neither passed, was skipped nor was 
   // minutes read as stopped); an odd conclusion reads as a pass (red: `neutral` read as stopped).
   fc.assert(
     fc.property(fc.option(needs, { nil: null }), calmJobs, notPassed, fc.nat(), (given, jobs, bad, place) => {
+      // SAFETY: `calmJobs` builds each job in the shape `verdict` reads; the cast only drops fast-check's mutable type.
       const all: Jobs = (jobs as Jobs).toSpliced(place % (jobs.length + 1), 0, bad);
       expect(scheduled.verdict({ needs: given, jobs: all, failed: [], limits: LIMITS })).toBe("red");
       expect(scheduled.causes(all, LIMITS).map((c) => c.leg)).toContain(bad.name);
@@ -395,6 +398,7 @@ it("property: a leg canceled at or past its limit is a time-out, named by its le
       steps,
       run,
       (others, [suite, shard], over, list, r) => {
+        // SAFETY: `suite` comes from the `constantFrom` above, which only gives "next" or "tooling", the two keys of LIMITS.
         const minutes = LIMITS[suite as keyof typeof LIMITS];
 
         const leg = {
@@ -515,6 +519,7 @@ it("property: the limits are each LIMIT_ variable's positive number, by its job 
 
 // Run 43673342835 on main, from when a red leg's last step canceled its own run (until 2026-11-15):
 // leg `next (2)` failed its vitest step, its stop step canceled the run and the leg with it, so `needs` read `cancelled` twice. The report job is as it saw itself, running.
+// SAFETY: the fixture is a saved run, read here in the three fields the report reads; `scheduled` decodes each one itself.
 const run43673342835 = JSON.parse(
   readFileSync(new URL("./fixtures/scheduled-run-43673342835.json", import.meta.url), "utf8"),
 ) as { needs: unknown; jobs: unknown; reports: unknown[] };
@@ -540,6 +545,7 @@ it("pinned: run 43673342835, a red leg that stopped its own run, is red from its
 // matrix: failure if a leg failed, else cancelled if one was. 43723346561 and 43721881250 ran on
 // branches, where the report does not run; here they are judged as if on main.
 const fixture = (id: string) =>
+  // SAFETY: each saved fixture holds the `needs` and `jobs` fields; their contents stay unknown, since `scheduled` decodes them.
   JSON.parse(readFileSync(new URL(`./fixtures/scheduled-run-${id}.json`, import.meta.url), "utf8")) as {
     needs: unknown;
     jobs: unknown;

@@ -12,9 +12,11 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import * as Function from "effect/Function";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import type * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
+import type * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
 
@@ -86,7 +88,7 @@ const cssRules = (css: string) => {
   return rules;
 };
 
-const meaning = (rules: readonly Rule[]): unknown =>
+const meaning = (rules: readonly Rule[]): Schema.Json =>
   JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
 
 const fixture = (id: number) => {
@@ -267,18 +269,18 @@ describe("P16 CSS tokens", () => {
                 return span;
               },
             }),
-            css =
-              kind === "file"
-                ? `.root${id} { background: url(./image${id}.png); }`
-                : kind === "missing"
-                  ? `@import "./stylesheet ${id}:missing.css";`
-                  : `@import "child${id}.css" ${kind === "layer" ? "layer(theme)" : "supports(display: grid)"};`,
-            reason =
-              kind === "file"
-                ? "stylesheet references a file"
-                : kind === "missing"
-                  ? expect.stringMatching(/^stylesheet has a broken @import:/)
-                  : "unsupported @import condition";
+            css = Match.value(kind).pipe(
+              Match.when("file", () => `.root${id} { background: url(./image${id}.png); }`),
+              Match.when("missing", () => `@import "./stylesheet ${id}:missing.css";`),
+              Match.orElse(
+                () => `@import "child${id}.css" ${kind === "layer" ? "layer(theme)" : "supports(display: grid)"};`,
+              ),
+            ),
+            reason = Match.value(kind).pipe(
+              Match.when("file", () => "stylesheet references a file"),
+              Match.when("missing", () => expect.stringMatching(/^stylesheet has a broken @import:/)),
+              Match.orElse(() => "unsupported @import condition"),
+            );
 
           if (nested) {
             writeFileSync(join(f.home, `child${id}.css`), css);
@@ -641,12 +643,11 @@ describe("P16 CSS tokens", () => {
       fc.asyncProperty(ids, fc.constantFrom("string", "url()", "@import"), async (id, token) => {
         const f = fixture(id);
 
-        const css =
-          token === "string"
-            ? `@import "child\n${id}.css";`
-            : token === "url()"
-              ? `a { background: url(https://test.invalid/a ${id}); }`
-              : `@import ("child${id}.css");`;
+        const css = Match.value(token).pipe(
+          Match.when("string", () => `@import "child\n${id}.css";`),
+          Match.when("url()", () => `a { background: url(https://test.invalid/a ${id}); }`),
+          Match.orElse(() => `@import ("child${id}.css");`),
+        );
 
         const error = await failure(f.read(css));
 

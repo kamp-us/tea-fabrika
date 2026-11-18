@@ -28,7 +28,7 @@
 //
 // `.oxlintrc.json` turns it on for `next/` and off for tests: a test's stand-in is not a contract.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
-import { Array as Arr } from "effect";
+import { Array as Arr, Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 /** The import an identifier is bound to: its source and the name it imports (`*` for a namespace). */
@@ -62,7 +62,7 @@ const memberName = (node: ESTree.MemberExpression): string | null => {
     return node.property.name;
   }
 
-  return node.computed && node.property.type === "Literal" && typeof node.property.value === "string"
+  return node.computed && node.property.type === "Literal" && Predicate.isString(node.property.value)
     ? node.property.value
     : null;
 };
@@ -77,12 +77,13 @@ const declared = (variable: Variable | undefined): Node | null => {
 /** The nodes directly under one. */
 function* parts(node: Node): Generator<Node> {
   for (const [key, value] of Object.entries(node)) {
-    if (key === "parent" || value === null || typeof value !== "object") {
+    if (key === "parent") {
       continue;
     }
 
+    // Only a node has a string `type`: a primitive, null or a plain list of numbers has none.
     for (const part of Arr.isArray(value) ? value : [value]) {
-      if (part !== null && typeof part === "object" && typeof part.type === "string") {
+      if (Predicate.isString(part?.type)) {
         yield part;
       }
     }

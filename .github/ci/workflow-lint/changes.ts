@@ -1,4 +1,4 @@
-import { Record as Rec } from "effect";
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's changes job (S1): its flags and outputs, the
 // parser's pass, and the size step that sizes next's legs (legs.ts).
 import {
@@ -87,8 +87,8 @@ export const changesJob: Rule = ({ jobs }, require) => {
 
   for (const step of changeSteps.filter(
     (s) =>
-      (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
-      (typeof s["run"] === "string" && s["run"].startsWith("pnpm install")),
+      (Predicate.isString(s["uses"]) && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
+      (Predicate.isString(s["run"]) && s["run"].startsWith("pnpm install")),
   )) {
     const forSizing = step["run"] === "pnpm install --frozen-lockfile --ignore-scripts";
     const before = forSizing ? sizing : same;
@@ -125,7 +125,7 @@ export const changesJob: Rule = ({ jobs }, require) => {
   // S1. BUDGET is the setting for a vitest leg's seconds (legs.ts): a positive number, declared here
   // once. legs.ts refuses any other value, and its step then prints nothing.
   const budget = map(sizing?.["env"])["BUDGET"];
-  require(typeof budget === "number" &&
+  require(Predicate.isNumber(budget) &&
     Number.isFinite(budget) &&
     budget > 0, "S1: the size step gets BUDGET, a vitest leg's seconds, as a positive number");
 

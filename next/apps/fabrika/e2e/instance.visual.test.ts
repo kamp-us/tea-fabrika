@@ -5,16 +5,15 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { it } from "@effect/vitest";
-import { String as Str, Array as Arr, Effect, Option } from "effect";
+import { String as Str, Array as Arr, Effect, Option, type Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
-
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
 
 interface BrowserDriver {
   readonly frames: Array<any>;
-  readonly call: (method: string, params: unknown) => Promise<any>;
+  readonly call: (method: string, params: Schema.Json) => Promise<any>;
   readonly connections: () => number;
 }
 
@@ -227,7 +226,7 @@ const driver = async (page: Page, url: string, tab: string) => {
       let socket: WebSocket;
       const pending = new Map<number, (frame: any) => void>();
 
-      const call = (method: string, params: unknown) =>
+      const call = (method: string, params: Schema.Json) =>
         // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         new Promise<any>((done) => {
           const id = ++serial;
@@ -309,7 +308,7 @@ const driver = async (page: Page, url: string, tab: string) => {
 
 const state = (page: Page) => page.evaluate(() => window.p12.frames);
 
-const rpc = (page: Page, method: string, params: unknown) =>
+const rpc = (page: Page, method: string, params: Schema.Json) =>
   page.evaluate(async ({ method, params }) => window.p12.call(method, params), {
     method,
     params,

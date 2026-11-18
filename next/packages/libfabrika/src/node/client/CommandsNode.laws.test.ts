@@ -28,6 +28,7 @@ import * as Exit from "effect/Exit";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -128,6 +129,7 @@ const merge = <A>(a: ReadonlyArray<A>, b: ReadonlyArray<A>, picks: ReadonlyArray
 
   while (i < a.length || j < b.length) {
     const takeA = j >= b.length || (i < a.length && (picks[k++ % Math.max(picks.length, 1)] ?? true));
+    // SAFETY: the loop guard keeps i below a.length when it takes from a, and j below b.length otherwise.
     out.push(takeA ? (a[i++] as A) : (b[j++] as A));
   }
 
@@ -312,7 +314,7 @@ describe("P39 slice 4b: the real command layer", () => {
             // value could be written.
             const text = yield* Schema.encodeEffect(
               Schema.fromJsonString(Schema.Unknown, {
-                replacer: (_k, v) => (typeof v === "object" && v !== null && "value" in v ? String(v.value) : v),
+                replacer: (_k, v) => (Predicate.isObjectOrArray(v) && "value" in v ? String(v.value) : v),
               }),
             )({ c: command.command, a: Arr.map(command.args, String), o: command.options });
 

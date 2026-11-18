@@ -8,7 +8,17 @@
 // never appear whole in the file's bytes. The folder it reads is never changed: a read-only open
 // may still write a `-shm` file, so it opens the copy, with `TestDatabase.open`, which sets nothing in it.
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, Effect, FileSystem, Formatter, Path, Schema, String as Str, Record as Rec } from "effect";
+import {
+  Array as Arr,
+  Effect,
+  FileSystem,
+  Formatter,
+  Path,
+  Predicate,
+  Schema,
+  String as Str,
+  Record as Rec,
+} from "effect";
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
@@ -101,10 +111,9 @@ const cellHits = (file: string, copy: string, roots: Forms) =>
             for (const [row, cells] of rows.entries()) {
               for (const [column, value] of Rec.toEntries(cells)) {
                 for (const { root, forms } of roots) {
-                  const holds =
-                    typeof value === "string"
-                      ? Arr.some(forms, ({ text }) => Str.includes(text)(value))
-                      : value instanceof Uint8Array && Arr.some(forms, ({ bytes }) => offsets(value, bytes).length > 0);
+                  const holds = Predicate.isString(value)
+                    ? Arr.some(forms, ({ text }) => Str.includes(text)(value))
+                    : value instanceof Uint8Array && Arr.some(forms, ({ bytes }) => offsets(value, bytes).length > 0);
 
                   if (holds) {
                     hits.push({ file, place: Place.cases.cell.make({ table, row, column }), root });

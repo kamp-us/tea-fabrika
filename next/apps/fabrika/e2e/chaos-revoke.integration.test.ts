@@ -5,7 +5,20 @@ import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Array as Arr, Clock, Effect, Fiber, FileSystem, Layer, Option, Path, Queue, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  Clock,
+  Effect,
+  Fiber,
+  FileSystem,
+  Layer,
+  Match,
+  Option,
+  Path,
+  Queue,
+  Schema,
+  Stream,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 
 import { localInstance } from "../src/local-instance.ts";
@@ -98,7 +111,7 @@ const Frame = Schema.Struct({
 });
 
 /** Masked client frame, RFC 6455 section 5.2; the payload is a complete small JSON request. */
-const encode = (value: unknown) => {
+const encode = (value: Schema.Json) => {
   const payload = new TextEncoder().encode(JSON.stringify(value));
 
   if (payload.length > 65535) {
@@ -193,14 +206,21 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
 
       const opcode = (buffered[0] ?? 0) & 15;
       const short = (buffered[1] ?? 0) & 127;
-      const header = short === 126 ? 4 : short === 127 ? 10 : 2;
+      const header = Match.value(short).pipe(
+        Match.when(126, () => 4),
+        Match.when(127, () => 10),
+        Match.orElse(() => 2),
+      );
 
       while (buffered.length < header) {
         yield* more;
       }
 
-      const size =
-        short === 126 ? buffered.readUInt16BE(2) : short === 127 ? Number(buffered.readBigUInt64BE(2)) : short;
+      const size = Match.value(short).pipe(
+        Match.when(126, () => buffered.readUInt16BE(2)),
+        Match.when(127, () => Number(buffered.readBigUInt64BE(2))),
+        Match.orElse(() => short),
+      );
 
       if (!Number.isSafeInteger(size) || size > 1024 * 1024) {
         return yield* WireFailure.make({ cause: "oversized test frame" });
@@ -237,7 +257,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
   // A JSON-RPC 2.0 id only has to be unique among this client's open requests.
   let calls = 0;
 
-  const call = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const id = `call-${++calls}`;
     socket.write(encode({ jsonrpc: "2.0", id, method, params }));
 
@@ -467,7 +487,7 @@ it.live(
         expect(before.error).toBeUndefined();
         expect(before.result).toMatchObject({ _tag: "accepted" });
 
-        const hold = (method: string, params: unknown = {}) =>
+        const hold = (method: string, params: Schema.Json = {}) =>
           RevokeTest.invoke(() =>
             // @ts-expect-error p90-control is no ConnectionId: only the test's control binding takes it (chaos-revoke.worker.test-support.ts:90)
             project.route("p90-control", method, params, "p90-control"),

@@ -90,7 +90,7 @@ import { Failure, Policy, type Receipt, Work } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
 import { DemonitorInput, MonitorInput } from "./Monitor.ts";
-import { diff } from "./Patch.ts";
+import { diff, isJsonObject } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
 import { QuotaWaiting, reserveFault } from "./QuotaRunner.ts";
 import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
@@ -307,6 +307,7 @@ const operands = (cmd: unknown, fields: Readonly<Record<string, unknown>>): Opti
   }
 
   const { type: _type, ...rest } = cmd;
+
   return Arr.every(Rec.keys(rest), (key) => Rec.has(fields, key)) ? Option.some(rest) : Option.none();
 };
 
@@ -328,8 +329,8 @@ const encoder = new TextEncoder();
 
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
-const withoutInput = (cmd: unknown): unknown => {
-  if (!Predicate.isObject(cmd) || !Rec.has(cmd, "input")) {
+const withoutInput = (cmd: Schema.Json): Schema.Json => {
+  if (!isJsonObject(cmd) || !Object.hasOwn(cmd, "input")) {
     return cmd;
   }
 
@@ -401,6 +402,8 @@ type Delivery = typeof Delivery.Type;
 const decodeDelivery = Schema.decodeUnknownEffect(Delivery);
 const Typed = Schema.Struct({ type: Schema.String });
 const decodeTyped = Schema.decodeUnknownOption(Typed);
+
+const decodeJsonObject = Schema.decodeUnknownOption(Schema.JsonObject);
 const decodeDown = Schema.decodeUnknownOption(Down);
 
 const inputDigest = Effect.fnUntraced(function* (input: Delivery) {
@@ -1346,7 +1349,7 @@ export class ProgramRunner extends Context.Service<
           const loaded = yield* loader.load(process.program, recorded);
           // The Worker's loader names the hash it loaded: for a build a home never kept, the code
           // that took its place at an open, so every record from here names that code (0293).
-          const build = "hash" in loaded && typeof loaded.hash === "string" ? loaded.hash : recorded;
+          const build = "hash" in loaded && Predicate.isString(loaded.hash) ? loaded.hash : recorded;
           process = { ...process, build };
 
           if (supervision?.journal._tag === "idle" && supervision.build !== build) {
@@ -1463,6 +1466,8 @@ export class ProgramRunner extends Context.Service<
           options: { readonly mine?: string; readonly dirty?: boolean } = {},
         ) {
           if (yield* ended) {
+            // SAFETY: an ended life folds no letter, so it makes no Cmd; the literal is empty, and an
+            // empty array is a ReadonlyArray of any element type.
             return { state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>() };
           }
 
@@ -1470,6 +1475,8 @@ export class ProgramRunner extends Context.Service<
           const saved = yield* store.load;
 
           if (letters.length === 0 && options.dirty !== true) {
+            // SAFETY: with no letter read and nothing dirty there is nothing to fold, and this empty
+            // literal holds no element, so naming its element type Dispatched cannot be wrong.
             return { state, fresh: [] as ReadonlyArray<Dispatched>, mine: Option.none<History>() };
           }
 
@@ -1632,6 +1639,9 @@ export class ProgramRunner extends Context.Service<
 
           live = next;
           yield* publish(state, next);
+
+          // SAFETY: `fresh` is the Array<Dispatched> declared at the top of this call; the cast only
+          // drops its mutable methods, and nothing pushes to it once this call returns.
           return { state: next, fresh: fresh as ReadonlyArray<Dispatched>, mine };
         });
 
@@ -1708,7 +1718,7 @@ export class ProgramRunner extends Context.Service<
          *  put there. A send_chunks keeps `{type, to, as}` and never its items, on `ok` and on `err`:
          *  operands just under the input cap plus the answer's own fields would pass the row cap, and
          *  the answer would never be saved. */
-        const echo = (job: Dispatched, outcome: "ok" | "err"): unknown => {
+        const echo = (job: Dispatched, outcome: "ok" | "err"): Schema.Json => {
           const type = cmdType(job);
 
           if (type === SEND_CHUNKS) {
@@ -1759,7 +1769,7 @@ export class ProgramRunner extends Context.Service<
 
           const { stream, write: asked } = input.success;
           const event = asked.event;
-          const kind = typeof event._tag === "string" ? event._tag : null;
+          const kind = Predicate.isString(event._tag) ? event._tag : null;
           const writes = state.loaded.declaration.writes;
           const policy = kind !== null && Rec.has(writes, kind) ? writes[kind] : undefined;
 
@@ -2050,7 +2060,8 @@ export class ProgramRunner extends Context.Service<
 
           // The Worker's loader names its build's hash; the Node loader runs this runner's build.
           const hash =
-            "hash" in code.success && typeof code.success.hash === "string" ? code.success.hash : process.build;
+            "hash" in code.success && Predicate.isString(code.success.hash) ? code.success.hash : process.build;
+
           const started = yield* children.value
             .start(
               {
@@ -2204,9 +2215,10 @@ export class ProgramRunner extends Context.Service<
           return yield* state.loaded.execution.reply(job.cmd, { ...outcome, at: yield* at }).pipe(
             Effect.map((m) => {
               const tag = outcome._tag === "Err" ? errTag(outcome.error) : undefined;
-              return tag !== undefined && typeof m === "object" && m !== null && !Arr.isArray(m)
-                ? { ...m, reason: tag }
-                : m;
+
+              return tag === undefined
+                ? m
+                : Option.match(decodeJsonObject(m), { onNone: () => m, onSome: (o) => ({ ...o, reason: tag }) });
             }),
             Effect.catchIf(
               (error) => error.reason === "step" && error.source === undefined,
@@ -2323,7 +2335,7 @@ export class ProgramRunner extends Context.Service<
                       ...old,
                       cmds: Arr.filter(
                         old.cmds,
-                        (cmd) => typeof cmd !== "object" || cmd === null || !("id" in cmd) || cmd.id !== job.id,
+                        (cmd) => !Predicate.isObjectOrArray(cmd) || !("id" in cmd) || cmd.id !== job.id,
                       ),
                     });
                   }
@@ -2364,6 +2376,9 @@ export class ProgramRunner extends Context.Service<
                     }
 
                     yield* waitForRoom;
+
+                    // SAFETY: this quota-wait path folds no letter and makes no Cmd, so the answer
+                    // is this empty literal, and an array with no element fits any element type.
                     return [] as ReadonlyArray<Dispatched>;
                   }),
                 ),
@@ -3021,9 +3036,9 @@ type WriteFailure = LedgerError | SessionManagerError | SigningRefused | NotGran
 const cmdType = (job: Dispatched): string =>
   Option.match(decodeTyped(job.cmd), { onNone: () => "", onSome: (c) => c.type });
 
-const hasParent = (m: unknown): boolean => typeof m === "object" && m !== null && "parent" in m;
+const hasParent = (m: unknown): boolean => Predicate.isObjectOrArray(m) && "parent" in m;
 
-const stamp = (m: unknown, parent: string): unknown => (typeof m === "object" && m !== null ? { ...m, parent } : m);
+const stamp = <M>(m: M, parent: string): M => (Predicate.isObjectOrArray(m) ? { ...m, parent } : m);
 
 const inputPort = (state: Live, m: unknown) =>
   Option.match(decodeTyped(m), {
@@ -3034,10 +3049,8 @@ const inputPort = (state: Live, m: unknown) =>
     },
   });
 
-const isEvent = (u: Readonly<Record<string, Schema.Json>>): u is Event => typeof u._tag === "string";
+const isEvent = (u: Readonly<Record<string, Schema.Json>>): u is Event => Predicate.isString(u._tag);
 
 /** An Err outcome's tag, when its error is tagged. */
 const errTag = (error: unknown): string | undefined =>
-  typeof error === "object" && error !== null && "_tag" in error && typeof error._tag === "string"
-    ? error._tag
-    : undefined;
+  Predicate.isObjectOrArray(error) && "_tag" in error && Predicate.isString(error._tag) ? error._tag : undefined;

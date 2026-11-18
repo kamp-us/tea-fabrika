@@ -21,6 +21,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -77,7 +78,7 @@ const forms = (text: string) => [
 ];
 
 const strings = (value: unknown): Array<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return [value];
   }
 
@@ -85,9 +86,7 @@ const strings = (value: unknown): Array<string> => {
     return Arr.flatMap(value, strings);
   }
 
-  return value !== null && typeof value === "object"
-    ? Arr.flatMap(Rec.toEntries(value), ([key, child]) => [key, ...strings(child)])
-    : [];
+  return Predicate.isObject(value) ? Arr.flatMap(Rec.toEntries(value), ([key, child]) => [key, ...strings(child)]) : [];
 };
 
 const clean = (outputs: Outputs, words: ReadonlyArray<string>) => {
@@ -289,10 +288,10 @@ const flow = async (sample: Flow) => {
     close: () => {},
   };
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- the fixture supplies attachment, send and close; workerd owns the complete socket
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: the fixture supplies attachment, send and close; workerd owns the complete socket
   const socket = ws as unknown as WebSocket;
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- workerd owns the full handles; the fixture supplies every member these real services call
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: workerd owns the full handles; the fixture supplies every member these real services call
   const ctx = {
     id: { name: "gateway" },
     storage: {
@@ -309,7 +308,7 @@ const flow = async (sample: Flow) => {
     getWebSocketAutoResponseTimestamp: () => null,
   } as unknown as DurableObjectState;
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies RPC transport only; Connection and record processing remain product code
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies RPC transport only; Connection and record processing remain product code
   const env = {
     INSTANCE: JSON.stringify(connectionInput),
     PROJECT: {
@@ -353,10 +352,11 @@ const flow = async (sample: Flow) => {
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
 
+              // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
               const plugin = Option.getOrUndefined(
                 Arr.findFirst(
                   [...local.mapUnsafe.values()],
-                  (value) => typeof value === "object" && value !== null && "sockets" in value,
+                  (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
                 ),
               ) as {
                 sockets: ReadonlyArray<{ service: { props: { json: string } } }>;

@@ -12,6 +12,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema, type Scope } from "effect";
 import * as Arr from "effect/Array";
+import * as Match from "effect/Match";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -311,7 +312,11 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
               const possible = (): ReadonlyArray<Move> =>
                 Arr.filter(MOVES, (move) =>
-                  move === "retry" ? failed !== null : move === "again" ? mine.last !== null : true,
+                  Match.value(move).pipe(
+                    Match.when("retry", () => failed !== null),
+                    Match.when("again", () => mine.last !== null),
+                    Match.orElse(() => true),
+                  ),
                 );
 
               for (const cell of tape) {

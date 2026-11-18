@@ -69,8 +69,10 @@ import {
   Console,
   Effect,
   FileSystem,
+  Match,
   Option,
   Path,
+  Predicate,
   Record as Rec,
   Schema,
   Stream,
@@ -162,7 +164,7 @@ const loads = (file: string, source: string): ReadonlySet<string> => {
   const names = new Set<string>();
 
   const add = (node: { readonly type: string; readonly value?: unknown } | null | undefined) => {
-    if (node?.type === "Literal" && typeof node.value === "string") {
+    if (node?.type === "Literal" && Predicate.isString(node.value)) {
       names.add(node.value);
     }
   };
@@ -670,7 +672,12 @@ export const droppedFromArmA = (
 export const narrowingUnknown = (reason: string) =>
   Arr.some(Str.split(reason, ","), (r) => pipe(r, Str.startsWith("no_reach:")) || pipe(r, Str.startsWith("no_arm_a:")));
 
-export const exitCode = (outcome: Summary["outcome"]) => (outcome === "done" ? 0 : outcome === "skip" ? 40 : 30);
+export const exitCode = (outcome: Summary["outcome"]) =>
+  Match.value(outcome).pipe(
+    Match.when("done", () => 0),
+    Match.when("skip", () => 40),
+    Match.orElse(() => 30),
+  );
 
 const text = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
   stream.pipe(Stream.decodeText(), Stream.mkString);
@@ -689,7 +696,7 @@ const sh = Effect.fnUntraced(
       forceKillAfter: `${KILL_GRACE_SECONDS} seconds`,
       ...(stdin === undefined
         ? {}
-        : { stdin: typeof stdin === "string" ? Stream.make(new TextEncoder().encode(stdin)) : stdin }),
+        : { stdin: Predicate.isString(stdin) ? Stream.make(new TextEncoder().encode(stdin)) : stdin }),
     });
 
     const [out, err, code] = yield* Effect.all([text(ran.stdout), text(ran.stderr), ran.exitCode], {
@@ -1238,17 +1245,15 @@ const run = Command.make(
       // Whatever went wrong, the answer is `stuck`: there is no other way to run the sample.
       Effect.catch((e) =>
         Effect.map(Clock.currentTimeMillis, (ended) =>
-          e._tag === "Stuck"
-            ? stuckSummary(ask, started, ended, e.reason, e.detail)
-            : e._tag === "CallTimeout"
-              ? stuckSummary(ask, started, ended, "docker_timeout", timeoutLine(e))
-              : stuckSummary(
-                  ask,
-                  started,
-                  ended,
-                  "crash",
-                  "a file or folder the run needs could not be read or written",
-                ),
+          Match.value(e).pipe(
+            Match.tag("Stuck", (stuck) => stuckSummary(ask, started, ended, stuck.reason, stuck.detail)),
+            Match.tag("CallTimeout", (timeout) =>
+              stuckSummary(ask, started, ended, "docker_timeout", timeoutLine(timeout)),
+            ),
+            Match.orElse(() =>
+              stuckSummary(ask, started, ended, "crash", "a file or folder the run needs could not be read or written"),
+            ),
+          ),
         ),
       ),
     );

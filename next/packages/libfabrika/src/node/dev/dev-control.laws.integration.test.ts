@@ -19,6 +19,7 @@ import * as Function from "effect/Function";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
@@ -310,6 +311,7 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
   };
 
   fetch.mockImplementation(async (url, options) => {
+    // SAFETY: every fetch here is a dev.ts control call, whose body is the JSON of `{ target, project, name, method, args }`, a Call body.
     const body = JSON.parse(bodyText(options)) as Call["body"];
     // The address as `fetch` parses it, given as a string or as the client's URL object.
     sent.push({ url: new URL(String(url)).href, body });
@@ -360,10 +362,11 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
         Effect.gen(function* () {
           observe = Context.get(local, RuntimeLifecycle);
 
+          // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
           const plugin = Option.getOrUndefined(
             Arr.findFirst(
               [...local.mapUnsafe.values()],
-              (value) => typeof value === "object" && value !== null && "sockets" in value,
+              (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
             ),
           ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
 
@@ -374,6 +377,7 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
       );
 
       // The startup flush delivered the first started row; its brain call keeps what it said.
+      // SAFETY: the brain call's first argument is the started row the startup flush delivered.
       const startup = Option.getOrThrow(Arr.findFirst(sent, (call) => call.body.method === "brain")).body
         .args[0] as Row;
 
@@ -528,7 +532,7 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
 
           const answered = ping().then(
             (value): Answer => ({ _tag: "value", value }),
-            (error: unknown): Answer => ({ _tag: "error", error }),
+            (cause: unknown): Answer => ({ _tag: "error", error: cause }),
           );
 
           if (world.pending) {
@@ -616,6 +620,7 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
   }
 
   const writes = Arr.filter(sent, (call) => call.body.target === "record" && call.body.method === "write");
+  // SAFETY: a record write's third argument is its list of spans, or absent.
   const spans = Arr.flatMap(writes, (call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
 
   return { startup, rows, facts, calls, restartReads, spans, world, kills };

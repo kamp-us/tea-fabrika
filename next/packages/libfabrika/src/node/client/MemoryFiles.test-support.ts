@@ -13,6 +13,7 @@ import * as Function from "effect/Function";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import type * as Scope from "effect/Scope";
 import * as Str from "effect/String";
 
@@ -483,7 +484,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
           return fail("NotFound", "utimes", normal(raw));
         }
 
-        entry.mtime = typeof mtime === "number" ? dateAt(mtime) : mtime;
+        entry.mtime = Predicate.isNumber(mtime) ? dateAt(mtime) : mtime;
 
         return Effect.void;
       }),

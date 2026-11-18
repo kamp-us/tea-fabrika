@@ -4,6 +4,7 @@
 // `storage()` reopens real SQLite files (Process.test-support.ts), so it is `.integration.` (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Layer } from "effect";
+import * as Match from "effect/Match";
 import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as fc from "fast-check";
@@ -101,12 +102,11 @@ const aim = (step: Call, state: World): Aimed => {
   const registered = NAMES.filter((name) => !free.includes(name));
   const n = "n" in step ? step.n : 0;
 
-  const name =
-    step.call === "first"
-      ? among(free, n, NAMES[n % NAMES.length]!)
-      : step.call === "again"
-        ? among(restartable, n, among(registered, n, NAMES[n % NAMES.length]!))
-        : among(registered, n, NAMES[n % NAMES.length]!);
+  const name = Match.value(step.call).pipe(
+    Match.when("first", () => among(free, n, NAMES[n % NAMES.length]!)),
+    Match.when("again", () => among(restartable, n, among(registered, n, NAMES[n % NAMES.length]!))),
+    Match.orElse(() => among(registered, n, NAMES[n % NAMES.length]!)),
+  );
 
   const process =
     step.call === "again"
@@ -127,6 +127,7 @@ const note = (state: World, { step, name, process }: Aimed, kept: Answer) => {
   }
 
   if (step.call === "first" || step.call === "again") {
+    // SAFETY: a `first` or `again` start that succeeded answers a placed start, which names its process.
     const placed = (kept.ok as { readonly process: string }).process;
     state.placed.set(placed, name);
     state.live.add(placed);
@@ -146,6 +147,7 @@ const answer = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Answer> =>
       const value: unknown = exit.value;
 
       if (Predicate.isObject(value) && Rec.has(value, "at")) {
+        // SAFETY: the check above proved `value` is an object with its own `at` key.
         const { at: _at, ...rest } = value as { readonly at: unknown };
 
         return { ok: rest };
@@ -156,7 +158,7 @@ const answer = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Answer> =>
 
     const error: unknown = Cause.squash(exit.cause);
 
-    return { refused: typeof error === "object" && error !== null && "reason" in error ? error.reason : error };
+    return { refused: Predicate.isObjectOrArray(error) && "reason" in error ? error.reason : error };
   });
 
 /** One call on whichever manager is in context. */

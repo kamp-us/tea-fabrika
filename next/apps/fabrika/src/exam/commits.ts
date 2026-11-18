@@ -30,6 +30,7 @@ import {
   Formatter,
   Option,
   Path,
+  Predicate,
   Schema,
   Stream,
 } from "effect";
@@ -161,6 +162,7 @@ export const keysProblem = (text: string | null): string | null => {
     }
 
     const [, role = "", namespace = "", key = ""] = m;
+    // SAFETY: the wider element type only lets `includes` take any role text; the list is read, never written.
     const step = (ROLES as ReadonlyArray<string>).includes(role);
     const person = /^person:[A-Za-z0-9._:-]+$/.test(role);
 
@@ -714,7 +716,7 @@ const report = Effect.fnUntraced(function* (title: string, answers: ReadonlyArra
 
   if (Option.isSome(summary)) {
     for (const a of answers) {
-      const level = a._tag === "stuck" ? "error" : a._tag === "ask" ? "warning" : "notice";
+      const level = Answer.match(a, { stuck: () => "error", ask: () => "warning", done: () => "notice" });
       yield* Console.log(`::${level} title=${title}::${annotate(plain(a, (p) => p))}`);
     }
 
@@ -842,10 +844,11 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
       Effect.mapError(() => Failed.make({ message: `field/runs.jsonl line ${i + 1} is not JSON` })),
     );
 
-    if (row === null || typeof row !== "object") {
+    if (!Predicate.isObjectOrArray(row)) {
       continue;
     }
 
+    // SAFETY: the check above ruled out null and every non-object, and `attested` is read as unknown.
     const links = (row as { attested?: unknown }).attested;
 
     if (links === undefined) {
@@ -1144,7 +1147,7 @@ if (import.meta.main) {
       Effect.provide(NodeServices.layer),
     ),
     {
-      teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) && typeof exit.value === "number" ? exit.value : 2),
+      teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) && Predicate.isNumber(exit.value) ? exit.value : 2),
     },
   );
 }

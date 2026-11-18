@@ -20,7 +20,7 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 const prefixes = fc.constantFrom("process", "input", "letter", "chaos");
 
 /** The random source throws `failure`, as a platform with no entropy left does. */
-const randomThrows = (failure: unknown) =>
+const randomThrows = (failure: object) =>
   vi.spyOn(crypto, "getRandomValues").mockImplementation(() => {
     throw failure;
   });

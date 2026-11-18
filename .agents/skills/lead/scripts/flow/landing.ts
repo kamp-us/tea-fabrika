@@ -15,7 +15,7 @@
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
-import { Array as Arr, String as Str, pipe, Effect, Path, Schema, Stream } from "effect";
+import { Array as Arr, String as Str, pipe, Effect, Match, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process";
 
@@ -92,19 +92,19 @@ export const governanceOutcome = (ran: Ran): Outcome.Outcome =>
 
 /** stepcommit.sh: 5 is a ticket the lead must pick again (an open PR holds it, or PRs cannot be read). */
 export const commitOutcome = (ran: Ran): Outcome.Outcome =>
-  ran.code === 0
-    ? Outcome.done(`committed and signed: ${tail(ran.output, 1)}`)
-    : ran.code === 5
-      ? Outcome.ask(`stepcommit.sh refused the lead link: ${tail(ran.output)}`)
-      : Outcome.stuck(`stepcommit.sh exited ${ran.code}: ${tail(ran.output)}`);
+  Match.value(ran.code).pipe(
+    Match.when(0, () => Outcome.done(`committed and signed: ${tail(ran.output, 1)}`)),
+    Match.when(5, () => Outcome.ask(`stepcommit.sh refused the lead link: ${tail(ran.output)}`)),
+    Match.orElse(() => Outcome.stuck(`stepcommit.sh exited ${ran.code}: ${tail(ran.output)}`)),
+  );
 
 /** leakgrep.sh fails closed: 1 is a hit for the lead's hand check, anything else but 0 is stuck. */
 export const leakOutcome = (ran: Ran): Outcome.Outcome =>
-  ran.code === 0
-    ? Outcome.done("the leak grep is clean on each commit not on origin")
-    : ran.code === 1
-      ? Outcome.ask(`the leak grep has a hit for the lead's hand check: ${tail(ran.output)}`)
-      : Outcome.stuck(`leakgrep.sh could not check (exit ${ran.code}): ${tail(ran.output)}`);
+  Match.value(ran.code).pipe(
+    Match.when(0, () => Outcome.done("the leak grep is clean on each commit not on origin")),
+    Match.when(1, () => Outcome.ask(`the leak grep has a hit for the lead's hand check: ${tail(ran.output)}`)),
+    Match.orElse(() => Outcome.stuck(`leakgrep.sh could not check (exit ${ran.code}): ${tail(ran.output)}`)),
+  );
 
 /** A refused add: a leak hit asks for the lead's hand check, as leak-grep does; anything else is stuck. */
 export const queueRefused = (e: { readonly reason: string }): Outcome.Outcome =>

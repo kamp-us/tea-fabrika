@@ -32,6 +32,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { drawn, fold, STRIP } from "./Fold.ts";
@@ -76,7 +77,7 @@ const under = (r: Box) => r.width < SMALLEST.width || r.height < SMALLEST.height
 const near = (r: Box) => Math.abs(r.width - SMALLEST.width) <= EDGE || Math.abs(r.height - SMALLEST.height) <= EDGE;
 
 const tilesIn = (node: Node): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : Arr.flatMap(node.parts, (p) => tilesIn(p.inner));
+  Predicate.isString(node) ? [node] : Arr.flatMap(node.parts, (p) => tilesIn(p.inner));
 
 /** What the rule draws: each tile's box outside a band, each band with its tiles, and for each
  *  container on the focused path the floor its focused part is held at, along its direction. */
@@ -95,7 +96,7 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
   let overflow = false;
 
   const walk = (node: Node, box: Box): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       boxes.set(node, box);
 
       return;
@@ -136,7 +137,7 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
         ? { x: at, y: box.y, width: shares[i]!, height: box.height }
         : { x: box.x, y: at, width: box.width, height: shares[i]! };
 
-      if (fixed[i] === true && typeof p.inner !== "string") {
+      if (fixed[i] === true && !Predicate.isString(p.inner)) {
         bands.push({ box: b, tiles: tilesIn(p.inner) });
       } else {
         walk(p.inner, b);

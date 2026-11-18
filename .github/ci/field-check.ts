@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Config, Result } from "effect";
+import { Config, Predicate, Result } from "effect";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
 import { readEnv } from "./step-env.ts";
@@ -32,7 +32,10 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
   });
 };
 
-const parse = (text: string): unknown => Result.getOrUndefined(Result.try((): unknown => JSON.parse(text)));
+/** A value as `JSON.parse` gives it back, the same type as Effect's `Schema.Json`. */
+type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
+
+const parse = (text: string): Json | undefined => Result.getOrUndefined(Result.try((): Json => JSON.parse(text)));
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
@@ -120,7 +123,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
   }
 
   findings.push(...checkRow(file, 1, value));
-  const row: Record<string, unknown> = typeof value === "object" && value !== null ? { ...value } : {};
+  const row: Record<string, unknown> = Predicate.isObjectOrArray(value) ? { ...value } : {};
   const key = idKey(logOf(file), row);
 
   if (name !== undefined && key !== null && row[key] !== name) {
@@ -129,7 +132,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
 
   const day = row["date"];
 
-  if (name !== undefined && typeof day === "string" && !name.startsWith(`${day}-`)) {
+  if (name !== undefined && Predicate.isString(day) && !name.startsWith(`${day}-`)) {
     findings.push(
       Finding.cases.warning.make({ file, line: 1, field: "date", reason: "differs from the file name's date" }),
     );

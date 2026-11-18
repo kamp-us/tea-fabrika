@@ -13,6 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import type * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
@@ -103,7 +104,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
 
         const args = Arr.map(command.args, (arg) => String(arg));
         seen.push({ executable: command.command, args, options: command.options });
-        const supplied = typeof answer === "function" ? yield* answer(args, spec) : answer;
+        const supplied = Predicate.isFunction(answer) ? yield* answer(args, spec) : answer;
 
         let response: Response = {
           ...supplied,

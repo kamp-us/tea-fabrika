@@ -6,6 +6,8 @@ import { createHash } from "node:crypto";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
@@ -26,7 +28,7 @@ const u32 = (n: number) => {
 };
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
 
   return Buffer.concat([u32(b.length), b]);
 };
@@ -305,13 +307,12 @@ describe("P10 hello", () => {
 
               const hello = {
                 ...x.hello,
-                ...(kind === "signature"
-                  ? { signed: "broken" }
-                  : kind === "key"
-                    ? { key: `${x.hello.key}=` }
-                    : kind === "version"
-                      ? { versions: [8] }
-                      : {}),
+                ...Match.value(kind).pipe(
+                  Match.when("signature", () => ({ signed: "broken" })),
+                  Match.when("key", () => ({ key: `${x.hello.key}=` })),
+                  Match.when("version", () => ({ versions: [8] })),
+                  Match.orElse(() => ({})),
+                ),
               };
 
               const admit = kind === "unknown" ? vi.fn(() => Effect.succeed(value)) : x.admit;
@@ -319,7 +320,11 @@ describe("P10 hello", () => {
               const result = yield* checked;
               expect(result).toMatchObject({
                 _tag: "refused",
-                ...(kind === "version" ? { reason: "no_version" } : kind === "unknown" ? { reason: value.reason } : {}),
+                ...Match.value(kind).pipe(
+                  Match.when("version", () => ({ reason: "no_version" })),
+                  Match.when("unknown", () => ({ reason: value.reason })),
+                  Match.orElse(() => ({})),
+                ),
               });
               expect(x.consume).not.toHaveBeenCalled();
               expect(admit.mock.calls.length).toBe(kind === "unknown" ? 1 : 0);

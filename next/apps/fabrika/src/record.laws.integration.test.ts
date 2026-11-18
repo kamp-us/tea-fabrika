@@ -18,6 +18,7 @@ import {
   Formatter,
   Layer,
   Option,
+  Predicate,
   Result,
   Schema,
   Record as Rec,
@@ -53,7 +54,7 @@ const node: Driver = Effect.fnUntraced(function* (name: string, cap: number) {
   const sql = nodeSql(db);
 
   // Only the state handles read by the four exported services; real SQLite, no fake queries.
-  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the platform handles the real record service reads
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies only the platform handles the real record service reads
   const state = {
     id: { name },
     storage: {
@@ -93,7 +94,7 @@ const Input = Schema.Struct({
 // A finding records it; this law compares well-formed text.
 const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
   const repair = (value: unknown): unknown => {
-    if (typeof value === "string") {
+    if (Predicate.isString(value)) {
       return Str.replace(/\p{Cs}/gu, "�")(value);
     }
 
@@ -101,7 +102,7 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
       return Arr.map(value, repair);
     }
 
-    if (value !== null && typeof value === "object") {
+    if (Predicate.isObject(value)) {
       return Rec.fromEntries(
         Arr.map(Rec.toEntries(value), ([key, item]) => [Str.replace(/\p{Cs}/gu, "�")(key), repair(item)]),
       );
@@ -137,7 +138,7 @@ const WireLive = Layer.effect(
         return yield* Effect.die(new Error("record binding is missing a method"));
       }
 
-      const call = <A>(schema: Schema.Codec<A>, invoke: () => Promise<unknown>) =>
+      const call = <A, B>(schema: Schema.Codec<A>, invoke: () => Promise<B>) =>
         recordCall(invoke).pipe(
           Effect.flatMap((value) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.orDie)),
         );
