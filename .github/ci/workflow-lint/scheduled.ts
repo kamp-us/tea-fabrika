@@ -474,13 +474,13 @@ const keptArchive = (jobs: Record<string, unknown>, require: Require): void => {
   const vitest = tests.findIndex((s) => s["run"] === WHOLE_NEXT);
   const receipts = tests.filter((s) => s["run"] === RECEIPT);
 
-  const archives = tests.filter(
-    (s) =>
-      s["name"] === "package archive" ||
-      (uses(s, "actions/upload-artifact") &&
-        Predicate.isString(map(s["with"])["name"]) &&
-        map(s["with"])["name"].startsWith(KEPT)),
-  );
+  const uploadsKept = (s: Record<string, unknown>) => {
+    const name = map(s["with"])["name"];
+
+    return uses(s, "actions/upload-artifact") && Predicate.isString(name) && name.startsWith(KEPT);
+  };
+
+  const archives = tests.filter((s) => s["name"] === "package archive" || uploadsKept(s));
 
   const [receipt] = receipts,
     [archive] = archives;
