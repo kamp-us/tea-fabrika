@@ -1,7 +1,7 @@
 ---
 id: 0004
 title: Every pull request squash-merges, stacked ones included, and a stack moves with `gh stack rebase`, never a merge-only catch-up
-status: amended-in-part by [0598](0598-native-stack-upkeep.md)
+status: amended-in-part by [0599](0599-native-stack-upkeep.md)
 date: 2026-11-09
 tags: [merge, squash, stacks, rebase, signing]
 ---
@@ -12,7 +12,7 @@ tags: [merge, squash, stacks, rebase, signing]
 [gh-stack](https://github.com/github/gh-stack) extension, and after a parent lands, the child is
 rebased onto main.
 
-The stack upkeep and merge-command rules below are amended by [0598](0598-native-stack-upkeep.md).
+The stack upkeep and merge-command rules below are amended by [0599](0599-native-stack-upkeep.md).
 The squash and step-signature rules still hold.
 
 ## Context

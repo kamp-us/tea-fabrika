@@ -1,12 +1,12 @@
 ---
-id: 0598
+id: 0599
 title: Native stacks link whole chains and keep children current by merging
 status: accepted
 date: 2026-11-17
 tags: [stacks, merge, queue, signing]
 ---
 
-# 0598: Native stacks link whole chains and keep children current by merging
+# 0599: Native stacks link whole chains and keep children current by merging
 
 **What this decides:** Native stacks have no fixed layer limit, link bottom-to-top as a whole, and keep open children current with merge commits.
 
