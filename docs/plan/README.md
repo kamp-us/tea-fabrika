@@ -70,8 +70,9 @@ and queue groups, ticket 1155. Since [decision 0602](../../.decisions/0602-integ
 those checks run only the plain tooling laws a change reaches: no `.integration.` law, of next/
 or of tooling, runs on a pull request, a queue group or a branch's proof run, and main's full run
 runs them all ([PR 1613](https://github.com/kamp-us/tea-fabrika/pull/1613) and the follow-up on
-branch `fabrikalfa/integration-off-proof-arm`). Related visual tests join the existing next
-matrix without requiring a label. Global triggers select every file, and selected laws run at
+branch `fabrikalfa/integration-off-proof-arm`). Related visual tests run in the existing next
+matrix on a push to main, and on a pull request only with the `visual` label; a queue group never
+runs them (0536, the owner's ruling of 2026-11-18, [PR 1615](https://github.com/kamp-us/tea-fabrika/pull/1615)). Global triggers select every file, and selected laws run at
 full depth. All test jobs share the existing nine groups and one control group. The original
 regression suite remains intact. The [automatic checklist fault runner](../../field/notes/2026-11-17-automatic-checklist-faults.json)
 assigns the ten existing cases once across the existing integration legs, after each leg's ordinary files. The fixture's full100 suite stays in its one owning leg. It binds the catalog
