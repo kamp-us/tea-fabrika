@@ -3,6 +3,7 @@
  */
 import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
@@ -20,7 +21,6 @@ import {
   VERSION,
   type InputOption,
   type LogLevel,
-  type LogOrStringHandler,
   type Plugin,
   type RolldownLog,
   type RolldownOutput,
@@ -121,27 +121,39 @@ export const bundle = Effect.fn("build.bundle")(function* (
   });
   const fail = (cause: unknown) => BuildError.make({ reason: "bundle", message: String(cause), cause });
 
+  // The console a person sees, or a law's TestConsole. Its members are plain functions, so the
+  // synchronous onLog calls them with no run of an Effect.
+  const out = yield* Console.Console;
+
+  // One printer per level Rolldown prints at its default level; a level Rolldown adds does not compile.
+  const print = {
+    warn: (line: string) => out.warn(line),
+    info: (line: string) => out.info(line),
+  } satisfies Record<Exclude<LogLevel, "debug">, (line: string) => void>;
+
   const config = {
     input,
     plugins,
-    // Rolldown notes each "use client" it drops; a bundle here has no server half.
-    onLog: (level: LogLevel, log: RolldownLog, handler: LogOrStringHandler) => {
-      if (log.code !== "MODULE_LEVEL_DIRECTIVE") {
-        let message = log.message;
-
-        // Rolldown has already embedded file names in the message before calling onLog.
-        for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
-          if (file !== undefined) {
-            message = Function.pipe(message, Str.replaceAll(file, relative(file)));
-          }
-        }
-
-        handler(level, {
-          ...log,
-          message,
-          ...(log.loc?.file === undefined ? {} : { loc: { ...log.loc, file: relative(log.loc.file) } }),
-        });
+    // Rolldown notes each "use client" it drops; a bundle here has no server half. A "debug" log is
+    // dropped, as Rolldown's own handler drops it at its default level. The rest is printed here,
+    // through Console, in Rolldown's own format: plugin, then place, then message.
+    onLog: (level: LogLevel, log: RolldownLog) => {
+      if (log.code === "MODULE_LEVEL_DIRECTIVE" || level === "debug") {
+        return;
       }
+
+      let message = log.message;
+
+      // Rolldown has already embedded file names in the message before calling onLog.
+      for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
+        if (file !== undefined) {
+          message = Function.pipe(message, Str.replaceAll(file, relative(file)));
+        }
+      }
+
+      const plugin = log.plugin === undefined ? "" : `(${log.plugin} plugin) `;
+      const place = log.loc?.file === undefined ? "" : `${relative(log.loc.file)} (${log.loc.line}:${log.loc.column}) `;
+      print[level](plugin + place + message);
     },
     platform: "browser" as const,
     // A tab names no platform module, so nothing is external there: its build refuses one.
