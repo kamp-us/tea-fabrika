@@ -1255,7 +1255,7 @@
   "trace": {
     "law": "scenario: R1, four cases in order: boot duplicate before a good save, boot duplicate before a broken save, then a preceding save's duplicate before a good and a broken save",
     "head": "47b4d13409ffe6187624942dc5fc849d8057200a",
-    "how": "scratch-only stderr lines at reply delivery, gate hold and release, file write and span end; hashes cut to 8 hex; times dropped",
+    "how": "scratch-only stderr lines at reply delivery, gate hold and release, file write and span end; hashes cut to 8 hex; times dropped. The lines are in the log order of two fibers, not event order: the law's code holds the duplicate before the write and releases it before the reply is delivered (finding 2026-11-18-watch-trace-lines-not-in-event-order). What the order does show is that each held same reaches the answer queue before that save's changed reply",
     "lines": [
       "span id=c202cb85 outcome=loaded bytes=678785",
       "reply tag=loaded hash=7bbf4ef4",
