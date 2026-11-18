@@ -1,27 +1,25 @@
 ---
 id: 0116
-title: GitHub requires the ci-required check on main beside commits, and a pull request need not be up to date to merge
-status: amended-in-part by [0161](0161-no-step-signing-by-hand.md), [0162](0162-no-friction-before-a-merge.md), [0163](0163-the-lead-acts-on-the-owners-word.md)
+title: GitHub requires the ci-required check on main, and a pull request need not be up to date to merge
+status: accepted
 date: 2026-11-11
 tags: [ci, merge, ruleset, github-actions, catchup, required-check]
 ---
 
-# 0116: GitHub requires the ci-required check on main beside commits, and a pull request need not be up to date to merge
+# 0116: GitHub requires the ci-required check on main, and a pull request need not be up to date to merge
 
 ```mermaid
 flowchart LR
-  head["pull request head"] --> check["check.yaml: changes, field, check, test, next, e2e"]
+  head["pull request head"] --> check["check.yaml: every job but ci-required"]
   check --> required["ci-required"]
-  head --> commits["commits.yaml: commits"]
   required --> ruleset["main's ruleset"]
-  commits --> ruleset
-  ruleset --> merge["merge: catchup.sh, or any other way"]
+  ruleset --> merge["merge, any way"]
 ```
 
 ```yaml
-# .github/workflows/check.yaml, the job's shape
+# .github/workflows/check.yaml, a sketch of the job's shape; the file's own jobs are the `needs:` list
 ci-required:
-  needs: [changes, field, check, e2e, test, next]
+  needs: [every other job of the file]
   if: always()
   steps:
     - env:
@@ -34,7 +32,7 @@ being behind main does not stop a merge.
 
 ## Context
 
-Until now main's ruleset required one check, `commits`. Tests, lint, the type check and e2e ran in
+Until 2026-11-11 main's ruleset required one check, `commits`. Tests, lint, the type check and e2e ran in
 CI, but only the lead's merge script, `catchup.sh`, waited for them. A merge made any other way went
 through with them red. The guard lived in one script on one laptop.
 
@@ -70,23 +68,24 @@ Where this repo differs, and why:
 This writes down the ruleset that [0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)
 and [0097](0097-a-green-pull-request-lands-without-catching-up.md) left as the owner's switch. It
 amends 0049 in part: 0049 found the up-to-date rule bypassed by timing, and that rule is now off,
-so a merge behind main is allowed at GitHub too. 0049's lint on the true merge and its binding
-constraints still hold. It sits beside [0014](0014-the-lead-merges-when-every-step-passed.md),
-which still says when the lead merges.
+so a merge behind main is allowed at GitHub too. It sits beside
+[0014](0014-the-lead-merges-when-every-step-passed.md), which says when the lead merges.
 
 ## Decision
 
-**Main's ruleset requires two checks, `ci-required` and `commits`, and does not require a branch to
-be up to date with main (owner, 2026-11-11).**
+**Main's ruleset requires one check, `ci-required`, and does not require a branch to be up to date
+with main (owner, 2026-11-11). It also required `commits` until that left the required checks on
+2026-11-13 ([0161](0161-no-step-signing-by-hand.md)).**
 
 - `ci-required` is the last job of `check.yaml`. It needs every other job there and passes when
   each one succeeded, or skipped where `changes.mjs` said it need not run. A failure, a
   cancellation, or a skip that should have run fails it.
-- `commits` stays its own required check, from `commits.yaml` on `pull_request_target`. It is never
-  folded into `ci-required`, which runs the pull request's own copy of the workflow.
-- Only the owner changes the ruleset. No agent adds, drops or edits a required check or a bypass.
-- `catchup.sh` keeps its own wait for the checks until the merge queue of 0107 and 0110 takes over
-  landing. From then on, GitHub's required checks and the queue are the two guards.
+- No agent nobody is watching adds, drops or edits a required check or a bypass. The lead changes
+  the ruleset when the owner tells it to, for that one change
+  ([0163](0163-the-lead-acts-on-the-owners-word.md)).
+- GitHub's required check is the guard on a merge. The lead lands a pull request by a push, green
+  CI and `gh pr merge --squash`, pinned to the head that was checked, and no script waits for the
+  checks ([0162](0162-no-friction-before-a-merge.md)). Being behind main stays allowed.
 
 **Binding constraints**
 
@@ -95,8 +94,8 @@ be up to date with main (owner, 2026-11-11).**
 
 ## Consequences
 
-- A merge made outside `catchup.sh` is refused while a check is red. The checks belong to CI, so
-  the laptop is free to run agents.
+- A merge made any way is refused while a check is red. The checks belong to CI, so the laptop is
+  free to run agents.
 - The cost: one more short CI job on every run. And a GitHub Actions outage now blocks merges at
   GitHub as well, as on 2026-11-11, when queued runs hung for about an hour.
 - A role the ruleset lets bypass still merges past it: 0049 saw the rule suites record `bypass`.

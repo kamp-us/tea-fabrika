@@ -1,7 +1,7 @@
 ---
 id: 0118
 title: Doc comments in next/ carry no @since or @stability tag until libfabrika has a released version
-status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md)
+status: accepted
 date: 2026-11-11
 tags: [doc-comments, effect, style, since, libfabrika, next]
 ---
@@ -12,7 +12,6 @@ tags: [doc-comments, effect, style, since, libfabrika, next]
 /**
  * The runner refused an input before the program saw it.
  *
- * @stability unstable
  * @category errors
  */
 export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {
@@ -20,8 +19,8 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 }) {}
 ```
 
-**What this decides:** a doc comment in `next/` is written without `@since` for now, and the tag
-comes back when `libfabrika` first ships a version.
+**What this decides:** a doc comment in `next/` is written without `@since` and `@stability` for
+now, and both tags come back together when `libfabrika` first ships a version.
 
 ## Context
 
@@ -30,26 +29,24 @@ export, with `@stability`, `@category` and `@since`, and leaves one item open: w
 while `libfabrika` is `0.0.0`. No file in `next/` has the tag today. The owner settled it on
 2026-11-11, in the walk of the Effect code guidelines: a tag that would say `0.0.0` on every export
 tells a reader nothing.
+[0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) dropped `@stability` too on
+2026-11-15, for the same reason.
 
-This amends 0023 in part: its doc comment rule stands, minus the one tag.
+This amends 0023 in part: its doc comment rule stands, minus the two tags.
 
 ## Decision
 
-**No `@since` in `next/` until `libfabrika` has a released version.**
+**No `@since` and no `@stability` in `next/` until `libfabrika` has a released version.**
 
-- A module block carries `@stability`. A public export carries `@stability` and `@category`.
-- The docs lint rule that 0023 plans to copy from Effect does not ask for `@since`.
-- When `libfabrika` first ships a version, the tag is added in one sweep, with that version on
+- A public export carries `@category`.
+- The docs lint rule that 0023 plans to copy from Effect does not ask for `@since` or `@stability`.
+- When `libfabrika` first ships a version, both tags are added in one sweep, with that version on
   everything that exists then.
 
 ## Consequences
 
-- One fewer line on every doc block, and no made-up value to keep in step.
-- The cost: the first release adds the tag to every export at once, so "since when" is lost for
+- Fewer lines on every doc block, and no made-up value to keep in step.
+- The cost: the first release adds the tags to every export at once, so "since when" is lost for
   anything written before it. That is true today as well.
 - [The doc comments pattern](../.patterns/doc-comments.md) shows Effect's own blocks, which keep
-  the tag; its note on our tree now points here.
-
-## Amendments
-
-- 2026-11-15: [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) drops `@stability` too until the first release, for the same reason as `@since`. The line above that says a module block and a public export carry `@stability` no longer holds. Both tags come back together in the one sweep at the first release.
+  the tags; its note on our tree now points here.
