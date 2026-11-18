@@ -53,7 +53,7 @@ The owner ruled yes on 2026-11-15 to two judgment checks.
 - [0523](0523-advice-rules-block-where-clean.md) and `AGENTS.md`'s checks section set the bar
   for a check that can block: its false alarms measured first, about 0% to block and up to 10% to
   only advise. A copy-paste detector has not been measured here, so it starts as advice.
-- [0585](0585-kalfa-is-six-domain-packages.md) names `@kalfa/codehost/ship` as the future home of the
+- [0585](0585-kalfa-is-six-domain-packages.md) names `@kalfa/ci/ship` as the future home of the
   pull request checks. Until that package exists, the checks stay where today's live.
 
 ## Decision
@@ -92,7 +92,7 @@ for each new name, and code refuses either one when a line is missing.**
 
 - A line's existence is checked by code. Only its quality is judged in prose.
 - jscpd stays advice until its false alarms are measured at or under the blocking bar.
-- When `@kalfa/codehost/ship` lands, these checks move there whole; they are not written twice.
+- When `@kalfa/ci/ship` lands, these checks move there whole; they are not written twice.
 
 ## Consequences
 
