@@ -289,9 +289,10 @@ not wait on a local `pnpm typecheck`: CI runs it, and a pull request merges only
 ([0133](./.decisions/0133-no-push-waits-on-a-local-typecheck.md)). Run the narrowest check that
 still covers the change, as
 [Effect's own repo](https://github.com/Effect-TS/effect/blob/main/.agents/AGENTS.md) asks of its
-agents. This table adds no rule, and `pnpm format` comes first in every row. In a sev0, before a push,
-run only `pnpm format` and the leak grep, and let CI judge the rest
-([the sev skill](./.agents/skills/sev/SKILL.md#sev0), [0603](./.decisions/0603-no-stacks-and-sev0-admin-merges.md)).
+agents. This table adds no rule, and `pnpm format` comes first in every row.
+No push waits on a local run of more than about five minutes that CI runs anyway, such as the full
+suite or a whole-repo `--changed`; a pull request that keeps coming back red runs its checks here
+first ([0603](./.decisions/0603-no-stacks-and-sev0-admin-merges.md)).
 
 | What changed | What to run here |
 |---|---|

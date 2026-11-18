@@ -1,12 +1,12 @@
 ---
 id: 0603
-title: No pull request is in a native stack, each layer lands on its own, and in a sev0 the lead admin-merges every ready pull request in order, docs at once, with only format and the leak grep before a push
+title: No pull request is in a native stack, each layer lands on its own, and no push waits on a long local run, and in a sev0 the lead admin-merges every ready pull request in order, docs at once
 status: accepted
 date: 2026-11-18
 tags: [stacks, sev0, merge, lead, admin, order, sweeps, checks, push]
 ---
 
-# 0603: No pull request is in a native stack, each layer lands on its own, and in a sev0 the lead admin-merges every ready pull request in order, docs at once, with only format and the leak grep before a push
+# 0603: No pull request is in a native stack, each layer lands on its own, and no push waits on a long local run, and in a sev0 the lead admin-merges every ready pull request in order, docs at once
 
 ```mermaid
 flowchart LR
@@ -49,6 +49,16 @@ bottom first.**
 - An old native stack is unstacked once with `gh stack unstack <number>`.
 - `land.ts stack` and the code that only served it are deleted.
 
+**Always: before a push, run the fast narrow checks, and skip any local run of more than about
+five minutes that CI runs anyway.**
+
+- Fast and narrow: `pnpm format`, the leak grep, lint, the typecheck of the package you changed,
+  and the tests of the files you touched, as `AGENTS.md`'s checks table says.
+- Skipped: the full suite, a whole-repo `--changed`, anything else past about five minutes. CI runs
+  them, and no push waits on them, as [0133](0133-no-push-waits-on-a-local-typecheck.md) says of
+  the typecheck.
+- A pull request that keeps coming back red from CI runs its checks locally before the next push.
+
 **In a sev0: the lead admin-merges every ready pull request itself, one at a time, in order, past
 the queue.**
 
@@ -63,10 +73,6 @@ the queue.**
   bot, and takes its place again once its new head is green.
 - **Decision and docs pull requests land at once,** on the lead's read
   ([0183](0183-the-lead-admin-merges-docs-only.md)), with no wait for the sev0 to end.
-- **Before a push, agents run only `pnpm format` and the leak grep.** No local lint, typecheck,
-  `--changed` or full test run, and no repeat run of a green law: CI judges them. Work-loop runs
-  stay (a law seen red, a plant gone red, the builder's narrow test), and so does any check CI does
-  not run for that change.
 - **The lead signs a narrowed proof bar** that keeps every law and files the dropped cause as its
   own ticket, in the same read. A loosened or removed law still goes to the owner.
 

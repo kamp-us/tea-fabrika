@@ -98,10 +98,6 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
   - **Stacks:** remove an old native stack link with `gh stack unstack <number>` (`gh api
     repos/<repo>/stacks` lists them). GitHub refuses `gh pr merge` on a stack member; each layer
     lands on its own, bottom first.
-  - **Before a push, agents run only `pnpm format` and the leak grep.** No local lint, typecheck,
-    `--changed` or full test run, and no repeat run of a green law: CI judges them. Work-loop runs
-    stay (a law seen red, a plant gone red, the builder's narrow test), and so does any check CI
-    does not run for that change. Say so in every brief the sev0 sends.
   - **A narrowed proof bar is the lead's to sign** when it keeps every law and files the dropped
     cause as its own ticket, in the same read, by the lead session the quest reports to. A
     loosened or removed law still goes to the owner.
