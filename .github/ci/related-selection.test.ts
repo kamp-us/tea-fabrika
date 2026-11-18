@@ -10,19 +10,35 @@ const sizing: Sizing = {
   table: {},
 };
 
+const count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 }));
+
+/** Generated files of both projects, as a run's `vitest list` would give them. */
+const filesOf = (integration: number, tooling: number) => ({
+  "next-integration": Array.from({ length: integration }, (_, index) => `next/a-${index}.integration.test.ts`),
+  tooling: Array.from({ length: tooling }, (_, index) => `.github/ci/a-${index}.test.ts`),
+});
+
+/** The step's printed outputs, by name. */
+const emittedBy = (result: ReturnType<typeof select>) =>
+  Object.fromEntries(
+    outputs(result).map((line) => {
+      const at = line.indexOf("=");
+
+      return [line.slice(0, at), line.slice(at + 1)];
+    }),
+  );
+
+// scenario: a push to main whose changes job failed, the one other event check.yaml's select job
+// runs on, picks both projects as it did before the merge line left the integration laws.
 it.prop(
   "related selection preserves both missing projects exactly once",
-  {
-    integration: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 })),
-    tooling: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 })),
-  },
+  { integration: count, tooling: count },
   ({ integration, tooling }) => {
-    const files = {
-      "next-integration": Array.from({ length: integration }, (_, index) => `next/a-${index}.integration.test.ts`),
-      tooling: Array.from({ length: tooling }, (_, index) => `.github/ci/a-${index}.test.ts`),
-    };
+    const files = filesOf(integration, tooling);
 
-    const result = select(files, sizing);
+    const lists = { "next-integration": () => files["next-integration"], tooling: () => files.tooling };
+
+    const result = select("push", lists, sizing);
 
     const all = Object.values(result.legs).flat();
 
@@ -42,13 +58,7 @@ it.prop(
       expect(paths.every((path) => files[project].includes(path))).toBe(true);
     }
 
-    const emitted = Object.fromEntries(
-      outputs(result).map((line) => {
-        const at = line.indexOf("=");
-
-        return [line.slice(0, at), line.slice(at + 1)];
-      }),
-    );
+    const emitted = emittedBy(result);
 
     // 0598: the related job holds no group, so the selection carries no group map.
     expect(Object.keys(emitted)).toEqual(["run", "legs", "files", "projects"]);
@@ -61,7 +71,52 @@ it.prop(
 
     expect(JSON.parse(emitted["projects"]!)).toEqual(result.projects);
 
-    expect(select(files, sizing)).toEqual(result);
+    expect(select("push", lists, sizing)).toEqual(result);
+  },
+  options,
+);
+
+// The owner's call of 2026-11-18: the merge line runs no integration law, main's full run does.
+// Plants, each run once on related.ts and restored: `projectsOf` returning both projects for every
+// event (red, integration files land on legs and their list is asked for); returning tooling alone
+// for every event (red, the push law above loses its integration files).
+it.prop(
+  "a pull request or queue group change that reaches integration laws selects none of them and the same tooling legs",
+  {
+    event: Schema.Literals(["pull_request", "merge_group"]),
+    integration: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })),
+    tooling: count,
+  },
+  ({ event, integration, tooling }) => {
+    const files = filesOf(integration, tooling);
+
+    let asked = 0;
+
+    const result = select(
+      event,
+      {
+        "next-integration": () => {
+          asked += 1;
+
+          return files["next-integration"];
+        },
+        tooling: () => files.tooling,
+      },
+      sizing,
+    );
+
+    // The integration list is never asked for, so the step starts no `vitest list` for it.
+    expect(asked).toBe(0);
+
+    expect(Object.values(result.legs).flat().toSorted()).toEqual(files.tooling.toSorted());
+
+    expect(Object.values(result.projects).every((project) => project === "tooling")).toBe(true);
+
+    // Tooling picks exactly what it picks when no integration law is reached at all.
+    expect(result).toEqual(select("push", { "next-integration": () => [], tooling: () => files.tooling }, sizing));
+
+    // With no tooling file the related job skips: `run=false`, no legs.
+    expect(emittedBy(result)["run"]).toBe(String(tooling > 0));
   },
   options,
 );
@@ -93,14 +148,28 @@ it.prop(
 
 it.prop(
   "related selection refuses ambiguous file lists",
-  { word: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)) },
-  ({ word }) => {
+  {
+    word: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)),
+    event: Schema.Literals(["pull_request", "merge_group"]),
+  },
+  ({ word, event }) => {
     const path = `next/${word}.integration.test.ts`;
 
-    expect(() => select({ "next-integration": [path], tooling: [path] }, sizing)).toThrow();
+    const none = () => [];
+
+    expect(() => select("push", { "next-integration": () => [path], tooling: () => [path] }, sizing)).toThrow();
 
     expect(() =>
-      select({ "next-integration": [`next/${word} name.integration.test.ts`], tooling: [] }, sizing),
+      select("push", { "next-integration": () => [`next/${word} name.integration.test.ts`], tooling: none }, sizing),
+    ).toThrow();
+
+    // The merge line's tooling list keeps the same guard.
+    const tool = `.github/ci/${word}.test.ts`;
+
+    expect(() => select(event, { "next-integration": none, tooling: () => [tool, tool] }, sizing)).toThrow();
+
+    expect(() =>
+      select(event, { "next-integration": none, tooling: () => [`.github/ci/${word} a.test.ts`] }, sizing),
     ).toThrow();
   },
   options,
