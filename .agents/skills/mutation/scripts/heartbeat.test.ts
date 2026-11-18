@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { beat, LATE, line } from "./heartbeat.ts";
@@ -6,15 +7,16 @@ import { beat, LATE, line } from "./heartbeat.ts";
 const options = { seed: 119120, numRuns: 300 };
 
 const now = fc.integer({ min: 1.7e12, max: 1.9e12 });
+
 const age = fc.integer({ min: -LATE, max: 3 * LATE });
 
 describe("the mutation heartbeat, today's tooling", () => {
   it("is late exactly when some merge since the last passing run is more than two hours old", () => {
     fc.assert(
       fc.property(now, fc.option(age), fc.array(age, { maxLength: 8 }), (t, pass, ages) => {
-        const merges = ages.map((a) => t - a);
+        const merges = Arr.map(ages, (a) => t - a);
         const b = beat(t, pass === null ? null : t - pass, merges);
-        expect(b._tag).toBe(ages.some((a) => a > LATE) ? "late" : "ok");
+        expect(b._tag).toBe(Arr.some(ages, (a) => a > LATE) ? "late" : "ok");
         expect(b.merges).toBe(merges.length);
 
         if (b._tag === "late") {

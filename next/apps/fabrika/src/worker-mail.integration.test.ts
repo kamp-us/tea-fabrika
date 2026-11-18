@@ -1,70 +1,43 @@
 // P41 slice 2, next/. Real workerd, sockets, object storage,
 // alarms and the private local instance capability, set up the way P12's instance-records test is.
 // No directly constructed runner and no raw Miniflare stands in for the instance.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Schema, Scope } from "effect";
+import type { Start } from "@kampus/libfabrika/processes/Process";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import {
+  Effect,
+  FileSystem,
+  Path,
+  Schema,
+  Scope,
+  Array as Arr,
+  String as Str,
+  Duration,
+  DateTime,
+  Formatter,
+  Option,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-09T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const PROJECT = "p41-workers";
+
 // Bounded waits tied to observable facts. Backoff is 100 to 800 ms, so this is generous.
 const WAIT = 25_000;
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    n = Buffer.alloc(4);
-  n.writeUInt32BE(body.length);
-  return Buffer.concat([n, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-type Key = ReturnType<typeof identity>;
+type Key = SshsigTest.Identity;
 
 // The fixtures use the same Send/ref exchange as slice 1. Source is bundled by the real app build.
 const source = (role: "requester" | "responder", pair: number, braked = false) => `
@@ -98,9 +71,10 @@ export const program = Program.make({name: "p41/${role}-${pair}", machine, state
 type Instance = any;
 
 // Private control only. Reading these rows must not load the runner or deliver mail.
-const instrumentMailBrain = async (brain: string, home: string) => {
-  const entry = join(home, "mail-diagnostics.mjs");
-  writeFileSync(
+const instrumentMailBrain = Effect.fnUntraced(function* (brain: string, home: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const entry = (yield* Path.Path).join(home, "mail-diagnostics.mjs");
+  yield* fs.writeFileString(
     entry,
     `
 import * as Brain from ${JSON.stringify(brain)};
@@ -139,35 +113,35 @@ export class Control extends Brain.Control {
   }
 }`,
   );
-  await Effect.runPromise(
-    Effect.acquireRelease(
-      Effect.promise(() => rolldown({ input: entry, platform: "browser", external: ["cloudflare:workers"] })),
-      (bundle) => Effect.promise(() => bundle.close()),
-    ).pipe(
-      Effect.flatMap((bundle) => Effect.promise(() => bundle.generate({ format: "esm", codeSplitting: false }))),
-      Effect.tap((out) =>
-        Effect.sync(() =>
-          writeFileSync(
-            brain,
-            out.output
-              .filter((item) => item.type === "chunk")
-              .map((item) => item.code)
-              .join("\n"),
+  yield* Effect.acquireRelease(
+    Effect.promise(() => rolldown({ input: entry, platform: "browser", external: ["cloudflare:workers"] })),
+    (bundle) => Effect.promise(() => bundle.close()),
+  ).pipe(
+    Effect.flatMap((bundle) => Effect.promise(() => bundle.generate({ format: "esm", codeSplitting: false }))),
+    Effect.flatMap((out) =>
+      fs.writeFileString(
+        brain,
+        Arr.join(
+          Arr.map(
+            Arr.filter(out.output, (item) => item.type === "chunk"),
+            (item) => item.code,
           ),
+          "\n",
         ),
       ),
-      Effect.scoped,
     ),
+    Effect.scoped,
   );
-};
+});
 
 const mailDiagnostics = () => {
   const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
   const events: Array<{ at: number; elapsed: number; event: string; value: unknown }> = [];
-  const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
-  const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
+  const stamp = () => ({ at: DateTime.toEpochMillis(DateTime.nowUnsafe()), elapsed: performance.now() });
+  const note = (event: string, value: object | null = null) => events.push({ ...stamp(), event, value });
   note("start");
-  const read = async (label: string, call: () => Promise<unknown>) => {
+
+  const read = async <A>(label: string, call: () => Promise<A>) => {
     const start = stamp();
     let value: unknown = null;
 
@@ -183,6 +157,7 @@ const mailDiagnostics = () => {
 
     return value;
   };
+
   return {
     note,
     frame: (raw: string) => frames.push({ ...stamp(), raw }),
@@ -210,6 +185,7 @@ const mailDiagnostics = () => {
           const page = await read(`spans/${pid}/${part}/${after}`, () =>
             instance.record(PROJECT, `job/${pid}/${part}`).read({ _tag: "job", process: pid }, part, after),
           );
+
           const decoded = Schema.decodeUnknownSync(
             Schema.NullOr(
               Schema.Struct({ after: Schema.Int, rolled: Schema.Boolean, spans: Schema.Array(Schema.Json) }),
@@ -248,58 +224,46 @@ const world = async (
   braked = false,
   diagnose = false,
 ) => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
+
   return Effect.runPromise(
     Effect.gen(function* () {
-      const home = yield* Effect.acquireRelease(
-        Effect.sync(() => mkdtempSync(join(tmpdir(), "p41w-"))),
-        (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-      );
-      const key = identity();
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
-      symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "p41w-" });
+
+      const key = yield* SshsigTest.identity;
+      yield* scopedEnv({ FABRIKA_HOME: home });
+      yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
       for (const pair of [1, 2]) {
         for (const role of ["requester", "responder"] as const) {
           const name = `${role}-${pair}`;
-          const path = join(home, `${name}.ts`);
-          writeFileSync(path, source(role, pair, braked && role === "responder" && pair === 1));
-          selections[`p41/${name}`] = path;
+          const file = path.join(home, `${name}.ts`);
+          yield* fs.writeFileString(file, source(role, pair, braked && role === "responder" && pair === 1));
+          selections[`p41/${name}`] = file;
         }
       }
 
-      const built = yield* build({ out: join(home, "dist"), programs: selections });
+      const built = yield* build({ out: path.join(home, "dist"), programs: selections });
       let diagnostics: ReturnType<typeof mailDiagnostics> | undefined;
 
       if (diagnose) {
         diagnostics = mailDiagnostics();
-        yield* Effect.promise(() => instrumentMailBrain(built.brain, home));
+        yield* instrumentMailBrain(built.brain, home);
       }
 
       yield* Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
         const instance = yield* localInstance(
           built,
-          RecordWireTest.startupFixture({
+          yield* RecordWireTest.startupFixture({
             home,
             name: PROJECT,
             person: PERSON,
@@ -318,7 +282,11 @@ const world = async (
             },
           }),
         );
+
         const scope = yield* Effect.scope;
+        // `test` is a plain async function, so `connect` runs with this world's services.
+        const context = yield* Effect.context();
+
         const from: From = {
           by: key.fingerprint,
           for: PERSON,
@@ -328,31 +296,34 @@ const world = async (
           traceId: TRACE,
           build: built.build,
         };
+
         yield* Effect.promise(() =>
           test(instance, key, {
             from,
             hash: built.build,
             diagnostics,
             connect: (tab) =>
-              Effect.runPromise(
+              Effect.runPromiseWith(context)(
                 Effect.gen(function* () {
                   const socket = yield* Effect.acquireRelease(
                     Effect.sync(
                       () =>
                         new WebSocket(
-                          `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                          `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
                         ),
                     ),
                     (socket) => Effect.sync(() => socket.close()),
                   );
+
                   return yield* Effect.promise(() => wire(instance, key, tab, socket, diagnostics));
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
             start: async (name) => {
-              const program = `p41/${name.replace(":", "-")}`;
+              const program = `p41/${Str.replace(":", "-")(name)}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
-              const started = await Reflect.get(instance.project(PROJECT), "start")(
+
+              const started = await instance.project(PROJECT).start(
                 {
                   _tag: "first",
                   id: `start-${name}`,
@@ -361,6 +332,7 @@ const world = async (
                 },
                 from,
               );
+
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             },
           }),
@@ -375,7 +347,7 @@ const world = async (
   );
 };
 
-const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 50) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(
@@ -384,10 +356,10 @@ const until = async <A>(
   done: (value: A) => boolean,
   ms = WAIT,
 ): Promise<A> => {
-  const end = Date.now() + ms;
+  const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + ms;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
     try {
       const value = await look();
       last = { value };
@@ -415,8 +387,10 @@ const wire = async (
 ) => {
   const frames: any[] = [];
   let initialized = false;
+
   let closeCode: number | undefined,
     serial = 0;
+
   socket.addEventListener("message", (event) => {
     if (diagnostics !== undefined) {
       const raw = String(event.data);
@@ -424,7 +398,7 @@ const wire = async (
       diagnostics.frame(
         initialized || raw === "pong"
           ? raw
-          : JSON.stringify(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(raw), (name, value) =>
+          : JSON.stringify(Schema.decodeSync(Schema.fromJsonString(Schema.Json))(raw), (name, value) =>
               ["key", "nonce", "signed", "token"].includes(name) ? "[redacted]" : value,
             ),
       );
@@ -440,16 +414,18 @@ const wire = async (
   socket.addEventListener("error", () => {
     closeCode ??= 1006;
   });
+
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + WAIT;
     diagnostics?.note("wait.start", { end });
 
-    while (Date.now() < end) {
-      const index = frames.findIndex(match);
+    while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        diagnostics?.note("consumed", { id: frames[index].id, method: frames[index].method });
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        diagnostics?.note("consumed", { id: frames[index.value].id, method: frames[index.value].method });
+
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -461,11 +437,14 @@ const wire = async (
 
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
-  const call = async (method: string, params: unknown) => {
+
+  const call = async (method: string, params: Schema.Json) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return next((frame) => frame.id === id);
   };
+
   const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
   expect(
     (
@@ -479,16 +458,18 @@ const wire = async (
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+        signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
       })
     ).error,
   ).toBeUndefined();
   initialized = true;
+
   return { call, next };
 };
 
 const facts = async (instance: Instance, stream: string) =>
-  ((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
+  // SAFETY: the audit read answers the stream's rows as an array.
+  Arr.map((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>, (row) => ({
     ...row.body,
     _tag: row._tag,
     rev: row.rev,
@@ -506,7 +487,7 @@ const answer = async (instance: Instance, name = "requester:1", ref = "exchange"
   until(
     "answer letter",
     () => facts(instance, `${name}/inbox`),
-    (rows) => rows.some((r) => r.m?.type === "answer" && r.m.ref === ref),
+    (rows) => Arr.some(rows, (r) => r.m?.type === "answer" && r.m.ref === ref),
   );
 
 // Read the view notifications; polling view.open would itself drain the requester's inbox.
@@ -532,7 +513,7 @@ it("scenario: W1 and W6, the door receives waiting then answered 8 and both obje
     await until(
       "idle alarms",
       async () => [await instance.process(requester).savedAlarm(), await instance.process(responder).savedAlarm()],
-      (alarms) => alarms.every((at) => at == null),
+      (alarms) => Arr.every(alarms, (at) => at == null),
     );
   });
 }, 180_000);
@@ -567,10 +548,10 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
             .then((value: unknown) => {
               fixture.diagnostics?.note("abort.result", { status: "fulfilled", value: value ?? null });
             })
-            .catch((error: unknown) => {
+            .catch((cause: unknown) => {
               fixture.diagnostics?.note("abort.result", {
                 status: "rejected",
-                error: error instanceof Error ? error.name : "unknown",
+                error: cause instanceof Error ? cause.name : "unknown",
               });
             });
           fixture.diagnostics.note("abort.end");
@@ -578,11 +559,11 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
 
         await changed(client, "answered");
         await answer(instance, "requester:1", "eviction");
-        expect((await facts(instance, "requester:1/outbox")).filter((r) => r.ref === "eviction")).toHaveLength(1);
+        expect(Arr.filter(await facts(instance, "requester:1/outbox"), (r) => r.ref === "eviction")).toHaveLength(1);
         const inbox = await facts(instance, "responder:1/inbox");
-        expect(inbox.filter((r) => r.m?.type === "request" && r.m.ref === "eviction")).toHaveLength(1);
+        expect(Arr.filter(inbox, (r) => r.m?.type === "request" && r.m.ref === "eviction")).toHaveLength(1);
         const answers = await facts(instance, "requester:1/inbox");
-        expect(answers.filter((r) => r.m?.type === "answer" && r.m.ref === "eviction")).toHaveLength(1);
+        expect(Arr.filter(answers, (r) => r.m?.type === "answer" && r.m.ref === "eviction")).toHaveLength(1);
         await until(
           "the requester has drained its answer",
           () => instance.process(requester).savedAlarm(),
@@ -641,16 +622,21 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
           sentAt: SENT,
           seen: 0,
         });
+
         const rows = await until(
           "restart or brake",
           () => facts(instance, "processes/responder:1"),
           (rows) =>
-            rows.some((r) => r._tag === "down") || rows.some((r) => r._tag === "restarted" && r.after === responder),
+            Arr.some(rows, (r) => r._tag === "down") ||
+            Arr.some(rows, (r) => r._tag === "restarted" && r.after === responder),
         );
-        down = rows.find((r) => r._tag === "down");
+
+        down = Option.getOrUndefined(Arr.findFirst(rows, (r) => r._tag === "down"));
 
         if (down === undefined) {
-          responder = rows.find((r) => r._tag === "restarted" && r.after === responder).process;
+          responder = Option.getOrUndefined(
+            Arr.findFirst(rows, (r) => r._tag === "restarted" && r.after === responder),
+          ).process;
         }
       }
 
@@ -659,21 +645,26 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
       await client.call("view.open", { pid: other });
       await client.call("process.send", request(other, "healthy"));
       await changed(client, "answered");
-      const healthy = (await answer(instance, "requester:2", "healthy")).filter(
+
+      const healthy = Arr.filter(
+        await answer(instance, "requester:2", "healthy"),
         (r) => r.m?.type === "answer" && r.m.ref === "healthy",
       );
+
       expect(healthy).toHaveLength(1);
       expect(healthy[0].m.value).toBe(8);
       expect(down.rev).toBeLessThan(healthy[0].rev);
-      expect((await facts(instance, "responder:1/inbox")).filter((r) => r.m?.ref === "braked")).toHaveLength(1);
-      expect((await facts(instance, "requester:1/inbox")).filter((r) => r.m?.type === "answer")).toEqual([]);
+      expect(Arr.filter(await facts(instance, "responder:1/inbox"), (r) => r.m?.ref === "braked")).toHaveLength(1);
+      expect(Arr.filter(await facts(instance, "requester:1/inbox"), (r) => r.m?.type === "answer")).toEqual([]);
       expect(await client.call("view.open", { pid: requester })).toMatchObject({
         result: { view: { phase: "waiting", ref: "braked" } },
       });
       expect(await instance.process(responder).savedAlarm()).toBe(down.until);
       const lifecycle = await facts(instance, "processes/responder:1");
-      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev && r.rev < healthy[0].rev)).toEqual([]);
-      expect(lifecycle.filter((r) => r._tag === "restarted" && r.rev > down.rev)).toEqual([]);
+      expect(
+        Arr.filter(lifecycle, (r) => r._tag === "restarted" && r.rev > down.rev && r.rev < healthy[0].rev),
+      ).toEqual([]);
+      expect(Arr.filter(lifecycle, (r) => r._tag === "restarted" && r.rev > down.rev)).toEqual([]);
     },
     true,
     true,
@@ -687,41 +678,28 @@ const checklistWorld = async (
     readonly connect: () => ReturnType<typeof wire>;
   }) => Promise<void>,
 ) => {
-  const { FileSystem } = await import("effect");
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
   await Effect.runPromise(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "alarm866-" });
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
-      yield* fs.symlink(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
-      const wrapper = join(home, "checklist.ts");
+      yield* scopedEnv({ FABRIKA_HOME: home });
+      yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
+      const wrapper = path.join(home, "checklist.ts");
       yield* fs.writeFileString(
         wrapper,
-        `export { checklist as program } from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
+        `export { checklist as program } from ${Formatter.formatJson(path.resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
       );
-      const built = yield* build({ out: join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
-      const key = identity();
+      const built = yield* build({ out: path.join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
+      const key = yield* SshsigTest.identity;
       const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
+
       const instance = yield* localInstance(
         built,
-        RecordWireTest.startupFixture({
+        yield* RecordWireTest.startupFixture({
           home,
           name: PROJECT,
           person: PERSON,
@@ -730,7 +708,11 @@ const checklistWorld = async (
           port: held.port,
         }),
       );
+
       const scope = yield* Effect.scope;
+      // `test` is a plain async function, so `connect` runs with this world's services.
+      const context = yield* Effect.context();
+
       const from: From = {
         by: key.fingerprint,
         for: PERSON,
@@ -740,12 +722,14 @@ const checklistWorld = async (
         traceId: TRACE,
         build: built.build,
       };
+
       yield* Effect.promise(() =>
         test({
           start: async (name, program = "fabrika/checklist") => {
             const code = built.programs[program];
             expect(code).toBeDefined();
-            const started = await Reflect.get(instance.project(PROJECT), "start")(
+
+            const started = await instance.project(PROJECT).start(
               {
                 _tag: "first",
                 id: `start-${name}`,
@@ -754,21 +738,24 @@ const checklistWorld = async (
               },
               from,
             );
+
             return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
           },
           connect: () =>
-            Effect.runPromise(
+            Effect.runPromiseWith(context)(
               Effect.gen(function* () {
                 const tab = "immediate-wake";
+
                 const socket = yield* Effect.acquireRelease(
                   Effect.sync(
                     () =>
                       new WebSocket(
-                        `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                        `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
                       ),
                   ),
                   (socket) => Effect.sync(() => socket.close()),
                 );
+
                 return yield* Effect.promise(() => wire(instance, key, tab, socket));
               }).pipe(Effect.provideService(Scope.Scope, scope)),
             ),
@@ -861,47 +848,34 @@ export const program = Program.make({name: "t1041/reader", machine, state: {v: 1
 `;
 
 it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread letter between two real programs answer full, and once the reader reads a resend lands", async () => {
-  process.env.DO_NOT_TRACK = "1";
+  noTracking();
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
   const Declarations = await import("@kampus/libfabrika/settings/Declarations");
   const Snapshot = await import("@kampus/libfabrika/settings/Snapshot");
-  const Sources = await import("@kampus/libfabrika/settings/Sources");
+  const Sources = await import("@kampus/libfabrika/settings/Fabrika");
   const { Digest } = await import("effect/crypto");
   await Effect.runPromise(
     Effect.gen(function* () {
-      const home = yield* Effect.acquireRelease(
-        Effect.sync(() => mkdtempSync(join(tmpdir(), "t1041-"))),
-        (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-      );
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const previous = process.env.FABRIKA_HOME;
-          process.env.FABRIKA_HOME = home;
-          return previous;
-        }),
-        (previous) =>
-          Effect.sync(() => {
-            if (previous === undefined) {
-              delete process.env.FABRIKA_HOME;
-            } else {
-              process.env.FABRIKA_HOME = previous;
-            }
-          }),
-      );
-      symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "t1041-" });
+
+      yield* scopedEnv({ FABRIKA_HOME: home });
+      yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
       for (const role of ["writer", "reader"] as const) {
-        const path = join(home, `${role}.ts`);
-        writeFileSync(path, capSource(role));
-        selections[`t1041/${role}`] = path;
+        const file = path.join(home, `${role}.ts`);
+        yield* fs.writeFileString(file, capSource(role));
+        selections[`t1041/${role}`] = file;
       }
 
-      const built = yield* build({ out: join(home, "dist"), programs: selections });
-      const key = identity();
+      const built = yield* build({ out: path.join(home, "dist"), programs: selections });
+      const key = yield* SshsigTest.identity;
       const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
       // The repo's own file, `[mail] unread = 2`, as its parse gives it (only the settings module
       // and start code read TOML, lint L15), resolved in the common source order and saved as the
       // start's snapshot.
@@ -918,12 +892,15 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         }),
         person: Sources.file("~/.fabrika/fabrika.toml", { value: {}, spans: [] }),
       });
+
       const loaded = {
         snapshot: yield* Snapshot.make(Declarations.all, resolved).pipe(Effect.provide(Digest.layerWebCrypto)),
       };
+
       expect(resolved.values.mailUnread, "the repo file's value is read").toBe(2);
+
       const instance = yield* localInstance(built, {
-        ...RecordWireTest.startupFixture({
+        ...(yield* RecordWireTest.startupFixture({
           home,
           name: PROJECT,
           person: PERSON,
@@ -931,10 +908,14 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
           window: key.raw,
           port: at.port,
           mail: { grants: { "writer:1": ["reader:1"] } },
-        }),
+        })),
         settings: loaded.snapshot,
       });
+
       const scope = yield* Effect.scope;
+      // The body below is a plain async function, so the client it opens runs with this law's services.
+      const context = yield* Effect.context();
+
       const from: From = {
         by: key.fingerprint,
         for: PERSON,
@@ -944,40 +925,48 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         traceId: TRACE,
         build: built.build,
       };
+
       yield* Effect.promise(async () => {
         const project = instance.project(PROJECT);
-        const start = async (request: object) =>
-          Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(
-            await Reflect.get(project, "start")(request, from),
-          ).process;
+
+        const start = async (request: Start) =>
+          Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(await project.start(request, from))
+            .process;
+
         const code = (role: string) => ({ program: `t1041/${role}`, hash: built.programs[`t1041/${role}`]!.hash });
+
         const writer = await start({
           _tag: "first",
           id: "start-writer",
           name: "writer:1",
           code: code("writer"),
         });
+
         const reader = await start({
           _tag: "first",
           id: "start-reader",
           name: "reader:1",
           code: code("reader"),
         });
-        const client = await Effect.runPromise(
+
+        const client = await Effect.runPromiseWith(context)(
           Effect.gen(function* () {
             const socket = yield* Effect.acquireRelease(
               Effect.sync(
                 () =>
                   new WebSocket(
-                    `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/cap`,
+                    `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/cap`,
                   ),
               ),
               (socket) => Effect.sync(() => socket.close()),
             );
+
             return yield* Effect.promise(() => wire(instance, key, "cap", socket));
           }).pipe(Effect.provideService(Scope.Scope, scope)),
         );
+
         let sent = 0;
+
         // One send at a time: the writer's newest answer is this letter's.
         const send = async (n: number) => {
           sent += 1;
@@ -990,23 +979,34 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
               seen: 0,
             }),
           ).toMatchObject({ result: { _tag: "accepted" } });
+
           const view = await until(
             `the writer's answer for send ${sent}`,
             async () => (await client.call("view.open", { pid: writer })).result?.view,
             (v) => v?.answers?.length === sent,
           );
+
           return view.answers.at(-1).answer;
         };
+
         const lifecycle = () => facts(instance, "processes/reader:1");
+
         const letters = async () =>
-          (await facts(instance, "reader:1/inbox")).filter((r) => r.m?.type === "letter").map((r) => r.m.n);
+          Arr.map(
+            Arr.filter(await facts(instance, "reader:1/inbox"), (r) => r.m?.type === "letter"),
+            (r) => r.m.n,
+          );
+
+        // SAFETY: Instance is `any`, so the law can reach the instance's private local `project`, whose audit read answers the stream's rows as an array.
         const last = async (stream: string) =>
           Math.max(
             0,
-            ...((await (instance as Instance).project(PROJECT).read(stream, 0, "audit")) as Array<any>).map(
+            ...Arr.map(
+              (await (instance as Instance).project(PROJECT).read(stream, 0, "audit")) as Array<any>,
               (row) => row.body.pos ?? row.pos,
             ),
           );
+
         // The reader crashes inside the door's call, and its supervisor holds the successor for
         // BACKOFF ms: nothing reads while the writer sends.
         expect(
@@ -1022,13 +1022,13 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
           "the crash is not accepted",
         ).toBeUndefined();
         await until("the reader's crash", lifecycle, (rows) =>
-          rows.some((r) => r._tag === "exited" && r.process === reader),
+          Arr.some(rows, (r) => r._tag === "exited" && r.process === reader),
         );
         expect(await send(1), "the first letter is saved").toBe("queued");
         expect(await send(2), "the second letter is saved").toBe("queued");
         expect(await send(3), "L14: the repo file's cap of 2 unread answers the third letter full").toBe("full");
         expect(
-          (await lifecycle()).filter((r) => r._tag === "restarted"),
+          Arr.filter(await lifecycle(), (r) => r._tag === "restarted"),
           "the reader had not started again, so the full answer is the cap's and no read had happened",
         ).toEqual([]);
         expect(await letters(), "L14: the full letter was not saved").toEqual([1, 2]);
@@ -1036,7 +1036,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         await until(
           "the reader's successor",
           lifecycle,
-          (rows) => rows.some((r) => r._tag === "restarted" && r.after === reader),
+          (rows) => Arr.some(rows, (r) => r._tag === "restarted" && r.after === reader),
           BACKOFF * 3,
         );
         const end = await last("reader:1/inbox");

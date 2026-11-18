@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -11,9 +13,23 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Exit, Schema, Stream } from "effect";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  Effect,
+  Exit,
+  Formatter,
+  Match,
+  Option,
+  Order,
+  Record as Rec,
+  Schema,
+  Stream,
+} from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
@@ -27,6 +43,7 @@ import {
   caseRenames,
   changedFiles,
   commitSubject,
+  collect,
   type MutboxRun,
   mutationDraft,
   mutboxAnswer,
@@ -60,6 +77,8 @@ import * as RunId from "./runid.ts";
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
 
+const byPath = Order.mapInput(Order.String, (c: { readonly path: string }) => c.path);
+
 const ask = {
   quest: "l",
   step: "build" as const,
@@ -69,8 +88,8 @@ const ask = {
   ticket: "1",
   plan: "p",
   branch: "fabrikalfa/l",
-  base: "b".repeat(40),
-  root: "b".repeat(40),
+  base: pipe("b", Str.repeat(40)),
+  root: pipe("b", Str.repeat(40)),
   box: "l-build1",
   run: "r",
   prompt: "",
@@ -106,7 +125,7 @@ const recorded = (
   pushed = true,
 ) => {
   const value = {
-    head: commits > 0 ? "c".repeat(40) : ask.base,
+    head: commits > 0 ? pipe("c", Str.repeat(40)) : ask.base,
     commits,
     unsigned: [],
     exam: [],
@@ -118,19 +137,29 @@ const recorded = (
     report,
     problem: null,
   };
+
+  // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read (drive.ts); no
+  // cell in drive.ts reads the `cmd` a real answer also carries.
   const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: typed, spent: NO_SPENT }, {
     type: "step_read_ok",
     value,
   } as never);
 
   if (read.phase !== "pushing") {
+    // SAFETY: the step did not push, so it ended in `recordIt`, whose one Cmd is
+    // the record of an Entry with `keep`, `reason` and `plants`.
     return { state: read, cmd: cmds[0] as Recorded };
   }
 
+  // SAFETY: `backup_push_ok` reads only `m.value`, here the push's ok and detail;
+  // no cell in drive.ts reads the `cmd` a real answer also carries.
   const [state, after] = machine.update.backup_push_ok(read, {
     type: "backup_push_ok",
     value: { ok: pushed, detail: pushed ? "" : "rejected" },
   } as never);
+
+  // SAFETY: `backup_push_ok` always ends in `recordIt`, whose one Cmd is the
+  // record of an Entry with `keep`, `reason` and `plants`.
   return { state, cmd: after[0] as Recorded };
 };
 
@@ -168,11 +197,13 @@ describe("drive keeps a box that holds work, today's tooling", () => {
   // outcome. Plants run once, both red: drop them on the backup push; drop them on a failed push.
   it("records the plants the typed answer names, through a push or a failed one, and none when it names none", () => {
     const plant = fc.record({ law: fc.string(), plant: fc.string(), result: fc.constantFrom("red", "green") });
+
     const typed = fc.record({
       verb: fc.constantFrom("done", "send", "ask", "skip", "stuck"),
       reason: fc.string(),
       plants: fc.option(fc.array(plant, { maxLength: 6 }), { nil: undefined }),
     });
+
     fc.assert(
       fc.property(typed, fc.nat({ max: 2 }), left, fc.boolean(), (said, commits, held, pushed) => {
         const to = said.verb === "send" ? "tests" : null;
@@ -190,9 +221,14 @@ describe("drive keeps a box that holds work, today's tooling", () => {
 
 describe("drive takes a skip answer, today's tooling", () => {
   const reason = fc.stringMatching(/^[a-z][a-z ]{0,30}[a-z]$/);
+
+  // SAFETY: `constantFrom` draws only the four step names it is given.
   const steps = fc.constantFrom("tests", "build", "mutation", "review") as fc.Arbitrary<
     "tests" | "build" | "mutation" | "review"
   >;
+
+  // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read with no commits;
+  // no cell in drive.ts reads the `cmd` a real answer also carries.
   const read = (step: "tests" | "build" | "mutation" | "review", report: string) =>
     machine.update.step_read_ok({ phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT }, {
       type: "step_read_ok",
@@ -226,6 +262,8 @@ describe("drive takes a skip answer, today's tooling", () => {
         expect(s.outcome).toEqual({ kind: "skip", why: "step_said" });
         expect(s.reason).toBe(text);
         expect(s.kept).toBe(false);
+        // SAFETY: with no commits the step ends in `recordIt`, whose one Cmd is
+        // the record of an Entry with `outcome`, `exit` and `keep`.
         const cmd = cmds[0] as { outcome: string; exit: number; keep: boolean };
         expect(cmd.outcome).toBe("skip:step_said");
         expect(cmd.exit).toBe(40);
@@ -248,11 +286,13 @@ describe("drive takes a skip answer, today's tooling", () => {
     ];
 
     for (const name of names) {
-      const want = { done: "pass", send: "fail", ask: "parked", skip: "skip" }[name.split(":")[0] as "done"];
+      // SAFETY: the lookup only reads: a first word that is none of the four
+      // keys answers undefined, which `?? "stopped"` takes.
+      const want = { done: "pass", send: "fail", ask: "parked", skip: "skip" }[Str.split(name, ":")[0] as "done"];
       expect(rowOf(name)).toBe(want ?? "stopped");
     }
 
-    expect(names.filter((n) => rowOf(n) === "skip")).toEqual(["skip:step_said"]);
+    expect(Arr.filter(names, (n) => rowOf(n) === "skip")).toEqual(["skip:step_said"]);
   });
 
   // Plant: give skip the stuck code. Each verb keeps an exit code of its own.
@@ -270,6 +310,7 @@ describe("drive takes a skip answer, today's tooling", () => {
     ]) {
       // A review's done also needs its merge-ready verdict line (ticket 557), so this reads a mutation step.
       const [, cmds] = read("mutation", line);
+      // SAFETY: with no commits the step ends in `recordIt`, whose one Cmd is the record of an Entry with `exit`.
       exits.set(line, (cmds[0] as { exit: number }).exit);
     }
 
@@ -284,13 +325,16 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   // no verb, marks around the line (` and **), upper case, a line inside a code fence, a fence that
   // never closes, and a review whose verdict line is not merge-ready.
   type Step = "mutation" | "review";
+
   const steps = fc.constantFrom<Step>("mutation", "review");
   const reason = fc.stringMatching(/^[a-z][a-z ]{0,20}[a-z]$/);
   const wrap = fc.constantFrom("", "`", "**");
+
   const spell = fc.constantFrom(
     (l: string) => l,
-    (l: string) => l.toUpperCase(),
+    (l: string) => Str.toUpperCase(l),
   );
+
   const readable = fc.constantFrom(
     ["done", "done"],
     ["send tests", "send:tests:step_said"],
@@ -300,6 +344,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
     ["skip", "skip:step_said"],
     ["stuck", "stuck:step_said"],
   );
+
   const line = fc.oneof(
     {
       arbitrary: fc.tuple(readable, reason).map(([[verb, name], text]) => ({ text: `answer: ${verb} ${text}`, name })),
@@ -312,21 +357,27 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
       weight: 1,
     },
   );
+
   const lines = fc.array(fc.tuple(line, wrap, spell), { maxLength: 4 });
+
   const ready = fc.constantFrom(
     "merge-ready; findings: 0",
     "**merge-ready; findings: 2**",
     "# merge-ready; findings: 1",
   );
+
   const back = fc
     .tuple(fc.integer({ min: 1, max: 12 }), fc.nat({ max: 3 }), fc.constantFrom("", "**", "`", "# "))
     .map(([n, m, mark]) => `${mark}changes: ${n}; findings: ${m}${mark === "# " ? "" : mark}`);
+
   const verdict = fc.oneof(ready, back, fc.constantFrom("", "The review", "changes: 0; findings: 1"));
   const chatter = fc.constantFrom("", "what I checked", "the answer is below", "it says answer: done in the brief");
 
   const ended = (step: Step, report: string) => {
     const [state, cmds] = machine.update.step_read_ok(
       { phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT },
+      // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read with no commits;
+      // no cell in drive.ts reads the `cmd` a real answer also carries.
       {
         type: "step_read_ok",
         value: {
@@ -338,17 +389,22 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
           left: [],
           manifests: [],
           plancheck: null,
+          changed: 0,
           report,
           problem: null,
         },
       } as never,
     );
+
     expect(state.phase).toBe("recording");
+
+    // SAFETY: the phase is "recording" (checked above), reached by `recordIt`, whose one Cmd
+    // is the record of an Entry with `outcome`, `exit`, `keep` and `reason`.
     return cmds[0] as { outcome: string; exit: number; keep: boolean; reason: string };
   };
 
   const written = (first: string, said: readonly string[], between: string) =>
-    [first, "report body", ...said.flatMap((l) => [between, l])].join("\n\n");
+    Arr.join([first, "report body", ...Arr.flatMap(said, (l) => [between, l])], "\n\n");
 
   // Plants: take the last answer line again; take the first; let a line with no known verb fall
   // through to an older line; let a review's verdict line stand in for a missing answer line; drop
@@ -356,7 +412,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   it("the step's own outcome needs exactly one answer line that reads; any other count is stuck:no_answer", () => {
     fc.assert(
       fc.property(steps, verdict, lines, chatter, (step, first, said, between) => {
-        const texts = said.map(([l, w, f]) => `${w}${f(l.text)}${w}`);
+        const texts = Arr.map(said, ([l, w, f]) => `${w}${f(l.text)}${w}`);
         const cmd = ended(step, written(first, texts, between));
         const one = said.length === 1 ? said[0]![0].name : null;
         const sentBack = step === "review" && !/merge-ready/.test(first);
@@ -380,7 +436,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   it("a review with a changes: n line, n above 0, is never done, whatever its answer lines say", () => {
     fc.assert(
       fc.property(back, lines, fc.boolean(), fc.option(ready, { nil: "" }), (sent, said, top, other) => {
-        const texts = said.map(([l, w, f]) => `${w}${f(l.text)}${w}`);
+        const texts = Arr.map(said, ([l, w, f]) => `${w}${f(l.text)}${w}`);
         const report = top ? written(sent, texts, other) : written(other, texts, sent);
         expect(ended("review", report).outcome).not.toBe("done");
       }),
@@ -401,11 +457,12 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
         (step, quoted, own, fence, closed) => {
           const block = [
             fence,
-            ...quoted.map(([l]) => l.text),
+            ...Arr.map(quoted, ([l]) => l.text),
             "\tanswer: Schema.Json,",
-            closed ? fence.slice(0, 3) : "",
+            closed ? pipe(fence, Str.slice(0, 3)) : "",
           ];
-          const cmd = ended(step, ["merge-ready; findings: 0", ...block, own.text].join("\n"));
+
+          const cmd = ended(step, Arr.join(["merge-ready; findings: 0", ...block, own.text], "\n"));
           expect(cmd.outcome).toBe(closed && own.name !== null ? own.name : "stuck:no_answer");
         },
       ),
@@ -418,7 +475,8 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   it("a review's typed done is done only under a merge-ready verdict, whatever its answer lines say", () => {
     fc.assert(
       fc.property(verdict, lines, chatter, (first, said, between) => {
-        const texts = said.map(([l, w, f]) => `${w}${f(l.text)}${w}`);
+        const texts = Arr.map(said, ([l, w, f]) => `${w}${f(l.text)}${w}`);
+
         const read = {
           head: ask.base,
           commits: 0,
@@ -432,6 +490,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
           report: written(first, texts, between),
           problem: null,
         };
+
         const judged = decide({ ...ask, step: "review" }, read, { verb: "done", to: null, reason: "", laws: null });
         const ready = /merge-ready/.test(first);
         expect(nameOf(judged.outcome)).toBe(ready ? "done" : "stuck:no_answer");
@@ -460,6 +519,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
         answer,
       ).outcome,
     );
+
   const layout = fc.constantFrom(
     (a: Answer) => JSON.stringify(a),
     (a: Answer) => `${JSON.stringify(a, null, 2)}\n`,
@@ -471,7 +531,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   it("a review's report that is the typed answer alone is judged by the verdict in its reason", () => {
     fc.assert(
       fc.property(verdict, fc.option(back, { nil: "" }), chatter, layout, (first, sent, body, write) => {
-        const reason = [first, body, sent, "answer: done read-only review complete"].join("\n");
+        const reason = Arr.join([first, body, sent, "answer: done read-only review complete"], "\n");
         const answer: Answer = { verb: "done", to: null, reason, laws: null };
         const ready = /merge-ready/.test(first) && sent === "";
         expect(judgedReview(write(answer), answer)).toBe(ready ? "done" : "stuck:no_answer");
@@ -485,7 +545,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
     fc.assert(
       fc.property(verdict, ready, layout, (first, claimed, write) => {
         const answer: Answer = { verb: "done", to: null, reason: `${claimed}\nnothing blocks`, laws: null };
-        const report = [first, "report body", write(answer)].join("\n\n");
+        const report = Arr.join([first, "report body", write(answer)], "\n\n");
         expect(judgedReview(report, answer)).toBe(/merge-ready/.test(first) ? "done" : "stuck:no_answer");
       }),
       options,
@@ -499,18 +559,23 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
       reason: "merge-ready; findings: 0\nFull diff matches the plan.\nanswer: done read-only review complete",
       laws: null,
     };
+
     expect(judgedReview(JSON.stringify(answer), answer)).toBe("done");
   });
 
   it("pinned: p16b review7's two answer lines under changes: 1 are stuck, not done (2026-11-10)", () => {
-    const report = [
-      "changes: 1; tickets: 2",
-      "",
-      "One thing blocks.",
-      "",
-      "answer: send tests the rule misses two cases",
-      "answer: done",
-    ].join("\n");
+    const report = Arr.join(
+      [
+        "changes: 1; tickets: 2",
+        "",
+        "One thing blocks.",
+        "",
+        "answer: send tests the rule misses two cases",
+        "answer: done",
+      ],
+      "\n",
+    );
+
     const cmd = ended("review", report);
     expect(cmd.outcome).toBe("stuck:no_answer");
     expect(cmd.exit).toBe(30);
@@ -523,6 +588,9 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   const check = fc.constantFrom(...checks);
   const detail = fc.stringMatching(/^[a-z0-9](?:[a-z0-9 /|.-]{0,40}[a-z0-9])?$/);
   const noise = fc.array(fc.stringMatching(/^[a-z ]{0,20}$/), { maxLength: 3 });
+
+  // SAFETY: `box_new_ok` reads only `m.value`, which each caller gives as one of box.sh's
+  // started answers; no cell in drive.ts reads the `cmd` a real answer also carries.
   const boxNewOk = (value: ReturnType<typeof startedOf>) =>
     machine.update.box_new_ok({ phase: "starting", ask: { ...ask, step: "tests" } }, {
       type: "box_new_ok",
@@ -534,7 +602,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   it("box.sh new's exit 3 with a refused line names the check; any other failure is the box failing", () => {
     fc.assert(
       fc.property(check, detail, noise, fc.constantFrom(0, 1, 2, 3, 127), (c, d, before, code) => {
-        const err = [...before, `refused ${c}: ${d}`, ""].join("\n");
+        const err = Arr.join([...before, `refused ${c}: ${d}`, ""], "\n");
         const got = startedOf(code, err);
 
         if (code === 0) {
@@ -560,14 +628,18 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
       fc.property(check, detail, (c, d) => {
         const [state, cmds] = boxNewOk({ _tag: "refused", check: c, detail: d });
         expect(state.phase).toBe("recording");
+
+        // SAFETY: a refused box ends in `recordIt`, whose one Cmd is the record
+        // of an Entry with `outcome`, `exit`, `keep` and `reason`.
         const cmd = cmds[0] as {
           outcome: string;
           exit: number;
           keep: boolean;
           reason: string;
         };
+
         expect(cmd.outcome).toBe(`refused:${c}`);
-        expect(cmd.outcome.startsWith("stuck")).toBe(false);
+        expect(pipe(cmd.outcome, Str.startsWith("stuck"))).toBe(false);
         expect(cmd.exit).toBe(3);
         expect(cmd.keep).toBe(false);
         expect(cmd.reason).toBe(d);
@@ -582,6 +654,8 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
     fc.assert(
       fc.property(detail, (d) => {
         const [, cmds] = boxNewOk({ _tag: "failed", detail: d });
+        // SAFETY: a failed box ends in `recordIt`, whose one Cmd is the
+        // record of an Entry with `outcome`, `exit` and `keep`.
         const cmd = cmds[0] as { outcome: string; exit: number; keep: boolean };
         expect(cmd.outcome).toBe("stuck:box_failed");
         expect(cmd.exit).toBe(30);
@@ -596,7 +670,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
     for (const c of [...checks, "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const) {
       const name = endName({ kind: "refused", check: c });
       expect(name).toBe(`refused:${c}`);
-      expect(name.split(":")[0]).not.toMatch(/^(done|send|ask|skip|stuck)$/);
+      expect(Str.split(name, ":")[0]).not.toMatch(/^(done|send|ask|skip|stuck)$/);
     }
   });
 });
@@ -621,6 +695,7 @@ describe("the agent cap refuses a start once 12 agents run (0012), today's tooli
 
 describe("T566 a mutation step while another Docker box runs is refused before its box, today's tooling", () => {
   const pid = fc.integer({ min: 1, max: 99_999 });
+
   const lock = fc.oneof(
     pid.map(String),
     pid.map((n) => ` ${n}\n`),
@@ -632,11 +707,14 @@ describe("T566 a mutation step while another Docker box runs is refused before i
     fc.assert(
       fc.property(fc.option(lock, { nil: null }), fc.boolean(), (text, alive) => {
         const asked: number[] = [];
+
         const holder = dockerHolder(text, (p) => {
           asked.push(p);
+
           return alive;
         });
-        const n = Number(text?.trim());
+
+        const n = Number(text === null ? undefined : Str.trim(text));
         const named = text !== null && Number.isInteger(n) && n > 0;
         expect(holder).toBe(named && alive ? n : null);
         expect(asked).toEqual(named ? [n] : []);
@@ -662,13 +740,13 @@ describe("T569 a review reads the quest's newest mutation report in its prompt, 
       fc.property(stepName, fc.array(row, { maxLength: 8 }), fc.boolean(), (step, steps, readable) => {
         const text = (p: string) => `report of ${p}`;
         const tail = mutationTail(step, steps, (p) => (readable ? text(p) : null));
-        const newest = steps.filter((s) => s.step === "mutation" && s.report !== null).at(-1);
+        const newest = Arr.filter(steps, (s) => s.step === "mutation" && s.report !== null).at(-1);
 
         const whole = step === "review" && newest?.report !== undefined && newest.report !== null && readable;
         expect(tail === "").toBe(step !== "review");
-        expect(tail.includes(text(newest?.report ?? "none"))).toBe(whole);
-        expect(tail.includes("cannot read outside itself")).toBe(whole);
-        expect(tail.includes("no mutation report")).toBe(step === "review" && !whole);
+        expect(pipe(tail, Str.includes(text(newest?.report ?? "none")))).toBe(whole);
+        expect(pipe(tail, Str.includes("cannot read outside itself"))).toBe(whole);
+        expect(pipe(tail, Str.includes("no mutation report"))).toBe(step === "review" && !whole);
       }),
       options,
     );
@@ -680,6 +758,7 @@ describe("T569 a review reads the quest's newest mutation report in its prompt, 
       { step: "mutation", report: "/b/p34w-mutation3.md" },
       { step: "tests", report: "/b/p34w-tests10.md" },
     ];
+
     const tail = mutationTail("review", steps, (p) => `text of ${p}`);
     expect(tail).toContain("text of /b/p34w-mutation3.md");
     expect(tail).not.toContain("mutation2");
@@ -688,12 +767,15 @@ describe("T569 a review reads the quest's newest mutation report in its prompt, 
 
 describe("T429 drive names the commits check's rule and commit, today's tooling", () => {
   const rule = fc.constantFrom("unsigned_commit", "build_touched_exam", "no_exam_list", "broken_chain", "stale_link");
+
   const answer = fc.record({
     reason: rule,
     sha: fc.stringMatching(/^[0-9a-f]{40}$/),
     step: fc.option(fc.constantFrom("tests", "build", "lead"), { nil: undefined }),
   });
+
   const quest = new Set(["tests", "build"]);
+
   const held = (a: { reason: string; step: string | undefined }) =>
     a.reason !== "unsigned_commit" && !(a.reason === "stale_link" && !(a.step !== undefined && quest.has(a.step)));
 
@@ -702,19 +784,28 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
   it("each held answer is named as rule, commit and step, and a waived stale link or a missing signature is not", () => {
     fc.assert(
       fc.property(fc.array(answer, { minLength: 1, maxLength: 7 }), (answers) => {
-        const out = answers.map((a) => JSON.stringify({ _tag: "stuck", ...a })).join("\n");
+        const out = pipe(
+          answers,
+          Arr.map((a) => JSON.stringify({ _tag: "stuck", ...a })),
+          Arr.join("\n"),
+        );
+
         const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, quest);
-        const named = answers
-          .filter(held)
-          .map((a) => `${a.reason} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`);
+
+        const named = pipe(
+          answers,
+          Arr.filter(held),
+          Arr.map((a) => `${a.reason} ${pipe(a.sha, Str.slice(0, 8))}${a.step !== undefined ? ` step ${a.step}` : ""}`),
+        );
 
         if (named.length === 0) {
           expect(said).toMatch(/^commits check exit 1: /);
+
           return;
         }
 
         const more = named.length > 5 ? `; and ${named.length - 5} more` : "";
-        expect(said).toBe(`commits check: ${named.slice(0, 5).join("; ")}${more}`);
+        expect(said).toBe(`commits check: ${Arr.join(named.slice(0, 5), "; ")}${more}`);
       }),
       options,
     );
@@ -726,25 +817,35 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
 describe("0161 a missing signature never holds a step, and the kept checks still do, today's tooling", () => {
   const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
   const quest = fc.uniqueArray(fc.constantFrom("tests", "build", "lead")).map((steps) => new Set<string>(steps));
+
   const plain = fc.array(sha, { minLength: 1, maxLength: 12 }).map((shas) => ({
     commits: shas.length,
     // The commits check's own answer for a quest of plain commits: one stuck line each, and exit 1.
     check: {
       code: 1,
-      out: shas.map((s) => JSON.stringify({ _tag: "stuck", reason: "unsigned_commit", sha: s })).join("\n"),
+      out: pipe(
+        shas,
+        Arr.map((s) => JSON.stringify({ _tag: "stuck", reason: "unsigned_commit", sha: s })),
+        Arr.join("\n"),
+      ),
       err: "",
     },
   }));
+
   const kept = fc.record({
     reason: fc.constantFrom("build_touched_exam", "no_exam_list", "broken_chain"),
     sha,
   });
+
   const done: Answer = { verb: "done", to: null, reason: "", laws: "a.test.ts" };
+
   const read = (commits: number, unsigned: readonly string[]) => ({
-    head: "c".repeat(40),
+    head: pipe("c", Str.repeat(40)),
     commits,
     unsigned,
+    // SAFETY: an empty array holds no element, so it is a string array.
     exam: [] as string[],
+    // SAFETY: an empty array holds no element, so it is a string array.
     leaks: [] as string[],
     left: [],
     manifests: [],
@@ -763,7 +864,7 @@ describe("0161 a missing signature never holds a step, and the kept checks still
         expect(decide({ ...ask, step }, read(commits, unsigned), done).outcome).toEqual({
           kind: "done",
           part: false,
-          head: "c".repeat(40),
+          head: pipe("c", Str.repeat(40)),
         });
       }),
       options,
@@ -774,10 +875,10 @@ describe("0161 a missing signature never holds a step, and the kept checks still
   it("property: a rule the check still gives holds the step beside any plain commits, and names itself", () => {
     fc.assert(
       fc.property(plain, fc.array(kept, { minLength: 1, maxLength: 3 }), quest, ({ commits, check }, rules, steps) => {
-        const out = [check.out, ...rules.map((r) => JSON.stringify({ _tag: "stuck", ...r }))].join("\n");
+        const out = Arr.join([check.out, ...Arr.map(rules, (r) => JSON.stringify({ _tag: "stuck", ...r }))], "\n");
         const unsigned = heldBy({ ...check, out }, steps);
-        const named = rules.map((r) => `${r.reason} ${r.sha.slice(0, 8)}`);
-        expect(unsigned).toEqual([`commits check: ${named.join("; ")}`]);
+        const named = Arr.map(rules, (r) => `${r.reason} ${pipe(r.sha, Str.slice(0, 8))}`);
+        expect(unsigned).toEqual([`commits check: ${Arr.join(named, "; ")}`]);
         const j = decide(ask, read(commits + rules.length, unsigned), done);
         expect(nameOf(j.outcome)).toBe("stuck:unsigned");
         expect(j.reason).toBe(unsigned[0]);
@@ -823,11 +924,13 @@ describe("0161 a missing signature never holds a step, and the kept checks still
 });
 
 describe("drive asks the lead for the lockfile, today's tooling", () => {
+  // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read with one commit;
+  // no cell in drive.ts reads the `cmd` a real answer also carries.
   const read = (report: string, manifests: readonly string[]) =>
     machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
       type: "step_read_ok",
       value: {
-        head: "c".repeat(40),
+        head: pipe("c", Str.repeat(40)),
         commits: 1,
         unsigned: [],
         exam: [],
@@ -840,6 +943,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
         problem: null,
       },
     } as never)[0];
+
   const manifest = fc.constantFrom("package.json", "apps/fabrika/package.json", "pnpm-workspace.yaml");
 
   // Plant: trust the step's own answer. themes build2 (ticket 385): a box could not refresh the
@@ -909,6 +1013,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
           report,
           problem: null,
         };
+
         const j = decide({ ...ask, step: "review" }, read);
         expect(nameOf(j.outcome)).toBe("stuck:review_committed");
       }),
@@ -930,6 +1035,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
       report: "answer: stuck no network",
       problem: null,
     };
+
     expect(nameOf(decide(ask, read, { verb: "done", to: null, reason: "", laws: null }).outcome)).toBe(
       "stuck:no_commit",
     );
@@ -954,6 +1060,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
       plant: fc.string({ maxLength: 20 }),
       result: fc.constantFrom("red" as const, "green" as const),
     });
+
     fc.assert(
       fc.property(fc.array(plant, { maxLength: 4 }), fc.nat({ max: 3 }), (plants, changed) => {
         const read = {
@@ -969,11 +1076,12 @@ describe("the box's changes are read from its status, today's tooling", () => {
           report: "",
           problem: null,
         };
+
         const said: Answer = { verb: "done", to: null, reason: "the records", laws: null, plants };
         const j = decide({ ...ask, step: "tests" }, read, said);
         const records = plants.length > 0 && changed === 0;
         expect(nameOf(j.outcome)).toBe(records ? "done" : "stuck:no_commit");
-        expect(j.reason.includes("the records")).toBe(records);
+        expect(pipe(j.reason, Str.includes("the records"))).toBe(records);
       }),
       options,
     );
@@ -982,6 +1090,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
 
 describe("T341 a step commit's subject says what the step did, today's tooling", () => {
   const text = fc.stringMatching(/^[A-Za-z][A-Za-z0-9 ,.]{0,100}[a-z]$/);
+  // SAFETY: `constantFrom` draws only the three step names it is given.
   const step = fc.constantFrom("tests", "build", "mutation") as fc.Arbitrary<"tests" | "build" | "mutation">;
 
   // The dry run of 2026-11-10 (ticket 522): a report that was the JSON answer alone gave the
@@ -991,11 +1100,13 @@ describe("T341 a step commit's subject says what the step did, today's tooling",
     fc.assert(
       fc.property(text, text, step, fc.boolean(), (prose, reason, s, alone) => {
         const answer = JSON.stringify({ verb: "done", to: null, reason, laws: null });
+
         const subject = commitSubject(
           { ticket: "7", step: s },
           alone ? `${answer}\n` : `\n## ${prose}\n\nmore\n${answer}\n`,
         );
-        expect(subject).toBe(`T7 ${s}: ${(alone ? reason : prose).slice(0, 72)}`);
+
+        expect(subject).toBe(`T7 ${s}: ${pipe(alone ? reason : prose, Str.slice(0, 72))}`);
         expect(subject).not.toContain("\n");
         expect(subject).not.toContain("{");
       }),
@@ -1012,6 +1123,7 @@ describe("T341 a step commit's subject says what the step did, today's tooling",
 describe("T341 drive reads what a box holds from outside it, today's tooling", () => {
   const root = mkdtempSync(join(tmpdir(), "drive-box-"));
   const env = { BOXES: root };
+
   const git = (...args: string[]) =>
     spawnSync(
       "git",
@@ -1051,7 +1163,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
     writeFileSync(join(box, ".git"), `gitdir: ${join(root, "nowhere")}\n`);
     const read = boxChanges(env, "b");
     expect(read.code).toBe(0);
-    expect(read.changes.toSorted((x, y) => x.path.localeCompare(y.path))).toEqual([
+    expect(Arr.sort(read.changes, byPath)).toEqual([
       { xy: " M", path: "a.ts" },
       { xy: " D", path: "gone.ts" },
       { xy: "??", path: "new/d.ts" },
@@ -1073,6 +1185,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
   it("scenario: a case-only rename is named by its new name, on a disk that ignores case or keeps it", () => {
     const top = mkdtempSync(join(tmpdir(), "drive-case-"));
     const box = boxTree(top, "c");
+
     const cgit = (...args: string[]) =>
       spawnSync(
         "git",
@@ -1087,6 +1200,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
         ],
         { encoding: "utf8" },
       );
+
     spawnSync("git", ["init", "-q", "--separate-git-dir", join(top, "c-gitdata"), box]);
     mkdirSync(join(box, "src"));
 
@@ -1105,22 +1219,24 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
     const ignoresCase = existsSync(join(box, "src/ID.TS"));
     const read = boxChanges({ BOXES: top }, "c");
     expect(read.code).toBe(0);
-    const named = read.changes.map((c) => c.path);
+    const named = Arr.map(read.changes, (c) => c.path);
     expect(named).toContain("src/Id.ts");
     expect(named).toContain("src/Answer.ts");
     expect(named).not.toContain("src/keep.ts");
 
     if (ignoresCase) {
-      expect(read.changes.toSorted((x, y) => x.path.localeCompare(y.path))).toEqual([
+      expect(Arr.sort(read.changes, byPath)).toEqual([
         { xy: "R ", from: "src/answer.ts", path: "src/Answer.ts" },
         { xy: "R ", from: "src/id.ts", path: "src/Id.ts" },
       ]);
     } else {
       expect(
-        read.changes
-          .filter((c) => c.xy === " D")
-          .map((c) => c.path)
-          .toSorted(),
+        pipe(
+          read.changes,
+          Arr.filter((c) => c.xy === " D"),
+          Arr.map((c) => c.path),
+          Arr.sort(Order.String),
+        ),
       ).toEqual(["src/answer.ts", "src/id.ts"]);
     }
 
@@ -1129,8 +1245,99 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
   });
 });
 
+it("property: changed-step collection installs its formatter, rejects bad bytes and makes an unsigned owned commit", () => {
+  fc.assert(
+    fc.property(fc.integer({ min: 0, max: 1000 }), (number) => {
+      const dir = mkdtempSync(join(tmpdir(), "drive-collect-"));
+      const main = join(dir, "main");
+      const boxes = join(dir, "boxes");
+      const box = "collect-tests1";
+      const path = "next/collected.test.ts";
+      const previousPath = process.env.PATH;
+      const git = (...args: string[]) => spawnSync("git", ["-C", main, ...args], { encoding: "utf8" });
+
+      try {
+        const bin = join(dir, "bin");
+        mkdirSync(bin);
+        const formatter = join(import.meta.dirname, "../../../../node_modules/.bin/oxfmt");
+        const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+        const installer = `#!/usr/bin/env node\nconst fs = require('node:fs');\nfs.appendFileSync(${JSON.stringify(join(dir, "installs.jsonl"))}, JSON.stringify(process.argv.slice(2))+'\\n');\nfs.mkdirSync('node_modules/.bin', {recursive: true});\nfs.writeFileSync('node_modules/.bin/oxfmt', ${JSON.stringify(`#!/bin/sh\nexec ${quote(formatter)} "$@"\n`)}, {mode: 0o755});\n`;
+        writeFileSync(join(bin, "pnpm"), installer);
+        chmodSync(join(bin, "pnpm"), 0o755);
+        process.env.PATH = `${bin}:${previousPath ?? ""}`;
+        const cloned = spawnSync("git", ["clone", "--shared", "-q", join(import.meta.dirname, "../../../.."), main]);
+        expect(cloned.status).toBe(0);
+        const base = git("rev-parse", "HEAD").stdout.trim();
+        const plan = join(dir, "plan.md");
+        const body = `# Collection fixture\n\n## Files\n| File | Owner step |\n| --- | --- |\n| ${path} | tests |\n`;
+        const hash = createHash("sha256").update(body).digest("hex");
+        writeFileSync(
+          plan,
+          `Approved by the lead agent, builds the decided note; body ${hash.slice(0, 12)}\nPlancheck-Version: 2\n${body}`,
+        );
+        mkdirSync(join(boxes, "state"), { recursive: true });
+        writeFileSync(
+          join(boxes, "state", `${box}.box`),
+          `ticket: 1154\nbranch: fabrikalfa/collected\nbase: ${base}\nplan: ${plan}\nplan-sha256: ${hash}\n`,
+        );
+        const tree = boxTree(boxes, box);
+        mkdirSync(join(tree, "next"), { recursive: true });
+        const report = join(dir, "report.md");
+        writeFileSync(report, "Collection fixture passed.\n");
+        const env = { MAIN: main, BOXES: boxes, GH_REPO: "", CODEX_MODEL: "", CODEX_EFFORT: "" };
+
+        const asked = {
+          ...ask,
+          step: "tests" as const,
+          ticket: "1154",
+          branch: "fabrikalfa/collected",
+          base,
+          box,
+          plan,
+          report,
+        };
+
+        writeFileSync(join(tree, path), `export const value={n:${number}}`);
+        const rejected = collect(env, asked, [{ xy: "??", path }], process.env.PATH ?? "");
+        expect(rejected.code).not.toBe(0);
+        expect(rejected.err).toContain("not_formatted");
+        expect(git("rev-parse", "--verify", asked.branch).status).not.toBe(0);
+        expect(existsSync(join(boxes, `${box}-sign`))).toBe(false);
+
+        writeFileSync(join(tree, path), `export const value = ${number};\n`);
+        const collected = collect(env, asked, [{ xy: "??", path }], process.env.PATH ?? "");
+        expect(collected.code, collected.err).toBe(0);
+        expect(git("diff", "--name-only", `${base}..${asked.branch}`).stdout.trim()).toBe(path);
+        expect(git("show", `${asked.branch}:${path}`).stdout).toBe(`export const value = ${number};\n`);
+        expect(git("log", "-1", "--format=%an", asked.branch).stdout.trim()).toBe("fabrikalfa[bot]");
+        expect(git("notes", "--ref=fabrika", "show", asked.branch).status).not.toBe(0);
+        expect(existsSync(join(boxes, `${box}-sign`))).toBe(false);
+
+        writeFileSync(join(tree, "next/not-owned.ts"), "export const forbidden = true;\n");
+        const refused = collect(env, asked, [{ xy: "??", path: "next/not-owned.ts" }], process.env.PATH ?? "");
+        expect(refused.code).not.toBe(0);
+        expect(refused.err).toContain("not_owner");
+
+        const installs = readFileSync(join(dir, "installs.jsonl"), "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+
+        expect(installs).toEqual(
+          Array.from({ length: 3 }, () => ["install", "--offline", "--frozen-lockfile", "--ignore-scripts"]),
+        );
+      } finally {
+        process.env.PATH = previousPath;
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }),
+    { seed: 119120, numRuns: 1 },
+  );
+});
+
 describe("T341 a step's agent runs in its own box, on the row its step allows, today's tooling", () => {
   const dir = mkdtempSync(join(tmpdir(), "drive-row-"));
+
   const env = {
     MAIN: join(dir, "main"),
     BOXES: join(dir, "boxes"),
@@ -1138,21 +1345,29 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
     CODEX_MODEL: "",
     CODEX_EFFORT: "",
   };
+
   const prompt = join(dir, "prompt.md");
   writeFileSync(prompt, "do the step\nRELATED=a.test.ts\n");
+
   // A mutation step's container run, already done: it left its report and said so.
   const boxed: MutboxRun = (args) =>
     Effect.sync(() => {
       const out = args[args.indexOf("--out") + 1] ?? "";
       mkdirSync(out, { recursive: true });
       writeFileSync(join(out, "mutbox.json"), "{}\n");
-      return { code: 0, out: JSON.stringify({ outcome: "done", reason: "", detail: "" }) };
+
+      return { code: 0, out: Formatter.formatJson({ outcome: "done", reason: "", detail: "" }) };
     });
+
+  // SAFETY: `constantFrom` draws only the five step names it is given.
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
+
+  // SAFETY: `constantFrom` draws only the two agent names it is given.
   const agent = fc.constantFrom("codex", "claude") as fc.Arbitrary<"codex" | "claude">;
   const quest = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+
   const drafted = (step: "plan" | "tests" | "build" | "mutation" | "review", agent: "codex" | "claude", box: string) =>
     Effect.gen(function* () {
       const rows = {
@@ -1160,11 +1375,13 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
         "codex-read": Agent.fakeAdapter(() => Agent.saying("done")),
         claude: Agent.fakeAdapter(() => Agent.saying("done")),
       };
+
       const agents = Agent.makeAgents({
         adapters: rows,
         sessions: Agent.memorySessions(),
         reaper: Agent.noReaper,
       });
+
       const sub = {
         deps: {
           ...ask,
@@ -1176,9 +1393,13 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
           report: join(dir, "report.md"),
         },
       };
+
+      // SAFETY: `agentsDraft` reads only `sub.deps` (drive.ts), and here that
+      // is the step's whole Ask with its step, agent and box.
       yield* Stream.runDrain(agentsDraft(env, agents, boxed)(sub as never));
+
       return rows;
-    });
+    }).pipe(Effect.provide(NodeServices.layer));
 
   // The harness closes everything beside the folder a turn names (packages/fabrika/src/agents/acp/
   // harness.test.ts, "the folder's siblings closed"), so the folder drive names is what keeps an
@@ -1193,12 +1414,12 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
         drafted(step, agent, `${name}-${step}${n}`).pipe(
           Effect.tap((rows) =>
             Effect.sync(() => {
-              const started = Object.values(rows).flatMap((row) => row.seen.started);
+              const started = Arr.flatMap(Rec.values(rows), (row) => row.seen.started);
               expect(started.length).toBe(1);
               const folder = started[0]?.folder ?? "";
               expect(folder).toBe(step === "plan" ? env.MAIN : boxTree(env.BOXES, `${name}-${step}${n}`));
-              expect(env.BOXES.startsWith(folder)).toBe(false);
-              expect(folder.startsWith(join(env.BOXES, "state"))).toBe(false);
+              expect(pipe(env.BOXES, Str.startsWith(folder))).toBe(false);
+              expect(pipe(folder, Str.startsWith(join(env.BOXES, "state")))).toBe(false);
             }),
           ),
           Effect.asVoid,
@@ -1239,7 +1460,7 @@ describe("T383 drive never passes off an older run's report, today's tooling", (
     const left = fc.array(fc.tuple(fc.integer({ min: 1, max: 6 }), fc.constantFrom(...RunId.FILES)));
     fc.assert(
       fc.property(fc.constantFrom("plan", "review", "build"), left, (step, files) => {
-        const taken = new Set(files.map(([i, suffix]) => `p12-${step}${i}${suffix}`));
+        const taken = new Set(Arr.map(files, ([i, suffix]) => `p12-${step}${i}${suffix}`));
         const box = RunId.next("p12", step, taken);
 
         for (const suffix of RunId.FILES) {
@@ -1305,7 +1526,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
     fc.assert(
       fc.property(answer, fc.integer({ min: 1, max: 3 }), fc.boolean(), (report, commits, landed) => {
         const value = {
-          head: "c".repeat(40),
+          head: pipe("c", Str.repeat(40)),
           commits,
           unsigned: [],
           exam: [],
@@ -1317,6 +1538,9 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
           report,
           problem: null,
         };
+
+        // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read; no cell
+        // in drive.ts reads the `cmd` a real answer also carries.
         const [read] = machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
           type: "step_read_ok",
           value,
@@ -1325,13 +1549,19 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
         // A stuck answer is never pushed.
         if (read.phase !== "pushing") {
           expect(read.phase === "recording" && read.outcome.kind).toBe("stuck");
+
           return;
         }
 
+        // SAFETY: `backup_push_ok` reads only `m.value`, here the push's ok and detail;
+        // no cell in drive.ts reads the `cmd` a real answer also carries.
         const [state, cmds] = machine.update.backup_push_ok(read, {
           type: "backup_push_ok",
           value: { ok: landed, detail: landed ? "pushed" : "botpush: push refused" },
         } as never);
+
+        // SAFETY: the push answer ends in `recordIt`, whose one Cmd is
+        // the record of an Entry with `outcome` and `head`.
         const cmd = cmds[0] as { outcome: string; head: string };
         expect(state.phase).toBe("recording");
         expect(cmd.head).toBe(value.head);
@@ -1348,9 +1578,11 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
 });
 
 describe("a step is told its owned paths first, today's tooling (ticket 430)", () => {
+  // SAFETY: `constantFrom` draws only the five step names it is given.
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
+
   const owner = fc.constantFrom("tests", "build", "mutation", "lead");
   const owners = fc.dictionary(fc.stringMatching(/^[a-z]{1,6}\/[a-z]{1,6}\.ts$/), owner, { maxKeys: 6 });
 
@@ -1363,16 +1595,20 @@ describe("a step is told its owned paths first, today's tooling (ticket 430)", (
 
         if (step === "plan" || step === "review") {
           expect(head).toBe("");
+
           return;
         }
 
-        const listed = [...head.matchAll(/^- (\S+)$/gm)].map((m) => m[1]);
-        const allowed = Object.keys(given).filter(
+        const listed = Arr.map([...pipe(head, Str.matchAll(/^- (\S+)$/gm))], (m) => m[1]);
+
+        const allowed = Arr.filter(
+          Rec.keys(given),
           (p) => given[p] === step || (step === "mutation" && given[p] === "tests"),
         );
-        expect(listed).toEqual(allowed.toSorted());
+
+        expect(listed).toEqual(Arr.sort(allowed, Order.String));
         expect(head).toContain("answer ask");
-        expect(head.endsWith("---\n\n")).toBe(true);
+        expect(pipe(head, Str.endsWith("---\n\n"))).toBe(true);
       }),
       options,
     );
@@ -1392,9 +1628,9 @@ describe("a step is never offered itself as a send's to, today's tooling", () =>
   it("property: the tail and the answer schema offer every send target but the step itself", () => {
     fc.assert(
       fc.property(steps, (step) => {
-        const offered = ["tests", "build", "plan"].filter((to) => to !== step);
+        const offered = Arr.filter(["tests", "build", "plan"], (to) => to !== step);
         expect(sendsFrom(step)).toEqual(offered);
-        expect(tailFor(step)).toContain(`  to:   ${offered.join(" | ")} when the verb is send, else null`);
+        expect(tailFor(step)).toContain(`  to:   ${Arr.join(offered, " | ")} when the verb is send, else null`);
         const decode = Schema.decodeUnknownExit(answerFor(step));
         const answer = (to: string) => ({ verb: "send", to, reason: "r", laws: null });
         expect(Exit.isFailure(decode(answer(step)))).toBe(true);
@@ -1410,7 +1646,7 @@ describe("a step is never offered itself as a send's to, today's tooling", () =>
   it("property: every boxed step's prompt carries the finish rule, and the plan's does not", () => {
     fc.assert(
       fc.property(steps, fc.boolean(), (step, electron) => {
-        expect(agentTail({ step, ticket: "1" }, electron).includes(FINISH)).toBe(step !== "plan");
+        expect(pipe(agentTail({ step, ticket: "1" }, electron), Str.includes(FINISH))).toBe(step !== "plan");
       }),
       options,
     );
@@ -1424,7 +1660,7 @@ describe("a step is never offered itself as a send's to, today's tooling", () =>
   it("property: every step's prompt, the plan's included, says never to ask to run outside the box", () => {
     fc.assert(
       fc.property(steps, fc.boolean(), (step, electron) => {
-        expect(agentTail({ step, ticket: "1" }, electron).includes(NO_ESCALATION)).toBe(true);
+        expect(pipe(agentTail({ step, ticket: "1" }, electron), Str.includes(NO_ESCALATION))).toBe(true);
       }),
       options,
     );
@@ -1434,6 +1670,7 @@ describe("a step is never offered itself as a send's to, today's tooling", () =>
 });
 
 describe("drive holds the Electron lock outside the box, today's tooling", () => {
+  // SAFETY: `constantFrom` draws only the five step names it is given.
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"
   >;
@@ -1450,7 +1687,7 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
   it("tells the agent the lock is held exactly when drive holds it", () => {
     fc.assert(
       fc.property(steps, fc.boolean(), (step, flagged) => {
-        const told = agentTail({ step, ticket: "1" }, flagged).includes("state/electron.lock");
+        const told = pipe(agentTail({ step, ticket: "1" }, flagged), Str.includes("state/electron.lock"));
         expect(told).toBe(holdsElectron(step, flagged));
       }),
       options,
@@ -1461,14 +1698,49 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
     const dir = mkdtempSync(join(tmpdir(), "drive-electron-"));
     const brief = join(dir, "brief.md");
     writeFileSync(brief, "brief");
+
     const r = spawnSync(process.execPath, [join(import.meta.dirname, "drive.ts"), "l", "build", brief, "--electron"], {
       encoding: "utf8",
       env: { ...process.env, BOXES: join(dir, "boxes") },
     });
+
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("--electron is for --agent claude");
   });
+});
+
+it("property: the full-access flag reaches every step only on codex-exec before a quest starts", () => {
+  const dir = mkdtempSync(join(tmpdir(), "drive-sandbox-"));
+  const brief = join(dir, "brief.md");
+  writeFileSync(brief, "brief");
+
+  try {
+    fc.assert(
+      fc.property(fc.constantFrom(...STEPS), fc.constantFrom("codex", "claude"), (step, other) => {
+        for (const [agent, sandbox, accepted] of [
+          ["codex-exec", "danger-full-access", true],
+          [other, "danger-full-access", false],
+          ["codex-exec", "workspace-write", false],
+        ] as const) {
+          const result = spawnSync(
+            process.execPath,
+            [join(import.meta.dirname, "drive.ts"), "!", step, brief, "--agent", agent, "--sandbox", sandbox],
+            { encoding: "utf8", env: { ...process.env, BOXES: join(dir, "boxes") } },
+          );
+
+          expect(result.status).toBe(2);
+          expect(result.stderr).toContain(
+            accepted ? "a quest name and a brief file are required" : "usage: node drive.ts",
+          );
+          expect(existsSync(join(dir, "boxes", "state", "!.lock"))).toBe(false);
+        }
+      }),
+      { seed: 119120, numRuns: 5 },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe("one live process drives a quest, today's tooling", () => {
@@ -1502,10 +1774,12 @@ describe("one live process drives a quest, today's tooling", () => {
     writeFileSync(brief, "brief");
     mkdirSync(join(boxes, "state"), { recursive: true });
     writeFileSync(join(boxes, "state", "l.lock"), String(process.pid));
+
     const r = spawnSync(process.execPath, [join(import.meta.dirname, "drive.ts"), "l", "tests", brief], {
       encoding: "utf8",
       env: { ...process.env, BOXES: boxes },
     });
+
     const made = readdirSync(boxes);
     const still = readFileSync(join(boxes, "state", "l.lock"), "utf8");
     rmSync(dir, { recursive: true, force: true });
@@ -1529,10 +1803,10 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
   it("the brief's related tests are one RELATED= line of its own, or none", () => {
     fc.assert(
       fc.property(paths, fc.constantFrom("", "Use the mutation skill.\n"), (tests, before) => {
-        const line = `RELATED=${tests.join(",")}`;
-        expect(relatedIn(`${before}${line}\nSeed 119120.\n`)).toBe(tests.join(","));
+        const line = `RELATED=${Arr.join(tests, ",")}`;
+        expect(relatedIn(`${before}${line}\nSeed 119120.\n`)).toBe(Arr.join(tests, ","));
         expect(relatedIn(`${before}Set ${line} first.\n`)).toBeUndefined();
-        expect(relatedIn(`${before}RELATED: ${tests.join(", ")}\n`)).toBeUndefined();
+        expect(relatedIn(`${before}RELATED: ${Arr.join(tests, ", ")}\n`)).toBeUndefined();
       }),
       options,
     );
@@ -1548,10 +1822,10 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         fc.string(),
         (outcome, reason, detail, noise) => {
           const line = JSON.stringify({ outcome, reason, detail, ticket: "1" });
-          expect(mutboxAnswer(`${noise.replaceAll("\n", " ")}\n${line}\n`).outcome).toBe(outcome);
+          expect(mutboxAnswer(`${pipe(noise, Str.replaceAll("\n", " "))}\n${line}\n`).outcome).toBe(outcome);
           expect(mutboxAnswer(JSON.stringify({ outcome: "passed", reason, detail })).outcome).toBe("stuck");
           expect(mutboxAnswer(`${line}\nnot json`).outcome).toBe("stuck");
-          expect(mutboxAnswer(line.slice(0, -1)).outcome).toBe("stuck");
+          expect(mutboxAnswer(pipe(line, Str.slice(0, -1))).outcome).toBe("stuck");
           expect(mutboxAnswer("").outcome).toBe("stuck");
         },
       ),
@@ -1566,7 +1840,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         const told = mutboxTail(report, skip);
         expect(told).toContain(report);
         expect(told).toContain("Do not run Stryker");
-        expect(told.includes("answer: skip")).toBe(skip);
+        expect(pipe(told, Str.includes("answer: skip"))).toBe(skip);
       }),
       options,
     );
@@ -1578,29 +1852,34 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
   const box = fc.stringMatching(/^[a-z0-9]{1,8}-mutation[1-9]$/);
   const text = fc.stringMatching(/^[A-Za-z0-9 _.,:-]{0,40}$/);
   const line = (outcome: string, reason: string, detail: string) => JSON.stringify({ outcome, reason, detail });
+
   // One mutation draft against a prompt file and a stand-in for mutbox.ts: what the turn ended as,
   // the agents it started, the command lines mutbox got and the report file the step left.
   const drafted = (
     mutbox: MutboxRun,
     name: string,
     brief: string,
-    heads = { base: "b".repeat(40), root: "a".repeat(40) },
+    heads = { base: pipe("b", Str.repeat(40)), root: pipe("a", Str.repeat(40)) },
   ) =>
     Effect.gen(function* () {
       const row = Agent.fakeAdapter(() => Agent.saying("done"));
+
       const agents = Agent.makeAgents({
         adapters: { codex: row, "codex-read": row, claude: row },
         sessions: Agent.memorySessions(),
         reaper: Agent.noReaper,
       });
+
       const calls: ReadonlyArray<string>[] = [];
       const prompt = join(dir, `${name}-prompt.md`);
       const report = join(dir, `${name}.md`);
       mkdirSync(env.BOXES, { recursive: true });
       writeFileSync(prompt, brief);
       rmSync(report, { force: true });
+
       const turned = yield* mutationDraft((args) => {
         calls.push(args);
+
         return mutbox(args);
       })(env, agents, {
         ...ask,
@@ -1612,6 +1891,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         report,
         events: join(dir, `${name}.jsonl`),
       });
+
       return {
         turned,
         started: row.seen.started,
@@ -1619,7 +1899,8 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         report: existsSync(report) ? readFileSync(report, "utf8") : null,
         saved: readFileSync(prompt, "utf8"),
       };
-    });
+    }).pipe(Effect.provide(NodeServices.layer));
+
   // What the reads find after such a step: the box untouched, no commit, no report of an agent's.
   const readNothing = {
     head: ask.base,
@@ -1634,6 +1915,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
     report: "",
     problem: null,
   };
+
   const written = (out: string, summary: string) => {
     mkdirSync(out, { recursive: true });
     writeFileSync(join(out, "mutbox.json"), summary);
@@ -1652,17 +1934,18 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         fc.constantFrom("line", "exit", "silent"),
         fc.constantFrom(0, 1, 30, 137),
         (name, reason, detail, method, exit) => {
-          const said =
-            method === "line"
-              ? { code: exit, out: `noise\n${line("stuck", reason, detail)}\n` }
-              : method === "exit"
-                ? { code: 30, out: `${line("done", "", "")}\n` }
-                : { code: exit, out: "not a line" };
+          const said = Match.value(method).pipe(
+            Match.when("line", () => ({ code: exit, out: `noise\n${line("stuck", reason, detail)}\n` })),
+            Match.when("exit", () => ({ code: 30, out: `${line("done", "", "")}\n` })),
+            Match.orElse(() => ({ code: exit, out: "not a line" })),
+          );
+
           return drafted(
             (args) =>
               Effect.sync(() => {
                 // Even with a report on disk, a stuck run hands nothing to an agent.
                 written(args[args.indexOf("--out") + 1] ?? "", "{}\n");
+
                 return said;
               }),
             name,
@@ -1711,7 +1994,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         drafted(
           () => Effect.succeed({ code: 0, out: line("done", "", "") }),
           name,
-          `Use the mutation skill.\n${before === "" ? "" : `${before}${tests.join(",")} first.\n`}`,
+          `Use the mutation skill.\n${before === "" ? "" : `${before}${Arr.join(tests, ",")} first.\n`}`,
         ).pipe(
           Effect.tap((ran) =>
             Effect.sync(() => {
@@ -1742,11 +2025,13 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         fc.boolean(),
         (name, tests, base, root, summary, skip) => {
           const report = `${JSON.stringify({ outcome: skip ? "skip" : "done", ...summary })}\n`;
-          const brief = `Use the mutation skill.\nRELATED=${tests.join(",")}\nSeed 119120.\n`;
+          const brief = `Use the mutation skill.\nRELATED=${Arr.join(tests, ",")}\nSeed 119120.\n`;
+
           return drafted(
             (args) =>
               Effect.sync(() => {
                 written(args[args.indexOf("--out") + 1] ?? "", report);
+
                 return { code: skip ? 40 : 0, out: `${line(skip ? "skip" : "done", "", "")}\n` };
               }),
             name,
@@ -1768,7 +2053,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                     "--base",
                     root,
                     "--related",
-                    tests.join(","),
+                    Arr.join(tests, ","),
                     "--out",
                     out,
                     "--lock",
@@ -1783,8 +2068,9 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                 expect(prompt).toContain(brief);
                 expect(prompt).toContain(report);
                 expect(prompt).toContain("Do not run Stryker");
-                expect(prompt.includes("answer: skip")).toBe(skip);
-                expect(prompt.indexOf(brief)).toBeLessThan(prompt.indexOf(report));
+                expect(pipe(prompt, Str.includes("answer: skip"))).toBe(skip);
+                const at = (part: string) => Option.getOrElse(pipe(prompt, Str.indexOf(part)), () => -1);
+                expect(at(brief)).toBeLessThan(at(report));
                 // What the agent was asked is kept: the saved prompt file holds the report too.
                 expect(ran.saved).toContain(report);
                 expect(prompt).toContain(ran.saved);
@@ -1820,11 +2106,13 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
     const dir = mkdtempSync(join(tmpdir(), "drive-mutbox-"));
     const brief = join(dir, "brief.md");
     writeFileSync(brief, "Use the mutation skill. RELATED: a.test.ts\n");
+
     const r = spawnSync(
       process.execPath,
       [join(import.meta.dirname, "drive.ts"), "l", "mutation", brief, "--agent", "claude"],
       { encoding: "utf8", env: { ...process.env, BOXES: join(dir, "boxes") } },
     );
+
     rmSync(dir, { recursive: true, force: true });
     expect(r.status).toBe(2);
     expect(r.stderr).toContain("RELATED=<paths>");
@@ -1839,8 +2127,13 @@ describe("T673 a step's start is timed, today's tooling", () => {
     const noise = fc.constantFrom("", "refused shared_ticket: 1 on x", "phase Bad 1", "phase x 1 more", "stuck y");
     fc.assert(
       fc.property(fc.array(fc.tuple(name, fc.nat(), noise)), (parts) => {
-        const text = parts.map(([n, ms, junk]) => `${junk}\nphase ${n} ${ms}`).join("\n");
-        expect(phasesIn(text)).toEqual(parts.map(([n, ms]) => ({ name: n, ms })));
+        const text = pipe(
+          parts,
+          Arr.map(([n, ms, junk]) => `${junk}\nphase ${n} ${ms}`),
+          Arr.join("\n"),
+        );
+
+        expect(phasesIn(text)).toEqual(Arr.map(parts, ([n, ms]) => ({ name: n, ms })));
       }),
       options,
     );

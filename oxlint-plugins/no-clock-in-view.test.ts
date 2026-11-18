@@ -9,8 +9,11 @@ import { CLOCK_VIEW, CLOCK_VIEW_TEST } from "./builtin-plants.ts";
 import { plant } from "./plant.ts";
 
 const CLOCK = "fabrika(no-clock-in-view)";
+
 const VIEW = "next/packages/tuval/src/window/view.tsx";
+
 const CLEAN = "next/packages/tuval/src/window/clean.tsx";
+
 const PLAIN = "next/packages/tuval/src/window/model.ts";
 
 describe("the clock in a view", async () => {

@@ -4,11 +4,14 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "exact-versions.ts");
+
 const home = mkdtempSync(join(tmpdir(), "exact-versions-"));
+
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 let trees = 0;
@@ -20,7 +23,7 @@ const run = (files: Readonly<Record<string, string>>, untracked: readonly string
   mkdirSync(tree);
   spawnSync("git", ["init", "-q"], { cwd: tree });
 
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(tree, path)), { recursive: true });
     writeFileSync(join(tree, path), text);
 
@@ -30,6 +33,7 @@ const run = (files: Readonly<Record<string, string>>, untracked: readonly string
   }
 
   const ran = spawnSync("node", [SCRIPT, tree], { encoding: "utf8" });
+
   return { status: ran.status, said: ran.stdout + ran.stderr };
 };
 
@@ -92,6 +96,7 @@ describe("a package.json", () => {
     const { status, said } = run({
       "package.json": JSON.stringify({ pnpm: { overrides: { thing: "^1.2.3" } } }),
     });
+
     expect(status).toBe(1);
     expect(said).toContain('package.json: pnpm.overrides: thing: "^1.2.3"');
   });
@@ -100,6 +105,7 @@ describe("a package.json", () => {
     const { status, said } = run({
       "package.json": JSON.stringify({ overrides: { thing: { other: "^1.2.3" } } }),
     });
+
     expect(status).toBe(1);
     expect(said).toContain("package.json: overrides: thing:");
   });
@@ -115,6 +121,7 @@ describe("a package.json", () => {
     const { status, said } = run({
       "fixtures/toy/repo/package.json": JSON.stringify({ devDependencies: { thing: "^1.0.0" } }),
     });
+
     expect(status).toBe(1);
     expect(said).toContain("fixtures/toy/repo/package.json: devDependencies: thing:");
   });
@@ -127,6 +134,7 @@ describe("a package.json", () => {
       },
       ["scratch/package.json"],
     );
+
     expect(status).toBe(0);
   });
 
@@ -135,6 +143,7 @@ describe("a package.json", () => {
       "package.json": "{}",
       "results/98-package.json": JSON.stringify({ dependencies: { thing: "^1.0.0" } }),
     });
+
     expect(status).toBe(0);
   });
 });
@@ -183,9 +192,13 @@ describe("a named catalog's pointer", () => {
 
   /** Each name a catalog holding `thing` at `version`, and one package naming each by its pointer. */
   const tree = (all: readonly string[], version: string) => ({
-    "pnpm-workspace.yaml": `catalogs:\n${all.map((name) => `  ${name}:\n    thing: ${version}\n`).join("")}`,
+    "pnpm-workspace.yaml": `catalogs:\n${pipe(
+      all,
+      Arr.map((name) => `  ${name}:\n    thing: ${version}\n`),
+      Arr.join(""),
+    )}`,
     "packages/one/package.json": JSON.stringify({
-      dependencies: Object.fromEntries(all.map((name, i) => [`thing${i}`, `catalog:${name}`])),
+      dependencies: Rec.fromEntries(Arr.map(all, (name, i) => [`thing${i}`, `catalog:${name}`])),
     }),
   });
 
@@ -235,12 +248,14 @@ describe("a named catalog's pointer", () => {
     fc.assert(
       fc.property(fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/), (name) => {
         const bad = notNames(name);
+
         const { status, said } = run({
           "pnpm-workspace.yaml": `catalogs:\n  ${name}:\n    thing: 1.2.3\n`,
           "packages/one/package.json": JSON.stringify({
-            dependencies: Object.fromEntries(bad.map((version, i) => [`thing${i}`, version])),
+            dependencies: Rec.fromEntries(Arr.map(bad, (version, i) => [`thing${i}`, version])),
           }),
         });
+
         expect(status).toBe(1);
 
         for (const [i, version] of bad.entries()) {

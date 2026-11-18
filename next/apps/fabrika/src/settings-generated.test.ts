@@ -15,27 +15,30 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
+import * as Setting from "@kampus/libfabrika/settings/Fabrika";
 import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
 import * as Reference from "@kampus/libfabrika/settings/Reference";
-import * as Setting from "@kampus/libfabrika/settings/Setting";
-import { Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Array as Arr, String as Str, Effect, FileSystem, Path, Result, Schema, Record as Rec } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
 
 /** The three generated outputs for a group, as the generation entry writes them. */
 const outputs = <A>(group: Setting.Group<A>) => ({
-  person: JsonSchema.format(JsonSchema.make(Files.schema(group, "person"))),
-  repo: JsonSchema.format(JsonSchema.make(Files.schema(group, "repo"))),
+  person: Files.schema(group, "person").pipe(JsonSchema.make, JsonSchema.format),
+  repo: Files.schema(group, "repo").pipe(JsonSchema.make, JsonSchema.format),
   reference: Reference.markdown(group),
 });
 
 const committed = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const app = path.resolve(import.meta.dirname, "..");
+
   return {
     person: yield* fs.readFileString(path.join(app, "person.json")),
     repo: yield* fs.readFileString(path.join(app, "repo.json")),
@@ -44,7 +47,9 @@ const committed = Effect.gen(function* () {
 }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise);
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
+
 const doc = fc.stringMatching(/^[A-Z][a-z |*_`#\n]{3,30}\.$/);
 
 const declared = fc.uniqueArray(
@@ -62,8 +67,8 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 
 const grouped = (ds: Declared) =>
   Setting.group(
-    Object.fromEntries(
-      ds.map((d) => [
+    Rec.fromEntries(
+      Arr.map(ds, (d) => [
         `${d.table}_${d.key}`,
         Setting.make(`${d.table}.${d.key}`, {
           schema: Port,
@@ -87,7 +92,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
     ({ limit, window }) => {
       expect(
         Result.isSuccess(
-          Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), { onExcessProperty: "error" })({
+          Schema.decodeResult(Files.schema(Declarations.all, "person"), { onExcessProperty: "error" })({
             gateway: { limit, window },
           }),
         ),
@@ -96,7 +101,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
       for (const gateway of [{ limit }, { window }, { limit, window }]) {
         expect(
           Result.isFailure(
-            Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })({
+            Schema.decodeResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })({
               gateway,
             }),
           ),
@@ -117,8 +122,8 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
     expect(files.person).toBe(fresh.person);
     expect(files.repo).toBe(fresh.repo);
     expect(files.reference).toContain(fresh.reference);
-    expect(fresh.person.endsWith("}\n") && !fresh.person.endsWith("\n\n")).toBe(true);
-    expect(fresh.repo.endsWith("}\n") && !fresh.repo.endsWith("\n\n")).toBe(true);
+    expect(Str.endsWith("}\n")(fresh.person) && !Str.endsWith("\n\n")(fresh.person)).toBe(true);
+    expect(Str.endsWith("}\n")(fresh.repo) && !Str.endsWith("\n\n")(fresh.repo)).toBe(true);
   });
 
   it("outputs ignore declaration order, and a changed doc or default reaches each output that shows it", () => {
@@ -128,7 +133,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
           fc.tuple(
             fc.constant(ds),
             fc.shuffledSubarray(
-              ds.map((_, n) => n),
+              Arr.map(ds, (_, n) => n),
               { minLength: ds.length, maxLength: ds.length },
             ),
             fc.nat(ds.length - 1),
@@ -140,14 +145,14 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
         ),
         ([ds, order, at, change]) => {
           const base = outputs(grouped(ds));
-          expect(outputs(grouped(order.map((n) => ds[n]!)))).toEqual(base);
+          expect(outputs(grouped(Arr.map(order, (n) => ds[n]!)))).toEqual(base);
 
           const before = ds[at]!;
           const after = change._tag === "doc" ? { ...before, doc: change.doc } : { ...before, default: change.default };
           // A doc that differs only in spacing may read the same in Markdown, so the change is in its words.
-          const words = (text: string) => text.replace(/\s+/g, " ").trim();
+          const words = (text: string) => Str.trim(Str.replace(/\s+/g, " ")(text));
           fc.pre(change._tag === "doc" ? words(change.doc) !== words(before.doc) : change.default !== before.default);
-          const changed = outputs(grouped(ds.map((d, n) => (n === at ? after : d))));
+          const changed = outputs(grouped(Arr.map(ds, (d, n) => (n === at ? after : d))));
           expect(changed.reference).not.toBe(base.reference);
           expect(changed.person !== base.person).toBe(before.scope.includes("person"));
           expect(changed.repo !== base.repo).toBe(before.scope.includes("repo"));
@@ -167,14 +172,14 @@ it.prop(
     const value = { desktop: { "link-ttl": lifetime } };
     expect(
       Result.isSuccess(
-        Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), {
+        Schema.decodeResult(Files.schema(Declarations.all, "person"), {
           onExcessProperty: "error",
         })(value),
       ),
     ).toBe(true);
     expect(
       Result.isFailure(
-        Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), {
+        Schema.decodeResult(Files.schema(Declarations.all, "repo"), {
           onExcessProperty: "error",
         })(value),
       ),

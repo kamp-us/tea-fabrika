@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-17-e88-git-auto-cleanup-stopped",
+  "date": "2026-11-17",
+  "by": "lead",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": ".git/worktrees/tf-e88/gc.log",
+    "line": 1
+  },
+  "says": "Git automatic cleanup is stopped in the E88 worktree while next/ integration runs.",
+  "proof": "Both ac9a0e19dd17475bc97dba74a622725aafb693d0 and 5e7b3cf3def4b40179ecf7fcd646631a34ef882a committed successfully but reported that automatic cleanup is disabled by gc.log. The log contains the warning that there are too many unreachable loose objects.",
+  "cost": "Each commit repeats the warning and skips automatic cleanup. No timing or disk cost was measured.",
+  "head": "5e7b3cf3def4b40179ecf7fcd646631a34ef882a",
+  "ticket": null,
+  "pr": null
+}

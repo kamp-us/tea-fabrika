@@ -18,26 +18,29 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Option, Predicate, Schema } from "effect";
 
 const NEXT = resolve(import.meta.dirname, "../next");
+
 const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
 
 // A planter owns every tree its test plants. The test's scope removes them when the test ends (0061).
 const planter = Effect.acquireRelease(
   Effect.sync(() => {
     const roots: Array<string> = [];
+
     const plant = (files: Readonly<Record<string, string | object>>): string => {
       const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
       roots.push(root);
 
-      for (const [path, body] of Object.entries({ "package.json": { name: "plant", private: true }, ...files })) {
+      for (const [path, body] of Rec.toEntries({ "package.json": { name: "plant", private: true }, ...files })) {
         mkdirSync(dirname(join(root, path)), { recursive: true });
-        writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
+        writeFileSync(join(root, path), Predicate.isString(body) ? body : JSON.stringify(body));
       }
 
       return root;
     };
+
     return { plant, roots };
   }),
   ({ roots }) =>
@@ -48,12 +51,12 @@ const planter = Effect.acquireRelease(
     }),
 );
 
-const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`;
+const lines = (...each: ReadonlyArray<string>): string => `${Arr.join(each, "\n")}\n`;
 
 const RuleRow = Schema.Struct({
   name: Schema.String,
   paths: Schema.Array(Schema.String),
-  layer: Schema.optionalKey(Schema.Number),
+  layer: Schema.optionalKey(Schema.Finite),
   imports: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
@@ -70,7 +73,7 @@ type Row = Rules["layers"][number];
 
 /** Each row that has a layer, by its name. */
 const layersByName = (rows: Rules["layers"]): ReadonlyMap<string, number> =>
-  new Map(rows.flatMap((row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])));
+  new Map(Arr.flatMap(rows, (row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])));
 
 /** The rule file `pnpm lint:layers` reads. Its paths start at the top of the repo. */
 const REAL: Rules = Schema.decodeUnknownSync(RuleFile)(
@@ -96,27 +99,31 @@ type Edge = `${string} -> ${string} [${string}]`;
 /** The tool's `--layers --json` on a planted root, with these rules. Exit 2 has no report. */
 const runJson = (root: string, rules: Rules) => {
   writeFileSync(join(root, "rules.json"), JSON.stringify(rules));
+
   const run = spawnSync(bin, [".", "--layers", "--json", "--layer-rules", "rules.json"], {
     cwd: root,
     encoding: "utf8",
   });
+
   // A rule file with no `layer` and no `imports` names no rule, since every break it has is upward.
   const report =
     run.status === 2
       ? { violations: [], unclaimed: [] }
       : (({ violations, unclaimed }: typeof Report.Type) => ({
-          violations: violations.map((v) => ({ ...v, rule: v.rule ?? "upward" })),
+          violations: Arr.map(violations, (v) => ({ ...v, rule: v.rule ?? "upward" })),
           unclaimed,
         }))(readReport(run.stdout));
+
   return { ...report, status: run.status, stderr: run.stderr };
 };
 
 /** Each import that breaks a rule as `from-file -> to-row [rule]`, each unclaimed file, the status. */
 const runTool = (root: string, rules: Rules) => {
   const run = runJson(root, rules);
+
   return {
-    edges: [...new Set(run.violations.map((v): Edge => `${v.from} -> ${v.toLayer} [${v.rule}]`))].sort(),
-    unclaimed: run.unclaimed.map((u) => u.file).sort(),
+    edges: [...new Set(Arr.map(run.violations, (v): Edge => `${v.from} -> ${v.toLayer} [${v.rule}]`))].sort(),
+    unclaimed: Arr.map(run.unclaimed, (u) => u.file).sort(),
     status: run.status,
     stderr: run.stderr,
   };
@@ -128,16 +135,55 @@ const RANKS = ["upward", "sideways"];
 const rowEdges = (root: string, rules: Rules): ReadonlyArray<Edge> =>
   [
     ...new Set(
-      runJson(root, rules)
-        .violations.filter((v) => RANKS.includes(v.rule))
-        .map((v): Edge => `${v.fromLayer} -> ${v.toLayer} [${v.rule}]`),
+      pipe(
+        runJson(root, rules).violations,
+        Arr.filter((v) => RANKS.includes(v.rule)),
+        Arr.map((v): Edge => `${v.fromLayer} -> ${v.toLayer} [${v.rule}]`),
+      ),
     ),
   ].sort();
 
 const LIB = "next/packages/libfabrika/src";
+
 const TUVAL = "next/packages/tuval/src";
 
 describe("the real rule file on planted trees", () => {
+  // scenario: P25 T5 uses the real import rules. Tools takes runtime and transport contracts and
+  // shared types, but cannot reach gateway or platform implementations. Plant: allow next-door
+  // in next-mcp's imports. The gateway import then passes and this check fails.
+  it.effect("scenario: P25 T5 Tools accepts its contracts and refuses gateway and platform imports", () =>
+    Effect.gen(function* () {
+      const { plant } = yield* planter;
+
+      const tree = plant({
+        [`${LIB}/mcp/Tools.ts`]: lines(
+          'import { Program } from "../runtime/Program.ts";',
+          'import { Call } from "../transport/Call.ts";',
+          'import { Id } from "../Id.ts";',
+          'import { Gateway } from "../gateway/Gateway.ts";',
+          'import { load } from "../node/settings/Load.ts";',
+          'import { object } from "../cloudflare/objects.ts";',
+        ),
+        [`${LIB}/runtime/Program.ts`]: lines("export const Program = 1;"),
+        [`${LIB}/transport/Call.ts`]: lines("export const Call = 1;"),
+        [`${LIB}/Id.ts`]: lines("export const Id = 1;"),
+        [`${LIB}/gateway/Gateway.ts`]: lines("export const Gateway = 1;"),
+        [`${LIB}/node/settings/Load.ts`]: lines("export const load = 1;"),
+        [`${LIB}/cloudflare/objects.ts`]: lines("export const object = 1;"),
+      });
+
+      expect(runTool(tree, REAL)).toMatchObject({
+        edges: [
+          `${LIB}/mcp/Tools.ts -> next-door [outside-imports]`,
+          `${LIB}/mcp/Tools.ts -> next-node [upward]`,
+          `${LIB}/mcp/Tools.ts -> next-workers [upward]`,
+        ],
+        unclaimed: [],
+        status: 1,
+      });
+    }),
+  );
+
   // scenario: each line is one named wall of the table, met in a module folder: the ledger may not
   // import processes, transport may not import the ledger, processes and access may not import the
   // gateway or the runtime, and the runtime may not import the ledger or transport. The runtime's
@@ -146,6 +192,7 @@ describe("the real rule file on planted trees", () => {
   it.effect("scenario: every wall between the library's modules fires, and nothing else", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
+
       const tree = plant({
         [`${LIB}/Id.ts`]: lines("export const id = 1;"),
         [`${LIB}/telemetry/Sink.ts`]: lines('import {id} from "../Id.ts";'),
@@ -179,6 +226,7 @@ describe("the real rule file on planted trees", () => {
         ),
         [`${LIB}/gateway/internal/waiting.ts`]: lines('import {wire} from "../../transport/Wire.ts";'),
       });
+
       const walls = [
         `${LIB}/access/Access.ts -> next-runtime [upward]`,
         `${LIB}/ledger/Ledger.ts -> next-processes [upward]`,
@@ -188,12 +236,15 @@ describe("the real rule file on planted trees", () => {
         `${LIB}/runtime/internal/supervisor.ts -> next-ledger [outside-imports]`,
         `${LIB}/transport/Wire.ts -> next-ledger [sideways]`,
       ];
+
       expect(runTool(tree, REAL)).toMatchObject({ edges: walls, unclaimed: [], status: 1 });
 
       const store = `${LIB}/runtime/ProcessStore.ts`;
-      const moved = REAL.layers.map((row) =>
-        row.name === "next-runtime-coordination" ? { ...row, paths: row.paths.filter((p) => p !== store) } : row,
+
+      const moved = Arr.map(REAL.layers, (row) =>
+        row.name === "next-runtime-coordination" ? { ...row, paths: Arr.filter(row.paths, (p) => p !== store) } : row,
       );
+
       expect(runTool(tree, { ...REAL, layers: moved }).edges).toEqual(
         [...walls, `${store} -> next-ledger [outside-imports]`].sort(),
       );
@@ -205,6 +256,7 @@ describe("the real rule file on planted trees", () => {
     Effect.gen(function* () {
       const { plant } = yield* planter;
       const lower = ["ledger", "processes", "runtime", "transport"];
+
       const tree = plant({
         [`${LIB}/gateway/Gateway.ts`]: lines(
           'import {run} from "../runtime/Runner.ts";',
@@ -216,11 +268,17 @@ describe("the real rule file on planted trees", () => {
         [`${LIB}/processes/Process.ts`]: lines("export const member = 1;"),
         [`${LIB}/ledger/Log.ts`]: lines("export const log = 1;"),
         [`${LIB}/transport/Wire.ts`]: lines("export const wire = 1;"),
-        ...Object.fromEntries(
-          lower.map((module) => [`${LIB}/${module}/Up.ts`, lines('import {Gateway} from "../gateway/Gateway.ts";')]),
+        ...Rec.fromEntries(
+          Arr.map(lower, (module) => [
+            `${LIB}/${module}/Up.ts`,
+            lines('import {Gateway} from "../gateway/Gateway.ts";'),
+          ]),
         ),
       });
-      expect(runTool(tree, REAL).edges).toEqual(lower.map((module) => `${LIB}/${module}/Up.ts -> next-door [upward]`));
+
+      expect(runTool(tree, REAL).edges).toEqual(
+        Arr.map(lower, (module) => `${LIB}/${module}/Up.ts -> next-door [upward]`),
+      );
     }),
   );
 
@@ -233,6 +291,7 @@ describe("the real rule file on planted trees", () => {
     () =>
       Effect.gen(function* () {
         const { plant } = yield* planter;
+
         const tree = plant({
           [`${LIB}/client/WindowStart.ts`]: lines(
             'import {Client} from "../runtime/Client.ts";',
@@ -248,6 +307,7 @@ describe("the real rule file on planted trees", () => {
           [`${LIB}/transport/Link.ts`]: lines("export const Link = 1;"),
           [`${LIB}/Id.ts`]: lines("export const Generator = 1;"),
         });
+
         expect(runTool(tree, REAL).edges).toEqual([
           `${LIB}/client/Grant.ts -> next-access [outside-imports]`,
           `${LIB}/transport/Dial.ts -> next-client [upward]`,
@@ -265,6 +325,7 @@ describe("the real rule file on planted trees", () => {
     () =>
       Effect.gen(function* () {
         const { plant } = yield* planter;
+
         const tree = plant({
           "pnpm-workspace.yaml": 'packages:\n  - "next/packages/*"\n',
           "next/packages/tuval/package.json": { name: "@kampus/tuval", exports: { ".": "./src/index.ts" } },
@@ -294,6 +355,7 @@ describe("the real rule file on planted trees", () => {
           [`${TUVAL}/desktop/fold.ts`]: lines('import {split} from "@kampus/libfabrika/tezgah/Layout";'),
           [`${TUVAL}/browser/rows.ts`]: lines('import type {Tile} from "@kampus/libfabrika/tezgah/Workspace";'),
         });
+
         expect(runTool(tree, REAL)).toMatchObject({
           edges: [
             `${LIB}/access/Access.ts -> next-tezgah [sideways]`,
@@ -316,6 +378,7 @@ describe("the real rule file on planted trees", () => {
   it.effect("format: P21 L12 desktop rules accept access and refuse gateway and platform modules", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
+
       const tree = plant({
         [`${LIB}/desktop/Menu.ts`]: lines(
           'import { Grant } from "../access/Access.ts";',
@@ -330,6 +393,7 @@ describe("the real rule file on planted trees", () => {
         [`${LIB}/cloudflare/objects.ts`]: lines("export const object = 1;"),
         [`${LIB}/electron/TouchId.ts`]: lines("export const TouchId = 1;"),
       });
+
       expect(runTool(tree, REAL)).toMatchObject({
         edges: [
           `${LIB}/desktop/Menu.ts -> next-door [sideways]`,
@@ -350,6 +414,7 @@ describe("the real rule file on planted trees", () => {
   it.effect("scenario: tuval's folders, a program's box and window, and nothing above the library", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
+
       const tree = plant({
         "pnpm-workspace.yaml": 'packages:\n  - "next/packages/*"\n  - "next/programs/*"\n',
         "next/packages/tuval/package.json": { name: "@kampus/tuval", exports: { ".": "./src/index.ts" } },
@@ -377,6 +442,7 @@ describe("the real rule file on planted trees", () => {
         [`${LIB}/ledger/Log.test.ts`]: lines('import {notes} from "@kampus/notes";'),
         [`${LIB}/node/Up.test.ts`]: lines('import {fold} from "@kampus/tuval";'),
       });
+
       const parts = [
         `${LIB}/ledger/Log.test.ts -> next-programs [upward]`,
         `${LIB}/ledger/Log.ts -> next-tuval-entry [upward]`,
@@ -386,16 +452,22 @@ describe("the real rule file on planted trees", () => {
         `${TUVAL}/window/machine.ts -> next-browser [upward]`,
         "next/programs/notes/src/box.ts -> next-program-windows [upward]",
       ];
+
       expect(runTool(tree, REAL)).toMatchObject({ edges: parts, unclaimed: [], status: 1 });
 
-      const node = REAL.layers.findIndex((row) => row.name === "next-node");
+      const node = Option.getOrThrowWith(
+        Arr.findFirstIndex(REAL.layers, (row) => row.name === "next-node"),
+        () => new Error("the real layer rules have a next-node row"),
+      );
+
       const below = [
         ...REAL.layers.slice(0, 1),
         ...REAL.layers.slice(node, node + 2),
         ...REAL.layers.slice(1, node),
         ...REAL.layers.slice(node + 2),
       ];
-      expect(below.map((row) => row.name).slice(0, 4)).toEqual([
+
+      expect(Arr.map(below, (row) => row.name).slice(0, 4)).toEqual([
         "next-apps",
         "next-node",
         "next-workers",
@@ -414,12 +486,20 @@ describe("the real rule file on planted trees", () => {
   it.effect("scenario: a library or tuval file no row claims fails, and a test there does not", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
-      const claimed = REAL.layers
-        .flatMap((row) => row.paths)
-        .filter((path) => (path.startsWith(`${LIB}/`) || path.startsWith(`${TUVAL}/`)) && !path.includes("*"))
-        .map((path) => (/\.tsx?$/.test(path) ? path : `${path}/Probe.ts`));
+
+      const claimed = pipe(
+        REAL.layers,
+        Arr.flatMap((row) => row.paths),
+        Arr.filter(
+          (path) =>
+            (pipe(path, Str.startsWith(`${LIB}/`)) || pipe(path, Str.startsWith(`${TUVAL}/`))) &&
+            !pipe(path, Str.includes("*")),
+        ),
+        Arr.map((path) => (/\.tsx?$/.test(path) ? path : `${path}/Probe.ts`)),
+      );
+
       const tree = plant({
-        ...Object.fromEntries(claimed.map((path) => [path, lines("export const probe = 1;")])),
+        ...Rec.fromEntries(Arr.map(claimed, (path) => [path, lines("export const probe = 1;")])),
         [`${LIB}/sync/Merge.ts`]: lines("export const merge = 1;"),
         [`${LIB}/sync/Merge.test.ts`]: lines("export const merge = 1;"),
         [`${LIB}/Loose.ts`]: lines("export const loose = 1;"),
@@ -427,6 +507,7 @@ describe("the real rule file on planted trees", () => {
         [`${TUVAL}/sync/view.ts`]: lines("export const view = 1;"),
         [`${TUVAL}/Loose.tsx`]: lines("export const loose = 1;"),
       });
+
       const stray = [`${LIB}/Loose.ts`, `${LIB}/sync/Merge.ts`, `${TUVAL}/Loose.tsx`, `${TUVAL}/sync/view.ts`];
       expect(claimed.length).toBeGreaterThan(30);
       expect(runTool(tree, REAL)).toMatchObject({ edges: [], unclaimed: stray, status: 1 });
@@ -442,12 +523,14 @@ describe("the real rule file on planted trees", () => {
       const { plant } = yield* planter;
       const tree = plant({ [`${LIB}/ledger/Log.ts`]: lines("export const a = 1;") });
       expect(runTool(tree, REAL).status).toBe(0);
+
       const twice = [
-        ...REAL.layers.map((row) =>
+        ...Arr.map(REAL.layers, (row) =>
           row.name === "next-ledger" ? { ...row, paths: [...row.paths, `${LIB}/ledger/*`] } : row,
         ),
         { name: "plant-twin", paths: [`${LIB}/*/Log.ts`] },
       ];
+
       const run = runTool(tree, { ...REAL, layers: twice });
       expect(run.status).toBe(2);
       expect(run.stderr).toContain(`${LIB}/ledger/Log.ts`);
@@ -458,6 +541,7 @@ describe("the real rule file on planted trees", () => {
   it.effect("scenario: T878 L12 repositories cannot import a peer, packs or Node wiring", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
+
       const tree = plant({
         [`${LIB}/repositories/Repositories.ts`]: lines(
           'import {setting} from "../settings/Setting.ts";',
@@ -471,6 +555,7 @@ describe("the real rule file on planted trees", () => {
         [`${LIB}/node/repositories/RepositoriesGit.ts`]: lines("export const git = 1;"),
         [`${LIB}/Id.ts`]: lines("export const id = 1;"),
       });
+
       expect(runTool(tree, REAL)).toMatchObject({
         edges: [
           `${LIB}/repositories/Repositories.ts -> next-node [upward]`,
@@ -484,33 +569,49 @@ describe("the real rule file on planted trees", () => {
 
   // The rule file's modules: one probe file per row that has a layer, each importing the probe of
   // every other row. The tool breaks exactly the imports that do not go down a layer.
-  const SRC_ROWS = REAL.layers.filter((row) => row.layer !== undefined && row.paths.every((p) => p.startsWith(LIB)));
+  const SRC_ROWS = Arr.filter(
+    REAL.layers,
+    (row) => row.layer !== undefined && Arr.every(row.paths, (p) => pipe(p, Str.startsWith(LIB))),
+  );
+
   const probe = (row: Row): string => {
     const first = row.paths[0] ?? "";
+
     return /\.tsx?$/.test(first) ? first : `${first}/Probe.ts`;
   };
+
   const expectedEdges = (rows: ReadonlyArray<Row>): ReadonlyArray<Edge> => {
-    const ranks = new Map(rows.flatMap((row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])));
-    return SRC_ROWS.flatMap((from) =>
-      SRC_ROWS.flatMap((to): ReadonlyArray<Edge> => {
+    const ranks = new Map(
+      Arr.flatMap(rows, (row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])),
+    );
+
+    return Arr.flatMap(SRC_ROWS, (from) =>
+      Arr.flatMap(SRC_ROWS, (to): ReadonlyArray<Edge> => {
         const [a, b] = [ranks.get(from.name), ranks.get(to.name)];
+
         return from.name === to.name || a === undefined || b === undefined || a > b
           ? []
           : [`${from.name} -> ${to.name} [${a === b ? "sideways" : "upward"}]`];
       }),
     ).sort();
   };
+
   const plantedReal = planter.pipe(
     Effect.map(({ plant }) =>
       plant(
-        Object.fromEntries(
-          SRC_ROWS.map((row) => [
+        Rec.fromEntries(
+          Arr.map(SRC_ROWS, (row) => [
             probe(row),
             lines(
-              ...SRC_ROWS.filter((other) => other.name !== row.name).map((other, n) => {
-                const spec = relative(dirname(probe(row)), probe(other));
-                return `import * as m${n} from "${spec.startsWith(".") ? spec : `./${spec}`}";`;
-              }),
+              ...pipe(
+                SRC_ROWS,
+                Arr.filter((other) => other.name !== row.name),
+                Arr.map((other, n) => {
+                  const spec = relative(dirname(probe(row)), probe(other));
+
+                  return `import * as m${n} from "${pipe(spec, Str.startsWith(".")) ? spec : `./${spec}`}";`;
+                }),
+              ),
               "export const p = 1;",
             ),
           ]),
@@ -541,18 +642,21 @@ describe("the real rule file on planted trees", () => {
   it.effect("scenario: a module put beside the runtime refuses an import from the runtime", () =>
     Effect.gen(function* () {
       const realTree = yield* plantedReal;
+
       const runtime =
-        REAL.layers.find((row) => row.name === "next-runtime")?.layer ?? expect.fail("the runtime has a layer");
-      const beside = REAL.layers.map((row) => (row.name === "next-access" ? { ...row, layer: runtime } : row));
+        Option.getOrUndefined(Arr.findFirst(REAL.layers, (row) => row.name === "next-runtime"))?.layer ??
+        expect.fail("the runtime has a layer");
+
+      const beside = Arr.map(REAL.layers, (row) => (row.name === "next-access" ? { ...row, layer: runtime } : row));
       const before = rowEdges(realTree, REAL);
       const after = rowEdges(realTree, { ...REAL, layers: beside });
       expect(after).toEqual(expectedEdges(beside));
-      expect(after.filter((edge) => !before.includes(edge))).toEqual([
+      expect(Arr.filter(after, (edge) => !before.includes(edge))).toEqual([
         "next-access -> next-runtime [sideways]",
         "next-runtime -> next-access [sideways]",
         "next-tezgah -> next-access [upward]",
       ]);
-      expect(before.filter((edge) => !after.includes(edge))).toEqual([
+      expect(Arr.filter(before, (edge) => !after.includes(edge))).toEqual([
         "next-access -> next-runtime [upward]",
         "next-access -> next-tezgah [sideways]",
         "next-tezgah -> next-access [sideways]",
@@ -568,7 +672,7 @@ describe("the real rule file on planted trees", () => {
   // T953 moved every row from the processes up by one, to put the permission core on layer 3 between
   // the ledger and the processes.
   it("pinned: the modules are on the layers the plan gives them", () => {
-    expect(Object.fromEntries(layersByName(REAL.layers))).toEqual({
+    expect(Rec.fromEntries(layersByName(REAL.layers))).toEqual({
       "next-node": 10,
       "next-workers": 9,
       "next-libfabrika-entry": 8,
@@ -625,10 +729,13 @@ describe("the real rule file on planted trees", () => {
       "next-telemetry": 1,
       "next-shared": 0,
     };
+
     const now = layersByName(REAL.layers);
-    const changed = Object.entries(main).flatMap(([a, before]) =>
-      Object.entries(main).flatMap(([b, other]) => {
+
+    const changed = Arr.flatMap(Rec.toEntries(main), ([a, before]) =>
+      Arr.flatMap(Rec.toEntries(main), ([b, other]) => {
         const [after, then] = [now.get(a), now.get(b)];
+
         return after === undefined || then === undefined
           ? [`${a} or ${b} lost its layer`]
           : before < other === after < then
@@ -636,6 +743,7 @@ describe("the real rule file on planted trees", () => {
             : [`${a} (${before} -> ${after}) and ${b} (${other} -> ${then})`];
       }),
     );
+
     expect(changed).toEqual([]);
   });
 
@@ -645,9 +753,15 @@ describe("the real rule file on planted trees", () => {
   // a program's box and tuval's entry file have no list, on purpose.
   // Plant: drop `next-mcp`'s `imports`. Its row then shows here.
   it("pinned: every library row names the rows it may import", () => {
-    const open = REAL.layers.filter((row) => row.imports === undefined && row.paths.some((p) => p.startsWith("next/")));
-    expect(open.filter((row) => row.paths.some((p) => p.startsWith("next/packages/libfabrika")))).toEqual([]);
-    expect(open.map((row) => row.name)).toEqual([
+    const open = Arr.filter(
+      REAL.layers,
+      (row) => row.imports === undefined && Arr.some(row.paths, (p) => pipe(p, Str.startsWith("next/"))),
+    );
+
+    expect(
+      Arr.filter(open, (row) => Arr.some(row.paths, (p) => pipe(p, Str.startsWith("next/packages/libfabrika")))),
+    ).toEqual([]);
+    expect(Arr.map(open, (row) => row.name)).toEqual([
       "next-apps",
       "next-program-windows",
       "next-programs",
@@ -667,6 +781,7 @@ describe("the patched code-graph", () => {
   it.effect("scenario: a root import of a package reads the root file, not its first-sorting subpath", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
+
       const root = plant({
         "package.json": { name: "plant", private: true, workspaces: ["pkgs/*"] },
         "pnpm-workspace.yaml": 'packages:\n  - "pkgs/*"\n',
@@ -683,6 +798,7 @@ describe("the patched code-graph", () => {
           ],
         },
       });
+
       const run = spawnSync(bin, [".", "--layers", "--layer-rules", "rules.json"], { cwd: root, encoding: "utf8" });
       expect(run.stdout).toContain("1 down, 0 sideways, 0 UP");
       expect(run.status).toBe(0);
@@ -701,6 +817,7 @@ describe("the patched code-graph", () => {
   it.effect("scenario: an unexported subpath of a package is unresolved, not the package's entry file", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
+
       const root = plant({
         "package.json": { name: "plant", private: true, workspaces: ["pkgs/*"] },
         "pnpm-workspace.yaml": 'packages:\n  - "pkgs/*"\n',
@@ -719,6 +836,7 @@ describe("the patched code-graph", () => {
           ],
         },
       });
+
       const run = spawnSync(bin, [".", "--layers", "--layer-rules", "rules.json"], { cwd: root, encoding: "utf8" });
       expect(run.stdout).toContain("1 down, 0 sideways, 0 UP");
       expect(run.stdout).toContain("1 unresolved");
@@ -735,6 +853,7 @@ describe("the patched code-graph", () => {
   it.effect("scenario: two rows on one layer share a rank, and an import between them breaks in either direction", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
+
       const tree = plant({
         "p/top/t.ts": lines(
           'import {m} from "../mid1/m.ts";',
@@ -749,18 +868,20 @@ describe("the patched code-graph", () => {
         "p/mid2/n.ts": lines('import {m} from "../mid1/m.ts";', "export const n = m;"),
         "p/low/l.ts": lines("export const l = 1;"),
       });
+
       const ranked = [
         { name: "top", layer: 2, paths: ["p/top"] },
         { name: "mid1", layer: 1, paths: ["p/mid1"] },
         { name: "mid2", layer: 1, paths: ["p/mid2"] },
         { name: "low", layer: 0, paths: ["p/low"] },
       ];
+
       expect(rowEdges(tree, { layers: ranked })).toEqual([
         "mid1 -> mid2 [sideways]",
         "mid1 -> top [upward]",
         "mid2 -> mid1 [sideways]",
       ]);
-      const listed = ranked.map(({ layer: _layer, ...row }) => row);
+      const listed = Arr.map(ranked, ({ layer: _layer, ...row }) => row);
       expect(rowEdges(tree, { layers: listed })).toEqual(["mid1 -> top [upward]", "mid2 -> mid1 [upward]"]);
     }),
   );
@@ -773,6 +894,7 @@ describe("the patched code-graph", () => {
   it.effect("scenario: a file under a root that no row claims fails, and a test keeps only the rank rules", () =>
     Effect.gen(function* () {
       const { plant } = yield* planter;
+
       const tree = plant({
         "src/a/a.ts": lines("export const a = 1;"),
         "src/b/b.ts": lines('import {a} from "../a/a.ts";', "export const b = a;"),
@@ -783,6 +905,7 @@ describe("the patched code-graph", () => {
         "src/sync/Merge.ts": lines("export const m = 1;"),
         "src/sync/Merge.test.ts": lines("export const m = 1;"),
       });
+
       const rules: Rules = {
         layers: [
           { name: "top", paths: ["top"] },
@@ -793,6 +916,7 @@ describe("the patched code-graph", () => {
         roots: ["src"],
         testFiles: ["**/*.test.ts"],
       };
+
       expect(runTool(tree, rules)).toMatchObject({
         edges: ["src/c/c.ts -> a [outside-imports]", "src/c/up.test.ts -> top [upward]"],
         unclaimed: ["src/sync/Merge.ts"],

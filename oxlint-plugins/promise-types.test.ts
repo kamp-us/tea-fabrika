@@ -60,6 +60,7 @@ const typed = (files: Readonly<Record<string, string>>, workers = false) => {
     try {
       const project = snapshot.getProject(config)!;
       expect(project.program.getSemanticDiagnostics()).toEqual([]);
+
       return checkPromiseTypes(project, root, paths);
     } finally {
       snapshot.dispose();
@@ -155,7 +156,9 @@ const rpcSource = (
       bare: ["", ""],
     } as const
   )[spelling];
+
   const inBridge = spelling !== "bare";
+
   // Installed workers-types: WorkerStub -> Fetcher<T> -> Rpc.Provider<T> ->
   // MethodOrProperty<V> -> Result<Awaited<R>> turns Promise<unknown> into never.
   const before = [
@@ -173,6 +176,7 @@ const rpcSource = (
     ...Array.from({ length: gap }, () => ""),
     ...(marked ? ["// oxlint-disable-next-line fabrika/no-promises -- edge: Worker RPC returns a Promise"] : []),
   ];
+
   return {
     file: "next/rpc.ts",
     line: before.length + 1,
@@ -329,6 +333,7 @@ describe("promise-types", () => {
   });
   it("pinned: the P12 storage-method gap refuses unmarked returned Promises", () => {
     const file = "next/apps/fabrika/src/storage-method.ts";
+
     const findings = typed({
       [file]: [
         "declare const storage: {put(key: string, value: unknown): Promise<void>};",
@@ -337,12 +342,14 @@ describe("promise-types", () => {
         "}",
       ].join("\n"),
     });
+
     expect(findings.filter((f) => f.file === file).map((f) => f.line)).toContain(3);
   });
   it("refuses Promise values, inferred returns, imported aliases and thunks outside one marked line", () => {
     fc.assert(
       fc.property(fc.stringMatching(/^[a-z]{1,8}$/), (suffix) => {
         const file = `next/case-${suffix}.ts`;
+
         const findings = typed({
           "next/binding.ts":
             "export type Later<T> = Promise<T>; export declare const platform: {read(): Later<number>};",
@@ -376,6 +383,7 @@ describe("promise-types", () => {
           "next/helper.test-support.ts": "declare const p: Promise<number>; export const f = () => p;",
           "packages/today.ts": "declare const p: Promise<number>; export const f = () => p;",
         });
+
         expect(findings.filter((f) => f.file === file).map((f) => f.line)).toEqual([3, 4, 5, 6, 7, 8, 9, 12, 15]);
         expect(findings.filter((f) => f.file !== file)).toEqual([]);
       }),
@@ -400,12 +408,14 @@ describe("secret reads enter Redacted at their source", () => {
           const file = "next/source.ts",
             path = join(folder, file),
             config = join(folder, "tsconfig.json");
+
           mkdirSync(dirname(path), { recursive: true });
           writeFileSync(
             join(folder, "crypto.d.ts"),
             'declare module "node:crypto" {export function randomBytes(n: number): {toString(encoding: string): string};}',
           );
           const prelude = `import {randomBytes as bytes${suffix}} from "node:crypto";\ninterface Redacted {readonly "~effect/Redacted": never}\ndeclare function wrap${suffix}(value: unknown): Redacted;\ndeclare const request: {headers: {get(name: string): string | null}};\ndeclare const ctx: {props: {token: string}};\n`;
+
           const lines = [
             `export const entropy = bytes${suffix}(32).toString("base64url");`,
             'export const header = request.headers.get("authorization");',
@@ -414,6 +424,7 @@ describe("secret reads enter Redacted at their source", () => {
             `export const safeHeader = wrap${suffix}(request.headers.get("authorization"));`,
             `export const safeBinding = wrap${suffix}(ctx.props.token);`,
           ];
+
           writeFileSync(path, prelude + lines.join("\n"));
           writeFileSync(
             config,
@@ -523,6 +534,7 @@ describe("every TypeScript file of a next/ package is in its program", () => {
       fc.asyncProperty(Planted, async (planted) => {
         const file = `${APP}/${planted.folder === "" ? "" : `${planted.folder}/`}${planted.name}${planted.suffix}`;
         const text = `export const planted: number = "${planted.word}";\n`;
+
         const { gaps, diagnostics } = await scoped(
           {
             "tsconfig.base.json": readFileSync(join(ROOT, "tsconfig.base.json"), "utf8"),
@@ -534,6 +546,7 @@ describe("every TypeScript file of a next/ package is in its program", () => {
           (at, snapshot, gapsOf) => {
             const program = snapshot.getProject(join(at, APP, "tsconfig.json"))?.program;
             const full = join(at, file);
+
             return {
               gaps: gapsOf([file]),
               diagnostics: [...(program?.getSyntacticDiagnostics() ?? []), ...(program?.getSemanticDiagnostics() ?? [])]
@@ -542,6 +555,7 @@ describe("every TypeScript file of a next/ package is in its program", () => {
             };
           },
         );
+
         expect(gaps).toEqual([]);
         expect(diagnostics).toEqual([{ code: 2322, line: 1 }]);
       }),
@@ -576,6 +590,7 @@ describe("every TypeScript file of a next/ package is in its program", () => {
       fc.asyncProperty(Scoped, async ({ name, files }) => {
         const pkg = `next/programs/${name}`;
         const tracked = files.map((f) => `${pkg}/${f}`);
+
         const gaps = await scoped(
           {
             [`${pkg}/package.json`]: JSON.stringify({ scripts: { typecheck: TYPECHECK } }),
@@ -588,6 +603,7 @@ describe("every TypeScript file of a next/ package is in its program", () => {
           {},
           (_at, _snapshot, gapsOf) => gapsOf(tracked),
         );
+
         expect([...gaps].sort()).toEqual(
           tracked
             .filter((f) => !f.startsWith(`${pkg}/src/`))
@@ -607,6 +623,7 @@ describe("every TypeScript file of a next/ package is in its program", () => {
         async (script, stray) => {
           const pkg = "next/packages/held";
           const tracked = [`${pkg}/src/index.ts`, `next/${stray}.ts`];
+
           const gaps = await scoped(
             {
               [`${pkg}/package.json`]: JSON.stringify(script === undefined ? {} : { scripts: { typecheck: script } }),
@@ -620,6 +637,7 @@ describe("every TypeScript file of a next/ package is in its program", () => {
             {},
             (_at, _snapshot, gapsOf) => gapsOf(tracked),
           );
+
           expect([...gaps].sort()).toEqual(
             [...(script === TYPECHECK ? [] : [`${pkg}/package.json script`]), `next/${stray}.ts stray`].sort(),
           );

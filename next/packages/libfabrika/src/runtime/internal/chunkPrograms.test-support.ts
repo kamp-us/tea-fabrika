@@ -14,6 +14,7 @@
 // @demlik/tea 0.25.0), so a `type` operand would be overwritten by "send_chunks".
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Str from "effect/String";
 import { Program } from "../Program.ts";
 import { send, sendChunks } from "../Send.ts";
 
@@ -34,10 +35,13 @@ export const Answer = Schema.Struct({
 
 /** @internal The answers, and the numbers of the chunked sends still unanswered, oldest first. */
 export const WriterModel = Schema.Struct({ answers: Schema.Array(Answer), pending: Schema.Array(Schema.Int) });
+
 type WriterModel = typeof WriterModel.Type;
 
 const Letter = Schema.Struct({ type: Schema.Literal("letter"), n: Schema.Int });
+
 const Rows = Schema.Struct({ type: Schema.Literal("rows"), n: Schema.Int, items: Schema.Array(Item) });
+
 /** A plain letter to the writer's second peer, so a law sees whether another name's mail waits. */
 const Aside = Schema.Struct({ type: Schema.Literal("aside"), n: Schema.Int });
 
@@ -53,11 +57,12 @@ const Big = Schema.Struct({
 
 /** @internal The items a `big` input makes: `count` items of send `n`, the last padded with `tail`. */
 export const madeItems = (n: number, count: number, size: number, tail: number) =>
-  Array.from({ length: count }, (_, i) => ({ s: n, i, pad: "x".repeat(i === count - 1 ? tail : size) }));
+  Array.from({ length: count }, (_, i) => ({ s: n, i, pad: Str.repeat(i === count - 1 ? tail : size)("x") }));
 
 /** A plain send's number, read back from the letter its answer echoes. */
 const numbered = (m: unknown): number => {
   const plain = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ n: Schema.Int }) }))(m);
+
   return plain._tag === "Some" ? plain.value.m.n : -1;
 };
 
@@ -68,6 +73,7 @@ const decodeEcho = Schema.decodeUnknownOption(
 /** A chunked send's echoed `{to, as}`, read back from its answer's Cmd; nothing when it names none. */
 const address = (m: unknown): Partial<typeof Answer.Type> => {
   const echo = decodeEcho(m);
+
   return echo._tag === "Some" ? { to: echo.value.cmd.to, as: echo.value.cmd.as } : {};
 };
 
@@ -96,6 +102,7 @@ export const pipeWriter = (peer: string) => {
       send_err: (s, m) => [answered(s, numbered(m.cmd), m.error._tag), []],
     },
   });
+
   return Program.make({
     name: "t1041-writer",
     machine,
@@ -134,6 +141,7 @@ export const chunkWriter = (peer: string, other: string = peer) => {
       send_chunks_err: (s, m) => [chunkAnswered(s, m.error._tag, address(m)), []],
     },
   });
+
   return Program.make({
     name: "t1041-chunk-writer",
     machine,
@@ -175,6 +183,7 @@ export const pipeReader = () => {
       rows: (s, m) => [{ got: [...s.got, { type: "rows" as const, items: m.items, part: m.part }] }, []],
     },
   });
+
   return Program.make({
     name: "t1041-reader",
     machine,

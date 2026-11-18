@@ -18,25 +18,27 @@
 // selected spec, the hashes that failed, the live processes) to pick the next move and its
 // parameters: an install generated from the current source, one of the five failures made from it,
 // a repeat, a new process, or a Project restart.
-import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Cause,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  Redacted,
-  Schedule,
-  Schema,
-  Scope,
-} from "effect";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { lineFor } from "../ledger/Log.ts";
@@ -57,20 +59,25 @@ vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {}, DurableObject
 const SEED = 119120;
 
 /** A Promise the law awaited rejected: fast-check's failed assertion, or a Response body that did not read. */
-class Rejected extends Schema.TaggedError<Rejected>()("Rejected", { cause: Schema.Defect() }) {}
+class Rejected extends Schema.TaggedError<Rejected, { readonly brand: unique symbol }>()("Rejected", {
+  cause: Schema.Defect(),
+}) {}
 
 const rejected = (cause: unknown) => new Rejected({ cause });
 
 const ProcessKey = Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String]));
 
 const EntryBody = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
+
 const PROGRAM = "fabrika/counter";
+
 const BRAIN_BUILD = "brain-build-test";
+
 const TOKEN = "control-token-test";
 
 // Main's T753: the Project reads its start from the INSTANCE binding and records it in its own ledger.
-const START = StartsTest.fixture(
-  {
+const START = await Effect.runPromise(
+  StartsTest.fixture({
     name: "project-test",
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
     // A public key line made from 32 fixed bytes: no private key exists for it.
@@ -78,8 +85,7 @@ const START = StartsTest.fixture(
     window: null,
     port: 18787,
     build: BRAIN_BUILD,
-  },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  }),
 );
 
 /** Cloudflare's SQLite row limit, from the plan: a source over it is refused as too large. */
@@ -87,6 +93,7 @@ const MOST = 2 * 1024 * 1024;
 
 // L12 (type): the door the Project hands its gateway has no code calls.
 expectTypeOf<GatewayCalls>().not.toHaveProperty("codeInstall");
+
 expectTypeOf<GatewayCalls>().not.toHaveProperty("codeFailed");
 
 /** A candidate as Worker Loader would run it: its declared name and `v`, or a throw as it loads. */
@@ -98,16 +105,21 @@ const Fixture = Schema.Struct({
   inputPersonOnly: Schema.Boolean,
   eventPersonOnly: Schema.Boolean,
 });
+
 type Fixture = typeof Fixture.Type;
 
 /** A fixture's source: plain module text that names its declaration; `pad` makes it as big as asked. */
-const sourceFor = (f: Fixture, pad = 0) => `export default {};\n// fixture ${JSON.stringify(f)}\n${"/".repeat(pad)}`;
+const sourceFor = (f: Fixture, pad = 0) =>
+  `export default {};\n// fixture ${JSON.stringify(f)}\n${Str.repeat(pad)("/")}`;
 
 const readFixture = (source: string): Fixture =>
-  Schema.decodeUnknownSync(Schema.fromJsonString(Fixture))(source.split("\n")[1]!.slice("// fixture ".length));
+  Schema.decodeUnknownSync(Schema.fromJsonString(Fixture))(
+    Str.slice("// fixture ".length)(Str.split(source, "\n")[1]!),
+  );
 
 const declaration = (f: Fixture) => {
   const model = Schema.Struct({ count: Schema.Int });
+
   const machine = Machine.make({
     model,
     msg: Schema.Struct({ type: Schema.Literal("inc") }),
@@ -115,6 +127,7 @@ const declaration = (f: Fixture) => {
     init: (kept) => [kept ?? { count: 0 }, []],
     update: { inc: (s) => [{ count: s.count + f.k }, []] },
   });
+
   const program = Program.make({
     name: f.name,
     machine,
@@ -128,6 +141,7 @@ const declaration = (f: Fixture) => {
     },
     wake: () => null,
   });
+
   return ProgramLoader.use((loader) => loader.load(f.name)).pipe(
     Effect.provide(ProgramLoader.layer<never>({ [f.name]: program }, {})),
     Effect.map((loaded) => loaded.declaration),
@@ -136,17 +150,22 @@ const declaration = (f: Fixture) => {
 
 /** What the brain pushed to one Process object, and what that object answers. */
 type Pushed = { readonly name: string; readonly load: string; readonly program: string; readonly hash: string };
+
 expectTypeOf<Omit<Pushed, "name">>().toEqualTypeOf<Parameters<ProcessBinding["swap"]>[0]>();
 
 /** One booted Project over one SQLite file, with every platform handle recorded. */
 const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: ReadonlyArray<Fixture> = []) {
+  const services = yield* Effect.context<never>();
   const parent = yield* Scope.Scope;
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
   );
+
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
+
   const storage = {
     sql: {
       exec: sql.exec,
@@ -160,12 +179,15 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
       values.set(key, value);
     },
   };
+
+  // SAFETY: the reload path reads the Project's name, its storage and the tail export, which this fixture gives.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
     storage,
     exports: { IsolateTail: () => ({ fetch: () => Promise.resolve(new Response()) }) },
   } as unknown as DurableObjectState;
+
   const source = sourceFor(builtIn);
   const builtHash = yield* hash(source);
   let bundled = { hash: builtHash, source };
@@ -173,10 +195,12 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
   const completed: Array<Pushed> = [];
   const loadedAtPush: Array<ReadonlyArray<string>> = [];
   const swapGates = new Map<string, Effect.Effect<void>>();
+
   const swapReplies = new Map<
     string,
     Effect.Effect<void, Effect.Error<ReturnType<ProjectService["Service"]["append"]>>>
   >();
+
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
   const running = new Map<string, string>();
   const refusing = new Set<string>();
@@ -201,22 +225,25 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
   let scope: Scope.Closeable;
   let doorPolicy: ProjectDoorOptions["policy"];
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => Effect.suspend(() => Effect.provide(work, context));
+
+  // SAFETY: the composition calls PROJECT's code install, failure and object calls and PROCESS's lifecycle calls, doubled below.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify(START),
+    INSTANCE: Formatter.formatJson(START),
     PROJECT: {
       getByName: () => ({
         codeInstall: (install: unknown) =>
-          Effect.runPromise(run(Effect.flatMap(ProjectService, (p) => p.codeInstall(install)))),
+          Effect.runPromiseWith(services)(run(Effect.flatMap(ProjectService, (p) => p.codeInstall(install)))),
         codeFailed: (fact: unknown) =>
-          Effect.runPromise(run(Effect.flatMap(ProjectService, (p) => p.codeFailed(fact)))),
+          Effect.runPromiseWith(services)(run(Effect.flatMap(ProjectService, (p) => p.codeFailed(fact)))),
         processObject: (pid: string) =>
-          Effect.runPromise(run(Effect.flatMap(ProjectService, (p) => p.processObject(pid)))),
+          Effect.runPromiseWith(services)(run(Effect.flatMap(ProjectService, (p) => p.processObject(pid)))),
       }),
     },
     PROCESS: {
       getByName: (key: string) => {
         const [, name] = Schema.decodeUnknownSync(ProcessKey)(key);
+
         return {
           configure: async (d: Pick<Descriptor, "id" | "name" | "build" | "program">) => {
             if (unreachable.has(name)) {
@@ -226,7 +253,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const gate = configureGates.get(name);
 
             if (gate !== undefined) {
-              await Effect.runPromise(gate);
+              await Effect.runPromiseWith(services)(gate);
             }
 
             descriptors.set(name, d);
@@ -237,6 +264,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
           },
           descriptor: async (pid?: string) => {
             const d = descriptors.get(name)!;
+
             return { ...d, id: pid ?? d.id, build: running.get(pid ?? d.id) ?? d.build };
           },
           msg: async () => ({ _tag: "accepted", rev: 1, pos: 1 }),
@@ -255,7 +283,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const gate = swapGates.get(request.hash);
 
             if (gate !== undefined) {
-              await Effect.runPromise(gate);
+              await Effect.runPromiseWith(services)(gate);
             }
 
             const pid = descriptors.get(name)!.id;
@@ -274,7 +302,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const reply = swapReplies.get(request.hash);
 
             if (reply !== undefined) {
-              await Effect.runPromise(reply);
+              await Effect.runPromiseWith(services)(reply);
             }
 
             return { _tag: "swapped", was };
@@ -291,12 +319,15 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
         const calls = isolates.get(id) ?? [];
         isolates.set(id, calls);
         const fixture = readFixture(text);
+
         const record =
           (method: string) =>
           async (..._args: ReadonlyArray<unknown>) => {
             calls.push(method);
+
             return null;
           };
+
         return {
           getEntrypoint: () => ({
             describe: async () => {
@@ -306,7 +337,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
                 throw new Error("a module that throws as it loads");
               }
 
-              return Effect.runPromise(declaration(fixture));
+              return Effect.runPromiseWith(services)(declaration(fixture));
             },
             init: record("init"),
             step: record("step"),
@@ -320,7 +351,8 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
       },
     },
   } as unknown as Env;
-  const door = Object.fromEntries(
+
+  const door = Rec.fromEntries(
     [
       "connect",
       "challenge",
@@ -339,6 +371,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
       () => (method === "retire" ? Effect.void : Effect.die(`the door is not under test: ${method}`)),
     ]),
   );
+
   const boot = Effect.fnUntraced(function* () {
     // The real composition, as the app's brain wires it; only the door is stubbed.
     scope = yield* Scope.fork(parent);
@@ -348,6 +381,8 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
         bootstrap: [{ name: "counter:1", id: "counter:1", program: PROGRAM }],
         door: (options) => {
           doorPolicy = options.policy;
+
+          // SAFETY: `door` holds each door method the Project calls, built from a list of names, which drops its type.
           return Effect.succeed(door as never);
         },
       }),
@@ -360,9 +395,12 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
         ? Effect.void
         : Effect.fail("a start is not yet delivered to its object"),
     ).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("5 seconds"), Effect.orDie);
+
     return project;
   });
+
   yield* boot();
+
   return {
     db,
     env,
@@ -417,7 +455,9 @@ const install = Effect.fnUntraced(function* (i: Instance, id: string, f: Fixture
   const source = sourceFor(f, pad);
   const digest = yield* hash(source);
   i.sources.set(digest, source);
+  // SAFETY: no caller passes `from`, so it is always "watch", one of the origins the From schema takes.
   const answer = yield* i.run(i.p.codeInstall({ id, program: PROGRAM, hash: digest, source, from: from as never }));
+
   return { digest, answer };
 });
 
@@ -425,10 +465,12 @@ const checkPolicies = Effect.fnUntraced(function* (i: Instance, n: number, phase
   for (const [name, descriptor] of i.descriptors) {
     const code = i.running.get(descriptor.id)!;
     const kept = readFixture(i.sources.get(code)!);
+
     const expected = {
       inputs: kept.inputPersonOnly ? ["inc"] : [],
       events: kept.eventPersonOnly ? ["changed"] : [],
     };
+
     expect(yield* i.policy(descriptor.id), `${name}'s running code decides its policy`).toEqual(expected);
     const id = `policy-own:${n}:${phase}:${name}`;
     yield* i.run(i.p.own(descriptor.id, id, `app/${name}`, { _tag: "changed" }));
@@ -472,8 +514,9 @@ const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
 
 const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, Scope.Scope>, runs: number) =>
   Effect.gen(function* () {
+    const context = yield* Effect.context<never>();
     // edge: fast-check owns the Promise callback; each generated run owns a fresh Effect scope.
-    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(Effect.scoped(body(g))));
+    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromiseWith(context)(Effect.scoped(body(g))));
     const options = { seed: SEED, numRuns: runs, endOnFailure: true };
     // edge: fast-check answers its assertion through a Promise.
     yield* Effect.tryPromise({ try: () => fc.assert(property, options), catch: rejected });
@@ -502,6 +545,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       "restart",
       ...(presses ? ["start", "start", ...(i.descriptors.size > 0 ? ["own"] : [])] : []),
     ];
+
     const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
     seen.add(move);
     const before = code(i).length;
@@ -550,6 +594,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       const expected = [...i.descriptors.values()]
         .filter((d) => i.running.get(d.id) !== selected)
         .map((d) => [d.name, selected, d.program]);
+
       yield* i.restart;
       expect(
         i.pushed
@@ -578,8 +623,12 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       // A new process starts on the selected code, never on a failed one.
       expect(i.descriptors.get(name)?.build).toBe(selected);
     } else {
-      const bad: Fixture =
-        move === "load" ? { ...next, throws: true } : move === "name" ? { ...next, name: "fabrika/other" } : next;
+      const bad: Fixture = Match.value(move).pipe(
+        Match.when("load", () => ({ ...next, throws: true })),
+        Match.when("name", () => ({ ...next, name: "fabrika/other" })),
+        Match.orElse(() => next),
+      );
+
       const pad = move === "too_large" ? MOST + 1 : 0;
       const { digest, answer } = yield* install(i, `install_${n}`, bad, pad);
       expect(answer).toEqual({ _tag: "failed", reason: move });
@@ -604,7 +653,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 
     // The candidate check calls only describe(), never init, a step or a Cmd.
     for (const [id, calls] of i.isolates) {
-      if (id.endsWith("/check")) {
+      if (Str.endsWith("/check")(id)) {
         expect(
           calls.filter((c) => c !== "describe"),
           `${id} ran more than describe`,
@@ -618,7 +667,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 
 // edge: the control boundary answers with a platform Response.
 const json = (response: Response) =>
-  Effect.tryPromise({ try: (): Promise<unknown> => response.json(), catch: rejected });
+  Effect.tryPromise({ try: (): Promise<Schema.Json> => response.json(), catch: rejected });
 
 describe("P15 slice 1: the brain installs and selects code", () => {
   it.live(
@@ -682,6 +731,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
         (g) =>
           Effect.gen(function* () {
             const i = yield* instance(baseFixture());
+
             const start = (name: string) =>
               i.run(
                 i.p.start(
@@ -689,6 +739,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                   origin,
                 ),
               );
+
             // Starts the Project saved while their objects could not be reached: each stays pending.
             const late = Array.from({ length: g(fc.integer, { min: 1, max: 3 }) }, (_, n) => `late:${n}`);
 
@@ -714,6 +765,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             }
 
             expect(code(i).at(-1)?.body.hash, "the last save is selected").toBe(selected);
+
             // Every process the Project holds, read from its own table: a pending start has no object yet.
             const held = () =>
               i.db
@@ -725,18 +777,23 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                     row["value"],
                   ).name,
                 }));
+
             const behind = () => held().filter(({ pid }) => i.running.get(pid) !== selected);
+
             const settled = (done: () => boolean, label: string) =>
               Effect.suspend(() => (done() ? Effect.void : Effect.fail(label))).pipe(
                 Effect.retry(Schedule.spaced("5 millis")),
                 Effect.timeoutOrElse({ duration: "5 seconds", orElse: () => Effect.die(new Error(label)) }),
               );
+
             const lines: Array<string> = [];
+
             const logged = Logger.layer([
               Logger.make((options) => {
                 lines.push(Logger.formatJson.log(options));
               }),
             ]);
+
             i.unreachable.clear();
             const left = behind();
             expect(
@@ -784,7 +841,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
 
             if (down) {
               yield* settled(
-                () => left.every(({ pid }) => lines.some((line) => line.includes(pid))),
+                () => left.every(({ pid }) => lines.some((line) => Str.includes(pid)(line))),
                 "a failed boot swap left no log line for its process",
               );
               expect(behind(), "a failed swap leaves each process on its old code").toEqual(left);
@@ -817,6 +874,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             let selected = i.builtHash;
             let k = baseFixture().k;
             let personOnly = false;
+
             const starts = new Map<
               string,
               {
@@ -824,6 +882,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 answer: Effect.Success<ReturnType<ProjectService["Service"]["start"]>>;
               }
             >();
+
             const steps = g(fc.integer, { min: 8, max: 20 });
 
             for (let n = 0; n < steps; n++) {
@@ -836,12 +895,14 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 selected = (yield* install(i, `start_install_${n}`, policyFixture(k, personOnly))).digest;
               } else if (move === "start") {
                 const name = `fresh:${n}`;
+
                 // A client still knows the built-in hash. The brain chooses the selection in its turn.
                 const request = Start.cases.first.make({
                   id: `first_${n}`,
                   name,
                   code: { program: PROGRAM, hash: i.builtHash },
                 });
+
                 const answer = yield* i.run(i.p.start(request, origin));
                 starts.set(name, { request, answer });
                 expect(i.descriptors.get(name)?.build).toBe(selected);
@@ -897,6 +958,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               const published = yield* Deferred.make<void>();
               const reply = yield* Deferred.make<void>();
               const id = `code.swapped:publish_${n}`;
+
               const line = lineFor(
                 { ...origin, build: digest },
                 {
@@ -906,6 +968,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                   was,
                 },
               );
+
               i.swapReplies.set(
                 digest,
                 Effect.gen(function* () {
@@ -948,11 +1011,14 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               ...g(() => fixtures),
               name: `p15/${g(() => fc.stringMatching(/^[a-z]{1,8}$/))}`,
             };
+
             const i = yield* instance(baseFixture(), [other]);
+
             const variants = new Map([
               [PROGRAM, baseFixture()],
               [other.name, other],
             ]);
+
             const count = g(fc.integer, { min: 2, max: 4 });
 
             for (let n = 1; n < count; n++) {
@@ -1008,9 +1074,11 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               i.sources.set(digest, source);
               const before = new Map(i.running);
               const pushes = i.pushed.length;
+
               const answer = yield* i.run(
                 i.p.codeInstall({ id: `isolated_${n}`, program, hash: digest, source, from: "watch" }),
               );
+
               expect(answer._tag).toBe("loaded");
               const matching = [...i.descriptors.values()].filter((d) => d.program === program);
               expect(
@@ -1058,6 +1126,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               const pending = yield* Effect.forkScoped(install(i, `concurrent_${n}`, current));
               yield* Deferred.await(waiting).pipe(Effect.timeout("2 seconds"));
               const id = `turn_finished_${n}`;
+
               const result = yield* i
                 .run(i.p.own(pid, id, `app/${pid}`, { _tag: "changed", count: n }))
                 .pipe(
@@ -1065,6 +1134,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                   Effect.andThen(Fiber.join(pending)),
                   Effect.timeoutOption("1 second"),
                 );
+
               expect(
                 Option.isSome(result),
                 "install must not hold the Project turn while awaiting a Process turn",
@@ -1183,7 +1253,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             expect(
               Exit.isFailure(exit)
                 ? Cause.squash(exit.cause)
-                : { opened: [...i.isolates.keys()].filter((id) => !before.has(id) && id.endsWith(`/${pid}`)) },
+                : { opened: [...i.isolates.keys()].filter((id) => !before.has(id) && Str.endsWith(`/${pid}`)(id)) },
               "the open fails loud, and counter:1 runs no other code",
             ).toMatchObject({ _tag: "ProgramDown", reason: "no_program" });
           }),
@@ -1239,15 +1309,16 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             expect(loaded[0]?.body).toMatchObject({ program: PROGRAM, hash: i.builtHash, was: null, from: "boot" });
 
             for (const e of entries) {
+              // SAFETY: a start entry's body may carry the `code` it starts on, an object with its `hash`, or none; `typeof` below checks it.
               const start = e.body.code as { readonly hash?: string } | undefined;
 
-              if (e.stream.startsWith("processes/") && typeof start?.hash === "string") {
+              if (Str.startsWith("processes/")(e.stream) && Predicate.isString(start?.hash)) {
                 expect(earlier(start.hash, e.rev), `${e.stream} ${e.id} starts on ${start.hash}`).toBe(true);
               }
 
-              if (e.stream.startsWith("gateway/")) {
+              if (Str.startsWith("gateway/")(e.stream)) {
                 expect(e.build, `${e.stream} ${e.id} is the brain's own entry`).toBe(BRAIN_BUILD);
-              } else if (e.stream.startsWith("app/")) {
+              } else if (Str.startsWith("app/")(e.stream)) {
                 expect(earlier(e.build, e.rev), "a process record's build was loaded first").toBe(true);
               }
             }
@@ -1288,6 +1359,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 i.sources.set(digest, source);
                 const before = code(i).length;
                 const body = { id: `install_${n}`, program: PROGRAM, hash: digest, source, from: "watch" };
+
                 const ask = (target: string, method: string, bearer: string | null) =>
                   control(
                     new Request("http://127.0.0.1/control", {
@@ -1303,6 +1375,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 if (move === "control") {
                   const response = yield* ask("project", "codeInstall", TOKEN);
                   expect(response.status).toBe(200);
+                  // SAFETY: a 200 from codeInstall carries the installed answer under `value`, tagged loaded or same.
                   const answer = ((yield* json(response)) as { value: { _tag: string } }).value;
                   expect(["loaded", "same"]).toContain(answer._tag);
                 } else if (move === "wrong_target") {
@@ -1319,6 +1392,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                       { nil: null },
                     ),
                   );
+
                   expect((yield* ask("project", "codeInstall", bearer)).status).toBe(403);
                   expect(code(i)).toHaveLength(before);
                 } else if (move === "mismatch") {
@@ -1332,11 +1406,13 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                   const info = yield* i.run(i.p.info);
                   const pid = info[0]!.process;
                   const stream = g(() => fc.constantFrom("gateway/code", "gateway/brain", "gateway/x"));
+
                   const exit = yield* i.run(
                     Effect.exit(
                       i.p.own(pid, `own_${n}`, stream, { _tag: "code.loaded", program: PROGRAM, hash: digest }),
                     ),
                   );
+
                   expect(Exit.isFailure(exit), `a program's write to ${stream}`).toBe(true);
                   expect(code(i)).toHaveLength(before);
                 } else if (move === "policy") {
@@ -1368,12 +1444,14 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                   i.refusing.add(refuses);
                   const refusedId = i.descriptors.get(refuses)!.id;
                   const kept = readFixture(i.sources.get(i.running.get(refusedId)!)!);
+
                   const next = {
                     ...fixture,
                     k: n + 100,
                     inputPersonOnly: !kept.inputPersonOnly,
                     eventPersonOnly: !kept.eventPersonOnly,
                   };
+
                   const installed = yield* install(i, `policy_${n}`, next);
                   expect(installed.answer._tag).toBe("loaded");
 

@@ -1,11 +1,25 @@
 /**
  * `Repositories` on Node, through the `git` command.
- *
- * @stability unstable
  */
-import { Effect, Fiber, FileSystem, Layer, Path, Redacted, Schema, Stream } from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Arr from "effect/Array";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import {
   Branch,
   DefaultUnknown,
@@ -19,12 +33,24 @@ import {
 import * as Sources from "./Sources.ts";
 
 const failure = (operation: string, cause: unknown, unknown = false) =>
-  new RepositoriesError({
+  RepositoriesError.make({
     message: `Selected repository: ${operation} failed.`,
     reason: unknown
-      ? new DefaultUnknown({ cause: Redacted.make(cause) })
-      : new ReadFailed({ cause: Redacted.make(cause) }),
+      ? DefaultUnknown.make({ cause: Redacted.make(cause) })
+      : ReadFailed.make({ cause: Redacted.make(cause) }),
   });
+
+/**
+ * What a git command takes from this process's environment, read at each command as process.env
+ * was: an empty variable stays empty, and an unset one stays unset.
+ */
+const inherited = Config.all({
+  PATH: Config.String("PATH").pipe(Config.withDefault(undefined)),
+  HOME: Config.String("HOME").pipe(Config.withDefault(undefined)),
+  GIT_CONFIG_NOSYSTEM: Config.String("GIT_CONFIG_NOSYSTEM").pipe(Config.withDefault(undefined)),
+  GIT_CONFIG_GLOBAL: Config.String("GIT_CONFIG_GLOBAL").pipe(Config.withDefault(undefined)),
+  SSH_AUTH_SOCK: Config.String("SSH_AUTH_SOCK").pipe(Config.withDefault(undefined)),
+});
 
 const safeConfig = [
   "-c",
@@ -58,7 +84,6 @@ const safeConfig = [
  * as `DefaultUnknown`. A root `fabrika.toml`, or a `.fabrika.jsonc` with no new settings file
  * beside it, fails with a message that says where the file moved.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: { readonly person: string }) =>
@@ -70,32 +95,37 @@ export const layer = (options: { readonly person: string }) =>
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const digest = yield* Digest.Digest;
       const hash = (text: string) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text));
+
       const run = Effect.fn("repositories.git")(function* (cwd: string, args: ReadonlyArray<string>, objects?: string) {
         yield* Effect.annotateCurrentSpan({ operation: args[0] ?? "read" });
+
         return yield* Effect.scoped(
           Effect.gen(function* () {
+            const env = yield* inherited.parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+
             const child = yield* spawner.spawn(
               ChildProcess.make("git", ["--no-replace-objects", "--literal-pathspecs", ...safeConfig, ...args], {
                 cwd,
                 extendEnv: false,
                 env: {
-                  PATH: process.env.PATH,
-                  HOME: process.env.HOME,
-                  GIT_CONFIG_NOSYSTEM: objects === undefined ? "1" : process.env.GIT_CONFIG_NOSYSTEM,
-                  GIT_CONFIG_GLOBAL: objects === undefined ? "/dev/null" : process.env.GIT_CONFIG_GLOBAL,
+                  PATH: env.PATH,
+                  HOME: env.HOME,
+                  GIT_CONFIG_NOSYSTEM: objects === undefined ? "1" : env.GIT_CONFIG_NOSYSTEM,
+                  GIT_CONFIG_GLOBAL: objects === undefined ? "/dev/null" : env.GIT_CONFIG_GLOBAL,
                   GIT_TERMINAL_PROMPT: "0",
                   GIT_ATTR_NOSYSTEM: "1",
                   GIT_ALLOW_PROTOCOL: "file:https:http:ssh:git",
                   GIT_OBJECT_DIRECTORY: objects,
-                  SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK,
+                  SSH_AUTH_SOCK: env.SSH_AUTH_SOCK,
                 },
               }),
             );
+
             const errors = yield* child.stderr.pipe(Stream.runCollect, Effect.forkScoped);
             const bytes = yield* child.stdout.pipe(Stream.runCollect);
             const code = yield* child.exitCode;
             const stderr = yield* Fiber.join(errors);
-            const size = bytes.reduce((n, part) => n + part.length, 0);
+            const size = Arr.reduce(bytes, 0, (n, part) => n + part.length);
             const output = new Uint8Array(size);
             let offset = 0;
 
@@ -116,16 +146,19 @@ export const layer = (options: { readonly person: string }) =>
           Effect.mapError((cause) => (cause._tag === "RepositoriesError" ? cause : failure(args[0] ?? "read", cause))),
         );
       });
+
       const decode = Effect.fnUntraced(function* (bytes: Uint8Array) {
         return yield* Effect.try({
           try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
           catch: (cause: unknown) => failure("decode", cause),
         });
       });
+
       const text = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
         // Git adds one newline. Other whitespace can belong to a directory or remote path.
-        return (yield* decode(yield* run(cwd, args))).replace(/\n$/, "");
+        return Function.pipe(yield* decode(yield* run(cwd, args)), Str.replace(/\n$/, ""));
       });
+
       return Repositories.of({
         open: Effect.fn("repositories.open")(
           function* (selected: string): Effect.fn.Return<Repository, RepositoriesError> {
@@ -134,13 +167,16 @@ export const layer = (options: { readonly person: string }) =>
               Effect.flatMap((directory) => fs.realPath(directory)),
               Effect.mapError((cause) => failure("location", cause, true)),
             );
+
             const common = yield* text(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).pipe(
               Effect.flatMap((directory) => fs.realPath(directory)),
               Effect.mapError((cause) => failure("location", cause, true)),
             );
+
             const format = yield* Schema.decodeUnknownEffect(Schema.Literals(["sha1", "sha256"]))(
               yield* text(root, ["rev-parse", "--show-object-format"]),
             ).pipe(Effect.mapError((cause) => failure("object format", cause)));
+
             const destination = yield* text(root, [
               "config",
               "--local",
@@ -149,7 +185,11 @@ export const layer = (options: { readonly person: string }) =>
               "remote.origin.url",
             ]).pipe(Effect.mapError((cause) => failure("origin", cause, true)));
 
-            if (destination === "" || destination.startsWith("-") || destination.includes("\n")) {
+            if (
+              destination === "" ||
+              Function.pipe(destination, Str.startsWith("-")) ||
+              Function.pipe(destination, Str.includes("\n"))
+            ) {
               return yield* failure("origin", "invalid destination", true);
             }
 
@@ -160,6 +200,7 @@ export const layer = (options: { readonly person: string }) =>
                 ? destination
                 : // Resolving here would collapse symlink/.. before Git follows the actual path.
                   `${root}${path.sep}${destination}`;
+
             const isolated = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
               return yield* Effect.scoped(
                 Effect.gen(function* () {
@@ -173,55 +214,74 @@ export const layer = (options: { readonly person: string }) =>
                       ? "[core]\nrepositoryformatversion = 1\nbare = true\n[extensions]\nobjectformat = sha256\n"
                       : "[core]\nrepositoryformatversion = 0\nbare = true\n",
                   );
+
                   return yield* run(directory, args, path.join(common, "objects"));
                 }),
               ).pipe(
                 Effect.mapError((cause) => (cause._tag === "RepositoriesError" ? cause : failure("Git read", cause))),
               );
             });
+
             const effective = yield* isolated(["ls-remote", "--get-url", "--", remote]).pipe(
               Effect.flatMap(decode),
-              Effect.map((value) => value.replace(/\n$/, "")),
-              Effect.mapError((cause) => failure("origin", cause, true)),
+              Effect.mapBoth({
+                onFailure: (cause) => failure("origin", cause, true),
+                onSuccess: Str.replace(/\n$/, ""),
+              }),
             );
+
             // Host URL rewrites apply; credentials are authority, never destination identity.
-            const identity = effective
-              .replace(/^(https?:\/\/)[^/@]*@/i, "$1")
-              .replace(/^(ssh:\/\/)[^/@]*@/i, "$1")
-              .replace(/^[^/@:]+@(?=[^/:]+:)/, "");
-            const key = yield* hash(JSON.stringify([common, identity])).pipe(
+            const identity = Function.pipe(
+              effective,
+              Str.replace(/^(https?:\/\/)[^/@]*@/i, "$1"),
+              Str.replace(/^(ssh:\/\/)[^/@]*@/i, "$1"),
+              Str.replace(/^[^/@:]+@(?=[^/:]+:)/, ""),
+            );
+
+            const key = yield* hash(Formatter.formatJson([common, identity])).pipe(
               Effect.flatMap(Schema.decodeUnknownEffect(Hash)),
               Effect.mapError((cause) => failure("fingerprint", cause)),
             );
+
             const advertised = yield* isolated(["ls-remote", "--symref", "--", remote, "HEAD"]).pipe(
               Effect.flatMap(decode),
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
-            const lines = advertised.trim().split("\n");
-            const symbolic = lines.filter((line) => line.startsWith("ref: ") && line.endsWith("\tHEAD"));
+
+            const lines = Str.split(Str.trim(advertised), "\n");
+
+            const symbolic = Arr.filter(
+              lines,
+              (line) => Function.pipe(line, Str.startsWith("ref: ")) && Function.pipe(line, Str.endsWith("\tHEAD")),
+            );
 
             if (symbolic.length !== 1) {
               return yield* failure("default branch", "missing or ambiguous HEAD", true);
             }
 
-            const ref = (symbolic[0] ?? "").slice(5, -5);
+            const ref = Function.pipe(symbolic[0] ?? "", Str.slice(5, -5));
 
-            if (!ref.startsWith("refs/heads/")) {
+            if (!Function.pipe(ref, Str.startsWith("refs/heads/"))) {
               return yield* failure("default branch", "not a branch", true);
             }
 
-            const branch = yield* Schema.decodeUnknownEffect(Branch)(ref.slice(11)).pipe(
+            const branch = yield* Schema.decodeEffect(Branch)(Function.pipe(ref, Str.slice(11))).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
-            const heads = lines.filter((line) => !line.startsWith("ref: ") && line.endsWith("\tHEAD"));
+
+            const heads = Arr.filter(
+              lines,
+              (line) => !Function.pipe(line, Str.startsWith("ref: ")) && Function.pipe(line, Str.endsWith("\tHEAD")),
+            );
 
             if (heads.length !== 1) {
               return yield* failure("default branch", "missing HEAD object", true);
             }
 
-            const advertisedCommit = yield* Schema.decodeUnknownEffect(ObjectId)((heads[0] ?? "").slice(0, -5)).pipe(
-              Effect.mapError((cause) => failure("default branch", cause, true)),
-            );
+            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)(
+              Function.pipe(heads[0] ?? "", Str.slice(0, -5)),
+            ).pipe(Effect.mapError((cause) => failure("default branch", cause, true)));
+
             // Pin the advertised object. A branch move during fetch is a refusal, never a different selection.
             yield* isolated([
               "fetch",
@@ -232,12 +292,14 @@ export const layer = (options: { readonly person: string }) =>
               remote,
               ref,
             ]).pipe(Effect.mapError((cause) => failure("fetch", cause, true)));
+
             const commit = yield* isolated(["rev-parse", "--verify", `${advertisedCommit}^{commit}`]).pipe(
               Effect.flatMap(decode),
-              Effect.map((value) => value.replace(/\n$/, "")),
+              Effect.map(Str.replace(/\n$/, "")),
               Effect.flatMap(Schema.decodeUnknownEffect(ObjectId)),
               Effect.mapError((cause) => failure("commit", cause, true)),
             );
+
             const entry = Effect.fnUntraced(function* (file: string) {
               const listed = yield* decode(yield* isolated(["ls-tree", "-z", commit, "--", file]));
 
@@ -247,13 +309,15 @@ export const layer = (options: { readonly person: string }) =>
 
               const [record] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([Schema.NonEmptyString, Schema.Literal("")]),
-              )(listed.split("\0")).pipe(Effect.mapError((cause) => failure("tree", cause)));
-              const tab = record.indexOf("\t"),
-                fields = record.slice(0, tab).split(" ");
+              )(Str.split(listed, "\0")).pipe(Effect.mapError((cause) => failure("tree", cause)));
 
-              if (record.slice(tab + 1) !== file) {
+              const tab = Function.pipe(record, Str.indexOf("\t"));
+
+              if (Option.isNone(tab) || Function.pipe(record, Str.slice(tab.value + 1)) !== file) {
                 return yield* failure("tree", "unexpected path");
               }
+
+              const fields = Function.pipe(record, Str.slice(0, tab.value), Str.split(" "));
 
               const [mode, type, id] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([
@@ -262,8 +326,10 @@ export const layer = (options: { readonly person: string }) =>
                   ObjectId,
                 ]),
               )(fields).pipe(Effect.mapError((cause) => failure("tree", cause)));
+
               return { mode, type, id };
             });
+
             const read = Effect.fnUntraced(function* (file: string) {
               const found = yield* entry(file);
 
@@ -277,12 +343,13 @@ export const layer = (options: { readonly person: string }) =>
 
               return yield* isolated(["cat-file", "blob", found.id]);
             });
+
             const file = ".fabrika/fabrika.toml";
             const old = yield* entry("fabrika.toml");
 
             if (old !== null) {
-              return yield* new RepositoriesError({
-                reason: new ReadFailed({ cause: Redacted.make("legacy root settings file") }),
+              return yield* RepositoriesError.make({
+                reason: ReadFailed.make({ cause: Redacted.make("legacy root settings file") }),
                 message: "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
               });
             }
@@ -290,8 +357,8 @@ export const layer = (options: { readonly person: string }) =>
             const document = yield* entry(file);
 
             if (document === null && (yield* entry(".fabrika.jsonc")) !== null) {
-              return yield* new RepositoriesError({
-                reason: new ReadFailed({ cause: Redacted.make("legacy-only settings file") }),
+              return yield* RepositoriesError.make({
+                reason: ReadFailed.make({ cause: Redacted.make("legacy-only settings file") }),
                 message: ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
               });
             }
@@ -302,10 +369,13 @@ export const layer = (options: { readonly person: string }) =>
 
             const bytes = yield* read(file);
             const body = bytes === null ? null : yield* decode(bytes);
+
             const documentHash = yield* hash(body === null ? "absent" : body).pipe(
               Effect.mapError((cause) => failure("hash", cause)),
             );
+
             yield* Effect.annotateCurrentSpan({ commit, branch, bytes: bytes?.length ?? 0, present: bytes !== null });
+
             return {
               snapshot: { key, branch, commit, file, text: body, hash: documentHash },
               read,

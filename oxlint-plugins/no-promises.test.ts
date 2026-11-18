@@ -7,8 +7,11 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-promises)";
+
 const FIRES = "next/packages/libfabrika/src/app/fires.ts";
+
 const PASSES = "next/packages/libfabrika/src/app/passes.ts";
+
 const EDGE = "next/packages/libfabrika/src/data/project.ts";
 
 const fires = [

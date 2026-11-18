@@ -2,11 +2,12 @@
 // never saves, full-history checkouts are blobless, and the typecheck's buildinfo cache.
 import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { Predicate, Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 import { compact, map, steps, uses } from "./shared.ts";
 
 const lines = (value: unknown) =>
-  typeof value === "string"
+  Predicate.isString(value)
     ? value
         .split("\n")
         .map((line) => line.trim())
@@ -31,45 +32,57 @@ export interface CacheFiles {
 const PNPM_STORE = /pnpm[\s\S]*store|store[\s\S]*pnpm/i;
 
 const ON_MAIN = "github.ref=='refs/heads/main'";
+
 // scripts/typecheck.sh's buildinfo path, relative to each package.
 const BUILDINFO = /"--tsBuildInfoFile",\s*"([^"]+)"/;
+
 const TSC_HASH = "git ls-files -s pnpm-lock.yaml '*tsconfig*.json' | git hash-object --stdin";
+
 const TSC_PREFIX = `tsc-\${{ runner.os }}-\${{ steps.tsc-key.outputs.hash }}-`;
+
 const TSC_SAVED = `\${{ steps.tsc.outputs.cache-primary-key }}`;
 
 export const lintCaches = (files: CacheFiles): string[] => {
   const errors: string[] = [];
+
   const require = (holds: boolean, reason: string) => {
     if (!holds) {
       errors.push(reason);
     }
   };
-  let action: Record<string, unknown>, workspace: Record<string, unknown>;
-  const workflows: [string, Record<string, unknown>][] = [];
 
-  try {
-    action = map(parse(files.action));
-    workspace = map(parse(files.workspace));
+  const parsed = Result.try(() => ({
+    action: map(parse(files.action)),
+    workspace: map(parse(files.workspace)),
+    workflows: Rec.toEntries(files.workflows).map(([path, text]): [string, Record<string, unknown>] => [
+      path,
+      map(parse(text)),
+    ]),
+  }));
 
-    for (const [path, text] of Object.entries(files.workflows)) {
-      workflows.push([path, map(parse(text))]);
-    }
-  } catch {
+  if (Result.isFailure(parsed)) {
     return ["cache lint: a file is not valid YAML"];
   }
 
+  const { action, workspace, workflows } = parsed.success;
+
   const actionSteps = steps(map(action["runs"]));
+
   // Only a workflow that runs for a pull request or a merge queue group saves on a ref of its own.
   const perRef = workflows.filter(([, workflow]) => {
     const on = workflow["on"];
+
     return ["pull_request", "merge_group"].some((event) =>
       Array.isArray(on) ? on.includes(event) : on === event || event in map(on),
     );
   });
+
   const everyStep: [string, Record<string, unknown>][] = [
+    // SAFETY: the arrow builds a two-item array of a path and a step, and the cast names it as that tuple.
     ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
     ...perRef.flatMap(([path, workflow]) =>
-      Object.values(map(workflow["jobs"])).flatMap((job) =>
+      Rec.values(map(workflow["jobs"])).flatMap((job) =>
+        // SAFETY: `steps` returns each step as a map, so the pair here is a path and a step map, as the tuple says.
         steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
       ),
     ),
@@ -84,9 +97,11 @@ export const lintCaches = (files: CacheFiles): string[] => {
   // so no workflow keeps one: not setup-node's own cache, not pnpm/action-setup's, and no cache
   // step whose path is the store.
   const allSteps: [string, Record<string, unknown>][] = [
+    // SAFETY: the setup action's own steps, paired with action.yml's path: a literal two-item path-and-step tuple.
     ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
     ...workflows.flatMap(([path, workflow]) =>
-      Object.values(map(workflow["jobs"])).flatMap((job) =>
+      Rec.values(map(workflow["jobs"])).flatMap((job) =>
+        // SAFETY: each workflow step comes from `steps`, which answers maps, so this pair is the tuple it is cast to.
         steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
       ),
     ),
@@ -125,7 +140,7 @@ export const lintCaches = (files: CacheFiles): string[] => {
     jobs = map(check["jobs"]);
 
   // C3. A full-history checkout fetches every commit and tree, and only the head's files.
-  for (const [name, job] of Object.entries(jobs)) {
+  for (const [name, job] of Rec.toEntries(jobs)) {
     for (const step of steps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
       const options = map(step["with"]);
       require(options["fetch-depth"] !== 0 ||
@@ -172,7 +187,7 @@ export const lintCaches = (files: CacheFiles): string[] => {
 
 /** The checked-in files lintCaches reads, through a reader of repo-relative paths. */
 export const cacheFiles = (read: (path: string) => string): CacheFiles => ({
-  workflows: Object.fromEntries(
+  workflows: Rec.fromEntries(
     globSync([".github/workflows/*.yaml", ".github/workflows/*.yml"], {
       cwd: fileURLToPath(new URL("../../../", import.meta.url)),
     })

@@ -1,22 +1,28 @@
-// Today's CI, both workflows. Each test leg's time table: how long each of the job's steps took
+// Today's CI, both workflows. Each test leg's time table: the job's queue wait and step times
 // (GitHub's jobs API) and the leg's slowest test files (its Vitest JSON report), in the job summary,
-// and the same numbers as one small JSON file the leg uploads, so each leg's balance shows on every
-// run and can be followed over time. Advice only: a missing or broken input gives an unavailable
-// section and the rest still prints, and the program exits 0 whatever it read.
+// and as one small JSON file the leg uploads, so each leg's balance shows on every run and can be
+// followed over time. Advice only: a missing or broken input gives an unavailable section and the
+// rest still prints, and the program exits 0 whatever it read.
 //
 //   check.yaml       next legs                   report $RUNNER_TEMP/next.json
 //   scheduled.yaml   next legs and tooling legs  report $RUNNER_TEMP/results.json
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { Effect, Formatter, Result, Schedule, Schema } from "effect";
+import type { Duration } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
+import * as Progress from "./progress.ts";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
+
 /** How many test files the summary lists, slowest first. The artifact keeps them all. */
 export const SLOWEST = 10;
+
 /** How often to ask the jobs API before the steps before this one all show an end, 2 s apart. */
 export const TRIES = 5;
+
 export const PAUSE: Duration.Input = "2 seconds";
 
 /** One step of the job, as the jobs API gave it. `start` and `end` are null until it has them. */
@@ -51,8 +57,20 @@ export type Leg = {
   readonly leg: string;
 };
 
-/** The artifact: one leg's steps and test files. */
-export type Timings = Leg & { readonly steps: Section<Step>; readonly files: Section<TestFile> };
+/** The time from GitHub creating a job until it starts. */
+type QueueWait = {
+  readonly created: string;
+  readonly started: string;
+  readonly seconds: number;
+};
+
+/** The artifact: one leg's queue wait, steps and test files. */
+export type Timings = Leg & {
+  readonly queueWait?: QueueWait;
+  readonly steps: Section<Step>;
+  readonly files: Section<TestFile>;
+  readonly progress?: Progress.Progress;
+};
 
 const Time = Schema.NullOr(Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)));
 
@@ -69,6 +87,14 @@ const Job = Schema.Struct({
   ),
 });
 
+const JobTimes = Schema.Struct({
+  status: Schema.optionalKey(Schema.String),
+  conclusion: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  runner_id: Schema.optionalKey(Schema.NullOr(Schema.Int)),
+  created_at: Schema.optionalKey(Time),
+  started_at: Schema.optionalKey(Time),
+});
+
 // Vitest's JSON reporter: one entry per test file, its times in milliseconds since the epoch.
 const Report = Schema.Struct({
   testResults: Schema.Array(
@@ -82,16 +108,20 @@ const Report = Schema.Struct({
   ),
 });
 
-/** An error's message on one line, short enough for a table's note. */
-export const reasonOf = (error: unknown): string =>
-  (error instanceof Error ? error.message : String(error)).replaceAll(/\s+/g, " ").trim().slice(0, 300) ||
-  "no reason given";
-
-const unavailable = <A>(reason: string): Section<A> => ({ _tag: "unavailable", reason });
+const unavailable = <A>(
+  reason:
+    | "the jobs API answer is not a job"
+    | "the report is not Vitest's JSON"
+    | "the jobs API could not be read"
+    | "the report could not be read"
+    | "JOB_ID is not set"
+    | "REPORT is not set",
+): Section<A> => ({ _tag: "unavailable", reason });
 
 /** The job's steps, in order, from a jobs API answer. */
 export const readSteps = (input: unknown): Section<Step> => {
   const decoded = Schema.decodeUnknownResult(Job)(input);
+
   return Result.isSuccess(decoded)
     ? {
         _tag: "read",
@@ -102,12 +132,67 @@ export const readSteps = (input: unknown): Section<Step> => {
           end: step.completed_at ?? null,
         })),
       }
-    : unavailable(`the jobs API answer is not a job: ${reasonOf(decoded.failure)}`);
+    : unavailable("the jobs API answer is not a job");
+};
+
+const timestamp = (value: string): number | undefined => {
+  if (
+    !/^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.test(
+      value,
+    )
+  ) {
+    return undefined;
+  }
+
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const calendar = new Date(0);
+
+  calendar.setUTCFullYear(year, month - 1, day);
+
+  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 || calendar.getUTCDate() !== day) {
+    return undefined;
+  }
+
+  const millis = Date.parse(value);
+
+  return Number.isFinite(millis) ? millis : undefined;
+};
+
+/** A real started job's queue wait. Pending placeholders have no queue wait. */
+export const readQueueWait = (input: unknown): QueueWait | undefined => {
+  const decoded = Schema.decodeUnknownResult(JobTimes)(input);
+
+  if (
+    Result.isFailure(decoded) ||
+    !["in_progress", "completed"].includes(decoded.success.status ?? "") ||
+    decoded.success.conclusion === "skipped" ||
+    decoded.success.runner_id == null ||
+    decoded.success.created_at == null ||
+    decoded.success.started_at == null
+  ) {
+    return undefined;
+  }
+
+  const created = timestamp(decoded.success.created_at);
+  const started = timestamp(decoded.success.started_at);
+
+  if (created === undefined || started === undefined) {
+    return undefined;
+  }
+
+  const seconds = (started - created) / 1000;
+
+  return Number.isFinite(seconds) && seconds >= 0
+    ? { created: decoded.success.created_at, started: decoded.success.started_at, seconds }
+    : undefined;
 };
 
 /** Each test file of a Vitest JSON report, its path from `root`. */
 export const readFiles = (input: unknown, root: string): Section<TestFile> => {
   const decoded = Schema.decodeUnknownResult(Report)(input);
+
   return Result.isSuccess(decoded)
     ? {
         _tag: "read",
@@ -118,7 +203,7 @@ export const readFiles = (input: unknown, root: string): Section<TestFile> => {
           result: file.status,
         })),
       }
-    : unavailable(`the report is not Vitest's JSON: ${reasonOf(decoded.failure)}`);
+    : unavailable("the report is not Vitest's JSON");
 };
 
 /**
@@ -131,6 +216,7 @@ export const settled = (steps: Section<Step>): boolean => {
   }
 
   const self = steps.rows.findIndex((step) => step.name === STEP);
+
   return self >= 0 && steps.rows.slice(0, self).every((step) => step.start === null || step.end !== null);
 };
 
@@ -152,6 +238,13 @@ const table = (header: readonly string[], right: readonly number[], rows: readon
 const section = <A>(title: string, read: Section<A>, render: (rows: readonly A[]) => string) =>
   `### ${title}\n\n${read._tag === "read" ? render(read.rows) : `Unavailable: ${cell(read.reason)}`}`;
 
+const queueSection = (queueWait: QueueWait | undefined) =>
+  [
+    "### Queue wait",
+    "",
+    queueWait ? `${queueWait.seconds.toFixed(3)} s` : "Unavailable: no valid job queue timing",
+  ].join("\n");
+
 const stepTable = (rows: readonly Step[]) =>
   table(
     ["Step", "Result", "Seconds"],
@@ -160,6 +253,7 @@ const stepTable = (rows: readonly Step[]) =>
       .filter((step) => step.start !== null)
       .map((step) => {
         const took = seconds(step);
+
         return [step.name, step.result, took === null ? "-" : String(Math.round(took))];
       }),
   );
@@ -171,6 +265,7 @@ export const slowest = (rows: readonly TestFile[]): TestFile[] =>
 const fileTable = (rows: readonly TestFile[]) => {
   const total = rows.reduce((sum, file) => sum + file.seconds, 0);
   const listed = slowest(rows);
+
   return [
     `${rows.length} files, ${total.toFixed(1)} s in all. The ${listed.length} slowest:`,
     "",
@@ -186,8 +281,10 @@ const fileTable = (rows: readonly TestFile[]) => {
 export const markdown = (timings: Timings): string =>
   [
     `## Time table: ${cell(timings.job)}, leg ${cell(timings.leg)}`,
+    queueSection(timings.queueWait),
     section("Steps", timings.steps, stepTable),
     section("Slowest test files", timings.files, fileTable),
+    Progress.markdown(timings.progress ?? Progress.Progress.cases.unavailable.make({ reason: "unread" })),
     "",
   ].join("\n\n");
 
@@ -201,9 +298,11 @@ export type Io = {
 };
 
 /** An input that could not be read: the network, GitHub's answer, a missing file or bad JSON. */
-export class Unread extends Schema.TaggedError<Unread>()("Unread", { cause: Schema.Defect() }) {}
+export class Unread extends Schema.TaggedError<Unread, { readonly brand: unique symbol }>()("Unread", {
+  cause: Schema.Defect(),
+}) {}
 
-const legOf = (env: Readonly<Record<string, string | undefined>>): Leg => ({
+export const legOf = (env: Readonly<Record<string, string | undefined>>): Leg => ({
   run: env["GITHUB_RUN_ID"] ?? "",
   attempt: env["GITHUB_RUN_ATTEMPT"] ?? "",
   workflow: env["GITHUB_WORKFLOW"] ?? "",
@@ -215,27 +314,47 @@ const legOf = (env: Readonly<Record<string, string | undefined>>): Leg => ({
 
 // The jobs API is asked once, then again `pause` apart until the steps before this one all show an
 // end, at most TRIES times in all; the last answer stands.
-const stepsOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.Effect<Section<Step>> =>
-  id
+type JobTimings = {
+  readonly steps: Section<Step>;
+  readonly queueWait?: QueueWait;
+};
+
+const jobOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.Effect<JobTimings> =>
+  id !== undefined && id !== ""
     ? io.job(id).pipe(
-        Effect.map(readSteps),
-        Effect.catch((error) =>
-          Effect.succeed(unavailable<Step>(`the jobs API could not be read: ${reasonOf(error.cause)}`)),
-        ),
-        Effect.repeat({ until: settled, times: TRIES - 1, schedule: Schedule.spaced(pause) }),
+        Effect.map((input): JobTimings => {
+          const queueWait = readQueueWait(input);
+
+          return {
+            steps: readSteps(input),
+            ...(queueWait ? { queueWait } : {}),
+          };
+        }),
+        Effect.catch(() => Effect.succeed({ steps: unavailable<Step>("the jobs API could not be read") })),
+        Effect.repeat({ until: (job) => settled(job.steps), times: TRIES - 1, schedule: Schedule.spaced(pause) }),
       )
-    : Effect.succeed(unavailable("JOB_ID is not set"));
+    : Effect.succeed({ steps: unavailable("JOB_ID is not set") });
 
 const filesOf = (path: string | undefined, root: string, io: Io): Effect.Effect<Section<TestFile>> =>
-  path
+  path !== undefined && path !== ""
     ? io.read(path).pipe(
-        Effect.flatMap((text) => Effect.try({ try: () => JSON.parse(text), catch: (cause) => new Unread({ cause }) })),
-        Effect.map((report) => readFiles(report, root)),
-        Effect.catch((error) =>
-          Effect.succeed(unavailable<TestFile>(`the report could not be read: ${reasonOf(error.cause)}`)),
+        Effect.flatMap((text) =>
+          Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+            Effect.mapError((cause) => Unread.make({ cause })),
+          ),
         ),
+        Effect.map((report) => readFiles(report, root)),
+        Effect.catch(() => Effect.succeed(unavailable<TestFile>("the report could not be read"))),
       )
     : Effect.succeed(unavailable("REPORT is not set"));
+
+const progressOf = (env: Readonly<Record<string, string | undefined>>, io: Io): Effect.Effect<Progress.Progress> =>
+  env["RUNNER_TEMP"]
+    ? io.read(join(env["RUNNER_TEMP"], "vitest-progress.ndjson")).pipe(
+        Effect.map((text) => Progress.read(text, legOf(env))),
+        Effect.catchCause(() => Effect.succeed(Progress.Progress.cases.unavailable.make({ reason: "unread" }))),
+      )
+    : Effect.succeed(Progress.Progress.cases.unavailable.make({ reason: "unread" }));
 
 /**
  * One leg's timings from its environment and what `io` answers. It cannot fail. The two inputs are
@@ -248,31 +367,42 @@ export const collect = (
   pause: Duration.Input = PAUSE,
 ): Effect.Effect<Timings> =>
   Effect.all(
-    { steps: stepsOf(env["JOB_ID"], io, pause), files: filesOf(env["REPORT"], root, io) },
-    { concurrency: 2 },
-  ).pipe(Effect.map(({ steps, files }) => ({ ...legOf(env), steps, files })));
+    {
+      job: jobOf(env["JOB_ID"], io, pause),
+      files: filesOf(env["REPORT"], root, io),
+      progress: progressOf(env, io),
+    },
+    { concurrency: 3 },
+  ).pipe(
+    Effect.map(({ job, files, progress }) => ({
+      ...legOf(env),
+      ...job,
+      files,
+      ...(env["RUNNER_TEMP"] ? { progress } : {}),
+    })),
+  );
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] !== undefined &&
+  process.argv[1] !== "" &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   const env = process.env;
   const api = env["GITHUB_API_URL"] ?? "https://api.github.com";
+
   const io: Io = {
+    // Any answer but a 2xx, a network failure or no answer within 5 s is the same Unread.
     job: (id) =>
-      Effect.tryPromise({
-        try: async (signal) => {
-          const answer = await fetch(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
-            headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
-            signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-          });
-
-          if (!answer.ok) {
-            throw new Error(`GitHub answered ${answer.status}`);
-          }
-
-          return answer.json();
-        },
-        catch: (cause) => new Unread({ cause }),
-      }),
-    read: (path) => Effect.try({ try: () => readFileSync(path, "utf8"), catch: (cause) => new Unread({ cause }) }),
+      HttpClient.get(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
+        headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
+      }).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap((answer) => answer.json),
+        Effect.timeout("5 seconds"),
+        Effect.mapError((cause) => Unread.make({ cause })),
+        Effect.provide(FetchHttpClient.layer),
+      ),
+    read: (path) => Effect.try({ try: () => readFileSync(path, "utf8"), catch: (cause) => Unread.make({ cause }) }),
   };
 
   // The leg's file beside its report, its table in the job summary and the log. A write that fails
@@ -281,20 +411,20 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     Effect.try({
       try: () => {
         const text = markdown(timings);
-        writeFileSync(join(env["RUNNER_TEMP"] ?? ".", fileName(timings)), `${JSON.stringify(timings)}\n`);
+        writeFileSync(join(env["RUNNER_TEMP"] ?? ".", fileName(timings)), `${Formatter.formatJson(timings)}\n`);
         console.log(text);
 
-        if (env["GITHUB_STEP_SUMMARY"]) {
+        if (env["GITHUB_STEP_SUMMARY"] !== undefined && env["GITHUB_STEP_SUMMARY"] !== "") {
           appendFileSync(env["GITHUB_STEP_SUMMARY"], text);
         }
       },
-      catch: (cause) => new Unread({ cause }),
+      catch: (cause) => Unread.make({ cause }),
     });
 
   await Effect.runPromise(
     collect(env, process.cwd(), io).pipe(
       Effect.flatMap(write),
-      Effect.catch((error) => Effect.sync(() => console.log(`time-table: unavailable: ${reasonOf(error.cause)}`))),
+      Effect.catch(() => Effect.sync(() => console.log("time-table: output unavailable"))),
     ),
   );
   process.exitCode = 0;

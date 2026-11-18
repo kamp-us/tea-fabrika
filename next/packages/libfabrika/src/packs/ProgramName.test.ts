@@ -5,33 +5,56 @@
 // The law walks a name. A decision tape is folded through the current valid name: an even step
 // grows or replaces one of its segments, staying valid, and an odd step breaks the current name in
 // one way and must be refused. Shrinking a tape recomputes every move from the shortened prefix.
+
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Option, Schema } from "effect";
+import { it } from "@effect/vitest";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, vi } from "vitest";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 type Api = { readonly ProgramName: Schema.Codec<string> };
 
-const load = async () => {
+const load = () => {
   const file = join(import.meta.dirname, "ProgramName.ts");
   assert(existsSync(file), "P40 not built: packs/ProgramName.ts, the qualified name schema, is absent");
   vi.resetModules();
+
   return vi.importActual<Api>(pathToFileURL(file).href);
 };
 
 const MAX = 256;
+
 const FIRST = "ABCXYZabcxyz_";
+
 const REST = `${FIRST}0123456789-`;
+
 // Text that must never sit inside a segment: separators, path text, quotes, controls and wide text.
 const FOREIGN = [" ", ".", ":", '"', "'", "\n", "\\", "@", "#", "%", "?", "雪", "\0", "\t", "+", "~"];
 
 type Name = { readonly pack: string; readonly program: string };
+
 type Step = { readonly name: string; readonly accepted: boolean; readonly move: string };
 
 const pick = <A>(xs: ReadonlyArray<A>, n: number): A => xs[n % xs.length]!;
+
 const text = (name: Name) => `${name.pack}/${name.program}`;
 
 // A fresh valid segment, spelled from the decision.
@@ -56,12 +79,18 @@ const grow = (name: Name, n: number): { name: Name; move: string } => {
   if (space > 0 && n % 3 !== 0) {
     // Fill to the bound now and then, so the 256th character is reached, not only approached.
     const add = n % 5 === 0 ? space : 1 + (n % Math.min(space, 4));
-    const tail = Array.from({ length: add }, (_, i) => pick([...REST], n + i)).join("");
+
+    const tail = Arr.join(
+      Array.from({ length: add }, (_, i) => pick([...REST], n + i)),
+      "",
+    );
+
     return { name: { ...name, [key]: name[key] + tail }, move: `grow ${key} by ${add}` };
   }
 
   const fresh = segment(n);
   const other = key === "pack" ? name.program : name.pack;
+
   return other.length + 1 + fresh.length <= MAX
     ? { name: { ...name, [key]: fresh }, move: `replace ${key}` }
     : { name: { pack: segment(n), program: segment(n + 1) }, move: "replace both" };
@@ -72,6 +101,7 @@ const grow = (name: Name, n: number): { name: Name; move: string } => {
 const breaks = (name: Name): ReadonlyArray<(n: number) => string> => {
   const { pack, program } = name;
   const full = text(name);
+
   return [
     () => program, // the bare name main accepted
     () => pack,
@@ -90,12 +120,15 @@ const breaks = (name: Name): ReadonlyArray<(n: number) => string> => {
     (n) => {
       const key = side(n);
       const at = n % (name[key].length + 1);
-      const broken = name[key].slice(0, at) + pick(FOREIGN, n) + name[key].slice(at);
+
+      const broken =
+        Function.pipe(name[key], Str.slice(0, at)) + pick(FOREIGN, n) + Function.pipe(name[key], Str.slice(at));
+
       return key === "pack" ? `${broken}/${program}` : `${pack}/${broken}`;
     },
     (n) =>
       side(n) === "pack" ? `${pick([..."0123456789-"], n)}${full}` : `${pack}/${pick([..."0123456789-"], n)}${program}`,
-    (n) => `${full}${pick([..."ab_-1"], n).repeat(MAX + 1 - full.length)}`,
+    (n) => `${full}${Function.pipe(pick([..."ab_-1"], n), Str.repeat(MAX + 1 - full.length))}`,
   ];
 };
 
@@ -121,40 +154,46 @@ const walk = (tape: ReadonlyArray<number>): ReadonlyArray<Step> => {
 const tape = fc.array(fc.nat(), { minLength: 2, maxLength: 40 });
 
 describe("P40 qualified program names", () => {
-  it("L1: a name is accepted exactly when it has one pack and one program segment within the bound", async () => {
-    const { ProgramName } = await load();
-    const decode = Schema.decodeUnknownOption(ProgramName);
-    await fc.assert(
-      fc.asyncProperty(tape, async (tape) => {
-        const steps = walk(tape);
-        // The walk took both kinds of move, so a schema that accepts or refuses everything fails.
-        expect(steps.some((s) => s.accepted && s.move !== "start")).toBe(true);
-        expect(steps.some((s) => !s.accepted)).toBe(true);
+  it.live("L1: a name is accepted exactly when it has one pack and one program segment within the bound", () =>
+    Effect.gen(function* () {
+      const { ProgramName } = yield* promised(() => load());
+      const decode = Schema.decodeUnknownOption(ProgramName);
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(tape, async (tape) => {
+            const steps = walk(tape);
+            // The walk took both kinds of move, so a schema that accepts or refuses everything fails.
+            expect(Arr.some(steps, (s) => s.accepted && s.move !== "start")).toBe(true);
+            expect(Arr.some(steps, (s) => !s.accepted)).toBe(true);
 
-        for (const step of steps) {
-          const decoded = decode(step.name);
+            for (const step of steps) {
+              const decoded = decode(step.name);
 
-          if (step.accepted) {
-            expect(step.name.length).toBeLessThanOrEqual(MAX);
-            expect(decoded, `${step.move}: ${JSON.stringify(step.name)}`).toEqual(Option.some(step.name));
-          } else {
-            expect(Option.isNone(decoded), `${step.move}: ${JSON.stringify(step.name)}`).toBe(true);
-          }
-        }
-      }),
-      { seed: 119120, numRuns: 200 },
-    );
-  });
-  it("L1: values that are not text are refused", async () => {
-    const { ProgramName } = await load();
-    await fc.assert(
-      fc.property(
-        fc.oneof(fc.integer(), fc.boolean(), fc.constant(null), fc.array(fc.string()), fc.object()),
-        (raw) => {
-          expect(Schema.is(ProgramName)(raw)).toBe(false);
-        },
-      ),
-      { seed: 119120, numRuns: 50 },
-    );
-  });
+              if (step.accepted) {
+                expect(step.name.length).toBeLessThanOrEqual(MAX);
+                expect(decoded, `${step.move}: ${JSON.stringify(step.name)}`).toEqual(Option.some(step.name));
+              } else {
+                expect(Option.isNone(decoded), `${step.move}: ${JSON.stringify(step.name)}`).toBe(true);
+              }
+            }
+          }),
+          { seed: 119120, numRuns: 200 },
+        ),
+      );
+    }),
+  );
+  it.live("L1: values that are not text are refused", () =>
+    Effect.gen(function* () {
+      const { ProgramName } = yield* promised(() => load());
+      fc.assert(
+        fc.property(
+          fc.oneof(fc.integer(), fc.boolean(), fc.constant(null), fc.array(fc.string()), fc.object()),
+          (raw) => {
+            expect(Schema.is(ProgramName)(raw)).toBe(false);
+          },
+        ),
+        { seed: 119120, numRuns: 50 },
+      );
+    }),
+  );
 });

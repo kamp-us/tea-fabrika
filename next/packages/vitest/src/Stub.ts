@@ -3,16 +3,14 @@
  * bucket. `Stub.make(rest, own)` answers a member of `own` as given, and any other method name
  * with `rest(name)`. `then` and every symbol key answer undefined, so awaiting a stub gives the
  * stub back and never hangs.
- *
- * @stability unstable
  */
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 
 /**
  * A stub of `A`. A name in `own` answers as `own` has it, `then` and symbol keys answer undefined,
  * and every other name answers `rest(name)`.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = <A extends object>(rest: (method: string) => A[keyof A], own: Partial<A> = {}): A => {
@@ -21,13 +19,14 @@ export const make = <A extends object>(rest: (method: string) => A[keyof A], own
   // listing, `in` and spread see this empty null-prototype object, so a stub stands in for calls and
   // nothing more.
   const target = Object.create(null) as A;
+
   return new Proxy<A>(target, {
     get: (_target, key) => {
       if (Predicate.isSymbol(key) || key === "then") {
         return undefined;
       }
 
-      return Object.hasOwn(members, key) ? members[key] : rest(key);
+      return Rec.has(members, key) ? members[key] : rest(key);
     },
   });
 };

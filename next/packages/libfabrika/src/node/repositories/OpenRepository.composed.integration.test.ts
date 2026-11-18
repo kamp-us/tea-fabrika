@@ -8,22 +8,29 @@ import { inspect } from "node:util"; // edge: JSON omits Error's non-enumerable 
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Effect,
-  Exit,
-  FileSystem,
-  Layer,
-  Logger,
-  Path,
-  Redacted,
-  Schema,
-  Sink,
-  Stream,
-  Tracer,
-} from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcessSpawner } from "effect/process";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Rec from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
@@ -45,26 +52,36 @@ import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as OpenRepository from "./OpenRepository.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
+/** A failed confirm whose message carries the secret, so a leak of it shows in every output. */
+class ConfirmFault extends Schema.TaggedError<ConfirmFault, { readonly brand: unique symbol }>()("ConfirmFault", {
+  message: Schema.String,
+}) {}
+
 const services = Layer.mergeAll(NodeServices.layer, RepositoryOpenTest.toml, Digest.layerWebCrypto);
 
 const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
   fc.nat().map((seed) => Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0]!);
 
 const ids = generated(Id.InputId);
+
 const people = generated(Id.make("person"));
+
 const document = ".fabrika/fabrika.toml";
+
 const personName = "~/.fabrika/fabrika.toml";
+
 const cell = fc.record({ move: fc.nat(), pick: fc.nat() });
+
 const tape = fc.array(cell, { minLength: 1, maxLength: 8 });
 
 const repoSnapshot = (text: string | null) =>
-  Schema.decodeUnknownSync(RepoSnapshot)({
-    key: "a".repeat(64),
+  Schema.decodeSync(RepoSnapshot)({
+    key: Function.pipe("a", Str.repeat(64)),
     branch: "release",
-    commit: "b".repeat(40),
+    commit: Function.pipe("b", Str.repeat(40)),
     file: document,
     text,
-    hash: "c".repeat(64),
+    hash: Function.pipe("c", Str.repeat(64)),
   });
 
 const reader = (text: string | null, touches: Array<string>) =>
@@ -74,20 +91,22 @@ const reader = (text: string | null, touches: Array<string>) =>
         snapshot: repoSnapshot(text),
         read: (path: string) => {
           touches.push(path);
+
           return Effect.succeed(null);
         },
         resolve: () => {
           touches.push("outside source");
+
           return Effect.fail(
-            new RepositoriesError({ reason: new ReadFailed({ cause: Redacted.make("must not resolve code") }) }),
+            RepositoriesError.make({ reason: ReadFailed.make({ cause: Redacted.make("must not resolve code") }) }),
           );
         },
       }),
   });
 
 describe("T878 composed repository opening", () => {
-  it("L3: every load uses supplied text once, checks scope/version first, and retains exact origins and checked hash", async () => {
-    await fc.assert(
+  it("L3: every load uses supplied text once, checks scope/version first, and retains exact origins and checked hash", () =>
+    fc.assert(
       fc.asyncProperty(tape, fc.integer({ min: 1, max: 65535 }), async (cells, port) => {
         await Effect.runPromise(
           Effect.scoped(
@@ -95,29 +114,36 @@ describe("T878 composed repository opening", () => {
               const parser = yield* Toml;
               let personReads = 0;
               let invalidPerson = false;
+
               const parsed: Array<string> = [],
                 touches: Array<string> = [];
+
               const fs = FileSystem.layerNoop({
                 readFileString: () => {
                   personReads++;
+
                   return Effect.succeed(
                     `# person\n\n[instance]\nport = ${invalidPerson ? '"invalid"' : personReads === 1 ? port : (port % 65535) + 1}\n`,
                   );
                 },
               });
+
               const counted = Layer.succeed(Toml, {
                 ...parser,
                 parse: (text: string) => {
                   parsed.push(text);
+
                   return parser.parse(text);
                 },
               });
+
               const options = {
                 person: { path: "person-file", name: personName },
                 flags: {},
                 env: {},
                 version: "0.0.0",
               };
+
               const docs = [
                 null,
                 "",
@@ -129,6 +155,7 @@ describe("T878 composed repository opening", () => {
                 '[review]\ngoverned = ["src/"]\n',
                 'fabrika-version = "bad"\n',
               ];
+
               const reasons = [null, null, null, "version", "scope", "unknown", "syntax", "unknown", "invalid"];
               const lines = [null, null, 3, 1, 2, 2, 2, 2, 1];
               const keys = [null, null, null, "fabrika-version", "instance.port", null, null, null, "fabrika-version"];
@@ -139,14 +166,16 @@ describe("T878 composed repository opening", () => {
                 const index = c.pick % docs.length;
                 invalidPerson = c.move % 2 !== 0 && reasons[index] === null;
                 const padding = c.move % 6;
-                const body = docs[index] === null ? null : "\n".repeat(padding) + docs[index]!;
+                const body = docs[index] === null ? null : Function.pipe("\n", Str.repeat(padding)) + docs[index]!;
+
                 const result = yield* OpenRepository.prepare("selected-repo", options).pipe(
                   Effect.provide([reader(body, touches), fs, counted]),
                   Effect.exit,
                 );
+
                 expect(Exit.isSuccess(result)).toBe(reasons[index] === null && !invalidPerson);
                 expect(personReads).toBe(index === 3 || index === 6 || index === 8 ? 0 : 1);
-                expect(parsed.filter((value) => value === body)).toHaveLength(body === null ? 0 : 1);
+                expect(Arr.filter(parsed, (value) => value === body)).toHaveLength(body === null ? 0 : 1);
 
                 if (Exit.isSuccess(result)) {
                   const saved = result.value.settings;
@@ -165,8 +194,8 @@ describe("T878 composed repository opening", () => {
                   expect(saved.hash).toBe(checked.snapshot.hash);
                   expect(result.value.snapshot.commit).toBe(repoSnapshot(body).commit);
                 } else {
-                  expect(result.cause.reasons.some((r) => r._tag === "Fail")).toBe(true);
-                  const failure = result.cause.reasons.find((r) => r._tag === "Fail");
+                  expect(Arr.some(result.cause.reasons, (r) => r._tag === "Fail")).toBe(true);
+                  const failure = Option.getOrUndefined(Arr.findFirst(result.cause.reasons, (r) => r._tag === "Fail"));
 
                   if (failure?._tag === "Fail") {
                     expect(failure.error.reason._tag).toBe("InvalidDocument");
@@ -190,12 +219,11 @@ describe("T878 composed repository opening", () => {
         );
       }),
       { seed: 119120, numRuns: 200 },
-    );
-  });
+    ));
 
-  it("L3: a malformed snapshot made upstream is refused rather than defaulted or returned unchecked", async () => {
+  it("L3: a malformed snapshot made upstream is refused rather than defaulted or returned unchecked", () =>
     // A fault at the saved-data boundary makes bypassing Snapshot.read observable.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (cells) => {
         const original = SettingsSnapshot.make;
         const spy = vi.spyOn(SettingsSnapshot, "make");
@@ -209,6 +237,7 @@ describe("T878 composed repository opening", () => {
                       Effect.map((saved) => (c % 2 === 0 ? { ...saved, hash: "wrong" } : { ...saved, values: {} })),
                     ),
                   );
+
                   const result = yield* OpenRepository.prepare("selected-repo", {
                     person: { path: "person-file", name: personName },
                     flags: {},
@@ -221,6 +250,7 @@ describe("T878 composed repository opening", () => {
                     ]),
                     Effect.exit,
                   );
+
                   expect(Exit.isFailure(result)).toBe(true);
                 }
               }),
@@ -231,14 +261,13 @@ describe("T878 composed repository opening", () => {
         );
       }),
       { seed: 119120, numRuns: 200 },
-    );
-  });
+    ));
 });
 
 const forms = (word: string) => [
   word,
   encodeURIComponent(word),
-  JSON.stringify(word).slice(1, -1),
+  Function.pipe(JSON.stringify(word), Str.slice(1, -1)),
   Buffer.from(word).toString("base64"),
   Buffer.from(word).toString("base64url"),
 ];
@@ -262,7 +291,7 @@ it.effect.prop(
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-open-code-" });
         const marker = path.join(root, "executed");
         const touches: Array<string> = [];
-        const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'executed');`;
+        const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${Formatter.formatJson(marker)}, 'executed');`;
 
         for (const name of ["settings.mjs", "program.mjs", "build.mjs", "start.mjs"]) {
           yield* fs.writeFileString(path.join(root, name), tripwire);
@@ -270,15 +299,17 @@ it.effect.prop(
 
         yield* fs.writeFileString(
           path.join(root, "package.json"),
-          JSON.stringify({
+          Formatter.formatJson({
             type: "module",
             scripts: { build: "node build.mjs", start: "node start.mjs" },
           }),
         );
+
         const db = yield* Effect.acquireRelease(
           Effect.sync(() => new DatabaseSync(":memory:")),
           (value) => Effect.sync(() => value.close()),
         );
+
         const trust = RepositoryTrustLedger.layer.pipe(
           Layer.provide(LedgerSql.layer(nodeSql(db), { reader: "brain" })),
           Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
@@ -291,6 +322,7 @@ it.effect.prop(
             env: {},
             version: "0.0.0",
           }).pipe(Effect.provide(reader('fabrika-version = "0.0.0"\n', touches)));
+
           const result = yield* OpenRepository.open(prepared, {
             selection,
             request,
@@ -300,6 +332,7 @@ it.effect.prop(
             interactive: cell.move % 3 !== 0,
             confirm: () => Effect.succeed(cell.move % 2 === 0),
           }).pipe(Effect.provide(trust), Effect.exit);
+
           expect(Exit.isSuccess(result)).toBe(true);
           expect(touches).toEqual([]);
           expect(yield* fs.exists(marker)).toBe(false);
@@ -309,8 +342,8 @@ it.effect.prop(
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
-it("L9 [secrets]: generated opening flows redact every report, pending state, error, span, ledger envelope and snapshot", async () => {
-  await fc.assert(
+it("L9 [secrets]: generated opening flows redact every report, pending state, error, span, ledger envelope and snapshot", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.stringMatching(/^[a-zA-Z][a-zA-Z0-9]{11,23}$/),
       tape,
@@ -320,6 +353,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
         const secret = `sentinel-${word}/+ &"`;
         const folder = `/private/fixture-${word}`;
         const url = `https://fixture:${encodeURIComponent(secret)}@example.invalid/repo.git`;
+
         const outputs = {
           report: new Array<unknown>(),
           pending: new Array<unknown>(),
@@ -330,19 +364,24 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           settings: new Array<unknown>(),
           state: new Array<unknown>(),
         };
+
         const spans: Array<Tracer.NativeSpan> = [];
+
         const tracer = Tracer.make({
           span: (options) => {
             const span = new Tracer.NativeSpan(options);
             spans.push(span);
+
             return span;
           },
         });
+
         const logger = Logger.layer([
           Logger.make((options) => {
             outputs.report.push(options.message);
           }),
         ]);
+
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
@@ -350,19 +389,24 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 Effect.sync(() => new DatabaseSync(":memory:")),
                 (value) => Effect.sync(() => value.close()),
               );
+
               const real = yield* Ledger.pipe(
                 Effect.provide(LedgerSql.layer(nodeSql(db), { reader: "brain" })),
                 Effect.provideService(Doorbell, { ring: () => Effect.void }),
               );
+
               const captured = {
                 ...real,
                 append: (stream: string, id: string, line: Line) => {
                   outputs.ledger.push({ stream, id, line });
+
                   return real.append(stream, id, line);
                 },
               };
+
               const path = yield* Path.Path;
               const digest = yield* Digest.Digest;
+
               // Require pending, acknowledged consent, document refusal, storage and prompt failures in every flow.
               const flow = [
                 ...cells,
@@ -378,16 +422,18 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 const selection = requests[index * 2]!;
                 const request = requests[index * 2 + 1]!;
                 const source = c.pick % 9;
-                const body =
-                  source === 0
-                    ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`
-                    : source === 3
-                      ? `fabrika-version = ${JSON.stringify(secret)}\n`
-                      : source === 4
-                        ? `[${JSON.stringify(secret)}]\nvalue = true\n`
-                        : source === 5
-                          ? `fabrika-version = ${JSON.stringify(secret)} [\n`
-                          : 'fabrika-version = "0.0.0"\n';
+
+                const body = Match.value(source).pipe(
+                  Match.when(
+                    0,
+                    () => `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${Formatter.formatJson(secret)}\n`,
+                  ),
+                  Match.when(3, () => `fabrika-version = ${Formatter.formatJson(secret)}\n`),
+                  Match.when(4, () => `[${Formatter.formatJson(secret)}]\nvalue = true\n`),
+                  Match.when(5, () => `fabrika-version = ${Formatter.formatJson(secret)} [\n`),
+                  Match.orElse(() => 'fabrika-version = "0.0.0"\n'),
+                );
+
                 const fs = FileSystem.layerNoop({
                   realPath: (location) => Effect.succeed(location),
                   makeTempDirectoryScoped: () => Effect.succeed(`${folder}/temporary`),
@@ -396,14 +442,15 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                   readFileString: () =>
                     Effect.succeed(source === 6 ? `[instance]\nport = ${JSON.stringify(secret)}\n` : ""),
                 });
+
                 const spawner = ChildProcessSpawner.make((command) => {
                   if (command._tag !== "StandardCommand") {
                     return Effect.die("unexpected pipeline");
                   }
 
                   const args = command.args;
-                  const commit = "b".repeat(40);
-                  const blob = "d".repeat(40);
+                  const commit = Function.pipe("b", Str.repeat(40));
+                  const blob = Function.pipe("d", Str.repeat(40));
                   let output = "";
 
                   if (args.includes("--show-toplevel")) {
@@ -427,6 +474,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                   const failed = source === 2 && args.includes(["fetch", "ls-tree", "cat-file"][c.move % 3]!);
                   const bytes = new TextEncoder().encode(output);
                   const errors = new TextEncoder().encode(`${url} ${folder} ${secret}`);
+
                   return Effect.succeed(
                     ChildProcessSpawner.makeHandle({
                       pid: ChildProcessSpawner.ProcessId(1),
@@ -443,6 +491,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                     }),
                   );
                 });
+
                 const selected = RepositoriesGit.layer({ person: folder }).pipe(
                   Layer.provide(
                     Layer.mergeAll(
@@ -453,19 +502,22 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                     ),
                   ),
                 );
+
                 const checked = yield* OpenRepository.prepare(folder, {
                   person: { path: `${folder}/person.toml`, name: personName },
                   flags: {},
                   env: { UNRELATED_TOKEN: secret },
                   version: "0.0.0",
                 }).pipe(Effect.provide([selected, fs]), Effect.exit);
+
                 expect(Exit.isSuccess(checked)).toBe(source === 1 || source === 7 || source === 8);
 
                 if (Exit.isFailure(checked)) {
                   outputs.error.push(String(checked.cause), checked.cause);
-                  outputs.errorJson.push(JSON.stringify(checked.cause));
+                  outputs.errorJson.push(Formatter.formatJson(checked.cause));
                 } else {
                   outputs.settings.push(checked.value.settings);
+
                   const opened = yield* OpenRepository.open(checked.value, {
                     selection,
                     request,
@@ -475,8 +527,9 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                     interactive: c.move % 3 !== 0,
                     confirm: (snapshot) => {
                       outputs.pending.push(snapshot);
+
                       return source === 8
-                        ? Effect.fail(new Error(`${url} ${folder} ${secret}`))
+                        ? Effect.fail(ConfirmFault.make({ message: `${url} ${folder} ${secret}` }))
                         : Effect.succeed(c.move % 2 === 0);
                     },
                   }).pipe(
@@ -488,7 +541,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                             ...captured,
                             append: () =>
                               Effect.fail(
-                                new LedgerError({ reason: "storage", message: `${url} ${folder} ${secret}` }),
+                                LedgerError.make({ reason: "storage", message: `${url} ${folder} ${secret}` }),
                               ),
                           }
                         : captured,
@@ -508,10 +561,10 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                       outputs.pending.push(opened.value);
                     }
 
-                    outputs.report.push(JSON.stringify(opened.value));
+                    outputs.report.push(Formatter.formatJson(opened.value));
                   } else {
                     outputs.error.push(String(opened.cause), opened.cause);
-                    outputs.errorJson.push(JSON.stringify(opened.cause));
+                    outputs.errorJson.push(Formatter.formatJson(opened.cause));
                   }
                 }
               }
@@ -519,7 +572,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           ).pipe(Effect.provide([services, logger]), Effect.withTracer(tracer)),
         );
         outputs.spans.push(
-          ...spans.map((span) => ({
+          ...Arr.map(spans, (span) => ({
             name: span.name,
             attributes: [...span.attributes],
             events: span.events,
@@ -527,19 +580,19 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           })),
         );
 
-        for (const [name, values] of Object.entries(outputs)) {
+        for (const [name, values] of Rec.toEntries(outputs)) {
           expect(values.length, `${name} must be observed`).toBeGreaterThan(0);
+
           const output =
             JSON.stringify(values, (_key: string, value: unknown) =>
-              typeof value === "bigint" ? value.toString() : value,
+              Predicate.isBigInt(value) ? value.toString() : value,
             ) + inspect(values, { depth: null });
 
-          for (const spelling of [secret, folder, url].flatMap(forms)) {
+          for (const spelling of Arr.flatMap([secret, folder, url], forms)) {
             expect(output, name).not.toContain(spelling);
           }
         }
       },
     ),
     { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
-  );
-});
+  ));

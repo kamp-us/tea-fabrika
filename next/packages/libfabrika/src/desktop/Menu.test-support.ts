@@ -1,32 +1,52 @@
 import { applyCell } from "@demlik/tea";
 // next/, P21 slice 1. The factory takes checked settings at start; no provider is read by update.
 import { arbGuidedSequence, stubCtxThrowingProxy } from "@demlik/tea/pbt";
-import { Equal, Schema } from "effect";
+import * as Equal from "effect/Equal";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Access from "../access/Access.ts";
 import * as Id from "../Id.ts";
 import * as Menu from "./Menu.ts";
 
 export const seed = 119120;
+
 export const ttl = 137;
+
 export const ctx = stubCtxThrowingProxy<unknown>();
+
 export const machine = Menu.machine({ linkTtl: ttl, browserLink: true });
+
 export type Model = ReturnType<typeof machine.init>[0];
+
 export type Msg = Parameters<(typeof machine.update)[keyof typeof machine.update]>[1];
+
 export type Command = ReturnType<typeof machine.init>[1][number];
+
 export type Row = typeof Menu.Row.Type;
+
 type Client = typeof Menu.Client.Type;
 
-export const same = (a: unknown, b: unknown) => Equal.equals(a, b);
-export const cmdId = (n: number) => Id.Cmd.make(`cmd_0000000000e008${n.toString(16).padStart(12, "0")}`);
+export const same = <A>(a: A, b: A) => Equal.equals(a, b);
+
+export const cmdId = (n: number) => Id.Cmd.make(`cmd_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
+
 export const command = fc.nat({ max: 0xfffffff }).map(cmdId);
+
 const stale = cmdId(0xffffffffff);
+
 const kind = fc.constantFrom(...Access.Grant.fields.as.literals);
+
 const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
+
 const Link = Schema.TaggedUnion({ connecting: {}, online: {}, lost: {} });
+
 export const label = fc.stringMatching(/^[A-Za-z][A-Za-z0-9 ]{0,23}$/);
-const code = fc.integer({ min: 0, max: 999999 }).map((n) => String(n).padStart(6, "0"));
+
+const code = fc.integer({ min: 0, max: 999999 }).map((n) => Str.padStart(6, "0")(String(n)));
+
 const digest = fc.constantFrom("digest-a", "digest-b", "digest-c");
+
 // Waiting and admitted snapshots arrive independently, so either can still hold the same key.
 const key = fc.constantFrom("waiting-a", "waiting-b", "waiting-c", "client-a", "client-b", "client-c");
 
@@ -54,7 +74,9 @@ const client: fc.Arbitrary<Client> = fc.record({
 });
 
 const rows = fc.uniqueArray(row, { selector: (r) => r.key, maxLength: 3 });
+
 const clients = fc.uniqueArray(client, { selector: (c) => c.key, maxLength: 3 });
+
 const at = fc.constantFrom(0, 1, ttl - 1, ttl, ttl + 1, ttl * 2);
 
 const click = <const T extends "approve" | "deny" | "remove">(type: T, keys: ReadonlyArray<string>) =>
@@ -116,7 +138,7 @@ export const walks = proposals.map((messages): ReadonlyArray<Msg> => {
 
     if (proposal.type === "approve" || proposal.type === "deny" || proposal.type === "remove") {
       const targets = proposal.type === "remove" ? model.clients : model.rows;
-      const index = proposal.key.endsWith("a") ? 0 : proposal.key.endsWith("b") ? 1 : 2;
+      const index = Str.endsWith("a")(proposal.key) ? 0 : Str.endsWith("b")(proposal.key) ? 1 : 2;
       const target = targets[index % Math.max(1, targets.length)];
       msg = target === undefined ? proposal : { ...proposal, key: target.key };
     }
@@ -137,4 +159,5 @@ export const walks = proposals.map((messages): ReadonlyArray<Msg> => {
 });
 
 export const modelJson = Schema.fromJsonString(Schema.toType(machine.model));
+
 export const encoded = (model: Model) => Schema.encodeSync(modelJson)(model);

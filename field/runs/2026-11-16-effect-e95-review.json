@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e95-review",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:52:59-08:00",
+  "ended": "2026-11-16T02:08:30-08:00",
+  "parent": "2026-11-16-effect-e95-tests1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of judgment slice E95 (runEffectInsideEffect, app:src of next/apps/fabrika, in next/) at 9f4390eeb on fabrikalfa/effect-e95, against its base eeb8ecdbb (the stack top fabrikalfa/test-sqlite-store, which has not moved): merge-ready, findings 0. Every one of the 20 hand fixes in 9 test files keeps what the code runs: each callback that the platform, fast-check or an async test body calls now runs its effect with the services the surrounding Effect read once through Effect.context() (Effect.runSyncWith or Effect.runPromiseWith, both in the installed effect 4.1.3), and the two places already inside an Effect now yield the effect directly. Where the outer runner is a plain Effect.runPromise (file-services L11, the start-child L10 alarm scenario, every world helper) the services are the same defaults as before. door.integration.test.ts:868 swaps provideContext(projectContext) plus runPromise for runPromiseWith(projectContext), the same context. The 14 left in next/apps/fabrika/src/runtime-quotas.laws.test.ts (lines 314, 316, 318, 360, 430-433, 435, 443-447) are truly not fixable by passing services: they stand in for workerd RPC into the Project and Process Durable Objects and for the Worker Loader box, and the real classes in next/apps/fabrika/src/brain.ts (Project.settingsStart at line 41, settingsRead at line 46) call Effect.runPromise on a fresh runtime themselves. Planted in a scratch copy of the base: lines 318 and 360 run with the law's own services through Effect.runPromiseWith; both Q12 laws then fail (expected writes 0 to equal 2), so passing the caller's services changes what the laws hold. Running them through the object's SettingsRuntime.runPromise would hide the call from the check without changing what runs, and 314, 316 and 430-447 have no such runtime; so the reasoned ignore line the tests row gives is the fix, as the 0026 ruling Q7 says for a Worker or Durable Object entry, for the judgment sweep's lock PR to add.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 16,
+  "note": "Read-only on the branch apart from this row; the plant ran in a second detached worktree of eeb8ecdbb in the scratch folder, reverted after. Recount with only runEffectInsideEffect at error through --lspconfig on next/apps/fabrika/tsconfig.json: base 36 (34 app:src, 2 app:e2e at page-runtime.laws.visual.test.ts:237 and :337), head 16 (the 14 runtime-quotas lines above and the same 2 app:e2e). No @effect-diagnostics, oxlint-disable, tsconfig override or LOCKED line was added or removed. loosening.sh eeb8ecdbb HEAD: 9 unrecognized changes (each a runPromise to runPromiseWith or runSyncWith line) and one removed expect in the start-child L10 alarm scenario, where the same six expects moved out of an Effect.promise async body unchanged: nothing is loosened. Tests at 9f4390eeb, from the repo root, nice -n 19, one worker: hands-client 2, door-recovery 21, file-services.laws 13, local-instance 3, door 153, worker-mail 6, worker-monitor 3, memory-replace.laws 2, runtime-quotas.laws 2 passed; start-child.laws 22 passed, 1 failed: L11's storage walk timed out at 60 s, and it times out the same way at eeb8ecdbb, so it is not this change; field/findings/2026-11-15-start-child-l11-runs-near-its-limit.json already holds it. A first run from next/apps/fabrika picked up 5 s timeouts, as field/findings/2026-11-15-vitest-from-a-subfolder-skips-every-local-guard.json says. pnpm typecheck exit 0; pnpm lint 17 of 18 parts passed, lint:promise-types lost its tsgo child (EOF) and passed alone with 0 findings. leakgrep --text on added lines against origin/main and --commits eeb8ecdbb..HEAD: clean. The clone is not shallow.",
+  "step": "review"
+}

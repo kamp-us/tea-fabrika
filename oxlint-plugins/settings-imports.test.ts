@@ -14,6 +14,7 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 // L9's callers: where an import sits, and whether it may take the TOML adapter or the parser.
 const ADAPTER = "next/packages/libfabrika/src/settings/TomlParser.ts";
+
 const RULE = "eslint(no-restricted-imports)";
 
 /** The exact start files: they choose the adapter. */
@@ -77,6 +78,7 @@ const relative = (from: string, to: string) => {
   const shared = a.findIndex((s, n) => s !== b[n]);
   const n = shared === -1 ? a.length : shared;
   const rest = b.slice(n).join("/");
+
   return a.length === n ? `./${rest}` : `${"../".repeat(a.length - n)}${rest}`;
 };
 
@@ -102,9 +104,12 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
                       : t === "parser"
                         ? "toml-eslint-parser"
                         : "toml-eslint-parser/lib/ast";
+
               const allowed = t === "parser" || t === "parser-subpath" ? c.parser : c.adapter;
+
               return { file: c.file, spec, allowed };
             });
+
           fc.pre(planted.length > 0);
 
           for (const p of planted) {

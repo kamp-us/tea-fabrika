@@ -11,11 +11,17 @@ export interface Plant {
 }
 
 const NUM = "declare const x: number;";
+
 const NUMS = ["declare const x: number;", "declare const y: number;", "declare const z: number;"];
+
 const STR = "declare const s: string;";
+
 const XS = "declare const xs: number[];";
+
 const FN = "declare const f: () => void;";
+
 const P = "declare const p: Promise<number>;";
+
 const TEST = 'import {describe, expect, it, vi} from "vitest";';
 
 const REACT = 'import {Component, createContext, forwardRef, useEffect, useMemo, useState} from "react";';
@@ -51,6 +57,57 @@ export const REFLECT: Plant = {
     // A documented miss: an alias of Reflect is not followed, and the review reads for it.
     ["const R = Reflect;", false],
     ['export const l: unknown = R.get(x, "a");', false],
+  ],
+};
+
+/**
+ * L10 of the Reflect ban (decision 0554, after the fold): the base blocks of `.oxlintrc.json` hold the
+ * ban for all of `next/`, so a folder no block names is refused too, a new package or program and a
+ * new folder beside the named ones included. Each entry is a folder's path with `NAME` where
+ * plants.test.ts puts a generated name; it plants REFLECT's lines in a file of that folder.
+ * Plant: leave the four Reflect entries out of the base block for all of `next/` (its one glob is
+ * `next/` then two stars, a slash and one star), and these folders are not refused.
+ */
+export const REFLECT_NEW_FOLDERS: readonly string[] = [
+  "next/NAME",
+  "next/apps/NAME",
+  "next/apps/NAME/src",
+  "next/apps/fabrika/src/NAME",
+  "next/apps/fabrika/e2e/NAME",
+  "next/packages/NAME/src",
+  "next/packages/libfabrika/src/NAME",
+  "next/programs/NAME/src",
+];
+
+/**
+ * L1 of the trusted-rules swap (decision 0573): `Data.TaggedError` is refused in each value form
+ * oxlint's `no-restricted-properties` resolves. It stands beside `fabrika/no-data-taggederror`,
+ * which stays because only it refuses the name in a type position (`DATA_TAGGEDERROR` in
+ * plants.test.ts), and the Effect checker's `preferSchemaTaggedError`, which holds every
+ * type-checked class. plants.test.ts runs these lines and ours in every folder of every block that
+ * sets the rule, at the root and at a path under no block.
+ * Plant: delete the `Data.TaggedError` entry from one block of `.oxlintrc.json`, and that folder's
+ * lines are not refused.
+ */
+export const TAGGED_ERROR: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: ['import {Data} from "effect";', "declare const Other: {TaggedError: (n: string) => new () => object};"],
+  lines: [
+    ['export class A extends Data.TaggedError("A") {}', true],
+    ["export const ref = Data.TaggedError;", true],
+    ['export const made = Data.TaggedError("C");', true],
+    ["export const { TaggedError } = Data;", true],
+    ['export const indexed = Data["TaggedError"];', true],
+    ["export const optional = Data?.TaggedError;", true],
+    // Not the ban: another object's member, a comment, a string. A type position is not this
+    // rule's: `fabrika/no-data-taggederror` refuses it, and plants.test.ts holds that in every folder.
+    ['export class B extends Other.TaggedError("B") {}', false],
+    ["// Data.TaggedError in a comment", false],
+    ['export const text = "Data.TaggedError";', false],
+    // A documented miss: an alias of Data is not followed. In a type-checked file the checker's
+    // preferSchemaTaggedError still catches the class; in an untyped script nothing does.
+    ["const D = Data;", false],
+    ['export class E extends D.TaggedError("E") {}', false],
   ],
 };
 

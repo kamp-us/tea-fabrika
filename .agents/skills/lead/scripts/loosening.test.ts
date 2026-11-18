@@ -2,10 +2,12 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Match, Predicate } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 const script = process.env.T318_LOOSENING_SCRIPT ?? join(import.meta.dirname, "loosening.sh");
+
 const word = fc.stringMatching(/^[a-z]{2,12}$/);
 
 const input = fc.record({
@@ -41,14 +43,17 @@ type File = string | { content: string; mode: number } | { link: string };
 
 const compare = (before: Record<string, File>, after: Record<string, File>, mapping?: string) => {
   const dir = mkdtempSync(join(tmpdir(), "loosening-"));
+
   const git = (...args: string[]) => {
     const ran = spawnSync("/usr/bin/git", ["-C", dir, ...args], {
       encoding: "utf8",
       env,
       timeout: 15_000,
     });
+
     expect(ran.error).toBeUndefined();
     expect(ran.status, ran.stderr).toBe(0);
+
     return ran.stdout.trim();
   };
 
@@ -57,6 +62,7 @@ const compare = (before: Record<string, File>, after: Record<string, File>, mapp
     git("config", "user.name", "Fixture");
     git("config", "user.email", "fixture@example.test");
     expect(git("remote")).toBe("");
+
     // Use the real exam classifier, with generated paths covered by the real list.
     const rows = [
       { glob: "checks/**/*.test.ts" },
@@ -65,13 +71,15 @@ const compare = (before: Record<string, File>, after: Record<string, File>, mapp
         glob,
       })),
     ];
+
     writeFileSync(join(dir, "exam-paths.json"), JSON.stringify(rows));
+
     const write = (files: Record<string, File>) => {
       for (const [path, content] of Object.entries(files)) {
         mkdirSync(dirname(join(dir, path)), { recursive: true });
         rmSync(join(dir, path), { force: true });
 
-        if (typeof content === "string") {
+        if (Predicate.isString(content)) {
           writeFileSync(join(dir, path), content);
         } else if ("link" in content) {
           symlinkSync(content.link, join(dir, path));
@@ -82,8 +90,10 @@ const compare = (before: Record<string, File>, after: Record<string, File>, mapp
 
       git("add", ".");
       git("commit", "-qm", "fixture", "--allow-empty");
+
       return git("rev-parse", "HEAD");
     };
+
     const base = write(before);
 
     for (const path of Object.keys(before)) {
@@ -103,6 +113,7 @@ const compare = (before: Record<string, File>, after: Record<string, File>, mapp
     const got = spawnSync("sh", args, { cwd: dir, encoding: "utf8", env, timeout: 5_000 });
     expect(got.error).toBeUndefined();
     expect(got.signal).toBeNull();
+
     return { code: got.status, text: got.stdout + got.stderr };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -126,10 +137,12 @@ describe("loosening, today's tooling", () => {
 
         for (const side of ["base", "head"]) {
           const rows = JSON.stringify([{ glob: `${folder}/**/*.ts` }]);
+
           const got = compare(
             { [path]: source(v), "exam-paths.json": side === "base" ? rows : "[]" },
             { "exam-paths.json": side === "head" ? rows : "[]" },
           );
+
           expect(got.code, got.text).toBe(1);
           expect(got.text).toContain(`${path}: removed law: ${v.name}`);
         }
@@ -147,6 +160,7 @@ describe("loosening, today's tooling", () => {
     quote: fc.constantFrom("'", '"', "`"),
     chainFirst: fc.boolean(),
   });
+
   type Form = {
     base: string;
     alias: string;
@@ -156,22 +170,26 @@ describe("loosening, today's tooling", () => {
     quote: string;
     chainFirst?: boolean;
   };
+
   const call = (v: Input, shape: Form, suite: boolean, modifier = "", option = "") => {
     const base = suite ? (shape.base === "it" ? "describe" : "suite") : shape.base;
     const alias = `law_${v.extra}`;
-    const prefix =
-      shape.alias === "import"
-        ? `import {${base} as ${alias}} from 'vitest';\n`
-        : shape.alias === "const"
-          ? `const ${alias} = ${base};\n`
-          : shape.alias === "destructure"
-            ? `import * as checks from 'vitest';\nconst {${base}: ${alias}} = checks;\n`
-            : shape.alias === "extended"
-              ? `const ${alias} = ${suite ? base : `${base}.extend({})`};\n`
-              : shape.alias === "namespace"
-                ? "import * as checks from 'vitest';\n"
-                : "";
-    const target = shape.alias === "direct" ? base : shape.alias === "namespace" ? `checks.${base}` : alias;
+
+    const prefix = Match.value(shape.alias).pipe(
+      Match.when("import", () => `import {${base} as ${alias}} from 'vitest';\n`),
+      Match.when("const", () => `const ${alias} = ${base};\n`),
+      Match.when("destructure", () => `import * as checks from 'vitest';\nconst {${base}: ${alias}} = checks;\n`),
+      Match.when("extended", () => `const ${alias} = ${suite ? base : `${base}.extend({})`};\n`),
+      Match.when("namespace", () => "import * as checks from 'vitest';\n"),
+      Match.orElse(() => ""),
+    );
+
+    const target = Match.value(shape.alias).pipe(
+      Match.when("direct", () => base),
+      Match.when("namespace", () => `checks.${base}`),
+      Match.orElse(() => alias),
+    );
+
     const options = option
       ? shape.options === "inline"
         ? `{${option}: true}`
@@ -179,9 +197,11 @@ describe("loosening, today's tooling", () => {
           ? `{...settings}`
           : "settings"
       : "{}";
+
     const shared = option && shape.options !== "inline" ? `const settings = {${option}: true};\n` : "";
     const body = suite ? `() => { test('${v.extra}', () => check(value)); }` : "() => check(value)";
     const args = shape.last ? `${body}, ${options}` : `${options}, ${body}`;
+
     return `${prefix}${shared}${target}${shape.chainFirst ? shape.parameter + modifier : modifier + shape.parameter}(${shape.quote}${v.name}${shape.quote}, ${args});\n`;
   };
 
@@ -194,10 +214,12 @@ describe("loosening, today's tooling", () => {
           for (const suite of kind === "fails" ? [false] : [false, true]) {
             const conditional = kind === "skipIf" || kind === "runIf";
             const modifier = conditional ? `.${kind}(${kind === "skipIf" ? "true" : "false"})` : "";
+
             const got = compare(
               { [file]: call(v, shape, suite) },
               { [file]: call(v, shape, suite, modifier, conditional ? "" : kind) },
             );
+
             expect(got.code, got.text).toBe(1);
             expect(got.text).toContain(`${file}: ${kind === "fails" ? "it.fails" : kind}:`);
           }
@@ -224,7 +246,9 @@ describe("loosening, today's tooling", () => {
     bound: fc.integer({ min: 200, max: 2000 }),
     wrapped: fc.boolean(),
   });
+
   type Range = { generator: string; key: string; shared: boolean; bound: number; wrapped: boolean };
+
   const ranged = (v: Input, r: Range, value: number | undefined, decoy = "") => {
     const key = ["array", "string"].includes(r.generator)
       ? r.key.startsWith("min")
@@ -233,11 +257,13 @@ describe("loosening, today's tooling", () => {
       : r.key.startsWith("min")
         ? "min"
         : "max";
+
     const options = value === undefined ? "" : `{${key}: ${value}}`;
     const arg = r.shared && options ? "settings" : options;
     const generator = `fc.${r.generator}(${r.generator === "array" ? `fc.integer()${arg ? ", " : ""}` : ""}${arg})`;
     const prelude = r.shared && options ? `const settings = ${options};\n` : "";
     const active = r.wrapped ? `const active_${v.extra} = ${generator};\n` : "";
+
     return `${prelude}${active}${r.wrapped ? decoy : ""}${v.title}('${v.name}', () => { ${r.wrapped ? "" : decoy} fc.assert(fc.property(${r.wrapped ? `active_${v.extra}` : generator}, check)); });\n`;
   };
 
@@ -249,6 +275,7 @@ describe("loosening, today's tooling", () => {
         const start = r.key.startsWith("min") && !["array", "string"].includes(r.generator) ? -r.bound : r.bound;
         const end = start + (r.key.startsWith("min") ? v.delta : -v.delta);
         const before = ranged(v, r, kind === "added" ? undefined : start);
+
         const decoy =
           kind === "unused"
             ? `${
@@ -257,6 +284,7 @@ describe("loosening, today's tooling", () => {
                   .split(", check")[0]
               };`
             : "";
+
         const got = compare({ [file]: before }, { [file]: ranged(v, r, end, decoy) });
         expect(got.code, got.text).toBe(1);
         expect(got.text).toContain(": tighter fast-check bound:");
@@ -270,9 +298,11 @@ describe("loosening, today's tooling", () => {
     fc.assert(
       fc.property(input, fc.integer({ min: 101, max: 2000 }), fc.boolean(), (v, runs, shared) => {
         const options = `{seed: ${v.count}, numRuns: ${runs}}`;
+
         const before = `${
           shared ? `const settings = ${options};\n` : ""
         }${call(v, { base: v.title, alias: "direct", parameter: "", options: "inline", last: false, quote: "'" }, false)}\nfc.assert(fc.property(fc.integer(), check), ${shared ? "settings" : options});`;
+
         const after = before.replace(`, numRuns: ${runs}`, "");
         const got = compare({ [file]: before }, { [file]: after });
         expect(got.code, got.text).toBe(1);
@@ -351,6 +381,7 @@ describe("loosening, today's tooling", () => {
             { [file]: `describe('${v.name}', () => {${source(v)}});` },
             { [file]: `describe.${modifier}('${v.name}', () => {${source(v)}});` },
           );
+
           expect(got.code, got.text).toBe(1);
           expect(got.text).toContain(`: ${modifier}:`);
         }
@@ -377,16 +408,19 @@ describe("loosening, today's tooling", () => {
           "fewer numRuns",
         );
         const shared = `const options = {numRuns: ${v.count}};\n${source(v).replace(`{numRuns: ${v.count}}`, "options")}`;
+
         const got = compare(
           { [file]: shared },
           { [file]: shared.replace(`numRuns: ${v.count}`, `numRuns: ${v.count - v.delta}`) },
         );
+
         expect(got.code, got.text).toBe(1);
         expect(got.text).toContain(": fewer numRuns:");
 
         for (const key of ["min", "max", "minLength", "maxLength"]) {
           const start = v.count,
             end = start + (key.startsWith("min") ? v.delta : -v.delta);
+
           const before = `${v.title}('${v.name}', () => fc.assert(fc.property(fc.array(fc.integer(), {${key}: ${start}}), xs => expect(xs).toBeDefined())));`;
           flagged(v, before, before.replace(`${key}: ${start}`, `${key}: ${end}`), "tighter fast-check bound");
         }
@@ -429,6 +463,7 @@ describe("loosening, today's tooling", () => {
             { [file]: after, "product.ts": "it.skip('ignored');" },
             map,
           );
+
           expect(got.code, got.text).toBe(code);
 
           if (code === 0) {
@@ -442,6 +477,7 @@ describe("loosening, today's tooling", () => {
           { "checks/moved.test.tsx": source(v, undefined, "", renamed) },
           `| removed | replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`,
         );
+
         expect(moved.code, moved.text).toBe(1);
 
         for (const after of [
@@ -459,10 +495,12 @@ describe("loosening, today's tooling", () => {
         expect(onlyProduct.text).toContain("0 hits in 0 exam files");
         accepted++;
         const existing = `describe.skip('${v.name}', () => {${before}});`;
+
         const shifted = compare(
           { [file]: existing },
           { [file]: `// ${v.extra}\n${existing}\n${source(v, undefined, "", renamed)}` },
         );
+
         expect(shifted.code, shifted.text).toBe(1);
       }),
       { seed: 3185, numRuns: 4 },
@@ -478,6 +516,7 @@ describe("loosening, today's tooling", () => {
       fc.property(input, (v) => {
         const before = source(v),
           after = before.replace(".toBe(value)", `.toBe(${v.count})`);
+
         const got = compare({ [file]: before }, { [file]: after });
         expect(got.code, got.text).toBe(1);
         expect(got.text).toContain(`${file}: unrecognized change: line 1`);
@@ -532,6 +571,7 @@ describe("loosening, today's tooling", () => {
         fc.property(input, (v) => {
           const pairs: [string, string][] = [];
           const body = `() => expect(value).toBe(${v.count})`;
+
           const law = (target: string, options = "") =>
             `${target}('${v.name}', ${options ? `${options}, ` : ""}${body});\n`;
 
@@ -665,11 +705,13 @@ describe("loosening, today's tooling", () => {
         expect(compare({ [file]: before }, { [file]: wrapped }).code).toBe(1);
         const destination = "checks/destination.test.ts";
         const renamed = `${v.name}-new`;
+
         const mapped = compare(
           { [file]: source(v), [destination]: "// kept file\n" },
           { [file]: "// kept file\n", [destination]: source(v, undefined, "", renamed) },
           `| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`,
         );
+
         expect(mapped.code, mapped.text).toBe(1);
       }),
       { seed: 31842, numRuns: 3, endOnFailure: true },
@@ -729,25 +771,29 @@ describe("loosening, today's tooling", () => {
     (kind) => {
       fc.assert(
         fc.property(input, (v) => {
-          const prelude =
-            kind === "options"
-              ? `const settings = {numRuns: ${v.count}};\n`
-              : kind === "module"
-                ? `import {state} from './product';\n`
-                : `const shared = {check: n => expect(n).toBe(n), get disable() { this.check = () => {}; return ${v.count}; }};\n`;
+          const prelude = Match.value(kind).pipe(
+            Match.when("options", () => `const settings = {numRuns: ${v.count}};\n`),
+            Match.when("module", () => `import {state} from './product';\n`),
+            Match.orElse(
+              () =>
+                `const shared = {check: n => expect(n).toBe(n), get disable() { this.check = () => {}; return ${v.count}; }};\n`,
+            ),
+          );
+
           const before =
             prelude +
-            (kind === "options"
-              ? source(v).replace(`{numRuns: ${v.count}}`, "settings")
-              : kind === "module"
-                ? source(v, "state.check(value);")
-                : source(v, "shared.check(value);"));
-          const write =
-            kind === "options"
-              ? "settings.numRuns = 1;"
-              : kind === "module"
-                ? "state.check = () => {};"
-                : "shared.check = () => {};";
+            Match.value(kind).pipe(
+              Match.when("options", () => source(v).replace(`{numRuns: ${v.count}}`, "settings")),
+              Match.when("module", () => source(v, "state.check(value);")),
+              Match.orElse(() => source(v, "shared.check(value);")),
+            );
+
+          const write = Match.value(kind).pipe(
+            Match.when("options", () => "settings.numRuns = 1;"),
+            Match.when("module", () => "state.check = () => {};"),
+            Match.orElse(() => "shared.check = () => {};"),
+          );
+
           const additions =
             kind === "getter"
               ? [`const added_${v.extra} = shared.disable;\n`, source(v, "shared.disable;", "", `${v.name}-added`)]
@@ -770,18 +816,18 @@ describe("loosening, today's tooling", () => {
     (kind) => {
       fc.assert(
         fc.property(input, (v) => {
-          const before =
-            kind === "return-newline"
-              ? source(v, "return expect(value).toBe(value);")
-              : kind === "regex"
-                ? source(v, "const pattern = /[//]/; expect(value).toBe(value);")
-                : source(v, "return /* same line */ expect(value).toBe(value);");
-          const after =
-            kind === "return-newline"
-              ? before.replace("return expect", "return\nexpect")
-              : kind === "regex"
-                ? before.replace("expect(value).toBe(value);", "")
-                : before.replace("same line", "split\nline");
+          const before = Match.value(kind).pipe(
+            Match.when("return-newline", () => source(v, "return expect(value).toBe(value);")),
+            Match.when("regex", () => source(v, "const pattern = /[//]/; expect(value).toBe(value);")),
+            Match.orElse(() => source(v, "return /* same line */ expect(value).toBe(value);")),
+          );
+
+          const after = Match.value(kind).pipe(
+            Match.when("return-newline", () => before.replace("return expect", "return\nexpect")),
+            Match.when("regex", () => before.replace("expect(value).toBe(value);", "")),
+            Match.orElse(() => before.replace("same line", "split\nline")),
+          );
+
           const got = compare({ [file]: before }, { [file]: after });
           expect(got.code, got.text).toBe(1);
           expect(got.text).toContain(`${file}: unrecognized change:`);
@@ -797,18 +843,23 @@ describe("loosening, today's tooling", () => {
       fc.property(input, (v) => {
         const renamed = `${v.name}-new`,
           destination = "checks/destination.test.ts";
+
         const old = source(v, "check(value);"),
           next = source(v, "check(value);", "", renamed);
+
         const shell =
           kind === "skipped-suite" ? `describe.skip('${v.extra}', () => {\n});\n` : "const check = () => {};\n";
+
         const before = {
           [file]: `const check = n => expect(n).toBe(n);\n${old}`,
           [destination]: shell,
         };
+
         const after = {
           [file]: "const check = n => expect(n).toBe(n);\n",
           [destination]: kind === "skipped-suite" ? shell.replace("\n});", `\n${next}});`) : shell + next,
         };
+
         const got = compare(before, after, `| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${renamed} |`);
         expect(got.code, got.text).toBe(1);
         expect(got.text).toContain(`${file}: unrecognized change:`);
@@ -825,9 +876,11 @@ describe("loosening, today's tooling", () => {
         fc.property(word, (name) => {
           const target = `target-${name}`;
           const original = kind === "new-symlink" ? {} : { [file]: target };
+
           const got = compare(original, {
             [file]: kind === "mode" ? { content: target, mode: 0o755 } : { link: target },
           });
+
           expect(got.code, got.text).toBe(1);
           expect(got.text).toContain("unrecognized change:");
         }),
@@ -868,6 +921,7 @@ describe("loosening, today's tooling", () => {
     `it.skip('${v.extra}-muted', () => expect(1).toBe(1));`,
     `const helper_${v.extra} = (n) => n + ${v.count};`,
   ];
+
   const fresh = (v: Input) => `import {it, expect} from 'vitest';\nimport fc from 'fast-check';\n${source(v)}`;
 
   // Plant: remove the added-file skip in loosening.sh, and a new file with shared state hits again.
@@ -912,6 +966,7 @@ describe("loosening, today's tooling", () => {
       fc.property(input, (v) => {
         const renamed = "checks/nested/renamed.test.ts";
         const mapping = `| Removed | Replacement |\n| --- | --- |\n| ${v.name} | ${v.name} |`;
+
         const padding =
           kind === "padded"
             ? Array.from({ length: 12 }, (_, i) => source(v, undefined, "", `${v.name}-kept-${i}`)).join("")
@@ -938,6 +993,7 @@ describe("loosening, today's tooling", () => {
           { [file]: source(v, undefined, "", `${v.name}-stays`), [renamed]: source(v, "") },
           mapping,
         );
+
         expect(moved.code, moved.text).toBe(1);
         expect(moved.text).toContain(`${file}: removed expect: ${v.name}`);
       }),
@@ -950,10 +1006,12 @@ describe("loosening, today's tooling", () => {
     // scenario: git pairs the two paths (identical bytes but one line), so the new path is no add.
     const v: Input = { name: "law", extra: "extra", title: "it", count: 50, delta: 1, space: " " };
     const padding = Array.from({ length: 12 }, (_, i) => source(v, undefined, "", `kept-${i}`)).join("");
+
     const got = compare(
       { [file]: padding + source(v) },
       { "checks/nested/renamed.test.ts": `${padding + source(v)}vi.mock('./x');\n` },
     );
+
     expect(got.code, got.text).toBe(1);
     expect(got.text).toContain("checks/nested/renamed.test.ts: unrecognized change:");
   });
@@ -1026,6 +1084,7 @@ describe("loosening, today's tooling", () => {
             { [file]: source(v), "exam-paths.json": invalid },
             { [file]: "", "exam-paths.json": invalid },
           );
+
           expect(got.code, got.text).toBe(2);
           expect(got.text).not.toContain("0 hits");
         }
@@ -1058,6 +1117,7 @@ describe("loosening, today's tooling", () => {
           encoding: "utf8",
           env,
         });
+
         expect(invalid.status).toBe(2);
         expect(invalid.stdout).not.toContain("0 hits");
       }),

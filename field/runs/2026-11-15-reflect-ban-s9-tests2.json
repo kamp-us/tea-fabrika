@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s9-tests2",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-15T22:52:38-08:00",
+  "ended": "2026-11-15T23:02:07-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step round 2 for slice 9 of the Reflect ban (0554, ticket 1056) in next/, on amendment point 6 of docs/plan/quests/reflect-ban-PLAN.md signed at c20d1da85. Slice 9's build (3897bced3) typed the dev client, and that left 13 type errors in five app test files, which this step fixes with type changes only. chaos-revoke.integration.test.ts (5 errors): the string-keyed invoke and its Binding type go; invoke takes a thunk; each proof is made before the thunk; the route call's p90-control gets the kind 10 @ts-expect-error. client-protocol.test-support.ts (2): Binding goes, invoke(method, thunk) keeps the method name in the SuiteError; its 5 Reflect.get fires stay for slice 13. worker-usage.integration.test.ts (4): start, open, restart and read go through the file's own call; invoke stays for instance.record(...). start-child.laws.integration.test.ts (1, TS7053): the string-keyed call helper goes, and its three callers call project() plainly. worker-mail.integration.test.ts (1): the local start takes Start, not object, with one import type line; its 3 fires stay for slice 14. Every sketch compiled as written: world.from passed as a From, so FROM needed no annotation. No assertion changed. Reflect.get/set/has counts per file are unchanged: 0, 5, 0, 0, 3. No new law, since L7 already holds the client's type.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "tsc --noEmit -p next/apps/fabrika: 13 errors before, 0 after. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the ratchet are all green. One pnpm typecheck at the end, exit 0. These ran green in vitest at the step's tree, one file at a time, with no 0178 refusal (CLAUDE_CODE_REMOTE=true on Linux): start-child.laws.integration.test.ts (23 passed), worker-usage.integration.test.ts (1 passed, plus the U9 it.effect.fails that was already there), worker-mail.integration.test.ts (6 passed) and chaos-revoke.integration.test.ts (1 passed). client-protocol.test-support.ts is read only by client-protocol.visual.test.ts. That test was tried once and was not reached: all 4 scenarios fail at spawn ssh-keygen ENOENT, because this box has no ssh-keygen. That is an environment gap, counted neither red nor green; CI's visual job or the laptop runs it.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "L7",
+      "plant": "dev.ts: restart dropped from DevProcess's Pick; tsc -p next/apps/fabrika fails at worker-usage.integration.test.ts:382 with TS2339, so the new call is typed and not any; restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

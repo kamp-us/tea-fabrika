@@ -23,7 +23,16 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -31,16 +40,23 @@ import { syncTest } from "../../Testing.ts";
 import { Policy, Supervision, supervisor } from "./supervisor.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 const NAME = "counter:1";
+
 const PROGRAM = "counter";
+
 const BUILD = "build-a";
 
-type Model = typeof Supervision.Type;
+type Model = Supervision;
+
 type Journal = Model["journal"];
+
 type Msg = { readonly type: string; readonly [key: string]: unknown };
 
-const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
+const pid = (n: number): string => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
+
 /** A process no fold creates. */
 const FOREIGN = pid(9_999_999_999);
 
@@ -51,27 +67,33 @@ const policy = {
   backoff: { minMs: 100, maxMs: 800, resetAfterMs: 5000 },
 };
 
-const ctx = (p: typeof Policy.Type = policy) => ({ policy: p, process: A, name: NAME, build: BUILD, at: 0 });
+const ctx = (p: Policy = policy) => ({ policy: p, process: A, name: NAME, build: BUILD, at: 0 });
 
+// SAFETY: the walk builds each msg from a move the supervisor accepts in the folded model, so it is one of the supervisor's own messages.
 const step = (model: Model, msg: Msg): Model => applyCell(supervisor, model, msg as never)[0];
 
 const valid = (model: unknown): boolean => Schema.is(Supervision)(model);
 
-const roundTrip = (model: Model): unknown =>
+const roundTrip = (model: Model): Schema.Json =>
   Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(Schema.encodeSync(Supervision)(model)));
 
 /** JSON text with sorted keys: a decoded copy may order its fields differently. */
 const canon = (value: unknown): string =>
   JSON.stringify(value, (_key, v: unknown) =>
-    v !== null && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
+    Predicate.isObject(v)
+      ? Rec.fromEntries(
+          Arr.sort(
+            Rec.toEntries(v),
+            Order.mapInput(Order.String, ([key]: readonly [string, unknown]) => key),
+          ),
+        )
       : v,
   );
 
 const decodes = (raw: unknown): boolean => Result.isSuccess(Schema.decodeUnknownResult(Supervision)(raw));
 
 /** Accepted policies: every brake reachable (the waits of one window fit inside it). */
-const policies: fc.Arbitrary<typeof Policy.Type> = fc
+const policies: fc.Arbitrary<Policy> = fc
   .record({
     intensity: fc.integer({ min: 1, max: 8 }),
     deliveries: fc.integer({ min: 1, max: 6 }),
@@ -103,7 +125,9 @@ const Cell = fc.record({
   gap: fc.integer({ min: 0, max: 3000 }),
   error: fcErrorClass.filter((e) => e.length <= 40),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
 const tapes = fc.array(Cell, { minLength: 1, maxLength: 80 });
 
 const LETTERS = ["l1", "l2", "l3"] as const;
@@ -153,7 +177,7 @@ type Move = {
 
 /** Each move once per unit of its weight, so a tape value picks among them. */
 const weighted = (options: ReadonlyArray<Move>): ReadonlyArray<Move> =>
-  options.flatMap((option) => Array.from({ length: option.weight ?? 1 }, () => option));
+  Arr.flatMap(options, (option) => Array.from({ length: option.weight ?? 1 }, () => option));
 
 const reasonFor = (phase: "fresh" | "saved", error: string) =>
   ExitReason.cases.crashed.make({ phase: phase === "fresh" ? "step" : "saved_letter", error });
@@ -169,9 +193,17 @@ const receiptFor = (letter: string, process: string) => ({
 });
 
 /** The smallest time at or after `t` with room in the window, by the fold's own search. */
-const roomAt = (restarts: ReadonlyArray<number>, t: number, p: typeof Policy.Type): number => {
-  const candidates = [t, ...restarts.map((r) => r + p.periodMs + 1)].filter((c) => c >= t).toSorted((a, b) => a - b);
-  return candidates.find((c) => restarts.filter((r) => r >= c - p.periodMs).length + 1 <= p.intensity) ?? t;
+const roomAt = (restarts: ReadonlyArray<number>, t: number, p: Policy): number => {
+  const candidates = Arr.sort(
+    Arr.filter([t, ...Arr.map(restarts, (r) => r + p.periodMs + 1)], (c) => c >= t),
+    Order.Number,
+  );
+
+  return (
+    Option.getOrUndefined(
+      Arr.findFirst(candidates, (c) => Arr.filter(restarts, (r) => r >= c - p.periodMs).length + 1 <= p.intensity),
+    ) ?? t
+  );
 };
 
 /** The moves possible from the current journal and the fold's world, with P15's `swapped` when asked. */
@@ -184,21 +216,23 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
 
   // The runner begins a fresh step only for a letter not yet accepted; a compacted receipt was
   // (finding 2026-11-11-supervisor-walk-begins-compacted-letter), so this walk does not offer it.
-  const base = all.filter(
-    (m) => m.name !== "begin_fresh" || w.model.receipts.some((r) => r.letter === m.msg.letter && r.input !== null),
+  const base = Arr.filter(
+    all,
+    (m) => m.name !== "begin_fresh" || Arr.some(w.model.receipts, (r) => r.letter === m.msg.letter && r.input !== null),
   );
 
   // A swap names the process the journal holds, or one it does not, with a build the fold makes.
   const j = w.model.journal;
-  const own =
-    j._tag === "idle"
-      ? j.process
-      : j._tag === "stepping"
-        ? j.attempt.process
-        : j._tag === "writing_exit"
-          ? j.process
-          : w.process;
+
+  const own = Match.value(j).pipe(
+    Match.tag("idle", (j) => j.process),
+    Match.tag("stepping", (j) => j.attempt.process),
+    Match.tag("writing_exit", (j) => j.process),
+    Match.orElse(() => w.process),
+  );
+
   const build = `build-swap-${cell.pick % 4}`;
+
   return [
     ...base,
     { name: "swapped", weight: 3, msg: { type: "swapped", process: own, build } },
@@ -209,20 +243,26 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
 const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
   const j = w.model.journal;
   const meta = from();
-  const old = w.sent.filter((m) => COMPLETIONS.has(m.type) && !sameWork(j, m));
+  const old = Arr.filter(w.sent, (m) => COMPLETIONS.has(m.type) && !sameWork(j, m));
   const stale = old.length === 0 ? [] : [{ name: "stale", msg: old[cell.pick % old.length]!, stale: true }];
   const later = { name: "advance", msg: { type: "healthy", at: w.at + cell.gap }, apply: () => (w.at += cell.gap) };
 
   switch (j._tag) {
     case "idle": {
       const letter = LETTERS[cell.pick % LETTERS.length]!;
-      const receipt = w.model.receipts.find((r) => r.letter === letter);
+      const receipt = Option.getOrUndefined(Arr.findFirst(w.model.receipts, (r) => r.letter === letter));
+
       const fresh: Array<Move> =
         receipt === undefined
           ? [{ name: "received", weight: 4, msg: { type: "received", receipt: receiptFor(letter, j.process) } }]
           : [];
+
       const request = `restart-${cell.pick % 3}`;
-      const compactable = w.model.receipts.find((r) => r.tries === 0 && r.input !== null);
+
+      const compactable = Option.getOrUndefined(
+        Arr.findFirst(w.model.receipts, (r) => r.tries === 0 && r.input !== null),
+      );
+
       return [
         ...fresh,
         ...(receipt !== undefined && receipt.result === null
@@ -284,8 +324,10 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+
     case "stepping": {
       const seq = j.attempt.seq;
+
       return [
         { name: "finished", msg: { type: "finished", seq } },
         {
@@ -308,6 +350,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+
     case "swapping":
       return [{ name: "swap_completed", msg: { type: "swap_completed", load: j.change.load } }, ...stale];
     case "checking":
@@ -339,6 +382,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
     case "writing_exit": {
       // The exit lands 0 to 50 ms after the throw, so a wait counted from the throw shows.
       const late = cell.gap % 51;
+
       return [
         {
           name: "exit_written",
@@ -357,6 +401,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+
     case "writing_down":
       return [{ name: "down_written", msg: { type: "down_written", process: j.recovery.process } }, ...stale];
     case "waiting_recovery":
@@ -372,6 +417,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
     case "waiting_start": {
       const until = j.timing._tag === "scheduled" ? j.timing.until : w.at;
       const ready = w.at >= until;
+
       return [
         later,
         ready
@@ -388,6 +434,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     }
+
     case "checkpointing":
       return [
         {
@@ -402,7 +449,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
 type Observer = (before: Model, move: Move, after: Model, w: World) => void;
 
 /** Folds one tape through the real machine, calling each observer after every step. */
-const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observer, swaps = false): World => {
+const walk = (p: Policy, tape: ReadonlyArray<Cell>, observe: Observer, swaps = false): World => {
   const w: World = {
     model: supervisor.init(null, ctx(p))[0],
     at: 0,
@@ -433,7 +480,7 @@ const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observe
     w.model = after;
     observe(before, move, after, w);
 
-    if (!move.stale && move.name !== "advance") {
+    if (move.stale !== true && move.name !== "advance") {
       w.sent.push(move.msg);
     }
   }
@@ -442,8 +489,8 @@ const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observe
 };
 
 /** Keeps the fold's own account. It reads only its own moves and which way the journal went. */
-const account = (before: Model, move: Move, after: Model, w: World, p: typeof Policy.Type): void => {
-  if (move.stale) {
+const account = (before: Model, move: Move, after: Model, w: World, p: Policy): void => {
+  if (move.stale === true) {
     return;
   }
 
@@ -452,6 +499,7 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
   switch (move.name) {
     case "limited":
       w.limit = msg.maxDeliveries === null ? null : Number(msg.maxDeliveries);
+
       return;
     case "threw":
     case "check_threw":
@@ -477,8 +525,10 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
 
       w.observations++;
       w.crashes++;
+
       return;
     }
+
     case "restart": {
       if (!w.requests.has(String(msg.id)) && after !== before) {
         w.requests.set(String(msg.id), String(msg.build));
@@ -486,16 +536,20 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
 
       return;
     }
+
     case "started":
     case "adopted": {
       w.pids++;
       w.process = pid(w.pids);
       w.live = true;
       w.restarts.push(w.at);
+
       return;
     }
+
     case "checkpointed":
       w.healthyAt = w.at;
+
       return;
     case "advance":
     case "healthy":
@@ -520,6 +574,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
       fc.integer({ min: 1, max: 2 }).map((intensity) => ({ ...policy, intensity })),
       fc.integer({ min: 1, max: 1500 }).map((periodMs) => ({ ...policy, periodMs })),
     );
+
     fc.assert(
       fc.property(invalid, (candidate) => {
         const bytes = JSON.stringify(candidate);
@@ -543,6 +598,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
     fc.assert(
       fc.property(policies, tapes, fc.nat(), (p, tape, pick) => {
         const reached: Array<Model> = [];
+
         const w = walk(p, tape, (_before, _move, after) => {
           expect(valid(after), `reached ${after.journal._tag}`).toBe(true);
           expect(decodes(roundTrip(after))).toBe(true);
@@ -602,7 +658,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           expect(after.observations, "observations match the captured attempts").toHaveLength(w.observations);
 
           for (const [letter, errors] of w.errors) {
-            const receipt = after.receipts.find((r) => r.letter === letter);
+            const receipt = Option.getOrUndefined(Arr.findFirst(after.receipts, (r) => r.letter === letter));
             expect(receipt?.errors, `letter ${letter}'s classes`).toEqual(errors);
             expect(receipt?.tries).toBe(errors.length);
           }
@@ -616,7 +672,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             const attempt = before.journal.attempt;
             const tries = w.errors.get(attempt.letter)?.length ?? 0;
             const terminal = tries >= (w.limit ?? p.maxDeliveries);
-            const receipt = after.receipts.find((r) => r.letter === attempt.letter);
+            const receipt = Option.getOrUndefined(Arr.findFirst(after.receipts, (r) => r.letter === attempt.letter));
             expect(receipt?.result ?? null).toEqual(terminal ? { _tag: "refused", reason: "dead" } : null);
             expect(receipt?.process).toBe(attempt.process);
             expect(after.journal).toMatchObject(
@@ -644,6 +700,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             move.name !== "finished"
           ) {
             const seq = before.journal.attempt.seq;
+
             const again = step(after, {
               type: "interrupted",
               process: before.journal.attempt.process,
@@ -653,6 +710,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
               from: from(),
               at: w.at,
             });
+
             const threw = step(after, {
               type: "threw",
               seq,
@@ -660,9 +718,10 @@ describe("P34c slice 2: one saved recovery journal", () => {
               reason: reasonFor("fresh", "TypeError"),
               from: from(),
             });
+
             expect(again).toEqual(after);
             expect(threw).toEqual(after);
-            const observation = after.observations.find((o) => o.seq === seq);
+            const observation = Option.getOrUndefined(Arr.findFirst(after.observations, (o) => o.seq === seq));
             expect(observation, "the journal's identity wins over the marker's").toMatchObject({
               letter: before.journal.attempt.letter,
               process: before.journal.attempt.process,
@@ -690,7 +749,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           // healthy interval while idle.
           expect(after.crashes, "crashes follow the fold's account").toBe(w.crashes);
 
-          if (move.stale) {
+          if (move.stale === true) {
             return;
           }
 
@@ -700,6 +759,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
             if (before.journal.origin._tag === "manual") {
               expect(after.journal).toMatchObject({ _tag: "waiting_start", timing: { _tag: "immediate" } });
+
               return;
             }
 
@@ -748,23 +808,26 @@ describe("P34c slice 2: one saved recovery journal", () => {
               backoff: { ...policy.backoff, resetAfterMs: 1_000_000 },
             }),
             // received, begin fresh, threw (dead at limit 1), dead written, exit written.
-            [0, 0, 1, 0, 0].map((move) => ({ move, pick: 0, gap: 0, error: "TypeError" })),
+            Arr.map([0, 0, 1, 0, 0], (move) => ({ move, pick: 0, gap: 0, error: "TypeError" })),
           ],
           // pinned: healthy for exactly resetAfterMs resets the crash count (P34 compares with >=).
           // begin saved, threw, exit written, wait out the backoff, started, checkpointed, then
           // two idle advances that end exactly resetAfterMs after the checkpoint.
           [
             Schema.decodeUnknownSync(Policy)(policy),
-            [
-              { move: 4, gap: 0 },
-              { move: 1, gap: 0 },
-              { move: 0, gap: 0 },
-              { move: 0, gap: policy.backoff.minMs },
-              { move: 1, gap: 0 },
-              { move: 0, gap: 0 },
-              { move: 6, gap: policy.backoff.resetAfterMs / 2 },
-              { move: 6, gap: policy.backoff.resetAfterMs / 2 },
-            ].map((cell) => ({ ...cell, pick: 0, error: "TypeError" })),
+            Arr.map(
+              [
+                { move: 4, gap: 0 },
+                { move: 1, gap: 0 },
+                { move: 0, gap: 0 },
+                { move: 0, gap: policy.backoff.minMs },
+                { move: 1, gap: 0 },
+                { move: 0, gap: 0 },
+                { move: 6, gap: policy.backoff.resetAfterMs / 2 },
+                { move: 6, gap: policy.backoff.resetAfterMs / 2 },
+              ],
+              (cell) => ({ ...cell, pick: 0, error: "TypeError" }),
+            ),
           ],
         ],
       },
@@ -781,6 +844,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
   // Plant: an unreachable brake, or a down before the window is full.
   it("J8: every generated policy trips its brake at crash intensity + 1, and a letter goes dead at its limit", () => {
     const G = 50;
+
     const Cycle = fc.record({
       // Mostly a held letter, so high delivery limits are reached too.
       reuse: fc.integer({ min: 0, max: 7 }).map((n) => n > 0),
@@ -791,6 +855,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
       late: fc.integer({ min: 0, max: G }),
       error: fcErrorClass.filter((e) => e.length <= 40),
     });
+
     const cases = fc
       .record({
         deliveries: fc.integer({ min: 1, max: 32 }),
@@ -816,8 +881,10 @@ describe("P34c slice 2: one saved recovery journal", () => {
           periodMs: total + 3 * intensity * G + 1 + slack,
           backoff: { minMs, maxMs, resetAfterMs: 1_000_000_000 },
         });
+
         return fc.tuple(fc.constant(accepted), fc.array(Cycle, { minLength: intensity + 1, maxLength: intensity + 1 }));
       });
+
     const seen = new Set<string>();
 
     fc.assert(
@@ -828,16 +895,22 @@ describe("P34c slice 2: one saved recovery journal", () => {
         let crashes = 0;
         const restarts: Array<number> = [];
         const tries = new Map<string, number>();
+
         const send = (msg: Msg): Model => {
           const after = step(model, msg);
           expect(after, `${msg.type} from ${model.journal._tag} moved the journal`).not.toEqual(model);
           model = after;
+
           return after;
         };
 
         for (const cycle of cycles) {
           // From idle: a letter the fold still holds open, or a new one.
-          const open = [...tries].filter(([, n]) => n < p.maxDeliveries).map(([letter]) => letter);
+          const open = Arr.map(
+            Arr.filter([...tries], ([, n]) => n < p.maxDeliveries),
+            ([letter]) => letter,
+          );
+
           const letter = cycle.reuse && open.length > 0 ? open[cycle.pick % open.length]! : `letter-${tries.size + 1}`;
           expect(model.journal._tag).toBe("idle");
           const process = model.journal._tag === "idle" ? model.journal.process : A;
@@ -877,6 +950,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
               recovery: { process, crashes, until },
             });
             seen.add(`brake:${p.intensity}`);
+
             return;
           }
 
@@ -902,8 +976,16 @@ describe("P34c slice 2: one saved recovery journal", () => {
       { seed: SEED, numRuns: RUNS },
     );
 
-    const brakes = [...seen].filter((s) => s.startsWith("brake:")).map((s) => Number(s.slice(6)));
-    const deads = [...seen].filter((s) => s.startsWith("dead:")).map((s) => Number(s.slice(5)));
+    const brakes = Arr.map(
+      Arr.filter([...seen], (s) => Str.startsWith("brake:")(s)),
+      (s) => Number(Str.slice(6)(s)),
+    );
+
+    const deads = Arr.map(
+      Arr.filter([...seen], (s) => Str.startsWith("dead:")(s)),
+      (s) => Number(Str.slice(5)(s)),
+    );
+
     expect(Math.max(...brakes), "intensity coverage reaches past 32").toBeGreaterThan(32);
     expect(Math.max(...deads), "delivery limits past 16 go dead").toBeGreaterThan(16);
   });
@@ -920,7 +1002,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             `a stale ${move.msg.type} changed the journal`,
           ).toBe(false);
 
-          if (move.stale) {
+          if (move.stale === true) {
             seen.add("stale_completion");
           }
         });
@@ -962,10 +1044,10 @@ describe("P34c slice 2: one saved recovery journal", () => {
                 expect(after, `swapped in ${j._tag} for ${move.name}`).toEqual(before);
                 seen.add(j._tag === "idle" ? "swapped_foreign" : "swapped_busy");
               }
-            } else if (!move.stale && move.name === "checkpointed" && before.journal._tag === "checkpointing") {
+            } else if (move.stale !== true && move.name === "checkpointed" && before.journal._tag === "checkpointing") {
               const origin = before.journal.origin;
               build = origin._tag === "manual" ? origin.request.build : build;
-            } else if (!move.stale && move.name === "adopted" && after !== before) {
+            } else if (move.stale !== true && move.name === "adopted" && after !== before) {
               build = String(move.msg.build);
             }
 
@@ -1001,6 +1083,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           msgs.push(move.msg);
         });
         syncTest(supervisor, ctx(p), {
+          // SAFETY: these msgs are the walk's moves, each one of the supervisor's own messages.
           msgs: msgs as never,
           seed: SEED,
           encode: (model) => Schema.encodeSync(Supervision)(model),
@@ -1015,39 +1098,49 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
 /** Invalid copies of one saved model: a wrong tag, a missing payload, an old version, a broken identity. */
 const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
+  // SAFETY: saved is an encoded Supervision model, which holds a journal and a list of receipts.
   const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
   const journal = raw.journal;
-  const fields = Object.keys(journal).filter((key) => key !== "_tag");
+  const fields = Arr.filter(Rec.keys(journal), (key) => key !== "_tag");
   const dropped = fields[pick % Math.max(fields.length, 1)];
+
   const broken: Array<unknown> = [
     { ...raw, journal: { ...journal, _tag: "starting" } },
-    { ...raw, journal: Object.fromEntries(Object.entries(journal).filter(([key]) => key !== dropped)) },
+    { ...raw, journal: Rec.fromEntries(Arr.filter(Rec.toEntries(journal), ([key]) => key !== dropped)) },
     { ...raw, v: 1 },
   ];
 
   if (journal._tag === "writing_dead") {
+    // SAFETY: a writing_dead journal holds its `failure`, a fresh Failure (internal/recovery.ts), which names its `letter`.
     const failure = journal.failure as { letter: string };
     // The exact fresh failure's receipt must be there, terminal and its own.
-    broken.push({ ...raw, receipts: raw.receipts.filter((r) => r.letter !== failure.letter) });
+    broken.push({ ...raw, receipts: Arr.filter(raw.receipts, (r) => r.letter !== failure.letter) });
     broken.push({
       ...raw,
-      receipts: raw.receipts.map((r) => (r.letter === failure.letter ? { ...r, result: null } : r)),
+      receipts: Arr.map(raw.receipts, (r) => (r.letter === failure.letter ? { ...r, result: null } : r)),
     });
     broken.push({
       ...raw,
-      receipts: raw.receipts.map((r) => (r.letter === failure.letter ? { ...r, process: pid(39) } : r)),
+      receipts: Arr.map(raw.receipts, (r) => (r.letter === failure.letter ? { ...r, process: pid(39) } : r)),
     });
   }
 
   if (journal._tag === "checkpointing") {
-    broken.push({ ...raw, journal: Object.fromEntries(Object.entries(journal).filter(([key]) => key !== "after")) });
+    broken.push({
+      ...raw,
+      journal: Rec.fromEntries(Arr.filter(Rec.toEntries(journal), ([key]) => key !== "after")),
+    });
   }
 
   if (journal._tag === "stepping") {
+    // SAFETY: a stepping journal holds its attempt, an object.
     broken.push({ ...raw, journal: { ...journal, attempt: { ...(journal.attempt as object), seq: 0 } } });
   }
 
   // A crash origin names the process its journal replaces; a foreign failure process is refused.
+  // SAFETY: in supervisor.ts's Journal, the writing_exit, writing_down, waiting_recovery, waiting_start and
+  // checkpointing cases hold `origin`, an Origin (crash with its failure, or manual with its request); the
+  // other seven cases have none and read `undefined`, which is why the next line reads `origin?._tag`.
   const origin = journal.origin as { _tag: string; failure?: object; request?: { id: string; build: string } };
 
   if (origin?._tag === "crash") {
@@ -1057,6 +1150,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
 
   // A person's restart starts with its own saved request ID and build.
   if (journal._tag === "waiting_start" && origin._tag === "manual") {
+    // SAFETY: every waiting_start journal holds its `request`, a Start `again` (processes/internal/processTable.ts) with its id and code.
     const request = journal.request as { id: string; code: Record<string, unknown> };
     broken.push({ ...raw, journal: { ...journal, request: { ...request, id: `${request.id}:other` } } });
     broken.push({
@@ -1114,10 +1208,12 @@ void j13;
 describe("P13 A11 saved admission work", () => {
   it("A11: checking, admission, reply and cleanup survive every JSON cut; stale completion cannot close work", () => {
     const reached = new Set<string>();
+
     const paths = tapes.map((tape) => {
       let model = supervisor.init(null, ctx())[0];
       let letters = 0;
       const messages: Array<typeof supervisor.msg.Type> = [];
+
       const send = (msg: Msg) => {
         const checked = Schema.decodeUnknownSync(Schema.toType(supervisor.msg))(msg);
         messages.push(checked);
@@ -1171,6 +1267,7 @@ describe("P13 A11 saved admission work", () => {
 
       return messages;
     });
+
     propertyTrace(
       supervisor,
       ctx(),
@@ -1194,10 +1291,11 @@ describe("P13 A11 saved admission work", () => {
 
           if (message.type === "admitted") {
             expect(after.journal).toMatchObject({ _tag: "stepping", attempt: { seq: message.seq } });
-            expect(after.receipts.find((r) => r.letter === message.receipt.letter)?.input).toEqual(
-              message.receipt.input,
-            );
             expect(
+              Option.getOrUndefined(Arr.findFirst(after.receipts, (r) => r.letter === message.receipt.letter))?.input,
+            ).toEqual(message.receipt.input);
+            expect(
+              // SAFETY: roundTrip answers an encoded Supervision model, an object.
               decodes({ ...(roundTrip(after) as object), receipts: [] }),
               "fresh stepping without the admitted input cannot load",
             ).toBe(false);
@@ -1243,18 +1341,20 @@ describe("P13 A11 saved admission work", () => {
                 reason: reasonFor("fresh", "TypeError"),
                 from: from(),
               };
+
               expect(step(after, stale)).toEqual(after);
             }
           }
         }
 
         syncTest(supervisor, ctx(), {
-          msgs: steps.map((s) => s.msg),
+          msgs: Arr.map(steps, (s) => s.msg),
           encode: Schema.encodeSync(Supervision),
           decode: Schema.decodeUnknownSync(Supervision),
           equals: (a, b) => canon(a) === canon(b),
           seed: SEED,
         });
+
         return true;
       },
       { seed: SEED, numRuns: 100 },

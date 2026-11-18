@@ -1,7 +1,12 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
-import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Signature from "effect/crypto/Signature";
+import * as Base64Url from "effect/encoding/Base64Url";
+
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { InputId } from "../Id.ts";
@@ -14,7 +19,10 @@ import { Input } from "../runtime/Program.ts";
 import { nth } from "../runtime/RepliesTest.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
-import { KeyLine, writeSshsig } from "../transport/Sshsig.ts";
+import * as PublicKey from "../transport/PublicKey.ts";
+import { writeSshsig } from "../transport/Sshsig.ts";
+
+import * as Formatter from "effect/Formatter";
 import { programBox } from "./box.ts";
 import { ProjectService, projectLayer, type ProjectOptions } from "./runtime.ts";
 import { Props, receive } from "./tail.ts";
@@ -22,16 +30,30 @@ import { Props, receive } from "./tail.ts";
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 const NAME = "counter:1";
+
 const BUILD = "build-a";
+
 // The counter as the build leaves it: named `pack/program`, its hash the SHA-256 of its source.
 const PROGRAM = "test/counter";
+
 const SOURCE = "";
-const CODE = { hash: createHash("sha256").update(SOURCE).digest("hex"), source: SOURCE };
+
+// The walk's keys, signatures and hashes: Effect's Signature and Digest on WebCrypto.
+const keys = Layer.mergeAll(
+  Digest.layerWebCrypto,
+  Signature.layerWebCrypto.pipe(Layer.provide(SecureRandom.layerWebCrypto)),
+);
+
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+
 const StampedMsg = Schema.Struct({ ...Msg.fields, parent: InputId, body: Schema.String });
+
 const Metadata = Schema.Struct({ ...Msg.fields, parent: InputId });
+
 const Recorded = Schema.Struct({ input: Schema.optionalKey(Schema.Json) });
+
 type Selector = "plain" | "default" | "custom";
 
 const ProjectInput = Schema.Struct({
@@ -70,7 +92,11 @@ const projectWalk = Effect.fnUntraced(function* (
   selector: Selector = "plain",
   usage: boolean = false,
 ) {
+  const digest = yield* Digest.Digest;
+  const signature = yield* Signature.Signature;
+  const CODE = { hash: yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(SOURCE)), source: SOURCE };
   const sql = yield* harness.open;
+
   const ledger = yield* Ledger.pipe(
     Effect.provide(
       LedgerSql.layer(sql, { reader: "project-audit-test" }).pipe(
@@ -78,18 +104,14 @@ const projectWalk = Effect.fnUntraced(function* (
       ),
     ),
   );
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
-  const field = (bytes: Uint8Array) => {
-    const n = Buffer.alloc(4);
-    n.writeUInt32BE(bytes.length);
-    return Buffer.concat([n, bytes]);
-  };
-  const line = Schema.decodeUnknownSync(KeyLine)(
-    `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
-  );
-  const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+
+  const pair = yield* signature.generateKeyPair(Signature.ed25519);
+  const raw = yield* Signature.toBytes(pair.publicKey);
+
+  const line = yield* PublicKey.line(raw);
+  const fingerprint = yield* PublicKey.fingerprint(raw);
   const message = selector === "plain" ? Msg : StampedMsg;
+
   const program = {
     name: "counter",
     machine: Machine.make({
@@ -118,14 +140,17 @@ const projectWalk = Effect.fnUntraced(function* (
         }
       : {}),
   };
+
   const Box = programBox(program, BUILD);
   const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
   let accepted = 0;
   const bound = new Map<unknown, typeof Props.Type>();
+
   // The driver wires Gateway; project routing, audit and box calls stay real.
   const unused = vi.fn((): never => {
     throw new Error("unused platform call");
   });
+
   const ctx: Parameters<typeof projectLayer>[0] = {
     id: { name: "p13-project", equals: unused, toString: unused },
     storage: {
@@ -151,6 +176,7 @@ const projectWalk = Effect.fnUntraced(function* (
       IsolateTail: ({ props }: { props: typeof Props.Type }) => {
         const tail = harness.tail();
         bound.set(tail, props);
+
         return tail;
       },
     },
@@ -167,8 +193,10 @@ const projectWalk = Effect.fnUntraced(function* (
     getTags: unused,
     abort: unused,
   };
+
   const loads = new Map<string, unknown>();
   const reported: Array<{ object: string; rows: ReadonlyArray<typeof IsolateUsage.Usage.Type> }> = [];
+
   const env = harness.environment(
     box,
     () => ++accepted,
@@ -184,22 +212,21 @@ const projectWalk = Effect.fnUntraced(function* (
   );
 
   const url = "https://fabrika.test/p13-project";
-  const instance = StartsTest.fixture(
-    {
-      name: "p13-project",
-      person: from().for,
-      founder: line,
-      window: raw.toString("base64url"),
-      port: 18787,
-      build: BUILD,
-    },
-    (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
+
+  const instance = yield* StartsTest.fixture({
+    name: "p13-project",
+    person: from().for,
+    founder: line,
+    window: Base64Url.encode(raw),
+    port: 18787,
+    build: BUILD,
+  });
+
   const project = yield* ProjectService.pipe(
     Effect.provide(
       projectLayer(
         ctx,
-        { ...env, INSTANCE: JSON.stringify(instance) },
+        { ...env, INSTANCE: Formatter.formatJson(instance) },
         {
           programs: { [PROGRAM]: CODE },
           bootstrap: [{ name: NAME, id: "project-start", program: PROGRAM }],
@@ -208,15 +235,18 @@ const projectWalk = Effect.fnUntraced(function* (
       ),
     ),
   );
+
   const client = yield* project.connect();
   const nonce = yield* project.challenge(client);
   const tab = "project-test";
+
   const signed = yield* writeSshsig({
     text: `fabrika-hello\n${url}\n${tab}\n${nonce}`,
     line,
     space: "fabrika-client",
-    sign: (bytes: Uint8Array) => Effect.sync(() => sign(null, bytes, pair.privateKey)),
+    sign: (bytes: Uint8Array) => signature.sign(pair.privateKey, bytes),
   });
+
   expect(
     yield* project.initialize(
       client,
@@ -224,7 +254,7 @@ const projectWalk = Effect.fnUntraced(function* (
         versions: [1],
         has: [],
         ping: "30s",
-        key: raw.toString("base64url"),
+        key: Base64Url.encode(raw),
         tab,
         nonce,
         signed,
@@ -245,10 +275,12 @@ const projectWalk = Effect.fnUntraced(function* (
   for (const [n, entropy] of tape.entries()) {
     const moves =
       history.length === 0 ? ["valid"] : selector === "plain" ? ["valid", "unknown", "retry"] : ["valid", "retry"];
+
     const move = nth(moves, entropy);
     reached.add(move);
     const prior = move === "retry" ? nth(history, Math.floor(entropy / moves.length)) : undefined;
     const letter = prior?.letter ?? `project-${n}`;
+
     const m =
       prior?.m ??
       (move === "unknown"
@@ -256,6 +288,7 @@ const projectWalk = Effect.fnUntraced(function* (
         : selector === "plain"
           ? Msg.make({ type: "add", n: accepted + 1 })
           : ProjectInput.make({ type: "add", n: accepted + 1, body: `BODY-${entropy}-${n}/雪\n` }));
+
     const answer = yield* project.route(client, "process.send", {
       pid: project.boot.process,
       letter,
@@ -266,9 +299,13 @@ const projectWalk = Effect.fnUntraced(function* (
 
     if (usage) {
       const key = `${CODE.hash}/${project.boot.process}`;
-      const loaded = Schema.decodeUnknownSync(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(loads.get(key));
+
+      const loaded = yield* Schema.decodeUnknownEffect(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(
+        loads.get(key),
+      );
+
       expect(loaded.tails).toHaveLength(1);
-      const props = Schema.decodeUnknownSync(Props)(bound.get(loaded.tails[0]));
+      const props = yield* Schema.decodeUnknownEffect(Props)(bound.get(loaded.tails[0]));
       expect(props).toEqual({ project: "p13-project", name: NAME, process: project.boot.process });
       const cpuMs = accepted + (entropy % 100);
       const wallMs = cpuMs + 1;
@@ -290,7 +327,7 @@ const projectWalk = Effect.fnUntraced(function* (
       ]);
       expect(reported.slice(before)).toEqual([
         {
-          object: JSON.stringify(["p13-project", NAME]),
+          object: Formatter.formatJson(["p13-project", NAME]),
           rows: [{ process: project.boot.process, method: "audit", outcome: "ok", cpuMs, wallMs }],
         },
       ]);
@@ -306,18 +343,20 @@ const projectWalk = Effect.fnUntraced(function* (
     }
 
     if (selector !== "plain") {
-      const binding = Schema.decodeUnknownSync(Schema.Struct({ id: InputId }))(
+      const binding = yield* Schema.decodeUnknownEffect(Schema.Struct({ id: InputId }))(
         sql.exec("SELECT id FROM gateway_bindings WHERE letter=?", `${project.boot.process}/${letter}`)[0],
       );
+
       const rows = (yield* Stream.runCollect(ledger.read("gateway/inputs", 0))).filter(
         (entry: Entry) => entry.id === binding.id,
       );
+
       expect(rows).toHaveLength(1);
 
       if (prior !== undefined) {
         expect(rows).toEqual(records.get(letter));
       } else {
-        const recorded = Schema.decodeUnknownSync(Recorded)(rows.at(0)?.body);
+        const recorded = yield* Schema.decodeUnknownEffect(Recorded)(rows.at(0)?.body);
 
         if (move === "valid") {
           expect(recorded.input).toEqual(
@@ -329,7 +368,7 @@ const projectWalk = Effect.fnUntraced(function* (
       }
     }
   }
-});
+}, Effect.provide(keys));
 
 /** Registers A13's project walk without choosing a database driver. */
 export const suite = (harness: Harness, register: Register) => {

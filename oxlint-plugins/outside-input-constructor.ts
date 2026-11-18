@@ -1,11 +1,13 @@
 // P17's decode paths. Follow local aliases, including aliases of curried Schema decoders.
 import type { CreateRule, Scope, Variable } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import { ancestors, dotted, pathIn, type Node } from "./match.ts";
 
 const scoped =
   /^next\/packages\/libfabrika\/src\/(?:data\/id|ledger\/Log|access\/Authorization|gateway\/(?:Gateway|GatewayStore|GatewayNonce)|runtime\/(?:Nemesis|ChaosState|Runner|Entry))\.ts$/;
 
 const outside = /^(?:raw|wire|saved|row|params|input|body|bytes|stored|persisted)(?:[A-Z_].*)?$/;
+
 const sync = /(?:^|\.)(?:decodeSync|decodeUnknownSync)$/;
 
 // Existing response and reducer constructors are outside this change. These are the saved/input
@@ -33,6 +35,7 @@ export const outsideInputConstructor: CreateRule = {
 
     const aliases = new Map<Variable, Node>();
     const names = new Map<Variable, string>();
+
     const binding = (node: Node): Variable | undefined => {
       if (node.type !== "Identifier") {
         return undefined;
@@ -52,6 +55,7 @@ export const outsideInputConstructor: CreateRule = {
 
       return undefined;
     };
+
     const resolve = (node: Node, seen = new Set<Variable>()): Node => {
       const variable = binding(node);
 
@@ -66,8 +70,10 @@ export const outsideInputConstructor: CreateRule = {
       }
 
       seen.add(variable);
+
       return resolve(value, seen);
     };
+
     const name = (node: Node, seen = new Set<Variable>()): string | null => {
       if (node.type === "Identifier") {
         const variable = binding(node);
@@ -89,17 +95,20 @@ export const outsideInputConstructor: CreateRule = {
         }
 
         seen.add(variable);
+
         return name(value, seen) ?? node.name;
       }
 
       if (node.type === "MemberExpression" && !node.computed && !node.optional) {
         const owner = name(node.object, seen);
         const member = dotted(node.property);
+
         return owner === null || member === null ? null : `${owner}.${member}`;
       }
 
       return dotted(node);
     };
+
     const constant = (node: Node, seen = new Set<Variable>()): boolean => {
       const value = resolve(node, seen);
 
@@ -107,22 +116,24 @@ export const outsideInputConstructor: CreateRule = {
         case "Literal":
           return true;
         case "TemplateLiteral":
-          return value.expressions.every((x) => constant(x, new Set(seen)));
+          return Arr.every(value.expressions, (x) => constant(x, new Set(seen)));
         case "UnaryExpression":
           return constant(value.argument, seen);
         case "TSAsExpression":
         case "TSSatisfiesExpression":
           return constant(value.expression, seen);
         case "ArrayExpression":
-          return value.elements.every((x) => x !== null && constant(x, new Set(seen)));
+          return Arr.every(value.elements, (x) => x !== null && constant(x, new Set(seen)));
         case "ObjectExpression":
-          return value.properties.every(
+          return Arr.every(
+            value.properties,
             (x) => x.type === "Property" && !x.computed && constant(x.value, new Set(seen)),
           );
         default:
           return false;
       }
     };
+
     const untrusted = (node: Node, seen = new Set<Variable>()): boolean => {
       if (node.type === "Identifier") {
         const variable = binding(node);
@@ -162,11 +173,11 @@ export const outsideInputConstructor: CreateRule = {
       }
 
       if (node.type === "ObjectExpression") {
-        return node.properties.some((x) => untrusted(x, new Set(seen)));
+        return Arr.some(node.properties, (x) => untrusted(x, new Set(seen)));
       }
 
       if (node.type === "ArrayExpression") {
-        return node.elements.some((x) => x !== null && untrusted(x, new Set(seen)));
+        return Arr.some(node.elements, (x) => x !== null && untrusted(x, new Set(seen)));
       }
 
       if (node.type === "SpreadElement" || node.type === "AwaitExpression" || node.type === "YieldExpression") {
@@ -180,14 +191,15 @@ export const outsideInputConstructor: CreateRule = {
       if (node.type === "CallExpression") {
         return (
           /(?:\.get|\.read|JSON\.parse)$/.test(dotted(node.callee) ?? "") ||
-          node.arguments.some((x) => untrusted(x, new Set(seen)))
+          Arr.some(node.arguments, (x) => untrusted(x, new Set(seen)))
         );
       }
 
       return false;
     };
+
     const inDecoder = (node: Node): boolean =>
-      [...ancestors(node)].some((parent) => {
+      Arr.some([...ancestors(node)], (parent) => {
         if (parent.type === "FunctionDeclaration") {
           return /^(?:decode|parse|load|read)/i.test(parent.id?.name ?? "");
         }
@@ -198,6 +210,7 @@ export const outsideInputConstructor: CreateRule = {
 
         return false;
       });
+
     return {
       ImportSpecifier(node) {
         const variable = binding(node.local);
@@ -255,8 +268,10 @@ export const outsideInputConstructor: CreateRule = {
         const curried = callee.type === "CallExpression" && sync.test(name(callee.callee) ?? "");
         const type = call.split(".")[0] ?? "";
         const added = /\/(?:data\/id|access\/Authorization|runtime\/(?:Nemesis|ChaosState))\.ts$/.test(pathIn(context));
+
         const constructor =
           call.endsWith(".make") && !declarations.has(type) && (added || inputs.has(type) || inDecoder(node));
+
         const throwing = constructor || sync.test(call) || curried;
 
         if (!idMake && !throwing) {
@@ -271,7 +286,7 @@ export const outsideInputConstructor: CreateRule = {
         if (
           idMake
             ? args.length === 1 && first !== undefined && constant(first)
-            : !args.some((x) => untrusted(x) || (inDecoder(node) && !constant(x)))
+            : !Arr.some(args, (x) => untrusted(x) || (inDecoder(node) && !constant(x)))
         ) {
           return;
         }

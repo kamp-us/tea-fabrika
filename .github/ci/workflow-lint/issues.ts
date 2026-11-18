@@ -1,3 +1,4 @@
+import { Record as Rec, Result } from "effect";
 // Today's CI, serving both versions. Who may touch issues (0534, 0541).
 import { parse } from "yaml";
 import { VERDICT } from "./scheduled.ts";
@@ -24,21 +25,24 @@ const touchesIssues = (grant: unknown) => grant === "write-all" || (isMap(grant)
  * job's, unless it is one of ISSUE_JOBS asking by name; `write-all` fails there too.
  */
 export const lintIssues = (workflows: Readonly<Record<string, string>>): string[] =>
-  Object.entries(workflows).flatMap(([path, text]) => {
-    let workflow: Record<string, unknown>;
+  Rec.toEntries(workflows).flatMap(([path, text]) => {
+    const parsed = Result.try(() => map(parse(text)));
 
-    try {
-      workflow = map(parse(text));
-    } catch {
+    if (Result.isFailure(parsed)) {
       return [`${path}: invalid YAML`];
     }
 
+    const workflow = parsed.success;
+
     const top = touchesIssues(workflow["permissions"]) ? [`${path}: the workflow's token: ${ISSUES_RULE}`] : [];
-    const jobs = Object.entries(map(workflow["jobs"]))
+
+    const jobs = Rec.toEntries(map(workflow["jobs"]))
       .filter(([name, job]) => {
         const grant = map(job)["permissions"];
+
         return touchesIssues(grant) && (ISSUE_JOBS[path] !== name || grant === "write-all");
       })
       .map(([name]) => `${path}: job ${name}: ${ISSUES_RULE}`);
+
     return [...top, ...jobs];
   });

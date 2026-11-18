@@ -1,3 +1,4 @@
+import { Array as Arr, pipe, String as Str, DateTime, Effect, FileSystem, Option, Path, Schema } from "effect";
 // Remove: the box rm command, which removes one box (its work folder and its git data folder) only
 // when every commit and file it saved is somewhere MAIN keeps. Deletion needs proof for every saved
 // state, so anything unknown keeps the pair. Today's lead tooling, run on our own laptop.
@@ -10,7 +11,6 @@
 // The order of the checks is the contract: the first that fails names the reason. Paths are read the
 // way Python's pathlib read them before this port: "." parts drop, ".." stays, and a link is
 // followed by hand, so every link and its target count as MAIN's storage.
-import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import { BoxGit, type Inspection } from "./BoxGit.ts";
 import { Runs } from "./Runs.ts";
 
@@ -19,6 +19,7 @@ export const Verdict = Schema.TaggedUnion({
   absent: {},
   kept: { reason: Schema.String, code: Schema.Literals([1, 2]) },
 });
+
 export type Verdict = typeof Verdict.Type;
 
 /** One rm: the name as its line shows it, what keepruns.sh said first ("" for nothing), the verdict. */
@@ -35,27 +36,41 @@ export const line = ({ shown, verdict }: Removal): string =>
 export const exitCode = (verdict: Verdict): number => (verdict._tag === "kept" ? verdict.code : 0);
 
 /** A check said no: the pair stays, for this reason. */
-class Keep extends Schema.TaggedError<Keep>()("Keep", { reason: Schema.String, code: Schema.Literals([1, 2]) }) {}
+class Keep extends Schema.TaggedError<Keep, { readonly brand: unique symbol }>()("Keep", {
+  reason: Schema.String,
+  code: Schema.Literals([1, 2]),
+}) {}
 
 /** Metadata in a shape nobody proved safe. Its words are the reason the line shows. */
-class Unsupported extends Schema.TaggedError<Unsupported>()("Unsupported", { reason: Schema.String }) {}
+class Unsupported extends Schema.TaggedError<Unsupported, { readonly brand: unique symbol }>()("Unsupported", {
+  reason: Schema.String,
+}) {}
 
 /** The disk could not be read or changed as asked. */
-class Unreadable extends Schema.TaggedError<Unreadable>()("Unreadable", { cause: Schema.optional(Schema.Defect()) }) {}
+class Unreadable extends Schema.TaggedError<Unreadable, { readonly brand: unique symbol }>()("Unreadable", {
+  cause: Schema.optional(Schema.Defect()),
+}) {}
 
-const keep = (reason: string) => new Keep({ reason, code: 1 });
-const unsupported = (reason: string) => new Unsupported({ reason });
+const keep = (reason: string) => Keep.make({ reason, code: 1 });
+
+const unsupported = (reason: string) => Unsupported.make({ reason });
 
 // Paths, as pathlib reads an absolute one.
 const normal = (path: string) =>
-  `/${path
-    .split("/")
-    .filter((part) => part !== "" && part !== ".")
-    .join("/")}`;
+  `/${pipe(
+    Str.split(path, "/"),
+    Arr.filter((part) => part !== "" && part !== "."),
+    Arr.join("/"),
+  )}`;
 
-const joined = (base: string, rest: string) => normal(rest.startsWith("/") ? rest : `${base}/${rest}`);
-const above = (path: string) => (path === "/" ? "/" : normal(path.slice(0, path.lastIndexOf("/"))));
-const last = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+const joined = (base: string, rest: string) => normal(pipe(rest, Str.startsWith("/")) ? rest : `${base}/${rest}`);
+
+// Where the last slash sits, or -1 with none, as the native lastIndexOf answered.
+const lastSlash = (path: string) => Option.getOrElse(pipe(path, Str.lastIndexOf("/")), () => -1);
+
+const above = (path: string) => (path === "/" ? "/" : normal(pipe(path, Str.slice(0, lastSlash(path)))));
+
+const last = (path: string) => pipe(path, Str.slice(lastSlash(path) + 1));
 
 const lineage = (path: string) => {
   const out = [path];
@@ -87,21 +102,24 @@ const utf8 = (bytes: Uint8Array) =>
 
 /** bytes.splitlines(): \n, \r and \r\n. */
 const byteLines = (text: string) => {
-  const out = text.split(/\r\n|\n|\r/);
+  const out = Str.split(text, /\r\n|\n|\r/);
+
   return out.at(-1) === "" ? out.slice(0, -1) : out;
 };
 
 /** str.splitlines(), with every separator Python's has. */
 const textLines = (text: string) => {
-  const out = text.split(SEPARATORS);
+  const out = Str.split(text, SEPARATORS);
+
   return out.at(-1) === "" ? out.slice(0, -1) : out;
 };
 
-const hex = (code: number, width: number) => code.toString(16).padStart(width, "0");
+const hex = (code: number, width: number) => pipe(code.toString(16), Str.padStart(width, "0"));
 
 /** A name as Python's repr() showed it: quoted, with control characters escaped. */
 const pythonRepr = (name: string) => {
-  const quote = name.includes("'") && !name.includes('"') ? '"' : "'";
+  const quote = pipe(name, Str.includes("'")) && !pipe(name, Str.includes('"')) ? '"' : "'";
+
   const escapes: Record<string, string> = {
     "\\": "\\\\",
     "\t": "\\t",
@@ -109,10 +127,11 @@ const pythonRepr = (name: string) => {
     "\r": "\\r",
     [quote]: `\\${quote}`,
   };
+
   let out = "";
 
   for (const char of name) {
-    const code = char.codePointAt(0) ?? 0;
+    const code = Option.getOrElse(Str.codePointAt(char, 0), () => 0);
     out +=
       escapes[char] ??
       (char !== " " && /[\p{C}\p{Z}]/u.test(char)
@@ -149,14 +168,18 @@ const ORDINARY = new Set([
 ]);
 
 const OID = "[0-9a-f]{40}";
+
 /** A byte a ref name may hold: no control byte, space or DEL. */
 const REF_CHARS = "[^\\x00-\\x20\\x7f]";
+
 /** A byte inside one line of metadata: no NUL and no line break. */
 const LINE_CHARS = "[^\\x00\\r\\n]";
+
 /** Every line break Python's str.splitlines() knows. */
 // oxlint-disable-next-line eslint/no-control-regex -- str.splitlines() breaks at these control characters too
 const SEPARATORS = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/;
-const ZERO = "0".repeat(40);
+
+const ZERO = pipe("0", Str.repeat(40));
 
 /** Following links by hand ends after this many, as Python's recursion limit ended it. */
 const HOPS = 1000;
@@ -168,26 +191,32 @@ const disk = (fs: FileSystem.FileSystem) => {
       Effect.map((info) => Option.some(info.type)),
       Effect.orElseSucceed(Option.none),
     );
+
   const isDir = (path: string) => Effect.map(kind(path), (type) => Option.contains(type, "Directory"));
   const isFile = (path: string) => Effect.map(kind(path), (type) => Option.contains(type, "File"));
   const exists = (path: string) => Effect.map(kind(path), Option.isSome);
+
   const isLink = (path: string) =>
     fs.lstat(path).pipe(
       Effect.map((info) => info.type === "SymbolicLink"),
       Effect.orElseSucceed(() => false),
     );
+
   const lexists = (path: string) =>
     fs.lstat(path).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );
+
   const identity = (path: string) =>
     fs.stat(path).pipe(
       Effect.map((info) => Option.some(`${info.dev}:${Option.getOrElse(info.ino, () => -1n)}`)),
       Effect.orElseSucceed(Option.none<string>),
     );
+
   const failed = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.mapError(effect, (cause) => new Unreadable({ cause }));
+    Effect.mapError(effect, (cause) => Unreadable.make({ cause }));
+
   return {
     isDir,
     isFile,
@@ -220,6 +249,7 @@ const holdsAny = Effect.fnUntraced(function* (d: Disk, roots: ReadonlyArray<stri
   }
 
   const known = new Map<string, Option.Option<string>>();
+
   const identity = Effect.fnUntraced(function* (path: string) {
     const seen = known.get(path);
 
@@ -229,6 +259,7 @@ const holdsAny = Effect.fnUntraced(function* (d: Disk, roots: ReadonlyArray<stri
 
     const got = yield* d.identity(path);
     known.set(path, got);
+
     return got;
   });
 
@@ -272,7 +303,7 @@ const protectMain = Effect.fnUntraced(function* (d: Disk, main: string, roots: R
       }
 
       if (hops > HOPS) {
-        return yield* new Unreadable({});
+        return yield* Unreadable.make({});
       }
 
       const parent = yield* follow(above(path), hops + 1);
@@ -284,13 +315,15 @@ const protectMain = Effect.fnUntraced(function* (d: Disk, main: string, roots: R
       }
 
       yield* d.stat(current);
+
       return last(path) === ".." ? above(parent) : current;
     });
+
   const resolve = (path: string) => follow(path, 0);
 
   const readPath = Effect.fnUntraced(function* (path: string) {
     const raw = yield* utf8(yield* d.read(yield* resolve(path)));
-    const value = raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+    const value = pipe(raw, Str.endsWith("\n")) ? pipe(raw, Str.slice(0, -1)) : raw;
 
     if (value === "" || /[\0\r\n]/.test(value)) {
       return yield* unsupported("unsupported MAIN storage path");
@@ -304,11 +337,11 @@ const protectMain = Effect.fnUntraced(function* (d: Disk, main: string, roots: R
   if (yield* d.isFile(gitdir)) {
     const pointer = yield* readPath(joined(main, ".git"));
 
-    if (!pointer.startsWith("gitdir: ")) {
+    if (!pipe(pointer, Str.startsWith("gitdir: "))) {
       return yield* unsupported("unsupported MAIN gitdir");
     }
 
-    gitdir = yield* resolve(joined(main, pointer.slice(8)));
+    gitdir = yield* resolve(joined(main, pipe(pointer, Str.slice(8))));
   }
 
   let common = gitdir;
@@ -339,7 +372,7 @@ const protectMain = Effect.fnUntraced(function* (d: Disk, main: string, roots: R
 
       if (yield* d.lexists(alternates)) {
         for (const value of textLines(yield* utf8(yield* d.read(yield* resolve(alternates))))) {
-          if (value === "" || value.startsWith('"') || value.includes("\0")) {
+          if (value === "" || pipe(value, Str.startsWith('"')) || pipe(value, Str.includes("\0"))) {
             return yield* unsupported("unsupported MAIN alternate");
           }
 
@@ -414,7 +447,7 @@ const reflogTips = Effect.fnUntraced(function* (d: Disk, logs: string, tips: Set
     Effect.gen(function* () {
       const { folders, files } = yield* entries(d, folder);
 
-      if (folders.some((entry) => entry.link)) {
+      if (Arr.some(folders, (entry) => entry.link)) {
         return yield* keep("symlinked reflog metadata");
       }
 
@@ -440,6 +473,7 @@ const reflogTips = Effect.fnUntraced(function* (d: Disk, logs: string, tips: Set
         }
       }
     });
+
   yield* visit(logs);
 });
 
@@ -457,12 +491,12 @@ const copyRefs = Effect.fnUntraced(function* (
 ) {
   const visit = (relative: ReadonlyArray<string>): Effect.Effect<void, Unsupported | Unreadable> =>
     Effect.gen(function* () {
-      const folder = joined(data, relative.join("/"));
+      const folder = joined(data, Arr.join(relative, "/"));
       const saved = !(relative[0] === "refs" && relative[1] === "remotes");
-      yield* d.failed(fs.makeDirectory(joined(into, relative.join("/")), { recursive: true }));
+      yield* d.failed(fs.makeDirectory(joined(into, Arr.join(relative, "/")), { recursive: true }));
       const { folders, files } = yield* entries(d, folder);
 
-      if (folders.some((entry) => entry.link)) {
+      if (Arr.some(folders, (entry) => entry.link)) {
         return yield* unsupported("symlinked ref metadata");
       }
 
@@ -472,23 +506,24 @@ const copyRefs = Effect.fnUntraced(function* (
 
         if (new RegExp(`^${OID}\\n?$`).test(value)) {
           if (saved) {
-            tips.add(value.trim());
+            tips.add(Str.trim(value));
           }
         } else if (new RegExp(`^ref: refs/${REF_CHARS}+\\n?$`).test(value)) {
           if (saved) {
-            symbolic.add((yield* utf8(bytes)).slice(5).trim());
+            symbolic.add(pipe(yield* utf8(bytes), Str.slice(5), Str.trim));
           }
         } else {
           return yield* unsupported("unsupported ref metadata");
         }
 
-        yield* d.failed(fs.writeFile(joined(into, [...relative, name].join("/")), bytes));
+        yield* d.failed(fs.writeFile(joined(into, Arr.join([...relative, name], "/")), bytes));
       }
 
       for (const { name } of folders) {
         yield* visit([...relative, name]);
       }
     });
+
   yield* visit(["refs"]);
 });
 
@@ -500,7 +535,9 @@ const checkMetadata = Effect.fnUntraced(function* (d: Disk, work: string, data: 
     return yield* keep("invalid gitdir pointer");
   }
 
-  const named = yield* utf8(Uint8Array.from(pointer[1] ?? "", (char) => char.charCodeAt(0)));
+  const named = yield* utf8(
+    Uint8Array.from(pointer[1] ?? "", (char) => Option.getOrElse(Str.charCodeAt(char, 0), () => Number.NaN)),
+  );
 
   if ((yield* d.realPath(joined(work, named))) !== data) {
     return yield* keep("gitdir pointer does not name this pair");
@@ -519,6 +556,7 @@ const checkMetadata = Effect.fnUntraced(function* (d: Disk, work: string, data: 
   }
 
   const names = yield* d.list(data);
+
   const shared = yield* Effect.forEach(
     ["commondir", "shallow", "info/grafts"],
     (path) => d.lexists(joined(data, path)),
@@ -527,12 +565,12 @@ const checkMetadata = Effect.fnUntraced(function* (d: Disk, work: string, data: 
     },
   );
 
-  if (shared.includes(true) || names.some((name) => name.startsWith("sharedindex."))) {
+  if (shared.includes(true) || Arr.some(names, (name) => pipe(name, Str.startsWith("sharedindex.")))) {
     return yield* keep("unsupported shared, shallow or graft metadata");
   }
 
   // Operation state and linked worktrees can hold commits and staged files outside this index.
-  if (names.some((name) => !ORDINARY.has(name))) {
+  if (Arr.some(names, (name) => !ORDINARY.has(name))) {
     return yield* keep("operation, linked worktree or unknown metadata");
   }
 
@@ -545,7 +583,7 @@ const checkMetadata = Effect.fnUntraced(function* (d: Disk, work: string, data: 
       return yield* keep("unsupported ORIG_HEAD");
     }
 
-    tips.add(value.trim());
+    tips.add(Str.trim(value));
   }
 
   const logs = joined(data, "logs");
@@ -595,7 +633,7 @@ const inspect = Effect.fn("Remove.inspect")(function* (
   // Keep Git's racy-index check: a fresh timestamp could hide a same-size edit. The copy's time is
   // never later than the original's (a Date holds milliseconds), so git only checks more.
   const stamp = yield* d.stat(joined(data, "index"));
-  const now = new Date(0);
+  const now = DateTime.toDateUtc(DateTime.makeUnsafe(0));
   yield* d.failed(
     fs.utimes(
       joined(into, "index"),
@@ -612,7 +650,7 @@ const inspect = Effect.fn("Remove.inspect")(function* (
     const value = yield* plain(d, packed);
     const shape = new RegExp(`^(?:${OID} refs/${REF_CHARS}+|\\^${OID})$`);
 
-    if (byteLines(latin1(value)).some((entry) => !entry.startsWith("#") && !shape.test(entry))) {
+    if (Arr.some(byteLines(latin1(value)), (entry) => !pipe(entry, Str.startsWith("#")) && !shape.test(entry))) {
       return yield* unsupported("unsupported packed refs");
     }
 
@@ -629,16 +667,18 @@ const inspect = Effect.fn("Remove.inspect")(function* (
   yield* d.failed(fs.writeFileString(joined(into, "objects/info/alternates"), `${objects}\n`));
 
   const at: Inspection = { gitDir: into, work };
+
   const asked = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.mapError(effect, () => unsupported("Git inspection failed"));
+
   const index = yield* asked(git.indexEntries(at));
 
-  if (index.some((entry) => entry !== "" && !entry.startsWith("H "))) {
+  if (Arr.some(index, (entry) => entry !== "" && !pipe(entry, Str.startsWith("H ")))) {
     return yield* keep("unsupported index flags");
   }
 
   // Status must never enter a submodule and read its own config or hooks.
-  if (index.some((entry) => entry.startsWith("H 160000 "))) {
+  if (Arr.some(index, (entry) => pipe(entry, Str.startsWith("H 160000 ")))) {
     return yield* keep("unsupported submodule metadata");
   }
 
@@ -647,15 +687,15 @@ const inspect = Effect.fn("Remove.inspect")(function* (
   }
 
   for (const { ref, oid } of yield* asked(git.refs(at))) {
-    if (ref.startsWith("refs/remotes/")) {
+    if (pipe(ref, Str.startsWith("refs/remotes/"))) {
       continue;
     }
 
     tips.add(oid);
 
     // A replace ref also saves the original object's name in its path.
-    if (ref.startsWith("refs/replace/")) {
-      tips.add(ref.slice("refs/replace/".length));
+    if (pipe(ref, Str.startsWith("refs/replace/"))) {
+      tips.add(pipe(ref, Str.slice("refs/replace/".length)));
     }
   }
 
@@ -668,7 +708,7 @@ const inspect = Effect.fn("Remove.inspect")(function* (
   // Only MAIN's retained history counts. Mere object presence and remote refs prove nothing.
   const reachable = yield* asked(Effect.flatMap(git.retained, git.reachable));
 
-  if ([...tips].some((tip) => !reachable.has(tip))) {
+  if (Arr.some([...tips], (tip) => !reachable.has(tip))) {
     return yield* keep("tip not retained in MAIN");
   }
 }, Effect.scoped);
@@ -742,7 +782,7 @@ export const remove = Effect.fn("Remove.remove")(function* (name: string, folder
 
     // Raw samples live under runs/, never in git: move them to MAIN before the folder goes.
     const moved = yield* runs.keep(work);
-    said = moved.said.trim() === "" ? "" : moved.said.trimEnd();
+    said = Str.trim(moved.said) === "" ? "" : Str.trimEnd(moved.said);
 
     if (!moved.kept) {
       return yield* keep("could not keep its runs/");
@@ -767,5 +807,6 @@ export const remove = Effect.fn("Remove.remove")(function* (name: string, folder
       Unreadable: () => Effect.succeed(Verdict.cases.kept.make({ reason: "inspection or removal failed", code: 1 })),
     }),
   );
+
   return { shown: name, runs: said, verdict };
 });

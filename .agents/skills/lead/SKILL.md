@@ -12,6 +12,10 @@ request: it runs hourly against main and files tickets
 ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)). The lead writes no step's
 work. It starts each step, reads what comes back, and lands the result.
 
+When staffing work, follow [0597](../../../.decisions/0597-eight-workers-before-twelve.md) for
+actual productive worker counts, fresh verification and immediate replacements. The brief names
+the bounded task and the ticket it serves.
+
 ```text
 plan (read-only) -> lead approves -> box -> tests -> build -> review
   -> fetch, read the diff, e2e -> push as the bot -> pull request -> merge rule -> merge queue
@@ -45,7 +49,9 @@ first step:
 Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
 Children: <ticket, branch and signed parent head for each child>, or none. Record before starting.
 Start a child at its parent's signed build head. Keep the child's tests until it lands.
-Land the stack with `gh stack merge <pr> --squash`, then `gh stack sync --prune`.
+Land the selected prefix with `land.ts stack <top-pr>`. After a parent head changes, coordinate
+with source, queue and writer, then update each open child with `gh pr update-branch <child>`,
+bottom-to-top. The child keeps its tests; its own step owner signs changed tree links again.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
 ```
 
@@ -54,8 +60,10 @@ Do not add a marker, key or readable file as proof of session identity.
 
 ## Step briefs
 
-One template a step, each filled in under a minute. Start each step as a fresh Opus agent at its
-default effort, and record the effort on its run row. The lines are fields, as in phoenix's
+One template a step, each filled in under a minute. Use the role settings in `local.env`: planning
+uses Astra/high, mechanical work Luna/max, coordination Sol/high, review Sol/xhigh.
+Record the model and effort sent to the runner as requested values. Mark effective context unknown
+unless the runner reports it. The lines are fields, as in phoenix's
 `fabrika lane brief` (`## Task` and `## Ground`): facts and paths, never a summary of the plan or
 the skill. What is special about this quest goes under `This quest:`, one bullet a fact, and nowhere
 else:
@@ -288,12 +296,13 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   running (a program's window, the desk, keys, the look) or need to bind a socket is run by a Claude
   agent instead. A Codex box can start neither, so a Codex build there would come back half checked.
   Still one agent per step.
-- **A tool that needs ports, sockets or its own processes runs in a container with its own
-  network** (owner, 2026-11-09,
-  [0045](../../../.decisions/0045-test-steps-run-in-containers.md)), never behind a hole in a
-  sandbox row. Mutation's Stryker run is the first: it runs through `mutbox.ts`, now in the hourly
-  run against main (0066); a quest parked inside its mutation step before 0066 still finishes it,
-  with `drive.ts` running `mutbox.ts` before that step's Claude agent starts (`drive.ts --agent claude`).
+- **Check execution:** ordinary safe checks run directly in parallel under the existing resource
+  caps. Launchd, real Electron and process-signal laws use eligible disposable CI off the owner's laptop. Read
+  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md) for the split; checks that still need
+  network isolation keep [0045](../../../.decisions/0045-test-steps-run-in-containers.md)'s fence.
+  Inspect the actual selected tests and cleanup before a direct run. A plain filename is not
+  clearance; narrow a `--changed` selection that reaches these laws to verified-safe local paths.
+  Mutation still runs through `mutbox.ts` on its hourly schedule (0066).
 - **One fresh Claude agent per step, not one long driver per ticket** (owner, 2026-11-09). Each
   step gets a new agent with a short brief. It reads the quest's state file
   (`BOXES/state/<quest>.md`), does its one step, and writes the state file back for the next agent:
@@ -440,7 +449,7 @@ Every commit leaves the laptop when it is made
 ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)). `stepcommit.sh` (signed)
 runs `publish.ts` itself, and a quest's box commit is pushed by drive's pushing phase, so neither
 step nor lead pushes by hand. A commit step that cannot push exits 6 and names the command to run
-where the push can. Run `node scripts/unlisted.ts` in the main checkout every round and fix each
+where the push can. Run `node .agents/skills/lead/scripts/unlisted.ts` in the main checkout every round and fix each
 line the same turn.
 
 Keep the bot's explicit atomic push of notes plus branch. On a person's branch, notes-only as the
@@ -491,8 +500,8 @@ visible, and never weaken the rules to hide this message.
    (above). No builder starts before tests that exist. Each brief names its skill.
    Never start a review while a host-only law the plan names has not passed on a real machine
    ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). The build runs it, or you run it right after
-   the build (step 7). On the owner's Mac it runs only after you have read every line it can reach
-   that signals a process or calls launchd, and the owner has said yes (0178).
+   the build (step 7). Launchd, real Electron and process-signal laws run on eligible disposable CI,
+   never on the owner's laptop ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)).
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
    one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
@@ -505,15 +514,12 @@ visible, and never weaken the rules to hide this message.
    Step-commit checks file owners.
    Each correction the owner makes, and each slip of the lead's own, gets a note too, with the code
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
-7. **Run what the box cannot,** yourself: Electron e2e and screenshots. One Electron app at a time,
-   each run with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`. Look at every shot.
-   A host-only law runs here before the first review, never at the end of the quest (0178). Before
-   it runs on the owner's Mac, read every line it can reach that signals a process or calls
-   launchd, and work out the worst target each could get: a pid or group of 0, 1 or -1 reaches
-   every process the owner has, and so does `launchctl bootout` of a whole domain. Then ask the
-   owner, and run it only on a yes. On the
-   real machine a test touches only its own label, files and processes: its own temp home and its
-   own test label under launchd, no focus taken, and nothing left behind.
+7. **Obtain proof the box cannot supply** before the first review (0178). Use eligible CI for each
+   law. Launchd, real Electron and process-signal laws use eligible disposable CI, never the owner's
+   laptop ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)). A workflow's green result
+   proves only the laws it actually ran. Keep the test's own temp home, label, files and processes;
+   one Electron app at a time, each with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`.
+   No focus taken and nothing left behind. Look at every screenshot.
 8. **Ready to land.** A quest agent never signs as lead, pushes, opens the pull request or adds
    it to the merge queue: the permission check refuses a subagent the lead key, and the quest stops
    ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md), ticket 652). Its last act
@@ -542,7 +548,9 @@ visible, and never weaken the rules to hide this message.
    2026-11-08). A change that loosens or removes a law still stays `ask owner exam_read`.
    Then the lead session turns on GitHub's "merge when ready" at once, without waiting for CI
    ([0530](../../../.decisions/0530-lead-turns-on-merge-when-ready.md)), only with
-   `land.ts arm <pr>`, never by hand: it refuses a full run there that is red or not ended, and
+   `land.ts arm <pr>`, never by hand: it takes a green proof run at the head, the full set or the
+   changed set ([0590](../../../.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)),
+   refuses one that is red or not ended, and a changed-set run at an older head, and
    prints each red job's failed steps and tests; with none at the head it arms, as
    [0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md) allows. GitHub puts it in the merge queue
    when `ci-required` goes green, never when red. If anything is pushed after the final read, run
@@ -563,16 +571,27 @@ visible, and never weaken the rules to hide this message.
    docs-only pull request ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
    A pull request the queue puts back out stays open: the
    quest merges main or fixes the red check, pushes, and it is queued again. A PR in a gh stack is
-   refused by `gh pr merge`; land it with `gh stack merge <pr> --squash --yes` by hand.
+   refused by `gh pr merge` and by `land.ts arm` (github/gh-stack#591); land it with
+   `land.ts stack <top-pr>`, never a bare `gh stack merge`. It runs `arm`'s leak gate and
+   `## New names` check on each layer, refuses unless `ci-required` is a success at each layer's
+   head (ticket 1119), then rereads the selected ordered prefix, its base, branch links and heads.
+   It asks GitHub's async merge API with the selected top head SHA. A SQUASH merge queue keeps its
+   configured method; without a queue, the request is an explicit squash under the repo's rules.
+   The result says merged, enqueued or pending; pending and enqueued are not merged, and a reported
+   merge is checked against every selected layer. A selected prefix can end at a middle PR while an
+   upper draft stays out of the request.
    Every PR squash-merges, a stacked
-   parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). A stack is a
-   GitHub stack ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)):
-   `gh stack init <bottom> ... <top>` adopts the branches, `gh stack submit` opens the PRs,
-   `gh stack merge <pr> --squash` lands bottom-up, and `gh stack sync --prune` rebases the rest
-   onto main and pushes. Rebase by hand only locally (`gh stack rebase`, then `gh stack push`),
-   never with the web "Rebase stack" button: it makes unsigned commits. The child's trees stay the
-   same, so its links hold; if a tree changed, that child's steps sign again. A child keeps its own
-   tests.
+   parent too ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md), amended in part
+   by [0599](../../../.decisions/0599-native-stack-upkeep.md)). A stack is a GitHub stack
+   ([its commands](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)).
+   Link every layer at once, bottom-to-top, with
+   `gh stack link <bottom> <next> ... <top>`. After the source, queue and writer agree on a
+   parent's new head, promptly update each open child with `gh pr update-branch <child>`, then
+   continue up the chain. This adds a merge commit to the child. After a parent squash, GitHub's
+   retarget and rebase are separate. Do not rebase or force-push for child upkeep. If a child's
+   signed tree links changed, only that child's step owner signs them again; the child keeps its
+   tests. A queue may land a bottom-up prefix in one group and later layers in later groups, so a
+   queued request or a merged bottom layer does not mean the selected prefix is complete.
    After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.
    `land.ts merged <pr>` does both (step 10).
    The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.
@@ -678,9 +697,9 @@ what counts as a hit.
 ## Never
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
-- Rebase, force-push or `gh pr update-branch`, except a stacked child moved with `gh stack` (0004): a
-  rewrite breaks every signed link and can drop a push another session made. Bring a branch up to date
-  with a merge of main.
+- Rebase or force-push a stacked child for upkeep. Use `gh pr update-branch <child>` only after the
+  parent head and source, queue and writer agree (0599); it adds a merge commit. For an ordinary
+  branch, bring main in with a merge.
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 
 ## When a run teaches something

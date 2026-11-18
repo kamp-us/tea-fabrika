@@ -1,5 +1,3 @@
-// edge: Effect has no node:sqlite driver for the Sql contract
-import { DatabaseSync } from "node:sqlite";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { expect } from "@effect/vitest";
 import type { Ci } from "@kampus/libfabrika/ci/Ci";
@@ -38,9 +36,25 @@ import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { FileSystem, Path } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import {
+  Array as Arr,
+  String as Str,
+  Clock,
+  ConfigProvider,
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+  FileSystem,
+  Path,
+  Option,
+} from "effect";
 import type { Redacted } from "effect";
-import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Option, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { handlers } from "../handlers.ts";
 import * as Mail from "../Mail.ts";
@@ -61,11 +75,17 @@ type Store = {
 };
 
 const NAME = "merger:1";
+
 const BUILD = "merge-law";
+
 const PROCESS = "process_0000000000e008000000000000";
+
 const QUEUE = "process_0000000000e008000000000001";
+
 const SESSION = "process_0000000000e008000000000002";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const owner = Writer.cases.agent.make({ key: "SHA256:law", for: "law" });
 
 const from = {
@@ -78,9 +98,11 @@ const from = {
   build: BUILD,
 };
 
-const head = CodeHostTest.commit("a".repeat(40));
-const base = CodeHostTest.commit("d".repeat(40));
-const checked = CodeHostTest.tree("e".repeat(40));
+const head = CodeHostTest.commit(Str.repeat(40)("a"));
+
+const base = CodeHostTest.commit(Str.repeat(40)("d"));
+
+const checked = CodeHostTest.tree(Str.repeat(40)("e"));
 
 const settings = Effect.runSync(
   Settings.all.parse(
@@ -102,7 +124,9 @@ const life = Effect.fnUntraced(function* (
     LedgerSql.layer(store.sql("ledger"), { reader: "merge-laws" }),
     LedgerTransactionSql.layer(store.sql("ledger")),
   ).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })));
+
   let serial = 0;
+
   const manager = ProcessManager.layer(
     {
       by: from.by,
@@ -111,6 +135,7 @@ const life = Effect.fnUntraced(function* (
     },
     Effect.sync(() => (serial++ === 0 ? PROCESS : QUEUE)),
   );
+
   const shared = MailDeliveryLive.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -119,7 +144,7 @@ const life = Effect.fnUntraced(function* (
         ChildrenLedger.layer({ grants: [], fabrika: Model.ref("fabrika", "pipeline") }).pipe(
           // T953: these laws grant no start, and the inputs they send are given no member behind them.
           Layer.provide(RelationsMemory.layer([])),
-          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
         ),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
@@ -128,6 +153,7 @@ const life = Effect.fnUntraced(function* (
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),
   );
+
   const context = yield* Layer.buildWithScope(shared, scope);
 
   for (const [name, code] of [
@@ -147,6 +173,7 @@ const life = Effect.fnUntraced(function* (
     CheckedWriter,
     Effect.gen(function* () {
       const mailbox = yield* Mailbox;
+
       return {
         append: (i: Incoming) =>
           mailbox.send(NAME, i.id, i.envelope.input, {
@@ -163,6 +190,7 @@ const life = Effect.fnUntraced(function* (
       };
     }),
   );
+
   const own = Layer.mergeAll(
     ProgramLoader.layer({ "pipeline/merger": program }, handlers).pipe(Layer.provide(Layer.succeedContext(services))),
     ProcessStore.layer(store.sql("process"), { process: PROCESS }),
@@ -171,6 +199,7 @@ const life = Effect.fnUntraced(function* (
     Layer.succeed(Recording, { flush: Effect.void }),
     checkedWriter,
   ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
+
   const built = yield* Layer.buildWithScope(
     ProgramRunner.layer(
       { id: PROCESS, name: NAME, program: "pipeline/merger", build: BUILD, owner },
@@ -178,13 +207,17 @@ const life = Effect.fnUntraced(function* (
     ).pipe(Layer.provide(own)),
     scope,
   );
+
   const runner = Context.get(built, ProgramRunner);
+
   const letters = (name: string) =>
     Mailbox.use((m) => Stream.runCollect(m.read(name, 0))).pipe(Effect.provide(context));
+
   const checkpoint = ProcessStore.use((s) => s.load).pipe(
     Effect.provide(ProcessStore.layer(store.sql("process"), { process: PROCESS })),
     Effect.provide(context),
   );
+
   return {
     runner,
     letters,
@@ -194,7 +227,7 @@ const life = Effect.fnUntraced(function* (
         Effect.provide(RepliesSql.layer(store.sql("recovery"), { capacity: 1024 ** 3 })),
       ),
     model: Effect.map(checkpoint, (saved) =>
-      saved === null ? null : Schema.decodeUnknownSync(program.state.schema)(saved.saved.model),
+      saved === null ? null : Schema.decodeSync(program.state.schema)(saved.saved.model),
     ),
   };
 });
@@ -205,22 +238,25 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
   const host = Context.get(services, CodeHostTest.Control);
   const ci = Context.get(services, CiTest.Control);
   yield* host.main(base);
+
   const reset = host.put({
     ...Change.cases.found.make({ change: 1, head, state: "open", paths: ["src/a.ts"] }),
     base: head,
     tree: checked,
     conflict: null,
   });
+
   yield* reset;
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   let current = yield* life(store, services, scope);
   let serial = 0;
-  const deliver = (input: unknown) =>
+
+  const deliver = (input: typeof Mail.Land.Type | typeof Mail.Abandon.Type) =>
     current.runner.msg({
       id: `incoming-${++serial}`,
       envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(serial.toString(16))}`),
         by: owner,
         arrivedAt: serial,
         input,
@@ -229,14 +265,16 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
       seen: 0,
       span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
     });
+
   const reopen = Effect.gen(function* () {
     yield* Scope.close(scope, Exit.void);
     yield* store.reopen;
     scope = yield* Scope.make();
     current = yield* life(store, services, scope);
   });
+
   const fire = Effect.gen(function* () {
-    const alarm = (yield* store.alarms.saved).find((a) => a.name === NAME);
+    const alarm = Option.getOrUndefined(Arr.findFirst(yield* store.alarms.saved, (a) => a.name === NAME));
     expect(alarm, "a working merger has a saved alarm").toBeDefined();
 
     if (alarm !== undefined) {
@@ -245,6 +283,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
       yield* current.runner.due(alarm.at);
     }
   });
+
   const green = Effect.gen(function* () {
     const found = yield* host.read(1);
     expect(found?._tag).toBe("found");
@@ -265,6 +304,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
       });
     }
   });
+
   return {
     host,
     ci,
@@ -294,17 +334,16 @@ const open = Effect.gen(function* () {
   const parent = yield* Scope.Scope;
   let scope = yield* Scope.fork(parent, "sequential");
   const opened = new Map<string, Sql>();
+
   const connect = Effect.fnUntraced(function* (part: string) {
-    const db = yield* Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(folder, `${part}.db`))),
-      (handle) => Effect.sync(() => handle.close()),
-    ).pipe(Scope.provide(scope));
-    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+    const db = yield* TestDatabase.make(path.join(folder, `${part}.db`)).pipe(Scope.provide(scope));
     opened.set(part, nodeSql(db));
   });
+
   const parts = ["ledger", "process", "recovery", "alarms"];
   yield* Effect.forEach(parts, connect, { discard: true, concurrency: 1 });
   const sqls = new Map<string, Sql>();
+
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -322,19 +361,25 @@ const open = Effect.gen(function* () {
 
       return current;
     };
+
     const adapter: Sql = {
       exec: (query, ...params) => handle().exec(query, ...params),
       transaction: (f) => handle().transaction(f),
       size: () => handle().size(),
     };
+
     sqls.set(part, adapter);
+
     return adapter;
   };
+
   const table = () => {
     const db = sql("alarms");
     db.exec("CREATE TABLE IF NOT EXISTS alarms (name TEXT PRIMARY KEY, at INTEGER NOT NULL)");
+
     return db;
   };
+
   return {
     sql,
     reopen: Effect.gen(function* () {
@@ -352,9 +397,10 @@ const open = Effect.gen(function* () {
           }
         }),
       saved: Effect.sync(() =>
-        table()
-          .exec("SELECT name, at FROM alarms ORDER BY at, name")
-          .map((row) => ({ name: String(row.name), at: Number(row.at) })),
+        Arr.map(table().exec("SELECT name, at FROM alarms ORDER BY at, name"), (row) => ({
+          name: String(row.name),
+          at: Number(row.at),
+        })),
       ),
       take: (alarm) =>
         Effect.sync(() => {

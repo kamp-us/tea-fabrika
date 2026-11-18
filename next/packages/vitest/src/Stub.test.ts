@@ -4,6 +4,7 @@
 // stub never hangs.
 // Plant: make the trap answer `then` with a function, and the "awaiting" law below goes red.
 import { expect, it } from "@effect/vitest";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import * as Stub from "./Stub.ts";
 
@@ -44,20 +45,23 @@ const ownAnswer =
     `own:${key}`;
 
 const ownMembers = (keys: ReadonlyArray<string>): Record<string, Method> =>
-  Object.fromEntries(keys.map((key) => [key, ownAnswer(key)]));
+  Rec.fromEntries(keys.map((key) => [key, ownAnswer(key)]));
 
 it("a name outside own answers rest(name) with that name and the call's arguments", () => {
   fc.assert(
     fc.property(Members, fc.array(fc.jsonValue(), { maxLength: 3 }), ({ keys, other }, args) => {
       const asked: Array<string> = [];
+
       const stub = Stub.make<Record<string, Method>>(
         (name) =>
           (...given) => {
             asked.push(name);
+
             return { name, given };
           },
         ownMembers(keys),
       );
+
       expect(stub[other]?.(...args)).toEqual({ name: other, given: args });
       expect(asked).toEqual([other]);
     }),
@@ -73,10 +77,13 @@ it("an own member answers as given, and rest is not asked for it", () => {
       ({ keys }, at) => {
         const key = keys[at % keys.length] ?? "";
         const asked: Array<string> = [];
+
         const stub = Stub.make<Record<string, Method>>((name) => {
           asked.push(name);
+
           return () => "rest";
         }, ownMembers(keys));
+
         expect(stub[key]?.()).toBe(`own:${key}`);
         expect(asked).toEqual([]);
       },

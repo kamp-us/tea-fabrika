@@ -6,6 +6,7 @@
 // `.oxlintrc.json` laws stay plain in next/apps/fabrika/src/exam/edge-config.test.ts, where pull request
 // 1420 (K11) put them so they run on every pull request. Plant: accept `Edge:` as `edge:` in the rule,
 // and the `edge-capital` case passes.
+import { Array as Arr, Record as Rec } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
@@ -14,7 +15,9 @@ const CODE = "fabrika(edge-comment)";
 const PRELUDE = ['import {Effect} from "effect";', "declare const p: Promise<number>, thing: Effect.Effect<number>;"];
 
 const PROMISE = "export const a = Effect.tryPromise(() => p);";
+
 const RUN = "export const a = Effect.runPromise(thing);";
+
 const BOTH = "export const a = Effect.runPromise(Effect.tryPromise(() => p));";
 
 /** Each planted file: its comment and the line under it, and whether this rule must refuse it. */
@@ -54,22 +57,22 @@ const CASES: Readonly<Record<string, readonly [string, string, boolean]>> = {
 };
 
 const at = (name: string) => `next/packages/libfabrika/src/data/${name}.ts`;
+
 const UNUSED = at("unused");
 
-describe("edge-comment", async () => {
-  const all = await plant({
-    ...Object.fromEntries(
-      Object.entries(CASES).map(([name, [comment, line]]) => [at(name), [...PRELUDE, comment, line].join("\n")]),
-    ),
-    [UNUSED]: [
-      ...PRELUDE,
-      "// oxlint-disable-next-line fabrika/no-promises -- edge: nothing fires below",
-      "export const a = 1;",
-    ].join("\n"),
-  });
+const all = await plant({
+  ...Rec.fromEntries(
+    Arr.map(Rec.toEntries(CASES), ([name, [comment, line]]) => [at(name), Arr.join([...PRELUDE, comment, line], "\n")]),
+  ),
+  [UNUSED]: Arr.join(
+    [...PRELUDE, "// oxlint-disable-next-line fabrika/no-promises -- edge: nothing fires below", "export const a = 1;"],
+    "\n",
+  ),
+});
 
+describe("edge-comment", () => {
   it("scenario: refuses each wrong edge comment, at the top of the file", () => {
-    const refused = Object.entries(CASES).filter(([, [, , no]]) => no);
+    const refused = Arr.filter(Rec.toEntries(CASES), ([, [, , no]]) => no);
     expect(refused).toHaveLength(8);
 
     for (const [name] of refused) {
@@ -78,7 +81,7 @@ describe("edge-comment", async () => {
   });
 
   it("scenario: passes a right one for each rule and for both, and leaves other comments alone", () => {
-    const passed = Object.entries(CASES).filter(([, [, , no]]) => !no);
+    const passed = Arr.filter(Rec.toEntries(CASES), ([, [, , no]]) => !no);
     expect(passed).toHaveLength(4);
 
     for (const [name] of passed) {
@@ -87,7 +90,7 @@ describe("edge-comment", async () => {
   });
 
   it("scenario: speaks alone: the line under each comment is silenced and no comment is unused", () => {
-    for (const name of Object.keys(CASES)) {
+    for (const name of Rec.keys(CASES)) {
       for (const code of [
         "fabrika(no-promises)",
         "fabrika(no-effect-run-outside-edge)",

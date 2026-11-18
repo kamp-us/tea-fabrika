@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e86-review",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-16T01:17:36-08:00",
+  "ended": "2026-11-16T01:29:00-08:00",
+  "parent": "2026-11-16-effect-e86-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of judgment slice E86 of the Effect-checker sweep, processEnv and processEnvInEffect in next/apps/fabrika's top src/ files, in next/: merge-ready, one finding row. Head 2c4e3b935 over base eeb8ecdbb. Recount with effect-tsgo diagnostics on the app's tsconfig, only the two checks at error: 105 hits in app:src at the base, 6 at the head (env.test-support.ts:19, :21, :64, sibling-objects.test-support.ts:58, local-instance.ts:36, :37), exactly the 6 the second tests row lists for the lock pull request; the 32 hits outside app:src are the same at both. All 20 files with a hit at the base changed; nothing outside app:src and field/runs changed. The new helpers restore exactly: a scratch property check (fast-check, seed 119120, 2000 runs) over five keys that start unset, empty, plain or odd, sets random values, lists random kept keys, lets the code write between, and closes the scope normally, by a die, or nested, put back every key and its presence each time. Three plants in scratch copies all went red: preserveEmptyStrings false, restore that leaves an unset key set, and kept keys not saved. The Config reads match process.env: a probe of Effect 4.1.3's fromEnv with preserveEmptyStrings true gave the same text for unset, empty, spaced, comma, newline values and for names with children under them (PATH and PATH_X, CI and CI_0), and the reads happen at the same moments as before. DO_NOT_TRACK set for good is safe: vitest 5 with isolate on (no project turns it off) runs each file in a fresh worker, nothing in next/ reads DO_NOT_TRACK expecting it unset, and three of the four files call localInstance, which already sets it for good (local-instance.ts:36); only sibling.laws really changes. The no-secret-env claim holds: a probe file with both checks at error flagged process.env.GITHUB_TOKEN, process.env[\"GITHUB_TOKEN\"] and process?.env.GITHUB_TOKEN, but not const { GITHUB_TOKEN } = process.env, nor the same inside Effect.sync, nor an alias env.GITHUB_TOKEN; ours refuses the destructured form, so 0573's headline keeps ours, and ours also runs on today's version, outside the checker. That leaves 0573's go list wrong for no-secret-env: the finding row. No assertion changed; loosening.sh's 18 hits are the new import lines, none a law. A new vi.stubEnv was not the existing tool to use: 0555 bans it in next/.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Read-only apart from this row. Ran: the recount at base and head; the helper property check and its three plants, outside the repo; the Config and checker probes, outside the repo; vitest one file at a time on Node 26.13.0: error-cause.test.ts, runtime.decode.test.ts and runtime-quotas.laws.test.ts (they import record-wire.test-support.ts) 2 passed each, and oxlint-plugins/effect-checks.test.ts 1 passed; oxlint on the 19 changed next/ files, the same findings at base and head; git merge-tree with origin/fabrikalfa/effect-e49: conflicts in 4 E86 files, all from the two branches' different bases (the TestDatabase import, decodeSync against decodeUnknownSync), while the env edits match line for line. Not run, need a box: all 16 changed .integration. files and the two changed test-support files' integration callers. Not run: pnpm typecheck (the tests step ran it on this head). Owed by the integrator pull request: a ## New names line for changeEnv, scopedEnv, keptEnv and noTracking, and an ## Existing tools line for env.test-support.ts (0587), since the sweep plan has no such section.",
+  "step": "review"
+}

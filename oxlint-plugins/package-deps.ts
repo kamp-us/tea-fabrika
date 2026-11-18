@@ -48,6 +48,7 @@ const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optional
 const manifestAt = (file: string): Manifest => {
   const json: unknown = JSON.parse(readFileSync(file, "utf8"));
   const m = record(json) ? json : {};
+
   return {
     name: typeof m.name === "string" ? m.name : "",
     exports: m.exports,
@@ -67,6 +68,7 @@ const packagesIn = (root: string): ReadonlyArray<Package> => {
 
   const found = GROUPS.flatMap((group) => {
     const folder = join(root, "next", group);
+
     return existsSync(folder)
       ? readdirSync(folder, { withFileTypes: true })
           .filter((entry) => entry.isDirectory() && existsSync(join(folder, entry.name, "package.json")))
@@ -77,7 +79,9 @@ const packagesIn = (root: string): ReadonlyArray<Package> => {
           }))
       : [];
   });
+
   trees.set(root, found);
+
   return found;
 };
 
@@ -86,6 +90,7 @@ const packageAt = (spec: string): { readonly name: string; readonly subpath: str
   const parts = spec.split("/");
   const size = spec.startsWith("@") ? 2 : 1;
   const rest = parts.slice(size);
+
   return { name: parts.slice(0, size).join("/"), subpath: rest.length === 0 ? "." : `./${rest.join("/")}` };
 };
 
@@ -93,6 +98,7 @@ const packageAt = (spec: string): { readonly name: string; readonly subpath: str
 const pointsAt = (from: string, spec: string): string => {
   const base = join(dirname(from), spec);
   const tries = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), base.replace(/\.js$/, ".ts")];
+
   return tries.find((path) => existsSync(path) && statSync(path).isFile()) ?? base;
 };
 
@@ -109,6 +115,7 @@ const exportMap = (pkg: Package): ReadonlyMap<string, string | undefined> => {
 
     return target(value["import"] ?? value["default"]);
   };
+
   const { exports } = pkg.manifest;
 
   if (!record(exports)) {
@@ -139,6 +146,7 @@ type Reached =
 export const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: string): Reached => {
   if (map.has(subpath) && !subpath.includes("*")) {
     const file = map.get(subpath);
+
     return file === undefined ? { _tag: "refused" } : { _tag: "file", file };
   }
 
@@ -159,6 +167,7 @@ export const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: 
 
   const file = map.get(best.key);
   const matched = subpath.slice((best.parts[0] ?? "").length, subpath.length - (best.parts[1] ?? "").length);
+
   return file === undefined ? { _tag: "refused" } : { _tag: "file", file: file.split("*").join(matched) };
 };
 
@@ -223,6 +232,7 @@ export const packageDeps: CreateRule = {
 
     const byName = new Map(packages.map((each) => [each.manifest.name, each]));
     const inApp = pkg.group === "apps" && relative(pkg.dir, full).split(sep).join("/") !== ELECTRON_MAIN;
+
     const check = (source: Node | null | undefined) => {
       const spec = written(source);
 

@@ -1,22 +1,36 @@
+import { join } from "node:path";
+import { it } from "@effect/vitest";
 // Ticket 907, slice A1. `fabrika/no-cause-squash` refuses every use of Effect's `Cause.squash` in
 // next/'s product code (docs/direction/effect-code-guidelines.md, E2). Law 2 runs generated files in
 // process through oxlint's RuleTester: an import spelling, some uses and some neighbors that must
 // pass, one per line. Law 3 is one real oxlint run with the repo's config, since only the config
 // says which paths are tests.
-import { join } from "node:path";
+import { Array as Arr, Effect, pipe, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { noCauseSquash } from "./no-cause-squash.ts";
 import { plant } from "./plant.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
+
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so the rule reads each path as oxlint gives it there.
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 
 const CODE = "fabrika(no-cause-squash)";
+
 const REFUSED = /turns a typed failure into one unknown value/;
 
 /**
@@ -97,11 +111,12 @@ it("law 2: reports exactly the uses of Effect's squash, through every import spe
     fc.property(generated, ({ spelling, alias, pieces }) => {
       const at = spelling(alias);
       const { module } = at;
+
       // With `squash` imported by name, the import is the one use, and a call of it adds no report.
       const lines: ReadonlyArray<readonly [string, boolean]> = [
         [at.header, module === null],
-        ...OTHERS.map((line) => [line, false] as const),
-        ...pieces.map(({ fires, form }, i): readonly [string, boolean] =>
+        ...Arr.map(OTHERS, (line) => [line, false] as const),
+        ...Arr.map(pieces, ({ fires, form }, i): readonly [string, boolean] =>
           fires
             ? module === null
               ? [`const u${i} = ${at.local}(x);`, false]
@@ -109,28 +124,50 @@ it("law 2: reports exactly the uses of Effect's squash, through every import spe
             : [NEIGHBORS[form]!(at, i), false],
         ),
       ];
+
       const filename = "next/packages/libfabrika/src/runtime/Case.ts";
-      const errors = lines.flatMap(([, fires], i) => (fires ? [{ line: i + 1, message: REFUSED }] : []));
+      const errors = Arr.flatMap(lines, ([, fires], i) => (fires ? [{ line: i + 1, message: REFUSED }] : []));
+
       // The same file with every firing line taken out.
-      const valid = lines.flatMap(([line, fires]) => (fires ? [] : [line])).join("\n");
+      const valid = pipe(
+        lines,
+        Arr.flatMap(([line, fires]) => (fires ? [] : [line])),
+        Arr.join("\n"),
+      );
 
       tester.run("no-cause-squash", noCauseSquash, {
         valid: [{ code: valid, filename }],
-        invalid: errors.length === 0 ? [] : [{ code: lines.map(([line]) => line).join("\n"), filename, errors }],
+        invalid:
+          errors.length === 0
+            ? []
+            : [
+                {
+                  code: pipe(
+                    lines,
+                    Arr.map(([line]) => line),
+                    Arr.join("\n"),
+                  ),
+                  filename,
+                  errors,
+                },
+              ],
       });
     }),
     { seed: 119120, numRuns: 100 },
   );
 });
 
-const BODY = [
-  'import { Cause } from "effect";',
-  "export const a = (cause: Cause.Cause<unknown>) => Cause.squash(cause);",
-  "// oxlint-disable-next-line fabrika/no-cause-squash -- edge: names whatever failed, for a span",
-  "export const b = (cause: Cause.Cause<unknown>) => Cause.squash(cause);",
-  "// oxlint-disable-next-line fabrika/no-cause-squash -- edge: this line squashes nothing",
-  "export const c = 1;",
-].join("\n");
+const BODY = Arr.join(
+  [
+    'import { Cause } from "effect";',
+    "export const a = (cause: Cause.Cause<unknown>) => Cause.squash(cause);",
+    "// oxlint-disable-next-line fabrika/no-cause-squash -- edge: names whatever failed, for a span",
+    "export const b = (cause: Cause.Cause<unknown>) => Cause.squash(cause);",
+    "// oxlint-disable-next-line fabrika/no-cause-squash -- edge: this line squashes nothing",
+    "export const c = 1;",
+  ],
+  "\n",
+);
 
 const HELD = [
   "next/packages/libfabrika/src/runtime/Plant.ts",
@@ -150,22 +187,26 @@ const LEFT_OUT = [
   "packages/fabrika/src/plant.ts",
 ];
 
-it("scenario: one real lint run per path kind, since only the real config holds which paths are tests", async () => {
-  const linted = await plant(Object.fromEntries([...HELD, ...LEFT_OUT].map((path) => [path, BODY])));
+it.live("scenario: one real lint run per path kind, since only the real config holds which paths are tests", () =>
+  Effect.gen(function* () {
+    const linted = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([...HELD, ...LEFT_OUT], (path) => [path, BODY]))),
+    );
 
-  // Product code: the bare call fires, and the call under its edge comment passes.
-  for (const path of HELD) {
-    expect([path, linted(CODE, path)]).toEqual([path, [2]]);
-  }
+    // Product code: the bare call fires, and the call under its edge comment passes.
+    for (const path of HELD) {
+      expect([path, linted(CODE, path)]).toEqual([path, [2]]);
+    }
 
-  // An edge comment over a line with no squash is an unused directive, which oxlint reports with no
-  // rule code (`reportUnusedDisableDirectives`).
-  for (const path of HELD) {
-    expect([path, linted("", path)]).toEqual([path, [5]]);
-  }
+    // An edge comment over a line with no squash is an unused directive, which oxlint reports with no
+    // rule code (`reportUnusedDisableDirectives`).
+    for (const path of HELD) {
+      expect([path, linted("", path)]).toEqual([path, [5]]);
+    }
 
-  // Tests, shared suites, test support and today's version: nothing fires.
-  for (const path of LEFT_OUT) {
-    expect([path, linted(CODE, path)]).toEqual([path, []]);
-  }
-});
+    // Tests, shared suites, test support and today's version: nothing fires.
+    for (const path of LEFT_OUT) {
+      expect([path, linted(CODE, path)]).toEqual([path, []]);
+    }
+  }),
+);

@@ -12,7 +12,9 @@ import { describe, expect, it } from "vitest";
 import { nodeKindProblems } from "./node-kinds.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const KIND = "alchemy-durable-object-export";
+
 const HOME = "next/apps/fabrika/src/brain.ts";
 
 /** Plants `files` in a fresh folder, answers the command's problems there, and removes the folder. */
@@ -55,6 +57,7 @@ describe("node-kinds.json (L6)", () => {
           seen.add(shape);
           const exported = shape === "exported only" || shape === "both";
           const bound = shape === "bound only" || shape === "both";
+
           const found = problemsIn({
             "package.json": "{}",
             "node-kinds.json": kinds("src/brain.ts", ["RecordPart", name]),
@@ -68,6 +71,7 @@ describe("node-kinds.json (L6)", () => {
             // A test file's string binds nothing, as code-graph classes tests.
             "next/apps/fabrika/src/brain.test.ts": `bind("${name}");`,
           });
+
           expect(found).toEqual([
             ...(exported ? [] : [`${KIND}: ${name} is not exported by ${HOME}`]),
             ...(bound ? [] : [`${KIND}: ${name} is bound by no string in next/ outside ${HOME}`]),

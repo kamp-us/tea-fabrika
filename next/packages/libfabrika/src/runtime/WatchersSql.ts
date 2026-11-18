@@ -1,11 +1,10 @@
 /**
  * The `Watchers` layer that keeps view membership in the process's own SQL: one row per registered
  * name in the `process_watchers` table, read and written through the watchers machine.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import { Clock, Effect, Layer, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import type { Sql } from "../Sql.ts";
 import type { Update } from "./Entry.ts";
 import { Model, watchers } from "./internal/watchers.ts";
@@ -13,7 +12,9 @@ import { WatcherManager } from "./WatcherManager.ts";
 import { BadRow, Storage, Watchers, WatchersError } from "./Watchers.ts";
 
 const Saved = Schema.Struct({ v: Schema.Literal(1), build: Schema.String, name: Schema.String, state: Model });
+
 const decode = Schema.decodeUnknownResult(Schema.fromJsonString(Saved));
+
 const encode = Schema.encodeSync(Schema.fromJsonString(Saved));
 
 const stored = <A>(f: () => A) =>
@@ -54,7 +55,6 @@ const load = (sql: Sql, name: string) => {
  * before the next delivery starts, so no transaction stays open across a delivery. Each span and
  * saved row reads `descriptor.build` when it is written, so it names the code the process runs then.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (
@@ -65,6 +65,7 @@ export const layer = (
     Watchers,
     Effect.gen(function* () {
       const manager = yield* WatcherManager;
+
       const step = (
         msg:
           | {
@@ -80,20 +81,29 @@ export const layer = (
           descriptor.name,
           encode({ v: 1, build: descriptor.build, name: descriptor.name, state: next }),
         );
-        const held = new Set(next._tag === "empty" ? [] : next.clients.map((c) => c.client));
-        return before._tag === "watching" ? before.clients.filter((c) => !held.has(c.client)).map((c) => c.client) : [];
+        const held = new Set(next._tag === "empty" ? [] : Arr.map(next.clients, (c) => c.client));
+
+        return before._tag === "watching"
+          ? Arr.map(
+              Arr.filter(before.clients, (c) => !held.has(c.client)),
+              (c) => c.client,
+            )
+          : [];
       };
+
       // Read at each call: `build` is the code the process runs now, which a swap or an open moves.
       const attributes = () => ({
         name: descriptor.name,
         build: descriptor.build,
         process: descriptor.id ?? descriptor.name,
       });
+
       const end = Effect.fn("watchers.end")(function* (client: string, position: number) {
         const at = yield* Clock.currentTimeMillis;
         yield* stored(() => sql.transaction(() => step({ type: "end", client })));
         yield* Effect.annotateCurrentSpan({ ...attributes(), client, position, at, reason: "gone" });
       });
+
       const deliver = Effect.fnUntraced(function* (client: string, update: Update) {
         return yield* manager.publish(client, update).pipe(
           Effect.as("sent" as const),
@@ -104,12 +114,15 @@ export const layer = (
           }),
         );
       });
+
       return {
         open: Effect.fn("watchers.open")(function* (client: string, whole: Extract<Update, { type: "whole" }>) {
           const at = yield* Clock.currentTimeMillis;
+
           const evicted = yield* stored(() =>
             sql.transaction(() => step({ type: "open", watch: { client, at, position: whole.rev } })),
           );
+
           const outcome = yield* deliver(client, whole);
           yield* Effect.annotateCurrentSpan({
             ...attributes(),

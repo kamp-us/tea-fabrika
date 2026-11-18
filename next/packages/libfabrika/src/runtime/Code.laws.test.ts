@@ -21,13 +21,17 @@
 // or a `loaded` for an entry the ledger holds. The oracle is the walk's own selection, never the reducer.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import type { ProgramName } from "../packs/ProgramName.ts";
 import * as Code from "./Code.ts";
 
 const SEED = 119120;
+
 const RUNS = 300;
 
 type Model = typeof Code.Selected.Type;
@@ -52,13 +56,18 @@ type Loaded = {
 };
 
 type From = "watch" | "deploy" | "boot" | "restart" | "open";
+
 type Selection = { readonly hash: string; readonly load: string };
+
 expectTypeOf<Omit<(typeof Code.CodeEvent.cases)["code.loaded"]["Type"], "_tag">>().toEqualTypeOf<Loaded>();
+
 expectTypeOf<typeof Code.From.Type>().toEqualTypeOf<From>();
+
 expectTypeOf<Model[string]>().toEqualTypeOf<Selection>();
 
 // L20 (type): both code facts take a program's qualified name; `code.failed`'s reason is closed.
 expectTypeOf<(typeof Code.CodeEvent.cases)["code.loaded"]["Type"]["program"]>().toEqualTypeOf<ProgramName>();
+
 expectTypeOf<(typeof Code.CodeEvent.cases)["code.failed"]["Type"]["program"]>().toEqualTypeOf<ProgramName>();
 
 expectTypeOf<(typeof Code.CodeEvent.cases)["code.failed"]["Type"]["reason"]>().toEqualTypeOf<
@@ -68,7 +77,10 @@ expectTypeOf<(typeof Code.CodeEvent.cases)["code.failed"]["Type"]["reason"]>().t
 expectTypeOf<(typeof Code.CodeEvent.Type)["_tag"]>().toEqualTypeOf<"code.loaded" | "code.failed">();
 
 const step = (model: Model, msg: Msg): readonly [Model, ReadonlyArray<Cmd>] => {
+  // SAFETY: each Msg the walk sends is one of the code cell's own `checked` or `loaded` messages.
   const [next, cmds] = applyCell(Code.code, model, msg as never);
+
+  // SAFETY: every Cmd the code cell returns is a record with a string `type`, which is all Cmd here says.
   return [next, cmds as ReadonlyArray<Cmd>];
 };
 
@@ -78,7 +90,9 @@ const Stored = Schema.fromJsonString(Code.Selected);
 const roundTrip = (model: Model): Model => Schema.decodeUnknownSync(Stored)(Schema.encodeSync(Stored)(model));
 
 const hashes = fc.uint8Array({ minLength: 32, maxLength: 32 }).map((b) => Buffer.from(b).toString("hex"));
+
 const names = fc.stringMatching(/^[a-z_][a-z0-9-]{0,7}\/[a-z_][a-z0-9-]{0,7}$/);
+
 const froms = fc.constantFrom<From>("watch", "deploy", "boot", "restart", "open");
 
 const Cell = fc.record({
@@ -87,7 +101,9 @@ const Cell = fc.record({
   hash: hashes,
   from: froms,
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
 const tapes = fc.tuple(fc.uniqueArray(names, { minLength: 1, maxLength: 4 }), fc.array(Cell, { maxLength: 60 }));
 
 /** What the walk knows from its own moves only. */
@@ -121,9 +137,11 @@ const nth = <A>(items: ReadonlyArray<A>, i: number): A => {
 const moves = (w: World, programs: ReadonlyArray<string>, cell: Cell, n: number): ReadonlyArray<Move> => {
   const program = nth(programs, cell.pick);
   const fresh = `install_${n}`;
+
   const options: Array<Move> = [
     { name: "checked_new", msg: { type: "checked", id: fresh, program, hash: cell.hash, from: cell.from } },
   ];
+
   const earlier = w.seen.get(program) ?? [];
 
   if (earlier.length > 0) {
@@ -195,15 +213,16 @@ const account = (move: Move, cmds: ReadonlyArray<Cmd>, w: World): void => {
 
   if (move.msg.type === "loaded") {
     w.selected.set(program, { hash, load: id });
+
     return;
   }
 
-  if (!w.ids.some((i) => i.id === id)) {
+  if (!Arr.some(w.ids, (i) => i.id === id)) {
     w.ids.push({ id, program, hash });
   }
 
   for (const cmd of cmds) {
-    if (cmd.type === "append" && !w.ledger.some((e) => e.id === id && e.hash === hash)) {
+    if (cmd.type === "append" && !Arr.some(w.ledger, (e) => e.id === id && e.hash === hash)) {
       w.ledger.push({ id, program, hash });
     }
   }
@@ -229,10 +248,11 @@ describe("P15 slice 1: the brain's code per program", () => {
               // p72: the hash already selected is nothing a reader sees.
               expect(cmds, "checked with the selected hash emits nothing").toEqual([]);
               seen.add("same");
+
               return;
             }
 
-            expect(cmds.map((c) => c.type)).toEqual(["append"]);
+            expect(Arr.map(cmds, (c) => c.type)).toEqual(["append"]);
             const [append] = cmds;
             const event = Schema.decodeUnknownSync(Code.CodeEvent)(append?.event);
             expect(event).toEqual(
@@ -256,6 +276,7 @@ describe("P15 slice 1: the brain's code per program", () => {
 
             w.appendIds.set(id, appendId);
             seen.add(current === undefined ? "first" : "was");
+
             return;
           }
 
@@ -270,7 +291,7 @@ describe("P15 slice 1: the brain's code per program", () => {
         }
 
         // The machine's model is the walk's selection, whole.
-        expect(w.model).toEqual(Object.fromEntries(w.selected));
+        expect(w.model).toEqual(Rec.fromEntries(w.selected));
       }),
       { seed: SEED, numRuns: RUNS },
     );

@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e52-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:36:00-08:00",
+  "ended": "2026-11-15T20:45:50-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E52 of the Effect-checker sweep, in next/: the check multipleEffectProvide in lib:node, app:e2e, lib:access, lib:telemetry, lib:top and lib:processes. Counted with only this check at error through --lspconfig: 25 hits in the row's folders, all in exam paths (test files and test support), so no product file has a hit and the slice needs no build step. None is in pull request 1366's files. All 25 were fixed by a scratchpad codemod, not by the checker's quick fix: the quick fix writes Layer.mergeAll(A, B), which builds both layers side by side, so the inner layer no longer sees the outer one. The codemod writes Effect.provide(A1.pipe(Layer.provideMerge(A2), ...)), the exact form of the chain: the later layers are built first, the first layer sees all of them, and all of their services reach the effect. Effect's provide forks the outer memo map into an inner build, so a chain and one provideMerge build share layers the same way. Five files gained a Layer import. The recount shows 0 hits in the row's folders; the 21 left are in app:src, slice E94, after 1366. No law is new or changed and no lock line is added, as the owner's ruling for judgment slices says. Lint, the ratchet and one typecheck passed, and every narrow test of a touched file ran green except the two visual files, which this box never runs.",
+  "plants": [
+    {
+      "law": "T518 shared Id generator (next/packages/libfabrika/src/Id.test.ts): the generator continues the saved state",
+      "plant": "the checker's quick fix in place of the merge: Layer.mergeAll(Id.Generator.layer, TestClock.layer())",
+      "result": "green"
+    },
+    {
+      "law": "p101, measurements in two levels (next/packages/libfabrika/src/telemetry/internal/measurements.integration.test.ts)",
+      "plant": "the checker's quick fix in place of the merge: Layer.mergeAll(world(sql), TestClock.layer())",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Both plants were run once and restored by copy. They stayed green: these laws read the clock at use time, so no law here tells the mergeAll form from the chain. The order is kept by construction, provideMerge being the chain's exact form, not proven by a law. The checker's quick fix was tried on two files and reverted before the codemod ran; a temporary error level in tsconfig.base.json for that try was restored by copy.",
+  "step": "tests"
+}

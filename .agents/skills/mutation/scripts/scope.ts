@@ -24,12 +24,13 @@
  * - A test of an in-scope file is in, and a test of an out-of-scope file is out.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Stdio, Stream } from "effect";
+import { Array as Arr, String as Str, pipe, Console, Effect, Option, Stdio, Stream } from "effect";
 
 const LEAD = ".agents/skills/lead/scripts/";
 
 /** The quest code's own files and tests (0089's table); the flow runner is a folder. */
-const QUEST = ["chain", "drive"].flatMap((stem) => [".ts", ".test.ts"].map((end) => `${LEAD}${stem}${end}`));
+const QUEST = Arr.flatMap(["chain", "drive"], (stem) => Arr.map([".ts", ".test.ts"], (end) => `${LEAD}${stem}${end}`));
+
 const FLOW = `${LEAD}flow/`;
 
 /**
@@ -37,29 +38,32 @@ const FLOW = `${LEAD}flow/`;
  * parsers/create-parser.js). A changed `.cjs` or `.mjs` file is sampled like a `.ts` one (ticket 655).
  */
 const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"] as const;
+
 const DECLARATIONS = [".d.ts", ".d.mts", ".d.cts"] as const;
+
 const TESTS = [".test.ts", ".test.tsx"] as const;
 
 /** The same product rule as a git pathspec, for the sample script's diff: less tests and type-only files. */
 export const PRODUCT = [
-  ...EXTENSIONS.map((extension) => `*${extension}`),
+  ...Arr.map(EXTENSIONS, (extension) => `*${extension}`),
   ":!*.test.*",
-  ...DECLARATIONS.map((extension) => `:!*${extension}`),
+  ...Arr.map(DECLARATIONS, (extension) => `:!*${extension}`),
 ] as const;
 
 /** A file that holds mutants: the pathspec above, read as git reads it (its `*` crosses `/`). */
 const product = (path: string) =>
-  EXTENSIONS.some((extension) => path.endsWith(extension)) &&
-  !path.includes(".test.") &&
-  !DECLARATIONS.some((extension) => path.endsWith(extension));
+  Arr.some(EXTENSIONS, (extension) => pipe(path, Str.endsWith(extension))) &&
+  !pipe(path, Str.includes(".test.")) &&
+  !Arr.some(DECLARATIONS, (extension) => pipe(path, Str.endsWith(extension)));
 
-const test = (path: string) => TESTS.some((extension) => path.endsWith(extension));
+const test = (path: string) => Arr.some(TESTS, (extension) => pipe(path, Str.endsWith(extension)));
 
 /** Whether the run may mutate this path, or run it as a test: all but lead tooling, quest code kept. */
-export const inScope = (path: string) => !path.startsWith(".agents/") || QUEST.includes(path) || path.startsWith(FLOW);
+export const inScope = (path: string) =>
+  !pipe(path, Str.startsWith(".agents/")) || QUEST.includes(path) || pipe(path, Str.startsWith(FLOW));
 
 /** The changed paths in scope, in their order. */
-export const pick = (paths: ReadonlyArray<string>) => paths.filter(inScope);
+export const pick = (paths: ReadonlyArray<string>) => Arr.filter(paths, inScope);
 
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -69,10 +73,12 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  * exists at head is the workflow's check.
  */
 export const related = (changed: ReadonlyArray<string>) => {
-  const tests = pick(changed).flatMap((path) => {
+  const tests = Arr.flatMap(pick(changed), (path) => {
     if (product(path)) {
-      const stem = path.slice(0, path.lastIndexOf("."));
-      return TESTS.map((extension) => `${stem}${extension}`);
+      const dot = Option.getOrElse(pipe(path, Str.lastIndexOf(".")), () => -1);
+      const stem = pipe(path, Str.slice(0, dot));
+
+      return Arr.map(TESTS, (extension) => `${stem}${extension}`);
     }
 
     return test(path) ? [path] : [];
@@ -86,10 +92,10 @@ if (import.meta.main) {
     Effect.gen(function* () {
       const stdio = yield* Stdio.Stdio;
       const text = yield* stdio.stdin.pipe(Stream.decodeText(), Stream.mkString);
-      const tests = related(text.split("\n").filter((line) => line !== ""));
+      const tests = related(Arr.filter(Str.split(text, "\n"), (line) => line !== ""));
 
       if (tests.length > 0) {
-        yield* Console.log(tests.join("\n"));
+        yield* Console.log(Arr.join(tests, "\n"));
       }
     }).pipe(Effect.provide(NodeServices.layer)),
   );

@@ -8,12 +8,19 @@
 // Generator contract: each run boots one Project and walks it. Every move reads the watches the walk
 // holds: a new watch for a session, a repeat of a held one, the one exit of the watched process,
 // or the close of a session that holds watches or of one that holds none.
-import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -31,19 +38,26 @@ vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {}, DurableObject
 const SEED = 119120;
 
 /** A Promise the law awaited rejected: fast-check's failed assertion. */
-class Rejected extends Schema.TaggedError<Rejected>()("Rejected", { cause: Schema.Defect() }) {}
+class Rejected extends Schema.TaggedError<Rejected, { readonly brand: unique symbol }>()("Rejected", {
+  cause: Schema.Defect(),
+}) {}
 
 const rejected = (cause: unknown) => new Rejected({ cause });
+
 const PROGRAM = "fabrika/counter";
+
 const BRAIN_BUILD = "brain-build-test";
+
 const CLIENTS = ["window-a", "window-b", "window-c"];
+
 const REFS = ["watch-a", "watch-b", "watch-c"];
+
 /** A session id is a process id. A walk's new sessions take `PIDS` from the front, and the
  * sessions that never held a watch take them from here on, so the two never meet. */
 const NONE = 20;
 
-const START = StartsTest.fixture(
-  {
+const START = await Effect.runPromise(
+  StartsTest.fixture({
     name: "project-test",
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
     // A public key line made from 32 fixed bytes: no private key exists for it.
@@ -51,8 +65,7 @@ const START = StartsTest.fixture(
     window: null,
     port: 18787,
     build: BRAIN_BUILD,
-  },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  }),
 );
 
 /** A watch's fact on the processes stream, as the law reads it back. */
@@ -78,6 +91,7 @@ const declaration = () => {
     init: (kept) => [kept ?? { count: 0 }, []],
     update: { inc: (s) => [{ count: s.count + 1 }, []] },
   });
+
   const program = Program.make({
     name: PROGRAM,
     machine,
@@ -89,6 +103,7 @@ const declaration = () => {
     writes: {},
     wake: () => null,
   });
+
   return ProgramLoader.use((loader) => loader.load(PROGRAM)).pipe(
     Effect.provide(ProgramLoader.layer<never>({ [PROGRAM]: program }, {})),
     Effect.map((loaded) => loaded.declaration),
@@ -107,12 +122,17 @@ const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
 
 /** One booted Project over one SQLite database, with the door's `monitor` kept for the law. */
 const instance = Effect.fnUntraced(function* () {
+  const services = yield* Effect.context<never>();
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
   );
+
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
+
+  // SAFETY: the Project reads its name, SQL, key-value storage and tail exports, which this fixture gives.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
@@ -131,10 +151,13 @@ const instance = Effect.fnUntraced(function* () {
     },
     exports: { IsolateTail: () => ({ fetch: () => Promise.resolve(new Response()) }) },
   } as unknown as DurableObjectState;
+
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
+
+  // SAFETY: the leave composition calls only these namespace methods: configure, descriptor, msg, swap, ring and notify.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify(START),
+    INSTANCE: Formatter.formatJson(START),
     PROJECT: { getByName: () => ({}) },
     PROCESS: {
       getByName: (key: string) => ({
@@ -143,6 +166,7 @@ const instance = Effect.fnUntraced(function* () {
         },
         descriptor: async (pid?: string) => {
           const d = descriptors.get(key)!;
+
           return { ...d, id: pid ?? d.id };
         },
         msg: async () => ({ _tag: "accepted", rev: 1, pos: 1 }),
@@ -155,12 +179,13 @@ const instance = Effect.fnUntraced(function* () {
     LOADER: {
       get: () => ({
         getEntrypoint: () => ({
-          describe: () => Effect.runPromise(declaration()),
+          describe: () => Effect.runPromiseWith(services)(declaration()),
         }),
       }),
     },
   } as unknown as Env;
-  const door = Object.fromEntries(
+
+  const door = Rec.fromEntries(
     [
       "connect",
       "challenge",
@@ -179,17 +204,22 @@ const instance = Effect.fnUntraced(function* () {
       () => (method === "retire" ? Effect.void : Effect.die(`the door is not under test: ${method}`)),
     ]),
   );
+
   let monitor: ProjectDoorOptions["monitor"] | undefined;
+
   const context = yield* Layer.build(
     projectLayer(ctx, env, {
       programs: { [PROGRAM]: { hash: yield* hash(SOURCE), source: SOURCE } },
       bootstrap: [{ name: "counter:1", id: "counter:1", program: PROGRAM }],
       door: (options) => {
         monitor = options.monitor;
+
+        // SAFETY: `door` above holds each door method the Project calls, built from a list of names, which loses its type.
         return Effect.succeed(door as never);
       },
     }),
   );
+
   // The build forks its configure calls (ticket 762): wait for the Project's record of them.
   yield* Effect.suspend(() =>
     sql.exec("SELECT process FROM dev_descriptors WHERE pending>0").length === 0
@@ -197,6 +227,7 @@ const instance = Effect.fnUntraced(function* () {
       : Effect.fail("a start is not yet delivered to its object"),
   ).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("5 seconds"), Effect.orDie);
   const project = Context.get(context, ProjectService);
+
   return {
     project,
     monitor: monitor!,
@@ -251,7 +282,7 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
                         const to = Recipient.cases.client.make({ client, session });
                         expect(Exit.isSuccess(yield* Effect.exit(i.monitor(ref, pid, to, origin)))).toBe(true);
                         const watches = held.get(session) ?? new Map<string, "live" | "fired">();
-                        const key = JSON.stringify([client, ref]);
+                        const key = yield* Schema.encodeEffect(Key)([client, ref]);
                         watches.set(key, watches.get(key) ?? (running ? "live" : "fired"));
                         held.set(session, watches);
                       } else if (move === 5) {
@@ -269,9 +300,11 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
                       } else {
                         // A close: a session that holds watches, or one that never held any.
                         const session = move < 10 ? holders[g(fc.nat, { max: holders.length - 1 })]! : PIDS[NONE + n]!;
+
                         const ending = [...(held.get(session) ?? [])]
                           .filter(([, state]) => state === "live")
                           .map(([key]) => Schema.decodeUnknownSync(Key)(key));
+
                         const before = i.facts("demonitored").length;
                         const client = CLIENTS[g(fc.nat, { max: CLIENTS.length - 1 })]!;
                         const exit = yield* closed(i.project.leave(client, session));
@@ -289,12 +322,15 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
                     const ended = new Set(
                       i.facts("demonitored").map((f) => JSON.stringify([f.to.client, f.to.session, f.ref])),
                     );
+
                     const kept = [...held].flatMap(([session, watches]) =>
                       [...watches.keys()].map((key) => {
                         const [client, ref] = Schema.decodeUnknownSync(Key)(key);
+
                         return JSON.stringify([client, session, ref]);
                       }),
                     );
+
                     expect(kept.filter((key) => ended.has(key))).toEqual([]);
                   }),
                 ),

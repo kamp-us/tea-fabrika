@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e32-review1",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-15T21:44:19-08:00",
+  "ended": "2026-11-15T21:54:19-08:00",
+  "parent": "2026-11-15-t1075-e32-tests1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "pipeline, tracker ticket 1075, review: send to tests. Review of E32 (asyncFunction, judgment slice) at 6b1bbfc, in next/ tests and tooling tests: the 246 fixes made are correct, but most of the 436 hits left as owner calls are decided fixes the tests step skipped, and the one folder the slice brought to zero was not locked. Recount with the checker (asyncFunction at error, 9 projects, joined by file and offset): 682 in the row's folders at the base f7169afe, 436 at the head, so the field row's numbers hold. Fixes: 220 vitest callbacks now return fast-check's Promise and 22 tests became it.live with Effect.gen; per-file counts of expect calls, timeouts and comment lines are equal before and after, no ignore or disable line was added, no file of pull request 1366 is touched, and three plants (changes.test.ts, watcher.test.ts, counter program.laws.test.ts) turned the converted laws red. Faults: (1) 117 async it bodies in folders where fabrika/no-effect-promise blocks are no clash, since that rule's own fix, Effect.tryPromise({ try, catch }) with a tagged test error, already runs in tests there (client/WindowStart.laws.test.ts:263, transport/Hello.test.ts:59), and some wrap an Effect that can run directly (settings/Files.test.ts:37 validate, called at :283, :294, :305); (2) the asyncProperty predicates are fixed by the move 0579 already decided (it.prop or it.effect.prop), whose order is the lead's call, not the owner's, and the plan says a slice splits by folder, never by leaving hits; (3) the async describe callbacks (oxlint-plugins/modules.test.ts:45 and 6 more there, 9 in app src/exam, 3 more in oxlint-plugins) take a top-level await or move into the tests; (4) lib:processes went from 1 hit to 0 and has no lock entry; (5) the field row gives no file:line for the hits it left, as step-rules ask.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Read-only apart from this row. Ran: effect-tsgo diagnostics on base and head for libfabrika, the app, oxlint-plugins, .github/ci, .agents, counter, checklist, tezgah and tuval; pnpm lint (exit 0, NODE_OPTIONS heap 6144); pnpm typecheck (exit 0); vitest one file at a time on 8 changed files, all green (watcher, counter program.laws, changes, law-shape, Sshsig, Snapshot, exam deps.integration, GatewayRevocation.integration); 3 plants in a scratch worktree, then undone. loosening.sh: 61 unrecognized-change hits and 6 removed-expect hits, all re-indents into Effect.gen or return-the-Promise forms; per-file expect counts are unchanged, so no law is loosened. git merge-tree with origin/main bcad0080: no conflict. Not run: the 6 visual files and launchd test, which need Electron or a Mac.",
+  "step": "review"
+}

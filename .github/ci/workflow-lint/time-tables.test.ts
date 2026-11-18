@@ -23,10 +23,12 @@ const plants: Plant[] = [
   // TT1 and TT2: every test leg writes its time table and uploads its timings file. Each plant was
   // also run once on workflow-lint.ts with its rule dropped, and that turned it red.
   ...(["next"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+    // SAFETY: next's steps in `valid` are `NextStep` values, which carry the fields `Timed` reads.
     const steps = (w: Workflow) => stepsOf(w, job) as Timed[];
     const named = (w: Workflow, name: string) => steps(w).find((s) => s["name"] === name)!;
     const table = (w: Workflow) => named(w, "time table");
     const upload = (w: Workflow) => named(w, "timings");
+
     return [
       [`TT1: ${job} drops its time table`, (w) => void steps(w).splice(place(w, job, "time table"), 1)],
       [`TT1: ${job}'s time table skips a red leg`, (w) => (table(w).if = "success()")],
@@ -112,6 +114,7 @@ it("scenario: Q1 and TT2: a timings upload named as a tested-tree record is refu
   // `matched` (changes.mjs) trusts an artifact by its `tested-<tree>-<base>` name from a green run,
   // so a timings upload under that name could stand in for a record.
   const workflow: Parsed = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
+  // SAFETY: check.yaml's next job has a timings upload step, which takes a `with` map of inputs.
   (step(workflow, "next", "timings")["with"] as Record<string, unknown>)["name"] = `tested-\${{ github.sha }}-base`;
   expect(lint(JSON.stringify(workflow))).toEqual([
     "check.yaml: Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings",

@@ -1,7 +1,12 @@
 // P12, next/. Corrupt saved rows at each synchronous decoder in the changed record files.
 import { DatabaseSync } from "node:sqlite";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer } from "effect";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -38,24 +43,26 @@ const typed = (exit: Exit.Exit<unknown, unknown>) => {
 };
 
 for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as const) {
-  it(`record ${reader} decoder refuses malformed disk rows with a typed failure`, async () => {
-    await fc.assert(
+  it(`record ${reader} decoder refuses malformed disk rows with a typed failure`, () =>
+    fc.assert(
       fc.asyncProperty(fc.string(), async (text) => {
         const db = new DatabaseSync(":memory:"),
           real = nodeSql(db);
+
         let corrupt = false;
+
         // SQLite's rowid is always an integer. Plant a bad adapter answer for its seq decoder.
         const sql: Sql = {
           ...real,
           exec: (query, ...args) => {
             const rows = real.exec(query, ...args);
 
-            if (corrupt && reader === "kept" && query.includes("SELECT * FROM content")) {
-              return rows.map((r) => ({ ...r, message: text.length }));
+            if (corrupt && reader === "kept" && Str.includes("SELECT * FROM content")(query)) {
+              return Arr.map(rows, (r) => ({ ...r, message: text.length }));
             }
 
-            return corrupt && reader === "seq" && query.includes("rowid AS seq")
-              ? rows.map((r) => ({ ...r, seq: text }))
+            return corrupt && reader === "seq" && Str.includes("rowid AS seq")(query)
+              ? Arr.map(rows, (r) => ({ ...r, seq: text }))
               : rows;
           },
         };
@@ -95,13 +102,12 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
+    ));
 }
 
 for (const reader of ["chain", "row", "part"] as const) {
-  it(`sink ${reader} decoder refuses malformed saved rows and keeps the unsent span`, async () => {
-    await fc.assert(
+  it(`sink ${reader} decoder refuses malformed saved rows and keeps the unsent span`, () =>
+    fc.assert(
       fc.asyncProperty(fc.string(), async (text) => {
         const db = new DatabaseSync(":memory:"),
           sql = nodeSql(db);
@@ -134,6 +140,5 @@ for (const reader of ["chain", "row", "part"] as const) {
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
+    ));
 }

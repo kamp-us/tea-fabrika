@@ -28,7 +28,9 @@ when to keep going and how to write for a reader who saw none of the work.
 3. **Check what is settled** before you call anything open: `.decisions/`, `docs/direction/`,
    `experiments/`, `docs/plan/`, and the settled-search tool the brief names, if any. Run
    `node .agents/skills/lead/scripts/records.ts find "<words>"` for each open question, in two or
-   three wordings, and read every hit.
+   three wordings, and read every hit. In a read-only sandbox, use `find --read-only "<words>"`
+   over the `origin/main` the lead fetched before the step. It may lack newer records; an absent
+   `origin/main` still fails.
 4. **Lead with the known way.** How the makers do it (Elm and Erlang/OTP first, then Effect and the
    industry). Cite what you read; mark what you did not fetch. A web request carries no detail of
    this project.

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-b1-crash-budget-does-not-bite",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/RunnerLifecycleTest.ts",
+    "line": 472
+  },
+  "says": "In next/, B1 budgets a crash call at 4 steps of 3 lifecycle reads (12), while a crash reads 4 at the head and 9 when every ended and living check reads fresh, so a crash call that went back to reading the lifecycle at every check stays inside its budget.",
+  "proof": "On a scratch copy, Runner.ts's ended and living changed to read base.status every time and B1's assertion replaced by a print: crash printed '9 of 12' (4 runs), restart '14 of 12', inc '11 of 3'; at the head, crash printed '4 of 12'.",
+  "cost": "A regression to per-check reads on the crash path is caught only because other moves in the same walk also regress; a change confined to recovery would pass B1.",
+  "head": "fc9d4697459463c17efaa266ecc379bb7f2ec58e",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1591"
+}

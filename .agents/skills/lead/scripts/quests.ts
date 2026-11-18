@@ -52,7 +52,20 @@
 // sweep log, and the status page read the quest's state file and a clock, which is ticket 685.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Option, Path, Predicate, Schema } from "effect";
+import {
+  Array as Arr,
+  pipe,
+  String as Str,
+  Console,
+  DateTime,
+  Effect,
+  FileSystem,
+  Option,
+  Order,
+  Path,
+  Predicate,
+  Schema,
+} from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import * as Beat from "./flow/Beat.ts";
 import { paths } from "./gcloop.ts";
@@ -74,6 +87,7 @@ export const Record = Schema.Struct({
   steps: Schema.Array(Step),
   beat: Schema.optionalKey(Beat.Beat),
 });
+
 export type Record = typeof Record.Type;
 
 const RecordText = Schema.fromJsonString(Record);
@@ -84,6 +98,7 @@ export const Found = Schema.TaggedUnion({
   unreadable: {},
   read: { record: Record },
 });
+
 export type Found = typeof Found.Type;
 
 /** How a quest's last process ended: chain.ts's last line, and when the out file was last written. */
@@ -92,6 +107,7 @@ export const End = Schema.Struct({
   reason: Schema.String,
   at: Schema.NullOr(Schema.String),
 });
+
 export type End = typeof End.Type;
 
 const EndLine = Schema.fromJsonString(
@@ -123,17 +139,18 @@ export const Line = Schema.Struct({
   box: Schema.NullOr(Schema.String),
   phase: Schema.NullOr(Schema.Literals(Beat.PHASES)),
   /** Seconds since the chain last wrote its beat; `null` with no beat. */
-  quietSeconds: Schema.NullOr(Schema.Number),
+  quietSeconds: Schema.NullOr(Schema.Finite),
   /** Since when: the phase began, the step started, the quest stopped or landed. */
   since: Schema.NullOr(Schema.String),
   text: Schema.String,
 });
+
 export type Line = typeof Line.Type;
 
 /** The last `{"outcome":...}` line in a chain's output, among whatever else was printed there. */
 export const lastOutcome = (out: string): Omit<End, "at"> | null => {
-  for (const line of out.split("\n").toReversed()) {
-    const end = Schema.decodeUnknownOption(EndLine)(line.trim());
+  for (const line of Arr.reverse(Str.split(out, "\n"))) {
+    const end = Schema.decodeOption(EndLine)(Str.trim(line));
 
     if (Option.isSome(end)) {
       return { outcome: end.value.outcome, reason: end.value.reason ?? "" };
@@ -146,9 +163,12 @@ export const lastOutcome = (out: string): Omit<End, "at"> | null => {
 /** The box of an open step: the standing `<quest>-<step><n>` with the highest n. */
 const standing = (quest: string, step: string, boxes: ReadonlyArray<string>): string | null => {
   const head = `${quest}-${step}`;
-  const runs = boxes
-    .filter((box) => box.startsWith(head) && /^\d+$/.test(box.slice(head.length)))
-    .toSorted((a, b) => Number(a.slice(head.length)) - Number(b.slice(head.length)));
+
+  const runs = Arr.sort(
+    Arr.filter(boxes, (box) => pipe(box, Str.startsWith(head)) && /^\d+$/.test(pipe(box, Str.slice(head.length)))),
+    Order.mapInput(Order.Number, (box: string) => Number(pipe(box, Str.slice(head.length)))),
+  );
+
   return runs.at(-1) ?? null;
 };
 
@@ -167,7 +187,14 @@ export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
   const { record } = seen.found;
   const last = record.steps.at(-1) ?? null;
   const open = last !== null && last.endedAt === null ? last : null;
-  const box = open === null ? last?.line?.box || null : standing(seen.quest, open.step, seen.boxes);
+
+  const box =
+    open === null
+      ? last?.line?.box !== undefined && last.line.box !== ""
+        ? last.line.box
+        : null
+      : standing(seen.quest, open.step, seen.boxes);
+
   const quest = { ...nothing, step: last?.step ?? null, box };
 
   if (record.landed !== null) {
@@ -181,6 +208,7 @@ export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
 
   if (!seen.held && seen.end !== null) {
     const { outcome, reason, at } = seen.end;
+
     return outcome === "done"
       ? { ...quest, state: "landed", since: at, text: reason }
       : { ...quest, state: "waits", since: at, text: `${outcome}: ${reason}` };
@@ -188,6 +216,7 @@ export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
 
   if (record.beat !== undefined) {
     const said = Beat.says(record.beat, now, quiet);
+
     return {
       ...quest,
       state: said.stuck ? "stuck" : "running",
@@ -201,6 +230,7 @@ export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
   if (open !== null) {
     const ms = now.getTime() - Date.parse(open.startedAt);
     const stuck = ms > quiet;
+
     return {
       ...quest,
       state: stuck ? "stuck" : "running",
@@ -229,23 +259,24 @@ const see = Effect.fn("quests.see")(function* (boxes: string, quest: string, sta
   const read = (file: string) => fs.readFileString(file).pipe(Effect.option);
   const out = path.join(boxes, `${quest}-chain.out`);
   const record = yield* read(path.join(boxes, "state", `${quest}${CHAIN}`));
-  const held = yield* fs
-    .exists(path.join(boxes, "state", `${quest}.lock`))
-    .pipe(Effect.catch(() => Effect.succeed(false)));
+  const held = yield* fs.exists(path.join(boxes, "state", `${quest}.lock`)).pipe(Effect.orElseSucceed(() => false));
   const ended = Option.flatMapNullishOr(yield* read(out), lastOutcome);
   const written = Option.flatMap(yield* fs.stat(out).pipe(Effect.option), (info) => info.mtime);
+
   const found = Option.match(record, {
     onNone: () => Found.cases.missing.make({}),
     onSome: (text) =>
-      Option.match(Schema.decodeUnknownOption(RecordText)(text), {
+      Option.match(Schema.decodeOption(RecordText)(text), {
         onNone: () => Found.cases.unreadable.make({}),
         onSome: (read) => Found.cases.read.make({ record: read }),
       }),
   });
+
   const end = Option.map(ended, (e) => ({
     ...e,
     at: Option.getOrNull(Option.map(written, (date) => date.toISOString())),
   }));
+
   return { quest, found, held, end: Option.getOrNull(end), boxes: standingBoxes } satisfies Seen;
 });
 
@@ -259,19 +290,35 @@ export const read = Effect.fn("quests.read")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const names = yield* fs.readDirectory(path.join(boxes, "state")).pipe(Effect.catch(() => Effect.succeed([])));
-  const recorded = names.filter((name) => name.endsWith(CHAIN)).map((name) => name.slice(0, -CHAIN.length));
-  const standingBoxes = names.filter((name) => name.endsWith(".box")).map((name) => name.slice(0, -".box".length));
-  const asked = (options.named.length > 0 ? options.named : recorded).toSorted();
+
+  const names = yield* fs
+    .readDirectory(path.join(boxes, "state"))
+    .pipe(Effect.orElseSucceed(() => Arr.empty<string>()));
+
+  const recorded = pipe(
+    names,
+    Arr.filter((name) => pipe(name, Str.endsWith(CHAIN))),
+    Arr.map((name) => pipe(name, Str.slice(0, -CHAIN.length))),
+  );
+
+  const standingBoxes = pipe(
+    names,
+    Arr.filter((name) => pipe(name, Str.endsWith(".box"))),
+    Arr.map((name) => pipe(name, Str.slice(0, -".box".length))),
+  );
+
+  const asked = Arr.sort(options.named.length > 0 ? options.named : recorded, Order.String);
   const now = DateTime.toDate(yield* DateTime.now);
+
   const lines = yield* Effect.forEach(
     asked,
     (quest) => Effect.map(see(boxes, quest, standingBoxes), (seen) => verdict(seen, now)),
     { concurrency: 1 },
   );
+
   return options.named.length > 0 || options.all
     ? lines
-    : lines.filter((line) => line.state !== "landed" && line.state !== "queued");
+    : Arr.filter(lines, (line) => line.state !== "landed" && line.state !== "queued");
 });
 
 // ---------------------------------------------------------------- the command

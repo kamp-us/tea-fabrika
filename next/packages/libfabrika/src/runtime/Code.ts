@@ -2,8 +2,6 @@
  * The code each program runs: which hash is selected per program, the facts that record a change, and
  * the machine that folds them. A `checked` Msg only asks for a `code.loaded` fact; only folding that
  * fact changes the selection and pushes a swap.
- *
- * @stability unstable
  */
 import { Machine, Cmd } from "@demlik/tea/effect";
 import { Schema } from "effect";
@@ -15,7 +13,6 @@ import { Swapped } from "./Runner.ts";
  * Schema for where a load came from: `watch`, `deploy`, `boot` or `restart`, or `open` for the move of
  * a home saved before the code store to this build's code when it opens (0529).
  *
- * @stability unstable
  * @category schemas
  */
 export const From = Schema.Literals(["watch", "deploy", "boot", "restart", "open"]);
@@ -29,7 +26,6 @@ export const From = Schema.Literals(["watch", "deploy", "boot", "restart", "open
  * A `code.failed` fact carries `hash: null` when the source never bundled, and may carry the `path` and
  * `line` of the error.
  *
- * @stability unstable
  * @category schemas
  */
 export const CodeEvent = Schema.TaggedUnion({
@@ -47,7 +43,6 @@ export const CodeEvent = Schema.TaggedUnion({
  * Schema for one install request: a program's compiled source, its hash and where it came from, under
  * the request's `id`.
  *
- * @stability unstable
  * @category schemas
  */
 export const Install = Schema.Struct({
@@ -57,13 +52,13 @@ export const Install = Schema.Struct({
   source: Schema.String,
   from: From,
 });
+
 export type Install = typeof Install.Type;
 
 /**
  * Schema for an install's answer: `same` when the hash is already selected, `failed` with the
  * `code.failed` reason, or `loaded` with each live process's swap outcome.
  *
- * @stability unstable
  * @category schemas
  */
 export const Installed = Schema.TaggedUnion({
@@ -71,12 +66,12 @@ export const Installed = Schema.TaggedUnion({
   failed: { reason: CodeEvent.cases["code.failed"].fields.reason },
   loaded: { processes: Schema.Array(Schema.Struct({ name: Schema.String, outcome: Swapped })) },
 });
+
 export type Installed = typeof Installed.Type;
 
 /**
  * Schema for the selection: each program's selected hash and the id of the install that loaded it.
  *
- * @stability unstable
  * @category schemas
  */
 export const Selected = Schema.Record(ProgramName, Schema.Struct({ hash: Hash, load: Schema.String }));
@@ -102,7 +97,6 @@ const swap = Cmd.make("swap", {
  * A `checked` Msg for the selected hash does nothing. The model starts from the saved selection, or
  * empty, and `append` and `swap` answers leave it unchanged.
  *
- * @stability unstable
  * @category machines
  */
 export const code = Machine.make({
@@ -112,6 +106,7 @@ export const code = Machine.make({
     Schema.Struct({ type: Schema.Literal("loaded"), id: Schema.String, program: ProgramName, hash: Hash }),
   ]),
   cmds: [append, swap],
+  // SAFETY: `types` only carries the empty ctx type; tea never reads this value at run time.
   types: { ctx: {} as Record<string, never> },
   init: (saved) => [saved ?? {}, []],
   update: {

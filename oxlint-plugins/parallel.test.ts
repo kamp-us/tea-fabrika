@@ -7,11 +7,14 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
+import { Array as Arr, pipe, Option, Order, Record as Rec } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "parallel.ts");
+
 const home = mkdtempSync(join(tmpdir(), "parallel-"));
+
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 const RUNS = { seed: 119120, numRuns: 6 };
@@ -20,6 +23,7 @@ const RUNS = { seed: 119120, numRuns: 6 };
 const run = (parts: readonly string[], env: NodeJS.ProcessEnv = process.env) => {
   const cwd = mkdtempSync(join(home, "run-"));
   const ran = spawnSync(process.execPath, [SCRIPT, ...parts], { cwd, env, encoding: "utf8" });
+
   return { status: ran.status, out: ran.stdout.split("\n"), err: ran.stderr.split("\n") };
 };
 
@@ -44,33 +48,34 @@ const parts = fc.array(part, { minLength: 1, maxLength: 4 });
 
 /** Part `i`'s lines, each marked with its part and stream, so no two parts' lines are alike. */
 const lines = (parts: readonly Part[]) =>
-  parts.map((p, i) => ({
-    out: p.out.map((w, j) => `p${i}o${j}${w}`),
-    err: p.err.map((w, j) => `p${i}e${j}${w}`),
+  Arr.map(parts, (p, i) => ({
+    out: Arr.map(p.out, (w, j) => `p${i}o${j}${w}`),
+    err: Arr.map(p.err, (w, j) => `p${i}e${j}${w}`),
   }));
 
 const marked = (line: string) => /^p\d+[oe]\d+/.test(line);
 
 const printf = (written: readonly string[], to = "") =>
-  written.length === 0 ? [] : [`printf '%s\\n' ${written.join(" ")}${to}`];
+  written.length === 0 ? [] : [`printf '%s\\n' ${Arr.join(written, " ")}${to}`];
 
 /** Part `i` as a shell command: its stdout lines, its wait, its stderr lines, its exit. */
 const commands = (parts: readonly Part[]) =>
-  lines(parts).map(({ out, err }, i) =>
-    [...printf(out), `sleep 0.${parts[i]?.tenths ?? 0}`, ...printf(err, " >&2"), `exit ${parts[i]?.code ?? 0}`].join(
+  Arr.map(lines(parts), ({ out, err }, i) =>
+    Arr.join(
+      [...printf(out), `sleep 0.${parts[i]?.tenths ?? 0}`, ...printf(err, " >&2"), `exit ${parts[i]?.code ?? 0}`],
       "; ",
     ),
   );
 
 const header = (said: readonly string[], command: string) =>
-  said.findIndex((line) => line.startsWith(`> ${command} (`));
+  Arr.findFirstIndex(said, (line) => line.startsWith(`> ${command} (`));
 
 describe("parallel.ts, the runner pnpm lint goes through", () => {
   // Plant: end with `return;` in place of failing with the failed parts: exit 0, red.
   it("exits 1 when a part fails, and 0 when every part passes", () => {
     fc.assert(
       fc.property(parts, (generated) => {
-        expect(run(commands(generated)).status).toBe(generated.some((p) => p.code !== 0) ? 1 : 0);
+        expect(run(commands(generated)).status).toBe(Arr.some(generated, (p) => p.code !== 0) ? 1 : 0);
       }),
       RUNS,
     );
@@ -81,6 +86,7 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
   it("scenario: runs the parts at once: two parts that each wait for the other both pass", () => {
     const wait = (mine: string, theirs: string) =>
       `touch ${mine}; for i in $(seq 100); do [ -f ${theirs} ] && exit 0; sleep 0.1; done; exit 1`;
+
     const ran = run([wait("a", "b"), wait("b", "a")]);
     expect(ran.err).toEqual([""]);
     expect(ran.status).toBe(0);
@@ -93,10 +99,11 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
       fc.property(parts, (generated) => {
         const given = commands(generated);
         const ran = run(given);
-        const at = given.map((command) => header(ran.out, command));
-        expect(at.every((index) => index >= 0)).toBe(true);
-        expect(at).toEqual(at.toSorted((a, b) => a - b));
-        lines(generated).forEach(({ out }, i) => {
+        const found = Arr.map(given, (command) => header(ran.out, command));
+        expect(Arr.every(found, Option.isSome)).toBe(true);
+        const at = Arr.getSomes(found);
+        expect(at).toEqual(Arr.sort(at, Order.Number));
+        Arr.forEach(lines(generated), ({ out }, i) => {
           const start = (at[i] ?? 0) + 1;
           expect(ran.out.slice(start, start + out.length)).toEqual(out);
         });
@@ -110,8 +117,8 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
     fc.assert(
       fc.property(parts, (generated) => {
         const ran = run(commands(generated));
-        expect(ran.out.filter(marked)).toEqual(lines(generated).flatMap(({ out }) => out));
-        expect(ran.err.filter(marked)).toEqual(lines(generated).flatMap(({ err }) => err));
+        expect(Arr.filter(ran.out, marked)).toEqual(Arr.flatMap(lines(generated), ({ out }) => out));
+        expect(Arr.filter(ran.err, marked)).toEqual(Arr.flatMap(lines(generated), ({ err }) => err));
       }),
       RUNS,
     );
@@ -124,24 +131,32 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
       fc.property(parts, (generated) => {
         const given = commands(generated);
         const ran = run(given);
-        const failed = generated.flatMap((p, i) => (p.code === 0 ? [] : [i]));
+        const failed = Arr.flatMap(generated, (p, i) => (p.code === 0 ? [] : [i]));
         const said = lines(generated);
 
         if (failed.length === 0) {
           expect(ran.out.at(-2)).toMatch(new RegExp(`^parallel: ${given.length} parts passed in [\\d.]+ s$`));
+
           return;
         }
 
-        const summary = ran.err.slice(ran.err.findIndex((line) => line.startsWith("parallel: ")));
+        const summary = Option.match(
+          Arr.findFirstIndex(ran.err, (line) => line.startsWith("parallel: ")),
+          { onNone: () => [], onSome: (start) => ran.err.slice(start) },
+        );
+
         expect(summary[0]).toMatch(
           new RegExp(`^parallel: ${failed.length} of ${given.length} parts failed in [\\d.]+ s:$`),
         );
         const last = (i: number) => said[i]?.err.at(-1) ?? said[i]?.out.at(-1);
-        const named = failed.flatMap((i) => {
+
+        const named = Arr.flatMap(failed, (i) => {
           const line = last(i);
           const ended = `  ${given[i]} (failed, exit ${generated[i]?.code})`;
+
           return line === undefined ? [ended] : [ended, `    ${line}`];
         });
+
         expect(summary.slice(1)).toEqual([...named, ""]);
       }),
       RUNS,
@@ -156,12 +171,18 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
       fc.property(signal, word, word, (name, out, err) => {
         const command = `echo o-${out}; echo e-${err} >&2; kill -${name} $$`;
         const ran = run([command]);
-        const n = Object.entries(constants.signals).find(([signal]) => signal === `SIG${name}`)?.[1];
-        const code = 128 + (n ?? 0);
+
+        const n = pipe(
+          Arr.findFirst(Rec.toEntries(constants.signals), ([signal]) => signal === `SIG${name}`),
+          Option.map(([, number]) => number),
+          Option.getOrElse(() => 0),
+        );
+
+        const code = 128 + n;
         expect(ran.status).toBe(1);
         expect(ran.out).toContain(`o-${out}`);
         expect(ran.err).toContain(`e-${err}`);
-        expect(ran.out[header(ran.out, command)]).toMatch(
+        expect(Option.getOrUndefined(Option.map(header(ran.out, command), (index) => ran.out[index]))).toMatch(
           new RegExp(`\\(failed, killed by SIG${name}, exit ${code}, [\\d.]+ s\\)$`),
         );
       }),
@@ -176,7 +197,7 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
   it("scenario: a part that cannot start says so, and is named as failed", () => {
     const ran = run(["echo never"], { ...process.env, PATH: "" });
     expect(ran.status).toBe(1);
-    expect(ran.out.some((line) => line.startsWith("> echo never (could not start: "))).toBe(true);
+    expect(Arr.some(ran.out, (line) => line.startsWith("> echo never (could not start: "))).toBe(true);
     expect(ran.err.at(-3)).toMatch(/^parallel: 1 of 1 parts failed in [\d.]+ s:$/);
   });
 });

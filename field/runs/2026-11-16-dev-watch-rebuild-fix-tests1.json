@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-dev-watch-rebuild-fix-tests1",
+  "ticket": "1122",
+  "pr": null,
+  "started": "2026-11-16T19:18:57-08:00",
+  "ended": "2026-11-16T19:26:39-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Permitted tests work is complete for next/ ticket 1122. The save-driven watcher law now checks typed replies in order, accepts only established-hash duplicates and finishes each save on its required changed reply. Completed rebuild spans are recorded by identity through their real end method. Complete histories check changed outcomes, current source and hash, ordered failure facts, encoded private inputs and resource cleanup. A gated scenario covers real same replies from boot and a preceding save, before good and broken saves. Product files are unchanged. Runtime proof is pending on an eligible remote runner; no guarded integration law or plant ran on the laptop.",
+  "laws": [
+    {
+      "law": "R1: scenario: R1 a held same reply from boot or a preceding save cannot complete a good or broken save",
+      "red": "After build on an eligible remote runner: restore the old next-answer assertion and run the controlled scenario once. No observed red is claimed."
+    },
+    {
+      "law": "R2/R3/R4/R5: L17/L18: save-driven rebuilds record success and ERROR outcomes and close every acquired result",
+      "red": "After build on an eligible remote runner: full-depth property and planned plants. Seed 119120, 3 fast or 20 full runs, 2 to 5 edits and 1 to 99 increments retained."
+    },
+    {
+      "law": "R5: L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures, without leaking source through warnings or repeating a failure for unchanged bytes",
+      "red": "Existing law retained unchanged; full-file remote execution pending."
+    },
+    {
+      "law": "R6: L18: every Rolldown watcher and every BUNDLE_END and ERROR result is closed when the scope closes, after success, a failure or an interruption at any point the run reached",
+      "red": "Existing interruption law retained unchanged; full-file remote execution and cleanup plants pending."
+    }
+  ],
+  "plants": [],
+  "pendingPlants": [
+    "R1 restore original next-answer assertion",
+    "R2 drop saved rebuild; stale successful source; report changed load as same",
+    "R3 omit a span; duplicate a changed outcome; associate a previous span with a save",
+    "R4 remove failed-input suppression; suppress a distinct broken input",
+    "R5 leak generated marker or temporary root into replies, failure facts and rebuild attributes in each checked encoding",
+    "R6 omit result cleanup; omit watcher cleanup"
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 7.7,
+  "costUsd": null,
+  "billed": null,
+  "note": "pnpm install --frozen-lockfile passed to supply missing dependencies. Pinned Node 26.13.0 used through Volta. pnpm format and pnpm lint passed, final lint 18 parts passed with 0 blocking findings. List ratchet passed without ledger changes. The safe adjacent internal/watcher.test.ts passed, 1 file and 1 test. No typecheck in the tests step. The approved plan remains uncommitted lead input, body adbb966cf5cc. Required remote proof: controlled original-assertion red; repaired scenario; five full-depth save-driven runs; whole integration file at full depth; every listed plant once with restoration; green scheduled.yaml branch proof at final head whose proof-set includes the watcher file. No actual reply order, hash or span identity is reported without execution. No new build export is needed. First L17/L18, L10 and interruption laws are retained. Usage and list-price cost were not exposed to this worker."
+}

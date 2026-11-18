@@ -16,23 +16,24 @@ import * as CommandsNode from "@kampus/libfabrika/node/client/CommandsNode";
 import * as JournalSqlite from "@kampus/libfabrika/node/client/JournalSqlite";
 import * as KeyFile from "@kampus/libfabrika/node/client/KeyFile";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
-import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
-import type { Link } from "@kampus/libfabrika/transport/Link";
-import { Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
+import { Link } from "@kampus/libfabrika/transport/Link";
+import { Record as Rec, Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { Socket } from "effect/socket";
+import { environment, present } from "./src/environment.ts";
 
 const VERSION = "0.0.0";
 
 /** What the launcher prints, one line per change: the protocol between it and its parent. */
 const Line = Schema.TaggedUnion({
   /** The key is not granted yet: a person approves `code` before `until`. */
-  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Number },
+  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Finite },
   online: { fingerprint: Schema.String },
   offline: { fingerprint: Schema.String },
 });
+
 type Line = typeof Line.Type;
 
 const encodeLine = Schema.encodeEffect(Schema.fromJsonString(Line));
@@ -44,34 +45,38 @@ const OS: Partial<Record<NodeJS.Platform, "macos" | "linux" | "windows">> = {
   win32: "windows",
 };
 
-/** The entries that hold a value, as one record. */
-const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
-
 /** What a parent needs to know of the link: waiting for a grant, online, or neither. */
 const lineFor = (link: Link, fingerprint: string): Line =>
-  link._tag === "waiting_grant"
-    ? Line.cases.waiting.make({ fingerprint, code: link.code, until: link.until })
-    : link._tag === "online"
-      ? Line.cases.online.make({ fingerprint })
-      : Line.cases.offline.make({ fingerprint });
+  Link.matchOrElse(
+    link,
+    {
+      waiting_grant: (link) => Line.cases.waiting.make({ fingerprint, code: link.code, until: link.until }),
+      online: () => Line.cases.online.make({ fingerprint }),
+    },
+    () => Line.cases.offline.make({ fingerprint }),
+  );
 
 const hands = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
-  const home = process.env.FABRIKA_HOME ?? path.join(yield* Config.String("HOME"), ".fabrika");
+
+  const env = yield* environment;
+  const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
+
   const loaded = yield* Load.load({
     person: {
       path: path.join(home, "fabrika.toml"),
-      name: `${process.env.FABRIKA_HOME === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
+      name: `${env.home === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
     },
     flags: {},
-    env: present(Declarations.all.declarations.map((d) => [d.env, process.env[d.env]])),
+    env: present(Rec.toEntries(env.settings)),
     version: VERSION,
   }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto]));
+
   const folder = path.join(home, "hands");
   // The journal opens its file as its layer is built, so the folder is made first, private.
   yield* fs.makeDirectory(folder, { recursive: true, mode: 0o700 });
+
   const layers = Layer.mergeAll(
     KeyFile.layer({ file: path.join(folder, "key.json") }),
     JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file: path.join(folder, "journal.sqlite") }))),
@@ -82,12 +87,14 @@ const hands = Effect.gen(function* () {
 
   return yield* Effect.gen(function* () {
     const { fingerprint } = yield* ClientKey.use((keys) => keys.current(null));
+
     const booting = yield* start({
       origin: `http://127.0.0.1:${loaded.values.port}`,
       build: VERSION,
       label: "hands",
       os: OS[process.platform] ?? "unknown",
     });
+
     const runtime = yield* booting.ready;
     // Every state the run reaches, from the first, as the line a parent reads; a line is printed
     // only when it changes.
@@ -96,6 +103,7 @@ const hands = Effect.gen(function* () {
         Effect.sync(() => {
           const push = () => Queue.offerUnsafe(queue, lineFor(runtime.getState().link, fingerprint));
           push();
+
           return runtime.subscribe(push);
         }),
         (unsubscribe) => Effect.sync(unsubscribe),

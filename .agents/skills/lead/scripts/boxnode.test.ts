@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import { firstOnPath, holdsPin, pinnedBin, pnpmBin } from "./boxnode.ts";
 
 const segment = fc.stringMatching(/^[a-z0-9.]{1,8}$/);
+
 const dir = fc.array(segment, { minLength: 1, maxLength: 4 }).map((parts) => `/${parts.join("/")}`);
+
 const dirs = fc.array(dir, { maxLength: 6 });
+
 const version = fc.tuple(fc.nat(40), fc.nat(40), fc.nat(40)).map((v) => v.join("."));
 
 describe("firstOnPath", () => {

@@ -1,15 +1,17 @@
 /**
  * The `Senders` port, answered by the gateway's one signing service (0262): who sent an input
  * delivered to a process, as a right's check takes it.
- *
- * @stability unstable
  */
-import { Effect, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { Sender, type Senders, SendersError } from "../permissions/Senders.ts";
 import { NotGranted, SigningRefused, type Writer } from "./SessionManager.ts";
 
 const decodeSender = Schema.decodeUnknownResult(Sender);
+
 const isNotGranted = Schema.is(NotGranted);
+
 const isRefused = Schema.is(SigningRefused);
 
 /** A refusal or a failure of the signing service, as the port answers it. */
@@ -19,13 +21,13 @@ const refused = (cause: unknown) => {
   }
 
   if (isNotGranted(cause)) {
-    return Effect.fail(new SendersError({ reason: "removed" }));
+    return Effect.fail(SendersError.make({ reason: "removed" }));
   }
 
   return Effect.fail(
     isRefused(cause) && cause.reason === "ended"
-      ? new SendersError({ reason: "ended" })
-      : new SendersError({ reason: "storage", cause }),
+      ? SendersError.make({ reason: "ended" })
+      : SendersError.make({ reason: "storage", cause }),
   );
 };
 
@@ -33,7 +35,7 @@ const refused = (cause: unknown) => {
 const decoded = (writer: Writer) =>
   Result.match(decodeSender(writer), {
     onSuccess: (sender) => Effect.succeedSome(sender),
-    onFailure: (cause) => Effect.fail(new SendersError({ reason: "storage", cause })),
+    onFailure: (cause) => Effect.fail(SendersError.make({ reason: "storage", cause })),
   });
 
 /**
@@ -46,7 +48,6 @@ const decoded = (writer: Writer) =>
  * that process is behind the write. `NotGranted` is `removed`, `ended` is `ended`, and any other
  * failure, a ledger or session store failure included, is `storage` with its cause kept.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = (

@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-reflect-ban-s14-tests1",
+  "ticket": "1056",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T01:54:16-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 14 of the Reflect ban (0554, ticket 1056) in next/, the app's next/apps/fabrika/src/ folder, on docs/plan/quests/reflect-ban-PLAN.md signed at 4e9601147 with amendment points 1 to 7, on fabrikalfa/reflect-rest from e8d0dc607. Met 43 fires in 14 files, as point 7 counted them (41 get, 1 has, 1 set); every one is gone or under its named disable line. Kind 6 (dev client): scheduled-job-alarm 6, worker-mail 3, worker-supervision 2, worker-monitor :335, hands-launcher :233, instance-records :232, tasks-wire :228 become plain typed calls on DevProject and DevProcess; input-recording's invoke (:40) and worker-quotas's rpc (:189) take a thunk, and their callers call start, connect, challenge, initialize, route, read, info, abort and restart plainly; input-recording decodes the connect answer with the ConnectionId schema of @kampus/libfabrika/workers/bindings, since challenge, initialize and route take a ConnectionId. Kind 5 (a method picked by name inside a stand-in): checklist-instance :186 and :247, runtime-recovery :565 and :730, runtime-quotas :320 and :371 narrow with Predicate.hasProperty, then Predicate.isFunction (a vitest assert in the two integration files), and call the member with Reflect.apply; the six named new Proxy stand-ins (checklist-instance :269 and :315, runtime-recovery :613 and :689, runtime-quotas :305 and :353) are Stub.make<ProjectBinding> or Stub.make<ProcessBinding>, each named type, the special members in own. Kinds 1 and 2: door :5812 and :5835, worker-monitor :362, checklist-instance :687, runtime-recovery :866, :1502, :1521, :1826, :1828, runtime.decode :72, :83, :84 read through Predicate.hasProperty; runtime-quotas :488 and :491 decode one schema of two optional fields once. runtime-recovery :1647 and :1648 call object.restart(request). runtime-quotas :660's Reflect.set is a local let that env reads through a getter. Kind 11: the generated text at instance-records :288 reads base[name]. runtime.decode's two hostile-Proxy lines (:165 has, :176 get) carried no disable line at e8d0dc607; each now has one with the plan's reason, the 2 fabrika/reflect-disables allows there. .oxlintrc.json: next/apps/fabrika/src/* joins the warn Reflect block, not src/**: src/* is in the JSON.parse warn block, exam/** is already in the warn Reflect block and entry/** in the error one, so src/** in the warn block would have turned entry/'s JSON.parse from error to advice.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "No new law: the plan's slice 14 rows are fixes held by L5 (lint). Where the code won over the plan: (1) hands-launcher :114, the plan's 'becomes project[name]': the three names (requestHandsTask, readHandsTask, allRows) are the fixture's own calls, which only hands-launcher.test-support.ts's Control takes; DevProject does not name them, so project[name] is a type error. The helper takes Exclude<keyof LauncherProject, keyof DevProject> and reads project[name] under one kind 10 @ts-expect-error with its reason, as point 2 did for ping. (2) runtime-recovery's Process stand-in typed msg as (incoming: Incoming), which ProcessBinding's msg (input: unknown) refuses; the stand-in takes unknown and keeps it as sent, and the world's received list is unknown[] (nothing reads it). (3) The Process stand-in's rest in runtime-recovery is async, since ProcessBinding's members answer Promises; a missing member now rejects instead of throwing at the call. (4) runtime.decode's two Proxy lines had no disable lines on the branch; they were added. No @ts-expect-error was used as a cast: no canned answer here needs one. Checks at the tests tree on e8d0dc607: effect-tsgo tsc --noEmit -p next/apps/fabrika clean; vitest one file at a time under nice -n 15: runtime.decode.test.ts and runtime-quotas.laws.test.ts 4 passed; the 12 integration files each passed alone, with no 0178 refusal (CLAUDE_CODE_REMOTE=true on Linux): checklist-instance.laws 6, door 153, hands-launcher 2, input-recording 1, instance-records 13, runtime-recovery.laws 13, scheduled-job-alarm 1, tasks-wire 1, worker-mail 6, worker-monitor 3, worker-quotas 3, worker-supervision 4. The ratchet exit 0. pnpm format, pnpm lint, pnpm typecheck and loosening.sh results are in the step's report.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "L5",
+      "plant": "the old line put back at next/apps/fabrika/src/tasks-wire.integration.test.ts:228, Reflect.get(running.project(\"tasks-wire\"), \"start\")(...); node oxlint-plugins/lint.ts on the file exits 1, blocking with 'eslint(no-restricted-properties) Reflect.get is restricted from being used'; restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

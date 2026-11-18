@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e40-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:35:47-08:00",
+  "ended": "2026-11-15T20:53:12-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E40 of the Effect-check sweep (preferEffectArray), in next/. Owner ruling for judgment slices: fix code only, add no lock line. Counted with only preferEffectArray at error through --lspconfig on libfabrika and next/programs/counter: 360 hits in the row's folders on origin/main at e613fa4 (the plan counted 358 at 82296f5): 296 in exam paths (34 files), 64 in 20 product files, 0 in PR 1366's files. Fixed all 296 exam-path hits. The checker has no quick fix for this check (checkerfix.mjs fixed 0, 'no quick fix'), so a scratchpad codemod on the TypeScript parser rewrote 273 plain calls to the data-first Arr form (map, filter, some, every, flatMap, forEach, join with a separator, reduce with a start value swapped to Arr.reduce(self, start, f), toReversed to Arr.reverse), skipping any callback that reads the array parameter. 23 were hand edits: 17 find to Arr.findFirst and 4 findIndex to Arr.findFirstIndex, each kept to what the code answered (Option.getOrUndefined where the code read undefined, getOrElse for a ?? default, getOrThrow for a non-null assertion on a value the generator always holds, Option.isSome and .value where the index was tested with >= 0, and getOrElse(-1) where two indexes are compared by an unchanged assertion), one reduce without a start value (the first candidate starts the fold, as before), and one toSorted to Arr.sort with an Order on run.id, flipped. Five type errors from the rewrite were fixed in the same files: join over string | undefined got ?? \"\" (what native join wrote for undefined), one tuple lost as const for a typed tuple, one callback got its element type written out. Effect names the fix added are namespace imports (import * as Arr from \"effect/Array\") in libfabrika, as 0577 asks of libraries, and barrel names in the counter program.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "Recount after the fix: 0 exam-path hits; 64 product hits left for the build (lib:tezgah 30, lib:transport 12, lib:tasks 9, lib:top 4, lib:access 3, lib:permissions 3, lib:codehost 1, lib:presence 1, prog:counter 1). Every other check in the 36 changed files counts the same before and after (all 135 checks at error), except preferNamespaceImport in the two counter test files, where the count used the library import list; the program takes the barrel (0577), so those are not hits. tsc --noEmit on libfabrika and counter: 0 errors. vitest --changed origin/main: 68 files passed, 844 tests; next/packages/libfabrika/src/transport/Sshsig.integration.test.ts failed 3 tests because this box has no ssh-keygen (ENOENT), the same on the base files. pnpm lint passed, ratchet exit 0. No law was added or loosened; the plants below show two rewritten laws still fail on a broken product.",
+  "plants": [
+    {
+      "law": "Answer.test.ts T843 answerFrame: retry delay survives with the request id and counts its enclosing span",
+      "plant": "transport/Answer.ts names its span transport.answerFrameX: the rewritten Arr.findFirst lookup finds none and the property fails",
+      "result": "red"
+    },
+    {
+      "law": "Fold.laws.test.ts L31: every open tile but the focused one is drawn at least 220x120",
+      "plant": "tezgah/Fold.ts never finds the part that leads to the focus: the law, whose oracle now uses Arr.findFirstIndex, fails",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

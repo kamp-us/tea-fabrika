@@ -1,14 +1,20 @@
+import { Array as Arr, String as Str, pipe, Option } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { inScope, pick, PRODUCT, related } from "./scope.ts";
+
+// Where the last dot sits, or -1 with none, as the native lastIndexOf answered.
+const dot = (path: string) => Option.getOrElse(pipe(path, Str.lastIndexOf(".")), () => -1);
 
 const options = { seed: 119120, numRuns: 200 };
 
 // Script paths are built from their stems, so the script-reads lint does not take this file for a
 // reader of the scripts it names: they are data here, never read.
 const skill = (name: string, stem: string, end = ".ts") => `.agents/skills/${name}/scripts/${stem}${end}`;
+
 const lead = (stem: string, end = ".ts") => skill("lead", stem, end);
-const QUEST = ["chain", "drive"].flatMap((stem) => [lead(stem), lead(stem, ".test.ts")]);
+
+const QUEST = Arr.flatMap(["chain", "drive"], (stem) => [lead(stem), lead(stem, ".test.ts")]);
 
 const segment = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
 
@@ -35,7 +41,7 @@ const product = fc
     fc.array(segment, { maxLength: 3 }),
     file,
   )
-  .map(([top, folders, name]) => [top, ...folders, name].join("/"));
+  .map(([top, folders, name]) => Arr.join([top, ...folders, name], "/"));
 
 /** Lead tooling that is not quest code: any skill's files, and the lead's other scripts. */
 const otherLead = fc.oneof(
@@ -61,24 +67,29 @@ const quest = fc.oneof(
   fc.constantFrom(...QUEST),
   fc
     .tuple(fc.array(segment, { maxLength: 2 }), file)
-    .map(([folders, name]) => [".agents/skills/lead/scripts/flow", ...folders, name].join("/")),
+    .map(([folders, name]) => Arr.join([".agents/skills/lead/scripts/flow", ...folders, name], "/")),
 );
 
 const leadCode = fc.oneof(quest, otherLead);
+
 const anyPath = fc.oneof(product, quest, otherLead);
 
 // The `range` step before 0089, read as git reads its pathspecs: `*` crosses `/`. For each changed
 // product file its two test names, and each changed test, sorted and unique.
 const before = (changed: ReadonlyArray<string>) => {
   const code = (path: string) =>
-    /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(path) && !path.includes(".test.") && !/\.d\.[mc]?ts$/.test(path);
-  const tests = changed.flatMap((path) =>
+    /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(path) &&
+    !pipe(path, Str.includes(".test.")) &&
+    !/\.d\.[mc]?ts$/.test(path);
+
+  const tests = Arr.flatMap(changed, (path) =>
     code(path)
-      ? [".test.ts", ".test.tsx"].map((end) => `${path.slice(0, path.lastIndexOf("."))}${end}`)
+      ? Arr.map([".test.ts", ".test.tsx"], (end) => `${pipe(path, Str.slice(0, dot(path)))}${end}`)
       : /\.test\.tsx?$/.test(path)
         ? [path]
         : [],
   );
+
   return [...new Set(tests)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 };
 
@@ -101,8 +112,8 @@ describe("the mutation run's file pick (0089)", () => {
         fc.array(fc.oneof(product, otherLead), { maxLength: 8 }),
         (ours, rest) => {
           const changed = [...rest, ...ours];
-          expect(pick(changed).filter((path) => path.startsWith(".agents/"))).toEqual(
-            changed.filter((path) => path.startsWith(".agents/") && ours.includes(path)),
+          expect(Arr.filter(pick(changed), (path) => pipe(path, Str.startsWith(".agents/")))).toEqual(
+            Arr.filter(changed, (path) => pipe(path, Str.startsWith(".agents/")) && ours.includes(path)),
           );
 
           for (const test of before(ours)) {
@@ -127,9 +138,9 @@ describe("the mutation run's file pick (0089)", () => {
   it("property: a lead `.ts` file's `name.test.ts` is in exactly when the file is", () => {
     fc.assert(
       fc.property(
-        leadCode.filter((path) => path.endsWith(".ts")),
+        leadCode.filter((path) => pipe(path, Str.endsWith(".ts"))),
         (path) => {
-          const code = before([path]).filter((test) => test.endsWith(".test.ts") && test !== path);
+          const code = Arr.filter(before([path]), (test) => pipe(test, Str.endsWith(".test.ts")) && test !== path);
 
           for (const test of code) {
             expect(inScope(test), test).toBe(inScope(path));
@@ -144,7 +155,7 @@ describe("the mutation run's file pick (0089)", () => {
     fc.assert(
       fc.property(fc.array(anyPath, { maxLength: 16 }), (changed) => {
         const kept = pick(changed);
-        expect(kept).toEqual(changed.filter((path) => kept.includes(path)));
+        expect(kept).toEqual(Arr.filter(changed, (path) => kept.includes(path)));
         expect(related(changed)).toEqual(related(kept));
       }),
       options,

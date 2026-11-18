@@ -1,0 +1,91 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1135-fresh-pins-lead-checks",
+  "ticket": "kamp-us/tea-fabrika#1135",
+  "pr": null,
+  "started": "2026-11-17T15:08:59.409Z",
+  "ended": "2026-11-17T15:10:31.415Z",
+  "parent": "2026-11-17-t1135-fresh-pair-pins",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's L11 tooling for next/ passed the independent source and mapping read at the exact fresh-pair pin change. The lead normally merged current main, verified every incoming quota path and unchanged pin bytes, then ran format, one canonical compiler across all 30 packages and all 18 normal lint parts. All 5268 tracked source hashes and modes, head, index and protected files stayed unchanged. The cached source was published normally and its remote commit, tree, parents and draft metadata independently verified. No new-pair product law or actual exercise ran. Historical failures and source-specific evidence remain unchanged.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "driver_caused": false,
+  "head": "86fab8e8cb2dbf816484ed52a6a17487e8c79780",
+  "plan": "cb98be65a541e6c86f38f785065d448fa0e890c40b5fc42fe91bc7118e5ad8e9",
+  "checks": {
+    "node": "26.13.0",
+    "pnpm": "12.16.1",
+    "paidKeyUnset": true,
+    "lockOverrides": false,
+    "format": {
+      "exit": 0,
+      "pid": 99445,
+      "started": "2026-11-17T15:08:59.409Z",
+      "ended": "2026-11-17T15:09:30.545Z"
+    },
+    "typecheck": {
+      "exit": 0,
+      "pid": 2338,
+      "started": "2026-11-17T15:09:38.575Z",
+      "ended": "2026-11-17T15:09:51.193Z"
+    },
+    "lint": {
+      "exit": 0,
+      "pid": 4061,
+      "started": "2026-11-17T15:09:59.237Z",
+      "ended": "2026-11-17T15:10:31.415Z"
+    },
+    "compilerPackages": 30,
+    "lintParts": 18,
+    "trackedSourcesPreserved": 5268,
+    "headPreserved": true,
+    "indexPreserved": true,
+    "modesPreserved": true,
+    "sharedFilesPreserved": true,
+    "noLingeringCompiler": true,
+    "safePureLaws": 24,
+    "independentSourceRead": "pass",
+    "literalInverse": 25,
+    "mappedVariants": 7,
+    "transformedBuffers": 13,
+    "incomingMainPathsExact": 3,
+    "cachedRemoteIdentitiesVerified": true,
+    "actualExercises": 0
+  },
+  "limits": [
+    "new exact-head branch proof remains owed",
+    "trusted-main executor landing remains owed",
+    "new-pair comparison, inputs, five output cases and ten predeclared slots remain unrun",
+    "row mapping missing",
+    "initialization and recovery attribution missing",
+    "Runner mapping missing",
+    "product CPU profile missing",
+    "fresh cached product review remains owed"
+  ],
+  "sources": {
+    "cached": "875e45de42b4dceee1aa47b57a046050ada4a4dc",
+    "uncached": "ab47ff27805749e5cfb27a2170cbea381304b7ca"
+  },
+  "loosening": {
+    "hits": 2,
+    "paths": [
+      ".github/ci/l11-cases.ts",
+      ".github/workflows/l11-exercise.yaml"
+    ],
+    "judgment": "All 25 substitutions are exact source and expected-hash updates. Restoring those literals restores both base files byte for byte. No mapping, assertion, count, seed, deadline, refusal, phase, privacy or serial ordering is weakened."
+  }
+}

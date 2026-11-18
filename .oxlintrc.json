@@ -48,8 +48,19 @@
     // P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
     // All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
     "fabrika/door-is-library": "error",
-    // T518 A8: the only current match is P17a's second module, confirmed by hand.
-    "fabrika/one-id-module": "error",
+    // 0573: this entry stands beside `fabrika/no-data-taggederror` and the Effect checker's
+    // preferSchemaTaggedError, as extra cover for the value forms in every file oxlint lints. Ours
+    // stays, since only it refuses `Data.TaggedError` in a type position. An override replaces a
+    // rule's options, so every block that sets this rule writes the entry out again
+    // (oxlint-plugins/plants.test.ts, L2).
+    "eslint/no-restricted-properties": [
+      "error",
+      {
+        "object": "Data",
+        "property": "TaggedError",
+        "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+      }
+    ],
     "fabrika/outside-input-constructor": "error",
 
     // Where a Claude run's settings come from is said by `ownRules` alone, so its file is left
@@ -648,7 +659,6 @@
       "rules": {
         "fabrika/no-promises": "error",
         "fabrika/no-ledger-sql": "error",
-        "fabrika/no-node-filesystem": "error",
         "fabrika/no-node-imports": "error",
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
@@ -752,11 +762,12 @@
               },
               {
                 // The library's shared suites and test kits: of our names, only the test primitives
-                // (0538), which they read their case counts from. Its own tests stay as the library's
-                // part has them: macOS matches these globs without case, so a `.test.ts` lands here.
+                // (0538), which they read their case counts from, and their SQLite module, which opens
+                // a test's file (ticket 1029). Its own tests stay as the library's part has them: macOS
+                // matches these globs without case, so a `.test.ts` lands here.
                 "name": "library suites",
                 "files": ["next/packages/libfabrika/**/*Test.ts", "next/packages/libfabrika/**/*.test-support.ts"],
-                "may": ["@kampus/vitest"],
+                "may": ["@kampus/vitest", "@kampus/vitest/TestDatabase"],
                 "tests": ["@kampus/libfabrika", "@kampus/vitest"]
               },
               {
@@ -848,10 +859,11 @@
               },
               {
                 // A program's shared suites and test kits: what the box may import, and the test
-                // primitives (0538), which they read their case counts from.
+                // primitives (0538), which they read their case counts from, with their SQLite module
+                // (ticket 1029).
                 "name": "program suites",
                 "files": ["next/programs/*/src/**/*Test.ts", "next/programs/*/src/**/*.test-support.ts"],
-                "may": ["@kampus/libfabrika", "@kampus/vitest"]
+                "may": ["@kampus/libfabrika", "@kampus/vitest", "@kampus/vitest/TestDatabase"]
               },
               {
                 // What the box loads: no tuval and no React. `pnpm lint:layers` refuses a box file
@@ -967,7 +979,6 @@
       "rules": {
         "fabrika/no-promises": "error",
         "fabrika/no-ledger-sql": "error",
-        "fabrika/no-node-filesystem": "error",
         "fabrika/no-node-imports": "error",
         "fabrika/no-effect-run-outside-edge": "error",
         "fabrika/edge-comment": "error",
@@ -1147,6 +1158,14 @@
       // on experiment 292's classified tree: 73 files fired, 72 drive a resource (oxlint-plugins/README.md).
       "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
       "rules": { "fabrika/integration-test-name": "error" }
+    },
+    {
+      // Ticket 1029, decision 0538: a test, shared suite or test kit opens a SQLite file through
+      // `@kampus/vitest/TestDatabase`, `make` for a file it owns and `open` for one another party
+      // owns; only `":memory:"` keeps `new DatabaseSync`. Measured on `86a7668d6`: 62 calls in 53
+      // files, none right as it was once `open` exists, so it blocks (oxlint-plugins/README.md).
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/test-database": "error" }
     },
     {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
@@ -1334,6 +1353,7 @@
               "packs",
               "access",
               "runtime",
+              "mcp",
               "gateway",
               "schedules",
               "client",
@@ -1624,6 +1644,7 @@
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
+        "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/schedules/**",
@@ -1646,6 +1667,7 @@
         "next/packages/libfabrika/src/access/internal/**",
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",
+        "next/packages/libfabrika/src/mcp/internal/**",
         "next/packages/libfabrika/src/gateway/internal/**",
         "next/packages/libfabrika/src/settings/internal/**",
         "next/packages/libfabrika/src/schedules/internal/**",
@@ -1715,6 +1737,11 @@
         ],
         "eslint/no-restricted-properties": [
           "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
           { "property": "setBounds", "message": "Size a test window with TestWindow.size." },
           { "property": "setPosition", "message": "Size a test window with TestWindow.size." }
         ]
@@ -1751,43 +1778,33 @@
       // blocks since ticket 909 (decision 0168). It reads only libfabrika's source folder, so its glob
       // can stay wide. Its glob is `next/**/*`, the same files as `next/**`: that exact key names the
       // exam block above, which `.agents/` repeats (0033), and this block holds next/ alone.
+      // It also holds the Reflect ban (0554) for every folder of next/, a new one included. The warn
+      // block and the client/ block near the end write its entries out again, since an override
+      // replaces a rule's options and a file takes the last override that matches it.
       "files": ["next/**/*"],
       "rules": {
         "eslint/no-restricted-properties": [
           "error",
           {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
             "object": "JSON",
             "property": "parse",
             "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
           }
         ],
         "fabrika/service-id": ["error", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
-      }
-    },
-    {
-      // P18 L4: a window client's reconnects are the Link machine's (`transport/Link.ts`, `backoff`), so
-      // nothing in the client retries a dial itself. After next/**, since an override replaces
-      // options: the JSON.parse entry is repeated, and it blocks here, where the folder starts at zero.
-      "files": ["next/packages/libfabrika/src/client/**"],
-      "rules": {
-        "eslint/no-restricted-properties": [
-          "error",
-          {
-            "object": "JSON",
-            "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
-          },
-          {
-            "object": "Effect",
-            "property": "retry",
-            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
-          },
-          {
-            "object": "Stream",
-            "property": "retry",
-            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
-          }
-        ]
       }
     },
     {
@@ -2302,7 +2319,10 @@
       "rules": { "fabrika/no-raw-try-catch": "warn" }
     },
     {
-      // An override replaces a rule's options, so the JSON.parse entry is written out again.
+      // An override replaces a rule's options, so the JSON.parse entry and the Reflect ban (0554) are
+      // written out again. Only the JSON.parse fire advises here: lint.ts blocks every other fire of
+      // this rule at any level (advice.ts), so a Reflect call in these folders fails `pnpm lint`,
+      // though a plain oxlint run in an editor shows it as a warning.
       "files": [
         "next/apps/fabrika/e2e/*",
         "next/apps/fabrika/src/*",
@@ -2323,67 +2343,10 @@
         "eslint/no-restricted-properties": [
           "warn",
           {
-            "object": "JSON",
-            "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
-          }
-        ]
-      }
-    },
-    {
-      // Decision 0554: no Reflect.get, Reflect.set or Reflect.has, and no globalThis.Reflect, which
-      // would hide the call from this rule. Each of the next three blocks lists the folders where the
-      // ban is on: every folder at zero. A folder is listed whole and joins the day its own slice
-      // brings it to zero; none is ever taken off, and no block turns the ban off or down for a
-      // folder with fires (0168, 0524). The last slice folds the lists into the base blocks.
-      // This one is the tooling, which has no other entry for the rule.
-      "files": [".agents/**", ".github/**", "oxlint-plugins/**"],
-      "rules": {
-        "eslint/no-restricted-properties": [
-          "error",
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
-          {
-            "object": "globalThis",
-            "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
-          }
-        ]
-      }
-    },
-    {
-      // The Reflect ban in next/, where JSON.parse blocks. An override replaces a rule's options, so
-      // the JSON.parse entry of next/**/* is written out again.
-      "files": [
-        "next/apps/fabrika/*",
-        "next/apps/fabrika/e2e/node/**",
-        "next/apps/fabrika/src/entry/**",
-        "next/packages/libfabrika/src/access/**",
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/desktop/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/schedules/**",
-        "next/packages/libfabrika/src/tezgah/**",
-        "next/packages/tuval/src/*",
-        "next/packages/tuval/src/browser/**",
-        "next/packages/tuval/src/window/**",
-        "next/packages/vitest/**",
-        "next/programs/chaos/**",
-        "next/programs/checklist/**",
-        "next/programs/counter/**",
-        "next/programs/inbox/**",
-        "next/programs/pipeline/**",
-        "next/programs/tezgah/**"
-      ],
-      "rules": {
-        "eslint/no-restricted-properties": [
-          "error",
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
           {
             "object": "JSON",
             "property": "parse",
@@ -2401,29 +2364,81 @@
       }
     },
     {
-      // The Reflect ban in next/, where JSON.parse still advises: the folders of the warn block above
-      // that have no Reflect fire. The level stays "warn" for the JSON.parse entry alone. lint.ts
-      // blocks every other fire of this rule at any level (advice.ts), so a Reflect call here fails
-      // `pnpm lint`, though a plain oxlint run in an editor shows it as a warning. A folder leaves
-      // this list for the one above when its JSON.parse line goes.
-      "files": [
-        "next/apps/fabrika/src/exam/**",
-        "next/packages/libfabrika/src/*",
-        "next/packages/libfabrika/src/gateway/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/libfabrika/src/ledger/**",
-        "next/packages/libfabrika/src/processes/**",
-        "next/packages/libfabrika/src/settings/**",
-        "next/packages/libfabrika/src/telemetry/**",
-        "next/packages/libfabrika/src/transport/**"
-      ],
+      // P18 L4: a window client's reconnects are the Link machine's (`transport/Link.ts`, `backoff`), so
+      // nothing in the client retries a dial itself. This block comes after next/** and after the
+      // JSON.parse warn block above, on purpose: an override replaces options and a file takes the last
+      // override that matches it, so no glob added to the warn block can strip these retry entries or
+      // turn JSON.parse into advice here, where the folder starts at zero. Keep it the last block that
+      // sets this rule for next/ (L4 of the Reflect ban holds it, and L10 holds the order).
+      "files": ["next/packages/libfabrika/src/client/**"],
       "rules": {
         "eslint/no-restricted-properties": [
-          "warn",
+          "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
           {
             "object": "JSON",
             "property": "parse",
             "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          {
+            "object": "Effect",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
+          },
+          {
+            "object": "Stream",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
+      // L5 of the Reflect ban (0554): no ignore comment lets a Reflect call through
+      // no-restricted-properties outside the plan's 6 named lines, a has and a get in each of the
+      // three hostile Proxies: runtime's, transport's (slice 4) and the app's (slice 14). Every other folder, cloudflare/ and e2e/ included, may
+      // hold none. The JSON.parse oracles' ignore comments cover no Reflect line, so they are not
+      // counted (reflect-disables.ts says how).
+      "files": ["next/**", ".agents/**", ".github/**", "oxlint-plugins/**"],
+      "rules": {
+        "fabrika/reflect-disables": [
+          "error",
+          {
+            "allow": {
+              "next/apps/fabrika/src/runtime.decode.test.ts": 2,
+              "next/packages/libfabrika/src/runtime/Program.test.ts": 2,
+              "next/packages/libfabrika/src/transport/Connection.test.ts": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      // Decision 0554: no Reflect.get, Reflect.set or Reflect.has, and no globalThis.Reflect, which
+      // would hide the call from this rule. All of next/ holds the ban through the base blocks of
+      // this rule above (next/**/*, client/** and the JSON.parse warn block), so a new folder is
+      // covered the day it appears, and no block turns the ban off or down (0168, 0524). This block
+      // is the tooling, which no base block covers and which has no other entry for the rule.
+      "files": [".agents/**", ".github/**", "oxlint-plugins/**"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
           },
           { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
           { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
@@ -2468,6 +2483,36 @@
         "next/programs/pipeline/src/*{.test.ts,.test.tsx}"
       ],
       "rules": { "fabrika/prefer-schema-arbitrary": "warn" }
+    },
+    {
+      // E1 of the Effect-check sweep (0574): no doc block carries `@stability` until libfabrika's
+      // first release, and `pnpm format` deletes the line (`oxlint-plugins/no-stability-tag.ts`).
+      "files": ["next/**", ".agents/**", ".github/ci/**", "oxlint-plugins/**"],
+      "rules": { "fabrika/no-stability-tag": "error" }
+    },
+    {
+      // E2 of the Effect-check sweep (0577): a library imports each Effect module by its path, and
+      // `pnpm format` writes the form (`oxlint-plugins/prefer-namespace-import.ts`). On for the
+      // folders libfabrika's and tuval's tsconfig hold at error for the same check; each later
+      // import slice adds its folders to both.
+      "files": [
+        "next/packages/libfabrika/src/*.ts",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/**",
+        "next/packages/vitest/**"
+      ],
+      "rules": { "fabrika/prefer-namespace-import": "error" }
     },
     {
       // E6 (0023, 0120): every public export of a next/ library has an Effect-shaped doc block, and
@@ -2656,8 +2701,7 @@
     // block lists the folders where its rule has no hit, and is on as an error there and nowhere
     // else. A pull request that brings a folder to zero adds it here, and a whole `pnpm lint` fails
     // until it does (oxlint-plugins/anti-slop.ts). A rule is never "off" or "warn". Once every folder
-    // is on a list, the list becomes the four globs of the scope. `anti-slop/require-readable-spacing`
-    // has no block yet: no folder is at zero for it, so its first block comes with the first sweep.
+    // is on a list, the list becomes the four globs of the scope.
     {
       // 0558: no ternary nests more than 2 deep.
       "files": [
@@ -2685,40 +2729,35 @@
     {
       // 0561: every type cast carries a `SAFETY:` comment that says the fact the compiler cannot see.
       "files": [
+        ".agents/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
-        "next/programs/inbox/**"
+        "next/programs/inbox/**",
+        "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/require-safety-comment-for-type-assertion": ["error", { "markers": ["SAFETY"] }] }
     },
     {
       // 0563: no `unknown` parameter but a `cause` or a type guard's subject.
       "files": [
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/schedules/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/vitest/**",
-        "next/programs/inbox/**"
-      ],
-      "rules": { "anti-slop/no-unknown-parameters": "error" }
-    },
-    {
-      // 0563: no function returns `unknown`.
-      "files": [
+        "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
@@ -2728,11 +2767,38 @@
         "next/packages/libfabrika/src/presence/**",
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/vitest/**",
+        "next/programs/checklist/**",
+        "next/programs/inbox/**",
+        "next/programs/pipeline/**"
+      ],
+      "rules": { "anti-slop/no-unknown-parameters": "error" }
+    },
+    {
+      // 0563: no function returns `unknown`.
+      "files": [
+        ".agents/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/tuval/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
+        "next/programs/checklist/**",
         "next/programs/inbox/**",
+        "next/programs/pipeline/**",
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/no-unknown-returns": "error" }
@@ -2740,18 +2806,34 @@
     {
       // 0563: no runtime `typeof` check but a probe for a binding that may not exist.
       "files": [
+        ".agents/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/tuval/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
-        "next/programs/inbox/**"
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
+        "next/programs/inbox/**",
+        "next/programs/pipeline/**",
+        "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/no-runtime-typeof": "error" }
     },
@@ -2796,6 +2878,7 @@
       // 0567: a tagged value is matched by its union's matcher or Effect's Match, never by comparing `_tag`.
       "files": [
         "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/vitest/**",
         "next/programs/counter/**",
@@ -2806,21 +2889,47 @@
     {
       // 0567: a ternary chain over one value's literals is a Match.
       "files": [
+        ".github/ci/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
         "next/packages/tuval/**",
         "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
         "next/programs/inbox/**",
+        "next/programs/pipeline/**",
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }
+    },
+    {
+      // 0563, 0021: a blank line before a `return` and every control statement, around a multi-line
+      // binding, and between top-level statements, as the rule ships.
+      "files": [".agents/**", ".github/ci/**", "oxlint-plugins/**", "next/**"],
+      "rules": { "anti-slop/require-readable-spacing": "error" }
     }
   ]
 }

@@ -6,7 +6,8 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Formatter, Schema } from "effect";
+
 import { ROWS, text } from "./ratchet.test-support.ts";
 
 import { LISTS } from "./ratchet.ts";
@@ -18,6 +19,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
   const quiet = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
   const script = join(import.meta.dirname, "ratchet.ts");
   const extra = { file: "next/b.ts", rule: "fabrika(no-of)", code: "const b = 2;" };
+
   // Each test builds its own repository in its own scope, which removes it when the test ends (0061).
   const scenario = Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "ratchet-"))),
@@ -32,36 +34,42 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
         });
 
         if (out.status !== 0) {
-          throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+          throw new Error(`git ${Arr.join(args, " ")}: ${out.stderr}`);
         }
 
-        return out.stdout.trim();
+        return Str.trim(out.stdout);
       };
+
       const put = (file: string, entries: ReadonlyArray<object>) => writeFileSync(join(repo, file), text(entries));
+
       const commit = (message: string) => {
         git("add", "-A");
         git("commit", "-q", "--allow-empty", "-m", message);
+
         return git("rev-parse", "HEAD");
       };
+
       const ratchet = (base: string) =>
         spawnSync(process.execPath, [script, "--base", base], { cwd: repo, encoding: "utf8", env: quiet });
 
       git("init", "-q", "-b", "main");
 
-      for (const [file, rows] of Object.entries(ROWS)) {
+      for (const [file, rows] of Rec.toEntries(ROWS)) {
         put(file, rows);
       }
 
       const base = commit("base");
+
       return { repo, git, put, commit, ratchet, base };
     }),
   );
 
   const jsonLines = (stdout: string) =>
-    stdout
-      .split("\n")
-      .filter((line) => line.startsWith("{"))
-      .map((line) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(line));
+    pipe(
+      Str.split(stdout, "\n"),
+      Arr.filter((line) => pipe(line, Str.startsWith("{"))),
+      Arr.map((line) => Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(line)),
+    );
 
   it.effect("L4 scenario: a head that adds a row exits 1, naming the row in its JSON line and annotation", () =>
     Effect.gen(function* () {
@@ -87,7 +95,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       commit("head");
       const out = ratchet(base);
       expect(out.status).toBe(0);
-      expect(jsonLines(out.stdout)).toEqual(LISTS.map((list) => ({ _tag: "done", file: list.file })));
+      expect(jsonLines(out.stdout)).toEqual(Arr.map(LISTS, (list) => ({ _tag: "done", file: list.file })));
     }),
   );
 
@@ -97,7 +105,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       put("next-ledger.json", [...ROWS["next-ledger.json"], extra]);
       commit("head");
 
-      for (const none of ["", "0".repeat(40)]) {
+      for (const none of ["", pipe("0", Str.repeat(40))]) {
         const out = ratchet(none);
         expect(out.status).toBe(0);
         expect(out.stdout).toContain("no base");
@@ -144,7 +152,9 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       commit("and one more row");
       const out = ratchet(start);
       expect(out.status).toBe(1);
-      expect(out.stdout).toContain(JSON.stringify(lintKey({ ...extra, file: "a.integration.ts" })).slice(1, -1));
+      expect(out.stdout).toContain(
+        pipe(Formatter.formatJson(lintKey({ ...extra, file: "a.integration.ts" })), Str.slice(1, -1)),
+      );
     }),
   );
 });

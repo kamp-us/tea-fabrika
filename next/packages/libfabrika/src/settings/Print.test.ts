@@ -9,24 +9,33 @@
 //   hold its value, its origin (a file's name and line, a flag's or environment variable's name),
 //   its default and its doc. `all` changes which rows show, never what a shown row says.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
+import * as Setting from "./Fabrika.ts";
+import * as Sources from "./Fabrika.ts";
 import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
-import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
-import * as Sources from "./Sources.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 const PERSON = "~/.fabrika/fabrika.toml";
+
 const REPO = ".fabrika/fabrika.toml";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+
 const port = fc.integer({ min: 1, max: 65535 });
+
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
 
 // Words with Markdown punctuation and line breaks, which plain text must keep.
@@ -38,6 +47,7 @@ const doc = fc
   .map((words) => words.join(" "));
 
 const SOURCES = ["flag", "env", "repo", "person"] as const;
+
 type Slot = (typeof SOURCES)[number];
 
 /** Port declarations, each with values in some sources: often its own default, or one shared value. */
@@ -50,7 +60,7 @@ const declared = port.chain((shared) =>
       default: fc.oneof(fc.constant(shared), port),
       scope: fc.constantFrom<Setting.Scope>(["person"], ["repo", "person"]),
       supplied: fc.record(
-        Object.fromEntries(
+        Rec.fromEntries(
           SOURCES.map((s) => [s, fc.oneof(fc.constant("default" as const), fc.constant(shared), port)]),
         ) as Record<Slot, fc.Arbitrary<number | "default">>,
         { requiredKeys: [] },
@@ -77,7 +87,7 @@ const fileText = (entries: ReadonlyArray<readonly [string, string, number]>) => 
 const loadRows = (ds: Declared) =>
   Effect.gen(function* () {
     const group = Setting.group(
-      Object.fromEntries(
+      Rec.fromEntries(
         ds.map((d, n) => [
           `s${n}`,
           Setting.make(`${d.table}.${d.key}`, {
@@ -91,11 +101,14 @@ const loadRows = (ds: Declared) =>
         ]),
       ),
     );
+
     const value = (d: Declared[number], slot: Slot) => {
       const v = d.supplied[slot];
+
       // "default" supplies the declaration's own default explicitly.
       return v === undefined ? undefined : v === "default" ? d.default : v;
     };
+
     const flags: Record<string, string> = {};
     const env: Record<string, string> = {};
     const files: Record<"repo" | "person", Array<readonly [string, string, number]>> = { repo: [], person: [] };
@@ -120,27 +133,31 @@ const loadRows = (ds: Declared) =>
       }
     });
     const toml = yield* Toml;
+
     const resolved = yield* Sources.resolve(group, {
       flags: Sources.flags(flags),
       env: Sources.env(env),
       repo: Sources.file(REPO, yield* toml.parse(fileText(files.repo))),
       person: Sources.file(PERSON, yield* toml.parse(fileText(files.person))),
     });
+
     const snapshot = yield* Snapshot.make(group, resolved);
+
     return { group, snapshot, rows: Reference.rows(group, snapshot) };
   }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto]), Effect.runPromise);
 
 /** Whether `line` starts the row of `path`: the path first, then no further key character. */
 const starts = (line: string, path: string) => {
-  const rest = line.trimStart();
-  return rest.startsWith(path) && !/^[a-z0-9.-]/.test(rest.slice(path.length));
+  const rest = Str.trimStart(line);
+
+  return Str.startsWith(path)(rest) && !/^[a-z0-9.-]/.test(Str.slice(path.length)(rest));
 };
 
 /** Each shown row's lines, by path, in the order the report prints them. */
 const blocks = (report: string, paths: ReadonlyArray<string>) => {
   const out: Array<{ path: string; text: string }> = [];
 
-  for (const line of report.split("\n")) {
+  for (const line of Str.split(report, "\n")) {
     const path = paths.find((p) => starts(line, p));
 
     if (path !== undefined) {
@@ -153,11 +170,11 @@ const blocks = (report: string, paths: ReadonlyArray<string>) => {
   return out;
 };
 
-const collapse = (text: string) => text.replace(/\s+/g, " ").trim();
+const collapse = (text: string) => Str.trim(Str.replace(/\s+/g, " ")(text));
 
 describe("L5, the printed report says what the snapshot holds, and --all adds only default rows", () => {
-  it("shown rows are the explicit ones, or all; each says its value, origin, default and doc", async () => {
-    await fc.assert(
+  it("shown rows are the explicit ones, or all; each says its value, origin, default and doc", () =>
+    fc.assert(
       fc.asyncProperty(declared, async (ds) => {
         const { snapshot, rows } = await loadRows(ds);
         const paths = rows.map((r) => r.path);
@@ -199,14 +216,14 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
         // row's lines run to the end, so a closing line after it may differ.
         const explicit = (report: string) =>
           blocks(report, paths).filter((b) => rows.find((r) => r.path === b.path)!.origin._tag !== "default");
+
         const [a, b] = [explicit(all), explicit(plain)];
         expect(a.map((x) => x.path)).toEqual(b.map((x) => x.path));
         a.forEach((x, n) => {
-          const [long, short] = [x.text.trimEnd(), b[n]!.text.trimEnd()].sort((p, q) => q.length - p.length);
-          expect(long!.startsWith(short!), `${long}\n---\n${short}`).toBe(true);
+          const [long, short] = [Str.trimEnd(x.text), Str.trimEnd(b[n]!.text)].sort((p, q) => q.length - p.length);
+          expect(Str.startsWith(short!)(long!), `${long}\n---\n${short}`).toBe(true);
         });
       }),
       check,
-    );
-  });
+    ));
 });

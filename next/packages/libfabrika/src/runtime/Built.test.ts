@@ -1,19 +1,22 @@
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 // P16, next/. The tables one built brain file carries: each program's compiled source with its
 // hash, each window file with its route. Outside values decode through Effect with typed failures,
 // malformed JSON included. Builder contract: `app/built.ts` exports `Built`, `BuiltProgram`,
 // `Asset` and `decodeBuilt(raw)`, and a bad value fails as `BuildError`. P40: a program's key is
 // its qualified identity, `pack/program`, and a table with any other key fails whole: no entry is
 // dropped to make it pass.
-import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { Effect, Schema } from "effect";
+
+import * as Arr from "effect/Array";
+import * as Digest from "effect/crypto/Digest";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
 type Program = { readonly hash: string; readonly source: string };
+
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
 
 type Built = {
@@ -29,13 +32,25 @@ type Api = {
 };
 
 const load = async () => {
-  const file = join(import.meta.dirname, "Built.ts");
-  assert(existsSync(file), "P16 not built: shared Built schemas and table validation absent");
   vi.resetModules();
-  return vi.importActual<Api>(pathToFileURL(file).href);
+
+  return vi.importActual<Api>(new URL("./Built.ts", import.meta.url).href);
 };
 
-const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+/** A text's SHA-256 in hex, through Effect's Digest on the platform's WebCrypto. */
+const sha = (s: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(s))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
+
+/** Each program row as the table holds it, keyed by its name, with its source's hash. */
+const programTable = async (rows: ReadonlyArray<{ readonly name: string; readonly source: string }>) =>
+  Rec.fromEntries(
+    await Promise.all(Arr.map(rows, async ({ name, source }) => [name, { hash: await sha(source), source }] as const)),
+  );
+
 // P14 slice 1: a tab's page is one more checked asset type, generated beside scripts and stylesheets.
 // The refusals below keep a bare `text/html` and every other type out.
 const types = ["text/javascript; charset=utf-8", "text/css; charset=utf-8", "text/html; charset=utf-8"] as const;
@@ -54,8 +69,8 @@ const routes = fc.uniqueArray(
   fc.record({
     route: fc
       .array(fc.stringMatching(/^[\w-][\w.-]{0,8}$/), { minLength: 1, maxLength: 3 })
-      .filter((parts) => parts.every((p) => p !== "." && p !== ".."))
-      .map((parts) => `/${parts.join("/")}`),
+      .filter((parts) => Arr.every(parts, (p) => p !== "." && p !== ".."))
+      .map((parts) => `/${Arr.join(parts, "/")}`),
     type: fc.constantFrom(...types),
     body: fc.string({ maxLength: 40, unit: "grapheme" }),
   }),
@@ -76,17 +91,22 @@ describe("P16 checked built tables", () => {
     await fc.assert(
       fc.asyncProperty(rows, routes, async (rows, assets) => {
         const raw: Built = {
-          programs: Object.fromEntries(rows.map(({ name, source }) => [name, { hash: sha(source), source }])),
-          assets: Object.fromEntries(assets.map(({ route, type, body }) => [route, { hash: sha(body), type, body }])),
+          programs: await programTable(rows),
+          assets: Rec.fromEntries(
+            await Promise.all(
+              Arr.map(assets, async ({ route, type, body }) => [route, { hash: await sha(body), type, body }] as const),
+            ),
+          ),
         };
+
         expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);
         expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Built)(raw))).toEqual(raw);
 
-        for (const program of Object.values(raw.programs)) {
+        for (const program of Rec.values(raw.programs)) {
           expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.BuiltProgram)(program))).toEqual(program);
         }
 
-        for (const asset of Object.values(raw.assets)) {
+        for (const asset of Rec.values(raw.assets)) {
           expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Asset)(asset))).toEqual(asset);
         }
       }),
@@ -104,12 +124,15 @@ describe("P16 checked built tables", () => {
         fc.constantFrom("text/html", "application/json", "text/javascript"),
         fc.oneof(fc.integer(), fc.boolean(), fc.constant(null)),
         async (rows, assets, junk, route, type, other) => {
+          // SAFETY: the rows generator above draws at least two rows.
           const [a, b] = rows as [(typeof rows)[0], (typeof rows)[0]];
           const asset = assets[0]!;
+
           const good = {
-            programs: { [a.name]: { hash: sha(a.source), source: a.source } },
-            assets: { [asset.route]: { hash: sha(asset.body), type: asset.type, body: asset.body } },
+            programs: { [a.name]: { hash: await sha(a.source), source: a.source } },
+            assets: { [asset.route]: { hash: await sha(asset.body), type: asset.type, body: asset.body } },
           };
+
           await expect(Effect.runPromise(api.decodeBuilt(good))).resolves.toEqual(good);
 
           for (const raw of [
@@ -117,29 +140,29 @@ describe("P16 checked built tables", () => {
             junk,
             "{malformed JSON",
             { programs: junk, assets: null },
-            { ...good, programs: { [a.name]: { hash: sha(b.source), source: a.source } } },
-            { ...good, programs: { "": { hash: sha(a.source), source: a.source } } },
+            { ...good, programs: { [a.name]: { hash: await sha(b.source), source: a.source } } },
+            { ...good, programs: { "": { hash: await sha(a.source), source: a.source } } },
             {
               ...good,
               assets: {
-                [asset.route]: { hash: sha(asset.body), type: asset.type, body: `${asset.body}x` },
+                [asset.route]: { hash: await sha(asset.body), type: asset.type, body: `${asset.body}x` },
               },
             },
             {
               ...good,
-              assets: { [route]: { hash: sha(asset.body), type: asset.type, body: asset.body } },
+              assets: { [route]: { hash: await sha(asset.body), type: asset.type, body: asset.body } },
             },
-            { ...good, assets: { [asset.route]: { hash: sha(asset.body), type, body: asset.body } } },
+            { ...good, assets: { [asset.route]: { hash: await sha(asset.body), type, body: asset.body } } },
             // A missing or non-text source or body fails even when the hash is its text's.
-            { ...good, programs: { [a.name]: { hash: sha("") } } },
-            { ...good, programs: { [a.name]: { hash: sha(String(other)), source: other } } },
-            { ...good, assets: { [asset.route]: { hash: sha(""), type: asset.type } } },
+            { ...good, programs: { [a.name]: { hash: await sha("") } } },
+            { ...good, programs: { [a.name]: { hash: await sha(String(other)), source: other } } },
+            { ...good, assets: { [asset.route]: { hash: await sha(""), type: asset.type } } },
             {
               ...good,
-              assets: { [asset.route]: { hash: sha(String(other)), type: asset.type, body: other } },
+              assets: { [asset.route]: { hash: await sha(String(other)), type: asset.type, body: other } },
             },
           ]) {
-            if (raw === junk && typeof junk === "object" && junk !== null) {
+            if (raw === junk && Predicate.isObjectOrArray(junk)) {
               continue;
             }
 
@@ -152,41 +175,42 @@ describe("P16 checked built tables", () => {
   });
   it("L2: a table with one key that is not a qualified name fails whole, and a good table keeps every key", async () => {
     const api = await load();
+
     // Each break keeps the current key inside it, so a check on one end or one segment passes it.
     const breaks: ReadonlyArray<(key: string) => string> = [
-      (key) => key.split("/")[1]!,
-      (key) => key.split("/")[0]!,
+      (key) => Str.split(key, "/")[1]!,
+      (key) => Str.split(key, "/")[0]!,
       (key) => `/${key}`,
       (key) => `${key}/`,
-      (key) => key.replace("/", "//"),
+      (key) => Str.replace("/", "//")(key),
       (key) => `${key}/extra`,
       (key) => `../${key}`,
-      (key) => key.replace("/", "/./"),
-      (key) => key.replace("/", "."),
-      (key) => key.replace("/", ":"),
+      (key) => Str.replace("/", "/./")(key),
+      (key) => Str.replace("/", ".")(key),
+      (key) => Str.replace("/", ":")(key),
       (key) => `${key} `,
-      (key) => `${key}${"x".repeat(257 - key.length)}`,
+      (key) => `${key}${Str.repeat(257 - key.length)("x")}`,
     ];
+
     // The walk: start from a completed table, then each step either adds a program under a fresh
     // qualified key, which must decode with every key kept, or mutates one current key, which must
     // fail. A mutation never enters the state, so every later step starts from a good table.
     const tape = fc.array(fc.nat(), { minLength: 2, maxLength: 12 });
     await fc.assert(
       fc.asyncProperty(rows, tape, async (rows, tape) => {
-        const programs: Record<string, Program> = Object.fromEntries(
-          rows.map(({ name, source }) => [name, { hash: sha(source), source }]),
-        );
+        const programs: Record<string, Program> = await programTable(rows);
+
         let added = 0,
           refused = 0;
 
         for (const [i, n] of tape.entries()) {
-          const keys = Object.keys(programs);
+          const keys = Rec.keys(programs);
 
           if (i % 2 === 0) {
             const key = `pack${n % 5}/added${i}`;
-            programs[key] = { hash: sha(key), source: key };
+            programs[key] = { hash: await sha(key), source: key };
             const decoded = await Effect.runPromise(api.decodeBuilt({ programs, assets: {} }));
-            expect(Object.keys(decoded.programs).sort()).toEqual(Object.keys(programs).sort());
+            expect(Rec.keys(decoded.programs).sort()).toEqual(Rec.keys(programs).sort());
             expect(decoded.programs).toEqual(programs);
             added++;
           } else {

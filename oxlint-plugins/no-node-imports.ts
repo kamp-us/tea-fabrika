@@ -1,6 +1,7 @@
 // next/ uses Effect's platform. A native import needs a reason on its source line.
 import { builtinModules } from "node:module";
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr, Predicate } from "effect";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const builtins = new Set(builtinModules);
@@ -48,6 +49,7 @@ export const noNodeImports: CreateRule = {
     }
 
     const comments = context.sourceCode.getAllComments();
+
     const check = (source: Node | null | undefined) => {
       const value =
         source?.type === "Literal"
@@ -56,7 +58,7 @@ export const noNodeImports: CreateRule = {
             ? source.quasis[0]?.value.cooked
             : null;
 
-      if (typeof value !== "string" || source == null) {
+      if (!Predicate.isString(value) || source == null) {
         return;
       }
 
@@ -69,7 +71,8 @@ export const noNodeImports: CreateRule = {
       // Only a real line comment on the module string's line counts. A nearby comment,
       // a string containing // edge:, or an empty reason must not bless another import.
       if (
-        comments.some(
+        Arr.some(
+          comments,
           (comment) =>
             comment.type === "Line" &&
             comment.loc.start.line === source.loc.start.line &&
@@ -84,6 +87,7 @@ export const noNodeImports: CreateRule = {
         message: `Use ${replacement(module)}. Native imports in next/ need // edge: <reason> on this line (docs/direction/build-on-effect.md).`,
       });
     };
+
     return {
       ImportDeclaration: (node) => check(node.source),
       ExportNamedDeclaration: (node) => check(node.source),

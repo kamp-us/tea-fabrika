@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e49-tests1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T20:36:28-08:00",
+  "ended": "2026-11-15T20:51:11-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E49 of the Effect-checker sweep, processEnvInEffect and processEnv, in next/ and our tooling, as a judgment slice: code fixes only, no lock line. Counted with only the two checks at error through --lspconfig over .github/ci, .agents, next/packages/vitest, next/apps/fabrika and next/packages/libfabrika: 74 hits in the slice's folders, as the plan says (app:e2e 24, .github/ci 20, .agents 9, lib:node 9, app:top 8, lib:runtime 2, vitest 2), none in a file of pull request 1366. 53 sit in exam paths and 21 in product files. 21 exam hits fixed by hand with Effect's Config, keeping what each line reads: .github/ci/legs.ts 7 (one Config.all, with empty values kept so an empty FILTER still means the reader tests), apt.test.ts 1 and legs.test.ts 1 (PATH), the P19 fixture brain.ts 1, electron-launchd.visual.test.ts 2, P19Launchd.test-support.ts 2, one-file.visual.test.ts 3 (the planted fault and trace), tezgah.test-support.ts 1 (SHOTS), RecoveryGaps.integration.test.ts 2 and Depth.test.ts 1. 32 exam hits left: changes.mjs 5, required.mjs 1 and scheduled.mjs 1 run in CI jobs with no install, so effect cannot be imported there; field-check.ts 4, where importing effect turns on no-raw-try-catch for its two old try/catch blocks, another check's work; mutbox.test.ts 1 and p14.test-support.ts 3, read synchronously at collection or load, where an Effect run needs an edge comment the owner reads; chaos-revoke 8, one-file 5 and BrainControlLaunchd L10 4 set and restore a variable the code under test or a child reads, and Config cannot write one. 21 product hits are left for the build. No law was loosened; the changed laws assert the same behavior.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Recount after the fixes: 53 hits left in the slice's folders (32 exam, 21 product). Ran here: legs.test.ts 21 passed, apt.test.ts 18 passed, Depth.test.ts 4 passed (also with FABRIKA_TEST_DEPTH=full), RecoveryGaps.integration.test.ts 12 passed and 1 skipped (the driver scenario, as before); tsc --noEmit on .github/ci, next/packages/vitest, next/apps/fabrika and next/packages/libfabrika exits 0; pnpm lint passes; the list ratchet exits 0. Not run here: the .visual. files and the host-only P19 check.",
+  "plants": [
+    {
+      "law": "Depth.test.ts pinned: this run reads FABRIKA_TEST_DEPTH",
+      "plant": "Depth.ts reads FABRIKA_TEST_DEPTH_PLANT in place of FABRIKA_TEST_DEPTH, run with FABRIKA_TEST_DEPTH=full: expected 'fast' to be 'full'",
+      "result": "red"
+    },
+    {
+      "law": "legs.test.ts scenario: the main prints the full matrix to GITHUB_OUTPUT",
+      "plant": "legs.ts reads GITHUB_OUTPUT_PLANT in place of GITHUB_OUTPUT: the output file is never written, ENOENT",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

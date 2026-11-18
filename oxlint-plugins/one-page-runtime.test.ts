@@ -21,16 +21,22 @@ import { plant } from "./plant.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so the rule reads each path as oxlint gives it there.
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 
 const ENTRY = "next/apps/fabrika/src/entry/browser.tsx";
+
 const CODE = "fabrika(one-page-runtime)";
 
 const IMPORT = /Import `runMain` from `@kampus\/tuval\/browser` once/;
+
 const START = /Start the page's one Effect program at module scope/;
+
 const SECOND = /A second page runtime/;
+
 const OTHER = /runs an Effect the page does not own/;
 
 /** The real entry as it stood when the rule took over, with its program named `name` and started by `start`. */
@@ -76,6 +82,7 @@ const starts = {
 type Spelling = keyof typeof starts;
 
 const spelling = fc.constantFrom<Spelling>("piped", "direct", "curried");
+
 // A program name that is no keyword and no run function: lower-case letters, then `Page`.
 const name = fc.stringMatching(/^[a-z]{1,8}$/).map((letters) => `${letters}Page`);
 
@@ -159,6 +166,7 @@ const breaks = (
 });
 
 const from = fc.constantFrom("@kampus/tuval", "effect", "@effect/platform-browser", "@kampus/tuval/electron");
+
 const run = fc.constantFrom("Effect.runPromise", "Effect.runFork", "Effect.runSync", "runtime.runPromise");
 
 // A local name that is no keyword, no `runMain` and no run function: lower-case letters, then `Boot`.
@@ -176,7 +184,9 @@ const key = fc.constantFrom(...keys);
 
 // A run function's name as a string anywhere: each run name, `runMain` among them, in each quote.
 const runNames = ["runPromise", "runFork", "runSync", "runMain"] as const;
+
 const quotes = ['"', "'", "`"] as const;
+
 const held = fc.record({ name: fc.constantFrom(...runNames), quote: fc.constantFrom(...quotes) });
 
 // A run function's name in a template piece beside an expression, `tail`, which is the empty string.
@@ -276,6 +286,7 @@ it("scenario: the repo's config turns the rule on for the page entry and for no 
   // scenario: oxlint's own path matching is the subject, so each kind is one oxlint run on the
   // config as it is; the generated law above holds the rule's reach.
   const start = starts.piped("page");
+
   const planted = breaks(
     "page",
     start,
@@ -288,6 +299,7 @@ it("scenario: the repo's config turns the rule on for the page entry and for no 
     { spelled: pieces.after("runPromise"), error: OTHER },
     { spelled: wordings.dotted("runPromise", '"'), error: OTHER },
   );
+
   const elsewhere = "next/apps/fabrika/src/entry/other.tsx";
   const clean = await plant({ [ENTRY]: entry("page", start), [elsewhere]: planted["a second start"].code });
   expect(clean(CODE, ENTRY)).toEqual([]);

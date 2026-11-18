@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1133-compiler2",
+  "ticket": "1133",
+  "pr": null,
+  "started": "2026-11-16T22:14:42-08:00",
+  "ended": "2026-11-16T22:15:03-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Today's lead tooling whole pinned compiler at 0fd5b50069bbdb555e42d21fbfbd461c522d791e, actual exit 0. Native pnpm12.16.1 and direct/pnpm/Python-nested Node26.13.0 were verified; paid API key absent; ordinary global lock and wrapper used without overrides. No real adapter or protected law ran. Raw proof remains private. Session usage and list-price cost were unavailable.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 0.36433275763338313,
+  "costUsd": null,
+  "listUsd": null,
+  "billing": null
+}

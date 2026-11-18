@@ -3,15 +3,20 @@
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { expect, it } from "@effect/vitest";
-import type { Schema } from "effect";
-import { Arbitrary, Effect } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import type * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
 import { Event, TrustDecision } from "../RepositoryTrust.ts";
 import * as Open from "./open.ts";
 
 type Model = typeof Open.machine.model.Type;
+
 type Msg = typeof Open.machine.msg.Type;
+
 type Phase = "closed" | "checking" | "history" | "awaiting_trust" | "saving" | "ready" | "refused";
 
 const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
@@ -36,15 +41,19 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
       const events: Array<Event> = [];
       const selected: Array<typeof Event.cases.selected.Type> = [];
       const messages: Array<Msg> = [];
-      let decision: typeof TrustDecision.Type | undefined;
+      let decision: TrustDecision | undefined;
       let writes = 0;
+
       const send = (msg: Msg) => {
         messages.push(msg);
         model = applyCell(Open.machine, model, msg)[0];
+
         return model;
       };
+
       const select = (pick: number) => {
         const past = draw.snapshots[pick % draw.snapshots.length]!;
+
         const event = Event.cases.selected.make({
           repository: snapshot.repository,
           key: snapshot.key,
@@ -56,10 +65,13 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
           settings: past.settings,
           request: draw.selections[selected.length]!,
         });
+
         selected.push(event);
         events.push(event);
+
         return event;
       };
+
       const answer = (past: typeof Event.cases.selected.Type, yes: boolean) => {
         decision = yes ? TrustDecision.cases.accepted.make({}) : TrustDecision.cases.denied.make({});
         events.push(
@@ -76,6 +88,7 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
           }),
         );
       };
+
       const replay = (pick: number) => {
         const selection = draw.selections[pick % draw.selections.length]!;
         send({ type: "select", selection });
@@ -84,13 +97,15 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
         expect(model._tag).toBe("checking");
         const result = send({ type: "history", selection, events: [...events] });
         expect(result._tag).toBe(
-          decision?._tag === "accepted" ? "saving" : decision?._tag === "denied" ? "refused" : "awaiting_trust",
+          decision === undefined
+            ? "awaiting_trust"
+            : TrustDecision.match(decision, { accepted: () => "saving", denied: () => "refused" }),
         );
 
         if (result._tag === "saving") {
           expect(result.snapshot).toEqual(snapshot);
           expect(result.request).toBe(selection);
-          const other = draw.selections.find((id) => id !== selection)!;
+          const other = Option.getOrThrow(Arr.findFirst(draw.selections, (id) => id !== selection));
           const receipt = draw.receipts[pick % draw.receipts.length]!;
           expect(send({ type: "saved", selection: other, request: selection, receipt })).toEqual(result);
           expect(send({ type: "saved", selection, request: other, receipt })).toEqual(result);
@@ -177,6 +192,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       let accepted = false;
       const old: Array<Msg> = [];
       const messages: Array<Msg> = [];
+
       const send = (msg: Msg, expected: Phase) => {
         const [next] = applyCell(Open.machine, model, msg);
         messages.push(msg);
@@ -195,6 +211,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         model = next;
         cursor.phase = expected;
       };
+
       const select = (pick: number) => {
         if (model._tag !== "closed") {
           old.push({ type: "checked", selection, snapshot });
@@ -209,12 +226,13 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
           old.push({ type: "failed", selection, request, reason: draw.failures[pick % draw.failures.length]! });
         }
 
-        const alternatives = draw.selections.filter((id) => id !== selection);
+        const alternatives = Arr.filter(draw.selections, (id) => id !== selection);
         selection = alternatives[pick % alternatives.length]!;
         snapshot = draw.snapshots[pick % draw.snapshots.length]!;
         accepted = false;
         send({ type: "select", selection }, "checking");
       };
+
       const advance = (pick: number, yes: boolean) => {
         if (cursor.phase === "closed" || cursor.phase === "ready" || cursor.phase === "refused") {
           select(pick);
@@ -245,7 +263,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       for (const cell of draw.cells) {
         const moves = ["advance", "replace", "close"];
 
-        if (old.some((msg) => "selection" in msg && msg.selection !== selection)) {
+        if (Arr.some(old, (msg) => "selection" in msg && msg.selection !== selection)) {
           moves.push("late");
         }
 
@@ -266,7 +284,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         } else if (move === "close") {
           send({ type: "close" }, "closed");
         } else if (move === "late") {
-          const late = old.filter((msg) => "selection" in msg && msg.selection !== selection);
+          const late = Arr.filter(old, (msg) => "selection" in msg && msg.selection !== selection);
           const before = model;
           send(late[cell.pick % late.length]!, cursor.phase);
           expect(model).toEqual(before);
@@ -276,7 +294,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
             "refused",
           );
         } else if (move === "wrong-request") {
-          const other = draw.answers.find((id) => id !== request)!;
+          const other = Option.getOrThrow(Arr.findFirst(draw.answers, (id) => id !== request));
           const before = model;
           send(
             { type: "saved", selection, request: other, receipt: draw.receipts[cell.pick % draw.receipts.length]! },
@@ -328,6 +346,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
       }
 
       expect(model._tag).toBe("refused");
+
       // Require a stale yes to arrive while its replacement is actually awaiting an answer.
       const stale: Msg = {
         type: "answer",
@@ -335,6 +354,7 @@ it("L4/L6: only the active selection's acknowledged acceptance reaches ready; ev
         request,
         decision: TrustDecision.cases.accepted.make({}),
       };
+
       select(draw.cells[0]!.pick);
       advance(0, true);
       advance(0, true);

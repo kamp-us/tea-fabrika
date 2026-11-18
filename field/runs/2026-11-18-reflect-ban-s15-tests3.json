@@ -1,0 +1,96 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-reflect-ban-s15-tests3",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-17T18:27:00-08:00",
+  "ended": "2026-11-17T18:37:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Fix round 2 of slice 15 of the Reflect ban (0554, ticket 1056) in next/ and our tooling, on docs/plan/quests/reflect-ban-PLAN.md law L4 and amendment point 8, on fabrikalfa/reflect-rest from 908221d20, after the recheck in field/runs/2026-11-18-reflect-ban-s13-s15-review2.json. The one finding: L4 in oxlint-plugins/advice.test.ts mapped a folder to the top that must hold a JSON.parse fire with topOf, and topOf mapped next/apps/fabrika/e2e/node to e2e, whose own files hold fires. So next/apps/fabrika/e2e/** added to the JSON.parse warn block moved e2e/node, where JSON.parse blocks today, to advice, and L4 stayed green. topOf now treats an app's e2e as it treats src: the root counts only its direct files' fires (a new directOnly helper), and each folder one level under it is its own top. A folder above the first level (next, next/packages/libfabrika, next/apps/fabrika) is direct-only too, which closes a second way the review did not name: next/packages/libfabrika/* moved the package's direct files to advice, and the old topOf excused them with the fires of the whole package. The law's comment and the stated limit now say: the only folders that advise without a fire of their own are the subfolders of a first-level folder the warn block already lists whole with **, which were at warn at the fold too.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "note": "Files changed: oxlint-plugins/advice.test.ts (topOf, a new directOnly, the inside helper, the law's comment) and this row. .oxlintrc.json and product code unchanged. Vitest under CI=1, nice -n 15, maxWorkers 2, TYPESAFE_API_KEY unset, on Node 22: advice.test.ts and plants.test.ts green (274 tests). pnpm format; pnpm lint (0 blocking); ratchet.ts exit 0. Every plant is a scratch edit of .oxlintrc.json (a glob inserted into the JSON.parse warn block's files, or the named edit), run once against the L4 test alone, restored by copy and checked with cmp. The old L4 (908221d20) on the same config: next/apps/fabrika/e2e/** green (the finding), next/packages/libfabrika/* green (the second way), next/apps/fabrika/** red only through src/entry. One law is green on the config as it stands; its reds are the plants.",
+  "laws": [
+    {
+      "law": "oxlint-plugins/advice.test.ts: Reflect ban L4 each file of next/ ends with the setting the rule held there before, pinned: every folder of next/ ends with JSON.parse and the ban at one level, new folders and client/ at error with both retry entries, and a folder that advises has JSON.parse fires in its tree",
+      "red": "none on the branch's config: the config is right and the law is green. On the finding's plant it was green before this round and is red now: next/apps/fabrika/e2e/node advises for JSON.parse and has no JSON.parse fire left, so it blocks at zero: expected false to be true."
+    }
+  ],
+  "plants": [
+    {
+      "law": "L4",
+      "plant": "the finding: next/apps/fabrika/e2e/** added to the JSON.parse warn block's files; fails with next/apps/fabrika/e2e/node advises for JSON.parse and has no JSON.parse fire left, so it blocks at zero: expected false to be true",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/* added to the warn block's files (a folder above the first level; the old law was green on it); fails with next/packages/libfabrika advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/apps/fabrika/** added to the warn block's files; fails with next/apps/fabrika advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/** added to the warn block's files; fails with next/packages/libfabrika/src/client starts at zero and blocks: expected 'warning' to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/src/access/** added to the warn block's files; fails with next/packages/libfabrika/src/access advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/src/access/inner/** added to the warn block's files; fails with next/packages/libfabrika/src/access advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/programs/pipeline/** added to the warn block's files; fails with next/programs/pipeline advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/programs/inbox/src/** added to the warn block's files; fails with next/programs/inbox/src advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/apps/fabrika/src/** added to the warn block's files; fails with next/apps/fabrika/src/entry advises for JSON.parse and has no JSON.parse fire left",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "next/packages/libfabrika/src/client/** added to the warn block's files; fails with next/packages/libfabrika/src/client starts at zero and blocks: expected 'warning' to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the Effect.retry entry dropped from client/'s block; fails with next/packages/libfabrika/src/client keeps Effect.retry: expected undefined to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "client/'s block set to warn; fails with next/packages/libfabrika/src/client starts at zero and blocks: expected 'warning' to be 'error'",
+      "result": "red"
+    },
+    {
+      "law": "L4",
+      "plant": "the JSON.parse entry dropped from the next/**/* block; fails with next ends with JSON.parse restricted: expected undefined to be defined",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

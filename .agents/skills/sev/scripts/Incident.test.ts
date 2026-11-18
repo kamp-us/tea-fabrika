@@ -2,18 +2,34 @@
 // asks GitHub or git. The log goes to a temporary folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Layer, Schema, type Scope } from "effect";
+import { Recorder } from "@kampus/vitest";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  DateTime,
+  Duration,
+  Effect,
+  FileSystem,
+  Layer,
+  Order,
+  Record as Rec,
+  Schema,
+} from "effect";
+import type { Scope } from "effect";
 import * as BranchesTest from "../../lead/scripts/pr/BranchesTest.ts";
 import type { PullRequest } from "../../lead/scripts/pr/PullRequests.ts";
 import * as PullRequestsTest from "../../lead/scripts/pr/PullRequestsTest.ts";
 import * as AlertsTest from "./AlertsTest.ts";
 import * as Incident from "./Incident.ts";
 import * as Level from "./Level.ts";
-import { Run } from "./WorkflowRuns.ts";
+import { Run, WorkflowRuns } from "./WorkflowRuns.ts";
 import * as WorkflowRunsTest from "./WorkflowRunsTest.ts";
 
 const AT = "2026-11-14T19:00:00.000Z";
+
 const red = { number: 1300, title: "Scheduled CI is red on main", since: AT } satisfies Level.Alert;
+
 const slow = { number: 1301, title: "CI speed: a stage is over its goal", since: AT } satisfies Level.Alert;
 
 const home = Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectoryScoped({ prefix: "sev-" }));
@@ -24,7 +40,7 @@ const law = <A, E>(body: Effect.Effect<A, E, NodeServices.NodeServices | Scope.S
 const pr = (number: number, head: string, state: PullRequest["state"] = "OPEN"): PullRequest => ({
   number,
   head,
-  oid: `${number}`.padStart(40, "0"),
+  oid: pipe(`${number}`, Str.padStart(40, "0")),
   state,
   draft: false,
 });
@@ -50,7 +66,7 @@ const run = (id: number, branch: string): Run => ({
   workflow: "check",
   event: "pull_request",
   branch,
-  sha: "a".repeat(40),
+  sha: pipe("a", Str.repeat(40)),
   status: "completed",
   conclusion: "cancelled",
   created: AT,
@@ -72,10 +88,12 @@ describe("close", () => {
         Effect.gen(function* () {
           const dir = yield* home;
           const github = WorkflowRunsTest.world(runs);
-          const prs = picks.map((p, i) =>
+
+          const prs = Arr.map(picks, (p, i) =>
             pr(i + 1, runs.length === 0 ? stray : (runs[Math.abs(p.at) % runs.length]?.branch ?? stray), p.state),
           );
-          const behind = Object.fromEntries(prs.map((p, i) => [p.oid, picks[i]?.behind ?? 0]));
+
+          const behind = Rec.fromEntries(Arr.map(prs, (p, i) => [p.oid, picks[i]?.behind ?? 0]));
           const prWorld = PullRequestsTest.world([...prs, pr(9999, stray)]);
 
           yield* Incident.open({ home: dir, reason: "slow", allow: [] }).pipe(Effect.provide(services({})));
@@ -84,18 +102,29 @@ describe("close", () => {
             yield* Level.write(dir, canceled(r));
           }
 
-          const closed = yield* Incident.close(dir, "lead", Duration.zero).pipe(
-            Effect.provide(services({ github, prs: prWorld, behind })),
-          );
+          const { closed, cancels } = yield* Effect.gen(function* () {
+            return {
+              closed: yield* Incident.close(dir, "lead", Duration.zero),
+              cancels: yield* Recorder.calls(WorkflowRuns, "cancel"),
+            };
+          }).pipe(Effect.provide(services({ github, prs: prWorld, behind })));
 
-          expect(github.calls).toEqual([]);
+          expect(cancels).toEqual([]);
           expect(github.runs).toEqual(runs);
           expect(prWorld.calls).toEqual([]);
 
-          const hit = new Set(runs.map((r) => r.branch));
-          const due = [...prs, pr(9999, stray)].filter((p) => p.state === "OPEN" && hit.has(p.head));
-          expect(closed.walk.map((w) => w.pr).toSorted((a, b) => a - b)).toEqual(
-            due.map((p) => p.number).toSorted((a, b) => a - b),
+          const hit = new Set(Arr.map(runs, (r) => r.branch));
+          const due = Arr.filter([...prs, pr(9999, stray)], (p) => p.state === "OPEN" && hit.has(p.head));
+          expect(
+            Arr.sort(
+              Arr.map(closed.walk, (w) => w.pr),
+              Order.Number,
+            ),
+          ).toEqual(
+            Arr.sort(
+              Arr.map(due, (p) => p.number),
+              Order.Number,
+            ),
           );
           expect((yield* Level.read(dir)).sev0._tag).toBe("closed");
         }),
@@ -117,6 +146,7 @@ describe("close", () => {
           yield* Level.write(dir, canceled(run(3, "fabrikalfa/b")));
           yield* Level.write(dir, canceled(run(4, "main")));
           yield* Level.write(dir, canceled(run(5, "fabrikalfa/gone")));
+
           const prs = PullRequestsTest.world([
             pr(10, "fabrikalfa/a"),
             pr(11, "fabrikalfa/b"),
@@ -128,7 +158,7 @@ describe("close", () => {
             Effect.provide(services({ prs, behind: { [pr(11, "").oid]: 3, [pr(10, "").oid]: 0 }, issues: [red] })),
           );
 
-          expect(closed.walk.map((w) => w._tag)).toEqual(["holds", "behind"]);
+          expect(Arr.map(closed.walk, (w) => w._tag)).toEqual(["holds", "behind"]);
           expect(Incident.nextLines(closed.walk)).toEqual([
             "sev: 2 open pull requests had runs canceled; walk them in this order, on the merge line:",
             "  11 fabrikalfa/b: 3 commits behind main; merge main in and push",
@@ -149,9 +179,11 @@ describe("close", () => {
           const dir = yield* home;
           yield* Incident.open({ home: dir, reason: "slow", allow: [] }).pipe(Effect.provide(services({})));
           yield* Level.write(dir, canceled(run(1, "fabrikalfa/a")));
+
           const closed = yield* Incident.close(dir, "lead", Duration.zero).pipe(
             Effect.provide(services({ prs: PullRequestsTest.world([pr(10, "fabrikalfa/a")]) })),
           );
+
           expect(closed.walk).toEqual([
             Incident.Walk.cases.unknown.make({ pr: 10, branch: "fabrikalfa/a", reason: `unknown ${pr(10, "").oid}` }),
           ]);
@@ -190,6 +222,7 @@ describe("open, next, allow and status", () => {
           const again = yield* Effect.flip(
             Incident.open({ home: dir, reason: "again", allow: [] }).pipe(Effect.provide(layer)),
           );
+
           expect(again).toMatchObject({ _tag: "Refused" });
 
           yield* Incident.next(dir, "fabrikalfa/y");
@@ -261,6 +294,7 @@ describe("summary", () => {
       Level.Entry.cases.failed.make({ at: AT, call: "cancel", id: 3, reason: "gone" }),
       Level.Entry.cases.closed.make({ at: AT, by: "owner" }),
     ];
+
     expect(Incident.summary(entries)).toEqual([
       `${AT} opened by the owner: slow; allowed: fabrikalfa/a`,
       "  over ci-scheduled issues: 1300",
@@ -269,4 +303,47 @@ describe("summary", () => {
       "3 runs canceled on 2 branches; 1 GitHub calls failed",
     ]);
   });
+
+  /** Tonight's three kinds of failed call: the 403 rate limit, the 409 of a stuck run, and a 502 (runs/sev/log.jsonl, 2026-11-18). */
+  const tonight: ReadonlyArray<Level.Entry> = [
+    Level.Entry.cases.limited.make({
+      at: "2026-11-18T10:01:42.000Z",
+      call: "cancel",
+      id: 43096104693,
+      until: DateTime.makeUnsafe("2026-11-18T10:08:55Z"),
+      reason: "gh run cancel exited 1: HTTP 403: API rate limit exceeded.",
+    }),
+    Level.Entry.cases.refused.make({
+      at: "2026-11-18T10:46:01.000Z",
+      id: 43096104693,
+      status: 409,
+      reason: "gh api exited 1: gh: Cannot cancel a workflow run that has not been queued yet. (HTTP 409)",
+    }),
+    Level.Entry.cases.failed.make({
+      at: "2026-11-18T09:39:46.045Z",
+      call: "cancel",
+      id: 43096102409,
+      reason: "gh run cancel exited 1: HTTP 502: Server Error",
+    }),
+  ];
+
+  it.prop(
+    "property: the summary counts each failed, refused and rate-limited call as one failed GitHub call",
+    {
+      lines: Schema.Array(
+        Schema.Union([Level.Entry.cases.failed, Level.Entry.cases.refused, Level.Entry.cases.limited]),
+      ),
+    },
+    ({ lines }) => {
+      const entries = [
+        Level.Entry.cases.opened.make({ at: AT, by: "owner", reason: "slow", allow: [], issues: [] }),
+        ...tonight,
+        ...lines,
+      ];
+
+      expect(Incident.summary(entries).at(-1)).toBe(
+        `0 runs canceled on 0 branches; ${tonight.length + lines.length} GitHub calls failed`,
+      );
+    },
+  );
 });

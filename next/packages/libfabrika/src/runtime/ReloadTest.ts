@@ -17,7 +17,11 @@ import {
   Schema,
   Scope,
   Stream,
+  Predicate,
+  Match,
 } from "effect";
+import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
@@ -64,9 +68,12 @@ const SEED = 119120;
 class PropertyFailure extends Schema.TaggedError<PropertyFailure>()("PropertyFailure", { cause: Schema.Defect() }) {}
 
 const propertyFailure = (cause: unknown) => new PropertyFailure({ cause });
+
 /** P40: the counter's qualified name; its registered names stay `counter:N`. */
 const PROGRAM = "fabrika/counter";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const PERSON = Writer.cases.person.make({ key: "SHA256:person", for: "person" });
 
 // --- Variants ---------------------------------------------------------------------------------
@@ -95,13 +102,14 @@ const BASE: Spec = { k: 1, shape: "same", min: 0, max: 0, v: 1, gaps: [], cmd: f
 type CounterModel = { readonly count: number; readonly step?: number };
 
 const schemaFor = (spec: Spec) =>
-  spec.shape === "widened"
-    ? Schema.Struct({ count: Schema.Number })
-    : spec.shape === "narrowed"
-      ? Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: spec.min, maximum: spec.max })) })
-      : spec.shape === "field"
-        ? Schema.Struct({ count: Schema.Int, step: Schema.Int })
-        : Schema.Struct({ count: Schema.Int });
+  Match.value(spec.shape).pipe(
+    Match.when("widened", () => Schema.Struct({ count: Schema.Number })),
+    Match.when("narrowed", () =>
+      Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: spec.min, maximum: spec.max })) }),
+    ),
+    Match.when("field", () => Schema.Struct({ count: Schema.Int, step: Schema.Int })),
+    Match.orElse(() => Schema.Struct({ count: Schema.Int })),
+  );
 
 /** A narrowed counter never leaves its bounds, so its own steps keep its model readable. */
 const clamp = (spec: Spec, n: number) => (spec.shape === "narrowed" ? Math.min(spec.max, Math.max(spec.min, n)) : n);
@@ -120,16 +128,21 @@ const updateFor = (spec: Spec, model: CounterModel, m: { readonly type: string }
 
 /** The chain: one upgrade per number below `v`, except the gaps. A field variant's upgrades add `step`. */
 const upgradesFor = (spec: Spec) =>
-  Array.from({ length: spec.v - 1 }, (_, i) => i + 1)
-    .filter((from) => !spec.gaps.includes(from))
-    .map((from) => ({
+  Arr.map(
+    Arr.filter(
+      Array.from({ length: spec.v - 1 }, (_, i) => i + 1),
+      (from) => !spec.gaps.includes(from),
+    ),
+    (from) => ({
       name: `${spec.shape}_${from}`,
       from,
-      run: (m: unknown): unknown =>
-        spec.shape === "field" && typeof m === "object" && m !== null && !("step" in m) ? { ...m, step: 1 } : m,
-    }));
+      run: <M>(m: M): M | (M & { readonly step: number }) =>
+        spec.shape === "field" && Predicate.isObjectOrArray(m) && !("step" in m) ? { ...m, step: 1 } : m,
+    }),
+  );
 
 const ping = Cmd.make("ping", { input: Schema.Struct({ n: Schema.Number }), ok: Schema.Number, err: [] });
+
 const changed = Schema.TaggedStruct("changed", { count: Schema.Int });
 
 const write = Cmd.make("write", {
@@ -147,7 +160,9 @@ const Msg = Schema.Union([
 /** The variant as a program, made with `Program.make` as a program author writes one. */
 const programFor = (spec: Spec) => {
   const model = schemaFor(spec);
+
   const machine = Machine.make({
+    // SAFETY: every variant schemaFor builds is a Struct of a numeric `count` and, for `field`, an Int `step`, so each type fits CounterModel.
     model: model as Schema.Codec<CounterModel>,
     msg: Msg,
     cmds: [ping, write, send],
@@ -176,6 +191,7 @@ const programFor = (spec: Spec) => {
       send_err: (s: CounterModel) => [s, []],
     },
   });
+
   return Program.make({
     name: PROGRAM,
     machine,
@@ -201,7 +217,7 @@ const fits = (spec: Spec, model: CounterModel, v: number): "fits" | "shape" | "n
   let m: unknown = model;
 
   for (let from = v; from < spec.v; from++) {
-    const upgrade = upgradesFor(spec).find((u) => u.from === from);
+    const upgrade = Option.getOrUndefined(Arr.findFirst(upgradesFor(spec), (u) => u.from === from));
 
     if (upgrade === undefined) {
       return "shape";
@@ -219,10 +235,7 @@ const climb = (spec: Spec, model: CounterModel, v: number): CounterModel => {
 
   for (let from = v; from < spec.v; from++) {
     // Only a variant that fits is climbed, so its chain has every step.
-    m =
-      upgradesFor(spec)
-        .find((u) => u.from === from)
-        ?.run(m) ?? m;
+    m = Option.getOrUndefined(Arr.findFirst(upgradesFor(spec), (u) => u.from === from))?.run(m) ?? m;
   }
 
   return Schema.encodeSync(schemaFor(spec))(Schema.decodeUnknownSync(schemaFor(spec))(m));
@@ -241,6 +254,7 @@ const fcFitting = (model: CounterModel, v: number): fc.Arbitrary<Spec> =>
     .map(({ k, shape, below, above, climb }) => {
       // A field the model lacks needs an upgrade to add it, so its variant climbs at least one number.
       const up = shape === "field" && model.step === undefined ? Math.max(1, climb) : climb;
+
       return {
         k,
         shape,
@@ -311,6 +325,7 @@ const makeCode = Effect.fnUntraced(function* (specs: ReadonlyArray<Spec>) {
 const learn = Effect.fnUntraced(function* (code: Code, spec: Spec) {
   const digest = yield* hashFor(spec);
   code.variants.set(digest, spec);
+
   return digest;
 });
 
@@ -326,6 +341,7 @@ const loader = (code: Code) => ({
       }
 
       code.calls.loads.push(build);
+
       const loaded: Loaded = yield* ProgramLoader.use((l) => l.load(name, build)).pipe(
         Effect.provide(
           ProgramLoader.layer(
@@ -341,14 +357,17 @@ const loader = (code: Code) => ({
                     yield* Deferred.await(code.cmdGate);
                   }
 
-                  const n = typeof cmd === "object" && cmd !== null && "n" in cmd ? Number(cmd.n) : 0;
+                  const n = Predicate.isObjectOrArray(cmd) && "n" in cmd ? Number(cmd.n) : 0;
+
                   return Outcome.ok(n);
                 }),
             },
           ),
         ),
       );
+
       const { execution } = loaded;
+
       /** Holds a letter's step open while a law's gate is set, and says so on `held`. */
       const gated = Effect.gen(function* () {
         const gate = code.stepGate;
@@ -363,6 +382,7 @@ const loader = (code: Code) => ({
           yield* Deferred.await(gate);
         }
       });
+
       return {
         stepper: loaded.stepper,
         declaration: loaded.declaration,
@@ -372,6 +392,7 @@ const loader = (code: Code) => ({
           init: (saved: unknown) =>
             Effect.suspend(() => {
               code.calls.inits.push(build);
+
               return execution.init(saved);
             }),
           step: (model: unknown, m: unknown) => Effect.andThen(gated, execution.step(model, m)),
@@ -437,6 +458,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, specs: ReadonlyArray<Spec>)
   const ledger = yield* rig.open;
   const manager = yield* rig.open;
   const code = yield* makeCode(specs);
+
   return {
     rig,
     ledger,
@@ -458,6 +480,7 @@ const nextProcess = Id.Generator.use((ids) => ids.next(Id.Process)).pipe(
 /** Opens a runner for `name`, starting it on `build` the first time, waking it after. */
 const open = Effect.fnUntraced(function* (w: World, name: string, build: string) {
   const known = w.names.get(name);
+
   const entry: Name = known ?? {
     name,
     store: yield* w.rig.open.pipe(Scope.provide(w.scope)),
@@ -466,13 +489,16 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
     updates: new Map(),
     session: null,
   };
+
   w.names.set(name, entry);
   const scope = yield* Scope.fork(w.scope);
   const alarms: Array<number | null> = [];
+
   const sessionWork = Effect.gen(function* () {
     const storeSql = entry.store.sql;
     const manager = w.rig.coordination(w.ledger.sql, w.manager.sql, nextProcess);
     const managerContext = yield* Layer.build(manager);
+
     // The brain starts each name once, on the build its descriptor names; a wake finds it live.
     const status = yield* ProcessManager.use((m) =>
       m.status(name).pipe(
@@ -485,11 +511,14 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
         Effect.flatMap(() => m.status(name)),
       ),
     ).pipe(Effect.provide(managerContext), Effect.orDie);
+
     entry.pid = status.state.process;
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: Effect.fnUntraced(function* (i: {
             id: string;
@@ -505,9 +534,12 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
 
                 w.cuts.armed = null;
                 w.cuts.hits.push(at);
+
                 return Effect.fail(new LedgerError({ reason: "unreachable" }));
               });
+
             yield* cut("before_acceptance");
+
             const appended = yield* mailbox.send(name, i.id, i.envelope.input, {
               ...brainFrom(entry.build),
               by: PERSON.key,
@@ -515,7 +547,9 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
               sentAt: i.sentAt,
               seen: i.seen,
             });
+
             yield* cut("after_acceptance");
+
             return appended;
           }),
           commit: () => Effect.die("a counter variant has no write Cmd"),
@@ -528,11 +562,13 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
               }
 
               w.durable.completed.add(id);
+
               return Appended.cases.placed.make({ rev: 1, pos: 1 });
             }),
         };
       }),
     );
+
     const services = Layer.mergeAll(
       ProcessStore.layer(storeSql, { process: entry.pid }),
       checked,
@@ -546,6 +582,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
             }
 
             w.durable.completed.add(mail.command);
+
             return Queued.make({ id: mail.command });
           }),
       }),
@@ -558,6 +595,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
       Layer.succeed(Alarm, { set: (at) => Effect.sync(() => void alarms.push(at)) }),
       Layer.succeed(Recording, { flush: Effect.void }),
     ).pipe(Layer.provideMerge(Layer.succeedContext(managerContext)));
+
     const layer = ProgramRunner.withLoader(
       { id: entry.pid, name, program: PROGRAM, build: entry.build, owner: PERSON },
       loader(w.code),
@@ -572,12 +610,15 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
 
             w.cuts.armed = null;
             w.cuts.hits.push(cut);
+
             return Effect.fail(new LedgerError({ reason: "unreachable" }));
           }),
       },
     ).pipe(Layer.provideMerge(services));
+
     const context = yield* Layer.build(layer);
     const runner = Context.get(context, ProgramRunner);
+
     const session: Session = {
       scope,
       runner,
@@ -585,10 +626,13 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
       run: (work) => Effect.provide(work, context),
       sql: storeSql,
     };
+
     return session;
   });
+
   const session = yield* sessionWork.pipe(Scope.provide(scope));
   entry.session = session;
+
   return session;
 });
 
@@ -606,18 +650,20 @@ const evict = Effect.fnUntraced(function* (w: World, name: string) {
 /** The name's open session, waking it on its descriptor's build when it was evicted. */
 const session = Effect.fnUntraced(function* (w: World, name: string) {
   const entry = w.names.get(name);
+
   return entry?.session ?? (yield* open(w, name, entry?.build ?? (yield* hashFor(BASE))));
 });
 
 /** One press, as the door delivers it: a fresh letter id unless a law resends one. */
 const press = (w: World, type: "inc" | "dec" | "reset", letter?: number) => {
   const n = letter ?? ++w.letters;
+
   return {
     n,
     input: {
       id: `press-${n}`,
       envelope: {
-        id: `input_0000000000e00800000000${n.toString(16).padStart(4, "0")}`,
+        id: `input_0000000000e00800000000${Str.padStart(4, "0")(n.toString(16))}`,
         by: PERSON,
         arrivedAt: n,
         input: { type },
@@ -643,20 +689,25 @@ type Fact = {
 const history = Effect.fnUntraced(function* (w: World, name: string) {
   const s = yield* session(w, name);
   const pid = w.names.get(name)?.pid ?? "";
+
   return yield* s.run(
     Effect.gen(function* () {
       const mailbox = yield* Mailbox;
-      const facts = w.rig
-        .rows(w.ledger.sql)
-        .filter((e) => e.stream === pid)
-        .map((e): Fact => ({
+
+      const facts = Arr.map(
+        Arr.filter(w.rig.rows(w.ledger.sql), (e) => e.stream === pid),
+        (e): Fact => ({
           tag: e.event,
           id: e.id,
+          // SAFETY: a process row's body is the object the runtime wrote for it.
           body: e.body as Readonly<Record<string, unknown>>,
           build: e.build,
-        }));
+        }),
+      );
+
       const inbox = yield* Stream.runCollect(mailbox.read(name, 0));
       const checkpoint = yield* ProcessStore.use((store) => store.load);
+
       return { facts, inbox, checkpoint };
     }),
   );
@@ -665,6 +716,7 @@ const history = Effect.fnUntraced(function* (w: World, name: string) {
 /** The name's saved supervision journal. */
 const supervision = Effect.fnUntraced(function* (w: World, name: string) {
   const s = yield* session(w, name);
+
   return yield* recoveryStore(s.sql, { name, capacity: 1024 ** 3, schema: Supervision }).load;
 });
 
@@ -695,15 +747,17 @@ const replay = (
         problems.push(`${String(body.input)} stepped on ${String(body.build)} while the stream ran ${build}`);
       }
 
-      const letter = inbox.find((l) => l.id === body.input);
+      const letter = Option.getOrUndefined(Arr.findFirst(inbox, (l) => l.id === body.input));
 
       if (letter === undefined) {
         problems.push(`${String(body.input)} has no letter`);
         continue;
       }
 
+      // SAFETY: an inbox letter's `m` is a message the counter takes, with its `type`.
       model = updateFor(code.variants.get(String(body.build)) ?? spec, model, letter.m as { type: string });
     } else if (fact.tag === "state.upgraded") {
+      // SAFETY: a state.upgraded body names the upgrades it ran as a list of their names.
       upgraded = { ran: (body.ran as ReadonlyArray<string>) ?? [] };
     } else if (fact.tag === "code.swapped") {
       const next = code.variants.get(String(body.hash));
@@ -713,11 +767,17 @@ const replay = (
         continue;
       }
 
-      const chain = upgradesFor(next).filter((u) => u.from >= v);
+      const chain = Arr.filter(upgradesFor(next), (u) => u.from >= v);
 
-      if ((upgraded?.ran ?? []).join() !== chain.map((u) => u.name).join()) {
+      if (
+        Arr.join(upgraded?.ran ?? [], ",") !==
+        Arr.join(
+          Arr.map(chain, (u) => u.name),
+          ",",
+        )
+      ) {
         problems.push(
-          `code.swapped to ${String(body.hash)} ran ${String(upgraded?.ran)}, its chain is ${chain.map((u) => u.name)}`,
+          `code.swapped to ${String(body.hash)} ran ${String(upgraded?.ran)}, its chain is ${Arr.map(chain, (u) => u.name)}`,
         );
       }
 
@@ -733,9 +793,10 @@ const replay = (
 };
 
 /** Each fact of a tag, and how many of them answer each load. */
-const byTag = (facts: ReadonlyArray<Fact>, tag: string) => facts.filter((f) => f.tag === tag);
+const byTag = (facts: ReadonlyArray<Fact>, tag: string) => Arr.filter(facts, (f) => f.tag === tag);
 
 const NAME = "counter:1";
+
 // Each run opens real SQLite files and runners; 100 runs took about 10 to 40 s on a laptop.
 const TIMEOUT = 300_000;
 
@@ -751,10 +812,12 @@ expectTypeOf<typeof SwapAnswer.Type>().toEqualTypeOf<Swapped>();
 
 // L20 (type): a swap's answer is a closed union a caller must match whole.
 expectTypeOf<Swapped["_tag"]>().toEqualTypeOf<"same" | "swapped" | "refused" | "not_now">();
+
 expectTypeOf<(typeof Swapped.cases)["refused"]["Type"]["reason"]>().toEqualTypeOf<"shape" | "newer" | "load">();
 
 // 0135: the swap request restated here is pinned to the runner's own parameter.
 type SwapRequest = { readonly load: string; readonly program: string; readonly hash: string };
+
 expectTypeOf<Parameters<Session["runner"]["swap"]>[0]>().toEqualTypeOf<SwapRequest>();
 
 const swap = (s: Session, load: string, hash: string) => s.runner.swap({ load, program: PROGRAM, hash });
@@ -793,6 +856,7 @@ const pressOnce = Effect.fnUntraced(function* (w: World, a: Account, g: fc.Gener
   expect(sent._tag, `press ${input.id}`).toBe("accepted");
   a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, { type });
   a.accepted.push(input.id);
+
   return input;
 });
 
@@ -804,6 +868,7 @@ const swapFitting = Effect.fnUntraced(function* (w: World, a: Account, spec: Spe
 
   if (hash === a.build) {
     expect(answer).toEqual(SwapAnswer.cases.same.make({}));
+
     return { hash, load, answer };
   }
 
@@ -813,6 +878,7 @@ const swapFitting = Effect.fnUntraced(function* (w: World, a: Account, spec: Spe
   a.build = hash;
   a.ran.push(hash);
   a.swaps++;
+
   return { hash, load, answer };
 });
 
@@ -848,8 +914,9 @@ const agrees = Effect.fnUntraced(function* (w: World, a: Account, start: string,
 /** Runs one generated walk in a fresh world, every resource given back with its scope. */
 const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, never>, runs = 100) =>
   Effect.gen(function* () {
+    const context = yield* Effect.context<never>();
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check requires a Promise callback
-    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(body(g)));
+    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromiseWith(context)(body(g)));
     // A walk of real runners is slow to shrink: report the first counterexample as found.
     const options = { seed: SEED, numRuns: runs, endOnFailure: true };
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check runs an async property as a Promise
@@ -860,6 +927,7 @@ const inWorld = <A, E>(rig: Rig, specs: ReadonlyArray<Spec>, body: (w: World) =>
   Effect.scoped(
     Effect.gen(function* () {
       const w = yield* world(rig, specs);
+
       return yield* body(w);
     }),
   );
@@ -875,6 +943,7 @@ type RefusedFact = {
 };
 
 expectTypeOf<Omit<(typeof RuntimeRecord.cases)["code.swapped"]["Type"], "_tag">>().toEqualTypeOf<SwappedFact>();
+
 expectTypeOf<Omit<(typeof RuntimeRecord.cases)["code.refused"]["Type"], "_tag">>().toEqualTypeOf<RefusedFact>();
 
 /** Runs the reload laws over the driver module's real stores. */
@@ -895,11 +964,13 @@ export const suite = (rig: Rig): void => {
                 const steps = g(fc.integer, { min: 1, max: 12 });
 
                 for (let n = 0; n < steps; n++) {
-                  const back = a.ran.filter(
+                  const back = Arr.filter(
+                    a.ran,
                     (h) =>
                       h !== a.build &&
                       fits(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(h))), a.model, a.v) === "fits",
                   );
+
                   const move = pick(g, ["press", "press", "swap", ...(back.length > 0 ? ["back"] : [])]);
                   seen.add(move);
 
@@ -927,10 +998,10 @@ export const suite = (rig: Rig): void => {
                 const { facts } = yield* agrees(w, a, base);
                 const swapped = byTag(facts, "code.swapped");
                 expect(swapped, "one code.swapped per swap").toHaveLength(a.swaps);
-                expect(new Set(swapped.map((f) => f.id)).size).toBe(a.swaps);
+                expect(new Set(Arr.map(swapped, (f) => f.id)).size).toBe(a.swaps);
 
                 for (const fact of swapped) {
-                  expect(fact.id.startsWith("code.swapped:")).toBe(true);
+                  expect(Str.startsWith("code.swapped:")(fact.id)).toBe(true);
                   expect(fact.body.program).toBe(PROGRAM);
                 }
               }),
@@ -974,6 +1045,7 @@ export const suite = (rig: Rig): void => {
                       a,
                       g(() => fcFitting(a.model, a.v)),
                     );
+
                     loads.push(load);
                     continue;
                   }
@@ -983,7 +1055,7 @@ export const suite = (rig: Rig): void => {
                   const before = yield* history(w, NAME);
                   const journal = yield* supervision(w, NAME);
                   const inits = w.code.calls.inits.length;
-                  const updates = [...(w.names.get(NAME)?.updates.values() ?? [])].map((u) => u.length);
+                  const updates = Arr.map([...(w.names.get(NAME)?.updates.values() ?? [])], (u) => u.length);
                   const answer = yield* swap(yield* session(w, NAME), load, a.build);
                   seen.add(move);
                   expect(answer).toEqual(SwapAnswer.cases.same.make({}));
@@ -993,7 +1065,7 @@ export const suite = (rig: Rig): void => {
                   expect(yield* supervision(w, NAME), "the supervisor").toEqual(journal);
                   expect(w.code.calls.inits.length, "no init").toBe(inits);
                   expect(
-                    [...(w.names.get(NAME)?.updates.values() ?? [])].map((u) => u.length),
+                    Arr.map([...(w.names.get(NAME)?.updates.values() ?? [])], (u) => u.length),
                     "no view notice",
                   ).toEqual(updates);
                 }
@@ -1011,88 +1083,91 @@ export const suite = (rig: Rig): void => {
     it.live(
       "L3: a swap sent while a step is held open runs after that turn; the next letter runs on the new code; each letter steps once, resends included",
       () =>
-        Effect.gen(function* () {
-          yield* law((g) =>
-            inWorld(rig, [BASE], (w) =>
-              Effect.gen(function* () {
-                const base = yield* hashFor(BASE);
-                yield* open(w, NAME, base);
-                const a = account(base);
-                const sent: Array<ReturnType<typeof press>["input"]> = [];
-                const before = g(fc.integer, { min: 0, max: 4 });
+        law((g) =>
+          inWorld(rig, [BASE], (w) =>
+            Effect.gen(function* () {
+              const base = yield* hashFor(BASE);
+              yield* open(w, NAME, base);
+              const a = account(base);
+              const sent: Array<ReturnType<typeof press>["input"]> = [];
+              const before = g(fc.integer, { min: 0, max: 4 });
 
-                for (let n = 0; n < before; n++) {
-                  sent.push(yield* pressOnce(w, a, g));
-                }
+              for (let n = 0; n < before; n++) {
+                sent.push(yield* pressOnce(w, a, g));
+              }
 
-                // The held turn: its step waits on a gate the law opens after the swap is sent.
-                const s = yield* session(w, NAME);
-                const gate = yield* Deferred.make<void>();
-                const held = yield* Deferred.make<void>();
-                w.code.stepGate = gate;
-                w.code.held = held;
-                const { input } = press(w, "inc");
-                const turn = yield* Effect.forkChild(s.runner.msg(input));
-                yield* Deferred.await(held);
-                const spec = g(() =>
-                  fcFitting(
-                    updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
-                      type: "inc",
-                    }),
-                    a.v,
-                  ),
-                );
-                const hash = yield* learn(w.code, spec);
-                const swapping = yield* Effect.forkChild(swap(s, "install_held", hash));
+              // The held turn: its step waits on a gate the law opens after the swap is sent.
+              const s = yield* session(w, NAME);
+              const gate = yield* Deferred.make<void>();
+              const held = yield* Deferred.make<void>();
+              w.code.stepGate = gate;
+              w.code.held = held;
+              const { input } = press(w, "inc");
+              const turn = yield* Effect.forkChild(s.runner.msg(input));
+              yield* Deferred.await(held);
 
-                for (let n = 0; n < 20; n++) {
-                  yield* Effect.yieldNow;
-                }
+              const spec = g(() =>
+                fcFitting(
+                  updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
+                    type: "inc",
+                  }),
+                  a.v,
+                ),
+              );
 
-                expect(swapping.pollUnsafe(), "the swap waits for the turn in flight").toBeUndefined();
-                yield* Deferred.succeed(gate, undefined);
-                expect((yield* Fiber.join(turn))._tag).toBe("accepted");
-                a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
-                  type: "inc",
-                });
-                a.accepted.push(input.id);
-                sent.push(input);
-                const answer = yield* Fiber.join(swapping);
-                w.code.held = null;
+              const hash = yield* learn(w.code, spec);
+              const swapping = yield* Effect.forkChild(swap(s, "install_held", hash));
 
-                if (hash === a.build) {
-                  expect(answer).toEqual(SwapAnswer.cases.same.make({}));
-                } else {
-                  expect(answer).toEqual(SwapAnswer.cases.swapped.make({ was: a.build }));
-                  a.model = climb(spec, a.model, a.v);
-                  a.v = spec.v;
-                  a.build = hash;
-                  a.swaps++;
-                }
+              for (let n = 0; n < 20; n++) {
+                yield* Effect.yieldNow;
+              }
 
-                // The next letter runs on the new code; resends of letters this walk sent step nothing.
-                const next = yield* pressOnce(w, a, g);
-                const resends = g(fc.integer, { min: 0, max: Math.min(3, sent.length) });
+              expect(swapping.pollUnsafe(), "the swap waits for the turn in flight").toBeUndefined();
+              yield* Deferred.succeed(gate, undefined);
+              expect((yield* Fiber.join(turn))._tag).toBe("accepted");
+              a.model = updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
+                type: "inc",
+              });
+              a.accepted.push(input.id);
+              sent.push(input);
+              const answer = yield* Fiber.join(swapping);
+              w.code.held = null;
 
-                for (let n = 0; n < resends; n++) {
-                  const again = pick(g, sent);
-                  expect((yield* s.runner.msg(again))._tag).toBe("accepted");
-                }
+              if (hash === a.build) {
+                expect(answer).toEqual(SwapAnswer.cases.same.make({}));
+              } else {
+                expect(answer).toEqual(SwapAnswer.cases.swapped.make({ was: a.build }));
+                a.model = climb(spec, a.model, a.v);
+                a.v = spec.v;
+                a.build = hash;
+                a.swaps++;
+              }
 
-                const { facts } = yield* agrees(w, a, base);
-                const stepped = byTag(facts, "stepped");
-                expect(stepped.find((f) => f.body.input === next.id)?.body.build, "the next letter's code").toBe(hash);
+              // The next letter runs on the new code; resends of letters this walk sent step nothing.
+              const next = yield* pressOnce(w, a, g);
+              const resends = g(fc.integer, { min: 0, max: Math.min(3, sent.length) });
 
-                for (const id of a.accepted) {
-                  expect(
-                    stepped.filter((f) => f.body.input === id),
-                    `${id} steps once`,
-                  ).toHaveLength(1);
-                }
-              }),
-            ),
-          );
-        }),
+              for (let n = 0; n < resends; n++) {
+                const again = pick(g, sent);
+                expect((yield* s.runner.msg(again))._tag).toBe("accepted");
+              }
+
+              const { facts } = yield* agrees(w, a, base);
+              const stepped = byTag(facts, "stepped");
+              expect(
+                Option.getOrUndefined(Arr.findFirst(stepped, (f) => f.body.input === next.id))?.body.build,
+                "the next letter's code",
+              ).toBe(hash);
+
+              for (const id of a.accepted) {
+                expect(
+                  Arr.filter(stepped, (f) => f.body.input === id),
+                  `${id} steps once`,
+                ).toHaveLength(1);
+              }
+            }),
+          ),
+        ),
       TIMEOUT,
     );
 
@@ -1119,6 +1194,7 @@ export const suite = (rig: Rig): void => {
                     "cut_swap",
                     ...(a.swaps > 0 ? ["restart"] : []),
                   ]);
+
                   seen.add(move);
 
                   if (move === "press") {
@@ -1162,6 +1238,7 @@ export const suite = (rig: Rig): void => {
                     const spec = { ...g(() => fcFitting(a.model, a.v)), v: a.v + 1 };
                     const hash = yield* learn(w.code, spec);
                     const load = `install_${++a.loads}`;
+
                     const cut = pick(g, [
                       "after_swap_prepared",
                       "after_swap_checkpoint",
@@ -1171,6 +1248,7 @@ export const suite = (rig: Rig): void => {
                       "after_swap_publish",
                       "after_swap_supervisor",
                     ]);
+
                     w.cuts.armed = cut;
                     const result = yield* Effect.exit(swap(s, load, hash));
                     expect(Exit.isFailure(result), `the call lost its answer at ${cut}`).toBe(true);
@@ -1196,20 +1274,29 @@ export const suite = (rig: Rig): void => {
                     if (!reopen) {
                       const fresh = (updates.get(client) ?? []).slice(notices);
                       expect(fresh.length, "recovery finishes the view notice").toBeGreaterThan(0);
-                      const rev = before.inbox.filter((l) => a.accepted.includes(l.id)).at(-1)?.pos ?? 0;
-                      expect(fresh).toEqual(fresh.map(() => ({ type: "whole", rev, view: a.model })));
+                      const rev = Arr.filter(before.inbox, (l) => a.accepted.includes(l.id)).at(-1)?.pos ?? 0;
+                      expect(fresh).toEqual(Arr.map(fresh, () => ({ type: "whole", rev, view: a.model })));
                     }
 
                     const after = yield* agrees(w, a, base);
                     expect(after.checkpoint?.saved.after, "the inbox position survives the swap").toBe(
                       before.checkpoint?.saved.after ?? 0,
                     );
-                    const upgrade = after.facts.findIndex((f) => f.id === `state.upgraded:${load}`);
-                    const swapped = after.facts.findIndex((f) => f.id === `code.swapped:${load}`);
+
+                    const upgrade = Option.getOrElse(
+                      Arr.findFirstIndex(after.facts, (f) => f.id === `state.upgraded:${load}`),
+                      () => -1,
+                    );
+
+                    const swapped = Option.getOrElse(
+                      Arr.findFirstIndex(after.facts, (f) => f.id === `code.swapped:${load}`),
+                      () => -1,
+                    );
+
                     expect(upgrade, "the upgrade is recorded before the swap").toBeGreaterThanOrEqual(0);
                     expect(swapped).toBeGreaterThan(upgrade);
-                    expect(after.facts.filter((f) => f.id === `code.swapped:${load}`)).toHaveLength(1);
-                    expect(after.facts.filter((f) => f.id === `state.upgraded:${load}`)).toHaveLength(1);
+                    expect(Arr.filter(after.facts, (f) => f.id === `code.swapped:${load}`)).toHaveLength(1);
+                    expect(Arr.filter(after.facts, (f) => f.id === `state.upgraded:${load}`)).toHaveLength(1);
                     // The first later letter must use the recovered code and kept model.
                     yield* pressOnce(w, a, g);
                   } else {
@@ -1219,12 +1306,17 @@ export const suite = (rig: Rig): void => {
 
                 yield* evict(w, NAME);
                 const { facts, inbox } = yield* agrees(w, a, base);
+
                 // Every accepted letter is in the inbox, in the order it was accepted, and stepped once.
-                const ids = inbox.map((l) => l.id).filter((id) => a.accepted.includes(id));
+                const ids = Arr.filter(
+                  Arr.map(inbox, (l) => l.id),
+                  (id) => a.accepted.includes(id),
+                );
+
                 expect(ids).toEqual(a.accepted);
-                const revs = inbox.map((l) => l.rev);
+                const revs = Arr.map(inbox, (l) => l.rev);
                 expect(revs).toEqual([...revs].sort((x, y) => x - y));
-                const stepped = byTag(facts, "stepped").map((f) => f.body.input);
+                const stepped = Arr.map(byTag(facts, "stepped"), (f) => f.body.input);
                 expect(stepped).toEqual(a.accepted);
                 expect(byTag(facts, "code.swapped")).toHaveLength(a.swaps);
               }),
@@ -1278,14 +1370,16 @@ export const suite = (rig: Rig): void => {
                     watchers.push(client);
                   } else {
                     const updates = Option.getOrThrow(Option.fromNullishOr(w.names.get(NAME))).updates;
-                    const counts = new Map(watchers.map((c) => [c, updates.get(c)?.length ?? 0]));
+                    const counts = new Map(Arr.map(watchers, (c) => [c, updates.get(c)?.length ?? 0]));
+
                     const { answer } = yield* swapFitting(
                       w,
                       a,
                       g(() => fcFitting(a.model, a.v)),
                     );
+
                     const { inbox } = yield* history(w, NAME);
-                    const rev = inbox.filter((l) => a.accepted.includes(l.id)).at(-1)?.pos ?? 0;
+                    const rev = Arr.filter(inbox, (l) => a.accepted.includes(l.id)).at(-1)?.pos ?? 0;
 
                     for (const client of watchers) {
                       const fresh = (updates.get(client) ?? []).slice(counts.get(client));
@@ -1299,7 +1393,7 @@ export const suite = (rig: Rig): void => {
                 }
 
                 for (const [client, list] of Option.getOrThrow(Option.fromNullishOr(w.names.get(NAME))).updates) {
-                  const same = list.filter((u) => u.type === "patch" && u.rev === u.base);
+                  const same = Arr.filter(list, (u) => u.type === "patch" && u.rev === u.base);
                   expect(same, `${client}'s patches at their own base`).toEqual([]);
                 }
               }),
@@ -1347,9 +1441,10 @@ export const suite = (rig: Rig): void => {
 
                     if (late) {
                       const { checkpoint } = yield* history(w, NAME);
+                      // SAFETY: a checkpoint's cmds are the saved Cmds, each a record that may name its build.
                       const pending = (checkpoint?.cmds ?? []) as ReadonlyArray<{ readonly build?: string }>;
                       expect(
-                        pending.map((c) => c.build),
+                        Arr.map(pending, (c) => c.build),
                         "the dispatched entry keeps its build",
                       ).toEqual([old]);
                       yield* Deferred.succeed(gate, undefined);
@@ -1363,7 +1458,11 @@ export const suite = (rig: Rig): void => {
 
                     seen.add(late ? "late" : "early");
                     const { facts } = yield* agrees(w, a, old);
-                    const answers = byTag(facts, "stepped").filter((f) => String(f.body.input).endsWith("/answer"));
+
+                    const answers = Arr.filter(byTag(facts, "stepped"), (f) =>
+                      Str.endsWith("/answer")(String(f.body.input)),
+                    );
+
                     expect(answers, "the answer folds once").toHaveLength(1);
                     expect(answers[0]?.body.build).toBe(late ? a.build : old);
                   }),
@@ -1386,6 +1485,7 @@ export const suite = (rig: Rig): void => {
           yield* law((g) => {
             const durable = pick(g, ["write", "send"] as const);
             const start = { ...BASE, durable, k: g(fc.integer, { min: 1, max: 5 }) };
+
             return inWorld(rig, [start], (w) =>
               Effect.gen(function* () {
                 const old = yield* hashFor(start);
@@ -1402,9 +1502,11 @@ export const suite = (rig: Rig): void => {
                   const before = yield* history(w, NAME);
                   const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
                   expect(pending).toHaveLength(1);
-                  const job = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String, build: Schema.String }))(
-                    pending[0],
-                  );
+
+                  const job = yield* Schema.decodeUnknownEffect(
+                    Schema.Struct({ id: Schema.String, build: Schema.String }),
+                  )(pending[0]);
+
                   expect(job.build).toBe(a.build);
                   expect(w.durable.attempts).toContain(job.id);
                   expect(w.durable.completed.has(job.id)).toBe(false);
@@ -1415,12 +1517,14 @@ export const suite = (rig: Rig): void => {
                   const spec = { ...g(() => fcFitting(a.model, a.v)), durable };
                   const hash = yield* learn(w.code, spec);
                   const load = `pending_${n}`;
+
                   const cut = pick(g, [
                     "after_swap_prepared",
                     "after_swap_checkpoint",
                     "after_swap_record",
                     "after_swap_supervisor",
                   ]);
+
                   w.cuts.armed = cut;
                   expect(Exit.isFailure(yield* Effect.exit(swap(s, load, hash)))).toBe(true);
                   expect(w.cuts.armed).toBeNull();
@@ -1434,10 +1538,12 @@ export const suite = (rig: Rig): void => {
                   w.durable.blocked = false;
                   yield* swap(s, load, hash);
                   yield* s.runner.open(`pending-reader-${n}`);
+
                   const finished = yield* Effect.suspend(() => Effect.succeed(w.durable.completed.has(job.id))).pipe(
                     Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 millis") }),
                     Effect.timeoutOption("100 millis"),
                   );
+
                   expect(Option.isSome(finished), "the next turn retries the dispatched job after swap recovery").toBe(
                     true,
                   );
@@ -1452,13 +1558,15 @@ export const suite = (rig: Rig): void => {
                   expect(after.checkpoint?.cmds).toEqual([]);
                   expect(after.checkpoint?.saved.model).toEqual(a.model);
                   expect(
-                    after.facts.filter((f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`),
+                    Arr.filter(after.facts, (f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`),
                   ).toHaveLength(1);
                   expect(
-                    after.facts.find((f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`)?.body.build,
+                    Option.getOrUndefined(
+                      Arr.findFirst(after.facts, (f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`),
+                    )?.body.build,
                   ).toBe(hash);
                   expect(
-                    after.facts.filter((f) => f.tag === "code.swapped" && f.id === `code.swapped:${load}`),
+                    Arr.filter(after.facts, (f) => f.tag === "code.swapped" && f.id === `code.swapped:${load}`),
                   ).toHaveLength(1);
                   expect([...w.durable.completed]).toHaveLength(n + 1);
                   seen.add(durable);
@@ -1486,6 +1594,7 @@ export const suite = (rig: Rig): void => {
           // Plant: omit sendRetry from finishSwap's alarm candidates.
           yield* law((g) => {
             const start: Spec = { ...BASE, durable: "send", k: g(fc.integer, { min: 1, max: 5 }) };
+
             return inWorld(rig, [start], (w) =>
               Effect.gen(function* () {
                 const old = yield* hashFor(start);
@@ -1501,9 +1610,11 @@ export const suite = (rig: Rig): void => {
                   const before = yield* history(w, NAME);
                   const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
                   expect(pending).toHaveLength(1);
-                  const job = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String, build: Schema.String }))(
-                    pending[0],
-                  );
+
+                  const job = yield* Schema.decodeUnknownEffect(
+                    Schema.Struct({ id: Schema.String, build: Schema.String }),
+                  )(pending[0]);
+
                   expect(job.build).toBe(a.build);
                   expect(w.durable.attempts).toContain(job.id);
                   expect(w.durable.completed.has(job.id)).toBe(false);
@@ -1515,23 +1626,25 @@ export const suite = (rig: Rig): void => {
                   });
                   a.accepted.push(input.id);
                   yield* TestClock.setTime(g(fc.integer, { min: now + 1, max: deadline - 1 }));
+
                   const spec = g(() =>
                     fcFitting(a.model, a.v)
                       .map((variant) => ({ ...variant, durable: "send" as const }))
                       .filter((variant) => JSON.stringify(variant) !== JSON.stringify(w.code.variants.get(a.build))),
                   );
+
                   const hash = yield* learn(w.code, spec);
                   expect(hash).not.toBe(a.build);
                   const load = `normal_pending_${n}`;
                   expect(yield* swap(s, load, hash)).toEqual(SwapAnswer.cases.swapped.make({ was: a.build }));
                   expect(s.alarms.at(-1), "a normal swap preserves the original Send retry deadline").toBe(deadline);
                   expect((yield* history(w, NAME)).checkpoint?.cmds).toEqual(pending);
-                  const attempts = w.durable.attempts.filter((id) => id === job.id).length;
+                  const attempts = Arr.filter(w.durable.attempts, (id) => id === job.id).length;
                   w.durable.blocked = false;
                   yield* TestClock.setTime(deadline);
                   // The host fires only the alarm. No msg, open or mailed call nudges the runner.
                   yield* s.runner.due(deadline);
-                  expect(w.durable.attempts.filter((id) => id === job.id)).toHaveLength(attempts + 1);
+                  expect(Arr.filter(w.durable.attempts, (id) => id === job.id)).toHaveLength(attempts + 1);
                   expect(w.durable.completed.has(job.id)).toBe(true);
                   a.model = updateFor(spec, climb(spec, a.model, a.v), { type: "send_ok" });
                   a.v = spec.v;
@@ -1540,10 +1653,15 @@ export const suite = (rig: Rig): void => {
                   expect(after.checkpoint?.cmds).toEqual([]);
                   expect(after.checkpoint?.saved.model).toEqual(a.model);
                   expect(after.checkpoint?.saved.build).toBe(hash);
-                  const answers = after.facts.filter((f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`);
+
+                  const answers = Arr.filter(
+                    after.facts,
+                    (f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`,
+                  );
+
                   expect(answers).toHaveLength(1);
                   expect(answers[0]?.body.build).toBe(hash);
-                  expect(after.facts.filter((f) => f.id === `code.swapped:${load}`)).toHaveLength(1);
+                  expect(Arr.filter(after.facts, (f) => f.id === `code.swapped:${load}`)).toHaveLength(1);
                   expect([...w.durable.completed]).toHaveLength(n + 1);
                   expect(s.alarms.at(-1), "the answered Send no longer needs an alarm").toBeNull();
                 }
@@ -1595,11 +1713,11 @@ export const suite = (rig: Rig): void => {
         const answer = yield* swap(yield* session(w, name), load, hash);
 
         expect(answer, `${name}: ${expected}`).toEqual(
-          expected === "same"
-            ? SwapAnswer.cases.same.make({})
-            : expected === "fits"
-              ? SwapAnswer.cases.swapped.make({ was: a.build })
-              : SwapAnswer.cases.refused.make({ was: a.build, reason: expected }),
+          Match.value(expected).pipe(
+            Match.when("same", () => SwapAnswer.cases.same.make({})),
+            Match.when("fits", () => SwapAnswer.cases.swapped.make({ was: a.build })),
+            Match.orElse((reason) => SwapAnswer.cases.refused.make({ was: a.build, reason })),
+          ),
         );
 
         if (expected === "same") {
@@ -1643,8 +1761,11 @@ export const suite = (rig: Rig): void => {
                   // The next press runs on the code the process holds now: the new one, or its old one.
                   const input = yield* pressOnce(w, a, g, name);
                   const { facts } = yield* agrees(w, a, base, name);
-                  expect(byTag(facts, "stepped").find((f) => f.body.input === input.id)?.body.build).toBe(a.build);
-                  const refused = byTag(facts, "code.refused").filter((f) => f.id === `code.refused:${load}`);
+                  expect(
+                    Option.getOrUndefined(Arr.findFirst(byTag(facts, "stepped"), (f) => f.body.input === input.id))
+                      ?.body.build,
+                  ).toBe(a.build);
+                  const refused = Arr.filter(byTag(facts, "code.refused"), (f) => f.id === `code.refused:${load}`);
                   const outcome = outcomes.get(name);
                   seen.add(outcome ?? "same");
 
@@ -1690,7 +1811,11 @@ export const suite = (rig: Rig): void => {
                 for (const [name, a] of accounts) {
                   const input = yield* pressOnce(w, a, g, name);
                   const { facts } = yield* agrees(w, a, base, name);
-                  const step = byTag(facts, "stepped").find((f) => f.body.input === input.id);
+
+                  const step = Option.getOrUndefined(
+                    Arr.findFirst(byTag(facts, "stepped"), (f) => f.body.input === input.id),
+                  );
+
                   expect(step?.body.build, `${name} woke on the code that saved it`).toBe(a.build);
                   seen.add(a.build === base ? (a.accepted.length === 1 ? "descriptor" : "old") : "checkpoint");
                 }

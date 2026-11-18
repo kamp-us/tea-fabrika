@@ -22,12 +22,24 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import { Stub } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { RpcCallError } from "alchemy/Rpc";
-import type { Layer, Scope } from "effect";
-import { Effect, Option, Schema, Stream } from "effect";
-import { TestClock } from "effect/testing";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import type * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
@@ -35,33 +47,31 @@ import { RecordManager, type RecordCalls } from "./Records.ts";
 import { SinkError } from "./Sink.ts";
 import { type Chain, SpanRow } from "./Trace.ts";
 
-type ChainValue = typeof Chain.Type;
-type Row = typeof SpanRow.Type;
+type ChainValue = Chain;
+
+type Row = SpanRow;
 
 /** A folder of its own, and every part file opened in it. `RecordManager.sql` asks for a part's
- *  file with a plain call, so a file cannot be acquired one by one: the folder holds them, and the
- *  scope that asked for the folder closes each one, then removes it (0061). */
-const folder = Effect.acquireRelease(
-  Effect.sync(() => ({
-    dir: mkdtempSync(join(tmpdir(), "p37-records-")),
-    dbs: new Map<string, DatabaseSync>(),
-  })),
-  ({ dir, dbs }) =>
-    Effect.sync(() => {
-      for (const db of dbs.values()) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
+ *  file with a plain call, so each file is opened into the scope that asked for the folder: that
+ *  scope closes each one, last opened first, then removes the folder (0061). */
+const folder = Effect.gen(function* () {
+  const scope = yield* Effect.scope;
 
-      rmSync(dir, { recursive: true, force: true });
-    }),
-);
+  const dir = yield* Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "p37-records-"))),
+    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+  );
+
+  const connect = (file: string): DatabaseSync => Effect.runSync(Scope.provide(scope)(TestDatabase.make(file)));
+
+  return { dir, dbs: new Map<string, DatabaseSync>(), connect };
+});
 
 /** One home of part files: `open(name)` gives the same node:sqlite file each time it is asked. */
 const home = folder.pipe(
-  Effect.map(({ dir, dbs }) => {
+  Effect.map(({ dir, dbs, connect }) => {
     const asked: Array<string> = [];
+
     const db = (name: string): DatabaseSync => {
       const known = dbs.get(name);
 
@@ -69,11 +79,14 @@ const home = folder.pipe(
         return known;
       }
 
-      const made = new DatabaseSync(join(dir, `${name.replaceAll("/", "_")}.db`));
+      const made = connect(join(dir, `${Str.replaceAll("/", "_")(name)}.db`));
       dbs.set(name, made);
+
       return made;
     };
+
     const sqls = new Map<string, Sql>();
+
     const open = (name: string): Sql => {
       asked.push(name);
       const known = sqls.get(name);
@@ -84,17 +97,23 @@ const home = folder.pipe(
 
       const made = nodeSql(db(name));
       sqls.set(name, made);
+
       return made;
     };
+
     const rows = (name: string, table: string): Array<Record<string, unknown>> =>
       dbs.has(name) ? (db(name).prepare(`SELECT * FROM ${table}`).all() as Array<Record<string, unknown>>) : [];
+
     return { open, asked, rows, names: () => [...dbs.keys()] };
   }),
 );
 
 const PROCESS = Effect.runSync(processId);
+
 const job: ChainValue = { _tag: "job", process: PROCESS };
+
 const spans: ChainValue = { _tag: "spans" };
+
 const part = (n: number) => `job/${PROCESS}/${n}`;
 
 /** A span row; `fill` pads one tag so a part reaches a small cap in a few rows. */
@@ -109,7 +128,7 @@ const row = (spanId: string, fill = 0): Row => ({
   attributes: {
     "fab.process": PROCESS,
     "fab.letter.id": "m-17",
-    ...(fill > 0 ? { "fab.fill": "f".repeat(fill) } : {}),
+    ...(fill > 0 ? { "fab.fill": Str.repeat(fill)("f") } : {}),
   },
   events: [],
   links: [],
@@ -117,9 +136,10 @@ const row = (spanId: string, fill = 0): Row => ({
   ok: true,
 });
 
-const id = (n: number) => `s${String(n).padStart(15, "0")}`;
+const id = (n: number) => `s${Str.padStart(15, "0")(String(n))}`;
 
 const CAP = 64 * 1024;
+
 const FILL = 2000;
 
 const read = (chain: ChainValue) => RecordManager.use((records) => Stream.runCollect(records.read(chain)));
@@ -139,7 +159,7 @@ const send = (chain: ChainValue, from: number, rows: ReadonlyArray<{ span: Row; 
       }
 
       const had = new Set(answer.had);
-      left = left.filter((r) => !had.has(r.span.spanId));
+      left = Arr.filter(left, (r) => !had.has(r.span.spanId));
       at += 1;
       expect(answer.next).toBe(chain._tag === "job" ? `job/${chain.process}/${at}` : `spans/${at}`);
     }
@@ -184,16 +204,16 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
 
         expect(used.size, "80 rows of about 2 KB under a 64 KB cap need more than one part").toBeGreaterThan(1);
         const all = yield* read(job);
-        expect(all.map((r) => r.spanId)).toEqual(Array.from({ length: 80 }, (_, n) => id(n)));
+        expect(Arr.map(all, (r) => r.spanId)).toEqual(Array.from({ length: 80 }, (_, n) => id(n)));
 
         if (parts !== undefined) {
           for (const p of [...used].sort((x, y) => x - y).slice(0, -1)) {
             const rolled = parts.rows(part(p), "rolled");
             expect(rolled, `${part(p)} keeps one rolled row`).toHaveLength(1);
-            const values = Object.values(rolled[0] ?? {});
+            const values = Rec.values(rolled[0] ?? {});
             expect(values, "rolled names the next part").toContain(part(p + 1));
             expect(
-              values.some((v) => typeof v === "number" && v >= CAP),
+              Arr.some(values, (v) => Predicate.isNumber(v) && v >= CAP),
               "rolled keeps the part's size then, at or past the cap",
             ).toBe(true);
           }
@@ -231,7 +251,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
         }
 
         yield* send(job, 1, [kept(row(id(n - 1))), kept(row(id(1000))), kept(row(id(1001))), kept(row(id(1002)))]);
-        const all = (yield* read(job)).map((r) => r.spanId);
+        const all = Arr.map(yield* read(job), (r) => r.spanId);
         expect(all).toHaveLength(held + 4);
         expect(new Set(all).size).toBe(all.length);
       }).pipe(Effect.provide(layer));
@@ -256,16 +276,11 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
           expect(answer._tag).toBe("rolled");
 
           if (answer._tag === "rolled") {
-            expect([...answer.had].sort()).toEqual(
-              first
-                .slice(30)
-                .map((r) => r.span.spanId)
-                .sort(),
-            );
+            expect([...answer.had].sort()).toEqual(Arr.map(first.slice(30), (r) => r.span.spanId).sort());
           }
 
           yield* send(job, 0, again);
-          const all = (yield* read(job)).map((r) => r.spanId);
+          const all = Arr.map(yield* read(job), (r) => r.spanId);
           expect(all).toEqual(Array.from({ length: 41 }, (_, n) => id(n)));
         }).pipe(Effect.provide(layer));
       }),
@@ -283,7 +298,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
           expect(yield* records.write(job, 0, batch)).toEqual({ _tag: "written" });
         }
 
-        expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: made }, (_, n) => id(n)));
+        expect(Arr.map(yield* read(job), (r) => r.spanId)).toEqual(Array.from({ length: made }, (_, n) => id(n)));
       }).pipe(Effect.provide(layer));
     }),
   );
@@ -300,12 +315,15 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
         }
 
         expect(at).toBeGreaterThan(0);
-        expect((yield* read(spans)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
+        expect(Arr.map(yield* read(spans), (r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
         expect(yield* read(job)).toEqual([]);
 
         if (parts !== undefined) {
           expect(
-            parts.asked.filter((name) => name.startsWith("spans/")).every((name) => /^spans\/\d+$/.test(name)),
+            Arr.every(
+              Arr.filter(parts.asked, (name) => Str.startsWith("spans/")(name)),
+              (name) => /^spans\/\d+$/.test(name),
+            ),
           ).toBe(true);
           expect(parts.names()).toContain("spans/0");
           expect(parts.names()).toContain("spans/1");
@@ -326,10 +344,12 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
           Array.from({ length: 5 }, (_, n) => kept(row(id(n), FILL))),
         ),
       ).pipe(Effect.provide(RecordManager.sql(parts.open, 1024 * 1024 * 1024)));
+
       // The same files under a cap the part is already past.
       const answer = yield* RecordManager.use((records) => records.write(job, 0, [kept(row(id(5)))])).pipe(
         Effect.provide(RecordManager.sql(parts.open, 1)),
       );
+
       expect(answer).toEqual({ _tag: "rolled", next: part(1), had: [] });
       expect(parts.rows(part(0), "spans")).toHaveLength(5);
       expect(parts.rows(part(0), "rolled")).toHaveLength(1);
@@ -352,6 +372,7 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
             },
             size: () => 0,
           };
+
           return Effect.gen(function* () {
             const error = yield* Effect.flip(RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])));
             expect(error).toBeInstanceOf(SinkError);
@@ -365,6 +386,7 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
 });
 
 const T = Date.UTC(2026, 10, 7, 22, 0, 0, 20);
+
 const MESSAGE = "TypeError: note-body-p100 was not a function\n    at step (counter.ts:12:3)";
 
 describe.each(backends)("p100, content is the one deletable part, on RecordManager.$name", (backend) => {
@@ -379,11 +401,13 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
             const { layer, parts } = yield* backend.make(CAP);
             yield* Effect.gen(function* () {
               const records = yield* RecordManager;
+
               const failed = {
                 ...row(id(0)),
                 ok: false,
                 attributes: { ...row(id(0)).attributes, "error.type": "TypeError" },
               };
+
               yield* records.write(job, 0, [kept(failed, MESSAGE), kept(row(id(1)))]);
               expect(yield* records.content(job, id(0))).toEqual(
                 Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
@@ -397,6 +421,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
                 by: "owner",
                 reason: value,
               });
+
               const deleted = {
                 _tag: "deleted",
                 spanId: id(0),
@@ -404,6 +429,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
                 at: T,
                 reason: value,
               };
+
               expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
               yield* TestClock.setTime(T + 60_000);
@@ -414,7 +440,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
 
               if (parts !== undefined) {
                 expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
-                const content = JSON.stringify(parts.rows(part(0), "content"));
+                const content = Formatter.formatJson(parts.rows(part(0), "content"));
                 expect(content).not.toContain("note-body-p100");
                 expect(content).toContain("owner");
               }
@@ -482,7 +508,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
               expect(yield* records.content(job, id(0))).toEqual(
                 Option.some({ _tag: "deleted", spanId: id(0), by: "owner", at: T, reason: value }),
               );
-              expect((yield* read(job)).map((r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
+              expect(Arr.map(yield* read(job), (r) => r.spanId)).toEqual(Array.from({ length: 60 }, (_, n) => id(n)));
             }).pipe(Effect.provide(layer));
           }),
         { concurrency: 1, discard: true },
@@ -495,29 +521,25 @@ describe("RecordManager.remote, the record object's stub", () => {
   /** A stub that answers any method the builder names; `then` stays undefined so it is no thenable. */
   const stub = (answer: () => Effect.Effect<unknown, unknown>) => {
     const calls: Array<{ name: string; method: string }> = [];
-    const make = (name: string): RecordCalls =>
-      new Proxy(
-        {},
-        {
-          get: (_, method) =>
-            method === "then"
-              ? undefined
-              : () => {
-                  calls.push({ name, method: String(method) });
-                  return answer();
-                },
-        },
-      ) as RecordCalls;
+
+    const make = (name: string) =>
+      Stub.make<RecordCalls>((method) => () => {
+        calls.push({ name, method });
+
+        return answer();
+      });
+
     return { make, calls };
   };
 
   it.effect("each call goes to the part's own object, by its name", () => {
     const { make, calls } = stub(() => Effect.succeed({ _tag: "written" }));
+
     return Effect.gen(function* () {
       const records = yield* RecordManager;
       expect(yield* records.write(job, 2, [kept(row(id(0)))])).toEqual({ _tag: "written" });
       expect(yield* records.write(spans, 0, [kept(row(id(1)))])).toEqual({ _tag: "written" });
-      expect(calls.map((c) => c.name)).toEqual([part(2), "spans/0"]);
+      expect(Arr.map(calls, (c) => c.name)).toEqual([part(2), "spans/0"]);
     }).pipe(Effect.provide(RecordManager.remote(make)));
   });
 
@@ -531,18 +553,22 @@ describe("RecordManager.remote, the record object's stub", () => {
           Effect.gen(function* () {
             const gone = stub(() => Effect.fail(value));
             const odd = stub(() => Effect.succeed({ weird: 1 }));
+
             const unreachable = yield* Effect.flip(
               RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
                 Effect.provide(RecordManager.remote(gone.make)),
               ),
             );
+
             expect(unreachable).toBeInstanceOf(SinkError);
             expect(unreachable.reason).toBe("unreachable");
+
             const bad = yield* Effect.flip(
               RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
                 Effect.provide(RecordManager.remote(odd.make)),
               ),
             );
+
             expect(bad.reason).toBe("bad_row");
             const readFailed = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(gone.make))));
             expect(readFailed.reason).toBe("unreachable");
@@ -561,6 +587,7 @@ describe("RecordManager.remote, the record object's stub", () => {
     ({ reason, held, generated }) =>
       Effect.gen(function* () {
         const typed = new SinkError({ reason, held });
+
         const calls = [
           RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])),
           read(job),
@@ -570,15 +597,18 @@ describe("RecordManager.remote, the record object's stub", () => {
 
         for (const operation of calls) {
           const call: Effect.Effect<unknown, SinkError, RecordManager> = operation;
+
           const same = yield* Effect.flip(
             call.pipe(Effect.provide(RecordManager.remote(stub(() => Effect.fail(typed)).make))),
           );
+
           expect(same).toBe(typed);
 
           for (const cause of [generated, new RpcCallError({ method: "record", cause: generated })]) {
             const failed = yield* Effect.flip(
               call.pipe(Effect.provide(RecordManager.remote(stub(() => Effect.fail(cause)).make))),
             );
+
             expect(failed).toBeInstanceOf(SinkError);
             expect(failed.reason).toBe("unreachable");
             expect(failed.held).toBe(0);
@@ -595,6 +625,7 @@ describe("RecordManager.remote, the record object's stub", () => {
               ),
             ),
           );
+
           expect(thrown).toBeInstanceOf(SinkError);
           expect(thrown.reason).toBe("unreachable");
           expect(thrown.cause).toBe(generated);
@@ -612,14 +643,16 @@ describe("RecordManager.remote, the record object's stub", () => {
         (value) =>
           Effect.gen(function* () {
             const event = value;
+
             const page = (events: ReadonlyArray<unknown>) =>
               stub(() => Effect.succeed({ spans: [{ ...row(id(0)), events }], after: 1, rolled: false }));
+
             const good = yield* read(job).pipe(Effect.provide(RecordManager.remote(page([event]).make)));
-            expect(good.map((r) => r.events)).toEqual([[event]]);
+            expect(Arr.map(good, (r) => r.events)).toEqual([[event]]);
 
             for (const broken of [{}, { ...event, name: 7 }, { ...event, attributes: { "fab.n": {} } }]) {
               const bad = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(page([broken]).make))));
-              expect(bad.reason, JSON.stringify(broken)).toBe("bad_row");
+              expect(bad.reason, Formatter.format(broken)).toBe("bad_row");
             }
           }),
         { concurrency: 1, discard: true },

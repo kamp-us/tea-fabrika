@@ -17,28 +17,33 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  ByteSize,
-  Cause,
-  Clock,
-  Console,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  References,
-  Result,
-  Schema,
-  Scope,
-  Stream,
-  Tracer,
-} from "effect";
-import { TestClock } from "effect/testing";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as ByteSize from "effect/ByteSize";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Console from "effect/Console";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as References from "effect/References";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { Appended, InputId, Writer } from "../coordination/index.ts";
 import { INPUT_BYTES } from "../processes/Children.ts";
@@ -83,6 +88,7 @@ export type Store = {
 };
 
 const SEED = 119120;
+
 const joinLimit = "20 seconds";
 
 const completion = <A, E>(fiber: Fiber.Fiber<A, E>, label: string) =>
@@ -108,6 +114,7 @@ const WALK_START = 1794358800000;
 const walkClock = (live: Clock.Clock): Clock.Clock => {
   let now = WALK_START;
   const tick = () => now++;
+
   return {
     currentTimeMillisUnsafe: tick,
     currentTimeMillis: Effect.sync(tick),
@@ -120,18 +127,27 @@ const walkClock = (live: Clock.Clock): Clock.Clock => {
 };
 
 const BUILD = "p41-build-a";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const GHOST = "ghost:1";
+
 /** The brain's own session: a process ID no start in a walk reaches. */
 const DOOR = PIDS.at(-1) ?? "";
+
 const PAIRS = [1, 2] as const;
+
 type Pair = (typeof PAIRS)[number];
+
 const requesterName = (k: Pair) => `requester:${k}`;
+
 const responderName = (k: Pair) => `responder:${k}`;
 
-const REQUESTERS = Object.fromEntries(
-  PAIRS.map((k) => [k, mailRequester({ self: requesterName(k), peer: responderName(k) })]),
+// SAFETY: PAIRS.map gives one entry for each Pair, so the record has every Pair key.
+const REQUESTERS = Rec.fromEntries(
+  Arr.map(PAIRS, (k) => [String(k), mailRequester({ self: requesterName(k), peer: responderName(k) })]),
 ) as Record<Pair, ReturnType<typeof mailRequester>>;
 
 const TimerModel = Schema.Struct({
@@ -203,25 +219,26 @@ const alarmPolicy = {
 };
 
 const PROGRAMS: Record<string, unknown> = {
-  ...Object.fromEntries(PAIRS.map((k) => [REQUESTERS[k].name, REQUESTERS[k]])),
+  ...Rec.fromEntries(Arr.map(PAIRS, (k) => [REQUESTERS[k].name, REQUESTERS[k]])),
   [mailResponder.name]: mailResponder,
   [timerProgram.name]: timerProgram,
 };
 
 /** The host's closed grant: each requester reaches its own responder and a missing name; each
  *  responder reaches its own requester. */
-const GRANTS: Grants = Object.fromEntries(
-  PAIRS.flatMap((k) => [
+const GRANTS: Grants = Rec.fromEntries(
+  Arr.flatMap(PAIRS, (k) => [
     [requesterName(k), [responderName(k), GHOST]],
     [responderName(k), [requesterName(k)]],
   ]),
 );
 
 const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
+
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
 const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
 
 const brainFrom = (): From => ({
   by: "SHA256:brain",
@@ -234,8 +251,11 @@ const brainFrom = (): From => ({
 });
 
 const decodeRequester = Schema.decodeUnknownOption(RequesterModel);
+
 const decodeResponder = Schema.decodeUnknownOption(ResponderModel);
+
 const Body = Schema.Struct({ type: Schema.String, ref: Schema.optionalKey(Schema.String) });
+
 const decodeBody = Schema.decodeUnknownOption(Body);
 
 /** One tape cell: which move, which pair or alarm, a value, and which bad shape. */
@@ -248,7 +268,9 @@ const Cell = fc.record({
   ),
   shape: fc.nat(),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
 const Tape = fc.array(Cell, { minLength: 6, maxLength: 24, size: "max" });
 
 const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
@@ -257,17 +279,20 @@ const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
   const errors: Array<string> = [];
   const logs: Array<string> = [];
   const wakes: Array<{ span: string; name: string; at: number | null }> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = captured.tracer.span(options);
       spans.push(span);
+
       return span;
     },
   });
+
   const logger = Logger.layer([
     Logger.make((options) => {
       // Effect 4 keeps a line's annotations on its fiber; a logger that throws would hide the line.
-      const plain = (_: string, value: unknown) => (typeof value === "bigint" ? value.toString() : value);
+      const plain = (_: string, value: unknown) => (Predicate.isBigInt(value) ? value.toString() : value);
       logs.push(
         JSON.stringify(options.message, plain),
         JSON.stringify(options.fiber.getRef(References.CurrentLogAnnotations), plain),
@@ -275,6 +300,7 @@ const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
       );
     }),
   ]);
+
   const check = () => {
     RepliesTest.unleaked([...captured.text(), ...logs, ...errors], secrets);
 
@@ -289,17 +315,21 @@ const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
 
       const queued = Schema.decodeUnknownSync(Queued)(span.status.exit.value);
       expect(span.attributes.get("fab.mail.receipt"), "T1a: queued is tied to its receipt").toBe(queued.id);
-      const wake = wakes.find((w) => w.span === span.spanId);
+      const wake = Option.getOrUndefined(Arr.findFirst(wakes, (w) => w.span === span.spanId));
       expect(wake, "T1a: every queued Send saved its target alarm").toBeDefined();
       expect(span.attributes.get("fab.mail.to")).toBe(wake?.name);
-      const children = spans.filter(
+
+      const children = Arr.filter(
+        spans,
         (s) => s.name === "runner.mailed" && Option.getOrUndefined(s.parent)?.spanId === span.spanId,
       );
+
       expect(children).toHaveLength(1);
       expect(children[0]?.attributes.get("fab.mail.to")).toBe(wake?.name);
       expect(children[0]?.attributes.get("fab.mail.alarm")).toBe(wake?.at);
     }
   };
+
   return { secrets, tracer, logger, errors, wakes, check, spans };
 };
 
@@ -368,7 +398,7 @@ type World = {
 };
 
 /** The public JSON a client sends or reads, written out by hand because the shape itself is the law. */
-const wire = (tag: string, fields: object): unknown =>
+const wire = (tag: string, fields: object): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- format: L13 pins the encoded JSON other clients decode
   ({ _tag: tag, ...fields });
 
@@ -384,18 +414,23 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 
 /** The ledger's Sql, with the two cuts a send can meet: its mail save and its acknowledgement. */
 const faulting = (sql: Sql, fault: World["fault"]) => {
-  const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => typeof p === "string");
+  const strings = (params: ReadonlyArray<SqlValue>) => Arr.filter(params, (p): p is string => Predicate.isString(p));
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\b/i.test(query)) {
         const text = strings(params);
 
-        if (fault.mail && text.some((p) => p.endsWith("/mail"))) {
+        if (fault.mail && Arr.some(text, (p) => Str.endsWith("/mail")(p))) {
           fault.mail = false;
           throw new Error("SQLITE_FULL planted at the mail save");
         }
 
-        if (fault.ack && text.some((p) => p.endsWith("/answer")) && text.some((p) => p.includes('"send_ok"'))) {
+        if (
+          fault.ack &&
+          Arr.some(text, (p) => Str.endsWith("/answer")(p)) &&
+          Arr.some(text, (p) => Str.includes('"send_ok"')(p))
+        ) {
           fault.ack = false;
           throw new Error("SQLITE_FULL planted at the send acknowledgement");
         }
@@ -406,6 +441,7 @@ const faulting = (sql: Sql, fault: World["fault"]) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return wrapped;
 };
 
@@ -416,6 +452,7 @@ const faulting = (sql: Sql, fault: World["fault"]) => {
 const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effect.Effect<string>, scope: Scope.Scope) {
   const ledgerSql = faulting(store.sql("ledger"), world.fault);
   const data = ledger(ledgerSql);
+
   const manager = ProcessManager.layer(
     {
       by: "SHA256:brain",
@@ -424,13 +461,19 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     },
     next,
   );
+
   const runners = new Map<string, ProgramRunner["Service"]>();
+
   const wakeups = Layer.succeed(MailWakeups, {
     wake: (name: string) =>
       Effect.gen(function* () {
-        const pair = PAIRS.find((k) => responderName(k) === name || requesterName(k) === name);
+        const pair = Option.getOrUndefined(
+          Arr.findFirst(PAIRS, (k) => responderName(k) === name || requesterName(k) === name),
+        );
+
         const stall = pair === undefined ? undefined : world.stalled.get(pair);
 
+        // SAFETY: stall is defined only when pair was found above.
         if (stall !== undefined && name === responderName(pair as Pair)) {
           yield* Deferred.succeed(stall.entered, undefined);
           yield* Deferred.await(stall.release);
@@ -438,6 +481,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
 
         if (world.fault.wake) {
           world.fault.wake = false;
+
           return yield* new MailWakeupsError({ reason: "unavailable" });
         }
 
@@ -469,11 +513,12 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
           world.records.wakes.push({
             span: span.spanId,
             name,
-            at: (yield* store.alarms.saved).find((a) => a.name === name)?.at ?? null,
+            at: Option.getOrUndefined(Arr.findFirst(yield* store.alarms.saved, (a) => a.name === name))?.at ?? null,
           });
         }
       }),
   });
+
   const shared = MailDeliveryLive.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -482,8 +527,8 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
           cap: 16_384,
           grants: {
             ...GRANTS,
-            ...Object.fromEntries(
-              (world.records?.secrets ?? []).map((secret) => [`decoy-${secret}`, [`unused-${secret}`]]),
+            ...Rec.fromEntries(
+              Arr.map(world.records?.secrets ?? [], (secret) => [`decoy-${secret}`, [`unused-${secret}`]]),
             ),
           },
         }),
@@ -494,7 +539,9 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),
   );
+
   const context = yield* Layer.buildWithScope(shared, scope);
+
   const boot = Effect.fnUntraced(function* (name: string, program: string) {
     const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.result);
 
@@ -505,19 +552,23 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     const started = yield* ProcessManager.use((p) =>
       p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: BUILD } }), brainFrom()),
     ).pipe(Effect.orDie);
+
     return started.process;
   });
-  const names: ReadonlyArray<readonly [string, string]> = PAIRS.flatMap((k) => [
+
+  const names: ReadonlyArray<readonly [string, string]> = Arr.flatMap(PAIRS, (k) => [
     [requesterName(k), REQUESTERS[k].name] as const,
-    [responderName(k), world.timers ? timerProgram.name : mailResponder.name] as const,
+    [responderName(k), world.timers === true ? timerProgram.name : mailResponder.name] as const,
   ]);
 
   for (const [name, program] of names) {
     const pid = yield* boot(name, program).pipe(Effect.provide(context));
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: (i: Incoming) =>
             mailbox.send(name, i.id, i.envelope.input, {
@@ -536,11 +587,13 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
               : Effect.sync(() => {
                   world.notes?.written.push(id);
                   const n = world.notes?.written.length ?? 0;
+
                   return Appended.cases.placed.make({ rev: n, pos: n });
                 }),
         };
       }),
     );
+
     const own = Layer.mergeAll(
       ProgramLoader.layer(PROGRAMS, {}),
       ProcessStore.layer(store.sql(`process-${name}`), { process: pid }),
@@ -562,14 +615,16 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       Layer.succeed(Recording, { flush: Effect.void }),
       checked,
     ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
+
     const runner = ProgramRunner.layer(
       { id: pid, name, program, build: BUILD, owner },
       {
-        ...(world.timers ? { policy: alarmPolicy } : {}),
+        ...(world.timers === true ? { policy: alarmPolicy } : {}),
         recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 },
         chunk: ANY_CHUNK,
       },
     ).pipe(Layer.provide(own));
+
     const built = yield* Layer.buildWithScope(runner, scope);
     runners.set(name, Context.get(built, ProgramRunner));
   }
@@ -580,9 +635,11 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
 /** A process's saved model: what its view is made from, read without asking the runner. */
 const savedModel = Effect.fnUntraced(function* (store: Store, name: string) {
   const status = yield* ProcessManager.use((p) => p.status(name));
+
   const saved = yield* ProcessStore.use((s) => s.load).pipe(
     Effect.provide(ProcessStore.layer(store.sql(`process-${name}`), { process: status.state.process })),
   );
+
   return saved?.saved.model ?? null;
 });
 
@@ -602,6 +659,7 @@ const walk = (
   Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
     const store = yield* open;
     const next = ids(...PIDS);
+
     const world: World = {
       ...(recorded === undefined ? {} : { records: recorded }),
       current: new Map(),
@@ -620,10 +678,12 @@ const walk = (
       forged: 0,
       n: 0,
     };
+
     let scope = yield* Scope.make();
     let life = yield* host(store, world, next.next, scope);
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     const inContext = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(life.context));
+
     const runner = (name: string) => {
       const found = life.runners.get(name);
 
@@ -633,11 +693,14 @@ const walk = (
 
       return found;
     };
+
     const letters = (name: string) => inContext(Mailbox.use((m) => Stream.runCollect(m.read(name, 0))));
+
     const bodies = (name: string) =>
       Effect.map(letters(name), (all) =>
-        all.flatMap((l) => Option.toArray(Option.map(decodeBody(l.m), (b) => ({ id: l.id, ...b })))),
+        Arr.flatMap(all, (l) => Option.toArray(Option.map(decodeBody(l.m), (b) => ({ id: l.id, ...b })))),
       );
+
     /** A call that may fail at a planted boundary; it must still answer, never hang. */
     const call = <A, E>(effect: Effect.Effect<A, E>, label: string) =>
       effect.pipe(
@@ -645,7 +708,7 @@ const walk = (
           Effect.sync(() => {
             recorded?.errors.push(
               String(Cause.squash(cause)),
-              JSON.stringify(Cause.squash(cause)),
+              Formatter.formatJson(Cause.squash(cause)),
               Cause.pretty(cause),
             );
           }),
@@ -654,16 +717,20 @@ const walk = (
         Effect.timeoutOption("20 seconds"),
         Effect.map((answer) => {
           expect(Option.isSome(answer), `${label} answers: no other recipient's stall holds it`).toBe(true);
+
           return answer;
         }),
       );
+
     const pairFor = (name: string): Pair | undefined =>
-      pairs.find((k) => requesterName(k) === name || responderName(k) === name);
+      Option.getOrUndefined(Arr.findFirst(pairs, (k) => requesterName(k) === name || responderName(k) === name));
+
     /** Fires every saved alarm until none is left, or only those of stalled pairs. */
     const settle = Effect.fnUntraced(function* (skip: ReadonlySet<Pair>) {
       for (let round = 0; round < 64; round++) {
-        const due = (yield* store.alarms.saved).filter((a) => {
+        const due = Arr.filter(yield* store.alarms.saved, (a) => {
           const k = pairFor(a.name);
+
           return k !== undefined && !skip.has(k);
         });
 
@@ -678,12 +745,15 @@ const walk = (
         }
       }
     });
+
     const requesterState = (k: Pair) =>
       Effect.map(inContext(savedModel(store, requesterName(k))), (m) => Option.getOrNull(decodeRequester(m)));
+
     const deliverAs = Effect.fnUntraced(function* (source: string, to: string, m: unknown) {
       const status = yield* inContext(ProcessManager.use((p) => p.status(source)));
       const command = `${status.state.process}/${1_000_000 + ++world.forged}/0`;
       world.forgedIds.add(`${command}/mail`);
+
       return yield* inContext(
         ProgramMail.use((mail) =>
           mail.deliver({
@@ -699,6 +769,7 @@ const walk = (
 
     const checkpoint = Effect.fnUntraced(function* (name: string) {
       const status = yield* inContext(ProcessManager.use((p) => p.status(name)));
+
       return yield* ProcessStore.use((s) => s.load).pipe(
         Effect.provide(ProcessStore.layer(store.sql(`process-${name}`), { process: status.state.process })),
         Effect.provide(life.context),
@@ -708,10 +779,11 @@ const walk = (
     /** The command ids of every Send the name's saved checkpoint still owes. */
     const owedIds = (name: string) =>
       Effect.map(checkpoint(name), (saved) =>
-        (saved?.cmds ?? []).flatMap((cmd) =>
+        Arr.flatMap(saved?.cmds ?? [], (cmd) =>
           Schema.is(Schema.Struct({ id: Schema.String, mail: Schema.Literal(true) }))(cmd) ? [cmd.id] : [],
         ),
       );
+
     const owed = (name: string) => Effect.map(owedIds(name), (ids) => ids.length > 0);
 
     /** The invariants every prefix keeps. */
@@ -722,11 +794,11 @@ const walk = (
         if (moves.includes("wakeDuringDrain")) {
           for (const name of [requesterName(k), responderName(k)]) {
             const saved = yield* checkpoint(name);
-            const unread = (yield* letters(name)).some((letter) => letter.rev > (saved?.saved.after ?? 0));
+            const unread = Arr.some(yield* letters(name), (letter) => letter.rev > (saved?.saved.after ?? 0));
 
             if (unread) {
               expect(
-                (yield* store.alarms.saved).some((alarm) => alarm.name === name),
+                Arr.some(yield* store.alarms.saved, (alarm) => alarm.name === name),
                 "M1: unread mail keeps its recipient's alarm",
               ).toBe(true);
             }
@@ -737,7 +809,7 @@ const walk = (
           for (const name of [requesterName(k), responderName(k)]) {
             if (yield* owed(name)) {
               expect(
-                (yield* store.alarms.saved).some((a) => a.name === name),
+                Arr.some(yield* store.alarms.saved, (a) => a.name === name),
                 `S1: ${name}'s saved Send keeps a saved alarm`,
               ).toBe(true);
             }
@@ -746,15 +818,20 @@ const walk = (
 
         const state = yield* requesterState(k);
         const asked = world.history.get(k) ?? [];
-        const answers = (yield* bodies(requesterName(k))).filter(
+
+        const answers = Arr.filter(
+          yield* bodies(requesterName(k)),
           (b) => b.type === "answer" && !world.forgedIds.has(b.id),
         );
-        const requests = (yield* bodies(responderName(k))).filter(
+
+        const requests = Arr.filter(
+          yield* bodies(responderName(k)),
           (b) => b.type === "request" && !world.forgedIds.has(b.id) && asked.includes(b.ref ?? ""),
         );
-        const refs = requests.map((r) => r.ref);
+
+        const refs = Arr.map(requests, (r) => r.ref);
         expect(new Set(refs).size, `L3: one request letter per command in ${responderName(k)}`).toBe(refs.length);
-        const answered = answers.map((a) => a.ref);
+        const answered = Arr.map(answers, (a) => a.ref);
         expect(new Set(answered).size, `L3: one answer letter per command in ${requesterName(k)}`).toBe(
           answered.length,
         );
@@ -766,7 +843,7 @@ const walk = (
             (current?.value ?? Number.NaN) + 1,
           );
           expect(
-            answers.some((a) => a.ref === state.ref && a.id.endsWith("/mail")),
+            Arr.some(answers, (a) => a.ref === state.ref && Str.endsWith("/mail")(a.id)),
             "L2: a request completes only by its answer letter, never by `queued`",
           ).toBe(true);
         }
@@ -796,34 +873,36 @@ const walk = (
         cut_mail: !world.fault.mail,
         lose_ack: !world.fault.ack,
         fail_wake: !world.fault.wake,
-        fire: (yield* store.alarms.saved).some((a) => {
+        fire: Arr.some(yield* store.alarms.saved, (a) => {
           const k = pairFor(a.name);
+
           return k !== undefined && !world.stalled.has(k);
         }),
         forge: true,
-        stale_answer: pairs.some((k) => (world.history.get(k) ?? []).length > 0),
+        stale_answer: Arr.some(pairs, (k) => (world.history.get(k) ?? []).length > 0),
         restart: true,
-        stop: pairs.some((k) => !world.stopped.has(k)),
+        stop: Arr.some(pairs, (k) => !world.stopped.has(k)),
         stall: world.stalled.size === 0 && pairs.length > 1,
         settle: true,
         reopen: world.stalled.size === 0,
         evict:
-          [...world.stalled.values()].some((stall) => Deferred.isDoneUnsafe(stall.entered)) &&
+          Arr.some([...world.stalled.values()], (stall) => Deferred.isDoneUnsafe(stall.entered)) &&
           world.background.length > 0,
         wakeDuringDrain:
-          idle.some((k) => !world.stopped.has(k)) &&
+          Arr.some(idle, (k) => !world.stopped.has(k)) &&
           world.stalled.size === 0 &&
           !world.fault.mail &&
           !world.fault.ack &&
           !world.fault.wake,
         holdAlarm:
-          idle.some((k) => !world.stopped.has(k)) &&
+          Arr.some(idle, (k) => !world.stopped.has(k)) &&
           world.stalled.size === 0 &&
           !world.fault.mail &&
           !world.fault.ack &&
           !world.fault.wake,
       };
-      const options = moves.filter((move) => can[move]);
+
+      const options = Arr.filter(moves, (move) => can[move]);
 
       if (options.length === 0) {
         continue;
@@ -838,24 +917,33 @@ const walk = (
         case "wakeDuringDrain":
         case "holdAlarm": {
           const k = choose(
-            move === "wakeDuringDrain" || move === "holdAlarm" ? idle.filter((p) => !world.stopped.has(p)) : idle,
+            move === "wakeDuringDrain" || move === "holdAlarm" ? Arr.filter(idle, (p) => !world.stopped.has(p)) : idle,
             cell.pick,
           );
-          const other = pairs.find((p) => p !== k) ?? k;
+
+          const other = Option.getOrUndefined(Arr.findFirst(pairs, (p) => p !== k)) ?? k;
           const ref = `${recorded?.secrets[k - 1] ?? "ref"}-${k}-${++world.n}`;
+
           const kind =
             move === "start" || move === "wakeDuringDrain" || move === "holdAlarm"
               ? "normal"
               : move === "start_forbidden"
                 ? "forbidden"
                 : "missing";
-          const input =
-            kind === "normal"
-              ? { type: "start", ref, value: cell.value }
-              : kind === "forbidden"
-                ? // Aimed at the other requester, claiming to be that requester's own responder.
-                  { type: "start", ref, value: cell.value, to: requesterName(other), claim: responderName(other) }
-                : { type: "start", ref, value: cell.value, to: GHOST };
+
+          const input = Match.value(kind).pipe(
+            Match.when("normal", () => ({ type: "start", ref, value: cell.value })),
+            // Aimed at the other requester, claiming to be that requester's own responder.
+            Match.when("forbidden", () => ({
+              type: "start",
+              ref,
+              value: cell.value,
+              to: requesterName(other),
+              claim: responderName(other),
+            })),
+            Match.orElse(() => ({ type: "start", ref, value: cell.value, to: GHOST })),
+          );
+
           const incoming: Incoming = {
             id: `letter-${world.n}`,
             envelope: { id: inputId(world.n), by: person, arrivedAt: 1794099600000 + world.n, input },
@@ -863,6 +951,7 @@ const walk = (
             seen: 0,
             span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
           };
+
           const work = runner(requesterName(k)).msg(incoming);
           const stall = world.stalled.get(k);
 
@@ -875,6 +964,7 @@ const walk = (
             world.wakes.set(name, arrived);
             const now = yield* Clock.currentTimeMillis;
             const clock = yield* Clock.Clock;
+
             // Keep wall time fixed across the held storage call; deadline sleeps still use the live clock.
             const frozen: Clock.Clock = {
               currentTimeMillisUnsafe: () => now,
@@ -885,6 +975,7 @@ const walk = (
               monotonicTimeNanos: clock.monotonicTimeNanos,
               sleep: (duration) => clock.sleep(duration),
             };
+
             const drain =
               move === "wakeDuringDrain"
                 ? yield* Effect.forkChild(runner(name).due(now).pipe(Effect.provideService(Clock.Clock, frozen)))
@@ -912,7 +1003,7 @@ const walk = (
 
             yield* completion(sending, `${law}: sending completion for ${requesterName(k)}`);
             world.wakes.delete(name);
-            const alarm = (yield* store.alarms.saved).find((a) => a.name === name);
+            const alarm = Option.getOrUndefined(Arr.findFirst(yield* store.alarms.saved, (a) => a.name === name));
             expect(alarm, "M1, M4: the wake behind the drain saves the next alarm").toBeDefined();
             expect(alarm?.at).toBeLessThanOrEqual(world.wakeTimes.get(name) ?? Number.NaN);
           } else if (stall !== undefined) {
@@ -941,21 +1032,26 @@ const walk = (
             if (moves.includes("evict") && healthy) {
               const after = yield* owedIds(requesterName(k));
               expect(
-                after.filter((id) => !before.includes(id)),
+                Arr.filter(after, (id) => !before.includes(id)),
                 "S2: the completed Send is no longer owed",
               ).toEqual([]);
 
               if (after.length === 0) {
                 expect(
-                  (yield* store.alarms.saved).filter((a) => a.name === requesterName(k)),
+                  Arr.filter(yield* store.alarms.saved, (a) => a.name === requesterName(k)),
                   "S2: the last Send's answer removes its retry alarm",
                 ).toEqual([]);
               }
             }
           }
 
-          if ((yield* letters(requesterName(k))).some((l) => l.id === incoming.id)) {
-            const to = kind === "normal" ? responderName(k) : kind === "forbidden" ? requesterName(other) : GHOST;
+          if (Arr.some(yield* letters(requesterName(k)), (l) => l.id === incoming.id)) {
+            const to = Match.value(kind).pipe(
+              Match.when("normal", () => responderName(k)),
+              Match.when("forbidden", () => requesterName(other)),
+              Match.orElse(() => GHOST),
+            );
+
             world.current.set(k, { ref, value: cell.value, kind, to });
             world.history.get(k)?.push(ref);
 
@@ -966,6 +1062,7 @@ const walk = (
 
           break;
         }
+
         case "cut_mail":
           world.fault.mail = true;
           break;
@@ -977,21 +1074,25 @@ const walk = (
           break;
         case "fire": {
           const alarm = choose(
-            (yield* store.alarms.saved).filter((a) => {
+            Arr.filter(yield* store.alarms.saved, (a) => {
               const k = pairFor(a.name);
+
               return k !== undefined && !world.stalled.has(k);
             }),
             cell.pick,
           );
+
           yield* store.alarms.take(alarm);
           const now = yield* Clock.currentTimeMillis;
           yield* call(runner(alarm.name).due(Math.max(now, alarm.at)), `${alarm.name}'s alarm`);
           break;
         }
+
         case "forge": {
           // Mail another program could send: it takes the recipient's ordinary admission.
           const k = choose(pairs, cell.pick);
           const ref = `forged-${++world.forged}`;
+
           const shapes: ReadonlyArray<unknown> = [
             { type: "request", value: cell.value, reply: requesterName(k) },
             { type: "approve" },
@@ -1004,17 +1105,21 @@ const walk = (
               at: 0,
             },
           ];
+
           yield* deliverAs(requesterName(k), responderName(k), choose(shapes, cell.shape));
           break;
         }
+
         case "stale_answer": {
           const k = choose(
-            pairs.filter((p) => (world.history.get(p) ?? []).length > 0),
+            Arr.filter(pairs, (p) => (world.history.get(p) ?? []).length > 0),
             cell.pick,
           );
+
           const current = world.current.get(k)?.ref;
-          const old = (world.history.get(k) ?? []).filter((r) => r !== current);
+          const old = Arr.filter(world.history.get(k) ?? [], (r) => r !== current);
           const state = yield* requesterState(k);
+
           // A repeat of the current answer, only once it is answered; else an old or an unknown ref.
           const ref =
             state?._tag === "answered" && cell.shape % 3 === 1
@@ -1022,9 +1127,11 @@ const walk = (
               : old.length > 0 && cell.shape % 3 !== 0
                 ? choose(old, cell.shape)
                 : `unknown-${++world.forged}`;
+
           yield* deliverAs(responderName(k), requesterName(k), { type: "answer", ref, value: cell.value });
           break;
         }
+
         case "restart": {
           const k = choose(pairs, cell.pick);
           yield* call(
@@ -1035,13 +1142,17 @@ const walk = (
           world.restarted.add(k);
           break;
         }
+
         case "stop": {
           const k = choose(
-            pairs.filter((p) => !world.stopped.has(p)),
+            Arr.filter(pairs, (p) => !world.stopped.has(p)),
             cell.pick,
           );
+
           const current = world.current.get(k)?.ref;
-          const reached = (yield* bodies(requesterName(k))).some(
+
+          const reached = Arr.some(
+            yield* bodies(requesterName(k)),
             (b) => b.type === "answer" && b.ref === current && !world.forgedIds.has(b.id),
           );
 
@@ -1056,11 +1167,13 @@ const walk = (
           world.stopped.add(k);
           break;
         }
+
         case "stall": {
           const k = choose(pairs, cell.pick);
           world.stalled.set(k, { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() });
           break;
         }
+
         case "settle": {
           const skip = new Set(world.stalled.keys());
           yield* settle(skip);
@@ -1083,6 +1196,7 @@ const walk = (
 
           break;
         }
+
         case "evict": {
           // The wake is held after the receipt and letter were saved. Interrupt only the
           // test's Send fibers, then discard the runners; the databases and alarms survive.
@@ -1101,6 +1215,7 @@ const walk = (
           life = yield* host(store, world, next.next, scope);
           break;
         }
+
         case "reopen": {
           yield* Scope.close(scope, Exit.void);
           yield* store.reopen;
@@ -1150,7 +1265,7 @@ const walk = (
         expect(state, "L8: a forbidden destination is refused, whatever sender the command claims").toEqual(
           RequesterModel.cases.failed.make({ ref: current.ref, reason: "forbidden" }),
         );
-        const reached = (yield* bodies(current.to)).filter((b) => b.ref === current.ref);
+        const reached = Arr.filter(yield* bodies(current.to), (b) => b.ref === current.ref);
         expect(reached, "L8: no forbidden delivery reaches its destination").toEqual([]);
       } else if (current.kind === "missing") {
         expect(state, "L8: a missing name is a typed refusal").toEqual(
@@ -1170,9 +1285,11 @@ const walk = (
       }
 
       // L3: each command reached its recipient once, however often its delivery was retried.
-      const answers = (yield* bodies(requesterName(k))).filter(
+      const answers = Arr.filter(
+        yield* bodies(requesterName(k)),
         (b) => b.type === "answer" && b.ref === current.ref && !world.forgedIds.has(b.id),
       );
+
       expect(answers.length, `L3: at most one answer letter for ${current.ref}`).toBeLessThanOrEqual(1);
     }
 
@@ -1184,11 +1301,18 @@ const walk = (
       // L7: only admitted requests stepped the responder; forged and malformed mail did not.
       const model = Option.getOrNull(decodeResponder(yield* inContext(savedModel(store, responderName(k)))));
       const asked = world.history.get(k) ?? [];
-      const admitted = new Set(
-        (yield* bodies(responderName(k)))
-          .filter((b) => b.type === "request" && !world.forgedIds.has(b.id))
-          .flatMap((b) => (b.ref !== undefined && asked.includes(b.ref) && !world.negative.has(b.ref) ? [b.ref] : [])),
+
+      const requests = Arr.filter(
+        yield* bodies(responderName(k)),
+        (b) => b.type === "request" && !world.forgedIds.has(b.id),
       );
+
+      const admitted = new Set(
+        Arr.flatMap(requests, (b) =>
+          b.ref !== undefined && asked.includes(b.ref) && !world.negative.has(b.ref) ? [b.ref] : [],
+        ),
+      );
+
       expect(
         model?.answered ?? 0,
         `L7: ${responderName(k)} stepped once per admitted request, never for other mail`,
@@ -1207,12 +1331,15 @@ const prop = (
   runs: Runs = { fast: 10, full: 40 },
   examples: ReadonlyArray<ReadonlyArray<Cell>> = [],
 ) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const law = walk(name, open, pairs, moves, done);
+
         const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
           const probe = yield* Effect.scoped(law(tape));
           // L12: once the scope is gone, nothing it opened is still open or still running.
@@ -1220,14 +1347,17 @@ const prop = (
           expect(probe.open(), "L12: every database handle closed with its scope").toBe(0);
           expect(probe.late(), "L12: no alarm task set an alarm after its scope closed").toBe(0);
         });
+
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(once(tape)));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(once(tape)));
+
         const options = {
           seed: SEED,
           numRuns: runsFor(runs),
-          examples: examples.map((tape) => [[...tape]]),
+          examples: Arr.map(examples, (tape) => [[...tape]]),
           includeErrorInReport: true,
         };
+
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, options));
         // An empty flow cannot pass: every move the law is about ran at least once.
@@ -1238,15 +1368,20 @@ const prop = (
   );
 
 const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boolean) =>
-  it.effect(
+  // Each tape provides its own TestClock.layer(), so the walk runs on a test clock under it.live or
+  // it.effect alike; it.live changes nothing this law reads.
+  it.live(
     stopped
       ? "M3: mailed neither starts a stopped name nor keeps its mail alarm alive"
       : "M2: one alarm keeps the earliest timer, mail wake and owed Send",
     () =>
       Effect.gen(function* () {
+        const services = yield* Effect.context<never>();
         const visited = new Set<string>();
+
         const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
           const store = yield* open;
+
           const world: World = {
             timers: true,
             current: new Map(),
@@ -1265,6 +1400,7 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
             forged: 0,
             n: 0,
           };
+
           const next = ids(...PIDS);
           let scope = yield* Scope.make();
           let life = yield* host(store, world, next.next, scope);
@@ -1272,6 +1408,7 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
           const name = responderName(1);
           const runner = () => Option.getOrThrow(Option.fromUndefinedOr(life.runners.get(name)));
           const within = <A, E, R>(work: Effect.Effect<A, E, R>) => work.pipe(Effect.provide(life.context));
+
           const input = (m: unknown): Incoming => ({
             id: `timer-${++world.n}`,
             envelope: { id: inputId(world.n), by: person, arrivedAt: world.n, input: m },
@@ -1279,23 +1416,33 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
             seen: 0,
             span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
           });
+
           let timer: number | null = null,
             wake: number | null = null,
             retry: number | null = null;
+
           let live = true;
           let recoveryWait: number | null = null;
           let kept: ReadonlyArray<unknown> = [];
           const ticks: number[] = [];
-          const saved = () => Effect.map(store.alarms.saved, (rows) => rows.find((a) => a.name === name)?.at ?? null);
+
+          const saved = () =>
+            Effect.map(
+              store.alarms.saved,
+              (rows) => Option.getOrUndefined(Arr.findFirst(rows, (a) => a.name === name))?.at ?? null,
+            );
+
           yield* runner().due(0);
 
           for (const cell of tape) {
             const now = yield* Clock.currentTimeMillis;
+
             const choices = stopped
               ? live
                 ? ["stop", "brake", "wake", "reopen"]
                 : ["wake", "reopen"]
               : ["arm", "wake", "send", "advance", ...((yield* saved()) === null ? [] : ["fire"])];
+
             const move = choose(choices, cell.move);
             visited.add(move);
 
@@ -1416,23 +1563,26 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
                 recoveryWait === null ? "ended" : "down",
               );
             } else if (!stopped) {
-              const terms = [timer, wake, retry].filter((at): at is number => at !== null);
+              const terms = Arr.filter([timer, wake, retry], (at): at is number => at !== null);
               expect(yield* saved(), "M2: the single saved alarm is the earliest pending work").toBe(
                 terms.length === 0 ? null : Math.min(...terms),
               );
               const checkpoint = yield* within(savedModel(store, name));
+
               const model =
                 checkpoint === null
                   ? timerMachine.init(null, stubCtxThrowingProxy<unknown>())[0]
-                  : Schema.decodeUnknownSync(TimerModel)(checkpoint);
+                  : yield* Schema.decodeUnknownEffect(TimerModel)(checkpoint);
+
               expect(model.at, "M2: a mail drain keeps the program timer").toBe(timer);
               expect(model.ticks, "M2: only a due program timer adds its timer letter").toEqual(ticks);
             }
           }
         });
+
         const scoped = (tape: ReadonlyArray<Cell>) => Effect.scoped(once(tape)).pipe(Effect.provide(TestClock.layer()));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(scoped(tape)));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(services)(scoped(tape)));
         const checks = { seed: SEED, numRuns: runsFor({ fast: 20, full: 100 }), includeErrorInReport: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check reports its result as a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
@@ -1452,14 +1602,19 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
  * the mail wake never leaves a write behind with no alarm.
  */
 const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Each tape provides its own TestClock.layer(), so the walk runs on a test clock under it.live or
+  // it.effect alike; it.live changes nothing this law reads.
+  it.live(
     "M6: a write made from mail read during a send runs, or its alarm stays until it does",
     () =>
       Effect.gen(function* () {
+        const services = yield* Effect.context<never>();
         const visited = new Set<string>();
+
         const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>) {
           const store = yield* open;
           const notes: NonNullable<World["notes"]> = { written: [], during: null };
+
           const world: World = {
             timers: true,
             notes,
@@ -1479,6 +1634,7 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             forged: 0,
             n: 0,
           };
+
           const next = ids(...PIDS);
           const scope = yield* Scope.make();
           const life = yield* host(store, world, next.next, scope);
@@ -1486,7 +1642,13 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const name = responderName(1);
           const runner = () => Option.getOrThrow(Option.fromUndefinedOr(life.runners.get(name)));
           const within = <A, E, R>(work: Effect.Effect<A, E, R>) => work.pipe(Effect.provide(life.context));
-          const saved = () => Effect.map(store.alarms.saved, (rows) => rows.find((a) => a.name === name)?.at ?? null);
+
+          const saved = () =>
+            Effect.map(
+              store.alarms.saved,
+              (rows) => Option.getOrUndefined(Arr.findFirst(rows, (a) => a.name === name))?.at ?? null,
+            );
+
           const input = (m: unknown): Incoming => ({
             id: `timer-${++world.n}`,
             envelope: { id: inputId(world.n), by: person, arrivedAt: world.n, input: m },
@@ -1494,9 +1656,11 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             seen: 0,
             span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
           });
+
           /** Notes delivered to the timer, each a letter whose step makes one write. */
           let sent = 0;
           const written = () => new Set(notes.written).size;
+
           /** Ordinary mail from the timer's granted peer, then its ping, as a delivery sends them. */
           const deliver = Effect.fnUntraced(function* (count: number) {
             const source = yield* within(ProcessManager.use((p) => p.status(requesterName(1))));
@@ -1518,12 +1682,14 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
             yield* runner().mailed;
           });
+
           const fire = Effect.fnUntraced(function* (at: number) {
             const now = yield* Clock.currentTimeMillis;
             yield* TestClock.setTime(Math.max(now, at));
             yield* store.alarms.take({ name, at });
             yield* runner().due(Math.max(now, at));
           });
+
           yield* runner().due(0);
 
           for (const cell of tape) {
@@ -1567,9 +1733,10 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
           expect(written(), "M6: every note's write ran once its alarms fired").toBe(sent);
         });
+
         const scoped = (tape: ReadonlyArray<Cell>) => Effect.scoped(once(tape)).pipe(Effect.provide(TestClock.layer()));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(scoped(tape)));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(services)(scoped(tape)));
         // Each run starts four real runners. Shrinking a failure runs hundreds more, which would hide
         // its failing check behind the test's limit, so the first failing tape is reported as found.
         const options = { seed: SEED, numRuns: 40, includeErrorInReport: true, endOnFailure: true };
@@ -1595,7 +1762,9 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 // the writer's saved model, the saved alarms and the writer's owed Cmds.
 
 const PIPE_WRITER = "writer:1";
+
 const PIPE_READER = "reader:1";
+
 /** A second reader, started only when a walk asks for one. */
 const PIPE_ASIDE = "reader:2";
 
@@ -1618,7 +1787,7 @@ const ackFaulting = (sql: Sql, fault: Pipe["fault"]): Sql => ({
     if (
       fault.ack &&
       /^\s*INSERT\b/i.test(query) &&
-      params.some((p) => typeof p === "string" && /\/acked\/[0-9]+$/.test(p))
+      Arr.some(params, (p) => Predicate.isString(p) && /\/acked\/[0-9]+$/.test(p))
     ) {
       fault.ack = false;
       throw new Error("SQLITE_FULL planted at the ack write");
@@ -1652,6 +1821,7 @@ const pipeHost = Effect.fnUntraced(function* (
   scope: Scope.Scope,
 ) {
   const data = ledger(ackFaulting(store.sql("ledger"), pipe.fault));
+
   const manager = ProcessManager.layer(
     {
       by: "SHA256:brain",
@@ -1660,16 +1830,20 @@ const pipeHost = Effect.fnUntraced(function* (
     },
     next,
   );
+
   const runners = new Map<string, ProgramRunner["Service"]>();
+
   const wakeups = Layer.succeed(MailWakeups, {
     wake: (name: string) =>
       Effect.suspend(() => {
         const target = runners.get(name);
+
         return target === undefined
           ? Effect.die(`no runner for ${name}`)
           : target.mailed.pipe(Effect.mapError((cause) => new MailWakeupsError({ reason: "unavailable", cause })));
       }),
   });
+
   const shared = MailDeliveryLive.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -1684,6 +1858,7 @@ const pipeHost = Effect.fnUntraced(function* (
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),
   );
+
   const context = yield* Layer.buildWithScope(shared, scope);
   const writer = pipe.writer === "plain" ? pipeWriter(PIPE_READER) : chunkWriter(PIPE_READER, PIPE_ASIDE);
   const reader = pipeReader();
@@ -1695,15 +1870,18 @@ const pipeHost = Effect.fnUntraced(function* (
     ...(pipe.aside === true ? [[PIPE_ASIDE, reader.name] as const] : []),
   ] as const) {
     const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.provide(context), Effect.result);
+
     const pid = Result.isSuccess(status)
       ? status.success.state.process
       : (yield* ProcessManager.use((p) =>
           p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: BUILD } }), brainFrom()),
         ).pipe(Effect.provide(context), Effect.orDie)).process;
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: (i: Incoming) =>
             mailbox.send(name, i.id, i.envelope.input, {
@@ -1720,7 +1898,9 @@ const pipeHost = Effect.fnUntraced(function* (
         };
       }),
     );
+
     const sql = store.sql(`process-${name}`);
+
     const own = Layer.mergeAll(
       ProgramLoader.layer(programs, {}),
       ProcessStore.layer(name === PIPE_READER ? saveFaulting(sql, pipe.fault) : sql, { process: pid }),
@@ -1729,6 +1909,7 @@ const pipeHost = Effect.fnUntraced(function* (
       Layer.succeed(Recording, { flush: Effect.void }),
       checked,
     ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
+
     const runner = ProgramRunner.layer(
       { id: pid, name, program, build: BUILD, owner },
       {
@@ -1736,6 +1917,7 @@ const pipeHost = Effect.fnUntraced(function* (
         chunk: ByteSize.bytes(pipe.chunk),
       },
     ).pipe(Layer.provide(own));
+
     const built = yield* Layer.buildWithScope(runner, scope);
     runners.set(name, Context.get(built, ProgramRunner));
   }
@@ -1753,7 +1935,9 @@ const PipeLetter = Schema.Union([
 ]);
 
 const decodePipeLetter = Schema.decodeUnknownOption(PipeLetter);
+
 const decodeWriter = Schema.decodeUnknownOption(WriterModel);
+
 const utf8 = new TextEncoder();
 
 /**
@@ -1769,18 +1953,21 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   const inContext = <A, E, R>(effect: Effect.Effect<A, E, R>) => effect.pipe(Effect.provide(life.context));
   const runner = (name: string) => Option.getOrThrow(Option.fromUndefinedOr(life.runners.get(name)));
+
   const call = <A, E>(effect: Effect.Effect<A, E>, label: string) =>
     effect.pipe(
       Effect.result,
       Effect.timeoutOption("20 seconds"),
       Effect.map((answer) => {
         expect(Option.isSome(answer), `${label} answers`).toBe(true);
+
         return Option.getOrThrow(answer);
       }),
     );
+
   /** The reader's inbox, each letter with its place and what it carries. */
   const inbox = Effect.map(inContext(Mailbox.use((m) => Stream.runCollect(m.read(PIPE_READER, 0)))), (letters) =>
-    letters.map((l) => ({
+    Arr.map(letters, (l) => ({
       id: l.id,
       rev: l.rev,
       pos: l.pos,
@@ -1788,29 +1975,43 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
       m: Option.getOrNull(decodePipeLetter(l.m)),
     })),
   );
+
   const checkpoint = (name: string) =>
     Effect.gen(function* () {
       const status = yield* inContext(ProcessManager.use((p) => p.status(name)));
+
       return yield* ProcessStore.use((s) => s.load).pipe(
         Effect.provide(ProcessStore.layer(store.sql(`process-${name}`), { process: status.state.process })),
         Effect.provide(life.context),
       );
     });
+
   /** The pos of the newest inbox letter the reader's saved checkpoint has read. */
   const savedPos = Effect.gen(function* () {
     const after = (yield* checkpoint(PIPE_READER))?.saved.after ?? 0;
-    return Math.max(0, ...(yield* inbox).filter((l) => l.rev <= after).map((l) => l.pos));
+
+    return Math.max(
+      0,
+      ...Arr.map(
+        Arr.filter(yield* inbox, (l) => l.rev <= after),
+        (l) => l.pos,
+      ),
+    );
   });
+
   const answers = Effect.map(checkpoint(PIPE_WRITER), (saved) =>
     Option.match(decodeWriter(saved?.saved.model ?? null), { onNone: () => [], onSome: (m) => m.answers }),
   );
+
   /** The ids of the writer's dispatched host Cmds still owed. */
   const owed = Effect.map(checkpoint(PIPE_WRITER), (saved) =>
-    (saved?.cmds ?? []).flatMap((cmd) =>
+    Arr.flatMap(saved?.cmds ?? [], (cmd) =>
       Schema.is(Schema.Struct({ id: Schema.String, mail: Schema.Literal(true) }))(cmd) ? [cmd.id] : [],
     ),
   );
+
   let letters = 0;
+
   /** A person's input to the writer, as the door delivers it. */
   const input = (m: unknown) =>
     call(
@@ -1823,9 +2024,10 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
       } satisfies Incoming),
       "the writer's input",
     );
+
   /** Fires every saved alarm of `names` once, and gives each turn's answer. */
   const turns = Effect.fnUntraced(function* (...names: ReadonlyArray<string>) {
-    const due = (yield* store.alarms.saved).filter((a) => names.includes(a.name));
+    const due = Arr.filter(yield* store.alarms.saved, (a) => names.includes(a.name));
     const answers = [];
 
     for (const alarm of due) {
@@ -1836,8 +2038,10 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
 
     return answers;
   });
+
   /** Fires every saved alarm of `names` once; true when one fired. */
   const fire = (names: ReadonlyArray<string>) => Effect.map(turns(...names), (answers) => answers.length > 0);
+
   /** Fires saved alarms until none is left. */
   const settle = Effect.fnUntraced(function* () {
     for (let round = 0; round < 96; round++) {
@@ -1846,15 +2050,18 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
       }
     }
   });
+
   const reopen = Effect.fnUntraced(function* () {
     yield* Scope.close(scope, Exit.void);
     yield* store.reopen;
     scope = yield* Scope.make();
     life = yield* pipeHost(store, pipe, next.next, scope);
   });
+
   /** A letter delivered as the writer's live process, outside its runner: a forged part. */
   const forge = Effect.fnUntraced(function* (command: string) {
     const status = yield* inContext(ProcessManager.use((p) => p.status(PIPE_WRITER)));
+
     return yield* inContext(
       ProgramMail.use((mail) =>
         mail.deliver({
@@ -1867,6 +2074,7 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
       ),
     ).pipe(Effect.result);
   });
+
   return { inbox, savedPos, answers, owed, input, turns, fire, settle, reopen, forge };
 });
 
@@ -1879,8 +2087,9 @@ const pipeProperty = <A>(
   runs: Runs,
 ) =>
   Effect.gen(function* () {
+    const context = yield* Effect.context<never>();
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated walk
-    const property = fc.asyncProperty(arbitrary, (value) => Effect.runPromise(Effect.scoped(law(value))));
+    const property = fc.asyncProperty(arbitrary, (value) => Effect.runPromiseWith(context)(Effect.scoped(law(value))));
     // Each run starts two real runners. Shrinking would run hundreds more, so the first failing case is reported.
     const options = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
@@ -1889,7 +2098,7 @@ const pipeProperty = <A>(
 
 /** Every plain answer is `queued` or `full`; a `full` letter never landed. */
 const plainAnswers = Effect.fnUntraced(function* (view: PipeView, plain: ReadonlySet<number>) {
-  const landed = new Set((yield* view.inbox).flatMap((l) => (l.m?.type === "letter" ? [l.m.n] : [])));
+  const landed = new Set(Arr.flatMap(yield* view.inbox, (l) => (l.m?.type === "letter" ? [l.m.n] : [])));
 
   for (const { n, answer } of yield* view.answers) {
     if (!plain.has(n)) {
@@ -1905,6 +2114,7 @@ const plainAnswers = Effect.fnUntraced(function* (view: PipeView, plain: Readonl
 });
 
 const PipeCell = fc.record({ move: fc.nat(), pick: fc.nat() });
+
 const PipeTape = fc.array(PipeCell, { minLength: 10, maxLength: 28, size: "max" });
 
 /**
@@ -1914,7 +2124,8 @@ const PipeTape = fc.array(PipeCell, { minLength: 10, maxLength: 28, size: "max" 
  * inbox, the writer's next send lands.
  */
 const fullLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L9: through real runners, the ack never runs ahead of the reader's saved place, a plain send to a full inbox folds full and lands nothing, and once the reader drains the next send lands",
     () =>
       Effect.gen(function* () {
@@ -1931,7 +2142,7 @@ const fullLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
               for (const cell of tape) {
                 const move = choose(moves, cell.move);
-                const newest = Math.max(0, ...(yield* view.inbox).map((l) => l.pos));
+                const newest = Math.max(0, ...Arr.map(yield* view.inbox, (l) => l.pos));
                 const unread = newest - (yield* view.savedPos);
 
                 switch (move) {
@@ -1940,7 +2151,7 @@ const fullLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     plain.add(n);
                     const answer = yield* view.input({ type: "letter", n });
                     expect(Result.isSuccess(answer), "the writer's turn answers").toBe(true);
-                    const got = (yield* view.answers).find((a) => a.n === n)?.answer;
+                    const got = Option.getOrUndefined(Arr.findFirst(yield* view.answers, (a) => a.n === n))?.answer;
 
                     if (unread >= cap) {
                       expect(got, `L9: a send with ${unread} unread at cap ${cap} folds full`).toBe("full");
@@ -1953,14 +2164,16 @@ const fullLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     drained = false;
                     break;
                   }
+
                   case "read": {
                     const clean = !pipe.fault.save && !pipe.fault.ack;
                     const ran = yield* view.fire([PIPE_READER]);
-                    const caught = (yield* view.savedPos) === Math.max(0, ...(yield* view.inbox).map((l) => l.pos));
+                    const caught = (yield* view.savedPos) === Math.max(0, ...Arr.map(yield* view.inbox, (l) => l.pos));
                     drained = ran && clean && caught;
                     done.add(ran ? "read" : "read_idle");
                     break;
                   }
+
                   case "cut_save":
                     pipe.fault.save = true;
                     drained = false;
@@ -1977,7 +2190,7 @@ const fullLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     break;
                 }
 
-                const top = Math.max(0, ...(yield* view.inbox).map((l) => l.pos));
+                const top = Math.max(0, ...Arr.map(yield* view.inbox, (l) => l.pos));
                 expect(
                   top - (yield* view.savedPos),
                   `L9: the reader's unread past its saved place never passes the cap ${cap}`,
@@ -1999,7 +2212,8 @@ const fullLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
  * wakes the reader; the reader's turn acks again, and the send after lands.
  */
 const repairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L10: a lost ack is repaired: a full answer wakes the reader, which acks again, and the next send lands",
     () =>
       Effect.gen(function* () {
@@ -2014,10 +2228,12 @@ const repairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             Effect.gen(function* () {
               const pipe: Pipe = { cap, chunk: 64 * 1_024, writer: "plain", fault: { save: false, ack: false }, n: 0 };
               const view = yield* pipeWorld(open, pipe);
+
               const send = Effect.fnUntraced(function* () {
                 const n = ++pipe.n;
                 yield* view.input({ type: "letter", n });
-                return (yield* view.answers).find((a) => a.n === n)?.answer;
+
+                return Option.getOrUndefined(Arr.findFirst(yield* view.answers, (a) => a.n === n))?.answer;
               });
 
               for (let round = 0; round < Math.max(rounds, lose + 1); round++) {
@@ -2031,9 +2247,9 @@ const repairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                   const turns = yield* view.turns(PIPE_READER);
                   expect(pipe.fault.ack, "the reader's turn tried to ack").toBe(false);
                   expect(
-                    turns.map((turn) => Result.isSuccess(turn)),
+                    Arr.map(turns, (turn) => Result.isSuccess(turn)),
                     "L10: a lost ack fails no turn: the reader's turn answers",
-                  ).toEqual(turns.map(() => true));
+                  ).toEqual(Arr.map(turns, () => true));
                   done.add("lost");
                 }
 
@@ -2057,8 +2273,10 @@ const repairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   );
 
 const KIB = 1_024;
+
 /** Items of a chunked send, each tagged with its send's number and its index. */
-const tagged = (n: number, pads: ReadonlyArray<number>) => pads.map((pad, i) => ({ s: n, i, pad: "x".repeat(pad) }));
+const tagged = (n: number, pads: ReadonlyArray<number>) =>
+  Arr.map(pads, (pad, i) => ({ s: n, i, pad: Str.repeat(pad)("x") }));
 
 type Sent =
   | { readonly kind: "letter" }
@@ -2067,12 +2285,15 @@ type Sent =
 /** L11's checks on what landed: Cmd order per pair, each send's parts in seq order once, each within its size. */
 const chunkChecks = Effect.fnUntraced(function* (view: PipeView, sent: ReadonlyMap<number, Sent>) {
   const landed = yield* view.inbox;
-  const order = landed.flatMap((l) =>
+
+  const order = Arr.flatMap(landed, (l) =>
     l.m === null ? [] : l.m.type === "letter" ? [l.m.n] : [l.m.items[0]?.s ?? Number.NaN],
   );
-  expect(order, `L11: letters one writer sends one reader arrive in its Cmd order: ${order.join(" ")}`).toEqual(
-    [...order].sort((a, b) => a - b),
-  );
+
+  expect(
+    order,
+    `L11: letters one writer sends one reader arrive in its Cmd order: ${Arr.join(Arr.map(order, String), " ")}`,
+  ).toEqual([...order].sort((a, b) => a - b));
   const answers = yield* view.answers;
 
   for (const [n, entry] of sent) {
@@ -2080,14 +2301,15 @@ const chunkChecks = Effect.fnUntraced(function* (view: PipeView, sent: ReadonlyM
       continue;
     }
 
-    const parts = landed.flatMap((l) =>
+    const parts = Arr.flatMap(landed, (l) =>
       l.m?.type === "rows" && l.m.items[0]?.s === n ? [{ ...l.m, bytes: l.bytes }] : [],
     );
+
     expect(
-      parts.map((p) => p.part.seq),
+      Arr.map(parts, (p) => p.part.seq),
       `L11: send ${n}'s parts land in seq order, each once`,
-    ).toEqual(parts.map((_, k) => k));
-    expect(new Set(parts.map((p) => p.part.id)).size, `send ${n}'s parts share one id`).toBeLessThanOrEqual(1);
+    ).toEqual(Arr.map(parts, (_, k) => k));
+    expect(new Set(Arr.map(parts, (p) => p.part.id)).size, `send ${n}'s parts share one id`).toBeLessThanOrEqual(1);
 
     for (const p of parts) {
       expect(
@@ -2097,7 +2319,7 @@ const chunkChecks = Effect.fnUntraced(function* (view: PipeView, sent: ReadonlyM
       expect(p.part.last, "only the final part is last").toBe(p === parts.at(-1) && p.part.last);
     }
 
-    const answer = answers.find((a) => a.n === n);
+    const answer = Option.getOrUndefined(Arr.findFirst(answers, (a) => a.n === n));
     const whole = parts.at(-1)?.part.last === true;
 
     if (answer !== undefined) {
@@ -2109,7 +2331,7 @@ const chunkChecks = Effect.fnUntraced(function* (view: PipeView, sent: ReadonlyM
 
     if (whole) {
       expect(
-        parts.flatMap((p) => p.items),
+        Arr.flatMap(parts, (p) => p.items),
         `L11: send ${n}'s parts hold its items in order`,
       ).toEqual(entry.items);
     }
@@ -2123,11 +2345,13 @@ const chunkChecks = Effect.fnUntraced(function* (view: PipeView, sent: ReadonlyM
  * send was cut with; letters arrive in the writer's Cmd order.
  */
 const chunkLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L11: send_chunks delivers its parts in seq order once each, answers queued with its count after the last, waits owed while full, keeps its cut size across a restart, and keeps the writer's Cmd order",
     () =>
       Effect.gen(function* () {
         const done = new Set<string>();
+
         const Tape = fc.array(
           fc.record({
             move: fc.nat(),
@@ -2135,6 +2359,7 @@ const chunkLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           }),
           { minLength: 8, maxLength: 20, size: "max" },
         );
+
         yield* pipeProperty(
           fc.tuple(fc.integer({ min: 1, max: 3 }), Tape),
           ([cap, tape]) =>
@@ -2155,13 +2380,15 @@ const chunkLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     sent.set(n, { kind: "rows", items, chunk: pipe.chunk });
                     const answer = yield* view.input({ type: "rows", n, items });
                     expect(Result.isSuccess(answer), "L11: the writer's turn answers, full or not").toBe(true);
-                    const last = (yield* view.inbox).some(
+
+                    const last = Arr.some(
+                      yield* view.inbox,
                       (l) => l.m?.type === "rows" && l.m.items[0]?.s === n && l.m.part.last,
                     );
 
                     if (!last) {
                       expect(
-                        (yield* view.answers).some((a) => a.n === n),
+                        Arr.some(yield* view.answers, (a) => a.n === n),
                         "L11: no answer before the last part",
                       ).toBe(false);
                       expect((yield* view.owed).length, "L11: a waiting send_chunks stays owed").toBeGreaterThan(0);
@@ -2170,6 +2397,7 @@ const chunkLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
                     break;
                   }
+
                   case "letter": {
                     const n = ++pipe.n;
                     sent.set(n, { kind: "letter" });
@@ -2177,6 +2405,7 @@ const chunkLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     yield* view.input({ type: "letter", n });
                     break;
                   }
+
                   case "read":
                     yield* view.fire([PIPE_READER]);
                     break;
@@ -2210,9 +2439,10 @@ const chunkLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
               for (const [n, entry] of sent) {
                 if (entry.kind === "rows") {
-                  expect(answers.find((a) => a.n === n)?.answer, `L11: send ${n} finished once every alarm fired`).toBe(
-                    "queued",
-                  );
+                  expect(
+                    Option.getOrUndefined(Arr.findFirst(answers, (a) => a.n === n))?.answer,
+                    `L11: send ${n} finished once every alarm fired`,
+                  ).toBe("queued");
                 }
               }
             }),
@@ -2246,6 +2476,7 @@ const nearCap = (n: number, delta: number) => {
   const size = 1_100;
   const count = Math.floor(INPUT_BYTES / (size + 30));
   const tail = size + INPUT_BYTES + delta - bigBytes(n, count, size, size);
+
   return { type: "big" as const, n, count, size, tail };
 };
 
@@ -2257,7 +2488,8 @@ const nearCap = (n: number, delta: number) => {
  * the Cmd's answer, and what landed holds no last part, so the reader's join says the send is cut.
  */
 const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L12: send_chunks answers too_big with no part saved for an item too big alone or operands over the row limit, and a final refusal on a later part is its answer with the send left cut",
     () =>
       Effect.gen(function* () {
@@ -2278,6 +2510,7 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               const pipe: Pipe = { cap, chunk: KIB, writer: "chunks", fault: { save: false, ack: false }, n: 0 };
               const view = yield* pipeWorld(open, pipe);
               const before = yield* view.inbox;
+
               /** One too_big send: its turn answers, and the Cmd gets exactly one answer, `too_big`. */
               const refused = Effect.fnUntraced(function* (input: unknown, label: string) {
                 const answer = yield* view.input(input);
@@ -2288,18 +2521,18 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 yield* view.settle();
                 // Exactly one answer, the one Cmd's: its echo keeps no items, so its row always fits.
                 const answers = yield* view.answers;
-                const mine = answers.filter((a) => a.n === pipe.n);
+                const mine = Arr.filter(answers, (a) => a.n === pipe.n);
                 expect(
-                  mine.map((a) => a.answer),
+                  Arr.map(mine, (a) => a.answer),
                   `L12: ${label} answers too_big once`,
                 ).toEqual(["too_big"]);
                 // The writer files an answer it cannot tie to a pending send under -1: a stray one.
                 expect(
-                  answers.filter((a) => a.n === -1),
+                  Arr.filter(answers, (a) => a.n === -1),
                   `L12: no stray answer after ${label}'s too_big`,
                 ).toEqual([]);
                 expect(
-                  mine.map((a) => [a.to, a.as]),
+                  Arr.map(mine, (a) => [a.to, a.as]),
                   `L12: ${label}'s too_big echoes its target and input type`,
                 ).toEqual([[PIPE_READER, "rows"]]);
                 expect(yield* view.owed, `L12: no Cmd stays owed after ${label}'s too_big`).toEqual([]);
@@ -2312,6 +2545,7 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 // One item past the 1 KiB chunk at a generated index, the rest small.
                 const pads = Array.from({ length: count }, (_, i) => (i === at % count ? 2 * KIB : 200));
                 yield* refused({ type: "rows", n, items: tagged(n, pads) }, "item");
+
                 return;
               }
 
@@ -2333,15 +2567,17 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               }
 
               const n = ++pipe.n;
+
               // Six items of 700 bytes: one per 1 KiB part. `cap` parts land, then the send waits on full.
               const items = tagged(
                 n,
                 Array.from({ length: 6 }, () => 700),
               );
+
               yield* view.input({ type: "rows", n, items });
               const id = (yield* view.owed)[0];
               expect(id, "the send waits owed on a full inbox").toBeDefined();
-              const landed = (yield* view.inbox).filter((l) => l.m?.type === "rows").length;
+              const landed = Arr.filter(yield* view.inbox, (l) => l.m?.type === "rows").length;
               expect(landed, `${cap} parts landed before full`).toBe(cap);
               // The reader reads what landed, so the inbox has room again.
               yield* view.fire([PIPE_READER]);
@@ -2351,20 +2587,20 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               expect(Result.isSuccess(forged), "the forged letter is saved").toBe(true);
               yield* view.settle();
               expect(
-                (yield* view.answers).find((a) => a.n === n)?.answer,
+                Option.getOrUndefined(Arr.findFirst(yield* view.answers, (a) => a.n === n))?.answer,
                 "L12: the later part's refusal is the answer",
               ).toBe("id_reused");
               expect(
-                (yield* view.answers).filter((a) => a.n === -1),
+                Arr.filter(yield* view.answers, (a) => a.n === -1),
                 "L12: no stray answer after the later part's refusal",
               ).toEqual([]);
-              const parts = (yield* view.inbox).flatMap((l) => (l.m?.type === "rows" ? [l.m.part] : []));
+              const parts = Arr.flatMap(yield* view.inbox, (l) => (l.m?.type === "rows" ? [l.m.part] : []));
               expect(
-                parts.map((p) => p.seq),
+                Arr.map(parts, (p) => p.seq),
                 "L12: the parts before the refused one stay",
               ).toEqual(Array.from({ length: seq }, (_, k) => k));
               expect(
-                parts.some((p) => p.last),
+                Arr.some(parts, (p) => p.last),
                 "L12: no last part landed, so the reader's join says cut",
               ).toBe(false);
               done.add(kind);
@@ -2384,7 +2620,8 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
  * target, so its `too_big` comes after the earlier send's `queued` and echoes `{to, as}`.
  */
 const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "T1041 L11: a send_chunks waiting on a full inbox holds back the writer's later mail to that name only, and a letter to another name lands at once",
     () =>
       Effect.gen(function* () {
@@ -2409,8 +2646,12 @@ const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 fault: { save: false, ack: false },
                 n: 0,
               };
+
               const view = yield* pipeWorld(open, pipe);
-              const answer = (n: number) => Effect.map(view.answers, (all) => all.find((a) => a.n === n)?.answer);
+
+              const answer = (n: number) =>
+                Effect.map(view.answers, (all) => Option.getOrUndefined(Arr.findFirst(all, (a) => a.n === n))?.answer);
+
               const rows = ++pipe.n;
               const items = tagged(rows, pads);
               yield* view.input({ type: "rows", n: rows, items });
@@ -2445,10 +2686,17 @@ const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               yield* view.settle();
               expect(yield* answer(rows), "the chunked send finished").toBe("queued");
               const all = yield* view.answers;
-              const tooBig = all.find((a) => a.n === huge.n);
+              const tooBig = Option.getOrUndefined(Arr.findFirst(all, (a) => a.n === huge.n));
               expect(tooBig?.answer, "L11: the oversize send answers too_big").toBe("too_big");
               expect(
-                all.findIndex((a) => a.n === rows) < all.findIndex((a) => a.n === huge.n),
+                Option.getOrElse(
+                  Arr.findFirstIndex(all, (a) => a.n === rows),
+                  () => -1,
+                ) <
+                  Option.getOrElse(
+                    Arr.findFirstIndex(all, (a) => a.n === huge.n),
+                    () => -1,
+                  ),
                 "L11: the oversize send's answer comes after the earlier send's, in Cmd order",
               ).toBe(true);
               expect(
@@ -2456,17 +2704,19 @@ const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 "L11: the oversize send's too_big echoes its target and input type",
               ).toEqual([PIPE_READER, "rows"]);
               expect(
-                all.filter((a) => a.n === -1),
+                Arr.filter(all, (a) => a.n === -1),
                 "L11: no stray answer",
               ).toEqual([]);
               // The held letter goes once the chunked send is done: a plain send, it lands or meets full.
               const last = yield* answer(held);
               expect(["queued", "full"], "the held letter was sent after the chunked send").toContain(last);
-              const order = (yield* view.inbox).flatMap((l) =>
+
+              const order = Arr.flatMap(yield* view.inbox, (l) =>
                 l.m === null ? [] : [l.m.type === "letter" ? l.m.n : (l.m.items[0]?.s ?? Number.NaN)],
               );
+
               expect(order, "reader:1 got the chunked send, then the held letter if it landed").toEqual([
-                ...items.map(() => rows),
+                ...Arr.map(items, () => rows),
                 ...(last === "queued" ? [held] : []),
               ]);
             }),
@@ -2486,16 +2736,21 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     refuseLaw(open);
 
     for (const trace of [false, true]) {
-      it.effect(
+      // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+      it.live(
         trace ? "T1a: receipt traces join each saved wake" : "T1a [secrets]: records hold no mail",
         () =>
           Effect.gen(function* () {
+            // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+            const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
             const done = new Set<Move>();
             let sends = 0;
+
             const once = Effect.fnUntraced(function* (tape: ReadonlyArray<Cell>, seed: number) {
               const clock = walkClock(yield* Clock.Clock);
               const secrets = yield* Arbitrary.sampleEffect(RepliesTest.sentinel, { seed, count: 2 });
               const observed = records(secrets, trace);
+
               const run = walk(
                 trace ? "T1a" : "T1a [secrets]",
                 open,
@@ -2515,16 +2770,19 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 done,
                 observed,
               );
+
               yield* Effect.scoped(run(tape)).pipe(
                 Effect.withTracer(observed.tracer),
                 Effect.provide(observed.logger),
                 Effect.provideService(Clock.Clock, clock),
               );
               observed.check();
-              sends += observed.spans.filter((s) => s.name === "mail_delivery.send").length;
+              sends += Arr.filter(observed.spans, (s) => s.name === "mail_delivery.send").length;
             });
+
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits the state-aware tape
-            const property = fc.asyncProperty(Tape, fc.nat(), (tape, seed) => Effect.runPromise(once(tape, seed)));
+            const property = fc.asyncProperty(Tape, fc.nat(), (tape, seed) => runPromise(once(tape, seed)));
+
             // Each run walks two real runners. Shrinking a failure runs hundreds more of them, so one
             // failed run became a 150 s timeout that hid its failing check (merge-group run
             // 43600068403). The first failing tape is reported as found.
@@ -2534,6 +2792,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               includeErrorInReport: true,
               endOnFailure: true,
             };
+
             // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check reports its property result
             yield* Effect.promise(() => fc.assert(property, options));
             expect(sends).toBeGreaterThan(0);
@@ -2649,6 +2908,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       const { machine } = REQUESTERS[1];
       const ctx = stubCtxThrowingProxy<unknown>();
       const ref = fc.constantFrom("ref-a", "ref-b", "ref-c");
+
       const lists = arbGuidedSequence(
         machine,
         ctx,
@@ -2678,6 +2938,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         },
         { maxLength: 40 },
       );
+
       const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
       propertyInvariant(
         machine,

@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e96-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:47:29-08:00",
+  "ended": "2026-11-16T01:20:16-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E96 (globalFetchInEffect, globalFetch), in next/, on branch fabrikalfa/effect-e96 from the stack top eeb8ecdbb. Recounted with only the two checks at error through --lspconfig on next/apps/fabrika/tsconfig.json: 19 hits, 18 in app:src (13 globalFetch, 5 globalFetchInEffect) and 1 in app:e2e (e2e/instance.visual.test.ts:104, another folder, not this row). All 18 app:src hits sit in exam paths (next/**/*.test.ts); no product file has a hit, so no build is needed, and none sits in a file that is still off limits (PR 1366 is merged). Fixed all 18 by hand with the Edit tool, no quick fix and no codemod: each global fetch became Effect's HttpClient over FetchHttpClient.layer, the replacement the check's own message names. Code already inside Effect yields HttpClient.get or HttpClient.post and gets FetchHttpClient.layer merged into an existing provide array (hands-launcher, sibling.laws, tasks-wire). Promise-written scenarios (brain-life, instance-one-file, instance-wire) got one local helper each that runs one request in its own scope with HttpClient.withScope, so the unread body is released when the scope closes, as the old body cancel did. JSON bodies use HttpBody.jsonUnsafe, which sets application/json as the old header did. local-instance kept its stand-in but no longer forwards to globalThis.fetch: the entry's client is handed the run's own vi.fn stand-in, and the same stand-in is stubbed as the global fetch for the scope, so a request on any path is still seen. Report: hits met 18, fixed by quick fix 0, hand edits 18, left 0, waiting on 1366 0. No ignore line, no lock line. Folder with hits, for the lock: next/apps/fabrika/src (top files), plus next/apps/fabrika/e2e for whichever slice owns it. Every other check in the 7 files was compared before and after with all 135 checks at error: no check grew except unstableApiUsage (72 to 100, every new one an effect/http name, which 0574's allowedUnstableApis list will name); strictEffectProvide stayed at 35 (test files are outside its lock); globalErrorInEffectCatch, globalErrorInEffectFailure, multipleEffectProvide and preferSchemaOverJson went down.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Files: next/apps/fabrika/src/{brain-life,hands-launcher,instance-one-file,instance-wire,local-instance,sibling.laws,tasks-wire}.integration.test.ts. Laws keep every assertion: .ok became a 2xx status check, header reads moved from Headers.get to the client's lowercase header record, and one probe check became the exact 200 the probe server answers. Tests run in the box, one file at a time, before the commit: local-instance 3 passed, tasks-wire 1 passed, sibling.laws 1 passed (its own bare-lookup plant runs inside the law and stays red as it should), hands-launcher 2 passed, instance-one-file 7 passed, instance-wire 15 passed, brain-life 5 passed. pnpm lint passed, with lint:kind and lint:promise-types run again alone (both passed) after they died with EPIPE when the kernel killed a process for memory while another agent's type check ran. The ratchet exited 0. pnpm typecheck: next/apps/fabrika Done with no error; today's apps/fabrika was killed for memory (exit 137), a package this change does not reach. brain-life has no separate plant: its readiness wait only passes when the new helper reads a 2xx status, and a plant that keeps a listener alive needs the real process tree.",
+  "plants": [
+    {
+      "law": "local-instance: a later dev command links its first start to the last runtime in that home; instance readiness waits for the started event to reach the ledger",
+      "plant": "libfabrika node/dev/dev.ts:432 sends build \"planted\" in the started event: both laws failed on the stand-in's captured events, then restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "tasks-wire: A14 real Project takes, reconnects, starts, finishes and reads its startup request",
+      "plant": "libfabrika cloudflare/fetch.ts /grant answers status 403: the grant status check failed, then restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "hands-launcher: E2 scenario, the person key's grant is accepted",
+      "plant": "the same 403 on /grant: E2 failed at the grant status check, then restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "instance-one-file: p33 complete output and T10 recovery",
+      "plant": "cloudflare/fetch.ts never serves an embedded file other than /: the missing file answered 200 where 404 is asserted, then restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "instance-wire: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the instance child fails",
+      "plant": "the same never-serve plant: /window.js lost its text/javascript type, read through the new header record, then restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

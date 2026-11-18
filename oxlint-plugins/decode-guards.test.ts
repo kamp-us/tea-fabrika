@@ -5,24 +5,32 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const CODE = "eslint(no-restricted-properties)";
+
 const ID = "fabrika(service-id)";
+
 const root = resolve(import.meta.dirname, "..");
+
 const word = fc.stringMatching(/^[a-z]{2,6}$/);
 
 /** A file of numbered lines, and the lines the rule must fire on. */
 const file = (lines: ReadonlyArray<readonly [string, boolean]>) => ({
-  text: `${lines.map(([line]) => line).join("\n")}\n`,
-  fires: lines.flatMap(([, fires], i) => (fires ? [i + 1] : [])),
+  text: `${pipe(
+    lines,
+    Arr.map(([line]) => line),
+    Arr.join("\n"),
+  )}\n`,
+  fires: Arr.flatMap(lines, ([, fires], i) => (fires ? [i + 1] : [])),
 });
 
 describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
-  it("fires on the parse forms oxlint resolves, and on nothing else or outside next/", async () => {
-    await fc.assert(
+  it("fires on the parse forms oxlint resolves, and on nothing else or outside next/", () =>
+    fc.assert(
       fc.asyncProperty(fc.record({ name: word.map((w) => `v${w}`), text: fc.json() }), async ({ name, text }) => {
         const body = (inside: boolean) =>
           file([
@@ -41,12 +49,14 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
             [`const J = JSON;`, false],
             [`export const aliased = J.parse(${JSON.stringify(text)});`, false],
           ]);
+
         const shadow = (inside: boolean) =>
           file([
             // A documented false alarm: oxlint's rule does not read scope, so a local JSON fires too.
             ["const JSON = { parse: (s: string) => s };", false],
             ['export const local = JSON.parse("x");', inside],
           ]);
+
         const files = {
           "next/packages/libfabrika/src/transport/Probe.ts": body(true),
           "next/apps/fabrika/src/probe.test.ts": body(true),
@@ -55,15 +65,15 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
           // Not under `oxlint-plugins/`: the planted folder links that one to the real folder.
           "scripts/probe.ts": body(false),
         };
-        const linted = await plant(Object.fromEntries(Object.entries(files).map(([path, f]) => [path, f.text])));
 
-        for (const [path, f] of Object.entries(files)) {
+        const linted = await plant(Rec.fromEntries(Arr.map(Rec.toEntries(files), ([path, f]) => [path, f.text])));
+
+        for (const [path, f] of Rec.toEntries(files)) {
           expect(linted(CODE, path), path).toEqual(f.fires);
         }
       }),
       { seed: 119120, numRuns: 4 },
-    );
-  });
+    ));
 
   it("scenario: replayed over the plan's decode sites, no bare JSON.parse is left in them", () => {
     const sites = [
@@ -72,15 +82,24 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
       "next/packages/libfabrika/src/runtime/Program.ts",
       "next/apps/fabrika/src/runtime.ts",
     ];
+
     const ran = spawnSync(
       join(root, "node_modules/.bin/oxlint"),
       [`--config=${join(root, ".oxlintrc.json")}`, "--disable-nested-config", "--no-ignore", "--format=json", ...sites],
       { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30, timeout: 120_000 },
     );
+
     const report: {
       readonly diagnostics: ReadonlyArray<{ readonly code?: string; readonly filename: string }>;
     } = JSON.parse(ran.stdout);
-    expect(report.diagnostics.filter((d) => d.code === CODE).map((d) => d.filename)).toEqual([]);
+
+    expect(
+      pipe(
+        report.diagnostics,
+        Arr.filter((d) => d.code === CODE),
+        Arr.map((d) => d.filename),
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -99,17 +118,19 @@ const lint = (files: Readonly<Record<string, string>>, args: ReadonlyArray<strin
       JSON.stringify({ name: "@kampus/libfabrika", dependencies: { effect: "catalog:" } }),
     );
 
-    for (const [path, text] of Object.entries(files)) {
+    for (const [path, text] of Rec.toEntries(files)) {
       mkdirSync(dirname(join(dir, path)), { recursive: true });
       writeFileSync(join(dir, path), text);
     }
 
-    const ran = spawnSync(process.execPath, [join(root, "oxlint-plugins/lint.ts"), ...args, ...Object.keys(files)], {
+    const ran = spawnSync(process.execPath, [join(root, "oxlint-plugins/lint.ts"), ...args, ...Rec.keys(files)], {
       cwd: dir,
       encoding: "utf8",
       timeout: 60_000,
     });
+
     expect(ran.error).toBeUndefined();
+
     return ran;
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -126,14 +147,17 @@ const probe = ({
   readonly id: string | null;
   readonly blocking: boolean;
 }) =>
-  `${[
-    'import { Context } from "effect";',
-    "",
-    `export class Probe extends Context.Service<Probe, { readonly n: number }>()("${id ?? "@kampus/libfabrika/runtime/Probe"}") {}`,
-    "",
-    `export const read = (text: string): unknown => ${parse ? "JSON.parse(text)" : "text"};`,
-    ...(blocking ? ["", "debugger;"] : []),
-  ].join("\n")}\n`;
+  `${Arr.join(
+    [
+      'import { Context } from "effect";',
+      "",
+      `export class Probe extends Context.Service<Probe, { readonly n: number }>()("${id ?? "@kampus/libfabrika/runtime/Probe"}") {}`,
+      "",
+      `export const read = (text: string): unknown => ${parse ? "JSON.parse(text)" : "text"};`,
+      ...(blocking ? ["", "debugger;"] : []),
+    ],
+    "\n",
+  )}\n`;
 
 const PROBE = "next/packages/libfabrika/src/runtime/Probe.ts";
 
@@ -149,6 +173,7 @@ describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a w
           const ran = lint({ [PROBE]: probe({ parse, id: id ? `fabrika/${name}` : null, blocking }) }, [
             "--warn=no-debugger",
           ]);
+
           const blocks = Number(parse) + Number(blocking) + Number(id);
           expect(ran.stdout).toContain(`oxlint: ${blocks} blocking, 0 advice`);
           expect(ran.stdout.includes(CODE)).toBe(parse);

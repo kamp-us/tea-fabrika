@@ -3,7 +3,7 @@
 // given (`next/packages/tuval/src/window/use-model.ts`), so the rules' own edge paths and the config's
 // `next/**` globs meet them as they would meet the real file. Nothing is written inside the repo.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { Array as Arr, Record as Rec, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** One fire: the rule's code, as oxlint prints it (`fabrika(no-of)`), where, and what it says. */
@@ -15,13 +15,13 @@ interface Fire {
 }
 
 const Report = Schema.Struct({
-  number_of_files: Schema.Number,
+  number_of_files: Schema.Finite,
   diagnostics: Schema.Array(
     Schema.Struct({
       code: Schema.optional(Schema.String),
       filename: Schema.String,
       message: Schema.String,
-      labels: Schema.optional(Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Number }) }))),
+      labels: Schema.optional(Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Finite }) }))),
     }),
   ),
 });
@@ -29,6 +29,7 @@ const Report = Schema.Struct({
 const readReport = Schema.decodeUnknownSync(Schema.fromJsonString(Report));
 
 type Files = Readonly<Record<string, string>>;
+
 type Fires<A> = (code: string, file: string) => readonly A[];
 
 /**
@@ -38,15 +39,15 @@ type Fires<A> = (code: string, file: string) => readonly A[];
  */
 export function plant(files: Files): Promise<Fires<number>>;
 export function plant<A>(files: Files, show: (fire: Fire) => A): Promise<Fires<A>>;
-export function plant(files: Files, show: (fire: Fire) => unknown = (f) => f.line): Promise<Fires<unknown>> {
+export function plant<A>(files: Files, show: (fire: Fire) => A | number = (f) => f.line): Promise<Fires<A | number>> {
   return Effect.runPromise(
     lint(files).pipe(
       Effect.map(
         (all) => (code: string, file: string) =>
-          all
-            .filter((f) => f.code === code && f.file === file)
-            .sort((a, b) => a.line - b.line)
-            .map(show),
+          Arr.map(
+            Arr.filter(all, (f) => f.code === code && f.file === file).sort((a, b) => a.line - b.line),
+            show,
+          ),
       ),
       Effect.provide(NodeServices.layer),
     ),
@@ -64,14 +65,15 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
   // The config loads the vendored anti-slop plugins from here (0563).
   yield* fs.symlink(path.join(ROOT, "vendor"), path.join(at, "vendor"));
 
-  for (const [file, text] of Object.entries(files)) {
+  for (const [file, text] of Rec.toEntries(files)) {
     const full = path.join(at, file);
     yield* fs.makeDirectory(path.dirname(full), { recursive: true });
     yield* fs.writeFileString(full, text);
   }
 
   // A planted file oxlint does not lint (a `package.json` a rule reads) is written and not passed.
-  const linted = Object.keys(files).filter((file) => /\.[cm]?[jt]sx?$/.test(file));
+  const linted = Arr.filter(Rec.keys(files), (file) => /\.[cm]?[jt]sx?$/.test(file));
+
   const ran = yield* ChildProcess.make(
     path.join(ROOT, "node_modules", ".bin", "oxlint"),
     [
@@ -83,6 +85,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     ],
     { cwd: at },
   );
+
   const [out, err] = yield* Effect.all(
     [
       ran.stdout.pipe(Stream.decodeText(), Stream.mkString),
@@ -91,13 +94,14 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
     ],
     { concurrency: 3 },
   );
+
   const report = readReport(out);
 
   if (report.number_of_files !== linted.length) {
     return yield* Effect.die(new Error(`oxlint read ${report.number_of_files} files: ${err}`));
   }
 
-  return report.diagnostics.map((d): Fire => ({
+  return Arr.map(report.diagnostics, (d): Fire => ({
     code: d.code ?? "",
     file: d.filename,
     line: d.labels?.[0]?.span.line ?? 0,

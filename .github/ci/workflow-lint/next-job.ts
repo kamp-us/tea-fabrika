@@ -1,3 +1,4 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's next job: its legs (E1, E10), each leg's
 // `--shard` (E2), the vitest and end-to-end steps (E3, E11), and its pinned commands.
 import {
@@ -15,7 +16,7 @@ import {
   SHARD_OF,
   steps,
   VISUAL_FILES,
-  VISUAL_LABEL,
+  VISUAL_ROUTE,
 } from "./shared.ts";
 import { TIME_TABLE } from "./time-tables.ts";
 
@@ -27,7 +28,9 @@ export const nextLaws: Rule = ({ jobs }, require) => {
     strategy = map(nextJob["strategy"]),
     matrix = map(strategy["matrix"]),
     nextSteps = steps(nextJob);
+
   require(!("name" in nextJob), "next keeps the default matrix check names");
+
   // E1. The matrix is `fromJSON(needs.changes.outputs.shards || (<when> && '<full>' || '<vitest>'))`:
   // on a run that tests all of next/ from a base, changes' sized legs, else a fallback (E10). The
   // full one is the end-to-end legs
@@ -41,23 +44,27 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // `matrix.shard != 'e2e'` (E3).
   const allLegs = legs(nextJob),
     e2eCount = ends(allLegs).length;
+
   const expectedLegs = [...Array.from({ length: e2eCount }, (_, i) => `${E2E_PREFIX}${i + 1}`), ...VITEST_LEGS];
   require(e2eCount >= 1 &&
     JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
-    Object.keys(matrix).length ===
+    Rec.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
-  // E10 (0536). The visual tests never start unasked: the full fallback runs only on a pull request
-  // with the `visual` label, and every other unsized run, the merge queue and main among them, gets
-  // the vitest legs alone; the schedule runs the visual tests. Plants, each run once on check.yaml
-  // and restored: the full fallback alone, as before (red); `github.event_name == 'push' ||` beside
-  // the label (red); the vitest fallback with e2e-1 (red).
+  // E10 (0536, the owner's ruling of 2026-11-18). A visual test needs a browser or Electron, so it
+  // never starts unasked on a pull request or in the merge queue: the full fallback runs on a push
+  // to main and on a pull request with the `visual` label, and every other unsized run, the merge
+  // queue among them, gets the vitest legs alone. Main's full run runs every visual file. Plants in
+  // next-job.test.ts, each run once on check.yaml and restored: the full fallback alone (red); the
+  // pull request, queue and main route of PR 1581 back (red); the merge queue beside the label
+  // (red); the label or the push dropped (red); the vitest fallback with e2e-1 (red).
   const { when, plain } = fallbacks(nextJob);
-  require(compact(when) === compact(VISUAL_LABEL) &&
+  require(compact(when) === compact(VISUAL_ROUTE) &&
     JSON.stringify(plain) ===
       JSON.stringify(
         VITEST_LEGS,
-      ), "E10: next's full fallback runs only with the visual label, else the vitest legs 1 to 5 alone");
+      ), "E10: next's full fallback runs only on a push to main or with the visual label, else the vitest legs 1 to 5 alone");
   require(strategy["fail-fast"] === false, "next lets every shard finish");
+
   // The vitest step's paths, unquoted so each path is its own argument. On a sized run (a pull
   // request, a merge queue group or a push to main, 0534) changes' `files`: what `--changed` picked
   // and every reader test, each once (legs.ts), so the step takes no `--changed` of its own, which
@@ -65,6 +72,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // reader tests or `next/`, and a missing filter runs all of next/.
   const nextCommand =
     'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
+
   // E11 (0536). The vitest step tests the `next` project alone, on every event: the merge line runs
   // the in-memory layer, and the schedule runs the real-resource one. A path filter alone finds a
   // file in any project, so the flag is what keeps `next-integration` out. Plants, each run once on
@@ -75,6 +83,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // visual file the change reaches.
   const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
   const adviceCommand = 'node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"';
+
   // Only these whole scripts are allowed; shell aliases and alternate paths cannot add work.
   const allowed = [
     "pnpm install --frozen-lockfile",
@@ -85,6 +94,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
     'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
     TIME_TABLE,
   ];
+
   const nextRuns = nextSteps.filter((s) => "run" in s).map((s) => s["run"]);
   require(nextRuns.length === allowed.length &&
     allowed.every(
@@ -93,26 +103,32 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   const testStep = nextSteps.find((s) => s["run"] === nextCommand);
   require(testStep !==
     undefined, "E11: next's vitest step runs the next project alone, with --shard and no exclusions");
+  require(map(testStep?.["env"])["FABRIKA_TEST_DEPTH"] === "full", "E11: next runs selected laws at full depth");
   const shard = map(testStep?.["env"])["SHARD"];
   // E3. The one `if` the vitest step may carry. Without it an e2e leg asks vitest for `e2e-1/5`.
   require(compact(testStep?.["if"]) ===
     compact(`!${ON_E2E}`), "next's vitest step runs only on the numbered legs, and has no other guard");
   // A larger denominator leaves a share of the files on no machine; a smaller one fails a leg.
-  require(typeof shard === "string" &&
+  require(Predicate.isString(shard) &&
     new RegExp(`^${SHARD_OF}/${denominator("vitest", VITEST_LEGS.length)}$`).test(
       shard,
     ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
   // The size step's list first, so a sized run runs the files it was sized with; changes' filter
-  // after, so every other run keeps it. SHARD and FILTER are its whole env: a CHANGED here would
+  // after, so every other run keeps it. Only depth, SHARD and FILTER belong here: a CHANGED would
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
     "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes changes' files, else filter, with the fallback next/");
-  require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
-    JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
+  require(JSON.stringify(Rec.keys(map(testStep?.["env"])).toSorted()) ===
+    JSON.stringify([
+      "FABRIKA_TEST_DEPTH",
+      "FILTER",
+      "SHARD",
+    ]), "next's vitest step's env is full depth, SHARD and FILTER alone");
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
+  require(map(e2eStep?.["env"])["FABRIKA_TEST_DEPTH"] === "full", "E11: visual laws run at full depth");
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
-  require(typeof e2eShard === "string" &&
+  require(Predicate.isString(e2eShard) &&
     new RegExp(`^${SHARD_OF}/${denominator("e2e", e2eCount)}$`).test(
       e2eShard,
     ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");

@@ -1,9 +1,19 @@
 // P34c, next/. Only the Node runner imports the driver; all policy and recovery are real code.
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Clock, Effect, Layer, Schema } from "effect";
-import { Digest } from "effect/crypto";
-import { TestClock } from "effect/testing";
+import * as Arr from "effect/Array";
+import * as Clock from "effect/Clock";
+import * as Digest from "effect/crypto/Digest";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as ScopedCache from "effect/ScopedCache";
+import * as TestClock from "effect/testing/TestClock";
 import { Writer } from "../access/SessionManager.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -25,7 +35,9 @@ import type { Sql } from "../Sql.ts";
 import * as ProgramMailTestSupport from "./ProgramMail.test-support.ts";
 
 const NAMES = ["alpha:1", "alpha:2", "beta:1"];
+
 const identity = (name: string) => (name.startsWith("alpha:") ? "sample/alpha" : "sample/beta");
+
 const BRAIN = "SHA256:brain";
 
 const from = () => ({
@@ -43,7 +55,7 @@ const person = Writer.cases.person.make({ key: "SHA256:input", for: "test-person
 const Model = Schema.Struct({
   count: Schema.Int,
   replies: Schema.Int,
-  wake: Schema.NullOr(Schema.Number),
+  wake: Schema.NullOr(Schema.Finite),
   text: Schema.String,
 });
 
@@ -51,8 +63,8 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("inc"), text: Schema.optionalKey(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("throw") }),
   Schema.Struct({ type: Schema.Literal("work") }),
-  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Finite }),
+  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }),
   Schema.Struct({ ...Down.fields, type: Schema.Literal("DOWN") }),
 ]);
 
@@ -85,8 +97,8 @@ const program = (name: string) => ({
   msg: Msg,
   view: { data: Model, select: (s: typeof Model.Type) => s },
   refuse: () => null,
-  inputs: Object.fromEntries(
-    ["inc", "throw", "work", "schedule"].map((key) => [
+  inputs: Rec.fromEntries(
+    Arr.map(["inc", "throw", "work", "schedule"], (key) => [
       key,
       {
         ...Schema.TaggedStruct("write", {}).make({}),
@@ -104,19 +116,21 @@ const program = (name: string) => ({
 const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
 
 const snapshot = (sql: Sql) =>
-  Object.fromEntries(
-    sql
-      .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-      .map(({ name }) => [String(name), sql.exec(`SELECT * FROM ${quote(String(name))}`)]),
+  Rec.fromEntries(
+    Arr.map(
+      sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
+      ({ name }) => [String(name), sql.exec(`SELECT * FROM ${quote(String(name))}`)],
+    ),
   );
 
 const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
   const store = yield* ProgramMailTestSupport.runtime;
-  let limits = initial;
+  let current = Equal.byReference({ limits: initial });
   let cut: number | null = null;
   let sequence = 0;
   const deliveries = new Map<string, string>();
   const sqls = new Map<string, Sql>();
+
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -125,6 +139,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
     }
 
     const raw = store.sql(part);
+
     const wrapped: Sql = {
       exec: (query, ...params) => {
         const result = raw.exec(query, ...params);
@@ -145,21 +160,27 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       transaction: (f) => raw.transaction(f),
       size: () => raw.size(),
     };
+
     sqls.set(part, wrapped);
+
     return wrapped;
   };
+
   const project = sql("project");
   const pid = Effect.sync(() => `process_0000000000e008${(++sequence).toString(16).padStart(12, "0")}`);
+
   const caller = {
     by: BRAIN,
     owner: Owner.cases.brain.make({}),
     recipient: Recipient.cases.client.make({ client: "test", session: "process_0000000000e008000000000099" }),
   };
-  const data = () =>
+
+  const data = (limits = current.limits) =>
     Layer.mergeAll(LedgerSql.layer(project, { reader: "quota-test" }), LedgerTransactionSql.layer(project)).pipe(
       Layer.provideMerge(QuotasSql.layer(project, { brain: BRAIN, limits })),
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     );
+
   const manager = () => ProcessManager.layer(caller, pid).pipe(Layer.provideMerge(data()));
 
   for (const name of NAMES) {
@@ -172,17 +193,36 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
   }
 
   // These are synchronous ports over the real name-local SQL, recreated from saved accounting.
-  const accounting = (name: string) => QuotasSql.accounting(sql(name), { name, limits: limits.recovery.process });
-  const base = () => Layer.mergeAll(Mailbox.layer, ProcessManager.layer(caller, pid)).pipe(Layer.provideMerge(data()));
+  const accounting = (name: string) =>
+    QuotasSql.accounting(sql(name), { name, limits: current.limits.recovery.process });
+
+  const base = (limits = current.limits) =>
+    Layer.mergeAll(Mailbox.layer, ProcessManager.layer(caller, pid)).pipe(Layer.provideMerge(data(limits)));
+
+  const admission = yield* ScopedCache.makeWith({
+    capacity: 1,
+    requireServicesAt: "construction",
+    lookup: (key: typeof current) =>
+      Effect.gen(function* () {
+        const memo = yield* Layer.makeMemoMap;
+        const scope = yield* Effect.scope;
+
+        return yield* Layer.buildWithMemoMap(base(key.limits), memo, scope);
+      }),
+    timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),
+  });
+
   const runner = Effect.fnUntraced(function* (name: string) {
     const status = yield* ProcessManager.use((m) => m.status(name)).pipe(Effect.provide(manager()));
     const process = status.state.process;
     const local = accounting(name);
     const descriptor = { id: process, name, program: identity(name), build: "test", owner: person };
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: (incoming) =>
             mailbox.send(name, incoming.id, incoming.envelope.input, {
@@ -196,6 +236,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
         };
       }),
     );
+
     const layer = ProgramRunner.layer(descriptor, {
       recovery: { sql: sql(name), name, capacity: 1_000_000_000, accounting: local },
       chunk: mailChunk.default,
@@ -215,10 +256,13 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       ),
       Layer.provide(Digest.layerWebCrypto),
     );
+
     return QuotaRunner.guard(yield* ProgramRunner.pipe(Effect.provide(layer)), local);
   });
+
   const checkpoint = Effect.fnUntraced(function* (name: string) {
     const status = yield* ProcessManager.use((m) => m.status(name)).pipe(Effect.provide(manager()));
+
     return yield* ProcessStore.use((s) => s.load).pipe(
       Effect.provide(
         ProcessStore.layer(sql(name), {
@@ -229,6 +273,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       Effect.provide(data()),
     );
   });
+
   return {
     runner,
     watch: Effect.fnUntraced(function* (source: string, target: string, ref: string) {
@@ -255,7 +300,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       return yield* (yield* runner(name)).msg({
         id,
         envelope: {
-          id: Schema.decodeUnknownSync(InputId)(envelope),
+          id: Schema.decodeSync(InputId)(envelope),
           by: person,
           arrivedAt: yield* Clock.currentTimeMillis,
           input: m,
@@ -266,11 +311,20 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       });
     }),
     alarm: (name) =>
-      Effect.map(store.alarms.saved, (alarms) => alarms.find((alarm) => alarm.name === name)?.at ?? null),
+      Effect.map(store.alarms.saved, (alarms) =>
+        Option.getOrNull(
+          Option.map(
+            Arr.findFirst(alarms, (alarm) => alarm.name === name),
+            (alarm) => alarm.at,
+          ),
+        ),
+      ),
     input: Effect.fnUntraced(function* (name, id, m) {
       // Admission only, so laws can inspect charges before the real step starts.
+      const services = yield* ScopedCache.get(admission, current);
+
       return yield* Mailbox.use((mailbox) => mailbox.send(name, id, m, { ...from(), parent: null })).pipe(
-        Effect.provide(base()),
+        Effect.provideContext(services),
       );
     }),
     program: (program) => Quotas.use((q) => q.program(program)).pipe(Effect.provide(data())),
@@ -279,6 +333,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
     checkpoint,
     replace: Effect.fnUntraced(function* (name, saved) {
       const status = yield* ProcessManager.use((m) => m.status(name)).pipe(Effect.provide(manager()));
+
       return yield* ProcessStore.use((s) => s.save(saved)).pipe(
         Effect.provide(
           ProcessStore.layer(sql(name), {
@@ -297,15 +352,15 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
         accounting: accounting(name),
       }).load,
     entries: Effect.sync(() =>
-      project.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row)),
+      Arr.map(project.exec("SELECT * FROM entries ORDER BY rev"), (row) => Schema.decodeUnknownSync(Row)(row)),
     ),
-    snapshot: Effect.sync(() => Object.fromEntries([...sqls].map(([name, db]) => [name, snapshot(db)]))),
+    snapshot: Effect.sync(() => Rec.fromEntries(Arr.map([...sqls], ([name, db]) => [name, snapshot(db)]))),
     reopen: store.reopen,
     cut: (at) => {
       cut = at;
     },
     limits: (next) => {
-      limits = next;
+      current = Equal.byReference({ limits: next });
     },
     restart: Effect.fnUntraced(function* (name, id, person) {
       // The public adapter checks the caller; an agent cannot clear a reserve fault.
@@ -330,10 +385,11 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
 
         if (saved === null || saved.journal._tag === "idle") {
           yield* (yield* runner(name)).open("test");
+
           return;
         }
 
-        const alarm = (yield* store.alarms.saved).find((a) => a.name === name);
+        const alarm = Option.getOrUndefined(Arr.findFirst(yield* store.alarms.saved, (a) => a.name === name));
 
         if (alarm === undefined) {
           return yield* Effect.die("unfinished recovery has no saved alarm");

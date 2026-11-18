@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s9-tests1",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-15T22:00:08-08:00",
+  "ended": "2026-11-15T22:20:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 9 of the Reflect ban (0554, ticket 1056) in next/, libfabrika's node folder, on the plan as amended and signed on 2026-11-15 (Process calls by choice A, Project calls by choice C). The rule met 6 fires in 4 files, all hand edits. dev-control.laws.integration.test.ts: the counting Clock Proxy became a plain TestClock that forwards its ten members (the walk's own TestClock.setTime and adjust read the Clock service, so it forwards those too), the gated FileSystem Proxy became a spread with rename and open replaced, and the ping call is the amendment's fake member under @ts-expect-error. watch.laws.integration.test.ts: the replayed Rolldown result became { close }, its type's one member. Launchd.test-support.ts: the file handle Proxy became a plain FileSystem.File that forwards each member by name, with stat and sync as getters, since the node handle keeps its members on its prototype. dev-secrets.laws.integration.test.ts: Reflect.get(instance.project(name), 'info')() became a plain .info() call, kind 6, a type error until the build types the client. next/packages/libfabrika/src/node/** joined the warn-level Reflect block of .oxlintrc.json; every other entry there is kept. L7 is new in node/dev/dev.types.test.ts: the client's Project and Process keys equal the control door's names (written from control.ts:31, which exports nothing), each call's arguments equal ProjectBinding's and ProcessBinding's, and each answer is a Promise the binding's answer extends, so Promise<unknown> is allowed. The plan's self-referring Pick<DevProject, ...> for gateways is fixed by one amendment line. Second job, the finding 2026-11-15-reflect-ban-l5-disable-lines-unchecked: L5's disable-line half is now a lint rule of our own, fabrika/reflect-disables, on for next/ and the tooling. It counts each ignore comment that reaches no-restricted-properties and covers a line naming Reflect in code, and refuses any past the count its allow option gives a file: 2 each for runtime/Program.test.ts (in today), transport/Connection.test.ts (slice 4) and the app's runtime.decode.test.ts (slice 14). Slices 10 and 13 name no line, so their folders may hold none. JSON.parse oracle comments are not counted. eslint-comments/no-restricted-disable, the known rule, refuses every comment for a rule and would refuse those oracles too.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "Build is needed: L7 is red in a typecheck (tsc -p next/packages/libfabrika ran once: dev.types.test.ts fails on keys, arguments and both unused @ts-expect-error lines, because the client is still a bare record), and dev-secrets.laws.integration.test.ts:380 is red there with TS2722, possibly undefined. Ran at the step's tree: reflect-disables.test.ts, plants.test.ts and advice.test.ts (253 tests), and BrainControlLaunchd, watch, dev-control and dev-secrets integration laws and dev.types.test.ts, all green in vitest. pnpm lint green and the ratchet exits 0. The approval line's body hash no longer matches after the amendment line, so the lead signs the plan again.",
+  "plants": [
+    {
+      "law": "L5",
+      "plant": "Reflect.get(instance.project(config.name), \"info\")() put back in dev-secrets.laws.integration.test.ts: lint.ts on node/ exits 1 with eslint(no-restricted-properties) 'Reflect.get' is restricted at 380:26; undone",
+      "result": "red"
+    },
+    {
+      "law": "L5",
+      "plant": "a third ignore comment over a Reflect.get appended to runtime/Program.test.ts: lint.ts on runtime/ exits 1 with fabrika(reflect-disables) on line 1693, this file may hold 2; undone",
+      "result": "red"
+    },
+    {
+      "law": "L5",
+      "plant": "the finding's own proof, an ignore comment over Reflect.get appended to runtime/Patch.test.ts: lint.ts exits 1 with fabrika(reflect-disables), this file may hold 0; undone",
+      "result": "red"
+    },
+    {
+      "law": "L5",
+      "plant": "reflect-disables.ts counts no comment (used += 0): reflect-disables.test.ts fails after 2 runs, expected 1 fire, got 0; undone",
+      "result": "red"
+    },
+    {
+      "law": "L5",
+      "plant": "Program.test.ts's count raised from 2 to 3 in .oxlintrc.json: reflect-disables.test.ts fails after 12 runs, expected 1 fire, got 0; undone",
+      "result": "red"
+    },
+    {
+      "law": "L7",
+      "plant": "after build, at review: type the client as the bare record again, and drop restart from DevProcess's Pick; today's tree is that bare record, and tsc fails L7 on every check",
+      "result": "red"
+    }
+  ],
+  "step": "tests",
+  "costUsd": null,
+  "billed": null
+}

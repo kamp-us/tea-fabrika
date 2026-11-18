@@ -36,6 +36,7 @@ const readManifest = Schema.decodeUnknownSync(Schema.fromJsonString(Manifest));
 /** p65's one outside package (docs/direction/fabrika-design-package.md): the design package, shared by
  *  both versions, which the window (`@kampus/tuval`) and the app import. No other `next/` package may. */
 const DESIGN = "@kampus/fabrika-design";
+
 const DESIGN_TAKERS: ReadonlySet<string> = new Set(["@kampus/tuval", "@kampus/fabrika"]);
 
 /** What is wrong with a manifest, as the command prints it. */
@@ -59,20 +60,25 @@ interface ManifestFault {
 export const manifestFaults = (root: string): ReadonlyArray<ManifestFault> => {
   const packages = GROUPS.flatMap((group) => {
     const folder = join(root, "next", group);
+
     return existsSync(folder)
       ? readdirSync(folder, { withFileTypes: true })
           .filter((entry) => entry.isDirectory() && existsSync(join(folder, entry.name, "package.json")))
           .map((entry) => {
             const file = `next/${group}/${entry.name}/package.json`;
+
             return { file, manifest: readManifest(readFileSync(join(root, file), "utf8")) };
           })
       : [];
   });
+
   const ours = new Set(packages.map((pkg) => pkg.manifest.name));
+
   return packages.flatMap(({ file, manifest: m }): ReadonlyArray<ManifestFault> => {
     const listed = [m.dependencies, m.devDependencies, m.peerDependencies, m.optionalDependencies].flatMap((names) =>
       Object.entries(names ?? {}),
     );
+
     return [
       ...(m.private === true ? [] : [{ file, reason: "public" as const }]),
       ...(m.version === "0.0.0" ? [] : [{ file, reason: "version" as const }]),

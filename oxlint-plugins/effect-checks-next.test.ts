@@ -8,13 +8,17 @@
 // of `tsconfig.base.json`, and the law fails.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Schema } from "effect";
+import { Array as Arr, pipe, Record as Rec, Schema } from "effect";
+
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const PLUGIN = "@effect/language-service";
+
 const NEXT = ["next/**/*.ts", "next/**/*.tsx"];
+
 const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx"];
 
 /** Each check, and what its override leaves out of `next/`. */
@@ -50,9 +54,9 @@ const Config = Schema.Struct({
 // oxc-parser's tree, read loosely: only literals, arrays and objects are walked.
 type Tree = any;
 
-const toValue = (node: Tree): unknown => {
+const toValue = (node: Tree): Schema.Json => {
   if (node.type === "ObjectExpression") {
-    return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
+    return Rec.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }
 
   if (node.type === "ArrayExpression") {
@@ -70,19 +74,26 @@ describe("tsconfig.base.json", () => {
   const text = readFileSync(join(ROOT, "tsconfig.base.json"), "utf8");
   const tree: Tree = parseSync("tsconfig.ts", `export default ${text}`).program;
   const config = Schema.decodeUnknownSync(Config)(toValue(tree.body[0].declaration));
-  const overrides = config.compilerOptions.plugins.filter((p) => p.name === PLUGIN).flatMap((p) => p.overrides);
+
+  const overrides = pipe(
+    config.compilerOptions.plugins,
+    Arr.filter((p) => p.name === PLUGIN),
+    Arr.flatMap((p) => p.overrides),
+  );
 
   // pinned: the config's own lines, since a check lost in a merge is silent: the type check passes
   // with it gone. Each check is set once, at `error`, for all of next/ less the paths named here.
   it("T910 pinned: Effect's checks for next/ are set at error under the plugin's next/ overrides", () => {
     for (const [check, exclude] of CHECKS) {
-      const set = overrides
-        .filter((o) => check in (o.options.diagnosticSeverity ?? {}))
-        .map((o) => ({
+      const set = pipe(
+        overrides,
+        Arr.filter((o) => check in (o.options.diagnosticSeverity ?? {})),
+        Arr.map((o) => ({
           severity: o.options.diagnosticSeverity?.[check],
           include: o.include,
           exclude: o.exclude ?? [],
-        }));
+        })),
+      );
 
       expect([check, set]).toEqual([check, [{ severity: "error", include: NEXT, exclude }]]);
     }

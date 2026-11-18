@@ -1,7 +1,8 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 const Inputs = { failedInputs: Schema.optionalKey(Schema.NullOr(Schema.String)) };
+
 const Model = Schema.TaggedUnion({ booting: Inputs, watching: Inputs });
 
 const Msg = Schema.Union([
@@ -14,6 +15,7 @@ export const watcher = Machine.make({
   model: Model,
   msg: Msg,
   cmds: [],
+  // SAFETY: `types` only carries the empty ctx type; tea never reads this value at run time.
   types: { ctx: {} as Record<string, never> },
   init: (loaded) => [loaded ?? Model.cases.booting.make({}), []],
   update: {

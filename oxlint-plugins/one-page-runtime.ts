@@ -21,10 +21,14 @@ import type { CreateRule } from "@oxlint/plugins";
 import type { Node } from "./match.ts";
 
 const FROM = "@kampus/tuval/browser";
+
 const NAME = "runMain";
+
 const OTHER_RUN = /^run[A-Z]\w*$/;
+
 // The deleted `build.test.ts` law's two word patterns, which it searched the whole source text with.
 const RUN_WORD = /\brun(?!Main\b)[A-Z]\w*/;
+
 const MAIN_WORD = /\brunMain\b/;
 
 const isRunMain = (node: Node | null | undefined): boolean =>
@@ -83,11 +87,13 @@ const startOf = (statement: Node): Node | null => {
 export const onePageRuntime: CreateRule = {
   create(context) {
     const reads: Node[] = [];
+
     const foreign = (node: Node, name: string) =>
       context.report({
         node,
         message: `\`${name}\` runs an Effect the page does not own. The page entry hands its one program to \`runMain\` from \`${FROM}\` and calls no other run function (P12, L11).`,
       });
+
     const read = (node: Node, name: string) => {
       if (name === NAME) {
         reads.push(node);
@@ -95,6 +101,7 @@ export const onePageRuntime: CreateRule = {
         foreign(node, name);
       }
     };
+
     /** A string's text, searched as words: a run word is a foreign run, a `runMain` word a second runtime. */
     const search = (node: Node, text: string) => {
       const run = RUN_WORD.exec(text);
@@ -107,6 +114,7 @@ export const onePageRuntime: CreateRule = {
         reads.push(node);
       }
     };
+
     return {
       Identifier(node) {
         const { parent } = node as Node & { readonly parent: Node };
@@ -143,6 +151,7 @@ export const onePageRuntime: CreateRule = {
                 }))
             : [],
         );
+
         const own = imports.find((i) => i.own);
         // Every other import of `runMain` is refused where it stands; with none at all, the module is.
         const refused: Node[] = imports.filter((i) => i !== own).map((i) => i.s);

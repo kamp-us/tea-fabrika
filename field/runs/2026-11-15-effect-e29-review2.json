@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e29-review2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:28:52-08:00",
+  "ended": "2026-11-15T23:49:26-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck (decision 0177) of judgment slice E29 of the Effect-checker sweep (preferEffectArray) in next/, from my last verdict at 5dbed17 to fce84d6. The delta is a merge of origin/main b510ed2, which carries pull request 1366, as 54d7bb6, plus a tests round in QuotaRunner.test.ts. Merge-ready, findings 0. The merge differs from git's own automatic merge only in the one conflicted hunk, in next/apps/fabrika/e2e/resources.laws.visual.test.ts, where interrupt keeps main's 10 millis look with this slice's Arr.some. That file now differs from main's only by Arr.* rewrites, so main's new case is kept. Its counts of it, describe, expect and each matcher equal main's. The 6 QuotaRunner edits are 4 maps to Arr.map and 2 alarm lookups to Arr.findFirst. One is read through Option.getOrNull(Option.map(..., at)), which is the old '?.at ?? null' because the alarms table's at is INTEGER NOT NULL. The other is read through Option.getOrUndefined, so its undefined check stays. The matcher counts are unchanged. My recount at fce84d6, with only this check at error through --lspconfig for libfabrika, the app and chaos, finds 0 hits in product files, prog:chaos and app:top, and the same 28 page-context hits in app:e2e.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 21,
+  "note": "Ran at fce84d6 on Node 26.13.0: the checker recount for 3 projects; loosening.sh 54d7bb6 fce84d6, one hit, an import line, and against main b510ed2, an import line plus the rewritten Arr.some expect, with no assertion removed; 48 non-visual test files one at a time under nice -n 19 vitest --maxWorkers=1, my round 1 list plus QuotaRunner.test.ts (7 passed), all green. Six of them were renamed on main by pull request 1420, so I ran them under their new names: error-cause.test.ts, Git.integration.test.ts (1 skipped by design), OpenRepository.composed.integration.test.ts, RepositoriesGit.identity.integration.test.ts, RepositoriesGit.integration.test.ts and Sources.integration.test.ts. One pnpm typecheck (passed); pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (18 parts passed). Not run: resources.laws.visual.test.ts and the other .visual. tests (no Playwright browser here), and instance-wire.integration.test.ts (no ssh-keygen here).",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

@@ -1,10 +1,9 @@
 /**
  * The runner's quota guard: a name with a saved reserve fault does no work until a person
  * restarts it.
- *
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { NotGranted, type Writer } from "../access/SessionManager.ts";
 import { QuotasError, type Accounting, type RecoveryReserveExhausted } from "../processes/Quotas.ts";
@@ -15,7 +14,6 @@ import type { ProgramRunner } from "./Runner.ts";
  * refused for quota. The turn catches it, keeps the saved wake or command and sets an alarm to
  * try again.
  *
- * @stability unstable
  * @category errors
  */
 export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting>()("QuotaWaiting", {}) {}
@@ -26,7 +24,6 @@ export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting>()("QuotaWaiti
  * Project turn and the recovery store does for a refused save. The guard and the runner read it
  * here, so a fault is met by name on every path.
  *
- * @stability unstable
  * @category getters
  */
 export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefined => {
@@ -34,12 +31,13 @@ export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefin
     return error.reason._tag === "RecoveryReserveExhausted" ? error.reason : undefined;
   }
 
-  if (typeof error !== "object" || error === null) {
+  if (!Predicate.isObjectOrArray(error)) {
     return undefined;
   }
 
   // An error with a reason keeps the fault from below under that reason, as the recovery store does.
   const below = "cause" in error ? reserveFault(error.cause) : undefined;
+
   return below ?? ("reason" in error ? reserveFault(error.reason) : undefined);
 };
 
@@ -53,7 +51,6 @@ export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefin
  * end without doing work. A fault that reaches the guard inside another module's error is saved
  * the same way, and the call fails with the fault itself.
  *
- * @stability unstable
  * @category combinators
  */
 export const guard = (runner: ProgramRunner["Service"], accounting: Accounting): ProgramRunner["Service"] => {
@@ -61,6 +58,7 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
     Effect.andThen(accounting.check, work).pipe(
       Effect.catch((error): Effect.Effect<never, E | QuotasError> => {
         const fault = reserveFault(error);
+
         return fault === undefined
           ? Effect.fail(error)
           : Effect.andThen(
@@ -69,8 +67,10 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
             );
       }),
     );
+
   const automatic = (work: ReturnType<ProgramRunner["Service"]["due"]>) =>
     checked(work).pipe(Effect.catchReason("QuotasError", "RecoveryReserveExhausted", () => Effect.void));
+
   return {
     open: (client) => checked(runner.open(client)),
     msg: (input) => checked(runner.msg(input)),
@@ -87,7 +87,6 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
  * fits, then runs the runner's restart. The caller is the person's gate: it calls this only for a
  * restart it has checked is the person's.
  *
- * @stability unstable
  * @category combinators
  */
 export const personRestart = Effect.fn("quota_runner.restart")(function* (
@@ -96,6 +95,7 @@ export const personRestart = Effect.fn("quota_runner.restart")(function* (
   request: { readonly id: string; readonly build: string },
 ) {
   yield* accounting.resume;
+
   return yield* runner.restart({ id: request.id, build: request.build });
 });
 
@@ -103,7 +103,6 @@ export const personRestart = Effect.fn("quota_runner.restart")(function* (
  * Restarts a stopped name for the checked writer `by`, as `personRestart` does for a person. Any
  * other writer fails with `NotGranted`.
  *
- * @stability unstable
  * @category combinators
  */
 export const restart = (

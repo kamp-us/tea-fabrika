@@ -12,6 +12,7 @@ import { exportAt, MESSAGES } from "./package-deps.ts";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(package-deps)";
+
 const LIBRARY = "@kampus/libfabrika";
 
 const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`;
@@ -31,6 +32,7 @@ const manifest = (name: string, extra: object = {}): string =>
 /** Lints the planted tree and answers each file's fires of this rule as `line message`. */
 const fires = async (files: Readonly<Record<string, string>>) => {
   const found = await plant(files, (fire) => `${fire.line} ${fire.message}`);
+
   return (file: string) => found(CODE, file);
 };
 
@@ -51,6 +53,7 @@ describe("reading imports", () => {
         fc.stringMatching(/^[a-z][a-z0-9]{0,8}$/),
         async (group, name) => {
           const file = `next/${group}/${name}/src/reader.ts`;
+
           const found = await fires({
             [`next/${group}/${name}/package.json`]: manifest(`@kampus/${name}`),
             [file]: lines(
@@ -73,6 +76,7 @@ describe("reading imports", () => {
               " */",
             ),
           });
+
           expect(found(file)).toEqual([
             `1 ${MESSAGES.unlisted("effect", "effect")}`,
             `2 ${MESSAGES.unlisted("@kampus/wire-types", "@kampus/wire-types")}`,
@@ -183,6 +187,7 @@ describe("planted breaks", () => {
       "next/apps/fabrika/src/exam/deps.test.ts": lines('import {it} from "vitest";'),
       "next/apps/fabrika/src/brain.ts": lines('import {Effect} from "effect";'),
     };
+
     const found = await fires(early);
     expect(Object.keys(early).map((file) => [file, found(file)])).toEqual([
       ["next/apps/fabrika/e2e.ts", []],
@@ -221,8 +226,10 @@ describe("a module's front files and its internal/ in the exports map", () => {
     "desktop",
     "client",
   ] as const;
+
   const module = fc.constantFrom(...MODULES);
   const name = fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,8}$/);
+
   const real = JSON.parse(
     readFileSync(join(import.meta.dirname, "..", "next/packages/libfabrika/package.json"), "utf8"),
   ).exports;
@@ -242,11 +249,13 @@ describe("a module's front files and its internal/ in the exports map", () => {
       name,
       fc.shuffledSubarray(["pattern", "null"], { minLength: 2 }),
     );
+
     fc.assert(
       fc.property(sub, ([each, kind, stem, order]) => {
         const entries = order.map((key): [string, string | undefined] =>
           key === "pattern" ? [`./${each}/*`, `/pkg/src/${each}/*.ts`] : [`./${each}/internal/*`, undefined],
         );
+
         const at = kind === "front" ? `./${each}/${stem}` : `./${each}/internal/${stem}`;
         expect(exportAt(new Map(entries), at)).toEqual(
           kind === "front" ? { _tag: "file", file: `/pkg/src/${each}/${stem}.ts` } : { _tag: "refused" },
@@ -263,6 +272,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
   // reaches nothing. Each run plants ten generated imports at once, one file each, beside the pinned
   // one, so six oxlint runs judge at least the exam's 60 cases; the law counts them.
   type Case = readonly [(typeof MODULES)[number], "front" | "internal" | "missing", string];
+
   // pinned: the plan's plant (ticket 477), the ledger's store imported from the app, runs first.
   const pinned: Case = ["ledger", "internal", "ledgerStore"];
   it("each module's front files are reached and its internal/ is refused to other packages", async () => {
@@ -280,6 +290,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
             pinned,
             ...generated.filter(([each, , stem]) => `${each}/${stem.toLowerCase()}` !== "ledger/ledgerstore"),
           ];
+
           const files: Record<string, string> = {
             "next/packages/libfabrika/package.json": manifest(LIBRARY, { exports: real }),
             "next/apps/fabrika/package.json": manifest("@kampus/fabrika", {

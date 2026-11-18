@@ -95,6 +95,7 @@ describe("next/ package manifests (p65)", () => {
     fc.assert(
       fc.property(fc.subarray([...PLANTED]), (planted) => {
         whole ||= planted.length === PLANTED.length;
+
         const found = faultsIn({
           [LIBRARY]: manifest("@kampus/libfabrika", { dependencies: { effect: "catalog:" } }),
           ...Object.fromEntries(planted.map((p) => [p.file, p.text])),
@@ -102,6 +103,7 @@ describe("next/ package manifests (p65)", () => {
           "next/packages/loose/src/index.ts": "export {};\n",
           "next/programs/package.json": JSON.stringify({ name: "x", version: "1.0.0" }),
         });
+
         expect([...found].sort()).toEqual(planted.flatMap((p) => p.faults).sort());
       }),
       // The whole tree first, as the exam planted it.

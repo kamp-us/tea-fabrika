@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-require-safety-comment-3-review2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:29:13-08:00",
+  "ended": "2026-11-15T22:31:30-08:00",
+  "parent": "2026-11-15-antislop-require-safety-comment-3-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Recheck of anti-slop judgment slice AS-require-safety-comment-3 (ticket 1057, decision 0561), in next/, at f7bd586 on fabrikalfa/antislop-require-safety-comment-3, no pull request. The fix holds: 385edb5..f7bd586 changes three SAFETY comment lines in next/packages/libfabrika/src/processes/ProgramMailTest.ts and its tests2 row, and no code. Each new reason was read against the code and is true: line 179, the cut sets after to null again at lines 185 and 506, so the field is widened from null and null means no cut is armed; line 839, world.names is written only with set (743, 796) and never deleted from, and line 757 offers the move only while rogue:1 is live; line 1115, lives is only set (1018 before the walk, 1134 on restart) and never deleted or cleared. The rule's recount on the file is zero. Sent back again because the class review1 named, a SAFETY reason that states an untrue fact, still has two cases review1 missed, both twins of the line-179 reason the fixer corrected: next/packages/libfabrika/src/processes/ExitReasonTest.ts:100 says the cut only ever sets a count in after, but line 391 sets it to null after each cut; next/packages/libfabrika/src/tasks/TasksTest.ts:324 says at is only ever set to before or after when the fault is armed, but lines 329, 334, 351 and 742 set it to null, and line 739 sets it while armed is false (740). Both casts still hold; only the reasons are wrong. This is the quest's second send-back (0176); the faults are named, located and inside the plan, so the lead decides whether one more fix round runs (0564).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 3,
+  "note": "Read-only apart from this row. Rule recount: oxlint with the rule's own source in a scratch config outside the repo, over ProgramMailTest.ts at f7bd586, 0 hits. No test run: the fix is comment-only and the file's one reader, next/packages/libfabrika/src/node/ProgramMail.integration.test.ts, is refused locally by the 0178 guard. No pnpm typecheck: comment-only change, and it passed at dd2a70e in review1.",
+  "step": "review"
+}

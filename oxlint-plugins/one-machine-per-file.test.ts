@@ -3,21 +3,40 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { it } from "@effect/vitest";
+import { Array as Arr, Effect, Option, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
 import { plant } from "./plant.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
+
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: import.meta.dirname });
+
 const RUNS = { seed: 119120, numRuns: 100 };
+
 const CODE = "fabrika(one-machine-per-file)";
+
 const TEA = 'import { Machine } from "@demlik/tea/effect";';
+
 const COUNT = /at most one tea machine/;
+
 const OWN = /must be defined in this file/;
+
 const IO = /no input or output imports/;
 
 type ErrorAt = { readonly line: number; readonly message: RegExp };
@@ -62,7 +81,8 @@ it("L1: exactly the reached calls after the first fire, in source order", () => 
   fc.assert(
     fc.property(fc.array(fc.constantFrom(...PIECES), { minLength: 1, maxLength: 6 }), (pieces) => {
       let seen = 0;
-      const errors = pieces.flatMap((p, i) => {
+
+      const errors = Arr.flatMap(pieces, (p, i) => {
         const at: ErrorAt[] = [];
 
         for (let n = 0; n < p.calls; n++) {
@@ -73,7 +93,8 @@ it("L1: exactly the reached calls after the first fire, in source order", () => 
 
         return at;
       });
-      check([TEA, ...pieces.map((p, i) => p.text(i))].join("\n"), errors);
+
+      check(Arr.join([TEA, ...Arr.map(pieces, (p, i) => p.text(i))], "\n"), errors);
     }),
     { ...RUNS, numRuns: 200 },
   );
@@ -91,7 +112,7 @@ it("L1: default exports and local default bindings count with every generated ne
       fc.constantFrom(...PIECES),
       (main, p) => {
         const errors: ErrorAt[] = Array.from({ length: p.calls }, () => ({ line: 3, message: COUNT }));
-        check([TEA, main, p.text(0)].join("\n"), errors);
+        check(Arr.join([TEA, main, p.text(0)], "\n"), errors);
       },
     ),
     RUNS,
@@ -120,8 +141,9 @@ it("L2: only a part whose value is an import or imported member fires", () => {
         update: fc.constantFrom(...PARTS),
       }),
       (parts) => {
-        const lines = Object.entries(parts).map(([key, value]) => `${key}: ${value},`);
-        const errors = Object.entries(parts).flatMap(([key, value], i) =>
+        const lines = Arr.map(Rec.toEntries(parts), ([key, value]) => `${key}: ${value},`);
+
+        const errors = Arr.flatMap(Rec.toEntries(parts), ([key, value], i) =>
           [
             "Imported",
             "Remote.Model",
@@ -134,15 +156,19 @@ it("L2: only a part whose value is an import or imported member fires", () => {
             ? [{ line: i + 5, message: OWN }]
             : [],
         );
+
         check(
-          [
-            TEA,
-            'import {Imported, Remote} from "./parts.ts";',
-            'import {Schema} from "effect"; const local = {};',
-            "export const m = Machine.make({",
-            ...lines,
-            "});",
-          ].join("\n"),
+          Arr.join(
+            [
+              TEA,
+              'import {Imported, Remote} from "./parts.ts";',
+              'import {Schema} from "effect"; const local = {};',
+              "export const m = Machine.make({",
+              ...lines,
+              "});",
+            ],
+            "\n",
+          ),
           errors,
         );
       },
@@ -156,45 +182,52 @@ it("L2: only a part whose value is an import or imported member fires", () => {
 });
 
 const IO_IMPORTS = [
-  ...[
-    "Effect",
-    "Layer",
-    "Context",
-    "ManagedRuntime",
-    "Fiber",
-    "Scope",
-    "Clock",
-    "Random",
-    "Schedule",
-    "FileSystem",
-    "Path",
-    "Config",
-    "ConfigProvider",
-    "Console",
-    "Stream",
-    "Queue",
-    "PubSub",
-    "Ref",
-    "Deferred",
-    "Semaphore",
-    "Sink",
-  ].map((n) => `import {${n} as Value} from "effect";`),
-  ...["run", "runIn", "spawn", "stop", "tell", "EffectRun", "EffectInterpret", "EffectSubscribe"].map(
+  ...Arr.map(
+    [
+      "Effect",
+      "Layer",
+      "Context",
+      "ManagedRuntime",
+      "Fiber",
+      "Scope",
+      "Clock",
+      "Random",
+      "Schedule",
+      "FileSystem",
+      "Path",
+      "Config",
+      "ConfigProvider",
+      "Console",
+      "Stream",
+      "Queue",
+      "PubSub",
+      "Ref",
+      "Deferred",
+      "Semaphore",
+      "Sink",
+    ],
+    (n) => `import {${n} as Value} from "effect";`,
+  ),
+  ...Arr.map(
+    ["run", "runIn", "spawn", "stop", "tell", "EffectRun", "EffectInterpret", "EffectSubscribe"],
     (n) => `import {${n} as Value} from "@demlik/tea/effect";`,
   ),
-  ...[
-    "node:fs",
-    "effect/process",
-    "effect/http",
-    "effect/cli",
-    "effect/unstable/sql",
-    "@effect/platform-node",
-    "cloudflare:workers",
-    "miniflare",
-    "workerd",
-    "wrangler",
-    "@cloudflare/workers-types",
-  ].map((n) => `import * as Value from "${n}";`),
+  ...Arr.map(
+    [
+      "node:fs",
+      "effect/process",
+      "effect/http",
+      "effect/cli",
+      "effect/unstable/sql",
+      "@effect/platform-node",
+      "cloudflare:workers",
+      "miniflare",
+      "workerd",
+      "wrangler",
+      "@cloudflare/workers-types",
+    ],
+    (n) => `import * as Value from "${n}";`,
+  ),
 ];
 
 const PURE_IMPORTS = [
@@ -214,28 +247,32 @@ it("L3: each closed-list value import fires only when a machine call exists, inc
       fc.constantFrom(...PURE_IMPORTS),
       (hasCall, exported, imports, pure) => {
         // Every line binds a unique name; the generated set may contain different spellings of Value.
-        const lines = [...imports, pure].map((s, i) => s.replaceAll("Value", `Value${i}`));
-        const errors = hasCall ? imports.map((_, i) => ({ line: i + 2, message: IO })) : [];
+        const lines = Arr.map([...imports, pure], (s, i) => s.replaceAll("Value", `Value${i}`));
+        const errors = hasCall ? Arr.map(imports, (_, i) => ({ line: i + 2, message: IO })) : [];
         check(
-          [TEA, ...lines, hasCall ? `${exported ? "export " : ""}const m = Machine.make({});` : ""].join("\n"),
+          Arr.join([TEA, ...lines, hasCall ? `${exported ? "export " : ""}const m = Machine.make({});` : ""], "\n"),
           errors,
         );
         check(
-          [TEA, ...lines.map((s) => s.replace("import ", "import type ")), "export const m = Machine.make({});"].join(
+          Arr.join(
+            [TEA, ...Arr.map(lines, (s) => s.replace("import ", "import type ")), "export const m = Machine.make({});"],
             "\n",
           ),
           [],
         );
         check(
-          [
-            TEA,
-            ...lines.map((s) =>
-              s.startsWith("import {")
-                ? s.replace("import {", "import {type ").replaceAll(", ", ", type ")
-                : s.replace("import ", "import type "),
-            ),
-            "const m = Machine.make({});",
-          ].join("\n"),
+          Arr.join(
+            [
+              TEA,
+              ...Arr.map(lines, (s) =>
+                s.startsWith("import {")
+                  ? s.replace("import {", "import {type ").replaceAll(", ", ", type ")
+                  : s.replace("import ", "import type "),
+              ),
+              "const m = Machine.make({});",
+            ],
+            "\n",
+          ),
           [],
         );
       },
@@ -244,7 +281,7 @@ it("L3: each closed-list value import fires only when a machine call exists, inc
   );
 });
 
-const file = (...lines: readonly string[]) => [TEA, ...lines].join("\n");
+const file = (...lines: readonly string[]) => Arr.join([TEA, ...lines], "\n");
 
 it("vector: an inline type import or type export is not a value, so it makes no machine, part or I/O hit", () => {
   // vector: `import {type Machine}` has no runtime value, so its two calls are not tea machines.
@@ -373,22 +410,25 @@ it("vector: a machine bound by destructuring is reached through its exported nam
 
 const DOUBLE = `${TEA}\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n`;
 
-it("pinned: L4 the two product blocks enforce the rule; the five test globs leave fixture machines alone", async () => {
-  // These paths exercise the exact globs in the approved scope, including RuntimeCauseTest's form.
-  const paths = [
-    "next/example.ts",
-    ".agents/skills/example.ts",
-    "next/example.test.ts",
-    "next/example.test.tsx",
-    "next/ExampleTest.ts",
-    "next/example.test-support.ts",
-    ".agents/example.test.ts",
-  ];
-  const result = await plant(Object.fromEntries(paths.map((p) => [p, DOUBLE])));
-  paths.forEach((p, i) => {
-    expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
-  });
-});
+it.live("pinned: L4 the two product blocks enforce the rule; the five test globs leave fixture machines alone", () =>
+  Effect.gen(function* () {
+    // These paths exercise the exact globs in the approved scope, including RuntimeCauseTest's form.
+    const paths = [
+      "next/example.ts",
+      ".agents/skills/example.ts",
+      "next/example.test.ts",
+      "next/example.test.tsx",
+      "next/ExampleTest.ts",
+      "next/example.test-support.ts",
+      ".agents/example.test.ts",
+    ];
+
+    const result = yield* promised(() => plant(Rec.fromEntries(Arr.map(paths, (p) => [p, DOUBLE]))));
+    Arr.forEach(paths, (p, i) => {
+      expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
+    });
+  }),
+);
 
 const REAL = [
   "next/packages/libfabrika/src/access/Access.ts",
@@ -406,29 +446,192 @@ const REAL = [
   ".agents/skills/lead/scripts/flow/machine.ts",
 ];
 
-it("scenario: L5 the 13 measured machine file copies have zero hits", async () => {
-  // These are the plan's measured inputs, including both factory forms.
-  const originals = Object.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
-  const clean = await plant(originals);
+it.live("scenario: L5 the 13 measured machine file copies have zero hits", () =>
+  Effect.gen(function* () {
+    // These are the plan's measured inputs, including both factory forms.
+    const originals = Rec.fromEntries(
+      Arr.map(REAL, (p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]),
+    );
 
-  for (const p of REAL) {
-    expect([p, clean(CODE, p)]).toEqual([p, []]);
+    const clean = yield* promised(() => plant(originals));
+
+    for (const p of REAL) {
+      expect([p, clean(CODE, p)]).toEqual([p, []]);
+    }
+  }),
+);
+
+it.live("scenario: L5 each real file copy refuses one added second export", () =>
+  Effect.gen(function* () {
+    // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
+    const originals = Rec.fromEntries(
+      Arr.map(REAL, (p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]),
+    );
+
+    const clean = yield* promised(() => plant(originals));
+
+    const broken = yield* promised(() =>
+      plant(
+        Rec.fromEntries(
+          Arr.map(Rec.toEntries(originals), ([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
+        ),
+      ),
+    );
+
+    for (const [p, s] of Rec.toEntries(originals)) {
+      expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
+    }
+  }),
+);
+
+const childTextFacts = (value: string) => {
+  const sample = value.length > 4096 ? `${value.slice(0, 2048)}\n[omitted]\n${value.slice(-2048)}` : value;
+
+  return {
+    length: value.length,
+    truncated: value.length > 4096,
+    codes: [
+      "ENOENT",
+      "EACCES",
+      "ENOTDIR",
+      "EISDIR",
+      "ENOBUFS",
+      "ETIMEDOUT",
+      "ERR_MODULE_NOT_FOUND",
+      "ERR_PACKAGE_PATH_NOT_EXPORTED",
+      "ERR_UNKNOWN_FILE_EXTENSION",
+      "ERR_INVALID_MODULE_SPECIFIER",
+    ].filter((code) => new RegExp(`\\b${code}\\b`).test(sample)),
+    reasons: [
+      "Failed to parse oxlint configuration file",
+      "Failed to load JS plugin",
+      "Cannot find package",
+      "Cannot find module",
+      "No such file or directory",
+      "Permission denied",
+      "Failed to open file",
+      "Failed to read file",
+      "Unexpected token",
+      "Expected",
+      "at most one tea machine",
+      "must be defined in this file",
+      "no input or output imports",
+    ].filter((reason) => sample.includes(reason)),
+    redacted: value.length > 0,
+  };
+};
+
+const lintFailure = (out: ReturnType<typeof spawnSync>): string => {
+  const errorCode =
+    out.error !== undefined && "code" in out.error && typeof out.error.code === "string" ? out.error.code : "";
+
+  return JSON.stringify({
+    status: out.status,
+    signal: out.signal,
+    error: out.error === undefined ? null : childTextFacts(`${out.error.name} ${out.error.message} ${errorCode}`),
+    stdout: childTextFacts(out.stdout?.toString() ?? ""),
+    stderr: childTextFacts(out.stderr?.toString() ?? ""),
+  });
+};
+
+const findingOf = (root: string, entry: unknown) => {
+  if (typeof entry !== "object" || entry === null) {
+    return { kind: "malformed_diagnostic", path: null, position: null };
   }
+
+  const code = "code" in entry && typeof entry.code === "string" ? entry.code : null;
+  const filename = "filename" in entry && typeof entry.filename === "string" ? entry.filename : null;
+  const path = filename === null ? null : relative(root, resolve(root, filename));
+  const leaf = path?.split(sep).at(-1);
+
+  const safePath =
+    path === null ||
+    path === "" ||
+    path === ".." ||
+    path.startsWith(`..${sep}`) ||
+    isAbsolute(path) ||
+    leaf?.startsWith(".") === true
+      ? null
+      : path;
+
+  const labels = "labels" in entry && Array.isArray(entry.labels) ? entry.labels : [];
+  const label: unknown = labels[0];
+  const span = typeof label === "object" && label !== null && "span" in label ? label.span : null;
+
+  const line =
+    typeof span === "object" && span !== null && "line" in span && typeof span.line === "number" ? span.line : null;
+
+  const column =
+    typeof span === "object" && span !== null && "column" in span && typeof span.column === "number"
+      ? span.column
+      : null;
+
+  const position =
+    line !== null && Number.isInteger(line) && line > 0 && column !== null && Number.isInteger(column) && column >= 0
+      ? { line, column }
+      : null;
+
+  return {
+    kind: code === CODE ? "target_rule" : code === null ? "unknown_diagnostic" : "other_diagnostic",
+    path: safePath,
+    position,
+  };
+};
+
+it("property: L5 child failures expose only bounded recognized error and stderr facts", () => {
+  const root = join(tmpdir(), "t1136-lint-root");
+  const generatedPath = join(root, "next", ".probe.ts");
+  const message = `${"x".repeat(5000)} ${generatedPath} ENOENT`;
+  const stderr = `EACCES Permission denied ${generatedPath}`;
+
+  const failure = lintFailure({
+    pid: 0,
+    output: [null, "", stderr],
+    stdout: "",
+    stderr,
+    status: 1,
+    signal: null,
+    error: Object.assign(new Error(message), { code: "ENOENT" }),
+  });
+
+  expect(failure).not.toContain(generatedPath);
+  expect(JSON.parse(failure)).toMatchObject({
+    error: { truncated: true, codes: ["ENOENT"], redacted: true },
+    stderr: { codes: ["EACCES"], reasons: ["Permission denied"], redacted: true },
+  });
 });
 
-it("scenario: L5 each real file copy refuses one added second export", async () => {
-  // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
-  const originals = Object.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
-  const clean = await plant(originals);
-  const broken = await plant(
-    Object.fromEntries(
-      Object.entries(originals).map(([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
-    ),
-  );
+it("property: L5 child diagnostics redact hidden leaf names and retain ordinary source locations", () => {
+  const root = join(tmpdir(), "t1136-lint-root");
 
-  for (const [p, s] of Object.entries(originals)) {
-    expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
-  }
+  fc.assert(
+    fc.property(
+      fc.record({
+        root: fc.constantFrom("next", ".agents"),
+        folders: fc.array(fc.nat({ max: 999 }), { maxLength: 3 }),
+        name: fc.nat({ max: 999 }).map((n) => `probe${n}`),
+        extension: fc.constantFrom("ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"),
+      }),
+      ({ root: area, folders, name, extension }) => {
+        const folder = join(area, ...folders.map((n) => `module${n}`));
+        const ordinary = join(root, folder, `${name}.${extension}`);
+        const hidden = join(root, folder, `.${name}.${extension}`);
+
+        const findings = [hidden, ordinary].map((filename) =>
+          findingOf(root, { code: CODE, filename, labels: [{ span: { line: 7, column: 3 } }] }),
+        );
+
+        const output = JSON.stringify(findings);
+
+        expect(output).not.toContain(hidden);
+        expect(findings).toEqual([
+          { kind: "target_rule", path: null, position: { line: 7, column: 3 } },
+          { kind: "target_rule", path: join(folder, `${name}.${extension}`), position: { line: 7, column: 3 } },
+        ]);
+      },
+    ),
+    { ...RUNS, examples: [[{ root: "next", folders: [], name: "probe", extension: "ts" }]] },
+  );
 });
 
 it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", () => {
@@ -446,18 +649,22 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
         rules: { "fabrika/one-machine-per-file": "error" },
         overrides: [
           {
-            files: [
-              "next/**/*.test.ts",
-              "next/**/*.test.tsx",
-              "next/**/*Test.ts",
-              "next/**/*.test-support.ts",
-              ".agents/**/*.test.ts",
-            ].map((pattern) => join(root, pattern)),
+            files: Arr.map(
+              [
+                "next/**/*.test.ts",
+                "next/**/*.test.tsx",
+                "next/**/*Test.ts",
+                "next/**/*.test-support.ts",
+                ".agents/**/*.test.ts",
+              ],
+              (pattern) => join(root, pattern),
+            ),
             rules: { "fabrika/one-machine-per-file": "off" },
           },
         ],
       }),
     );
+
     const out = spawnSync(
       join(root, "node_modules/.bin/oxlint"),
       [
@@ -471,13 +678,56 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
       ],
       { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30, timeout: 120_000 },
     );
-    expect(out.error).toBeUndefined();
+
+    const parsed: unknown = Option.getOrNull(
+      Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))(out.stdout),
+    );
+
+    const diagnostics =
+      typeof parsed === "object" && parsed !== null && "diagnostics" in parsed && Array.isArray(parsed.diagnostics)
+        ? parsed.diagnostics
+        : null;
+
+    const findings = diagnostics?.map((entry: unknown) => findingOf(root, entry)) ?? null;
+
+    const files =
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "number_of_files" in parsed &&
+      typeof parsed.number_of_files === "number" &&
+      Number.isInteger(parsed.number_of_files) &&
+      parsed.number_of_files >= 0
+        ? parsed.number_of_files
+        : null;
+
+    const failure = out.error !== undefined || out.status !== 0 ? lintFailure(out) : undefined;
+
+    console.log(
+      JSON.stringify({
+        status: out.status,
+        kind:
+          out.error !== undefined
+            ? "spawn_error"
+            : diagnostics === null || files === null
+              ? "malformed_report"
+              : "report",
+        files,
+        diagnosticCount: diagnostics?.length ?? null,
+        diagnostics: findings?.slice(0, 50) ?? null,
+        truncated: diagnostics !== null && diagnostics.length > 50,
+        childFailure: failure === undefined ? null : JSON.parse(failure),
+      }),
+    );
+
+    expect(out.error === undefined, failure).toBe(true);
     expect(out.status).toBe(0);
+
     const report: { number_of_files: number; diagnostics: Array<{ code?: string; filename: string }> } = JSON.parse(
       out.stdout,
     );
+
     expect(report.number_of_files).toBeGreaterThan(0);
-    const hits = report.diagnostics.filter((d) => d.code === CODE);
+    const hits = Arr.filter(report.diagnostics, (d) => d.code === CODE);
     console.log(JSON.stringify({ rule: CODE, files: report.number_of_files, hits: hits.length }));
     expect(hits).toEqual([]);
   } finally {

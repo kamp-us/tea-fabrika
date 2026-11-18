@@ -21,11 +21,17 @@ import { boxTree, oldBoxTree } from "./quest.ts";
 // Today's tooling. Real Git and the installed signer, local paths only. The only keys are
 // throwaway keys made here; scripts open them, this test never reads their files.
 const root = resolve(import.meta.dirname, "../../../..");
+
 const program = join(import.meta.dirname, "box.sh");
+
 const signer = join(root, "next/apps/fabrika/src/exam/commits.ts");
+
 const options = { seed: 321, numRuns: 3, endOnFailure: true };
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
+
 type Call = { cmd: string; args: string[]; cwd: string; head?: string };
+
 type Operation = { path: string; text?: string; to?: string };
 
 type Setup = {
@@ -104,10 +110,12 @@ exec /usr/bin/git "$@"
 /** Every row the fixture's commands wrote: the Node stub's JSON lines, then the git shim's rows. */
 const readCalls = (dir: string): Call[] => {
   const read = (name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "");
+
   const calls: Call[] = read("calls.jsonl")
     .split("\n")
     .filter(Boolean)
     .map((s) => JSON.parse(s));
+
   const fields = read("calls.git").split("\0");
 
   for (let i = 0; i + 1 < fields.length; i += 2 + Number(fields[i + 1])) {
@@ -290,12 +298,14 @@ class Box {
   call(cmd: string, args: string[], cwd = this.main, env = this.env) {
     const r = spawnSync(cmd, args, { cwd, env, encoding: "utf8", timeout: 15_000 });
     expect(r.error, `${cmd} failed to start`).toBeUndefined();
+
     return { code: r.status, signal: r.signal, text: r.stdout + r.stderr, stdout: r.stdout };
   }
 
   must(cmd: string, args: string[], cwd = this.main) {
     const r = this.call(cmd, args, cwd);
     expect(r.code, r.text).toBe(0);
+
     return r.stdout;
   }
 
@@ -360,11 +370,13 @@ class Box {
     write(join(cwd, path), text);
     this.git(cwd, "add", "--", path);
     this.git(cwd, "commit", "-q", "-m", "outside change");
+
     return this.head(cwd);
   }
 
   rows(): Array<Record<string, unknown>> {
     const path = join(this.boxes, "state/one.rows.jsonl");
+
     return existsSync(path)
       ? readFileSync(path, "utf8")
           .trim()
@@ -425,10 +437,13 @@ const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
       runner === "box"
         ? [program, "run", "one", join(b.dir, "prompt"), join(b.dir, "answer"), "--step", "tests", "--ticket", "321"]
         : [join(import.meta.dirname, "runplan.sh"), "one", join(b.dir, "prompt")];
+
     const child = spawn("sh", args, { cwd: b.main, env: b.env, detached: true });
     child.stdin.end();
+
     let text = "",
       sent = false;
+
     const poll = setInterval(() => {
       if (!sent && existsSync(join(b.dir, "ready"))) {
         sent = true;
@@ -438,6 +453,7 @@ const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
         }
       }
     }, 10);
+
     const timeout = setTimeout(() => {
       if (child.pid) {
         try {
@@ -447,6 +463,7 @@ const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
 
       reject(new Error("fixture runner never reached the signal point"));
     }, 10_000);
+
     child.stdout.on("data", (s) => {
       text += s;
     });
@@ -471,8 +488,10 @@ describe("T321 K1 fetch, today's tooling", () => {
             const before = b.commit(b.work, "src/a.ts", `${text}\n`);
             b.git(b.main, "fetch", "-q", b.work, `${b.branch}:${b.branch}`);
             const tree = b.head(b.work, "HEAD^{tree}");
+
             const rewritten =
               kind === "reset" ? b.base : b.git(b.work, "commit-tree", tree, "-p", b.base, "-m", kind).trim();
+
             b.git(b.work, "update-ref", `refs/heads/${b.branch}`, rewritten);
             refused(b.fetch(), /rewrite|non.fast.forward|rejected/);
             expect(b.head(b.main, b.branch)).toBe(before);
@@ -494,6 +513,7 @@ describe("T321 K1 fetch, today's tooling", () => {
               index: b.git(b.main, "write-tree"),
               status: b.git(b.main, "status", "--porcelain"),
             };
+
             b.setup({
               operations: texts.map((text, i) => ({ path: "src/a.ts", text: `${text}-${i}\n` })),
             });
@@ -571,12 +591,14 @@ describe("T321 K1 fetch, today's tooling", () => {
           write(join(b.main, "src/b.ts"), "staged main edit\n");
           b.git(b.main, "add", "--", "src/b.ts");
           write(join(b.main, "src/old.ts"), "unstaged main edit\n");
+
           const snapshot = {
             head: b.head(),
             index: b.git(b.main, "write-tree"),
             diff: b.git(b.main, "diff"),
             status: b.git(b.main, "status", "--porcelain"),
           };
+
           const got = b.fetch();
           expect(got.code, got.text).toBe(0);
           expect(b.git(b.main, "notes", "--ref=fabrika", "show", linked)).toBe(note);
@@ -611,6 +633,7 @@ describe("T321 K1 fetch, today's tooling", () => {
         try {
           const two = boxTree(b.boxes, "two"),
             data = join(b.boxes, "two-gitdata");
+
           b.git(b.dir, "clone", "-q", `--separate-git-dir=${data}`, b.main, two);
           b.git(two, "config", "user.name", "fixture");
           b.git(two, "config", "user.email", "fixture@example.test");
@@ -638,6 +661,7 @@ describe("T321 K1 fetch, today's tooling", () => {
               "322",
             ]).code,
           ).toBe(0);
+
           const fetch = (name: string, ticket: string) =>
             new Promise<{ code: number | null; text: string }>((resolve, reject) => {
               const child = spawn(
@@ -645,6 +669,7 @@ describe("T321 K1 fetch, today's tooling", () => {
                 [program, "fetch", name, `fabrikalfa/${name}`, "--sign", "tests", "--ticket", ticket],
                 { cwd: b.main, env: { ...b.env, T321_FETCH: "1" }, timeout: 15_000 },
               );
+
               child.stdin.end();
               let text = "";
               child.stdout.on("data", (s) => {
@@ -656,6 +681,7 @@ describe("T321 K1 fetch, today's tooling", () => {
               child.on("error", reject);
               child.on("close", (code) => resolve({ code, text }));
             });
+
           const order = reverse
             ? [
                 ["two", "322"],
@@ -679,6 +705,7 @@ describe("T321 K1 fetch, today's tooling", () => {
               "--head",
               b.head(b.main, `fabrikalfa/${name}`),
             ]);
+
             expect(check.code, check.text).toBe(0);
           }
 
@@ -809,6 +836,7 @@ describe("T321 K1 fetch, today's tooling", () => {
             expect(b.notes()).toBe("");
           }
         },
+        // SAFETY: a two-element array of strings is a [string, string].
         [["src/a.ts", "tests"], ...(row === "build" ? [[exam, "build"] as [string, string]] : [])],
       ),
     );
@@ -942,6 +970,7 @@ describe("T321 K2 box start, today's tooling", () => {
       "field-rows",
       "field-files",
     ] as const;
+
     const blocks = new Set(["open-pr", "running-box", "running-old-box", "gh-down"]);
     fc.assert(
       fc.property(word, (text) => {
@@ -961,6 +990,7 @@ describe("T321 K2 box start, today's tooling", () => {
                 : place === "field-files"
                   ? "field/runs/2026-11-11-t321-tests1.json"
                   : "src/a.ts";
+
             const rows = place === "field-rows" || place === "field-files";
             const sha = b.commit(b.main, path, `${text}\n`);
             b.sign(b.main, rows ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
@@ -995,10 +1025,12 @@ describe("T321 K2 box start, today's tooling", () => {
             }
 
             b.git(b.main, "checkout", "-q", "main");
+
             const got =
               place === "inside"
                 ? b.new(sha, b.branch)
                 : b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
+
             expect(got.code).not.toBeNull();
 
             // A live branch is the check saying no; open PRs gh cannot read is a check that
@@ -1120,6 +1152,7 @@ describe("T321 K2 box start, today's tooling", () => {
             const side = b.commit(b.main, "src/b.ts", `${text}\n`);
             b.git(b.main, "checkout", "-q", "main");
             const extra = root === "none" ? [] : ["--root", root === "held" ? b.base : side];
+
             const got = b.call("sh", [
               program,
               "new",
@@ -1135,6 +1168,7 @@ describe("T321 K2 box start, today's tooling", () => {
 
             if (root === "elsewhere") {
               checkRefused(got, "root_not_ancestor", /root is not an ancestor/);
+
               return;
             }
 
@@ -1171,6 +1205,7 @@ describe("T321 K2 box start, today's tooling", () => {
           spelling,
           "onequest",
         ]);
+
         expect(got.code, got.text).toBe(0);
         const state = readFileSync(join(b.boxes, "state/new.box"), "utf8");
         expect(state).toContain("quest: onequest\n");
@@ -1423,6 +1458,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
     appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
     b.setup({ operations: [{ path: "src/a.ts", text: "second tests\n" }] });
     expect(b.run().code).toBe(0);
+
     return b.fetch();
   };
 
@@ -1452,6 +1488,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
   // 18 fetches on 2026-11-09 stopped with no rule named, so nobody knew where to send them (T429).
   it("K1 the fetch refusal names each rule and commit that held it, five at most", () => {
     const rule = fc.constantFrom("unsigned_commit", "build_touched_exam", "broken_chain", "stale_link");
+
     // A stale link holds only for a step the quest signed (tests, here); others are waived.
     const answer = fc
       .record({
@@ -1460,6 +1497,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
         step: fc.option(fc.constantFrom("tests", "build"), { nil: undefined }),
       })
       .map((a) => (a.reason === "stale_link" ? { ...a, step: "tests" as const } : a));
+
     fc.assert(
       fc.property(fc.array(answer, { minLength: 1, maxLength: 7 }), (answers) =>
         fixture((b) => {
@@ -1487,10 +1525,12 @@ describe("T321 review round 1 fixes, today's tooling", () => {
     fixture((b) => {
       b.setup({ operations: [{ path: "src/b.ts", text: "unsigned\n" }] });
       expect(b.run().code).toBe(0);
+
       const got = b.call("sh", [program, "fetch", "one", b.branch], b.main, {
         ...b.env,
         T321_FETCH: "1",
       });
+
       refused(got, /commits check failed: unlinked_commit [0-9a-f]{8}/);
     });
   });
@@ -1535,6 +1575,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
   it("K2 scenario: a new box refuses a name an older box's tree in BOXES still holds", () => {
     fixture((b) => {
       mkdirSync(oldBoxTree(b.boxes, "two"));
+
       const started = b.call("sh", [
         program,
         "new",
@@ -1546,6 +1587,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
         "--plan",
         b.plan,
       ]);
+
       expect(started.code).toBe(1);
       expect(started.text).toContain("stuck box name taken by an older box");
       expect(existsSync(boxTree(b.boxes, "two"))).toBe(false);
@@ -1660,6 +1702,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
                 "quest-row-stuck",
                 "quest-row-lane-key",
               ].includes(kind);
+
               const pass = [
                 "tests",
                 "since-root",
@@ -1669,6 +1712,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
                 "quest-row-skip",
                 "quest-row-lane-key",
               ].includes(kind);
+
               const got = b.run(review ? "review" : "build");
               expect(got.code).not.toBeNull();
 
@@ -1784,6 +1828,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 
           try {
             const events = join(dir, "events.jsonl");
+
             const lines = turns.map((turn) =>
               JSON.stringify({
                 type: "turn.completed",
@@ -1794,9 +1839,11 @@ describe("T321 K3 step order and rows, today's tooling", () => {
                 },
               }),
             );
+
             lines.splice(1, 0, "partial{", '{"type":"item.completed"}');
             lines.push('{"type":"turn.completed","usage":{"input_tokens":999}}');
             writeFileSync(events, `${lines.join("\n")}\n`);
+
             const got = spawnSync(
               "python3",
               [
@@ -1815,6 +1862,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
                 env: { HOME: dir, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` },
               },
             );
+
             expect(got.error).toBeUndefined();
             expect(got.status, got.stderr).toBe(0);
             const input = turns.reduce((sum, turn) => sum + turn.fresh + turn.cached, 0);
@@ -1926,10 +1974,12 @@ describe("T321 K19 box and plan runners, today's tooling", () => {
 
               b.env.NPM_CONFIG_GLOBALCONFIG = join(b.dir, "global.npmrc");
               b.setup({ secrets, exit, signal });
+
               const got =
                 runner === "box"
                   ? b.run()
                   : b.call("sh", [join(import.meta.dirname, "runplan.sh"), "one", join(b.dir, "prompt")]);
+
               expect(got.code).toBe(signal ? 143 : exit);
               const seen = JSON.parse(readFileSync(join(b.dir, "observed.json"), "utf8"));
               expect(seen.envLeaks, "secret-shaped env names reached the child").toBe(0);
@@ -2016,7 +2066,9 @@ const shimGit = (
       ...(more.fetch ? { T321_FETCH: "1" } : {}),
     },
   });
+
   expect(r.error, "git failed to start").toBeUndefined();
+
   return { code: r.status, stdout: r.stdout, stderr: r.stderr };
 };
 
@@ -2063,6 +2115,8 @@ describe("T621 the fixture's git shim, today's tooling", () => {
       cd: (dir: string, to: string) => ({ cwd: join(dir, to), C: [] }),
       symlink: (dir: string, to: string) => ({ cwd: dir, C: [["-C", join(dir, "link", to)]] }),
     };
+
+    // SAFETY: `Object.keys` of the literal `spellings` lists exactly its own keys.
     const spelling = fc.constantFrom(...(Object.keys(spellings) as Array<keyof typeof spellings>));
 
     fc.assert(

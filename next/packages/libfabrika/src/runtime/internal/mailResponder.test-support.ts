@@ -15,6 +15,7 @@ export const Model = Schema.TaggedStruct("ready", {
   queued: Schema.Int,
   refused: Schema.Int,
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
 
@@ -27,6 +28,7 @@ const Request = Schema.Struct({
 });
 
 const Approve = Schema.Struct({ type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String) });
+
 /** @internal */
 export const Msg = Schema.Union([Request, Approve]);
 

@@ -25,6 +25,7 @@
 // It has a whitespace autofix, which `pnpm format` applies: a newline after the line where the first
 // statement ends.
 import type { Context, CreateRule } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import type { Node } from "./match.ts";
 
 type Source = Context["sourceCode"];
@@ -82,11 +83,12 @@ const isTypeOfValue = (prev: Node, next: Node): boolean => {
     return false;
   }
 
-  return value.declarations.some((d) => d.id.type === "Identifier" && d.id.name === type.id.name);
+  return Arr.some(value.declarations, (d) => d.id.type === "Identifier" && d.id.name === type.id.name);
 };
 
 const isOverload = (prev: Node, next: Node): boolean => {
   const name = callable(prev);
+
   return name !== null && isSignature(prev) && callable(next) === name;
 };
 
@@ -156,6 +158,7 @@ export const paddingLineBetweenStatements: CreateRule = {
           "Leave a blank line before this statement: top-level statements, class members, and every if, loop, switch and try each stand apart (owner, 2026-11-09). Fix: `pnpm format` adds it.",
         fix: (fixer) => fixer.insertTextAfterRange([at, at], "\n"),
       });
+
     return {
       Program(node) {
         check(context.sourceCode, report, node.body, true);

@@ -1,8 +1,20 @@
 // P33 extends p97/p99 through P37's real SQLite sink and JobRecords.
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Arbitrary from "effect/Arbitrary";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
+
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -49,18 +61,26 @@ const nat = (max: number) =>
   );
 
 const date = Arbitrary.schema(
-  Schema.Date.check(Schema.isBetweenDate({ minimum: new Date("1900-01-01"), maximum: new Date("2100-01-01") })),
+  Schema.Date.check(
+    Schema.isBetweenDate({
+      minimum: DateTime.toDateUtc(DateTime.makeUnsafe("1900-01-01")),
+      maximum: DateTime.toDateUtc(DateTime.makeUnsafe("2100-01-01")),
+    }),
+  ),
 ).pipe(Arbitrary.map((date) => date.toISOString()));
 
 const capture = () => {
   const spans: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span: (options) => {
       const span = new Tracer.NativeSpan(options);
       spans.push(span);
+
       return span;
     },
   });
+
   return {
     tracer,
     spans,
@@ -71,6 +91,7 @@ const capture = () => {
 const records = () => {
   const sink = storage();
   const parts = new Map<string, ReturnType<typeof storage>>();
+
   const open = (name: string) => {
     let part = parts.get(name);
 
@@ -81,6 +102,7 @@ const records = () => {
 
     return part.sql;
   };
+
   return {
     sink,
     parts,
@@ -103,8 +125,8 @@ const leakFree = (rows: ReadonlyArray<SpanRow>, marks: ReadonlyArray<string>) =>
       expect(text, row.name).not.toContain(mark);
     }
 
-    for (const value of Object.values(row.attributes)) {
-      if (typeof value === "string") {
+    for (const value of Rec.values(row.attributes)) {
+      if (Predicate.isString(value)) {
         expect(value.length, row.name).toBeLessThanOrEqual(128);
       }
     }
@@ -118,6 +140,7 @@ describe("p97, process calls", () => {
     examples([["one"]], (ref: string) => {
       const store = storage();
       const trace = capture();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         const placed = yield* processes.start(first(), from());
@@ -147,9 +170,9 @@ describe("p97, process calls", () => {
         }
 
         const refusal = trace.ended("process.start")[2]!;
-        expect([...refusal.attributes].find(([key]) => key.endsWith(".reason"))?.[1]).toBe("id_reused");
+        expect([...refusal.attributes].find(([key]) => Str.endsWith(".reason")(key))?.[1]).toBe("id_reused");
         expect(trace.ended("process.start")[0]!.attributes.get("fab.process")).toBe(A);
-        expect([...trace.ended("process.start")[0]!.attributes].find(([key]) => key.endsWith(".rev"))?.[1]).toBe(
+        expect([...trace.ended("process.start")[0]!.attributes].find(([key]) => Str.endsWith(".rev")(key))?.[1]).toBe(
           placed.rev,
         );
         expect(trace.ended("process.exit")[0]!.attributes.get("fab.process")).toBe(A);
@@ -168,6 +191,7 @@ describe("p97, process calls", () => {
     examples([[[A, B]]], ([A, B]: readonly [string, string]) => {
       const store = storage();
       const world = records();
+
       return Effect.gen(function* () {
         yield* Effect.gen(function* () {
           const processes = yield* ProcessManager;
@@ -183,11 +207,11 @@ describe("p97, process calls", () => {
         expect(old.filter((row) => row.name === "process.exit")).toHaveLength(1);
         expect(replacement.filter((row) => row.name === "process.start")).toHaveLength(1);
         expect(
-          old.filter((row) => row.name.startsWith("process.")).every((row) => row.attributes["fab.process"] === A),
+          old.filter((row) => Str.startsWith("process.")(row.name)).every((row) => row.attributes["fab.process"] === A),
         ).toBe(true);
         expect(
           replacement
-            .filter((row) => row.name.startsWith("process."))
+            .filter((row) => Str.startsWith("process.")(row.name))
             .every((row) => row.attributes["fab.process"] === B),
         ).toBe(true);
         expect(world.parts.has(`job/${A}/0`)).toBe(true);
@@ -204,6 +228,7 @@ describe("p97, process calls", () => {
       (now: number, lag: number, monitorSent: string, exitSent: string) => {
         const store = storage();
         const world = records();
+
         return Effect.gen(function* () {
           yield* TestClock.setTime(now);
           yield* Effect.gen(function* () {
@@ -223,13 +248,15 @@ describe("p97, process calls", () => {
           yield* TestClock.setTime(now + lag);
           expect(yield* receive(W).pipe(Effect.provide(manager(store, processCaller(W))))).toHaveLength(1);
           yield* SpanSink.use((sink) => sink.flush);
+
           const measurements = world.sink
             .db()
             .prepare("SELECT * FROM measurements WHERE piece='process.receive'")
             .all();
+
           expect(measurements).toHaveLength(1);
           expect(measurements[0]?.["lag"]).toBe(lag);
-        }).pipe(Effect.provide(world.layer), Effect.provide(TestClock.layer()));
+        }).pipe(Effect.provide(world.layer.pipe(Layer.provideMerge(TestClock.layer()))));
       },
     ),
     options,
@@ -250,6 +277,7 @@ describe("p99, process content stays out of span tags and measurements", () => {
     examples([["p33-private-message-marker", "p33-redacted-secret-marker"]], (MESSAGE: string, SECRET: string) => {
       const store = storage();
       const world = records();
+
       return Effect.gen(function* () {
         yield* Effect.gen(function* () {
           const processes = yield* ProcessManager;
@@ -263,14 +291,16 @@ describe("p99, process content stays out of span tags and measurements", () => {
           store.fault.after = null;
         }).pipe(Effect.provide(manager(store)));
         yield* SpanSink.use((sink) => sink.flush);
+
         const rows = [
           ...(yield* recorded(A)),
           ...(yield* RecordManager.use((r) => Stream.runCollect(r.read(Chain.cases.spans.make({}))))),
         ];
+
         expect(rows.some((row) => row.name === "process.receive")).toBe(true);
         expect(rows.some((row) => row.name === "process.exit" && !row.ok)).toBe(true);
         leakFree(rows, [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]);
-        const measurements = JSON.stringify(world.sink.db().prepare("SELECT * FROM measurements").all());
+        const measurements = Formatter.formatJson(world.sink.db().prepare("SELECT * FROM measurements").all());
 
         for (const mark of [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]) {
           expect(measurements).not.toContain(mark);

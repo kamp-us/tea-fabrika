@@ -4,7 +4,7 @@
 // a late one leaves an answered request as it is. A permanent send refusal moves it to `failed`.
 // It shares the message shape with the responder, never the responder's code.
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Schema, Predicate } from "effect";
 import { Program } from "../Program.ts";
 import { send } from "../Send.ts";
 
@@ -15,6 +15,7 @@ export const Model = Schema.TaggedUnion({
   answered: { ref: Schema.String, value: Schema.Int },
   failed: { ref: Schema.String, reason: Schema.String },
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
 
@@ -54,11 +55,13 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
         }
 
         const body = { type: "request", ref: m.ref, value: m.value, reply: config.self };
+
         // A claimed sender rides beside the operands, as a program could try; the host binds the real one.
         const input =
           m.claim === undefined
             ? { to: m.to ?? config.peer, m: body }
             : { to: m.to ?? config.peer, m: body, source: m.claim };
+
         return [Model.cases.waiting.make({ ref: m.ref }), [send(input)]];
       },
       answer: (s, m) =>
@@ -67,15 +70,12 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
           : [s, []],
       send_ok: (s) => [s, []],
       send_err: (s, m) =>
-        s._tag === "waiting" &&
-        m.cmd.m !== null &&
-        typeof m.cmd.m === "object" &&
-        "ref" in m.cmd.m &&
-        m.cmd.m.ref === s.ref
+        s._tag === "waiting" && Predicate.isObjectOrArray(m.cmd.m) && "ref" in m.cmd.m && m.cmd.m.ref === s.ref
           ? [Model.cases.failed.make({ ref: s.ref, reason: m.error._tag }), []]
           : [s, []],
     },
   });
+
   return Program.make({
     name: `requester-${config.self}`,
     machine,

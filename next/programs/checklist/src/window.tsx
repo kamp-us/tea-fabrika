@@ -1,22 +1,25 @@
 import { defineWindow, type TileProps, type WindowProps } from "@kampus/libfabrika";
 import { Button, Checkbox, Input } from "@manti-ui/react";
+import { Array as Arr } from "effect";
 import { useId } from "react";
 import { checklist, checklistView } from "./program.ts";
 import { tile } from "./tile.ts";
 
 type Props = WindowProps<typeof checklist> & TileProps<typeof tile>;
+
 const states = { new: "Open", open: "Open", late: "Late", checked: "Done" } as const;
 
 /** A click asks the brain. Only a checked view changes a box or the list. */
 const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
   const description = useId();
+
   return (
     <div className="checklist">
       {data.items.length === 0 ? (
         <p>Nothing on the list yet.</p>
       ) : (
         <ul className="checklist-items">
-          {data.items.map((item) => (
+          {Arr.map(data.items, (item) => (
             // The row's cursor key: a return to the tile lands DOM focus back on this row (0165).
             <li className="checklist-row" key={item.name} data-cursor={`item:${item.name}`}>
               <Checkbox
@@ -51,7 +54,7 @@ const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
           aria-label={checklist.inputs.add.description}
           maxLength={80}
           value={own.draft}
-          aria-describedby={refusal ? description : undefined}
+          aria-describedby={refusal !== undefined && refusal !== null && refusal !== "" ? description : undefined}
           onChange={(event) => send({ type: "typed", text: event.target.value })}
         />
         <p id={description} className="checklist-refusal">

@@ -1,18 +1,19 @@
 /**
  * One selected repository, read at one commit: its snapshot, its files and the source folders its
  * settings name. This file is the contract only (0095).
- *
- * @stability unstable
  */
-import { Context, Schema } from "effect";
-import type { Effect } from "effect";
+import * as Arr from "effect/Array";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 /**
  * Schema for a branch name under git's ref name rules (`git check-ref-format`): components
  * separated by single slashes, none of git's banned characters or sequences, and no component that
  * starts or ends with a dot or ends in `.lock`. A leading dash and a lone `@` are refused too.
  *
- * @stability unstable
  * @category schemas
  */
 export const Branch = Schema.String.check(
@@ -20,23 +21,25 @@ export const Branch = Schema.String.check(
   Schema.makeFilter(
     (s) =>
       s !== "@" &&
-      [...s].every((c) => c.charCodeAt(0) > 32 && c.charCodeAt(0) !== 127) &&
-      s.split("/").every((p) => !p.startsWith(".") && !p.endsWith(".") && !p.endsWith(".lock")),
+      Arr.every([...s], (c) => Option.exists(Str.charCodeAt(0)(c), (unit) => unit > 32 && unit !== 127)) &&
+      Arr.every(
+        Str.split("/")(s),
+        (p) => !Str.startsWith(".")(p) && !Str.endsWith(".")(p) && !Str.endsWith(".lock")(p),
+      ),
   ),
 );
 
 /**
  * Schema for a full git object id in lowercase hex: 40 characters for SHA-1, 64 for SHA-256.
  *
- * @stability unstable
  * @category schemas
  */
 export const ObjectId = Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/));
+
 /**
  * Schema for a SHA-256 digest in lowercase hex. It holds a snapshot's `key` and the hash of its
  * settings document.
  *
- * @stability unstable
  * @category schemas
  */
 export const Hash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
@@ -52,7 +55,6 @@ export const Hash = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
  * origin's destination, so the snapshot holds no location. `hash` is the digest of the document's
  * text, or of the word `absent` when there is none.
  *
- * @stability unstable
  * @category schemas
  */
 export const Snapshot = Schema.Struct({
@@ -63,10 +65,10 @@ export const Snapshot = Schema.Struct({
   text: Schema.NullOr(Schema.String),
   hash: Hash,
 });
+
 /**
  * A repository snapshot, as `Repositories.open` answers it.
  *
- * @stability unstable
  * @category models
  */
 export type Snapshot = typeof Snapshot.Type;
@@ -75,48 +77,54 @@ export type Snapshot = typeof Snapshot.Type;
  * Error for a selection that could not be pinned: the clone's location, its origin, the origin's
  * default branch or that branch's commit could not be established.
  *
- * @stability unstable
  * @category errors
  */
-export class DefaultUnknown extends Schema.TaggedError<DefaultUnknown>()("DefaultUnknown", {
-  cause: Schema.Defect(),
-}) {}
+export class DefaultUnknown extends Schema.TaggedError<DefaultUnknown, { readonly brand: unique symbol }>()(
+  "DefaultUnknown",
+  {
+    cause: Schema.Defect(),
+  },
+) {}
 
 /**
  * Error for a read that failed: git or the file system failed, or what was found has the wrong
  * form, such as a settings path that is not a regular file.
  *
- * @stability unstable
  * @category errors
  */
-export class ReadFailed extends Schema.TaggedError<ReadFailed>()("ReadFailed", { cause: Schema.Defect() }) {}
+export class ReadFailed extends Schema.TaggedError<ReadFailed, { readonly brand: unique symbol }>()("ReadFailed", {
+  cause: Schema.Defect(),
+}) {}
+
 /**
  * Error for a source folder's path that does not exist, in the commit or on disk.
  *
- * @stability unstable
  * @category errors
  */
-export class MissingPath extends Schema.TaggedError<MissingPath>()("MissingPath", { cause: Schema.Defect() }) {}
+export class MissingPath extends Schema.TaggedError<MissingPath, { readonly brand: unique symbol }>()("MissingPath", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for any `Repositories` failure. `reason` holds which of the three it was, with the lower
  * cause kept redacted. `message`, when present, is a sentence for the person, with no private
  * location in it.
  *
- * @stability unstable
  * @category errors
  */
-export class RepositoriesError extends Schema.TaggedError<RepositoriesError>()("RepositoriesError", {
-  reason: Schema.Union([DefaultUnknown, ReadFailed, MissingPath]),
-  message: Schema.optionalKey(Schema.String),
-}) {}
+export class RepositoriesError extends Schema.TaggedError<RepositoriesError, { readonly brand: unique symbol }>()(
+  "RepositoriesError",
+  {
+    reason: Schema.Union([DefaultUnknown, ReadFailed, MissingPath]),
+    message: Schema.optionalKey(Schema.String),
+  },
+) {}
 
 /**
  * Schema for where a source's bytes come from: `committed`, with the commit they were read at, or
  * `disk`. It is the part of a source that may be saved or sent: a local handle keeps its private
  * location in a closure, never in data.
  *
- * @stability unstable
  * @category schemas
  */
 export const SourceMetadata = Schema.TaggedUnion({ committed: { commit: ObjectId }, disk: {} });
@@ -130,7 +138,6 @@ export const SourceMetadata = Schema.TaggedUnion({ committed: { commit: ObjectId
  * Each read says for itself whether its bytes are `committed` or from `disk`, since a link inside
  * a committed folder may lead out of the repository.
  *
- * @stability unstable
  * @category models
  */
 export type Source = typeof SourceMetadata.Type & {
@@ -143,7 +150,6 @@ export type Source = typeof SourceMetadata.Type & {
  * One opened repository: its snapshot, and reads that keep the snapshot's commit whatever the
  * checkout or the branch does afterwards.
  *
- * @stability unstable
  * @category models
  */
 export interface Repository {
@@ -167,7 +173,6 @@ export interface Repository {
  * The selection is explicit and checked. `open` fails when it cannot prove which commit that is,
  * and it never falls back to whatever the checkout holds.
  *
- * @stability unstable
  * @category services
  */
 export class Repositories extends Context.Service<

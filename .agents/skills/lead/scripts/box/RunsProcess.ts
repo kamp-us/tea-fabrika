@@ -12,6 +12,7 @@ export const layer = (
     Runs,
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
       const keep = Effect.fn("RunsProcess.keep")(
         function* (folder: string) {
           const handle = yield* ChildProcess.make("sh", [script, folder], {
@@ -20,15 +21,18 @@ export const layer = (
             stdin: "ignore",
             stderr: "ignore",
           });
+
           const [said, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.stdout)), handle.exitCode], {
             concurrency: 2,
           });
+
           return { said, kept: Number(code) === 0 };
         },
         Effect.scoped,
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.orElseSucceed(() => ({ said: "", kept: false })),
       );
+
       return Runs.of({ keep });
     }),
   );

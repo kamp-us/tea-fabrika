@@ -15,6 +15,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     try {
       writeFileSync(join(dir, "allowed_signers"), `spike ${line}\n`);
       writeFileSync(join(dir, "assertion.sig"), realArmor);
+
       const result = spawnSync(
         "ssh-keygen",
         [
@@ -31,6 +32,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         ],
         { input: text, encoding: "utf8" },
       );
+
       expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
     } finally {

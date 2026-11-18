@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-t1161-no-new-names-ask-clash",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "opus",
+  "rule": "rule_break",
+  "location": {
+    "path": ".github/ci/proof.ts",
+    "line": 91
+  },
+  "says": "In today's CI, the PR adds names (Scope, Ask, askOf, inProjects, the asked record key, dispatchInputs, SC21, the scope and law inputs) with no New names section in the PR or the plan, and Ask/asked reuse the glossary's word ask, which means what an agent asks a person (the asked and answered facts), for a different idea: the hand start's request, which GitHub calls inputs.",
+  "proof": "`gh api repos/kamp-us/tea-fabrika/pulls/1623 --jq .body` shows no `## New names` heading. .glossary/TERMS.md:107 defines ask as what an agent or a step asks a person, recorded as the `asked` fact. proof.ts:91 is `export const Ask = Schema.TaggedUnion(...)`, and the proof-set record gains the key `asked`.",
+  "cost": "One word with two meanings in the proof-set record, which nothing reads yet. The names rule asks for one word per idea.",
+  "head": "a2217352223acf0e6754240e1dd2a07dfbdd0e3f",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623"
+}

@@ -4,6 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import { inputParents } from "../Id.test-support.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -17,7 +19,7 @@ import { Referee } from "./Referee.ts";
 import * as RefereeSql from "./RefereeSql.ts";
 
 const traceIds = Arbitrary.schema(Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/))).pipe(
-  Arbitrary.filter((traceId) => traceId !== "0".repeat(32)),
+  Arbitrary.filter((traceId) => traceId !== Str.repeat(32)("0")),
 );
 
 const SENT = "2026-11-07T21:10:01.204Z";
@@ -52,13 +54,14 @@ describe("T518, TraceId generation", () => {
           count: 200,
           seed: sampleSeed,
         });
+
         expect(values).toHaveLength(200);
 
         for (const value of values) {
-          expect(Schema.decodeUnknownSync(TraceId)(value)).toBe(value);
+          expect(yield* Schema.decodeEffect(TraceId)(value)).toBe(value);
           expect(value).toMatch(/^[0-9a-f]{32}$/);
-          const zero = value.replace(/[0-9a-f]/g, "0");
-          expect(() => Schema.decodeUnknownSync(TraceId)(zero)).toThrow();
+          const zero = Str.replace(/[0-9a-f]/g, "0")(value);
+          expect(() => Schema.decodeSync(TraceId)(zero)).toThrow();
         }
       }),
     { arbitrary: { seed: 119120, runs: 40 } },
@@ -72,6 +75,7 @@ describe("T246, fromHere", () => {
     { input: inputParents, own: Schema.Boolean, traceId: traceIds },
     ({ input, own, traceId }) => {
       const parent = own ? null : input;
+
       // The layer's own scope holds the open database.
       const world = Layer.unwrap(
         memory.pipe(
@@ -86,16 +90,20 @@ describe("T246, fromHere", () => {
           ),
         ),
       );
+
       return Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         expect(fromHere, "fromHere reads the span already in scope").toBeTypeOf("function");
         yield* TestClock.setTime(Date.parse(SENT));
         const referee = yield* Referee;
+
         // The test's object-call bridge runs the real referee; it invents no answer or stored row.
         const calls: LedgerCalls = {
-          append: (stream, id, line) => Effect.runPromise(referee.append(stream, id, line)),
-          read: (stream, after, reader) => Effect.runPromise(referee.read(stream, after, reader)),
-          wait: (stream, after, reader) => Effect.runPromise(referee.wait(stream, after, reader)),
+          append: (stream, id, line) => Effect.runPromiseWith(context)(referee.append(stream, id, line)),
+          read: (stream, after, reader) => Effect.runPromiseWith(context)(referee.read(stream, after, reader)),
+          wait: (stream, after, reader) => Effect.runPromiseWith(context)(referee.wait(stream, after, reader)),
         };
+
         const writer = { ...from, parent };
         yield* Effect.gen(function* () {
           const span = yield* Effect.currentSpan;
@@ -118,9 +126,12 @@ describe("T246, fromHere", () => {
         expect(entry).toMatchObject({ id: "w-1", parent, traceId });
         yield* SpanSink.use((sink) => sink.flush);
         const spans = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
-        const append = spans.filter(
+
+        const append = Arr.filter(
+          spans,
           (span) => span.name === "ledger.call" && span.attributes["rpc.method"] === "append",
         );
+
         expect(append).toHaveLength(1);
         expect(append[0]?.traceId).toBe(traceId);
         expect(entry?.traceId).toBe(append[0]?.traceId);

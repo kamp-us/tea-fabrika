@@ -9,11 +9,22 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as RateLimiter from "effect/persistence/RateLimiter";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -31,6 +42,7 @@ import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import type { Incoming } from "../runtime/Entry.ts";
 import { MailWakeups } from "../runtime/MailWakeups.ts";
+import type { News } from "../runtime/News.ts";
 import { Sent } from "../runtime/Runner.ts";
 import { Tasks } from "../tasks/Tasks.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -40,13 +52,25 @@ import { Answer } from "../transport/Wire.ts";
 import type { GatewayError } from "./GatewayError.ts";
 import * as RateLimiterSql from "./RateLimiterSql.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
+
 let Gateway: typeof import("./Gateway.ts").Gateway;
+
 let Id: typeof import("../Id.ts");
 
-beforeEach(async () => {
-  ({ Gateway } = await vi.importActual<typeof import("./Gateway.ts")>("./Gateway.ts"));
-  Id = await vi.importActual<typeof Id>("../Id.ts");
-});
+beforeEach(() =>
+  Effect.gen(function* () {
+    ({ Gateway } = yield* promised(() => vi.importActual<typeof import("./Gateway.ts")>("./Gateway.ts")));
+    Id = yield* promised(() => vi.importActual<typeof Id>("../Id.ts"));
+  }),
+);
 
 const checks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) };
 
@@ -56,23 +80,6 @@ const folder = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "p17-revoke-"))),
   (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
 );
-
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const db = new DatabaseSync(path);
-      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory,
-      // as Process.test-support does. Every byte a law reads stays in the file and survives reopen.
-      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
-      return db;
-    }),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
 
 const url = "https://fabrika.test/entry/p17",
   sentAt = "2026-11-08T04:00:00.000Z";
@@ -85,6 +92,7 @@ const processes = {
 };
 
 const Input = Schema.TaggedUnion({ add: { n: Schema.Int }, save: { text: Schema.String } });
+
 const Event = Schema.TaggedStruct("saved", { text: Schema.String });
 
 // The pre-P17 log shape, independent of the current door's input encoder.
@@ -101,22 +109,29 @@ const LegacyReceived = Schema.TaggedStruct("received", {
 const u32 = (n: number) => {
   const bytes = Buffer.alloc(4);
   bytes.writeUInt32BE(n);
+
   return bytes;
 };
 
 const field = (value: string | Uint8Array) => {
   const bytes = Buffer.from(value);
+
   return Buffer.concat([u32(bytes.length), bytes]);
 };
 
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
 const web = <A>(call: () => Promise<A>) =>
-  Effect.tryPromise({ try: call, catch: () => new Error("test crypto failed") });
+  Effect.tryPromise({ try: call, catch: () => WebCryptoError.make({ message: "test crypto failed" }) });
 
 const key = Effect.fnUntraced(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  const fp = (raw: Uint8Array) => `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+  const fp = (raw: Uint8Array) => `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(raw).digest("base64"))}`;
+
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -146,6 +161,7 @@ const key = Effect.fnUntraced(function* () {
             field("sha512"),
             field(Buffer.concat([field("ssh-ed25519"), field(new Uint8Array(signature))])),
           ]);
+
           return `-----BEGIN SSH SIGNATURE-----\n${packed
             .toString("base64")
             .match(/.{1,70}/g)
@@ -159,7 +175,9 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
   const root = yield* key(),
     old = yield* key(),
     other = yield* key();
+
   const path = join(yield* folder, "ledger.db");
+
   const founder = {
     name: "P17",
     person,
@@ -168,18 +186,25 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
     by: root.sshFingerprint,
     build: "test",
   };
+
   const deliveries: Incoming[] = [],
-    notices: unknown[] = [];
+    notices: Array<{ client: string; news: News }> = [];
+
   const controls = {
     letter: "",
     open: (_process: string, _client: string): Effect.Effect<Schema.Json> => Effect.succeed(null),
     deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError | GatewayError> =>
       Effect.void,
   };
-  const storage = () => openDb(path).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
+
+  // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
+  // journal in memory. Every byte a law reads stays in the file and survives reopen.
+  const storage = () => TestDatabase.make(path).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
   const first = yield* storage();
+
   const layers = (saved = first, beforeWrite: Effect.Effect<void> = Effect.void) => {
     const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
     const ledger = Layer.effect(
       Ledger,
       Ledger.pipe(
@@ -190,6 +215,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
         })),
       ),
     ).pipe(Layer.provide(LedgerSql.layer(saved.sql, { reader: "p17" })), Layer.provide(quiet));
+
     const transaction = Layer.effect(
       LedgerTransaction,
       LedgerTransaction.pipe(
@@ -198,6 +224,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
         })),
       ),
     ).pipe(Layer.provide(LedgerTransactionSql.layer(saved.sql)), Layer.provide(quiet));
+
     const env = Layer.mergeAll(
       ledger,
       transaction,
@@ -222,6 +249,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
         Layer.provide(RateLimiterSql.layer(saved.sql, { build: "test", policy: { limit: 100_000, window: 60_000 } })),
       ),
     );
+
     const layer = Gateway.layer({
       sql: saved.sql,
       founder,
@@ -241,6 +269,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
       deliver: (_process, envelope, span) => {
         const incoming: Incoming = { id: controls.letter, envelope, span, sentAt, seen: 0 };
         deliveries.push(incoming);
+
         return controls.deliver(incoming);
       },
       notify: (client, news) =>
@@ -256,17 +285,21 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
         ),
       events: { personOnly: [] },
     }).pipe(Layer.provideMerge(env));
+
     return { layer, env };
   };
+
   return { root, old, other, first, deliveries, notices, controls, layers, storage };
 });
 
 type World = Effect.Success<ReturnType<typeof world>>;
+
 type DoorService = typeof Gateway.Service;
 
 const proof = Effect.fnUntraced(function* (door: DoorService, k: World["old"], tab: string) {
   const client = yield* door.connect(),
     nonce = yield* door.challenge(client);
+
   return {
     client,
     params: {
@@ -287,6 +320,7 @@ const proof = Effect.fnUntraced(function* (door: DoorService, k: World["old"], t
 
 const hello = Effect.fnUntraced(function* (door: DoorService, k: World["old"], tab: string) {
   const hello = yield* proof(door, k, tab);
+
   return {
     client: hello.client,
     result: yield* door.initialize(hello.client, hello.params, hello.trusted),
@@ -302,6 +336,7 @@ const remove = Effect.fnUntraced(function* (door: DoorService, w: World, id: str
     sentAt,
     saw: { label: "Old client", location: "test", method: "panel", check: "touch" },
   });
+
   expect((yield* door.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
 });
 
@@ -310,6 +345,7 @@ const setup = Effect.fnUntraced(function* (w: World) {
   const b = yield* Gateway.pipe(Effect.provide(w.layers().layer));
   const old = yield* hello(a, w.old, "old");
   expect(old.result._tag).toBe("online");
+
   const text = grantText({
     id: "grant-other",
     key: w.other.raw,
@@ -326,9 +362,11 @@ const setup = Effect.fnUntraced(function* (w: World) {
       has: [],
     },
   });
+
   expect((yield* b.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
   const other = yield* hello(b, w.other, "other");
   expect(other.result._tag).toBe("online");
+
   return { a, b, old: old.client, other: other.client };
 });
 
@@ -349,6 +387,7 @@ const send = (
   text: string,
 ) => {
   w.controls.letter = id;
+
   return door.route(client, "process.send", request(target, id, text));
 };
 
@@ -358,7 +397,7 @@ const rows = (w: World, stream: string, saved = w.first) =>
 const last = (w: World) => {
   const incoming = w.deliveries.at(-1);
 
-  if (!incoming) {
+  if (incoming === undefined) {
     throw new Error("door did not deliver an input");
   }
 
@@ -378,16 +417,19 @@ describe("P12, door laws retained after the library move", () => {
             w.controls.open = (pid, client) =>
               Effect.sync(() => {
                 opened.push({ pid, client });
+
                 return { count };
               });
             const door = yield* Gateway.pipe(Effect.provide(w.layers().layer));
             const { client, result } = yield* hello(door, w.old, "view");
             expect(result._tag).toBe("online");
+
             // Plant: bypass the door's pid check and invoke the program directly.
             const open = (pid: string) =>
               plant
                 ? w.controls.open(pid, String(client)).pipe(Effect.map((result) => Answer.cases.ok.make({ result })))
                 : door.route(client, "view.open", { pid });
+
             expect(yield* open(badPid)).toEqual({ _tag: "refused", reason: "bad_input" });
             expect(opened).toEqual([]);
             expect(yield* open(processes.counter)).toEqual({ _tag: "ok", result: { count } });
@@ -395,14 +437,17 @@ describe("P12, door laws retained after the library move", () => {
           }).pipe(Effect.scoped),
         ),
     );
-  it("view.open refuses any bad pid before invoking the program, and opens a valid pid", async () => {
-    await fc.assert(viewOpen(), checks);
-  });
-  it("the view.open law catches a bypassed pid check", async () => {
-    const result = await fc.check(viewOpen(true), { ...checks, endOnFailure: true });
-    expect(result.failed).toBe(true);
-    expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
-  });
+
+  it("view.open refuses any bad pid before invoking the program, and opens a valid pid", () =>
+    fc.assert(viewOpen(), checks));
+  it.live("the view.open law catches a bypassed pid check", () =>
+    Effect.gen(function* () {
+      const result = yield* promised(() => fc.check(viewOpen(true), { ...checks, endOnFailure: true }));
+      expect(result.failed).toBe(true);
+      expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
+    }),
+  );
+
   const grantTarget = (plant?: "fingerprint" | "code") =>
     fc.asyncProperty(
       fc.string(),
@@ -418,12 +463,14 @@ describe("P12, door laws retained after the library move", () => {
             const knocked = yield* door.knock(client, { label });
             assert(knocked._tag === "ok");
             const { code } = yield* Schema.decodeUnknownEffect(Schema.Struct({ code: Schema.String }))(knocked.result);
+
             // Plants: ignore either the supplied fingerprint or the supplied code.
             const target = (fingerprint: string, suppliedCode: string) =>
               door.target(
                 plant === "fingerprint" ? w.other.fingerprint : fingerprint,
                 plant === "code" ? code : suppliedCode,
               );
+
             expect(yield* target(w.other.fingerprint, code)).toEqual({
               key: w.other.raw,
               for: person,
@@ -437,24 +484,25 @@ describe("P12, door laws retained after the library move", () => {
           }).pipe(Effect.scoped),
         ),
     );
-  it("a grant target matches both the waiting fingerprint and its code", async () => {
-    await fc.assert(grantTarget(), checks);
-  });
+
+  it("a grant target matches both the waiting fingerprint and its code", () => fc.assert(grantTarget(), checks));
 
   for (const field of ["fingerprint", "code"] as const)
   // Pin each P12 grant-target bypass plant, retaining the generated law and both fields.
   {
-    it(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, async () => {
-      const result = await fc.check(grantTarget(field), { ...checks, endOnFailure: true });
-      expect(result.failed).toBe(true);
-      expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
-    });
+    it.live(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, () =>
+      Effect.gen(function* () {
+        const result = yield* promised(() => fc.check(grantTarget(field), { ...checks, endOnFailure: true }));
+        expect(result.failed).toBe(true);
+        expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
+      }),
+    );
   }
 });
 
 describe("P17a, revoke stops writes at the final door", () => {
-  it("current inputs keep their fields and a retry with missing metadata fails as a bad row", async () => {
-    await fc.assert(
+  it("current inputs keep their fields and a retry with missing metadata fails as a bad row", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.constantFrom("door", "n"),
@@ -494,8 +542,19 @@ describe("P17a, revoke stops writes at the final door", () => {
               });
               const [saved] = w.first.sql.exec("SELECT id,value FROM gateway_bindings");
               assert(saved?.id !== undefined, "input binding must have a saved id");
-              const binding = { ...JSON.parse(String(saved.value)), [missing]: undefined };
-              w.first.sql.exec("UPDATE gateway_bindings SET value=? WHERE id=?", JSON.stringify(binding), saved.id);
+
+              const binding = {
+                ...(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+                  String(saved.value),
+                )),
+                [missing]: undefined,
+              };
+
+              w.first.sql.exec(
+                "UPDATE gateway_bindings SET value=? WHERE id=?",
+                Formatter.formatJson(binding),
+                saved.id,
+              );
               const before = w.first.sql.exec("SELECT * FROM entries ORDER BY rev");
               expect(yield* Effect.result(door.route(client.client, "process.send", params))).toMatchObject({
                 _tag: "Failure",
@@ -508,18 +567,20 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a hello paused before its final write cannot land after revoke", async () => {
-    await fc.assert(
+    ));
+  it("a hello paused before its final write cannot land after revoke", () =>
+    fc.assert(
       fc.asyncProperty(fc.boolean(), fc.uuid(), async (revokeFirst, tab) => {
         await Effect.runPromise(
           Effect.gen(function* () {
             const w = yield* world(),
               d = yield* setup(w);
-            const before = (yield* rows(w, "gateway/hellos")).filter((row) => row.by === w.old.fingerprint).length;
+
+            const before = Arr.filter(yield* rows(w, "gateway/hellos"), (row) => row.by === w.old.fingerprint).length;
+
             const entered = yield* Deferred.make<void>(),
               release = yield* Deferred.make<void>();
+
             // Pause both write services before their real SQLite transaction. This also
             // reaches a hello once the builder moves it to appendAdmitted.
             const gate = Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release)));
@@ -540,7 +601,8 @@ describe("P17a, revoke stops writes at the final door", () => {
 
             const revoke = (yield* rows(w, "gateway/access")).at(-1);
             expect(revoke?._tag).toBe("revoked");
-            const hellos = (yield* rows(w, "gateway/hellos")).filter((row) => row.by === w.old.fingerprint);
+            const hellos = Arr.filter(yield* rows(w, "gateway/hellos"), (row) => row.by === w.old.fingerprint);
+
             const answer = Result.isFailure(result)
               ? Schema.is(NotGranted)(result.failure)
                 ? "not_granted"
@@ -548,11 +610,12 @@ describe("P17a, revoke stops writes at the final door", () => {
               : result.success.result._tag === "refused"
                 ? result.success.result.reason
                 : result.success.result._tag;
+
             // Plant: the hello checks membership only before the pause.
             expect({
               answer,
               hellos: hellos.length - before,
-              afterRevoke: hellos.filter((row) => row.rev > (revoke?.rev ?? 0)).length,
+              afterRevoke: Arr.filter(hellos, (row) => row.rev > (revoke?.rev ?? 0)).length,
             }).toEqual({
               answer: revokeFirst ? "not_granted" : "online",
               hellos: revokeFirst ? 0 : 1,
@@ -566,17 +629,19 @@ describe("P17a, revoke stops writes at the final door", () => {
         // Review regression: revoke lands while this hello's final write is paused.
         examples: [[true, "paused-hello"]],
       },
-    );
-  });
-  it("a transforming program input is decoded once and delivered with its decoded value", async () => {
-    await fc.assert(
+    ));
+  it("a transforming program input is decoded once and delivered with its decoded value", () =>
+    fc.assert(
       fc.asyncProperty(fc.integer(), fc.uuid(), async (n, letter) => {
         await Effect.runPromise(
           Effect.gen(function* () {
             const input = Schema.TaggedStruct("add", { n: Schema.NumberFromString });
+
             const w = yield* world(input),
               d = yield* setup(w);
+
             w.controls.letter = letter;
+
             const answer = yield* d.a.route(d.old, "process.send", {
               pid: processes.counter,
               letter,
@@ -584,12 +649,17 @@ describe("P17a, revoke stops writes at the final door", () => {
               sentAt,
               seen: 0,
             });
+
             expect(answer._tag).toBe("ok");
             expect(w.deliveries).toHaveLength(1);
             const incoming = last(w);
             expect(incoming.envelope.input).toEqual({ _tag: "add", n });
+
             // Mutation regression: safe transformed input must stay in the authenticated log.
-            const recorded = (yield* rows(w, "gateway/inputs")).find((row) => row.id === incoming.envelope.id);
+            const recorded = Option.getOrUndefined(
+              Arr.findFirst(yield* rows(w, "gateway/inputs"), (row) => row.id === incoming.envelope.id),
+            );
+
             expect(recorded).toMatchObject({
               _tag: "received",
               body: { input: { _tag: "add", n: String(n) } },
@@ -610,10 +680,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         // Review regression: NumberFromString turns "7" into 7 before accept.
         examples: [[7, "transformed-input"]],
       },
-    );
-  });
-  it("a route paused after its online check cannot record authenticated input after revoke", async () => {
-    await fc.assert(
+    ));
+  it("a route paused after its online check cannot record authenticated input after revoke", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -621,21 +690,28 @@ describe("P17a, revoke stops writes at the final door", () => {
         async (target, revokeFirst, token) => {
           await Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
+
               const w = yield* world(),
                 d = yield* setup(w);
+
               const entered = yield* Deferred.make<void>(),
                 release = yield* Deferred.make<void>();
+
               const digest = crypto.subtle.digest.bind(crypto.subtle),
                 marker = `queued-input-${token}`;
+
               let paused = false;
+
               const spy = vi.spyOn(crypto.subtle, "digest").mockImplementation((algorithm, data) => {
                 const bytes = ArrayBuffer.isView(data)
                   ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
                   : new Uint8Array(data);
 
-                if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
+                if (!paused && Str.includes(marker)(new TextDecoder().decode(bytes))) {
                   paused = true;
-                  return Effect.runPromise(
+
+                  return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
                       Effect.andThen(web(() => digest(algorithm, data))),
@@ -656,9 +732,11 @@ describe("P17a, revoke stops writes at the final door", () => {
 
                 yield* Deferred.succeed(release, undefined);
                 const result = yield* Fiber.join(pending);
+
                 const refused = Result.isFailure(result)
                   ? result.failure._tag === "NotGranted"
                   : result.success._tag === "refused" && result.success.reason === "not_granted";
+
                 expect(refused).toBe(revokeFirst);
                 expect(yield* rows(w, "gateway/inputs")).toHaveLength(revokeFirst ? 0 : 1);
                 expect(w.deliveries).toHaveLength(revokeFirst ? 0 : 1);
@@ -670,10 +748,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a settled retry paused after online rechecks revoke before answering its cached placing", async () => {
-    await fc.assert(
+    ));
+  it("a settled retry paused after online rechecks revoke before answering its cached placing", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -682,8 +759,11 @@ describe("P17a, revoke stops writes at the final door", () => {
         async (target, revokeFirst, token, text) => {
           await Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
+
               const w = yield* world(),
                 d = yield* setup(w);
+
               w.controls.deliver = Effect.fnUntraced(function* (incoming: Incoming) {
                 const placing = yield* d.a.accept(incoming);
 
@@ -699,18 +779,22 @@ describe("P17a, revoke stops writes at the final door", () => {
               const inbox = yield* rows(w, `${processes[target]}/inbox`);
               expect(inbox).toHaveLength(1);
               const inputs = yield* rows(w, "gateway/inputs");
+
               const entered = yield* Deferred.make<void>(),
                 release = yield* Deferred.make<void>();
+
               const digest = crypto.subtle.digest.bind(crypto.subtle);
               let paused = false;
+
               const spy = vi.spyOn(crypto.subtle, "digest").mockImplementation((algorithm, data) => {
                 const bytes = ArrayBuffer.isView(data)
                   ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
                   : new Uint8Array(data);
 
-                if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
+                if (!paused && Str.includes(marker)(new TextDecoder().decode(bytes))) {
                   paused = true;
-                  return Effect.runPromise(
+
+                  return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
                       Effect.andThen(web(() => digest(algorithm, data))),
@@ -744,6 +828,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                   : result.success._tag === "refused"
                     ? { reason: result.success.reason }
                     : result.success;
+
                 // Plant: answer the cached placing without a final membership check.
                 expect({
                   answer,
@@ -764,10 +849,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("an admitted client gets its pre-P17 settled answer after reopen without appending", async () => {
-    await fc.assert(
+    ));
+  it("an admitted client gets its pre-P17 settled answer after reopen without appending", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.uuid(),
@@ -783,10 +867,13 @@ describe("P17a, revoke stops writes at the final door", () => {
               expect((yield* hello(original, w.old, "before-upgrade")).result._tag).toBe("online");
               const params = request(target, letter, text);
               const by = Writer.cases.person.make({ key: w.old.fingerprint, for: person });
-              const traceId = letter.replaceAll("-", ""),
-                spanId = traceId.slice(0, 16);
+
+              const traceId = Str.replaceAll("-", "")(letter),
+                spanId = Str.slice(0, 16)(traceId);
+
               const oldProcess = yield* ProcessIdGenerator.use((g) => g.next).pipe(Effect.provide(w.layers().env));
               const id = `in-${oldProcess}-${n}`;
+
               const from = {
                 by: by.key,
                 for: person,
@@ -796,7 +883,9 @@ describe("P17a, revoke stops writes at the final door", () => {
                 traceId,
                 build: "test",
               };
+
               yield* TestClock.setTime(arrivedAt);
+
               const result = yield* Ledger.use((ledger) =>
                 Effect.gen(function* () {
                   const logged = yield* ledger.append(
@@ -815,12 +904,15 @@ describe("P17a, revoke stops writes at the final door", () => {
                       }),
                     ),
                   );
+
                   expect(logged._tag).toBe("placed");
+
                   const placing = yield* ledger.append(
                     `${params.pid}/inbox`,
                     letter,
                     lineFor({ ...from, parent: id }, Schema.TaggedStruct("send", { m: Input }).make({ m: params.m })),
                   );
+
                   expect(placing._tag).toBe("placed");
 
                   if (placing._tag !== "placed") {
@@ -830,6 +922,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                   return Sent.cases.accepted.make({ rev: placing.rev, pos: placing.pos });
                 }),
               ).pipe(Effect.provide(w.layers().env));
+
               // Pre-P17 bindings have no door, n, letter, seen or input hash fields.
               const binding = {
                 id,
@@ -838,17 +931,18 @@ describe("P17a, revoke stops writes at the final door", () => {
                 process: params.pid,
                 name: params.m._tag,
                 personOnly: false,
-                digest: createHash("sha256").update(JSON.stringify(params)).digest("base64url"),
+                digest: createHash("sha256").update(Formatter.formatJson(params)).digest("base64url"),
                 arrivedAt,
                 span: { traceId, spanId },
                 sentAt,
                 state: Schema.TaggedStruct("settled", { result: Sent }).make({ result }),
               };
+
               w.first.sql.exec(
                 "INSERT INTO gateway_bindings (id,letter,value) VALUES (?,?,?)",
                 id,
                 `${params.pid}/${letter}`,
-                JSON.stringify(binding),
+                Formatter.formatJson(binding),
               );
               w.first.db.close();
               const saved = yield* w.storage();
@@ -878,10 +972,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("two Gateway layers on one ledger stop the open old client, even when it ignores close", async () => {
-    await fc.assert(
+    ));
+  it("two Gateway layers on one ledger stop the open old client, even when it ignores close", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.integer({ min: 1, max: 5 }),
@@ -913,7 +1006,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 });
               }
 
-              expect((yield* rows(w, `${processes[target]}/inbox`)).map((row) => row.id)).toEqual(
+              expect(Arr.map(yield* rows(w, `${processes[target]}/inbox`), (row) => row.id)).toEqual(
                 Array.from({ length: before }, (_, n) => `before-${n}`),
               );
               expect((yield* send(d.b, d.other, w, target, "other-live", text))._tag).toBe("ok");
@@ -923,10 +1016,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a delayed inbox append, including an exact duplicate, rechecks after revoke and reopen", async () => {
-    await fc.assert(
+    ));
+  it("a delayed inbox append, including an exact duplicate, rechecks after revoke and reopen", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -938,6 +1030,7 @@ describe("P17a, revoke stops writes at the final door", () => {
             Effect.gen(function* () {
               const w = yield* world(),
                 d = yield* setup(w);
+
               expect((yield* send(d.a, d.old, w, target, "delayed", text))._tag).toBe("ok");
               const incoming = last(w);
 
@@ -966,19 +1059,20 @@ describe("P17a, revoke stops writes at the final door", () => {
               }
 
               const saved = reopen ? yield* w.storage() : w.first;
+
               const stored = yield* Ledger.use((l) => Stream.runCollect(l.read(`${processes[target]}/inbox`, 0))).pipe(
                 Effect.provide(w.layers(saved).env),
               );
+
               expect(stored).toHaveLength(duplicate || !revokeFirst ? 1 : 0);
             }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
           );
         },
       ),
       checks,
-    );
-  });
-  it("a caused event paused after receipt checking cannot cross a revoke on another Gateway", async () => {
-    await fc.assert(
+    ));
+  it("a caused event paused after receipt checking cannot cross a revoke on another Gateway", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -987,12 +1081,17 @@ describe("P17a, revoke stops writes at the final door", () => {
         async (target, revokeFirst, reopen, text) => {
           await Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
+
               const w = yield* world(),
                 d = yield* setup(w);
+
               yield* send(d.a, d.old, w, target, "cause", text);
               const incoming = last(w);
+
               const id = "queued-fact",
                 parent = incoming.envelope.id;
+
               yield* d.a.signer(parent, processes[target], "saved").pipe(Effect.provideService(SignRequest, { id }));
 
               if (reopen) {
@@ -1002,20 +1101,25 @@ describe("P17a, revoke stops writes at the final door", () => {
               const saved = reopen ? yield* w.storage() : w.first;
               const door = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.a;
               const remover = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.b;
+
               const entered = yield* Deferred.make<void>(),
                 release = yield* Deferred.make<void>();
+
               const digest = crypto.subtle.digest.bind(crypto.subtle),
                 marker = `p17-queued-${text}`,
-                encodedMarker = JSON.stringify(marker);
+                encodedMarker = Formatter.formatJson(marker);
+
               let paused = false;
+
               const spy = vi.spyOn(crypto.subtle, "digest").mockImplementation((algorithm, data) => {
                 const bytes = ArrayBuffer.isView(data)
                   ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
                   : new Uint8Array(data);
 
-                if (!paused && new TextDecoder().decode(bytes).includes(encodedMarker)) {
+                if (!paused && Str.includes(encodedMarker)(new TextDecoder().decode(bytes))) {
                   paused = true;
-                  return Effect.runPromise(
+
+                  return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
                       Effect.andThen(web(() => digest(algorithm, data))),
@@ -1039,6 +1143,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                     }),
                   ),
                 );
+
                 yield* Deferred.await(entered);
 
                 if (revokeFirst) {
@@ -1066,10 +1171,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         // P17a regression: JSON-escaped text used to miss the pause after receipt checking.
         examples: [["notes", true, false, '"\n\\']],
       },
-    );
-  });
-  it("old-key challenges cannot reconnect or regrant it; a separate admitted client keeps writing", async () => {
-    await fc.assert(
+    ));
+  it("old-key challenges cannot reconnect or regrant it; a separate admitted client keeps writing", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -1080,6 +1184,7 @@ describe("P17a, revoke stops writes at the final door", () => {
             Effect.gen(function* () {
               const w = yield* world(),
                 d = yield* setup(w);
+
               const pending = challengeFirst ? yield* proof(d.a, w.old, "before-revoke") : null;
               yield* remove(d.b, w, "revoke");
 
@@ -1115,6 +1220,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                   has: [],
                 },
               });
+
               expect((yield* d.b.grant({ text: textGrant, armored: yield* w.root.sign(textGrant) }))._tag).toBe(
                 "refused",
               );
@@ -1124,20 +1230,22 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("the internal inbox operation refuses changed bindings and bodies before any append", async () => {
-    await fc.assert(
+    ));
+  it("the internal inbox operation refuses changed bindings and bodies before any append", () =>
+    fc.assert(
       fc.asyncProperty(fc.constantFrom("counter", "notes"), fc.string({ maxLength: 30 }), async (target, text) => {
         await Effect.runPromise(
           Effect.gen(function* () {
             const w = yield* world(),
               d = yield* setup(w);
+
             yield* send(d.a, d.old, w, target, "bound", text);
             const incoming = last(w);
+
             const malformed = yield* Effect.result(
               d.a.accept({ ...incoming, envelope: { ...incoming.envelope, input: {} } }),
             );
+
             expect(malformed).toMatchObject({
               _tag: "Failure",
               failure: { _tag: "LedgerError", reason: "bad_row" },
@@ -1172,6 +1280,5 @@ describe("P17a, revoke stops writes at the final door", () => {
         );
       }),
       checks,
-    );
-  });
+    ));
 });

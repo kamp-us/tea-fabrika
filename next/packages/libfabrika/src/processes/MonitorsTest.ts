@@ -17,7 +17,21 @@
 // oracle reads the store's own rows through `Ledger.read`, never the product's fold.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Predicate, Schema, type Scope, Stream } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -38,16 +52,22 @@ import { ProcessManager } from "./ProcessManager.ts";
 export type Store = { readonly sql: Sql };
 
 const SEED = 119120;
+
 const BRAIN = "SHA256:brain";
+
 const HASH = "build-a";
+
 const FABRIKA = Model.ref("fabrika", "demo");
+
 const FOUNDER = "person_01jcfounder0000000000000000";
+
 const OTHER = "person_01jcother000000000000000000";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00a00${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00a00${Str.padStart(10, "0")(String(n))}`,
 );
 
 type Holder = "founder" | "other";
@@ -55,6 +75,7 @@ type Holder = "founder" | "other";
 /** A person's window, or an agent let in for that person. */
 const senderFrom = (holder: Holder, as: "person" | "agent" = "person") => {
   const person = holder === "founder" ? FOUNDER : OTHER;
+
   return as === "person"
     ? Sender.cases.person.make({ key: `SHA256:window-${holder}`, for: person })
     : Sender.cases.agent.make({ key: `SHA256:agent-${holder}`, for: person });
@@ -94,7 +115,7 @@ const from = (parent: string | null): From => ({
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** An input the test delivered, as the gateway keeps it. */
-type Input = { readonly process: string; readonly sender: typeof Sender.Type; state: "live" | "removed" | "ended" };
+type Input = { readonly process: string; readonly sender: Sender; state: "live" | "removed" | "ended" };
 
 /** The gateway's answer: none unless the input was delivered to that process. */
 const gateway = (inputs: ReadonlyMap<string, Input>) =>
@@ -104,17 +125,18 @@ const gateway = (inputs: ReadonlyMap<string, Input>) =>
         const input = parent === null ? undefined : inputs.get(parent);
 
         if (input === undefined || input.process !== process) {
-          return Effect.succeed(Option.none());
+          return Effect.succeedNone;
         }
 
         return input.state === "live"
-          ? Effect.succeed(Option.some(input.sender))
+          ? Effect.succeedSome(input.sender)
           : Effect.fail(new SendersError({ reason: input.state }));
       }),
   });
 
 const ids = (values: ReadonlyArray<string>) => {
   let calls = 0;
+
   return Effect.sync(() => {
     const value = values[calls++];
 
@@ -131,11 +153,13 @@ const stack = (sql: Sql, changes: ReadonlyArray<Relation.Change>, inputs: Readon
   const data = Layer.merge(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
     Layer.provide(quiet),
   );
+
   return MonitorsLedger.layer({ fabrika: FABRIKA }).pipe(
     Layer.provideMerge(
       ProcessManager.layer(
         {
           owner: Owner.cases.brain.make({}),
+          // SAFETY: PIDS holds 40 ids, so the brain's session at index 39 is present.
           recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[39] as string }),
           by: BRAIN,
         },
@@ -152,7 +176,8 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
   const tables = sql
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 /** One ledger row: its global rev, stream, id, tag and body. */
@@ -165,8 +190,10 @@ type Row = {
 };
 
 const decodeRef = Schema.decodeUnknownOption(Schema.Struct({ ref: Schema.String }));
+
 /** A `send` row's DOWN, when its body is one. */
 const decodeDown = Schema.decodeUnknownOption(Schema.Struct({ m: Down }));
+
 const names = (body: unknown, ref: string) => Option.exists(decodeRef(body), (b) => b.ref === ref);
 
 type Answer = Exit.Exit<{ readonly ref: string; readonly process: string; readonly name: string }, MonitorsError>;
@@ -182,8 +209,10 @@ const world = Effect.fnUntraced(function* (
   const { sql } = yield* open;
   const inputs = new Map<string, Input>();
   const context = yield* Layer.build(stack(sql, changes, inputs));
+
   const run = <A, E>(effect: Effect.Effect<A, E, Monitors | ProcessManager | Ledger>) =>
     effect.pipe(Effect.provideContext(context));
+
   /** The rows of `streams`, read through the ledger, in the order the ledger took them. */
   const rows = (streams: ReadonlyArray<string>) =>
     run(
@@ -197,6 +226,7 @@ const world = Effect.fnUntraced(function* (
                 stream,
                 id: e.id,
                 tag: e._tag,
+                // SAFETY: every ledger row's body is a JSON object here, and an absent body reads as the empty object.
                 body: (e.body ?? {}) as Row["body"],
               })),
             ),
@@ -207,15 +237,17 @@ const world = Effect.fnUntraced(function* (
       Effect.orDie,
       Effect.map((parts) => parts.flat().sort((a, b) => a.rev - b.rev)),
     );
+
   let n = 0;
-  const start = (name: string, options: { readonly requester?: string; readonly member?: typeof Sender.Type } = {}) =>
+
+  const start = (name: string, options: { readonly requester?: string; readonly member?: Sender } = {}) =>
     run(
       ProcessManager.use((p) =>
         p.start(
           Start.cases.first.make({
             id: `start:${name}:${++n}`,
             name,
-            code: { program: name.split(":")[0] ?? "program", hash: HASH },
+            code: { program: Str.split(name, ":")[0] ?? "program", hash: HASH },
             ...(options.requester === undefined
               ? {}
               : { requester: Recipient.cases.process.make({ process: options.requester }) }),
@@ -228,8 +260,10 @@ const world = Effect.fnUntraced(function* (
       Effect.orDie,
       Effect.map((placed) => placed.process),
     );
+
   const exit = (process: string, reason: ExitReason = ExitReason.cases.normal.make({})) =>
     run(ProcessManager.use((p) => p.exit(process, reason, from(null)))).pipe(Effect.orDie);
+
   const restart = (name: string, after: string) =>
     run(
       ProcessManager.use((p) =>
@@ -237,7 +271,7 @@ const world = Effect.fnUntraced(function* (
           Start.cases.again.make({
             id: `again:${name}:${++n}`,
             name,
-            code: { program: name.split(":")[0] ?? "program", hash: HASH },
+            code: { program: Str.split(name, ":")[0] ?? "program", hash: HASH },
             after,
             reason: "crashed",
           }),
@@ -248,18 +282,22 @@ const world = Effect.fnUntraced(function* (
       Effect.orDie,
       Effect.map((placed) => placed.process),
     );
+
   const down = (process: string) =>
     run(
       ProcessManager.use((p) =>
         p.down(process, { reason: "intensity", crashes: 6, until: 1_794_099_700_000 }, from(null)),
       ),
     ).pipe(Effect.orDie);
+
   /** Delivers an input to `process` as the gateway would, and answers its id. */
-  const deliver = (process: string, sender: typeof Sender.Type, state: Input["state"] = "live") => {
+  const deliver = (process: string, sender: Sender, state: Input["state"] = "live") => {
     const id = `in-${process}-${++n}`;
     inputs.set(id, { process, sender, state });
+
     return id;
   };
+
   /** A watch as the runner makes it: this life is the watcher, a fresh Cmd id is the ref. */
   const watch = (watcher: string, name: string, parent: string | null, id = `${watcher}/${++n}/0`) =>
     run(
@@ -268,8 +306,10 @@ const world = Effect.fnUntraced(function* (
       ),
     ).pipe(
       Effect.exit,
+      // SAFETY: the exit holds what `monitor` answers or fails with, which is the `Answer` exit type.
       Effect.map((answer) => ({ id, answer: answer as Answer })),
     );
+
   return { sql, start, exit, restart, down, deliver, watch, rows };
 });
 
@@ -290,6 +330,7 @@ const inboxRows = (w: World, watcherName: string, ref: string) =>
 
 const refusal = (answer: Answer): string | undefined => {
   const error = Exit.isFailure(answer) ? Option.getOrUndefined(Cause.findErrorOption(answer.cause)) : undefined;
+
   return error instanceof MonitorsError ? error.reason : undefined;
 };
 
@@ -299,6 +340,7 @@ const watched = (answer: Answer, label: string) => {
   );
   const value = Exit.isSuccess(answer) ? answer.value : expect.fail(label);
   expect(Predicate.isTagged(value, "monitored"), `${label}: the answer is monitored`).toBe(true);
+
   return value;
 };
 
@@ -315,6 +357,8 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
   fc.nat().map((seed) => {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's map takes a plain value, so one sample is drawn here
     const [value] = Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }));
+
+    // SAFETY: the sample is drawn from `Arbitrary.schema(schema)`, so it is a value of the schema's type.
     return value as S["Type"];
   });
 
@@ -327,6 +371,7 @@ const M1Case = fc.record({
   via: fc.constantFrom("sender", "recorded", "related"),
   as: fc.constantFrom<"person" | "agent">("person", "agent"),
 });
+
 type M1Case = typeof M1Case extends fc.Arbitrary<infer A> ? A : never;
 
 /**
@@ -381,6 +426,7 @@ const M4Case = fc.record({
   state: fc.constantFrom("live", "ended", "down", "never"),
   reason: generated(ExitReason),
 });
+
 type M4Case = typeof M4Case extends fc.Arbitrary<infer A> ? A : never;
 
 /**
@@ -407,6 +453,7 @@ const m4 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
     if (life === undefined) {
       refused(w, answer, before, "no_name", label);
+
       return;
     }
 
@@ -420,6 +467,7 @@ const m4 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
     if (c.state === "live") {
       expect(inbox.downs, `${label}: no DOWN`).toEqual([]);
+
       return;
     }
 
@@ -439,7 +487,17 @@ const m4 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     expect(Math.max(...turn) - Math.min(...turn), `${label}: the three rows are one turn`).toBe(2);
   });
 
-const BAD_NAMES = ["", "Upper:1", "has space", "a/b", "client:x", "processes", "gateway", "-lead", "x".repeat(257)];
+const BAD_NAMES = [
+  "",
+  "Upper:1",
+  "has space",
+  "a/b",
+  "client:x",
+  "processes",
+  "gateway",
+  "-lead",
+  Str.repeat(257)("x"),
+];
 
 const M5Case = fc
   .record({
@@ -452,6 +510,7 @@ const M5Case = fc
     name: Name,
   })
   .filter((c) => c.bad || c.stale !== "no" || c.denied || c.missing);
+
 type M5Case = typeof M5Case extends fc.Arbitrary<infer A> ? A : never;
 
 /** The first refusal a case earns, in the plan's order. */
@@ -480,9 +539,10 @@ const m5 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       c.via === "sender" || c.stale === "cause"
         ? w.deliver(watcher, member, c.stale === "cause" ? "ended" : "live")
         : null;
+
     const before = snapshot(w.sql);
     const { answer } = yield* w.watch(watcher, c.bad ? c.badName : c.name, parent);
-    refused(w, answer, before, firstRefusal(c), `M5: ${JSON.stringify({ ...c, name: c.bad ? c.badName : c.name })}`);
+    refused(w, answer, before, firstRefusal(c), `M5: ${Formatter.format({ ...c, name: c.bad ? c.badName : c.name })}`);
   });
 
 const M6Case = fc.record({
@@ -492,6 +552,7 @@ const M6Case = fc.record({
   as: fc.constantFrom<"person" | "agent">("person", "agent"),
   pair: fc.constantFrom("child", "starter", "unrelated"),
 });
+
 type M6Case = typeof M6Case extends fc.Arbitrary<infer A> ? A : never;
 
 /**
@@ -505,27 +566,34 @@ const m6 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     // The other key kind for the recorded member, so a sender and a recorded member never look alike.
     const recorded = c.recorded === "none" ? undefined : senderFrom(c.recorded, c.as === "person" ? "agent" : "person");
     const starter = c.pair === "starter" ? yield* w.start("parent:1") : undefined;
+
     const watcher = yield* w.start("watcher:1", {
       ...(starter === undefined ? {} : { requester: starter }),
       ...(recorded === undefined ? {} : { member: recorded }),
     });
-    const target =
-      c.pair === "child"
-        ? { name: "child:1", life: yield* w.start("child:1", { requester: watcher }) }
-        : c.pair === "starter"
-          ? { name: "parent:1", life: starter as string }
-          : { name: "other:1", life: yield* w.start("other:1") };
+
+    // SAFETY: in the starter case `starter` was set by the start above, so it holds that process id.
+    const target = yield* Match.value(c.pair).pipe(
+      Match.when("child", () =>
+        w.start("child:1", { requester: watcher }).pipe(Effect.map((life) => ({ name: "child:1", life }))),
+      ),
+      Match.when("starter", () => Effect.succeed({ name: "parent:1", life: starter as string })),
+      Match.orElse(() => w.start("other:1").pipe(Effect.map((life) => ({ name: "other:1", life })))),
+    );
+
     const sender = c.sender === "none" ? undefined : senderFrom(c.sender, c.as);
     const parent = sender === undefined ? null : w.deliver(watcher, sender);
     const member = sender ?? recorded;
-    const label = `M6: ${JSON.stringify(c)}`;
+    const label = `M6: ${Formatter.format(c)}`;
     const before = snapshot(w.sql);
     const { id, answer } = yield* w.watch(watcher, target.name, parent);
+
     const ok =
       member === undefined ? c.pair !== "unrelated" : allowed(c.role, member.for === FOUNDER ? "founder" : "other");
 
     if (!ok) {
       refused(w, answer, before, "forbidden", label);
+
       return;
     }
 
@@ -550,14 +618,17 @@ const prop = <A>(
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(arbitrary, (c) => Effect.runPromise(Effect.scoped(law(c))));
+        const property = fc.asyncProperty(arbitrary, (c) => Effect.runPromiseWith(context)(Effect.scoped(law(c))));
+
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 25, full: 100 }),
           endOnFailure: true,
           examples: [...examples],
         };
+
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
       }),

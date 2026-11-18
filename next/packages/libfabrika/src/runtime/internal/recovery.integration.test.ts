@@ -3,6 +3,9 @@
 // fixed dead operation that supervision needs, including file reopen and foreign ledger rows.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../../Id.test-support.ts";
@@ -42,7 +45,9 @@ const deadInput = {
 const dead = Dead.make({ process: A, program: "counter", name: "counter:1", ...deadInput });
 
 const processId = fcProcessIds;
+
 const text = fc.string({ minLength: 1, maxLength: 256 });
+
 const name = fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/);
 
 const input = fc
@@ -95,6 +100,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
     const started = yield* ProcessManager.use((p) =>
       p.start(first(`start:${i}`, h.names[i]!, { program: h.programs[i]!, hash: "build-a" }), from()),
     ).pipe(Effect.provide(layer()));
+
     current[i] = started.process;
   }
 
@@ -103,6 +109,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
       const p = yield* ProcessManager;
       const after = current[i]!;
       yield* p.exit(after, CRASHED, from());
+
       const started = yield* p.start(
         Start.cases.again.make({
           id: `restart:${after}`,
@@ -113,6 +120,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
         }),
         from(),
       );
+
       current[i] = started.process;
     }).pipe(Effect.provide(layer()));
 
@@ -123,7 +131,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
 
   for (const row of disk.rows()) {
     if (row._tag === "started" && row.by === BRAIN) {
-      starts.push(Schema.decodeUnknownSync(ProcessEvent.cases.started)(valueFor(row)));
+      starts.push(yield* Schema.decodeUnknownEffect(ProcessEvent.cases.started)(valueFor(row)));
     }
   }
 
@@ -135,6 +143,7 @@ describe("T319, next/ dead-letter identity", () => {
     await fc.assert(
       fc.asyncProperty(invalidInputs, (values) => {
         const disk = storage();
+
         return Effect.runPromise(
           Effect.gen(function* () {
             const processes = yield* ProcessManager;
@@ -192,11 +201,11 @@ describe("T319, next/ dead-letter identity", () => {
                 }
               }
 
-              const deadRows = w.disk.rows().filter((row) => row._tag === "dead");
+              const deadRows = Arr.filter(w.disk.rows(), (row) => row._tag === "dead");
               expect(deadRows).toHaveLength(w.starts.length);
 
               for (const row of deadRows) {
-                expect(row.body).toMatchObject({ process: row.stream.slice(0, -"/dead".length) });
+                expect(row.body).toMatchObject({ process: Str.slice(0, -"/dead".length)(row.stream) });
               }
             }),
           ),
@@ -214,7 +223,8 @@ describe("T319, next/ dead-letter identity", () => {
             const w = yield* seeded(h);
 
             for (const started of w.starts) {
-              const other = w.starts.find((s) => s.name !== started.name)!;
+              const other = Option.getOrThrow(Arr.findFirst(w.starts, (s) => s.name !== started.name));
+
               const forged = {
                 ...h.input,
                 _tag: "dead" as const,
@@ -222,6 +232,7 @@ describe("T319, next/ dead-letter identity", () => {
                 program: other.program,
                 name: other.name,
               };
+
               yield* ProcessManager.use((p) => p.dead(started.process, forged, from())).pipe(Effect.provide(w.layer()));
 
               if (h.reopen) {
@@ -248,6 +259,7 @@ describe("T319, next/ dead-letter identity", () => {
                   program: "ignored",
                   name: "ignored",
                 };
+
                 yield* ProcessManager.use((p) => p.dead(started.process, changed, from())).pipe(
                   Effect.provide(w.layer()),
                 );
@@ -438,8 +450,8 @@ describe("P34 coordination recovery", () => {
               const p = yield* ProcessManager;
               yield* p.exit(A, value, from());
               expect((yield* p.start(again(A), from())).process).toBe(B);
-              expect((yield* events("counter:1")).filter((r) => r._tag === "exited")).toHaveLength(1);
-              expect((yield* events("counter:1")).filter((r) => r._tag === "restarted")).toHaveLength(1);
+              expect(Arr.filter(yield* events("counter:1"), (r) => r._tag === "exited")).toHaveLength(1);
+              expect(Arr.filter(yield* events("counter:1"), (r) => r._tag === "restarted")).toHaveLength(1);
               expect(yield* read("client:window-a/inbox")).toMatchObject([
                 { body: { m: { ref: "watch-a", process: A, to: brain().recipient } } },
               ]);

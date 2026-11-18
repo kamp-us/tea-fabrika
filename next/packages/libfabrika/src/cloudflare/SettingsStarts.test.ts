@@ -1,8 +1,9 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema, Predicate } from "effect";
 import { Digest } from "effect/crypto";
+import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as Start from "../settings/Start.ts";
@@ -29,9 +30,11 @@ const open = Effect.gen(function* () {
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
   );
+
   const base = nodeSql(database);
   let reads = 0;
   let appends = 0;
+
   const sql: Sql = {
     ...base,
     exec: (query, ...args) => {
@@ -47,14 +50,18 @@ const open = Effect.gen(function* () {
       return base.exec(query, ...args);
     },
   };
+
   const context = yield* Layer.build(SettingsStartsLedger.layer(sql));
   const starts = Context.get(context, Starts);
   const known = new Set<string>();
+
   const record = Effect.fnUntraced(function* (input: StartsTest.Input) {
     const receipt = yield* starts.record(input);
     known.add(input.start);
+
     return receipt;
   });
+
   return {
     record,
     read: starts.read,
@@ -77,6 +84,7 @@ for (const kind of StartsTest.originKinds) {
           Effect.sync(() => new DatabaseSync(":memory:")),
           (owned) => Effect.sync(() => owned.close()),
         );
+
         const context = yield* Layer.build(SettingsStartsLedger.layer(nodeSql(db)));
         const starts = Context.get(context, Starts);
         const input = yield* StartsTest.input(recipe);
@@ -88,13 +96,14 @@ for (const kind of StartsTest.originKinds) {
           const moves: ReadonlyArray<"read" | "repeat" | "restore" | "poison"> = poisoned
             ? ["read", "repeat", "restore"]
             : ["read", "repeat", "poison"];
+
           const move: (typeof moves)[number] | undefined = moves[choice % moves.length];
 
           if (move === "poison" || move === "restore") {
             poisoned = move === "poison";
             // Simulate a saved entry received from storage, bypassing today's writer.
             db.prepare("UPDATE entries SET body = ? WHERE id = ?").run(
-              JSON.stringify({
+              Formatter.formatJson({
                 start: input.start,
                 settings: poisoned ? bad.settings : input.settings,
                 build: input.build,
@@ -137,6 +146,7 @@ for (const kind of StartsTest.originKinds) {
           const moves: ReadonlyArray<"read" | "record" | "restore" | "poison"> = poisoned
             ? ["read", "record", "restore"]
             : ["read", "record", "poison"];
+
           const move: (typeof moves)[number] | undefined = moves[choice % moves.length];
 
           if (move === "poison" || move === "restore") {
@@ -169,13 +179,19 @@ StartsTest.law(
         Effect.sync(() => new DatabaseSync(":memory:")),
         (owned) => Effect.sync(() => owned.close()),
       );
+
       const sql = nodeSql(db);
       let consumers = 0;
+
       const unexpected = () => {
         consumers++;
+
         return {};
       };
+
       const input = yield* StartsTest.input(recipe);
+
+      // SAFETY: the settings-start path reads only the object's name and its SQL handle; every other storage call fails the law through `unexpected`.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: only Alchemy can construct a full object state; these are its SQLite handles
       const ctx = {
         id: { name: input.name },
@@ -197,9 +213,11 @@ StartsTest.law(
           put: async () => unexpected(),
         },
       } as unknown as DurableObjectState;
+
+      // SAFETY: a settings start reads only INSTANCE from the env; each binding here fails the law through `unexpected` if it is reached.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: namespace doubles count any non-ledger work without workerd's nominal brands
       const env = {
-        INSTANCE: JSON.stringify(input),
+        INSTANCE: Formatter.formatJson(input),
         PROJECT: { getByName: unexpected },
         PROCESS: { getByName: unexpected },
         CONNECTION: { getByName: unexpected },
@@ -207,6 +225,7 @@ StartsTest.law(
         LOADER: { get: unexpected },
         MEASUREMENTS: { put: unexpected, head: unexpected },
       } as unknown as Env;
+
       const runtime = yield* Effect.acquireRelease(
         Effect.sync(() =>
           projectRuntime(ctx, env, {
@@ -217,6 +236,7 @@ StartsTest.law(
         ),
         (owned) => owned.disposeEffect,
       );
+
       const saved = new Map<string, Start.Receipt>();
       let current = input;
 
@@ -272,6 +292,7 @@ describe("L5 minimal start path, next/", () => {
 
         for (const choice of choices) {
           const before = driver.counts();
+
           const receipts = yield* Effect.forEach(Array.from({ length: 1 + (choice % 4) }), () => driver.record(input), {
             concurrency: "unbounded",
           });
@@ -295,13 +316,16 @@ describe("L5 minimal start path, next/", () => {
           Effect.sync(() => new DatabaseSync(":memory:")),
           (db) => Effect.sync(() => db.close()),
         );
+
         const base = nodeSql(database);
         const cause = new Error(message, { cause: { code: "SQLITE_FULL" } });
         let fail = false;
+
         const sql: Sql = {
           ...base,
           exec: exec(base, () => fail, cause),
         };
+
         const context = yield* Layer.build(SettingsStartsLedger.layer(sql));
         const starts = Context.get(context, Starts);
         const input = yield* StartsTest.input(recipe);
@@ -312,7 +336,7 @@ describe("L5 minimal start path, next/", () => {
         let lower: unknown = error.reason;
 
         for (let depth = 0; depth < 8 && lower !== cause; depth++) {
-          lower = typeof lower === "object" && lower !== null && "cause" in lower ? lower.cause : undefined;
+          lower = Predicate.isObjectOrArray(lower) && "cause" in lower ? lower.cause : undefined;
         }
 
         expect(lower).toBe(cause);
@@ -331,10 +355,13 @@ StartsTest.law(
       const lower = new Error(secret, { cause: { private: secret } });
       let reject = true;
       let calls = 0;
+
       const call = () => {
         calls++;
+
         return reject ? Promise.reject(lower) : Promise.resolve({ placed: true });
       };
+
       const context = yield* Layer.build(SettingsStartsRemote.layer({ settingsStart: call, settingsRead: call }));
       const starts = Context.get(context, Starts);
 
@@ -358,6 +385,71 @@ StartsTest.law(
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );
 
+// T1075 E99, next/. Effect shares a built layer by reference (effect/Layer.ts, MemoMap), and a
+// context that Layer.build answers carries its memo map on. So a second ledger built inside the
+// first one's context must still get Starts of its own, over its own Sql, as `fromLedger` answers
+// when each call makes a new layer. The walk records into either ledger and reads any known start
+// from either; every walk ends by reading the first start from the other ledger.
+// Plant: `fromLedger` as one shared `Layer.effect` value, so the second `layer(sql)` reuses the first.
+StartsTest.law(
+  "L18 two ledgers keep their own starts, even when one is built inside the other's context",
+  fc.tuple(StartsTest.recipe, fc.array(fc.nat(), { minLength: 1, maxLength: 20 })),
+  ([recipe, choices]) =>
+    Effect.gen(function* () {
+      const ledger = Effect.fnUntraced(function* () {
+        const db = yield* Effect.acquireRelease(
+          Effect.sync(() => new DatabaseSync(":memory:")),
+          (owned) => Effect.sync(() => owned.close()),
+        );
+
+        return yield* Layer.build(SettingsStartsLedger.layer(nodeSql(db)));
+      });
+
+      const first = yield* ledger();
+      const second = yield* ledger().pipe(Effect.provide(first));
+      const ledgers = [Context.get(first, Starts), Context.get(second, Starts)] as const;
+      const held = [new Map<string, Start.Receipt>(), new Map<string, Start.Receipt>()] as const;
+      let crossed = false;
+
+      const read = Effect.fnUntraced(function* (side: 0 | 1, start: string) {
+        const exit = yield* Effect.exit(ledgers[side].read(start));
+        const receipt = held[side].get(start);
+        crossed ||= receipt === undefined;
+        // A start this ledger holds reads back its receipt; one only the other holds is Missing here.
+        expect(exit).toMatchObject(
+          receipt === undefined
+            ? { cause: { reasons: [{ _tag: "Fail", error: { _tag: "StartsError", reason: { _tag: "Missing" } } }] } }
+            : { _tag: "Success", value: receipt },
+        );
+      });
+
+      const record = Effect.fnUntraced(function* (side: 0 | 1, index: number) {
+        const input = yield* StartsTest.input({ ...recipe, start: `${recipe.start}-${index}` });
+        held[side].set(input.start, yield* ledgers[side].record(input));
+
+        return input.start;
+      });
+
+      const opening = yield* record(0, 0);
+
+      for (const [index, choice] of choices.entries()) {
+        const side = choice % 2 === 0 ? 0 : 1;
+        const known = [...held[0].keys(), ...held[1].keys()];
+        const start = known[Math.floor(choice / 2) % known.length];
+
+        if (Math.floor(choice / 2) % 3 === 0 || start === undefined) {
+          yield* record(side, index + 1);
+        } else {
+          yield* read(side, start);
+        }
+      }
+
+      yield* read(1, opening);
+      // Coverage: a read of a start only the other ledger holds is reached on every walk.
+      expect(crossed, "a start one ledger holds was read from the other").toBe(true);
+    }).pipe(Effect.provide(Digest.layerWebCrypto)),
+);
+
 StartsTest.law(
   "L10 [secrets] nested lower failures stay out of checked RPC failures and start records",
   fc.tuple(StartsTest.recipe, StartsTest.sentinel, fc.array(fc.nat(), { minLength: 8, maxLength: 35 })),
@@ -367,12 +459,14 @@ StartsTest.law(
       const driver = yield* open;
       expect.hasAssertions();
       const lower = new Error(secret, { cause: { password: secret } });
+
       const reasons = [
         new Decode({ cause: lower }),
         new Refused({ cause: lower }),
         new Storage({ cause: lower }),
         new Unreachable({ cause: lower }),
       ];
+
       let placed = false;
 
       for (const choice of choices) {
@@ -383,11 +477,12 @@ StartsTest.law(
           const reason = Option.getOrThrow(
             Option.fromUndefinedOr(reasons[Math.floor(choice / moves.length) % reasons.length]),
           );
+
           const reply = yield* settingsReply(Effect.fail(new StartsError({ reason })));
           StartsTest.exclude(reply, secret);
-          expect(JSON.stringify(reply)).not.toContain("cause");
+          expect(Formatter.formatJson(reply)).not.toContain("cause");
         } else {
-          StartsTest.exclude(JSON.stringify(input), secret);
+          StartsTest.exclude(Formatter.formatJson(input), secret);
           const receipt = yield* move === "read" ? driver.read(input.start) : driver.record(input);
           placed = true;
           StartsTest.exclude(receipt, secret);

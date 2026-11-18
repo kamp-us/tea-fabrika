@@ -10,6 +10,10 @@
 // another process collect.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { type Executor, type Request, Result, State } from "../Task.ts";
 import {
@@ -28,10 +32,13 @@ import { task } from "./task.ts";
 const RUNS = { seed: 119120, numRuns: 100 };
 
 type Model = (typeof task)["model"]["Type"];
+
 type Msg = (typeof task)["msg"]["Type"];
+
 type Phase = "absent" | "requested" | "assigned" | "started" | "finished" | "collected";
 
 const init = (): Model => task.init(null, undefined)[0];
+
 const step = (model: Model, msg: Msg): Model => applyCell(task, model, msg)[0];
 
 /** What the fold knows, from its own Msgs only. */
@@ -57,6 +64,7 @@ const Cell = fc.record({
   stranger: fcTypeId("process"),
   letter: fc.stringMatching(/^[a-z0-9]{1,8}$/),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const Tape = fc.uniqueArray(fcFingerprint, { minLength: 3, maxLength: 3 }).chain((keys) =>
@@ -67,6 +75,7 @@ const Tape = fc.uniqueArray(fcFingerprint, { minLength: 3, maxLength: 3 }).chain
     cells: fc.array(Cell, { minLength: 8, maxLength: 40, size: "max" }),
   }),
 );
+
 type Tape = typeof Tape extends fc.Arbitrary<infer A> ? A : never;
 
 type Move =
@@ -96,6 +105,7 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
   const s = world.phase;
   const done = s === "finished" || s === "collected";
   const owned = s === "assigned" || s === "started" || done;
+
   const can: Record<Move, boolean> = {
     request_new: s === "absent",
     early: s === "absent",
@@ -119,7 +129,8 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     collect_other: done,
     collect_early: !done,
   };
-  return moves.filter((move) => can[move]);
+
+  return Arr.filter(moves, (move) => can[move]);
 };
 
 /** The state the oracle expects, built from the world through the schema's own constructors. */
@@ -160,7 +171,7 @@ const able = (request: Request, cell: Cell, base: Executor): Executor => ({
 });
 
 const near = (execution: string, variant: number): string =>
-  choose([`${execution}x`, execution.slice(0, -1) || "e", `other-${execution}`], variant);
+  choose([`${execution}x`, Function.pipe(execution, Str.slice(0, -1)) || "e", `other-${execution}`], variant);
 
 type Expect = { readonly answer: "accepted" | "repeated" | "refused"; readonly reason?: string };
 
@@ -181,37 +192,50 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
         { type: "start", execution: cell.execution },
         { type: "finish", execution: cell.execution, result: cell.result },
       ];
+
       return [choose(msgs, cell.variant), world, refuse("not_found")];
     }
+
     case "request_equal":
       return [{ type: "request", request: copied(request) }, world, same];
     case "request_changed": {
       const changed = changedRequest(request, cell.variant, choose(tape.requests, cell.variant + 1));
+
       return [{ type: "request", request: changed }, world, refuse("conflict")];
     }
+
     case "take_ok": {
       const executor = able(request, cell, base);
       const next = { ...world, phase: "assigned" as const, executor, execution: cell.execution };
+
       return [{ type: "take", executor: copied(executor), execution: cell.execution }, next, { answer: "accepted" }];
     }
+
     case "take_again": {
       // The take reply was lost: the same key on a new connection proposes a new identity, and keeps the first.
       const executor = able(request, cell, base);
+
       return [{ type: "take", executor, execution: near(execution, cell.variant) }, world, same];
     }
+
     case "take_other": {
       const key = choose(
-        tape.keys.filter((k) => k !== request.target),
+        Arr.filter(tape.keys, (k) => k !== request.target),
         cell.variant,
       );
+
       const executor = { ...able(request, cell, base), key, has: [...CAPABILITIES] };
+
       return [{ type: "take", executor, execution: cell.execution }, world, refuse("not_target")];
     }
+
     case "take_lacking": {
       const missing = choose(request.needs, cell.variant);
-      const executor = { ...able(request, cell, base), has: CAPABILITIES.filter((c) => c !== missing) };
+      const executor = { ...able(request, cell, base), has: Arr.filter(CAPABILITIES, (c) => c !== missing) };
+
       return [{ type: "take", executor, execution: cell.execution }, world, refuse("lacks_capability")];
     }
+
     case "out_of_order": {
       // Before a take nothing may start or finish; an assigned task may not finish, even by its own execution.
       const msgs: ReadonlyArray<Msg> =
@@ -221,8 +245,10 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
               { type: "start", execution: cell.execution },
               { type: "finish", execution: cell.execution, result: cell.result },
             ];
+
       return [choose(msgs, cell.variant), world, refuse("wrong_state")];
     }
+
     case "start_ok":
       return [{ type: "start", execution: `${execution}` }, { ...world, phase: "started" }, { answer: "accepted" }];
     case "start_again":
@@ -231,8 +257,10 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
       return [{ type: "start", execution: near(execution, cell.variant) }, world, refuse("wrong_execution")];
     case "finish_ok": {
       const next = { ...world, phase: "finished" as const, result: cell.result };
+
       return [{ type: "finish", execution, result: copied(cell.result) }, next, { answer: "accepted" }];
     }
+
     case "finish_equal":
       return [{ type: "finish", execution, result: copied(world.result ?? cell.result) }, world, same];
     case "finish_other": {
@@ -240,8 +268,10 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
         JSON.stringify(cell.result) === JSON.stringify(world.result)
           ? Result.cases.exited.make({ code: 1, version: `${JSON.stringify(cell.result)}-other` })
           : cell.result;
+
       return [{ type: "finish", execution, result: other }, world, refuse("conflict")];
     }
+
     case "finish_wrong":
       return [
         { type: "finish", execution: near(execution, cell.variant), result: cell.result },
@@ -251,26 +281,33 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
     case "collect_ok": {
       const collection = { process: request.process, letter: `${request.id}/answer` };
       const next = { ...world, phase: "collected" as const, collection };
+
       return [{ type: "collect", collection: copied(collection) }, next, { answer: "accepted" }];
     }
+
     case "collect_again":
       return [{ type: "collect", collection: copied(world.collection ?? { process: "", letter: "" }) }, world, same];
     case "collect_conflict": {
       // The same process names another letter: one result goes in one answer letter.
       const collection = { process: request.process, letter: `${request.id}/answer/${cell.letter}` };
+
       return [{ type: "collect", collection }, world, refuse("conflict")];
     }
+
     case "collect_other": {
       // Another process generation, such as the successor of a restart, never takes this result.
       const process = cell.stranger === request.process ? `${request.process}x` : cell.stranger;
+
       return [
         { type: "collect", collection: { process, letter: `${request.id}/answer` } },
         world,
         refuse("wrong_process"),
       ];
     }
+
     case "collect_early": {
       const collection = { process: request.process, letter: `${request.id}/answer` };
+
       return [{ type: "collect", collection }, world, refuse(world.phase === "absent" ? "not_found" : "wrong_state")];
     }
   }
@@ -317,7 +354,7 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
           world = next;
           expect(model.state, `${move}: the state the plan's table gives`).toEqual(expected(world));
           // L7 on every prefix: folding only the committed events from a fresh init is the same task.
-          const replayed = accepted.reduce(step, init());
+          const replayed = Arr.reduce(accepted, init(), step);
           expect(replayed.state, `${move}: the committed events fold back to the same task`).toEqual(model.state);
         }
       }),
@@ -350,7 +387,7 @@ describe("P39 slice 1: the task machine", () => {
       "take_ok",
       "take_other",
       "early",
-      ...(["assigned", "started", "finished"] as const).flatMap((phase) => [
+      ...Arr.flatMap(["assigned", "started", "finished"] as const, (phase) => [
         `take_again@${phase}` as const,
         `take_lacking@${phase}` as const,
       ]),

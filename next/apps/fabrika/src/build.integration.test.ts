@@ -3,21 +3,12 @@
 // failure must preserve every last-good byte. P16: the app's build hands its selections to
 // libfabrika's one-file build, so only brain.mjs is published, and every failure is BuildError
 // with its `reason`.
-import {
-  chmodSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
+import { Effect, FileSystem, Layer, Path, PlatformError, Array as Arr, String as Str, Record as Rec } from "effect";
+
+import { Digest } from "effect/crypto";
+import { Base64 } from "effect/encoding";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,6 +18,18 @@ const homes: Array<string> = [];
 const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
   Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
 
+// The real disk and paths, through Effect's FileSystem and Path. A law's own setup steps run through
+// `disk`, so each is one awaited Effect.
+const { fs, path } = await runNode(
+  Effect.gen(function* () {
+    return { fs: yield* FileSystem.FileSystem, path: yield* Path.Path };
+  }),
+);
+
+const disk = <A>(step: Effect.Effect<A, PlatformError.PlatformError>) => Effect.runPromise(step);
+
+const { join, relative, resolve } = path;
+
 const discovery = (files: Array<string>, seen?: { calls: number }) =>
   Layer.effect(
     FileSystem.FileSystem,
@@ -34,7 +37,7 @@ const discovery = (files: Array<string>, seen?: { calls: number }) =>
       ...fs,
       glob: () =>
         Effect.sync(() => {
-          if (seen) {
+          if (seen !== undefined) {
             seen.calls++;
           }
 
@@ -45,19 +48,25 @@ const discovery = (files: Array<string>, seen?: { calls: number }) =>
 
 const refused = (reason: string) => ({ _tag: "Failure", failure: { _tag: "BuildError", reason } });
 
+/** Removes each of these temp homes, one after another. */
+const removeAll = (gone: ReadonlyArray<string>) =>
+  disk(Effect.forEach(gone, (h) => fs.remove(h, { recursive: true, force: true }), { concurrency: 1, discard: true }));
+
 afterEach(() => {
-  for (const h of homes.splice(0)) {
-    rmSync(h, { recursive: true, force: true });
-  }
+  const gone = homes.splice(0);
+
+  return removeAll(gone);
 });
 
-const home = () => {
-  const h = mkdtempSync(join(tmpdir(), "p12-b-"));
+const home = async () => {
+  const h = await disk(fs.makeTempDirectory({ prefix: "p12-b-" }));
   homes.push(h);
+
   return h;
 };
 
 const generated = fc.record({ name: fc.stringMatching(/^[a-z][a-z0-9]{0,12}$/), label: fc.string() });
+
 const chosen = { name: "view", label: "view-built" };
 
 const law = (name: string, check: (input: ReturnType<typeof generated.generate>["value"]) => Promise<void>) =>
@@ -67,26 +76,29 @@ const law = (name: string, check: (input: ReturnType<typeof generated.generate>[
         try {
           await check(input);
         } finally {
-          for (const h of homes.splice(0)) {
-            rmSync(h, { recursive: true, force: true });
-          }
+          await removeAll(homes.splice(0));
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), examples: [[chosen]] },
     );
   });
 
-const snapshot = (dir: string): ReadonlyArray<readonly [string, string]> =>
-  readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter((f) => f.isFile())
-    .map(
-      (f) =>
-        [
-          relative(dir, join(f.parentPath, f.name)),
-          readFileSync(join(f.parentPath, f.name)).toString("base64"),
-        ] as const,
-    )
-    .sort(([a], [b]) => a.localeCompare(b));
+/** Every file under `dir`, by its path inside `dir`, with its bytes in base64, in path order. */
+const snapshot = Effect.fnUntraced(function* (dir: string) {
+  const files: Array<readonly [string, string]> = [];
+
+  for (const name of yield* fs.readDirectory(dir, { recursive: true })) {
+    const file = join(dir, name);
+
+    if ((yield* fs.stat(file)).type === "File") {
+      files.push([name, Base64.encode(yield* fs.readFile(file))] as const);
+    }
+  }
+
+  return files.sort(([a], [b]) => Str.localeCompare(b)(a));
+});
+
+type Snapshot = Effect.Success<ReturnType<typeof snapshot>>;
 
 const clean = "export const Tip = (p: {text: string}) => <b>{p.text}</b>;";
 
@@ -103,63 +115,79 @@ describe("P12 Rolldown build", () => {
   for (const [plant, source] of plants) {
     law(`every reachable TSX input passes the Compiler check: ${plant}`, async ({ name }) => {
       const { build } = await import("./build.ts");
-      const folder = home(),
+
+      const folder = await home(),
         file = join(folder, `${name}.tsx`),
         program = join(folder, "program.ts"),
         out = join(folder, "dist");
-      mkdirSync(join(folder, "node_modules"));
-      symlinkSync(
-        resolve(import.meta.dirname, "../../../../node_modules/.pnpm/react@19.3.1/node_modules/react"),
-        join(folder, "node_modules/react"),
-      );
-      writeFileSync(file, clean);
-      writeFileSync(
-        program,
-        `import {Tip} from "./${name}.tsx"; import {counter} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))}; export const program = {...counter, fixture: Tip};`,
+
+      await disk(
+        Effect.gen(function* () {
+          yield* fs.makeDirectory(join(folder, "node_modules"));
+          yield* fs.symlink(
+            resolve(import.meta.dirname, "../../../../node_modules/.pnpm/react@19.3.1/node_modules/react"),
+            join(folder, "node_modules/react"),
+          );
+          yield* fs.writeFileString(file, clean);
+          yield* fs.writeFileString(
+            program,
+            `import {Tip} from "./${name}.tsx"; import {counter} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))}; export const program = {...counter, fixture: Tip};`,
+          );
+        }),
       );
       const options = { out, files: [], ledger: [], programs: { "fabrika/counter": program } };
       await runNode(build(options));
-      const before = snapshot(out);
-      writeFileSync(file, source);
+      const before = await disk(snapshot(out));
+      await disk(fs.writeFileString(file, source));
       const failed = await runNode(Effect.result(build(options)));
       expect(failed, "reachable input is checked even with files: []").toMatchObject(refused("compiler"));
-      expect(snapshot(out)).toEqual(before);
+      expect(await disk(snapshot(out))).toEqual(before);
     });
   }
 
   law("Compiler ledger rows use the same repo-relative paths as discovered inputs", async ({ name }) => {
     const { build } = await import("./build.ts");
-    const folder = home(),
+
+    const folder = await home(),
       file = join(folder, `${name}.tsx`),
       root = resolve(import.meta.dirname, "../../../..");
-    writeFileSync(file, 'export const Tip = () => {"use no memo"; return <b>approved</b>;}');
-    const path = relative(root, file);
+
+    await disk(fs.writeFileString(file, 'export const Tip = () => {"use no memo"; return <b>approved</b>;}'));
+    const inRepo = relative(root, file);
+
     const result = await runNode(
       Effect.exit(
         build({
           out: join(folder, "dist"),
-          ledger: [{ file: path, fn: "Tip", reason: "fixture approval" }],
+          ledger: [{ file: inRepo, fn: "Tip", reason: "fixture approval" }],
         }),
-      ).pipe(Effect.provide(discovery([path]))),
+      ).pipe(Effect.provide(discovery([inRepo]))),
     );
+
     expect(result).toMatchObject({ _tag: "Success" });
   });
   law(
     "default discovery checks a view without publishing siblings and custom modules export program",
     async ({ name, label }) => {
       const { build } = await import("./build.ts");
-      const parent = home(),
+
+      const parent = await home(),
         folder = join(parent, "owned"),
         view = join(folder, `${name}.tsx`),
         program = join(folder, "program.ts"),
         out = join(folder, "dist");
-      mkdirSync(folder);
-      writeFileSync(view, `export const label = ${JSON.stringify(label)};`);
-      writeFileSync(
-        program,
-        `export {counter as program} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))};`,
+
+      await disk(
+        Effect.gen(function* () {
+          yield* fs.makeDirectory(folder);
+          yield* fs.writeFileString(view, `export const label = ${JSON.stringify(label)};`);
+          yield* fs.writeFileString(
+            program,
+            `export {counter as program} from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/counter/src/program.ts"))};`,
+          );
+          yield* fs.chmod(parent, 0o500);
+        }),
       );
-      chmodSync(parent, 0o500);
 
       try {
         const built = await runNode(
@@ -167,51 +195,58 @@ describe("P12 Rolldown build", () => {
             Effect.provide(discovery([relative(resolve(import.meta.dirname, "../../../.."), view)])),
           ),
         );
+
         expect(built.programs["fabrika/counter"]?.hash).toMatch(/^[a-f0-9]{64}$/);
         // P16 replaces P12's loose view files: the one published file is the brain.
-        expect(readdirSync(out)).toEqual(["brain.mjs"]);
+        expect(await disk(fs.readDirectory(out))).toEqual(["brain.mjs"]);
         // Discovery must still reach the real Compiler.
-        const before = snapshot(out);
-        writeFileSync(view, plants[1][1]);
+        const before = await disk(snapshot(out));
+        await disk(fs.writeFileString(view, plants[1][1]));
+
         const failed = await runNode(
           Effect.result(build({ out, programs: { "fabrika/counter": program } })).pipe(
             Effect.provide(discovery([relative(resolve(import.meta.dirname, "../../../.."), view)])),
           ),
         );
+
         expect(failed, "default discovery must check its TSX inputs").toMatchObject(refused("compiler"));
-        expect(snapshot(out)).toEqual(before);
+        expect(await disk(snapshot(out))).toEqual(before);
       } finally {
-        chmodSync(parent, 0o700);
+        await disk(fs.chmod(parent, 0o700));
       }
     },
   );
   law("Compiler plant: calling compile without check publishes a skipped or impure rebuild", async ({ name }) => {
     const { build } = await import("./build.ts");
-    const h = home(),
+
+    const h = await home(),
       file = join(h, `${name}.tsx`),
       out = join(h, "dist");
-    writeFileSync(file, clean);
+
+    await disk(fs.writeFileString(file, clean));
     const options = { out, files: [file], ledger: [] };
     const good = await runNode(build(options));
     expect(good).toMatchObject({ build: expect.any(String) });
-    const before = snapshot(out);
+    const before = await disk(snapshot(out));
     expect(before.length).toBeGreaterThan(0);
 
     for (const [name, source] of plants) {
-      writeFileSync(file, source);
+      await disk(fs.writeFileString(file, source));
       const failed = await runNode(Effect.result(build(options)));
       expect(failed, name).toMatchObject(refused("compiler"));
-      expect(snapshot(out), name).toEqual(before);
+      expect(await disk(snapshot(out)), name).toEqual(before);
     }
   });
   law("Compiler plant: checking transformed files misses a stale ledger row or deleted input", async ({ name }) => {
     const { build } = await import("./build.ts");
-    const h = home(),
+
+    const h = await home(),
       file = join(h, `${name}.tsx`),
       out = join(h, "dist");
-    writeFileSync(file, clean);
+
+    await disk(fs.writeFileString(file, clean));
     await runNode(build({ out, files: [file], ledger: [] }));
-    const before = snapshot(out);
+    const before = await disk(snapshot(out));
 
     for (const stale of [file, join(h, "gone.tsx")]) {
       const result = await runNode(
@@ -223,20 +258,21 @@ describe("P12 Rolldown build", () => {
           }),
         ),
       );
+
       expect(result).toMatchObject(refused("compiler"));
-      expect(snapshot(out)).toEqual(before);
+      expect(await disk(snapshot(out))).toEqual(before);
     }
   });
   law(
     "sealed program plant: generated source must execute without host imports or ambient bindings",
     async ({ name }) => {
       const { build } = await import("./build.ts");
-      const built = await runNode(build({ out: join(home(), "dist") }));
+      const built = await runNode(build({ out: join(await home(), "dist") }));
       expect(built.brain).toEqual(expect.any(String));
       // P40: the app's own selections build under qualified names, the core counter as `fabrika/counter`.
-      expect(Object.keys(built.programs).length).toBeGreaterThan(0);
+      expect(Rec.keys(built.programs).length).toBeGreaterThan(0);
 
-      for (const key of Object.keys(built.programs)) {
+      for (const key of Rec.keys(built.programs)) {
         expect(key, "one pack and one program segment").toMatch(/^[A-Za-z_][\w-]*\/[A-Za-z_][\w-]*$/);
       }
 
@@ -245,8 +281,9 @@ describe("P12 Rolldown build", () => {
         source: expect.any(String),
       });
       // The native Worker entry may import cloudflare:workers. Its execution is checked on workerd.
-      const file = join(home(), `${name}.mjs`);
-      writeFileSync(file, built.programs["fabrika/counter"]!.source);
+      const file = join(await home(), `${name}.mjs`);
+      await disk(fs.writeFileString(file, built.programs["fabrika/counter"]!.source));
+
       const bundle = await rolldown({
         input: file,
         platform: "browser",
@@ -255,7 +292,7 @@ describe("P12 Rolldown build", () => {
 
       try {
         const generated = await bundle.generate({ format: "esm" });
-        expect(generated.output.some((o) => o.type === "chunk" && o.exports.includes("default"))).toBe(true);
+        expect(Arr.some(generated.output, (o) => o.type === "chunk" && o.exports.includes("default"))).toBe(true);
       } finally {
         await bundle.close();
       }
@@ -265,51 +302,69 @@ describe("P12 Rolldown build", () => {
   );
   law("discovery keeps program TSX and leaves out test files and installed dependencies", async ({ name }) => {
     const { build } = await import("./build.ts");
-    const folder = home(),
+
+    const folder = await home(),
       out = join(folder, "dist"),
       root = resolve(import.meta.dirname, "../../../.."),
       good = join(folder, `${name}.tsx`),
       test = join(folder, `${name}.test.tsx`),
       dependency = join(folder, "node_modules", `${name}.tsx`);
-    mkdirSync(join(folder, "node_modules"));
-    writeFileSync(good, clean);
-    writeFileSync(test, "this is invalid TSX");
-    writeFileSync(dependency, "this is invalid TSX");
+
+    await disk(
+      Effect.gen(function* () {
+        yield* fs.makeDirectory(join(folder, "node_modules"));
+        yield* fs.writeFileString(good, clean);
+        yield* fs.writeFileString(test, "this is invalid TSX");
+        yield* fs.writeFileString(dependency, "this is invalid TSX");
+      }),
+    );
     const seen = { calls: 0 };
+
     const built = await runNode(
       build({ out, ledger: [] }).pipe(
         Effect.provide(
           discovery(
-            [good, test, dependency].map((file) => relative(root, file)),
+            Arr.map([good, test, dependency], (file) => relative(root, file)),
             seen,
           ),
         ),
       ),
     );
+
     expect(seen.calls, "default discovery ran").toBeGreaterThan(0);
     expect(built.brain).toBe(join(out, "brain.mjs"));
-    expect(readFileSync(built.brain, "utf8").length).toBeGreaterThan(0);
+    expect((await disk(fs.readFileString(built.brain))).length).toBeGreaterThan(0);
     // Plant: the same good file, refused, still fails through discovery.
-    writeFileSync(good, plants[0][1]);
+    await disk(fs.writeFileString(good, plants[0][1]));
+
     const failed = await runNode(
       Effect.result(build({ out, ledger: [] })).pipe(Effect.provide(discovery([relative(root, good)]))),
     );
+
     expect(failed).toMatchObject(refused("compiler"));
   });
   law("discovery plant: a disk failure is a typed BuildError and preserves the last good file", async ({ label }) => {
     const { build } = await import("./build.ts");
-    const folder = home(),
+
+    const folder = await home(),
       out = join(folder, "dist");
-    mkdirSync(out);
-    writeFileSync(join(out, "brain.mjs"), label);
-    const before = snapshot(out);
+
+    await disk(
+      Effect.gen(function* () {
+        yield* fs.makeDirectory(out);
+        yield* fs.writeFileString(join(out, "brain.mjs"), label);
+      }),
+    );
+    const before = await disk(snapshot(out));
     let calls = 0;
+
     const failing = Layer.effect(
       FileSystem.FileSystem,
       Effect.map(FileSystem.FileSystem, (fs) => ({
         ...fs,
         glob: () => {
           calls++;
+
           return Effect.fail(
             PlatformError.systemError({
               _tag: "PermissionDenied",
@@ -321,11 +376,12 @@ describe("P12 Rolldown build", () => {
         },
       })),
     );
+
     // Effect.result catches typed failures only. A defect escapes this law.
     const result = await runNode(Effect.result(build({ out, ledger: [] })).pipe(Effect.provide(failing)));
     expect(calls).toBeGreaterThan(0);
     expect(result).toMatchObject(refused("read"));
-    expect(snapshot(out)).toEqual(before);
+    expect(await disk(snapshot(out))).toEqual(before);
   });
 });
 
@@ -339,10 +395,11 @@ describe("P12 Rolldown build", () => {
 // a good build it builds again or plants one disk failure (discovery, or the publication's write), and
 // the law reads the result against the last good bytes.
 describe("P14 slice 2, L18: the app's build carries the tab", () => {
-  const sha = async (text: string) => {
-    const { createHash } = await import("node:crypto");
-    return createHash("sha256").update(text).digest("hex");
-  };
+  const sha = (text: string) =>
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    );
+
   const failing = (method: "glob" | "writeFileString") =>
     Layer.effect(
       FileSystem.FileSystem,
@@ -365,39 +422,43 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
     { timeout: 900_000 },
     async () => {
       const { build } = await import("./build.ts");
+
       // A custom property the design package's own token sheet declares.
       const token = /(--[a-z][a-z0-9-]*)\s*:/.exec(
-        readFileSync(resolve(import.meta.dirname, "../../../../packages/fabrika-design/src/tokens.css"), "utf8"),
+        await disk(
+          fs.readFileString(resolve(import.meta.dirname, "../../../../packages/fabrika-design/src/tokens.css")),
+        ),
       )![1]!;
+
       const seen = { built: 0, failed: 0 };
       await fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 3 }), (picks) =>
           runNode(
             Effect.scoped(
               Effect.gen(function* () {
-                const folder = yield* Effect.acquireRelease(
-                  Effect.sync(() => mkdtempSync(join(tmpdir(), "p14-build-"))),
-                  (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
-                );
+                const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p14-build-" });
+
                 const out = join(folder, "dist");
-                let good: ReturnType<typeof snapshot> | null = null;
+                let good: Snapshot | null = null;
 
                 for (const pick of picks) {
                   const moves =
                     good === null ? (["build"] as const) : (["build", "glob", "writeFileString", "compiler"] as const);
+
                   const move = moves[pick % moves.length]!;
 
                   if (move !== "build") {
                     const source = join(folder, "view.tsx");
 
                     if (move === "compiler") {
-                      writeFileSync(source, `export const View = () => <p>{Date.now() + ${pick}}</p>;`);
+                      yield* fs.writeFileString(source, `export const View = () => <p>{Date.now() + ${pick}}</p>;`);
                     }
 
                     const attempt =
                       move === "compiler"
                         ? build({ out, ledger: [], files: [source] })
                         : build({ out, ledger: [] }).pipe(Effect.provide(failing(move)));
+
                     const result = yield* Effect.result(attempt);
                     seen.failed++;
                     expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "BuildError" } });
@@ -406,7 +467,7 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
                       expect(result).toMatchObject(refused("compiler"));
                     }
 
-                    expect(snapshot(out), `a ${move} failure changed the published output`).toEqual(good);
+                    expect(yield* snapshot(out), `a ${move} failure changed the published output`).toEqual(good);
                     continue;
                   }
 
@@ -418,15 +479,15 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
                   expect(script, "/window.js serves the script").toBeDefined();
                   expect(page!.type).toBe("text/html; charset=utf-8");
                   expect(script!.type).toBe("text/javascript; charset=utf-8");
-                  expect(page!.hash).toBe(yield* Effect.promise(() => sha(page!.body)));
-                  expect(script!.hash).toBe(yield* Effect.promise(() => sha(script!.body)));
+                  expect(page!.hash).toBe(yield* sha(page!.body));
+                  expect(script!.hash).toBe(yield* sha(script!.body));
                   expect(page!.body, "the page loads the script").toContain("/window.js");
                   expect(script!.body, "the tab bundle names no Node module").not.toMatch(/["'`]node:[a-z]/);
                   // Manti's defaults precede our token mapping (tier-1-detail.md, Styling).
-                  const styles = [...page!.body.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]!);
+                  const styles = Arr.map([...Str.matchAll(/<style>([\s\S]*?)<\/style>/g)(page!.body)], (m) => m[1]!);
                   expect(styles, "the tab's three stylesheets").toHaveLength(3);
                   expect(styles[1], "the design package's tokens follow Manti's styles").toContain(token);
-                  good = snapshot(out);
+                  good = yield* snapshot(out);
                 }
               }),
             ),

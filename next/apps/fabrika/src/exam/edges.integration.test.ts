@@ -6,11 +6,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema, Tracer } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Exit, Schema, Tracer } from "effect";
 import * as fc from "fast-check";
+
 import { asks } from "./edges.ts";
 
 const PRODUCT = "next/packages/libfabrika/src/data/project.ts";
+
 const OTHER = "next/packages/libfabrika/src/data/ledger.ts";
 
 const EDGE = "// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object answers a Promise";
@@ -18,12 +20,13 @@ const EDGE = "// oxlint-disable-next-line fabrika/no-promises -- edge: a Durable
 const RUN_EDGE = "// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the platform calls it";
 
 const CALL = "export const a = Effect.tryPromise(() => p);";
+
 const PRELUDE = 'import {Effect} from "effect";\ndeclare const p: Promise<number>;';
 
-const file = (...lines: ReadonlyArray<string>) => [PRELUDE, ...lines, ""].join("\n");
+const file = (...lines: ReadonlyArray<string>) => Arr.join([PRELUDE, ...lines, ""], "\n");
 
 const run = (base: Record<string, string>, head: Record<string, string>) =>
-  Effect.runSync(asks(new Map(Object.entries(base)), new Map(Object.entries(head))));
+  Effect.runSync(asks(new Map(Rec.toEntries(base)), new Map(Rec.toEntries(head))));
 
 describe("asks", () => {
   it.effect.prop(
@@ -31,7 +34,7 @@ describe("asks", () => {
     {
       generated: Schema.NonEmptyString.check(
         Schema.isPattern(/^[^\r\n]+$/),
-        Schema.makeFilter((s) => s.trim() === s),
+        Schema.makeFilter((s) => Str.trim(s) === s),
       ),
     },
     ({ generated }) =>
@@ -42,7 +45,7 @@ describe("asks", () => {
             expect(
               run(
                 { [PRODUCT]: file() },
-                { [PRODUCT]: file(EDGE.replace("a Durable Object answers a Promise", value), CALL) },
+                { [PRODUCT]: file(pipe(EDGE, Str.replace("a Durable Object answers a Promise", value)), CALL) },
               ),
             ).toEqual([
               {
@@ -75,7 +78,8 @@ describe("asks", () => {
         [OTHER]: file(EDGE, CALL),
       },
     );
-    expect(found.map((e) => [e.path, e.line])).toEqual([
+
+    expect(Arr.map(found, (e) => [e.path, e.line])).toEqual([
       [OTHER, 3],
       [PRODUCT, 5],
       [PRODUCT, 7],
@@ -83,7 +87,7 @@ describe("asks", () => {
   });
 
   it("asks again when an old edge's reason is reworded, or its file renamed", () => {
-    const reworded = EDGE.replace("answers", "must answer");
+    const reworded = pipe(EDGE, Str.replace("answers", "must answer"));
     expect(run({ [PRODUCT]: file(EDGE, CALL) }, { [PRODUCT]: file(reworded, CALL) })).toHaveLength(1);
     expect(run({ [PRODUCT]: file(EDGE, CALL) }, { [OTHER]: file(EDGE, CALL) })).toHaveLength(1);
   });
@@ -107,13 +111,16 @@ describe("asks", () => {
     fc.assert(
       fc.property(fc.array(fc.boolean(), { minLength: 1, maxLength: 12 }), (old) => {
         const spans: Array<Tracer.NativeSpan> = [];
+
         const tracer = Tracer.make({
           span(options) {
             const span = new Tracer.NativeSpan(options);
             spans.push(span);
+
             return span;
           },
         });
+
         const before = new Map<string, string>();
         const after = new Map<string, string>();
 
@@ -129,10 +136,10 @@ describe("asks", () => {
         }
 
         const found = Effect.runSync(asks(before, after).pipe(Effect.withTracer(tracer)));
-        expect(found.map((edge) => edge.path).sort()).toEqual(
-          old.flatMap((present, index) => (present ? [] : [`next/test-${index}.ts`])).sort(),
+        expect(Arr.map(found, (edge) => edge.path).sort()).toEqual(
+          Arr.flatMap(old, (present, index) => (present ? [] : [`next/test-${index}.ts`])).sort(),
         );
-        expect(spans.map((s) => s.name)).toEqual(["exam.asks"]);
+        expect(Arr.map(spans, (s) => s.name)).toEqual(["exam.asks"]);
         expect(spans[0]!.status._tag).toBe("Ended");
       }),
       { seed: 119120, numRuns: 40 },
@@ -144,6 +151,7 @@ describe("edges.ts, as CI runs it", () => {
   const { GITHUB_STEP_SUMMARY: _summary, ...env } = process.env;
   const quiet = { ...env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
   const script = join(import.meta.dirname, "edges.ts");
+
   // Each test builds its own repository in its own scope, which removes it when the test ends (0061).
   const scenario = Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "edges-"))),
@@ -158,15 +166,17 @@ describe("edges.ts, as CI runs it", () => {
         });
 
         if (out.status !== 0) {
-          throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
+          throw new Error(`git ${Arr.join(args, " ")}: ${out.stderr}`);
         }
 
-        return out.stdout.trim();
+        return Str.trim(out.stdout);
       };
+
       const put = (path: string, text: string) => {
         mkdirSync(dirname(join(repo, path)), { recursive: true });
         writeFileSync(join(repo, path), text);
       };
+
       const edges = (base: string, extra: Record<string, string> = {}) =>
         spawnSync(process.execPath, [script, "--base", base], {
           cwd: repo,
@@ -183,6 +193,7 @@ describe("edges.ts, as CI runs it", () => {
       put(OTHER, file(RUN_EDGE, "export const b = 1;"));
       git("add", ".");
       git("commit", "-q", "-m", "head");
+
       return { repo, put, edges, base };
     }),
   );
@@ -193,7 +204,7 @@ describe("edges.ts, as CI runs it", () => {
       const out = edges(base);
       expect(out.stderr).toBe("");
       expect(out.status).toBe(0);
-      expect(out.stdout.trim().split("\n")).toEqual([
+      expect(Str.split(Str.trim(out.stdout), "\n")).toEqual([
         "Edges this pull request adds, for the owner:",
         `${OTHER}:3  fabrika/no-effect-run-outside-edge  edge: the platform calls it  [ok] [no]`,
         `${PRODUCT}:5  fabrika/no-promises  edge: a Durable Object answers a Promise  [ok] [no]`,
@@ -204,7 +215,7 @@ describe("edges.ts, as CI runs it", () => {
   it.effect("in GitHub Actions, notes each line of the diff and writes the step summary", () =>
     Effect.gen(function* () {
       const { repo, edges, base } = yield* scenario;
-      const summary = join(repo, "..", `${repo.split("/").pop()}-summary.md`);
+      const summary = join(repo, "..", `${Str.split(repo, "/").pop()}-summary.md`);
       const out = edges(base, { GITHUB_STEP_SUMMARY: summary });
       expect(out.status).toBe(0);
       expect(out.stdout).toContain(
@@ -220,7 +231,7 @@ describe("edges.ts, as CI runs it", () => {
       const { edges } = yield* scenario;
       const out = edges("HEAD");
       expect(out.status).toBe(0);
-      expect(out.stdout.trim()).toBe("No new edge comments in this pull request.");
+      expect(Str.trim(out.stdout)).toBe("No new edge comments in this pull request.");
     }),
   );
 
