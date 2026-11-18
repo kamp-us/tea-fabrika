@@ -96,6 +96,7 @@ const Fixture = Schema.Struct({
 
 const diagnostic = (key: Request["case"], error: typeof ErrorDetails.Type) => {
   const message = error.message;
+
   if (key === "watcher-r1") {
     const received = /^expected \{\s*_tag: 'same'/.test(message)
       ? "same"
@@ -188,6 +189,7 @@ export const failure = (key: Request["case"], errors: readonly unknown[]) => {
     const safe = diagnostic(key, error);
     const frame = new RegExp(`${Regex.escape(cases[key].test)}:([0-9]+):([0-9]+)`).exec(error.stack ?? "");
     const assertion = frame === null ? null : { line: Number(frame[1]), column: Number(frame[2]) };
+
     if (
       (key === "host-requested-pin" && (assertion?.line !== 195 || assertion.column !== 62)) ||
       (key === "host-pnpm-path" && (assertion?.line !== 194 || assertion.column !== 70)) ||

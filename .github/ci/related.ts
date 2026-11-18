@@ -9,6 +9,7 @@ import { E2E_SETUP, list, room, withReaders } from "./legs.ts";
 import { isTrigger, legsOf, whole } from "./proof.ts";
 
 const PROJECTS = ["next-integration", "tooling"] as const;
+
 const checklistFixture = "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts";
 
 type Project = (typeof PROJECTS)[number];
