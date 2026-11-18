@@ -66,7 +66,7 @@ const WIDTH = 120;
  * of plain values on one line when it fits the width, so the committed text needs no reformatting.
  */
 const printed = (value: unknown, indent: string, taken: number): string => {
-  if (value === null || typeof value !== "object") {
+  if (!Predicate.isObjectOrArray(value)) {
     return JSON.stringify(value);
   }
 
@@ -77,7 +77,7 @@ const printed = (value: unknown, indent: string, taken: number): string => {
       return "[]";
     }
 
-    const flat = value.every((item) => item === null || typeof item !== "object");
+    const flat = value.every((item) => !Predicate.isObjectOrArray(item));
     const line = `[${value.map((item) => JSON.stringify(item)).join(", ")}]`;
 
     if (flat && indent.length + taken + line.length <= WIDTH) {

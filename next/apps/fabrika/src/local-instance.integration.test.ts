@@ -7,11 +7,13 @@ import { expect, it } from "@effect/vitest";
 import type { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
+import type { settings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
+import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Match, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
 import { vi } from "vitest";
+import type { Built } from "./build.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { rssStandIn } from "./rss.fixture.ts";
 
@@ -21,19 +23,27 @@ import { rssStandIn } from "./rss.fixture.ts";
 // The deployment reports a made-up pid, 27001, so nothing here may sample or signal it for real:
 // the memory sample answers 0 KiB for every pid, and `process.kill` is a spy each law checks.
 vi.mock("../alchemy.run.ts", () => ({
-  stack: (_built: unknown, _config: unknown, local: Context.Context<never>) => local,
+  stack: (
+    _built: Pick<Built, "brain">,
+    _config: Effect.Success<ReturnType<typeof settings>>,
+    local: Context.Context<never>,
+  ) => local,
 }));
 
 vi.mock("alchemy/Deploy", () => ({
   deploy: ({ stack }: { stack: Context.Context<never> }) =>
     Effect.gen(function* () {
+      // SAFETY: Context's `mapUnsafe` types its values as `any`; `unknown` only drops that, and the
+      // find below checks each entry with `typeof` and `in` before it reads one.
       const entries = [...stack.mapUnsafe.values()] as Array<unknown>;
-      const plugin = entries.find((entry) => typeof entry === "object" && entry !== null && "sockets" in entry);
+      const plugin = entries.find((entry) => Predicate.isObjectOrArray(entry) && "sockets" in entry);
 
-      if (typeof plugin !== "object" || plugin === null || !("start" in plugin)) {
+      if (!Predicate.isObjectOrArray(plugin) || !("start" in plugin)) {
         return yield* Effect.die("test deployment has no control plugin");
       }
 
+      // SAFETY: the only entry with `sockets` is the ControlPlugin dev.ts adds to the stack's context,
+      // and its `start` is Alchemy's PluginConfig hook, which takes the runtime's ports record.
       const start = plugin.start as (ports: Record<string, number>) => Effect.Effect<unknown>;
       const observe = Context.get(stack, RuntimeLifecycle);
       observe({ type: "start", worker: "fabrika", pid: 27001 });
@@ -104,8 +114,10 @@ const fetchClient = FetchHttpClient.layer.pipe(
 );
 
 /** A stubbed `fetch` call's body as text, sent as a string or as the client's bytes. */
+// SAFETY: dev.ts sends each control call with HttpClientRequest.bodyText, an HttpBody Uint8Array,
+// and Effect's FetchHttpClient hands `fetch` that body's bytes, so a body that is not a string is one.
 const bodyText = (options: RequestInit | undefined): string =>
-  typeof options?.body === "string" ? options.body : new TextDecoder().decode(options?.body as Uint8Array);
+  Predicate.isString(options?.body) ? options.body : new TextDecoder().decode(options?.body as Uint8Array);
 
 // The installed runner takes runs and a seed, so the old example runs first from this callback.
 const buildsPair = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]);
@@ -149,18 +161,22 @@ it.live.prop(
         values[Declarations.storage.path] = invalid;
       } else {
         values[Declarations.recovery.path] = {
-          project:
-            field === "project.bytes"
-              ? { ...project, bytes: invalid }
-              : field === "project.message.bytes"
-                ? { ...project, message: { ...project.message, bytes: invalid } }
-                : project,
-          process:
-            field === "process.bytes"
-              ? { ...process, bytes: invalid }
-              : field === "process.message.bytes"
-                ? { ...process, message: { ...process.message, bytes: invalid } }
-                : process,
+          project: Match.value(field).pipe(
+            Match.when("project.bytes", () => ({ ...project, bytes: invalid })),
+            Match.when("project.message.bytes", () => ({
+              ...project,
+              message: { ...project.message, bytes: invalid },
+            })),
+            Match.orElse(() => project),
+          ),
+          process: Match.value(field).pipe(
+            Match.when("process.bytes", () => ({ ...process, bytes: invalid })),
+            Match.when("process.message.bytes", () => ({
+              ...process,
+              message: { ...process.message, bytes: invalid },
+            })),
+            Match.orElse(() => process),
+          ),
         };
       }
 
@@ -195,6 +211,9 @@ it.live.prop(
           const folder = yield* sandbox;
           const events: Array<typeof BrainEvent.Type> = [];
           yield* spyOnFetch(async (_url, options) => {
+            // SAFETY: dev.ts's dial writes every body as JSON.stringify({ target, project, name, method,
+            // args }), and its outbox flush sends method "brain" with args `[event]`, a BrainEvent; only
+            // that method's args are read below.
             const call = JSON.parse(bodyText(options)) as {
               method: string;
               args: Array<typeof BrainEvent.Type>;
@@ -249,6 +268,8 @@ it.live.prop(
       const release = yield* Deferred.make<void>();
       const events: Array<typeof BrainEvent.Type> = [];
       yield* spyOnFetch(async (_url, options) => {
+        // SAFETY: each control body is the `{ target, project, name, method, args }` JSON dev.ts's dial
+        // writes; a "brain" call, the one branch below, carries the flushed BrainEvent as `args[0]`.
         const call = JSON.parse(bodyText(options)) as {
           method: string;
           args: Array<typeof BrainEvent.Type>;

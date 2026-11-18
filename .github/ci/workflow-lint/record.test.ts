@@ -16,9 +16,11 @@ import {
 // (wiring.test-support.ts), so an unrelated error cannot mask it.
 
 /** changes' record step's env, for a plant that changes one value. */
+// SAFETY: the record step in `valid` carries an `env` map of strings, read untyped through `step`.
 const recordEnv = (w: Workflow) => step(w, "changes", "record")["env"] as Record<string, string>;
 
 /** changes' upload of the record, for a plant that changes one input. */
+// SAFETY: `valid` writes the upload step's `with` block as a map of inputs.
 const uploadWith = (w: Workflow) => step(w, "changes", "upload the record")["with"] as Record<string, unknown>;
 
 const plants: Plant[] = [
@@ -97,6 +99,7 @@ const plants: Plant[] = [
     `Q1: ${job}'s checkout is told its ${key}`,
     (w) => {
       const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      // SAFETY: the `find` above is the job's actions/checkout step, and each checkout in `valid` has a `with` map.
       (checkout["with"] as Record<string, unknown>)[key] = value;
     },
   ]),
@@ -138,6 +141,7 @@ const plants: Plant[] = [
     (w) => stepsOf(w, "typecheck").splice(-1, 0, timings()),
   ],
   ...(["next"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+    // SAFETY: every step of next in `valid` is a `NextStep`, which has the fields of `Timed`.
     const upload = (w: Workflow) => (stepsOf(w, job) as Timed[]).find((s) => s["name"] === "timings")!;
 
     return [

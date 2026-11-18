@@ -4,8 +4,10 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import {
   rolldown,
   VERSION,
@@ -62,7 +64,7 @@ const emitted = (output: RolldownOutput) =>
       total +
       (item.type === "chunk"
         ? bytes(item.code)
-        : typeof item.source === "string"
+        : Predicate.isString(item.source)
           ? bytes(item.source)
           : item.source.byteLength),
     0,
@@ -107,7 +109,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
     "rolldown.version": VERSION,
     "effect.version": effectPackage.version,
   });
-  const fail = (error: unknown) => BuildError.make({ reason: "bundle", message: String(error), cause: error });
+  const fail = (cause: unknown) => BuildError.make({ reason: "bundle", message: String(cause), cause });
 
   const config = {
     input,
@@ -133,12 +135,11 @@ export const bundle = Effect.fn("build.bundle")(function* (
     },
     platform: "browser" as const,
     // A tab names no platform module, so nothing is external there: its build refuses one.
-    external:
-      options.phase === "brain"
-        ? ["cloudflare:workers", /^node:/]
-        : options.phase === "tab"
-          ? []
-          : ["cloudflare:workers"],
+    external: Match.value(options.phase).pipe(
+      Match.when("brain", () => ["cloudflare:workers", /^node:/]),
+      Match.when("tab", () => []),
+      Match.orElse(() => ["cloudflare:workers"]),
+    ),
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.define === undefined ? {} : { transform: { define: { ...options.define } } }),
   };

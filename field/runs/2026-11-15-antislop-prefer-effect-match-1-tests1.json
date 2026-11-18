@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-prefer-effect-match-1-tests1",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-15T21:46:41-08:00",
+  "ended": "2026-11-15T22:24:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "pipeline, tracker ticket 1057, test_writer: slice AS-prefer-effect-match-1, anti-slop-effect/prefer-effect-match over next/ and our tooling, in exam paths and test files only, no lock line and no .oxlintrc.json change, no pull request (owner ruling). The rule was forced to error in a scratch config outside the repo, at base bcad0080d: 260 hits, 9 of them in PR 1366's files (left alone), 207 in exam paths and test files, 44 in product files. Fixed 195: 174 by a scratch codemod that rewrites `v === A ? X : v === B ? Y : Z` into `Match.value(v).pipe(Match.when(A, () => X), ..., Match.orElse(() => Z))`, 14 by the same codemod's tag form (`Match.value(x).pipe(Match.tag(...), ..., Match.orElse(...))` where the union's own matcher is not exported to the test), and 7 by hand: the union's own match where it is in reach (RevokeHold.Model.match in chaos.laws.integration.test.ts, Answer.match in exam/commits.ts, HelloAnswer.match in HandsDoor.test-support.ts, TrustDecision.match in packs/internal/open.test.ts), Match.valueTags on a hand union (oxlint-plugins/jsdocs.test.ts), and two chains with yield* in a branch, rewritten so the Match picks the Effect and one yield* runs it (processes/MonitorsTest.ts, node/dev/error-cause.test.ts). After the codemod, 25 type errors from lost narrowing and widened literals were fixed by hand with handler params, Match.discriminator('type'), return types on handlers and `as const`; four comment lines the codemod dropped were put back; unused handler params were dropped. Left and stopped, 12: oxlint-plugins/effect-jsdocs.ts:801 is Effect's own Jsdocs.ts copied with a list of what changed, so a rewrite is the lead's call; 11 in four files with no effect import today, where importing Match turns on fabrika/no-raw-try-catch over their existing try/catch (.agents/skills/lead/scripts/box.test.ts:747,753,868,959,1218; .agents/skills/lead/scripts/redact.test.ts:133,185; .agents/skills/step-commit/scripts/stepcommit.test.ts:324,366,702; oxlint-plugins/program-package-layout.test.ts:1179). Build needed for the 44 product hits. No disable line was added, no assertion was removed or narrowed, and no law was added or changed, so no plant ran. Tests: 81 touched or reaching test files pass, one file at a time; 44 .integration. files were refused by the host-only guard (0178) and not run, and next/apps/fabrika/src/hands-launcher.integration.test.ts was not started since it sends a real SIGTERM. tsc passes in next/packages/libfabrika, next/apps/fabrika, next/programs/pipeline, chaos, counter, checklist, oxlint-plugins, .agents and .github/ci. pnpm lint's only failure is the zero lock asking to add 10 folders now at zero to the rule's block, which this slice may not do.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 38,
+  "note": "The codemod lived in the scratchpad and was never committed. Folders now at zero for this rule, waiting for the lock PR: .github/ci, libfabrika src/*, access, gateway, ledger, packs, tezgah, programs/chaos, programs/checklist, programs/counter.",
+  "step": "tests"
+}

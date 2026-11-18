@@ -10,6 +10,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Brand from "effect/Brand";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -18,7 +19,15 @@ import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
 import type { Sql } from "../Sql.ts";
-import { Writer, Session, SessionManager, NotGranted, SignRequest } from "./SessionManager.ts";
+import {
+  Writer,
+  Session,
+  SessionManager,
+  NotGranted,
+  SignRequest,
+  type SessionManagerError,
+  type SigningRefused,
+} from "./SessionManager.ts";
 
 // Match fc.jsonValue({maxDepth: depth}): finite numbers, strings/keys of
 // length 0..10, and arrays/objects of width 0..10. No required object keys.
@@ -231,7 +240,7 @@ const commitFault = (inner: Sql) => {
 };
 
 /** Holds that `error` is the signer's own refusal, for that reason. */
-const refusedFor = (error: unknown, reason: string) => {
+const refusedFor = (error: SigningRefused | NotGranted | SessionManagerError | null, reason: string) => {
   expect(error).toHaveProperty("_tag", "SigningRefused");
   expect(error).toHaveProperty("reason", reason);
 };
@@ -612,11 +621,11 @@ const signalLaws = (open: Open) => {
     ]),
   ).pipe(
     Arbitrary.map(([kind, space, rest, tail]) =>
-      kind === 0
-        ? JSON.stringify(["DOWN", ...rest])
-        : kind === 1
-          ? `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`
-          : `["DOWN"${tail}`,
+      Match.value(kind).pipe(
+        Match.when(0, () => JSON.stringify(["DOWN", ...rest])),
+        Match.when(1, () => `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`),
+        Match.orElse(() => `["DOWN"${tail}`),
+      ),
     ),
     Arbitrary.filter(inSignalSpace),
   );

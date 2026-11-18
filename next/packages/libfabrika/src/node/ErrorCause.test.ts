@@ -80,7 +80,7 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 );
 
 /** The same `Sql`, but each transaction throws `failure`. */
-const throwing = (sql: Sql, failure: unknown): Sql => ({
+const throwing = (sql: Sql, failure: object): Sql => ({
   ...sql,
   transaction: () => {
     throw failure;
@@ -140,15 +140,15 @@ type Flow = "ledger_rejects" | "ledger_decode" | "archive_rejects" | "store_thro
 
 const flows = fc.constantFrom<Flow>("ledger_rejects", "ledger_decode", "archive_rejects", "store_throws");
 
-/** One failing operation whose failure holds `text`, inside a span the sink stores. */
-const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown, unknown> => {
+/** One failing operation whose failure holds `text` in its `cause`, inside a span the sink stores. */
+const fail = (flow: Flow, text: string, cause: unknown): Effect.Effect<unknown, unknown> => {
   if (flow === "ledger_rejects" || flow === "ledger_decode") {
     const answer = flow === "ledger_rejects" ? null : { _tag: "ready", rev: { input: text } };
 
     const calls: LedgerCalls = {
-      append: () => (answer === null ? Promise.reject(carrier) : Promise.resolve(answer)),
-      read: () => (answer === null ? Promise.reject(carrier) : Promise.resolve([{ rev: { input: text } }])),
-      wait: () => (answer === null ? Promise.reject(carrier) : Promise.resolve(answer)),
+      append: () => (answer === null ? Promise.reject(cause) : Promise.resolve(answer)),
+      read: () => (answer === null ? Promise.reject(cause) : Promise.resolve([{ rev: { input: text } }])),
+      wait: () => (answer === null ? Promise.reject(cause) : Promise.resolve(answer)),
     };
 
     return Ledger.use((ledger) => ledger.wait("notes:1", 0)).pipe(
@@ -160,8 +160,8 @@ const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown
     return Archive.use((archive) => archive.put("spans/1", new Uint8Array([1]))).pipe(
       Effect.provide(
         Archive.bucket({
-          put: () => Promise.reject(carrier),
-          head: () => Promise.reject(carrier),
+          put: () => Promise.reject(cause),
+          head: () => Promise.reject(cause),
         }),
       ),
     );
@@ -172,7 +172,7 @@ const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown
   const broken: Sql = {
     ...disk,
     exec: () => {
-      throw carrier;
+      throw cause;
     },
   };
 

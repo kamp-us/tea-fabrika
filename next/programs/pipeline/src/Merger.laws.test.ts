@@ -6,7 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
+import { Arbitrary, ConfigProvider, Effect, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -81,7 +81,7 @@ const tree = (w: World, char: string) => Schema.decodeSync(Tree)(char.repeat(w.s
 
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
 
-const equal = (a: unknown, b: unknown) => expect(a).toEqual(b);
+const equal = (a: Model, b: Model) => expect(a).toEqual(b);
 
 const runAt = (w: World, choice: number) => ({
   name: w.name,
@@ -102,7 +102,11 @@ const runAt = (w: World, choice: number) => ({
         }),
 });
 
-const valueFor = (w: World, cmd: Command, pick: number): unknown => {
+const valueFor = (
+  w: World,
+  cmd: Command,
+  pick: number,
+): typeof Change.Type | typeof Updated.Type | typeof Checks.Type | typeof Merged.Type | typeof Queued.Type => {
   if (cmd.type === "change") {
     if (pick % 8 === 0) {
       return Change.cases.missing.make({ change: cmd.change });
@@ -311,13 +315,12 @@ const guided = (p: Program, w: World) => {
 const service = (cmd: Command) => cmd.type !== "send" && cmd.type !== "exit";
 
 const stateCmd = (model: Model) =>
-  model._tag === "reading"
-    ? "change"
-    : model._tag === "updating"
-      ? "update"
-      : model._tag === "checking"
-        ? "checks"
-        : "merge";
+  Match.value(model).pipe(
+    Match.tag("reading", () => "change"),
+    Match.tag("updating", () => "update"),
+    Match.tag("checking", () => "checks"),
+    Match.orElse(() => "merge"),
+  );
 
 // Each invariant reads a complete tea fold. A cut-off job is checked for its prefix, never for a
 // reply it has not sent yet.
@@ -341,7 +344,11 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
     if (law === "L9") {
       const own = Mail.Abandon.make({ type: "abandon", ref: prev._tag === "idle" ? w.ref : prev.job.ref });
       expect(p.refuse(prev, own)?.reason ?? null).toBe(
-        prev._tag === "idle" ? "idle" : prev._tag === "merging" ? "merging" : null,
+        Match.value(prev).pipe(
+          Match.tag("idle", () => "idle"),
+          Match.tag("merging", () => "merging"),
+          Match.orElse(() => null),
+        ),
       );
     }
 
@@ -714,20 +721,19 @@ describe("the merger, next/", () => {
 
                   const msg = moves[cell.move % moves.length]!();
 
-                  const refused =
-                    msg.type === "land"
-                      ? prev._tag !== "idle"
-                        ? "busy"
-                        : null
-                      : msg.type === "abandon"
-                        ? prev._tag === "idle"
-                          ? "idle"
-                          : prev._tag === "merging"
-                            ? "merging"
-                            : msg.ref !== prev.job.ref
-                              ? "other_job"
-                              : null
-                        : null;
+                  const refused = Match.value(msg).pipe(
+                    Match.discriminator("type")("land", () => (prev._tag !== "idle" ? "busy" : null)),
+                    Match.discriminator("type")("abandon", (abandon) =>
+                      prev._tag === "idle"
+                        ? "idle"
+                        : prev._tag === "merging"
+                          ? "merging"
+                          : abandon.ref !== prev.job.ref
+                            ? "other_job"
+                            : null,
+                    ),
+                    Match.orElse(() => null),
+                  );
 
                   if (msg.type === "land" || msg.type === "abandon") {
                     expect(p.refuse(prev, msg)?.reason ?? null).toBe(refused);
@@ -807,7 +813,7 @@ describe("the merger, next/", () => {
 
 // This walk answers only the current request. Every update may discover another main.
 const roundWalk = (p: Program, w: World) => {
-  const ok = (cmd: Command, value: unknown): Msg =>
+  const ok = (cmd: Command, value: Schema.Json): Msg =>
     Schema.decodeSync(p.msg)({ type: `${cmd.type}_ok`, cmd, value, at: w.at });
 
   return arbGuidedSequence(

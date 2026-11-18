@@ -48,6 +48,7 @@ import {
   Result,
   Schema,
   Scope,
+  Match,
 } from "effect";
 import * as fc from "fast-check";
 import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
@@ -221,6 +222,7 @@ const stopper = (name: string) => {
     msg: Msg,
     cmds: [StartChild.startChild, StartChild.stopChild],
     init: (loaded) => [loaded ?? { stepped: 0, answers: [] }, []],
+    // SAFETY: each key is a case of the Msg schema or the `_ok` or `_err` answer of a declared Cmd, the messages tea dispatches; the handlers are typed by hand, in shapes tea's update type does not take.
     update: {
       start: (s: Model, m: { ask: { program: string; name: string } }) => [
         { ...s, stepped: s.stepped + 1 },
@@ -228,7 +230,7 @@ const stopper = (name: string) => {
       ],
       stop: (s: Model, m: { name: string }) => [
         { ...s, stepped: s.stepped + 1 },
-        // A plain string on purpose: the host, not the type, judges the name.
+        // SAFETY: a plain string on purpose: the host, not the type, judges the name.
         [StartChild.stopChild({ name: m.name } as never)],
       ],
       start_child_ok: keep("start_child_ok"),
@@ -290,18 +292,19 @@ const brainFrom = (): From => ({
 
 const decodeModel = Schema.decodeUnknownOption(Model);
 
-/** A value's case, read without naming the key in a literal. */
-const tagged = (value: unknown): unknown => (Predicate.hasProperty(value, "_tag") ? value._tag : undefined);
+/** A value's case, read without naming the key in a literal; every caller compares it with a string. */
+const tagged = (value: unknown): string | undefined =>
+  Predicate.hasProperty(value, "_tag") && Predicate.isString(value._tag) ? value._tag : undefined;
 
 /** A raw value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
-const raw = (tag: string, fields: object = {}): unknown =>
+const raw = (tag: string, fields: object = {}): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
   ({ ...fields, _tag: tag });
 
-const body = (entry: Entry | undefined): Record<string, unknown> =>
-  typeof entry?.body === "object" && entry.body !== null && !Array.isArray(entry.body)
-    ? (entry.body as Record<string, unknown>)
-    : {};
+const body = (entry: Entry | undefined): Record<string, unknown> => {
+  const value = entry?.body;
+  return Predicate.isObject(value) ? value : {};
+};
 
 const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
   const item = items[pick % items.length];
@@ -331,7 +334,7 @@ const faulting = (
       if (
         fault.exited &&
         /^\s*INSERT\b/i.test(query) &&
-        params.some((p) => p === "exited" || (typeof p === "string" && p.includes('"exited"')))
+        params.some((p) => p === "exited" || (Predicate.isString(p) && p.includes('"exited"')))
       ) {
         fault.exited = false;
         throw Object.assign(
@@ -349,7 +352,7 @@ const faulting = (
         fault.inputCheckpoint !== undefined &&
         /INSERT INTO process_(state|checkpoint_parts)/.test(query) &&
         params.some(
-          (value) => typeof value === "string" && value.includes(JSON.stringify(fault.inputCheckpoint).slice(1, -1)),
+          (value) => Predicate.isString(value) && value.includes(JSON.stringify(fault.inputCheckpoint).slice(1, -1)),
         )
       ) {
         fault.inputCheckpoint = undefined;
@@ -365,7 +368,7 @@ const faulting = (
 
       if (
         /^\s*INSERT\b/i.test(query) &&
-        params.some((p) => p === "exited" || (typeof p === "string" && p.includes('"exited"')))
+        params.some((p) => p === "exited" || (Predicate.isString(p) && p.includes('"exited"')))
       ) {
         fault.landed = true;
       }
@@ -470,7 +473,10 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
   );
   /** The door's two steps before a delivery: the input is recorded with its sender, then delivered. */
   const deliver = (input: unknown, name: string, pid: string) => {
+    // SAFETY: deliver runs only in the runner wrapper's `msg` above, and every `msg` call in this file passes an Incoming: `letter(...)`, or an Incoming written out.
     const i = input as Incoming;
+
+    // SAFETY: SessionManager keeps its InputRecord type private; each field below is the recorded Incoming's own, in its schema's form.
     return sessions
       .record({
         id: i.envelope.id,
@@ -576,6 +582,8 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
   fc.nat().map((seed) => {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's map takes a plain value, so one sample is drawn here
     const [value] = Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }));
+
+    // SAFETY: sampleEffect was asked for one value, so the first element is there.
     return value as S["Type"];
   });
 
@@ -652,7 +660,7 @@ type Move =
 const STOPS: ReadonlySet<Move> = new Set(["stopper_start", "stop_own", "stop_other", "stop_ended"]);
 
 /** A forged operand for each extra field a program might add beside its Cmd. */
-const forged = (field: string, world: World): unknown => {
+const forged = (field: string, world: World): typeof Recipient.Type | typeof Owner.Type | string => {
   const sender = world.names.get("sender:1")?.pid ?? DOOR;
   return field === "requester"
     ? Recipient.cases.process.make({ process: sender })
@@ -723,6 +731,7 @@ const walk = (
       yield* call(runner.msg(letter(input, by)), `${name}'s letter`);
     });
     const answers = Effect.fnUntraced(function* (name: string) {
+      // SAFETY: answers is called only for names the walk started, and each start is kept in world.names.
       const held = world.names.get(name) as Name;
       return (yield* inContext(savedModel(store, name, held.pid)))?.answers ?? [];
     });
@@ -730,6 +739,8 @@ const walk = (
     const lastAnswer = Effect.fnUntraced(function* (name: string, before: number) {
       const told = yield* answers(name);
       expect(told.length, `${name} was told one answer`).toBe(before + 1);
+
+      // SAFETY: the expect above saw one more answer, and each answer is `{ type, outcome }`.
       return told.at(-1) as { type: string; outcome: unknown };
     });
 
@@ -745,6 +756,7 @@ const walk = (
         }
 
         const b = body(row);
+        // SAFETY: a start row's requester is a recipient, which names its process when it is one.
         const requester = (b["requester"] as { process?: string } | undefined)?.process;
 
         if (requester === undefined) {
@@ -877,6 +889,8 @@ const walk = (
                   cell.pick,
                 )
               : choose(starters(), cell.pick);
+
+          // SAFETY: the name was chosen from world.names: a live starter or a live mail starter.
           const held = world.names.get(name) as Name;
           const existing = [...world.names].filter(([n, h]) => h.program === "merger" && n !== name);
           const target = cell.alt % 3 === 0 && existing.length > 0 ? choose(existing, cell.alt)[0] : fresh();
@@ -892,6 +906,7 @@ const walk = (
             yield* door(name, { type: "start", ask });
           } else {
             // Another live process's letter: the requester must still be the life that steps it.
+            // SAFETY: sender:1 is one of the processes every world starts with.
             const sender = world.names.get("sender:1") as Name;
             const sent = yield* inContext(
               ProgramMail.use((mail) =>
@@ -956,41 +971,46 @@ const walk = (
           const name = choose(starters(), cell.pick);
           const target = fresh();
           const kind = cell.shape % 8;
-          const bad: { ask: Ask; reason: string; tag: string } =
-            kind === 0
-              ? { ask: { program: "merger", name: target, drop: ["program"] }, reason: "bad_cmd", tag: "missing" }
-              : kind === 1
-                ? { ask: { program: "merger", name: target, drop: ["name"] }, reason: "bad_cmd", tag: "missing" }
-                : kind === 2
-                  ? { ask: { program: 5, name: target }, reason: "bad_cmd", tag: "typed" }
-                  : kind === 3
-                    ? { ask: { program: "merger", name: ["x"] }, reason: "bad_cmd", tag: "typed" }
-                    : kind === 4
-                      ? {
-                          ask: { program: `nope${cell.alt % 9}`, name: target },
-                          reason: "no_program",
-                          tag: "no_program",
-                        }
-                      : kind === 5
-                        ? // The loader answers before the name is judged.
-                          { ask: { program: "nope", name: "Bad Name" }, reason: "no_program", tag: "no_program" }
-                        : kind === 6
-                          ? {
-                              ask: {
-                                program: "merger",
-                                name: choose(
-                                  ["", "processes", "Merger:1", "merger/1", "client:x", "m".repeat(257)],
-                                  cell.alt,
-                                ),
-                              },
-                              reason: "bad_name",
-                              tag: "bad_name",
-                            }
-                          : {
-                              ask: { program: "merger", name: target, inputBytes: ROW_LIMIT + 1 },
-                              reason: "bad_input",
-                              tag: "bad_input",
-                            };
+
+          const bad: { ask: Ask; reason: string; tag: string } = Match.value(kind).pipe(
+            Match.when(0, () => ({
+              ask: { program: "merger", name: target, drop: ["program"] },
+              reason: "bad_cmd",
+              tag: "missing",
+            })),
+            Match.when(1, () => ({
+              ask: { program: "merger", name: target, drop: ["name"] },
+              reason: "bad_cmd",
+              tag: "missing",
+            })),
+            Match.when(2, () => ({ ask: { program: 5, name: target }, reason: "bad_cmd", tag: "typed" })),
+            Match.when(3, () => ({ ask: { program: "merger", name: ["x"] }, reason: "bad_cmd", tag: "typed" })),
+            Match.when(4, () => ({
+              ask: { program: `nope${cell.alt % 9}`, name: target },
+              reason: "no_program",
+              tag: "no_program",
+            })),
+            // The loader answers before the name is judged.
+            Match.when(5, () => ({
+              ask: { program: "nope", name: "Bad Name" },
+              reason: "no_program",
+              tag: "no_program",
+            })),
+            Match.when(6, () => ({
+              ask: {
+                program: "merger",
+                name: choose(["", "processes", "Merger:1", "merger/1", "client:x", "m".repeat(257)], cell.alt),
+              },
+              reason: "bad_name",
+              tag: "bad_name",
+            })),
+            Match.orElse(() => ({
+              ask: { program: "merger", name: target, inputBytes: ROW_LIMIT + 1 },
+              reason: "bad_input",
+              tag: "bad_input",
+            })),
+          );
+
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
           yield* door(name, { type: "start", ask: bad.ask });
@@ -1015,6 +1035,7 @@ const walk = (
           break;
         }
         case "undeclared_exit": {
+          // SAFETY: plain:1 is one of the processes every world starts with.
           const held = world.names.get("plain:1") as Name;
           const before = yield* head;
           yield* door("plain:1", { type: "end", before: [], after: [], twice: false });
@@ -1034,6 +1055,7 @@ const walk = (
         case "worker_before_exit":
         case "worker_after_exit": {
           const name = choose(runnable(), cell.pick);
+          // SAFETY: runnable() lists only names in world.names.
           const held = world.names.get(name) as Name;
           const before = Array.from({ length: 1 + (cell.shape % 3) }, () => ({ program: "merger", name: fresh() }));
           const after = Array.from({ length: 1 + (cell.alt % 3) }, () => ({ program: "merger", name: fresh() }));
@@ -1156,6 +1178,7 @@ const walk = (
           const letters = rows.filter((row) => row.stream === `${target}/inbox`);
           expect(starts, "L6: a valid first letter survives an oversized full Cmd").toHaveLength(1);
           expect(letters, "L6: the boundary input is written once").toHaveLength(1);
+          // SAFETY: the expect above failed the law unless exactly one letter is there, and inbox rows carry From.
           const first = letters[0] as Entry & From;
           const texts = [
             first.stream,
@@ -1189,6 +1212,7 @@ const walk = (
         }
         case "checkpoint_starts": {
           const name = choose(starters(), cell.pick);
+          // SAFETY: starters() lists only names in world.names.
           const held = world.names.get(name) as Name;
           const before = (yield* answers(name)).length;
           const asks = Array.from({ length: 2 + (cell.shape % 2) }, () => ({
@@ -1220,6 +1244,7 @@ const walk = (
         case "exit":
         case "cut_exit": {
           const name = choose(runnable(), cell.pick);
+          // SAFETY: runnable() lists only names in world.names.
           const held = world.names.get(name) as Name;
           const before = Array.from({ length: cell.alt % 3 }, () => ({ program: "merger", name: fresh() }));
           const after = Array.from({ length: cell.shape % 3 }, () => ({ program: "merger", name: fresh() }));
@@ -1275,6 +1300,7 @@ const walk = (
 
           for (const child of children) {
             const status = yield* inContext(ProcessManager.use((p) => p.status(child)));
+            // SAFETY: each child the walk started is kept in world.names.
             const known = world.names.get(child) as Name;
             expect(status.state._tag, "L7: a requester's exit ends none of its children").toBe(
               known.live ? "live" : status.state._tag,
@@ -1282,14 +1308,17 @@ const walk = (
           }
 
           for (const watch of world.watches.filter((w) => w.target === held.pid)) {
+            // SAFETY: a watch is made only with a watcher from world.names.
             const watcher = [...world.names].find(([, h]) => h.pid === watch.watcher)?.[0] as string;
             const downs = (yield* all()).filter(
               (e) =>
                 e.stream === `${watcher}/inbox` &&
                 JSON.stringify(body(e)["m"] ?? null).includes('"DOWN"') &&
+                // SAFETY: a DOWN letter's `m` is the DOWN, which carries its `ref`.
                 (body(e)["m"] as { ref?: string } | undefined)?.ref === watch.ref,
             );
             expect(downs.length, "L7: each live watch gets one DOWN").toBe(1);
+            // SAFETY: the filter above kept only DOWN letters, whose `m` carries its `reason`.
             expect((body(downs[0])["m"] as { reason?: unknown }).reason, "L7: the DOWN says normal").toEqual(NORMAL);
             seen.add("down");
           }
@@ -1315,6 +1344,7 @@ const walk = (
         }
         case "exit_extra": {
           const name = choose(runnable(), cell.pick);
+          // SAFETY: runnable() lists only names in world.names.
           const held = world.names.get(name) as Name;
           const extra =
             cell.alt % 2 === 0
@@ -1355,6 +1385,7 @@ const walk = (
 
           const [, watcher] = choose(watchers, cell.alt);
           const ref = `ref-${++world.n}`;
+          // SAFETY: target came from runnable(), which lists only names in world.names.
           const held = world.names.get(target) as Name;
           yield* ProcessManager.use((p) => p.monitor(ref, held.pid, brainFrom())).pipe(
             Effect.provide(
@@ -1375,6 +1406,7 @@ const walk = (
         case "start_ended": {
           const name = choose(starters(), cell.pick);
           const target = choose(ended(), cell.alt);
+          // SAFETY: ended() lists only names in world.names.
           const was = world.names.get(target) as Name;
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
@@ -1398,6 +1430,7 @@ const walk = (
           // sender is the one checked and the one recorded, never the requester's own member.
           const { person: sender, role } = choose(drawn(true), cell.sender);
           const name = requester(cell);
+          // SAFETY: requester() picks from starters(), which lists only names in world.names.
           const held = world.names.get(name) as Name;
           const own = world.members.get(name);
           const program = choose(ANY_PROGRAM, cell.program);
@@ -1459,6 +1492,7 @@ const walk = (
         }
         case "stopper_start": {
           const name = choose(stoppers(), cell.pick);
+          // SAFETY: stoppers() lists only names in world.names.
           const held = world.names.get(name) as Name;
           const target = fresh();
           const before = (yield* answers(name)).length;
@@ -1471,6 +1505,7 @@ const walk = (
         case "stop_own": {
           // L3: OTP's terminate_child: the requester's own child ends with shutdown.
           const [target, child] = choose(stopperChildren(true), cell.alt);
+          // SAFETY: stopperChildren() keeps only children whose parent is in world.parents.
           const name = world.parents.get(target) as string;
           const before = (yield* answers(name)).length;
           const was = yield* states();
@@ -1495,14 +1530,17 @@ const walk = (
           }
 
           for (const watch of world.watches.filter((w) => w.target === child.pid)) {
+            // SAFETY: a watch is made only with a watcher from world.names.
             const watcher = [...world.names].find(([, h]) => h.pid === watch.watcher)?.[0] as string;
             const downs = (yield* all()).filter(
               (e) =>
                 e.stream === `${watcher}/inbox` &&
                 JSON.stringify(body(e)["m"] ?? null).includes('"DOWN"') &&
+                // SAFETY: a DOWN letter's `m` is the DOWN, which carries its `ref`.
                 (body(e)["m"] as { ref?: string } | undefined)?.ref === watch.ref,
             );
             expect(downs.length, "L3: each watcher of a stopped child gets one DOWN").toBe(1);
+            // SAFETY: the filter above kept only DOWN letters, whose `m` carries its `reason`.
             expect((body(downs[0])["m"] as { reason?: unknown }).reason, "L3: the DOWN says shutdown").toEqual(
               SHUTDOWN,
             );
@@ -1538,6 +1576,7 @@ const walk = (
         }
         case "stop_ended": {
           const [target] = choose(stopperChildren(false), cell.alt);
+          // SAFETY: stopperChildren() keeps only children whose parent is in world.parents.
           const name = world.parents.get(target) as string;
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
@@ -1561,6 +1600,7 @@ const walk = (
                   name: saved.name,
                   code: { program: saved.program, hash: "another-build" },
                   requester: Recipient.cases.process.make({ process: saved.requester }),
+                  // SAFETY: a saved start's input is its ask's, and the only input the walk's asks carry is `{ type: "ping" }`, a JSON value.
                   ...(saved.input === undefined ? {} : { input: saved.input as Schema.Json }),
                 },
                 brainFrom(),
@@ -1670,6 +1710,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
     const saved: Array<Asked> = [];
     const done = new Set<string>();
     const answers = (name: string) =>
+      // SAFETY: answers is called only for names the walk started, and each start is kept in world.names.
       savedModel(store, name, world.names.get(name)?.pid as string).pipe(
         Effect.provide(life.context),
         Effect.map((model) => model?.answers ?? []),
@@ -1691,7 +1732,11 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
 
       if (Exit.isFailure(outcome)) {
         for (const reason of outcome.cause.reasons) {
-          const error = reason._tag === "Fail" ? reason.error : reason._tag === "Die" ? reason.defect : undefined;
+          const error = Match.value(reason).pipe(
+            Match.tag("Fail", (reason) => reason.error),
+            Match.tag("Die", (reason) => reason.defect),
+            Match.orElse(() => undefined),
+          );
 
           if (error instanceof Error) {
             outputs.push(error.message);
@@ -1712,6 +1757,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
           rows.filter((e) => e._tag === "exited" && body(e)["process"] === world.names.get(ask.name)?.pid),
           "L11: the failed exit recovers exactly once",
         ).toHaveLength(1);
+        // SAFETY: this ask's start was recorded in world.names when it was asked.
         const held = world.names.get(ask.name) as Name;
         held.live = false;
         return;
@@ -1732,6 +1778,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
         });
       } else {
         expect(told.at(-1), "L11: the secret rode a start that answered").toMatchObject({ type: "start_child_ok" });
+        // SAFETY: the expect above matched the last answer as a start_child_ok, which holds an `outcome`.
         expect(tagged((told.at(-1) as { outcome: unknown }).outcome)).toBe("started");
       }
     });
@@ -1809,6 +1856,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
               };
         ask = {
           name,
+          // SAFETY: the `recover` and `retry` branches above took those two moves, so move is answer, refusal, storage or checkpoint, the Asked kinds.
           kind: move as Asked["kind"],
           before: (yield* answers(name)).length,
           incoming: {
@@ -1900,6 +1948,7 @@ const lifetimeLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const world: World = {
             people: [],
             members: new Map(),
+            // SAFETY: PIDS is a fixed list of ids, never empty.
             names: new Map([["starter:1", { program: "starter", pid: PIDS[0] as string, live: true }]]),
             starts: new Map(),
             parents: new Map(),

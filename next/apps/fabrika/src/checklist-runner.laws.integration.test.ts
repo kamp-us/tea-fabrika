@@ -179,6 +179,7 @@ let restarts = 0;
  *  loads it: whatever its module kept in memory is gone. */
 const fresh = Effect.promise(
   () =>
+    // SAFETY: the URL is @kampus/checklist's own module, with only a query added to load it fresh.
     import(/* @vite-ignore */ `${import.meta.resolve("@kampus/checklist")}?restart=${++restarts}`) as Promise<
       typeof import("@kampus/checklist")
     >,

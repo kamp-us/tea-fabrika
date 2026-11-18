@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
@@ -51,7 +52,7 @@ export const u32 = (n: number): Uint8Array => {
 };
 
 export const str = (s: Uint8Array | string): Uint8Array => {
-  const bytes = typeof s === "string" ? utf8(s) : s;
+  const bytes = Predicate.isString(s) ? utf8(s) : s;
 
   return join8(u32(bytes.length), bytes);
 };

@@ -17,7 +17,7 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
+import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream, Match } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
@@ -428,15 +428,14 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     const record = Effect.fnUntraced(function* (method: "write" | "read" | "content" | "deleteContent") {
       const chain = Chain.cases.spans.make({});
 
-      return yield* method === "write"
-        ? Effect.promise(() => write(chain, 57, []))
-        : method === "read"
-          ? Effect.promise(() => read(chain, 57, 0))
-          : method === "content"
-            ? Effect.promise(() => content(chain, 57, "absent"))
-            : Effect.promise(() =>
-                deleteContent(chain, 57, "absent", { by: "test-person", at: 0, reason: "requested" }),
-              );
+      return yield* Match.value(method).pipe(
+        Match.when("write", () => Effect.promise(() => write(chain, 57, []))),
+        Match.when("read", () => Effect.promise(() => read(chain, 57, 0))),
+        Match.when("content", () => Effect.promise(() => content(chain, 57, "absent"))),
+        Match.orElse(() =>
+          Effect.promise(() => deleteContent(chain, 57, "absent", { by: "test-person", at: 0, reason: "requested" })),
+        ),
+      );
     });
 
     for (const method of ["write", "read", "content", "deleteContent"] as const) {

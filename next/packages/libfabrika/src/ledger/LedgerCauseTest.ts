@@ -65,7 +65,7 @@ const callOn = (method: Method) =>
   });
 
 /** A stub whose every call rejects with `failure`. */
-const rejecting = (failure: unknown): LedgerCalls => ({
+const rejecting = (failure: object): LedgerCalls => ({
   // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
   append: () => Promise.reject(failure),
   // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
@@ -75,7 +75,7 @@ const rejecting = (failure: unknown): LedgerCalls => ({
 });
 
 /** A stub whose every call answers `raw`. */
-const answering = (raw: unknown): LedgerCalls => ({
+const answering = (raw: object): LedgerCalls => ({
   // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
   append: () => Promise.resolve(raw),
   // oxlint-disable-next-line fabrika/no-promises -- edge: a Durable Object stub answers with a Promise
@@ -85,7 +85,7 @@ const answering = (raw: unknown): LedgerCalls => ({
 });
 
 /** A valid answer for each call, then one schema-required field damaged. */
-const damaged = (method: Method, rev: number, bad: string): unknown => {
+const damaged = (method: Method, rev: number, bad: string): object => {
   if (method === "append") {
     return { ...Appended.cases.placed.make({ rev, pos: rev }), rev: bad };
   }
@@ -98,7 +98,7 @@ const damaged = (method: Method, rev: number, bad: string): unknown => {
 };
 
 /** The same `Sql`, but its next atomic step throws `failure` once the tables exist. */
-const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm: () => void } => {
+const throwing = (sql: Sql, failure: object): { readonly sql: Sql; readonly arm: () => void } => {
   let armed = false;
 
   return {

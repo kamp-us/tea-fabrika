@@ -9,7 +9,7 @@ import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import { Config, Effect, FileSystem, Layer, Match, Path, Schema, Stream } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -221,22 +221,34 @@ const command = Command.make("dev", flags, (options) => {
                 }
 
                 if (answer._tag === "failed") {
+                  const reason = Match.value(answer.reason).pipe(
+                    Match.when("bundle", () => "syntax error"),
+                    Match.when("compiler", () => "compiler check failed"),
+                    Match.when("name", () => "the program name changed"),
+                    Match.when("too_large", () => "the bundle is too large"),
+                    Match.orElse(() => "the module failed to load"),
+                  );
                   process.stdout.write(
-                    `${answer.program} did not load: ${answer.reason === "bundle" ? "syntax error" : answer.reason === "compiler" ? "compiler check failed" : answer.reason === "name" ? "the program name changed" : answer.reason === "too_large" ? "the bundle is too large" : "the module failed to load"}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
+                    `${answer.program} did not load: ${reason}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
                   );
 
                   return;
                 }
 
                 for (const { name, outcome } of answer.processes) {
-                  const text =
-                    outcome._tag === "swapped"
-                      ? `${name} runs ${answer.hash.slice(0, 8)} now`
-                      : outcome._tag === "refused"
-                        ? `${name} stays on ${outcome.was.slice(0, 8)}: ${outcome.reason === "shape" ? "the new code can't read its state" : outcome.reason === "newer" ? "its state has a newer version" : "the new code could not load"}`
-                        : outcome._tag === "not_now"
-                          ? `${name} will try the new code at the next brain start`
-                          : `${name} already runs this code`;
+                  const text = Match.valueTags(outcome, {
+                    swapped: () => `${name} runs ${answer.hash.slice(0, 8)} now`,
+                    refused: (outcome) => {
+                      const reason = Match.value(outcome.reason).pipe(
+                        Match.when("shape", () => "the new code can't read its state"),
+                        Match.when("newer", () => "its state has a newer version"),
+                        Match.orElse(() => "the new code could not load"),
+                      );
+                      return `${name} stays on ${outcome.was.slice(0, 8)}: ${reason}`;
+                    },
+                    not_now: () => `${name} will try the new code at the next brain start`,
+                    same: () => `${name} already runs this code`,
+                  });
 
                   process.stdout.write(`${text}\n`);
                 }

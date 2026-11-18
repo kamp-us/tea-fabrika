@@ -24,23 +24,23 @@ const encode = (text: string) => new TextEncoder().encode(text);
 const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 
 // lightningcss names the bad token in its message; the build's errors name what is broken.
-const refusal = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
+const refusal = (cause: unknown) => {
+  const message = cause instanceof Error ? cause.message : String(cause);
   const known = message.match(/(?:unsupported @import condition|stylesheet [^:]*)$/)?.[0];
 
   if (known !== undefined) {
-    return BuildError.make({ reason: "bundle", message: known, cause: error });
+    return BuildError.make({ reason: "bundle", message: known, cause });
   }
 
   if (message.includes("BadString")) {
-    return BuildError.make({ reason: "bundle", message: "stylesheet has a broken string", cause: error });
+    return BuildError.make({ reason: "bundle", message: "stylesheet has a broken string", cause });
   }
 
   if (message.includes("BadUrl")) {
-    return BuildError.make({ reason: "bundle", message: "stylesheet has a broken url()", cause: error });
+    return BuildError.make({ reason: "bundle", message: "stylesheet has a broken url()", cause });
   }
 
-  return BuildError.make({ reason: "bundle", message: `stylesheet has a broken @import: ${message}`, cause: error });
+  return BuildError.make({ reason: "bundle", message: `stylesheet has a broken @import: ${message}`, cause });
 };
 
 // lightningcss reports a rule's start as a 0-based line and a 1-based UTF-16 column, and counts

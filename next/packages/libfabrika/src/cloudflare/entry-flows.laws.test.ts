@@ -8,7 +8,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
+import { Context, Effect, Exit, Layer, Match, Option, Predicate, Schema, Scope, Tracer } from "effect";
 import { Digest } from "effect/crypto";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -50,7 +50,7 @@ const FIXTURE = { hash: createHash("sha256").update("fixture").digest("hex"), so
 const settingsExec =
   (base: Sql, failed: () => boolean, cause: Error, counted: (kind: "read" | "append") => void): Sql["exec"] =>
   (query, ...args) => {
-    const settings = args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"));
+    const settings = args.some((arg) => Predicate.isString(arg) && arg.startsWith("settings/instance/"));
 
     if (settings && /SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
       counted("read");
@@ -168,6 +168,7 @@ SettingsTest.suite((recipe, secret) =>
         return { placed: true };
       }
 
+      // SAFETY: `wire` is the frame a law just generated as a settings start, so it has the `StartsTest.Input` shape.
       const work =
         fault === "refused"
           ? Effect.fail(new Starts.StartsError({ reason: new Starts.Refused({ cause: lower }) }))
@@ -247,6 +248,7 @@ SettingsTest.suite((recipe, secret) =>
         busy: false,
       });
 
+      // SAFETY: the hibernating socket code calls only the attachment pair, `send` and `close`, which this double has.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies hibernating socket methods without workerd's nominal brand
       const socket = {
         deserializeAttachment: () => attached,
@@ -260,15 +262,15 @@ SettingsTest.suite((recipe, secret) =>
       } as unknown as WebSocket;
 
       // Only platform handles are doubled. The five consumer implementations run unchanged.
+      // SAFETY: the five entries call only the object's id, its SQL storage, key-value storage, alarms and sockets, all doubled below.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the storage and socket members these entries call
       const ctx = {
         id: {
-          name:
-            path === "Process"
-              ? JSON.stringify([input.name, "worker"])
-              : path === "RecordPart"
-                ? JSON.stringify([input.name, "spans/0"])
-                : input.name,
+          name: Match.value(path).pipe(
+            Match.when("Process", () => JSON.stringify([input.name, "worker"])),
+            Match.when("RecordPart", () => JSON.stringify([input.name, "spans/0"])),
+            Match.orElse(() => input.name),
+          ),
         },
         storage: {
           sql: {
@@ -310,6 +312,7 @@ SettingsTest.suite((recipe, secret) =>
         exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
       } as unknown as DurableObjectState;
 
+      // SAFETY: the entries reach only INSTANCE and the four object namespaces plus RECORD and MEASUREMENTS, each doubled below.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy owns the complete binding brands; these doubles implement the observed calls
       const env = {
         INSTANCE: encoded,
@@ -397,6 +400,7 @@ SettingsTest.suite((recipe, secret) =>
           Effect.provideService(WorkerEnvironment, env),
           Effect.provideService(
             ObjectState,
+            // SAFETY: `ctx` holds the storage handles `fromDurableObjectState` reads; its type differs from Alchemy's only in Request brands.
             // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy and the global Worker types disagree on raw Request brands; this double supplies the same storage handles
             fromDurableObjectState(ctx as unknown as Parameters<typeof fromDurableObjectState>[0]),
           ),
@@ -408,63 +412,69 @@ SettingsTest.suite((recipe, secret) =>
           const chain = Chain.cases.spans.make({});
           const method = choice % 4;
 
-          return yield* method === 0
-            ? part.write(chain, 0, [])
-            : method === 1
-              ? part.read(chain, 0, 0)
-              : method === 2
-                ? part.content(chain, 0, "absent")
-                : part.deleteContent(chain, 0, "absent", { by: "fixture-writer", at: 0, reason: "requested" });
+          return yield* Match.value(method).pipe(
+            Match.when(0, () => part.write(chain, 0, [])),
+            Match.when(1, () => part.read(chain, 0, 0)),
+            Match.when(2, () => part.content(chain, 0, "absent")),
+            Match.orElse(() =>
+              part.deleteContent(chain, 0, "absent", { by: "fixture-writer", at: 0, reason: "requested" }),
+            ),
+          );
         });
       } else {
-        const runtime =
-          path === "Connection"
-            ? connectionRuntime(ctx, env, config)
-            : path === "Process"
-              ? processRuntime(ctx, env, {})
-              : projectRuntime(ctx, env, {
-                  config,
-                  programs: { "test/fixture": FIXTURE },
-                  bootstrap: [{ id: "bootstrap-fixture", name: "bootstrap", program: "test/fixture" }],
-                  door: () => Effect.succeed({} as GatewayCalls),
-                });
+        const runtime = Match.value(path).pipe(
+          Match.when("Connection", () => connectionRuntime(ctx, env, config)),
+          Match.when("Process", () => processRuntime(ctx, env, {})),
+          Match.orElse(() =>
+            projectRuntime(ctx, env, {
+              config,
+              programs: { "test/fixture": FIXTURE },
+              bootstrap: [{ id: "bootstrap-fixture", name: "bootstrap", program: "test/fixture" }],
+              // SAFETY: these entry-flow laws never dial the gateway door, so an empty object stands in for its calls.
+              door: () => Effect.succeed({} as GatewayCalls),
+            }),
+          ),
+        );
 
         close = Effect.promise(() => runtime.dispose());
         yield* Effect.addFinalizer(() => close);
         enter = (choice: number) =>
           Effect.tryPromise({
             try: () => {
-              const work =
-                path === "Connection"
-                  ? ConnectionService.use((service) =>
-                      choice % 2 === 0
-                        ? service.message(socket, JSON.stringify({ jsonrpc: "2.0", method: "ping", id: choice }))
-                        : service.probe("fixture-session"),
-                    )
-                  : path === "Process"
-                    ? ProcessService.use((service) => service.alarm())
-                    : ProjectService.use((service) =>
-                        choice % 3 === 0
-                          ? service.info.pipe(Effect.asVoid)
-                          : service
-                              .processStart(
-                                Start.cases.first.make({
-                                  id: choice % 2 === 0 ? `birth-${config.start}` : `birth-${config.start}-${choice}`,
-                                  name: choice % 2 === 0 ? "child" : `child-${choice}`,
-                                  code: { program: "test/fixture", hash: FIXTURE.hash },
-                                }),
-                                {
-                                  by: "fixture-writer",
-                                  for: config.person,
-                                  sentAt: "2026-11-08T04:00:00.000Z",
-                                  seen: 0,
-                                  parent: null,
-                                  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-                                  build: config.build,
-                                },
-                              )
-                              .pipe(Effect.asVoid),
-                      );
+              const work = Match.value(path).pipe(
+                Match.when("Connection", () =>
+                  ConnectionService.use((service) =>
+                    choice % 2 === 0
+                      ? service.message(socket, JSON.stringify({ jsonrpc: "2.0", method: "ping", id: choice }))
+                      : service.probe("fixture-session"),
+                  ),
+                ),
+                Match.when("Process", () => ProcessService.use((service) => service.alarm())),
+                Match.orElse(() =>
+                  ProjectService.use((service) =>
+                    choice % 3 === 0
+                      ? service.info.pipe(Effect.asVoid)
+                      : service
+                          .processStart(
+                            Start.cases.first.make({
+                              id: choice % 2 === 0 ? `birth-${config.start}` : `birth-${config.start}-${choice}`,
+                              name: choice % 2 === 0 ? "child" : `child-${choice}`,
+                              code: { program: "test/fixture", hash: FIXTURE.hash },
+                            }),
+                            {
+                              by: "fixture-writer",
+                              for: config.person,
+                              sentAt: "2026-11-08T04:00:00.000Z",
+                              seen: 0,
+                              parent: null,
+                              traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+                              build: config.build,
+                            },
+                          )
+                          .pipe(Effect.asVoid),
+                  ),
+                ),
+              );
 
               return Reflect.apply(runtime.runPromise, runtime, [work]);
             },
@@ -501,14 +511,12 @@ SettingsTest.suite((recipe, secret) =>
               : db.prepare(`SELECT * FROM ${table}`).all(),
           );
 
-          const channel =
-            table === "entries"
-              ? "ledger"
-              : table === "dev_descriptors"
-                ? "descriptors"
-                : table === "content"
-                  ? "content"
-                  : "spans";
+          const channel = Match.value(table).pipe(
+            Match.when("entries", () => "ledger" as const),
+            Match.when("dev_descriptors", () => "descriptors" as const),
+            Match.when("content", () => "content" as const),
+            Match.orElse(() => "spans" as const),
+          );
 
           output[channel] = [...output[channel], ...rows];
         }

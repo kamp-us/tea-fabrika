@@ -10,7 +10,7 @@
 // - `./program.ts` exports `counterModel`, the model schema the machine holds, and `counterKeys`, the
 //   default key rows, one per input. `./window.tsx` exports `CounterWindow` and `counterWindow`.
 import { defineWindow, type WindowProps } from "@kampus/libfabrika";
-import { Exit, Schema } from "effect";
+import { Exit, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { counter, counterKeys, counterMachine, counterModel } from "./program.ts";
@@ -67,7 +67,7 @@ describe("P14 S1.4: the counter's window accepts its own data and emits only its
     const wrong = fc.oneof(
       fc.record({ count: fc.oneof(fc.string(), fc.double({ noInteger: true }), fc.boolean(), fc.constant(null)) }),
       fc.record({ total: fc.integer() }),
-      fc.anything().filter((u) => typeof u !== "object" || u === null || !("count" in u)),
+      fc.anything().filter((u) => !Predicate.isObjectOrArray(u) || !("count" in u)),
     );
 
     fc.assert(
@@ -89,7 +89,7 @@ describe("P14 S1.4: the counter's window accepts its own data and emits only its
         ];
 
         expect(row?.length, `counter.${input} has a default row`).toBeGreaterThan(0);
-        expect(row!.every((key) => typeof key === "string" && key.length > 0)).toBe(true);
+        expect(row!.every((key) => Predicate.isString(key) && key.length > 0)).toBe(true);
       }),
       { seed: 119120, numRuns: 100 },
     );

@@ -15,7 +15,7 @@ const Request = Schema.fromJsonString(
     jsonrpc: Schema.Literal("2.0"),
     id: Schema.Union([Schema.String, Schema.Finite]),
     method: Schema.String,
-    params: Schema.optional(Schema.Unknown),
+    params: Schema.optional(Schema.Json),
   }),
 );
 
@@ -27,7 +27,7 @@ type Frame<A extends typeof Attached.Type, E, R, E2, R2> = [
   _admit: (key: string) => Effect.Effect<typeof Admission.Type, E2, R2>,
   route: (
     method: string,
-    params: unknown,
+    params: Schema.Json | undefined,
     ...identity: A extends Online ? [identity: typeof Who.Type] : []
   ) => Effect.Effect<typeof Answer.Type, E, R>,
 ];

@@ -1,7 +1,7 @@
 // P33 review round 2, one rule instead of single guarded ids: every event the brain writes about a
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Result, Schema } from "effect";
+import { Arbitrary, Effect, Result, Schema, Predicate } from "effect";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
 import { Mailbox } from "./Mailbox.ts";
@@ -362,8 +362,7 @@ describe("P33, an inbox read is total", () => {
     Schema.Struct({ m: Schema.TaggedStruct("DOWN", { ref: json(1) }) }),
   ]);
 
-  const hasM = (body: unknown): body is { readonly m: unknown } =>
-    typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");
+  const hasM = (body: unknown): body is { readonly m: unknown } => Predicate.isObject(body) && Object.hasOwn(body, "m");
 
   // Plant: drop nested mail in envelopes with 2 to 4 keys. Shrinks to {ref: 0, m: []}.
   it.effect.prop(
@@ -380,6 +379,7 @@ describe("P33, an inbox read is total", () => {
             ledger.append("watcher:1/inbox", `junk:${n}`, {
               ...from({ by: CLIENT }),
               _tag: "send",
+              // SAFETY: `body` is a junk letter drawn as JSON on purpose, to see the inbox take it as data.
               body: body as Schema.Json,
             }),
           ).pipe(Effect.provide(manager(store)));
@@ -410,6 +410,7 @@ describe("P33, every brain-written line records who asked", () => {
 
     for (const row of rows) {
       expect(row.by).toBe(BRAIN);
+      // SAFETY: each brain row here answers an `asked` call and keeps the key in its body.
       expect((row.body as { readonly asked?: unknown }).asked).toBe(key);
     }
   };

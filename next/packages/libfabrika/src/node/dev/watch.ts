@@ -45,10 +45,10 @@ const Diagnostic = Schema.Struct({
 
 const Errors = Schema.Struct({ errors: Schema.Array(Diagnostic) });
 
-const details = (raw: unknown, root: string, path: Path.Path) => {
-  const many = Schema.decodeUnknownOption(Errors)(raw);
-  const list = Schema.decodeUnknownOption(Schema.Array(Diagnostic))(raw);
-  const one = Schema.decodeUnknownOption(Diagnostic)(raw);
+const details = (cause: unknown, root: string, path: Path.Path) => {
+  const many = Schema.decodeUnknownOption(Errors)(cause);
+  const list = Schema.decodeUnknownOption(Schema.Array(Diagnostic))(cause);
+  const one = Schema.decodeUnknownOption(Diagnostic)(cause);
 
   const item = Option.isSome(many)
     ? many.value.errors[0]

@@ -8,7 +8,7 @@ import { checklist } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import * as Programs from "@kampus/libfabrika/runtime/Program";
 import { senderTest } from "@kampus/libfabrika/testing";
-import { Arbitrary, Effect, FileSystem, type Option, Result, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Match, type Option, Predicate, Result, Schema, Struct } from "effect";
 
 const SEED = 119120;
 
@@ -94,8 +94,11 @@ const DeclarationCases = Arbitrary.array(
     inputs.map((input, i) => ({
       name: `extra${i}`,
       schema: Schema.Struct({
-        [input.field]:
-          input.type === "string" ? Schema.String : input.type === "number" ? Schema.Finite : Schema.Boolean,
+        [input.field]: Match.value(input.type).pipe(
+          Match.when("string", () => Schema.String),
+          Match.when("number", () => Schema.Finite),
+          Match.orElse(() => Schema.Boolean),
+        ),
       }),
       readOnly: input.readOnly,
       personOnly: input.personOnly,
@@ -314,11 +317,14 @@ const presence = <A extends Partial<Bridge>>(files: ReadonlySet<string>, law: La
   }
 
   const binding = load();
-  const methods: ReadonlyArray<keyof Bridge> =
-    law === "tools" ? ["tools", "hidden"] : law === "malformed" ? ["malformed", "missing"] : [law];
+  const methods: ReadonlyArray<keyof Bridge> = Match.value(law).pipe(
+    Match.when("tools", () => ["tools", "hidden"] as const),
+    Match.when("malformed", () => ["malformed", "missing"] as const),
+    Match.orElse((other) => [other]),
+  );
 
   for (const name of methods) {
-    if (typeof binding[name] !== "function") {
+    if (!Predicate.isFunction(binding[name])) {
       throw new Error(`missing bridge export: ${name}`);
     }
   }
@@ -696,17 +702,17 @@ it.prop(
       throw new Error(`failed import: ${message}`);
     };
 
-    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+    for (const law of Struct.keys(paths)) {
       expect(presence(new Set(), law, failed)).toBeNull();
 
-      for (const other of Object.keys(paths) as ReadonlyArray<Law>) {
+      for (const other of Struct.keys(paths)) {
         if (other !== law) {
           expect(presence(new Set([paths[other]]), law, failed)).toBeNull();
         }
       }
     }
 
-    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+    for (const law of Struct.keys(paths)) {
       expect(() => presence(new Set([paths[law]]), law, failed)).toThrow("failed import");
     }
 
@@ -720,7 +726,7 @@ it.prop(
       missing: () => Effect.die("control only"),
     };
 
-    for (const law of Object.keys(paths) as ReadonlyArray<Law>) {
+    for (const law of Struct.keys(paths)) {
       expect(presence(new Set([paths[law]]), law, () => clean)).toBe(clean);
     }
 
