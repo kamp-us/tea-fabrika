@@ -7,7 +7,7 @@ import * as Files from "@kalfa/config/Files";
 import { Toml, TomlError } from "@kalfa/config/Toml";
 import * as TomlParser from "@kalfa/config/TomlParser";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Match, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Fabrika.ts";
@@ -74,14 +74,23 @@ const pick = <A>(xs: ReadonlyArray<A>, hint: number): A => xs[hint % xs.length]!
 
 const same = (a: Path, b: Path) => a.length === b.length && a.every((s, i) => s === b[i]);
 
-const record = (v: unknown): v is Tree => typeof v === "object" && v !== null && !Array.isArray(v);
+const record = (v: unknown): v is Tree => Predicate.isObject(v);
 
-const frozen = (value: unknown): unknown =>
-  Array.isArray(value)
-    ? Object.freeze(value.map(frozen))
-    : record(value)
-      ? Object.freeze(Object.fromEntries(Object.entries(value).map(([k, v]) => [k, frozen(v)])))
-      : value;
+/** Freezes `value` and every array and table inside it, in place. */
+const freezeAll = (value: unknown): void => {
+  if (Array.isArray(value) || record(value)) {
+    Object.values(value).forEach(freezeAll);
+    Object.freeze(value);
+  }
+};
+
+/** A deep copy of `value` with every array and table inside it frozen. */
+const frozen = <A>(value: A): A => {
+  const copy = structuredClone(value);
+  freezeAll(copy);
+
+  return copy;
+};
 
 const throwingRecord = (cause: Error) =>
   Object.defineProperty({}, "member", {
@@ -91,7 +100,7 @@ const throwingRecord = (cause: Error) =>
     },
   });
 
-const get = (v: unknown, path: Path): unknown =>
+const get = (v: Tree, path: Path): unknown =>
   path.reduce<unknown>((parent, key) => (record(parent) && Object.hasOwn(parent, key) ? parent[key] : undefined), v);
 
 const put = (tree: Tree, path: Path, value: unknown): Tree => {
@@ -258,9 +267,9 @@ const writable = (value: unknown): boolean =>
       ? value.every(writable)
       : record(value)
         ? Object.entries(value).every(([key, child]) => !lone(key) && writable(child))
-        : typeof value === "string"
+        : Predicate.isString(value)
           ? !lone(value)
-          : typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value);
+          : !Predicate.isNumber(value) || !Number.isInteger(value) || Number.isSafeInteger(value);
 
 const dotted = (path: Path): string => path.map((key) => JSON.stringify(key)).join(".");
 
@@ -743,8 +752,12 @@ describe("T877 public TOML edits, next/", () => {
         const path = parent === "table" ? [parent] : [parent, parent === "rows" ? "0" : pick(segments, hint.key)];
 
         // The explicit parent's own header is the location, even after a child header.
-        const line =
-          parent === "table" ? beforeTable.split(l.eol).length : parent === "rows" ? 4 : parent === "array" ? 3 : 2;
+        const line = Match.value(parent).pipe(
+          Match.when("table", () => beforeTable.split(l.eol).length),
+          Match.when("rows", () => 4),
+          Match.when("array", () => 3),
+          Match.orElse(() => 2),
+        );
 
         const set = yield* refusal(toml.set(text, path, 2), "Conflict", line);
         expect(set.reason).toMatchObject({ path });

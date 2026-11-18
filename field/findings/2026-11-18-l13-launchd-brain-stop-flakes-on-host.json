@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-l13-launchd-brain-stop-flakes-on-host",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/e2e/electron-launchd.visual.test.ts",
+    "line": 74
+  },
+  "says": "The host law 'L13 unsigned Electron's real brain survives controller death, restarts and fully stops' timed out after 5 s on one attempt and passed on the next at the same head.",
+  "proof": "PR 1494 at 17c1ae830: host run 44243040878 attempt 1 (job 134595233763) failed L13 with a 5 s timeout; attempt 2 of the same run passed, with no push between them.",
+  "cost": "A host-gated pull request is held out of the merge queue until a rerun passes (decision 0178); tonight it took 1494 out of the queue once.",
+  "head": "2077e9d243dfce7726016a82d96686afb229597e",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1494"
+}

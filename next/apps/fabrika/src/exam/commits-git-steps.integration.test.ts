@@ -92,6 +92,7 @@ describe("build_touched_exam (p84)", () => {
   // scenario: real tree reads must use the ancestor list despite the changed list on head.
   it("scenario: a build commit dropping a row from exam-paths.json and touching that path: the base's list counts", () => {
     const r = new Repo();
+    // SAFETY: EXAM_LIST is exam-paths.json's text, an array of rows that each have a `glob`.
     const rows = JSON.parse(EXAM_LIST) as Array<{ glob: string }>;
     r.write("exam-paths.json", JSON.stringify(rows.filter((row) => row.glob !== "boundary-rules.json")));
     r.write("boundary-rules.json", "[3]\n");

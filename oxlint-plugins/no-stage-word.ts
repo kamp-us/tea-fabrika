@@ -16,6 +16,7 @@
 // time (`"sta" + "ge"`), and a regular expression's pattern. No autofix: the rule cannot tell
 // `dev` from `instance`, or move a saved name.
 import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { pathIn } from "./match.ts";
 
 const START = { line: 1, column: 0 };
@@ -121,7 +122,7 @@ export const noStageWord: CreateRule = {
       PrivateIdentifier: (node) => named(node, node.name),
       JSXIdentifier: (node) => named(node, node.name),
       Literal(node) {
-        if (typeof node.value === "string") {
+        if (Predicate.isString(node.value)) {
           named(node, node.value);
         }
       },

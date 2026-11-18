@@ -21,6 +21,7 @@
 import { lengths, STRIP, shut } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP, order } from "@kampus/libfabrika/tezgah/Layout";
 import type { Dir, Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import * as Predicate from "effect/Predicate";
 import type { ReactElement } from "react";
 
 /**
@@ -94,7 +95,7 @@ const NONE: ReadonlySet<TileId> = new Set();
 const stripName = (tile: Pick<Tile, "program" | "n">): string => `open ${tileName(tile)}`;
 
 /** A box's classes: its own, and the direction it lays its parts in when it holds a container. */
-const flow = (own: string, inner: Tree): string => (typeof inner === "string" ? own : `${own} flow-${inner.dir}`);
+const flow = (own: string, inner: Tree): string => (Predicate.isString(inner) ? own : `${own} flow-${inner.dir}`);
 
 /** The close question, in the tile guidelines' words, as tmux asks it. */
 export const question = (tile: Pick<Tile, "n">): string => `close t${tile.n}? (y/n)`;
@@ -204,7 +205,7 @@ export const Layout = ({
     dir: Dir,
     box: { readonly width: number; readonly height: number } | null,
   ): ReactElement | ReadonlyArray<ReactElement> | null => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       const tile = byId.get(node);
 
       if (tile !== undefined && node !== workspace.focus && strips.has(node)) {
@@ -249,12 +250,12 @@ export const Layout = ({
 
       // A band: every tile of a folded container lies along it, one strip each, sharing its length.
       const body =
-        folded && typeof part.inner !== "string"
+        folded && !Predicate.isString(part.inner)
           ? order(part.inner).flatMap((t, k) => [...(k === 0 ? [] : [divider(k)]), ...strip(t, node.dir)])
           : draw(part.inner, node.dir, inner);
 
       const flows =
-        folded && typeof part.inner !== "string"
+        folded && !Predicate.isString(part.inner)
           ? `part band flow-${row ? "column" : "row"}`
           : flow("part", part.inner);
 

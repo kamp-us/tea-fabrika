@@ -10,6 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { Predicate, Result } from "effect";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
@@ -20,8 +21,7 @@ const LEFT_OUT = /^next\//;
 
 const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 
-const isMap = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isMap = (value: unknown): value is Record<string, unknown> => Predicate.isObject(value);
 
 /** A pnpm-workspace.yaml glob as a test on a folder: `*` is one path part, as pnpm reads it here. */
 const matcher = (glob: string): RegExp =>
@@ -49,7 +49,7 @@ const read = (file: string): Manifest => {
     return isMap(map) ? Object.keys(map) : [];
   });
 
-  return { name: typeof manifest["name"] === "string" ? manifest["name"] : null, deps };
+  return { name: Predicate.isString(manifest["name"]) ? manifest["name"] : null, deps };
 };
 
 const tracked = spawnSync("git", ["ls-files", "-z", "--", "package.json", "**/package.json"], {
@@ -70,7 +70,7 @@ if (tracked.status !== 0) {
 const run = (): { readonly unreached: readonly string[]; readonly total: number } => {
   const workspace: unknown = parse(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8"));
   const globs = isMap(workspace) && Array.isArray(workspace["packages"]) ? workspace["packages"] : [];
-  const members = globs.filter((g): g is string => typeof g === "string").map(matcher);
+  const members = globs.filter((g): g is string => Predicate.isString(g)).map(matcher);
   const starts = STARTS.map(matcher);
 
   const folders = tracked.stdout
@@ -117,13 +117,9 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
   return { unreached, total: byName.size };
 };
 
-let result: ReturnType<typeof run> = { unreached: [], total: 0 };
+const ran = Result.try(run);
 
-try {
-  result = run();
-} catch (error) {
-  fail(`could not read: ${String(error)}`);
-}
+const result = Result.isSuccess(ran) ? ran.success : fail(`could not read: ${String(ran.failure)}`);
 
 if (result.unreached.length > 0) {
   for (const line of result.unreached) {

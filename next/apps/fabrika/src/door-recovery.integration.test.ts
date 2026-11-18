@@ -29,7 +29,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, Layer, Schema, Scope, Stream } from "effect";
+import { Effect, Layer, Predicate, Schema, Scope, Stream } from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -94,7 +94,7 @@ const disks = Effect.gen(function* () {
 type Disks = Effect.Success<typeof disks>;
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value) : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value) : Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(b.length);
 
@@ -367,7 +367,7 @@ const world = ({ disk }: Disks) => {
       if (
         controls.cutRecorded &&
         query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
+        args.some((arg) => Predicate.isString(arg) && arg.includes('"_tag":"recorded"'))
       ) {
         controls.cutRecorded = false;
         controls.cuts++;
@@ -377,7 +377,7 @@ const world = ({ disk }: Disks) => {
       if (
         controls.cutRetryable &&
         query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
+        args.some((arg) => Predicate.isString(arg) && arg.includes('"_tag":"retryable"'))
       ) {
         controls.cutRetryable = false;
         controls.retryableCuts++;

@@ -1,5 +1,6 @@
 // next/: the ledger's entries and rings belong to the ledger service, including reads.
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const OWNERS = new Set([
@@ -34,7 +35,7 @@ export const noLedgerSql: CreateRule = {
 
     return {
       Literal(node) {
-        if (typeof node.value === "string") {
+        if (Predicate.isString(node.value)) {
           report(node, node.value);
         }
       },

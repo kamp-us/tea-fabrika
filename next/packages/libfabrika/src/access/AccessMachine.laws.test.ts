@@ -17,6 +17,7 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Match from "effect/Match";
 import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
@@ -188,19 +189,32 @@ const pickTarget = (model: Folded, c: Choice, n: number, fresh: string): string 
   const live = withStanding(model, (k) => k._tag === "live");
   const stopped = withStanding(model, (k) => k._tag !== "live");
 
-  return at(c.aim === 7 ? stopped : c.aim === 6 ? [...keysIn(model).keys()] : live, c.target) ?? `${fresh}#${n}`;
+  return (
+    at(
+      Match.value(c.aim).pipe(
+        Match.when(7, () => stopped),
+        Match.when(6, () => [...keysIn(model).keys()]),
+        Match.orElse(() => live),
+      ),
+      c.target,
+    ) ?? `${fresh}#${n}`
+  );
 };
 
 const pickDrops = (model: Folded, c: Choice, signer: string): Array<string> =>
   c.drops.map(([which, n]) =>
-    which === 0
-      ? signer
-      : which === 1
-        ? (at(
+    Match.value(which).pipe(
+      Match.when(0, () => signer),
+      Match.when(
+        1,
+        () =>
+          at(
             withStanding(model, (k) => k._tag !== "live"),
             n,
-          ) ?? `gone#${n}`)
-        : (at([...keysIn(model).keys()], n) ?? `gone#${n}`),
+          ) ?? `gone#${n}`,
+      ),
+      Match.orElse(() => at([...keysIn(model).keys()], n) ?? `gone#${n}`),
+    ),
   );
 
 const pickFor = (model: Folded, c: Choice): string =>
@@ -209,7 +223,13 @@ const pickFor = (model: Folded, c: Choice): string =>
 const pickId = (model: Folded, c: Choice, refused: ReadonlyArray<string>, n: number, kind: string): string => {
   const accepted = [...idsIn(model)];
 
-  return (c.id === 0 ? at(accepted, c.pick) : c.id === 1 ? at(refused, c.pick) : undefined) ?? `${kind}_${c.raw}#${n}`;
+  return (
+    Match.value(c.id).pipe(
+      Match.when(0, () => at(accepted, c.pick)),
+      Match.when(1, () => at(refused, c.pick)),
+      Match.orElse(() => undefined),
+    ) ?? `${kind}_${c.raw}#${n}`
+  );
 };
 
 const founding = (c: Choice): MemberEvent => ({

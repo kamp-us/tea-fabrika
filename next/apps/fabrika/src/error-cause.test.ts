@@ -47,6 +47,7 @@ describe("T695, the app's wiring keeps what failed", () => {
     fc.record({ failure: failures, out: fc.stringMatching(/^[a-z]{1,8}$/) }),
     ({ failure, out }) =>
       Effect.gen(function* () {
+        // SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it.
         const disk = Layer.merge(FileSystem.layerNoop({ glob: () => Effect.fail(failure as never) }), Path.layer);
         const error = yield* Effect.flip(Effect.provide(build({ out: `/tmp-t695/${out}` }), disk));
         expect(error._tag).toBe("BuildError");
@@ -75,6 +76,7 @@ describe("T695, the app's wiring keeps what failed", () => {
               : { ...valid, [field]: bad };
 
         const instance = JSON.stringify(damaged);
+        // SAFETY: settings reads only `INSTANCE` from its Env, the one binding this law damages.
         const error = yield* Effect.flip(settings({ INSTANCE: instance } as Env));
         expect(error.reason).toBe("bad_row");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);

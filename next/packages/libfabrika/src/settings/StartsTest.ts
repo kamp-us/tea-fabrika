@@ -2,7 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Snapshot from "@kalfa/config/Snapshot";
 import { Origin } from "@kalfa/config/Sources";
-import { type Config, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
+import { type Config, DateTime, Effect, Exit, Match, Option, Predicate, Schema, type Scope } from "effect";
 import { Digest } from "effect/crypto";
 import { Hex } from "effect/encoding";
 import * as fc from "fast-check";
@@ -58,20 +58,20 @@ export const originFault = (kind: (typeof originKinds)[number]): fc.Arbitrary<Or
     )
     .map(([path, word, choice]) => ({
       path,
-      origin:
-        kind === "flag"
-          ? Origin.cases.flag.make({ name: `--undeclared.${word}` })
-          : kind === "env"
-            ? Origin.cases.env.make({ name: `FABRIKA_UNDECLARED_${word.replaceAll("-", "_")}` })
-            : Origin.cases.file.make({
-                file:
-                  choice % 3 === 0
-                    ? `/${word}/fabrika.toml`
-                    : choice % 3 === 1
-                      ? `C:\\${word}\\fabrika.toml`
-                      : `\\\\fixture\\${word}\\fabrika.toml`,
-                line: 1 + (choice % 1000),
-              }),
+      origin: Match.value(kind).pipe(
+        Match.when("flag", () => Origin.cases.flag.make({ name: `--undeclared.${word}` })),
+        Match.when("env", () => Origin.cases.env.make({ name: `FABRIKA_UNDECLARED_${word.replaceAll("-", "_")}` })),
+        Match.orElse(() =>
+          Origin.cases.file.make({
+            file: Match.value(choice % 3).pipe(
+              Match.when(0, () => `/${word}/fabrika.toml`),
+              Match.when(1, () => `C:\\${word}\\fabrika.toml`),
+              Match.orElse(() => `\\\\fixture\\${word}\\fabrika.toml`),
+            ),
+            line: 1 + (choice % 1000),
+          }),
+        ),
+      ),
     }));
 
 export const changeOrigin = (value: Input, fault: OriginFault): Input => ({
@@ -127,14 +127,12 @@ export const input = Effect.fnUntraced(function* (
   r: Recipe,
   values: Values = {},
 ): Effect.fn.Return<Input, never, Digest.Digest> {
-  const origin =
-    r.origin === "flag"
-      ? Origin.cases.flag.make({ name: "--instance.port" })
-      : r.origin === "env"
-        ? Origin.cases.env.make({ name: "FABRIKA_INSTANCE_PORT" })
-        : r.origin === "file"
-          ? Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })
-          : Origin.cases.default.make({});
+  const origin = Match.value(r.origin).pipe(
+    Match.when("flag", () => Origin.cases.flag.make({ name: "--instance.port" })),
+    Match.when("env", () => Origin.cases.env.make({ name: "FABRIKA_INSTANCE_PORT" })),
+    Match.when("file", () => Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })),
+    Match.orElse(() => Origin.cases.default.make({})),
+  );
 
   const settings = yield* Snapshot.make(Declarations.all, {
     // Every declaration starts at its declared default, so a setting added to `all` (T1041's two
@@ -259,7 +257,7 @@ export const exclude = (output: unknown, secret: string) => {
   const seen = new WeakSet<object>();
 
   const visit = (value: unknown): void => {
-    if (typeof value === "string") {
+    if (Predicate.isString(value)) {
       for (const form of forms) {
         // A walk visits every string of every output after each move. One assertion per string
         // took two thirds of an entry flow law's time, so only a string that holds the form
@@ -268,7 +266,7 @@ export const exclude = (output: unknown, secret: string) => {
           expect(value).not.toContain(form);
         }
       }
-    } else if (typeof value === "object" && value !== null && !seen.has(value)) {
+    } else if (Predicate.isObjectOrArray(value) && !seen.has(value)) {
       seen.add(value);
 
       if (value instanceof ArrayBuffer) {
@@ -420,18 +418,18 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
                   ...current,
                   origin: {
                     ...original,
-                    [key]:
-                      key === "seen"
-                        ? original.seen + 1
-                        : key === "parent"
-                          ? original.parent === null
-                            ? `in-process_${"0".repeat(26)}-1`
-                            : null
-                          : key === "traceId"
-                            ? `${original.traceId[0] === "0" ? "1" : "0"}${original.traceId.slice(1)}`
-                            : key === "sentAt"
-                              ? DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1))
-                              : `${original[key]}-different`,
+                    [key]: Match.value(key).pipe(
+                      Match.when("seen", () => original.seen + 1),
+                      Match.when("parent", () => (original.parent === null ? `in-process_${"0".repeat(26)}-1` : null)),
+                      Match.when(
+                        "traceId",
+                        () => `${original.traceId[0] === "0" ? "1" : "0"}${original.traceId.slice(1)}`,
+                      ),
+                      Match.when("sentAt", () =>
+                        DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1)),
+                      ),
+                      Match.orElse(() => `${original[key]}-different`),
+                    ),
                   },
                 };
 
@@ -465,7 +463,13 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               }
 
               const after = driver.counts();
-              const deliveries = move === "concurrent" ? 3 : move === "lost" ? 2 : 1;
+
+              const deliveries = Match.value(move).pipe(
+                Match.when("concurrent", () => 3),
+                Match.when("lost", () => 2),
+                Match.orElse(() => 1),
+              );
+
               expect(after.reads - before.reads).toBe(deliveries + (absent ? 1 : 0));
               expect(after.appends - before.appends).toBe(absent ? 1 : 0);
             }

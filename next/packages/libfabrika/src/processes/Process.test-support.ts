@@ -152,7 +152,10 @@ export const fcBadReason = (reason: ExitReason): fc.Arbitrary<unknown> =>
     fc.constant(raw("crashed", { error: "Error" })),
     fc
       .string({ minLength: 1, maxLength: 20 })
-      .filter((phase) => !(PHASES as ReadonlyArray<string>).includes(phase))
+      .filter(
+        // SAFETY: PHASES is a string tuple; widened here only so `includes` can test any generated phase.
+        (phase) => !(PHASES as ReadonlyArray<string>).includes(phase),
+      )
       .map((phase) => raw("crashed", { phase })),
     fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: "" })),
     fc
@@ -162,7 +165,7 @@ export const fcBadReason = (reason: ExitReason): fc.Arbitrary<unknown> =>
   );
 
 /** A raw client value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
-const raw = (tag: string, fields: object = {}): unknown =>
+const raw = (tag: string, fields: object = {}): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
   ({ ...fields, _tag: tag });
 

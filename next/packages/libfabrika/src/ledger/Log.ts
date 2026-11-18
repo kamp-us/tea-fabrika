@@ -113,7 +113,7 @@ export const lineFor = <A extends { readonly _tag: string } & Schema.JsonObject>
  * @stability unstable
  * @category converting
  */
-export const valueFor = (entry: Entry): unknown => Object.assign({}, entry.body, { _tag: entry._tag });
+export const valueFor = (entry: Entry): Schema.Json => Object.assign({}, entry.body, { _tag: entry._tag });
 
 /**
  * Schema for one entry of the log: a line, with the stream and id it was appended under and the

@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-runtime-typeof-1-review3",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:21:40-08:00",
+  "ended": "2026-11-15T23:31:16-08:00",
+  "parent": "2026-11-15-antislop-no-runtime-typeof-1-tests3",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice AS-no-runtime-typeof-1 at b7dc6bf4b, after the merge of origin/main b510ed2 (69eb51c54) and tests round three, next/ and our tooling: merge-ready, one finding row. The merge holds only this slice's fixes. For every file, the lines changed in b510ed2..69eb51c54 equal those changed in bcad0080d..ea6fd76c9, check-job.ts included. The one exception is oxlint-plugins/integration-test-name.ts, which is now main's version whole and has no runtime typeof. The 13 new swaps keep behavior: Proxy get keys, a fake deploy inside a vi.mock factory, a fetch stub, a SQL stub and lint plugin code, all on Node, none in a page body. loosening.sh on b510ed2..HEAD gives the same six one-for-one expect rewrites as review1, and on 69eb51c54..HEAD only import lines. With the rule forced on there are 17 hits at the head (11 in the .mjs scripts, 6 page-side) and 325 at b510ed2 over the same folders. The tests3 row's totals count the 7 hits once waiting on 1366 twice: 320 already held them. The right totals are 326 met (320 plus 6 from main), 308 fixed (296, less the integration-test-name.ts fix that main's rewrite replaced, plus 13) and 17 left, with 1 hit gone in main's rewrite.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Read-only apart from this row. Ran at b7dc6bf4b: the rule forced on in a scratch config; pnpm lint, which fails only on the zero lock's three asks for oxlint-plugins, next/packages/libfabrika/src/client and next/programs/tezgah; ratchet.ts --base b510ed2, which printed done for all three ledgers and exited 0; one pnpm typecheck, passed; 64 plain test files (runtime-quotas.laws.test.ts, test-kind.test.ts, integration-test-name.test.ts, check-job.test.ts and review1's 60), all green. Not run: the .integration. files the round touched (runtime-recovery.laws, local-instance) and the .visual. files. origin/main has moved on to 797c3c8a8 since the merge.",
+  "step": "review"
+}

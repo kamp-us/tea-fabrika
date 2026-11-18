@@ -9,6 +9,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Predicate, type Schema } from "effect";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -17,11 +18,15 @@ const ROOT = join(import.meta.dirname, "..");
 const KEY = "allowedDuplicatedPackages";
 
 /** A JSON value from the parsed config, comments dropped. */
-const value = (node: Expression): unknown => {
+const value = (node: Expression): Schema.Json => {
   switch (node.type) {
     case "ParenthesizedExpression":
       return value(node.expression);
     case "Literal":
+      if (Predicate.isBigInt(node.value) || Predicate.isRegExp(node.value)) {
+        throw new Error(`tsconfig.base.json holds a ${node.type} that is not JSON`);
+      }
+
       return node.value;
     case "ArrayExpression":
       return node.elements.map((element) =>
@@ -41,7 +46,7 @@ const value = (node: Expression): unknown => {
 };
 
 const record = (x: unknown): Record<string, unknown> =>
-  typeof x === "object" && x !== null && !Array.isArray(x) ? Object.fromEntries(Object.entries(x)) : {};
+  Predicate.isObject(x) ? Object.fromEntries(Object.entries(x)) : {};
 
 const list = (x: unknown): ReadonlyArray<unknown> => (Array.isArray(x) ? x : []);
 
@@ -74,7 +79,7 @@ it("format: E3, `@demlik/tea` may appear twice only in one checker override scop
 
   const include = list(holders[0]?.include);
   expect(include.length).toBeGreaterThan(0);
-  expect(include.filter((glob) => typeof glob !== "string" || !glob.startsWith(".agents/"))).toEqual([]);
+  expect(include.filter((glob) => !Predicate.isString(glob) || !glob.startsWith(".agents/"))).toEqual([]);
 
   const tracked = spawnSync("git", ["ls-files", "-z", "--", "tsconfig*.json", "**/tsconfig*.json"], {
     cwd: ROOT,

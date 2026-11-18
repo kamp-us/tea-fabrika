@@ -17,6 +17,7 @@
  * The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
  */
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
@@ -95,7 +96,7 @@ const saysNoMemo = (body: Tree): boolean => {
   }
 
   for (const s of body.body) {
-    if (s.type !== "ExpressionStatement" || typeof s.directive !== "string") {
+    if (s.type !== "ExpressionStatement" || !Predicate.isString(s.directive)) {
       return false;
     }
 
@@ -122,10 +123,13 @@ const opensWithCache = (body: Tree): boolean => {
 const functions = (file: string, text: string): readonly Fn[] => {
   const found: Fn[] = [];
 
-  const walk = (node: Tree, bound: string | null, depth: number, inJsx: { on: boolean }) => {
-    if (node === null || typeof node !== "object") {
+  const walk = (input: Tree, bound: string | null, depth: number, inJsx: { on: boolean }) => {
+    if (!Predicate.isObjectOrArray(input)) {
       return;
     }
+
+    // The guard only rules out a leaf: the walk goes on reading the node loosely, as `Tree` says.
+    const node: Tree = input;
 
     if (Array.isArray(node)) {
       for (const n of node) {

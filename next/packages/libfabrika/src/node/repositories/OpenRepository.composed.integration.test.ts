@@ -17,7 +17,9 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -411,16 +413,13 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 const request = requests[index * 2 + 1]!;
                 const source = c.pick % 9;
 
-                const body =
-                  source === 0
-                    ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`
-                    : source === 3
-                      ? `fabrika-version = ${JSON.stringify(secret)}\n`
-                      : source === 4
-                        ? `[${JSON.stringify(secret)}]\nvalue = true\n`
-                        : source === 5
-                          ? `fabrika-version = ${JSON.stringify(secret)} [\n`
-                          : 'fabrika-version = "0.0.0"\n';
+                const body = Match.value(source).pipe(
+                  Match.when(0, () => `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`),
+                  Match.when(3, () => `fabrika-version = ${JSON.stringify(secret)}\n`),
+                  Match.when(4, () => `[${JSON.stringify(secret)}]\nvalue = true\n`),
+                  Match.when(5, () => `fabrika-version = ${JSON.stringify(secret)} [\n`),
+                  Match.orElse(() => 'fabrika-version = "0.0.0"\n'),
+                );
 
                 const fs = FileSystem.layerNoop({
                   realPath: (location) => Effect.succeed(location),
@@ -573,7 +572,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
 
           const output =
             JSON.stringify(values, (_key: string, value: unknown) =>
-              typeof value === "bigint" ? value.toString() : value,
+              Predicate.isBigInt(value) ? value.toString() : value,
             ) + inspect(values, { depth: null });
 
           for (const spelling of [secret, folder, url].flatMap(forms)) {

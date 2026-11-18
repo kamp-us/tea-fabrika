@@ -23,10 +23,12 @@ import {
   Fiber,
   Layer,
   Option,
+  Predicate,
   Result,
   Schema,
   Scope,
   Stream,
+  Match,
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -482,7 +484,7 @@ const worldOn = async (
   });
 
   // The undeclared Cmd is an explicit broken module, not supported authoring.
-  const loaded = (): unknown =>
+  const loaded = () =>
     options.unknownCmd
       ? {
           ...p,
@@ -505,6 +507,8 @@ const worldOn = async (
   const alarms: Array<number | null> = [];
   const calls: Array<{ kind: string; id: string; parent: string | null }> = [];
 
+  // SAFETY: each `as` in this object only widens a starting literal (`""` or `"ok"`) to the union it
+  // is a member of, so a law can later set the field to any of the union's other faults.
   const fault = {
     append: "" as "" | "before" | "after" | "refused",
     answer: false,
@@ -560,6 +564,8 @@ const worldOn = async (
           (key: string) => Effect.succeed(key === "agent" ? writer("agent") : writer()),
           {
             input: (name: string) => name === "approve",
+            // SAFETY: a tag that is not one of `p.writes`' keys indexes to undefined, which the `?.`
+            // and `?? false` after it answer, so the key type claims nothing the read relies on.
             event: (tag: string) => p.writes[tag as keyof typeof p.writes]?.personOnly ?? false,
           },
         ),
@@ -1858,8 +1864,12 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 
             w.store.fault.query = (q) => q.startsWith(failing);
             w.store.fault.once = fault === "ledger" || fault === "recovery";
-            w.fault.load =
-              fault === "recovery" ? "limit" : fault === "down" ? "down" : fault === "interrupt" ? "pause" : "";
+            w.fault.load = Match.value(fault).pipe(
+              Match.when("recovery", () => "limit" as const),
+              Match.when("down", () => "down" as const),
+              Match.when("interrupt", () => "pause" as const),
+              Match.orElse(() => "" as const),
+            );
             yield* Effect.gen(function* () {
               const r: Runner = yield* w.ProgramRunner;
               yield* TestClock.setTime(now);
@@ -3058,9 +3068,7 @@ describe("P11 recovery gaps and durable installation", () => {
           expect(w.workCalls()).toBe(1);
           const saved = yield* ProcessStore.use((s) => s.load);
           expect(
-            saved?.cmds.filter(
-              (cmd) => typeof cmd === "object" && cmd !== null && "id" in cmd && cmd.id === `${PROCESS}/2/0`,
-            ),
+            saved?.cmds.filter((cmd) => Predicate.hasProperty(cmd, "id") && cmd.id === `${PROCESS}/2/0`),
           ).toMatchObject([{ id: `${PROCESS}/2/0`, state: "dispatched", cmd: { type: "work", n: 73 } }]);
         }).pipe(Effect.provide(w.layer())),
       );
@@ -3507,7 +3515,7 @@ describe("P11 monitoring, content and storage failures", () => {
 
                 const failed = rows.filter((row) => !row.ok);
                 expect(failed.length).toBeGreaterThan(0);
-                expect(failed.some((row) => typeof row.attributes["error.type"] === "string")).toBe(true);
+                expect(failed.some((row) => Predicate.isString(row.attributes["error.type"]))).toBe(true);
                 const records = yield* RecordManager;
 
                 const content = yield* Effect.forEach(

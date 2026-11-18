@@ -3,6 +3,7 @@
  * restarts it.
  */
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { NotGranted, type Writer } from "../access/SessionManager.ts";
 import { QuotasError, type Accounting, type RecoveryReserveExhausted } from "../processes/Quotas.ts";
@@ -30,7 +31,7 @@ export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefin
     return error.reason._tag === "RecoveryReserveExhausted" ? error.reason : undefined;
   }
 
-  if (typeof error !== "object" || error === null) {
+  if (!Predicate.isObjectOrArray(error)) {
     return undefined;
   }
 

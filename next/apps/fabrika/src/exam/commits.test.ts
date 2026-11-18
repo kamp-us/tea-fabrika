@@ -139,6 +139,7 @@ describe("signedText", () => {
       fc.property(anyNote, fc.string(), fc.string(), (n, key, sig) => {
         const expected = `fabrika-step attested v2\nstep ${n.step}\nticket ${n.ticket}\nversion ${n.version}\nfrom ${n.from}\nto ${n.to}\n`;
         expect(signedText(n)).toBe(expected);
+        // SAFETY: n plus `key` and `sig` is the whole Note schema in commits.ts; the law checks that signedText leaves those two out.
         expect(signedText({ ...n, key, sig } as Note)).toBe(expected);
         expect(signedText(n)).not.toContain("commit");
       }),

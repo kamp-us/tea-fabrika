@@ -29,7 +29,9 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import * as References from "effect/References";
 import * as Sink from "effect/Sink";
 import * as TestConsole from "effect/testing/TestConsole";
@@ -100,18 +102,20 @@ const files = (at: string, person: Person, sunk: Array<string>) =>
     FileSystem.makeNoop({
       readFileString: (path) => {
         if (path === at) {
-          return person._tag === "text"
-            ? Effect.succeed(person.text)
-            : person._tag === "unreadable"
-              ? Effect.fail(
-                  PlatformError.systemError({
-                    _tag: "PermissionDenied",
-                    module: "FileSystem",
-                    method: "readFileString",
-                    pathOrDescriptor: path,
-                  }),
-                )
-              : Effect.fail(missing("readFileString", path));
+          return Match.value(person).pipe(
+            Match.tag("text", (person) => Effect.succeed(person.text)),
+            Match.tag("unreadable", () =>
+              Effect.fail(
+                PlatformError.systemError({
+                  _tag: "PermissionDenied",
+                  module: "FileSystem",
+                  method: "readFileString",
+                  pathOrDescriptor: path,
+                }),
+              ),
+            ),
+            Match.orElse(() => Effect.fail(missing("readFileString", path))),
+          );
         }
 
         return path.endsWith(".fabrika/fabrika.toml")
@@ -157,7 +161,7 @@ const spans = () => {
       .map((span) =>
         JSON.stringify(
           { name: span.name, attributes: [...span.attributes], events: span.events, status: span.status },
-          (_key, value: unknown) => (typeof value === "bigint" ? String(value) : value),
+          (_key, value: unknown) => (Predicate.isBigInt(value) ? String(value) : value),
         ),
       )
       .join("\n");

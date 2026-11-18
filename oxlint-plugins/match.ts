@@ -3,6 +3,7 @@
 // `Effect.all<T>(x)` and `x.Effect.all(y)` did not. The rules keep that exactly: README.md says how
 // that was measured.
 import type { Context, ESTree, Visitor } from "@oxlint/plugins";
+import { Predicate } from "effect";
 
 type Source = Context["sourceCode"];
 
@@ -45,6 +46,7 @@ export const plainCall = (node: Node): string | null =>
 
 /** A plain member on the left of a write: `a.b = 1`, `a.b++`, `[a.b] = c`, `for (a.b of c)`. */
 export const isWritten = (node: Node): boolean => {
+  // SAFETY: oxlint hands every visited node its `parent`, and a written member always sits inside another node.
   const { parent } = node as Node & { readonly parent: Node };
 
   switch (parent.type) {
@@ -76,6 +78,7 @@ export const grouped = (source: Source, node: Node): number => {
     after = source.getTokenAfter(after);
   }
 
+  // SAFETY: a node a rule visits is never the Program itself here, so oxlint has set its `parent`.
   const { parent } = node as Node & { readonly parent: Node };
 
   if ((parent.type === "CallExpression" || parent.type === "NewExpression") && pairs > 0) {
@@ -133,17 +136,19 @@ export const effectNames = (program: ESTree.Program): ReadonlySet<string> => {
 
 /** Each ancestor of a node, nearest first. */
 export function* ancestors(node: Node): Generator<Node> {
+  // SAFETY: oxlint sets `parent` on every node it visits, and it is null only on the Program.
   let at = (node as Node & { readonly parent?: Node | null }).parent;
 
   while (at != null) {
     yield at;
+    // SAFETY: each ancestor oxlint hands back carries its own `parent`, null once the walk reaches the Program.
     at = (at as Node & { readonly parent?: Node | null }).parent;
   }
 }
 
 /** A string literal in the source, with its quotes: `"a"`. */
 export const quoted = (node: Node): string | null =>
-  node.type === "Literal" && typeof node.value === "string" ? node.raw : null;
+  node.type === "Literal" && Predicate.isString(node.value) ? node.raw : null;
 
 /** The empty string, in either quote, with no parentheses around it. */
 export const isEmptyString = (source: Source, node: Node | null): boolean =>
@@ -154,12 +159,13 @@ export function* below(node: Node): Generator<Node> {
   yield node;
 
   for (const [key, value] of Object.entries(node)) {
-    if (key === "parent" || value === null || typeof value !== "object") {
+    if (key === "parent") {
       continue;
     }
 
+    // Only a node has a string `type`: a primitive, null or a plain list of numbers has none.
     for (const part of Array.isArray(value) ? value : [value]) {
-      if (part !== null && typeof part === "object" && typeof part.type === "string") {
+      if (Predicate.isString(part?.type)) {
         yield* below(part);
       }
     }
@@ -184,6 +190,7 @@ export const banNames =
       TSQualifiedName: check,
       // `<Redacted.value />`. The opening tag is enough: a closing tag says it a second time.
       JSXMemberExpression(node) {
+        // SAFETY: a JSX member name always sits inside an opening or closing tag, which oxlint gives as its `parent`.
         if ((node as Node & { readonly parent: Node }).parent.type !== "JSXClosingElement") {
           check(node);
         }
