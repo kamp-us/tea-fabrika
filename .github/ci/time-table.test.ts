@@ -459,9 +459,10 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
 
   const created = "2026-11-14T09:59:56Z";
   const started = "2026-11-14T10:00:00Z";
+  const realRunner = { runner_id: 1_000_332_569 };
 
   for (const status of ["queued", "waiting", "requested", "pending"]) {
-    const placeholder = { status, created_at: created, started_at: null };
+    const placeholder = { ...realRunner, status, created_at: created, started_at: null };
     const timings = await timingsOf(
       env,
       io(
@@ -475,10 +476,16 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
     expect(markdown(timings)).toContain("Unavailable: no valid job queue timing");
   }
 
-  expect(readQueueWait({ status: "pending", created_at: created, started_at: started })).toBeUndefined();
-  expect(readQueueWait({ status: "in_progress", created_at: created, started_at: null })).toBeUndefined();
-  expect(readQueueWait({ status: "in_progress", created_at: "bad", started_at: started })).toBeUndefined();
-  expect(readQueueWait({ status: "in_progress", created_at: started, started_at: created })).toBeUndefined();
+  expect(readQueueWait({ ...realRunner, status: "pending", created_at: created, started_at: started })).toBeUndefined();
+  expect(
+    readQueueWait({ ...realRunner, status: "in_progress", created_at: created, started_at: null }),
+  ).toBeUndefined();
+  expect(
+    readQueueWait({ ...realRunner, status: "in_progress", created_at: "bad", started_at: started }),
+  ).toBeUndefined();
+  expect(
+    readQueueWait({ ...realRunner, status: "in_progress", created_at: started, started_at: created }),
+  ).toBeUndefined();
 
   const skipped = {
     status: "completed",
@@ -500,7 +507,7 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
   const real = {
     status: "completed",
     conclusion: "success",
-    runner_id: 1_000_332_569,
+    ...realRunner,
     created_at: "2026-11-17T15:14:09Z",
     started_at: "2026-11-17T15:25:54Z",
   };
@@ -520,7 +527,7 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
     ["created_at", "2026-11-14T09:59:56"],
     ["started_at", "2026-11-14T10:00:00"],
   ] as const) {
-    expect(readQueueWait({ ...job, [field]: value })).toBeUndefined();
+    expect(readQueueWait({ ...job, ...realRunner, [field]: value })).toBeUndefined();
   }
 });
 
