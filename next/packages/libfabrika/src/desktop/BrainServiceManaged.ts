@@ -7,6 +7,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -85,7 +86,10 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         void | typeof Status.Type | typeof Readiness.Type | typeof Children.Type,
         BrainControlError | BrainProbeError,
         Scope.Scope
-      > = cmd.type === "ready" ? probe.ready : cmd.type === "cleanup" ? probe.cleanup : control[cmd.type];
+      > = Match.value(cmd).pipe(
+        Match.discriminators("type")({ ready: () => probe.ready, cleanup: () => probe.cleanup }),
+        Match.orElse((cmd) => control[cmd.type]),
+      );
 
       const answer = yield* work.pipe(Effect.result);
       const at = yield* Clock.currentTimeMillis;
@@ -163,16 +167,22 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           }
 
           if (model._tag === "failed_up" || model._tag === "failed_stop") {
-            const reason =
-              model.reason === "Timeout"
-                ? Timeout.make({ action, cause })
-                : model.reason === "Conflict"
-                  ? Conflict.make({ cause })
-                  : Operation.make({
-                      action:
-                        model.command === "ready" ? "start" : model.command === "remove" ? "cleanup" : model.command,
-                      cause,
-                    });
+            const failed = model;
+
+            const reason = Match.value(failed.reason).pipe(
+              Match.when("Timeout", () => Timeout.make({ action, cause })),
+              Match.when("Conflict", () => Conflict.make({ cause })),
+              Match.orElse(() =>
+                Operation.make({
+                  action: Match.value(failed.command).pipe(
+                    Match.when("ready", (): "start" => "start"),
+                    Match.when("remove", (): "cleanup" => "cleanup"),
+                    Match.orElse((command) => command),
+                  ),
+                  cause,
+                }),
+              ),
+            );
 
             return yield* BrainServiceError.make({ reason });
           }

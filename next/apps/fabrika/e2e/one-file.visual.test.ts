@@ -110,6 +110,7 @@ describe("P16 real browser from a copied one-file build", () => {
             });
             const file = join(ROOT, "next/packages/libfabrika/src/node/build/build.ts");
             assert(existsSync(file), "P16 not built: reusable library build absent");
+            // SAFETY: build.ts exports `build`, and the Build type above restates its Options and its Built answer.
             const api = (await import(pathToFileURL(file).href)) as Build;
 
             const built = await Effect.runPromise(
@@ -381,6 +382,7 @@ const servedCounter = Effect.gen(function* () {
   writeFileSync(join(tab, "tab.css"), "output { color: rgb(12, 34, 56); }\n");
   cpSync(join(APP, "src"), join(home, "src"), { recursive: true, filter: (p) => !p.endsWith(".test.ts") });
 
+  // SAFETY: build.ts exports `build`, whose Options mirror Build's above and add the optional `tab`, an entry and its stylesheets.
   const api = (yield* Effect.promise(
     () => import(pathToFileURL(join(ROOT, "next/packages/libfabrika/src/node/build/build.ts")).href),
   )) as {
@@ -502,6 +504,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
                 assert(step._tag === "stepped");
                 await render(step.view);
                 const start = (await pressed()).length;
+                // SAFETY: the counter program's view is its model, `{ count }`, as `fabrika/counter` declares it.
                 expect(await count.textContent()).toBe(String((step.view as { count: number }).count));
                 expect(await count.evaluate((e) => getComputedStyle(e).color), "the page's styles apply").toBe(
                   "rgb(12, 34, 56)",
@@ -518,12 +521,14 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
                   expect(sent.every((m) => Exit.isSuccess(Schema.decodeUnknownExit(counter.msg)(m)))).toBe(true);
                   // The view never steps the program: until the next view arrives, the count stays.
                   expect(await count.textContent(), "a press alone changes nothing shown").toBe(
+                    // SAFETY: this step came from the same counter program, whose view is always `{ count }`.
                     String((step.view as { count: number }).count),
                   );
                   step = program.step(model, { type });
                   assert(step._tag === "stepped");
                   await render(step.view);
                   expect(await count.textContent(), "the shown count is the program's").toBe(
+                    // SAFETY: the view installed here is the counter's, which carries a numeric `count`.
                     String((step.view as { count: number }).count),
                   );
                 }

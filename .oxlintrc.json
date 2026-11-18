@@ -655,7 +655,95 @@
       // window chooses the TOML adapter. An override replaces a rule's options, so the Radix entry
       // of the base rule is repeated here. next/apps and libfabrika's own overrides below replace
       // this rule there.
-      "files": ["next/**", "kalfa/config/src/**", "kalfa/config/*.ts"],
+      "files": ["next/**"],
+      "rules": {
+        "fabrika/no-promises": "error",
+        "fabrika/no-ledger-sql": "error",
+        "fabrika/no-node-imports": "error",
+        "fabrika/no-effect-run-outside-edge": "error",
+        "fabrika/edge-comment": "error",
+        "fabrika/effect-functions": "error",
+        "fabrika/written-service-type": "error",
+        "fabrika/no-cause-squash": "error",
+        "fabrika/no-of": "error",
+        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // identifier; ours holds a quoted, computed or template key, which it does not decode.
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
+        "fabrika/no-hand-tag": "error",
+        "fabrika/one-store-hook": "error",
+        "fabrika/one-machine-per-file": "error",
+        "fabrika/no-stage-word": "error",
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The config engine moved to kalfa/config (0585) keeps the next/** rule block below, as its own
+      // override, so the next/** block stays exactly next/** (edge-config.test.ts reads it by that).
+      "files": ["kalfa/config/src/**", "kalfa/config/*.ts"],
+      "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
       "rules": {
         "fabrika/no-promises": "error",
         "fabrika/no-ledger-sql": "error",
@@ -1197,7 +1285,7 @@
       // Tests are left out: they await vitest, feed raw frames and may plant a broken view.
       // `no-of` and the question-word rules stay on, since tests follow the same naming rules.
       // Tests also manufacture spans as input for the sink. Tracing plants use product paths.
-      "files": ["next/**/*.test.ts", "kalfa/**/*.test.ts", "next/**/*.test.tsx", "kalfa/**/*.test.tsx"],
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
       "rules": {
         "fabrika/prefer-schema-arbitrary": "error",
         "fabrika/no-promises": "off",
@@ -1206,6 +1294,93 @@
         "fabrika/no-hand-tag": "off",
         "fabrika/one-machine-per-file": "off",
         "fabrika/one-store-hook": "off",
+        "react/refs": "off",
+        "react/immutability": "off",
+        "react/display-name": "off",
+        "react/purity": "off",
+        "fabrika/no-clock-in-view": "off",
+        "fabrika/no-wall-clock": "off"
+      }
+    },
+    {
+      // kalfa/config's tests (0556): the kalfa block above, less the rules next/'s tests set off.
+      // The three edge rules are left unset here, not turned off, so the kalfa block's excludeFiles
+      // is what keeps them off kalfa tests (edge-config.test.ts allows "off" only for next/ tests).
+      "files": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
+      "rules": {
+        "fabrika/no-ledger-sql": "error",
+        "fabrika/no-node-imports": "error",
+        "fabrika/edge-comment": "error",
+        "fabrika/written-service-type": "error",
+        "fabrika/no-cause-squash": "error",
+        "fabrika/no-of": "error",
+        "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
+        "fabrika/no-question-word-key": "error",
+        "fabrika/no-stage-word": "error",
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser",
+                  "**/config/src/TomlParser.ts",
+                  "**/config/src/TomlParser",
+                  "@kalfa/config/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
+              }
+            ]
+          }
+        ],
+        "fabrika/prefer-schema-arbitrary": "error",
         "react/refs": "off",
         "react/immutability": "off",
         "react/display-name": "off",
@@ -2946,40 +3121,35 @@
       // 0561: every type cast carries a `SAFETY:` comment that says the fact the compiler cannot see.
       "files": [
         "kalfa/config/**",
+        ".agents/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
-        "next/programs/inbox/**"
+        "next/programs/inbox/**",
+        "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/require-safety-comment-for-type-assertion": ["error", { "markers": ["SAFETY"] }] }
     },
     {
       // 0563: no `unknown` parameter but a `cause` or a type guard's subject.
       "files": [
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/schedules/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/vitest/**",
-        "next/programs/inbox/**"
-      ],
-      "rules": { "anti-slop/no-unknown-parameters": "error" }
-    },
-    {
-      // 0563: no function returns `unknown`.
-      "files": [
+        "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
@@ -2989,11 +3159,37 @@
         "next/packages/libfabrika/src/presence/**",
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/vitest/**",
+        "next/programs/checklist/**",
+        "next/programs/inbox/**",
+        "next/programs/pipeline/**"
+      ],
+      "rules": { "anti-slop/no-unknown-parameters": "error" }
+    },
+    {
+      // 0563: no function returns `unknown`.
+      "files": [
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/tuval/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
+        "next/programs/checklist/**",
         "next/programs/inbox/**",
+        "next/programs/pipeline/**",
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/no-unknown-returns": "error" }
@@ -3001,19 +3197,35 @@
     {
       // 0563: no runtime `typeof` check but a probe for a binding that may not exist.
       "files": [
+        "kalfa/config/**",
+        ".agents/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/tuval/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
-        "next/programs/inbox/**"
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
+        "next/programs/inbox/**",
+        "next/programs/pipeline/**",
+        "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/no-runtime-typeof": "error" }
     },
@@ -3071,18 +3283,39 @@
     {
       // 0567: a ternary chain over one value's literals is a Match.
       "files": [
+        "kalfa/config/**",
+        ".github/ci/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
         "next/packages/tuval/**",
         "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
         "next/programs/inbox/**",
+        "next/programs/pipeline/**",
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }

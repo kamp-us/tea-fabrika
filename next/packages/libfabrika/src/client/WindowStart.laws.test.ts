@@ -31,6 +31,7 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Random from "effect/Random";
@@ -171,7 +172,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
     return Deferred.await(waiting);
   });
 
-  const message = (frame: unknown) => {
+  const message = (frame: Schema.Json) => {
     if (asksHello(frame)) {
       owe(open!, 1);
     }
@@ -202,7 +203,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
     const frame = decoded.value;
 
     ids.set(frame.method, frame.id);
-    const result = (value: unknown) => message({ jsonrpc: "2.0", id: frame.id, result: value });
+    const result = (value: Schema.Json) => message({ jsonrpc: "2.0", id: frame.id, result: value });
 
     if (frame.method === "initialize") {
       owe(events, -1);
@@ -284,7 +285,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
     dials,
     resources,
     knocks: () => knocks,
-    message: (frame: unknown) => open !== null && message(frame),
+    message: (frame: Schema.Json) => open !== null && message(frame),
     /** The door closes the open socket with `code`. */
     drop: (code: number) => open?.drop(code),
     /** Moves TestClock once every hello the door asked for is sent, or its socket is gone. */
@@ -334,7 +335,7 @@ const identity = Effect.gen(function* () {
   };
 });
 
-const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<unknown>) =>
+const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<ClientRow>) =>
   Layer.mergeAll(
     socket,
     Layer.effect(
@@ -345,7 +346,7 @@ const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<
         persist: Effect.succeed(true),
       })),
     ),
-    Layer.succeed(ClientRows, { put: (row: unknown) => Effect.sync(() => void rows.push(row)) }),
+    Layer.succeed(ClientRows, { put: (row) => Effect.sync(() => void rows.push(row)) }),
     Id.Generator.layer,
   );
 
@@ -482,7 +483,7 @@ describe("L10: real runtime progress", () => {
           lastPong = clock.currentTimeMillisUnsafe();
         });
 
-        const rows: Array<unknown> = [];
+        const rows: Array<ClientRow> = [];
         const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
 
         const booting = yield* start({ tiles, window, build: BUILD, origin: ORIGIN, client: BROWSER }).pipe(
@@ -628,7 +629,12 @@ describe("L9: failure classes through the real runtime", () => {
           let injected = 0;
           let writes = 0;
           let failedRecord: ClientRow["record"] | undefined;
-          const op = operation === "sign" ? "key" : operation === "claim" ? "persist" : operation;
+
+          const op = Match.value(operation).pipe(
+            Match.when("sign", () => "key"),
+            Match.when("claim", () => "persist"),
+            Match.orElse(() => operation),
+          );
 
           const provided = Layer.mergeAll(
             // The first dial's constructor throws, as a browser's refuses a URL, with the platform's class.
@@ -797,10 +803,10 @@ describe("L12: wire formats are refused as typed values", () => {
         expect(opened, "the page opened its tile").toBeDefined();
         const beforeMalformed = run.getState();
         // The open's answer arrives malformed: an empty struct, then a view of the wrong type.
-        door.message({ jsonrpc: "2.0", id: opened?.id, result: {} });
+        door.message({ jsonrpc: "2.0", id: opened?.id ?? null, result: {} });
         yield* door.tick(500);
         expect(run.getState().flight, "a malformed open answer settled a flight").toEqual(beforeMalformed.flight);
-        door.message({ jsonrpc: "2.0", id: opened?.id, result: { rev: 1, view: { items: "one", left: 1 } } });
+        door.message({ jsonrpc: "2.0", id: opened?.id ?? null, result: { rev: 1, view: { items: "one", left: 1 } } });
         yield* door.tick(500);
         expect(run.getState().client.views, "nothing malformed was installed").toEqual({});
         // The run still folds: a well-formed notice with its pid installs.
@@ -1229,6 +1235,8 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
     (generated) =>
       Effect.gen(function* () {
         // Marked, so a secret is never a word the start writes anyway.
+        // SAFETY: the entries keep every key of `generated` and give each a
+        // string, and every field of `generated` is a string.
         const s = Object.fromEntries(
           Object.entries(generated).map(([k, v]) => [k, `Q9X${k}${v}Z`]),
         ) as typeof generated;
@@ -1406,6 +1414,8 @@ const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => {
 
   return {
     ...window,
+    // SAFETY: each Msg type keeps its own key, and `step` takes any WindowMsg and
+    // answers the machine's own step, as every cell of `window.update` does.
     update: Object.fromEntries(Object.keys(window.update).map((type) => [type, step])) as typeof window.update,
   };
 };
@@ -1444,6 +1454,7 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
         expect(monitors.length, "the window monitored its tile's process").toBeGreaterThan(0);
 
         for (const w of [...waits, ...monitors]) {
+          // SAFETY: a write's `call` is a tagged Call (WindowMachine.ts), an object whose `_tag` is a string.
           const call = w.call as { readonly _tag: string; readonly [key: string]: unknown };
 
           const params =

@@ -37,6 +37,8 @@ import {
   Scope,
   Stream,
   Tracer,
+  Predicate,
+  Match,
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -140,6 +142,7 @@ const requesterName = (k: Pair) => `requester:${k}`;
 
 const responderName = (k: Pair) => `responder:${k}`;
 
+// SAFETY: PAIRS.map gives one entry for each Pair, so the record has every Pair key.
 const REQUESTERS = Object.fromEntries(
   PAIRS.map((k) => [k, mailRequester({ self: requesterName(k), peer: responderName(k) })]),
 ) as Record<Pair, ReturnType<typeof mailRequester>>;
@@ -286,7 +289,7 @@ const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
   const logger = Logger.layer([
     Logger.make((options) => {
       // Effect 4 keeps a line's annotations on its fiber; a logger that throws would hide the line.
-      const plain = (_: string, value: unknown) => (typeof value === "bigint" ? value.toString() : value);
+      const plain = (_: string, value: unknown) => (Predicate.isBigInt(value) ? value.toString() : value);
       logs.push(
         JSON.stringify(options.message, plain),
         JSON.stringify(options.fiber.getRef(References.CurrentLogAnnotations), plain),
@@ -391,7 +394,7 @@ type World = {
 };
 
 /** The public JSON a client sends or reads, written out by hand because the shape itself is the law. */
-const wire = (tag: string, fields: object): unknown =>
+const wire = (tag: string, fields: object): object =>
   // oxlint-disable-next-line fabrika/no-hand-tag -- format: L13 pins the encoded JSON other clients decode
   ({ _tag: tag, ...fields });
 
@@ -407,7 +410,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 
 /** The ledger's Sql, with the two cuts a send can meet: its mail save and its acknowledgement. */
 const faulting = (sql: Sql, fault: World["fault"]) => {
-  const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => typeof p === "string");
+  const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => Predicate.isString(p));
 
   const wrapped: Sql = {
     exec: (query, ...params) => {
@@ -459,6 +462,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         const pair = PAIRS.find((k) => responderName(k) === name || requesterName(k) === name);
         const stall = pair === undefined ? undefined : world.stalled.get(pair);
 
+        // SAFETY: stall is defined only when pair was found above.
         if (stall !== undefined && name === responderName(pair as Pair)) {
           yield* Deferred.succeed(stall.entered, undefined);
           yield* Deferred.await(stall.release);
@@ -914,13 +918,18 @@ const walk = (
                 ? "forbidden"
                 : "missing";
 
-          const input =
-            kind === "normal"
-              ? { type: "start", ref, value: cell.value }
-              : kind === "forbidden"
-                ? // Aimed at the other requester, claiming to be that requester's own responder.
-                  { type: "start", ref, value: cell.value, to: requesterName(other), claim: responderName(other) }
-                : { type: "start", ref, value: cell.value, to: GHOST };
+          const input = Match.value(kind).pipe(
+            Match.when("normal", () => ({ type: "start", ref, value: cell.value })),
+            // Aimed at the other requester, claiming to be that requester's own responder.
+            Match.when("forbidden", () => ({
+              type: "start",
+              ref,
+              value: cell.value,
+              to: requesterName(other),
+              claim: responderName(other),
+            })),
+            Match.orElse(() => ({ type: "start", ref, value: cell.value, to: GHOST })),
+          );
 
           const incoming: Incoming = {
             id: `letter-${world.n}`,
@@ -1024,7 +1033,12 @@ const walk = (
           }
 
           if ((yield* letters(requesterName(k))).some((l) => l.id === incoming.id)) {
-            const to = kind === "normal" ? responderName(k) : kind === "forbidden" ? requesterName(other) : GHOST;
+            const to = Match.value(kind).pipe(
+              Match.when("normal", () => responderName(k)),
+              Match.when("forbidden", () => requesterName(other)),
+              Match.orElse(() => GHOST),
+            );
+
             world.current.set(k, { ref, value: cell.value, kind, to });
             world.history.get(k)?.push(ref);
 
@@ -1734,7 +1748,7 @@ const ackFaulting = (sql: Sql, fault: Pipe["fault"]): Sql => ({
     if (
       fault.ack &&
       /^\s*INSERT\b/i.test(query) &&
-      params.some((p) => typeof p === "string" && /\/acked\/[0-9]+$/.test(p))
+      params.some((p) => Predicate.isString(p) && /\/acked\/[0-9]+$/.test(p))
     ) {
       fault.ack = false;
       throw new Error("SQLITE_FULL planted at the ack write");

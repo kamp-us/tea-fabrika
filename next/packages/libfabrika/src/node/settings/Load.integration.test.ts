@@ -23,6 +23,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
@@ -323,11 +324,11 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
             Effect.scoped(
               Effect.gen(function* () {
                 const places = yield* lay(
-                  repo._tag === "stated"
-                    ? text(`fabrika-version = "${repo.minimum}"\n`)
-                    : repo._tag === "unstated"
-                      ? text("# no version\n")
-                      : { _tag: "missing" },
+                  Match.value(repo).pipe(
+                    Match.tag("stated", (repo) => text(`fabrika-version = "${repo.minimum}"\n`)),
+                    Match.tag("unstated", () => text("# no version\n")),
+                    Match.orElse((): File => ({ _tag: "missing" })),
+                  ),
                   text(""),
                 );
 
@@ -388,8 +389,12 @@ it.effect.prop(
         env: source === "env" || source === "flag" ? { [d.env]: String(value + 1) } : {},
       }).pipe(Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto)));
 
-      const want =
-        source === "default" ? d.default : source === "flag" ? value + 2 : source === "env" ? value + 1 : value;
+      const want = Match.value(source).pipe(
+        Match.when("default", () => d.default),
+        Match.when("flag", () => value + 2),
+        Match.when("env", () => value + 1),
+        Match.orElse(() => value),
+      );
 
       expect(loaded.values.desktopLinkTtl).toBe(want);
       expect(loaded.snapshot.values[d.path]).toBe(want);

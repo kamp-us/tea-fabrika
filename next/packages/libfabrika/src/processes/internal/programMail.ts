@@ -1,4 +1,5 @@
 // Program mail's pure rules, next/ (P41 slice 1, T1041): a delivery's ID, the host's grant and the inbox cap.
+import { Predicate } from "effect";
 import type { Rev } from "../../Rev.ts";
 import type { Grants } from "../ProgramMail.ts";
 
@@ -19,7 +20,7 @@ export const granted = (grants: Grants, source: string, to: string): boolean =>
 
 /** The business `ref` a message carries, if it has one. @internal */
 export const businessRef = (m: unknown): string | null =>
-  typeof m === "object" && m !== null && "ref" in m && typeof m.ref === "string" ? m.ref : null;
+  Predicate.isObjectOrArray(m) && "ref" in m && Predicate.isString(m.ref) ? m.ref : null;
 
 /**
  * How many letters of an inbox ending at `end` sit past its reader's `acked` pos. Never negative:

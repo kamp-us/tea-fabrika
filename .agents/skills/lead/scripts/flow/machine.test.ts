@@ -1,6 +1,6 @@
 // The flow machine's laws, on its pure init and update: no runner, no file, no clock.
 import { step } from "@demlik/tea/testing";
-import { Schema } from "effect";
+import { Schema, Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as Flow from "./Flow.ts";
@@ -17,13 +17,12 @@ type Cmd = ReturnType<typeof FlowMachine.stepRun>;
 const AT = 1_000;
 
 const verbOutcome = (verb: Verb, name: string): Outcome.Outcome =>
-  verb === "done"
-    ? Outcome.done(`${name} ok`)
-    : verb === "skip"
-      ? Outcome.skip(`${name} had nothing to do`)
-      : verb === "ask"
-        ? Outcome.ask(`${name} wants the lead`)
-        : Outcome.stuck(`${name} broke`);
+  Match.value(verb).pipe(
+    Match.when("done", () => Outcome.done(`${name} ok`)),
+    Match.when("skip", () => Outcome.skip(`${name} had nothing to do`)),
+    Match.when("ask", () => Outcome.ask(`${name} wants the lead`)),
+    Match.orElse(() => Outcome.stuck(`${name} broke`)),
+  );
 
 /**
  * Drive the machine as the engine would: each Cmd's answer comes from `answer`, one tick of the

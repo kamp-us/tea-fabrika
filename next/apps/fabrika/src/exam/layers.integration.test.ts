@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import type { Row } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
@@ -32,7 +32,7 @@ const planter = Effect.acquireRelease(
 
       for (const [path, body] of Object.entries({ "package.json": { name: "plant", private: true }, ...files })) {
         mkdirSync(dirname(join(root, path)), { recursive: true });
-        writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
+        writeFileSync(join(root, path), Predicate.isString(body) ? body : JSON.stringify(body));
       }
 
       return root;

@@ -70,7 +70,7 @@ const report = Fabrika.Chaos.Report.make({
 
 const fired = Fabrika.Chaos.Fired.cases.fired.make({ hit: null });
 
-const json = (value: unknown) => JSON.stringify(value);
+const json = (value: Model) => JSON.stringify(value);
 
 const answer = (cmd: Command, at: number): Msg => {
   const { now, fire, inspect } = Fabrika.ChaosMachine;
@@ -196,7 +196,7 @@ it("same seed/version/target draws the same bounded faults after every saved cut
           msgs: a.msgs,
           encode: Schema.encodeSync(chaos.state.schema),
           decode: Schema.decodeUnknownSync(chaos.state.schema),
-          equals: (x, y) => json(x) === json(y),
+          equals: (x, y) => JSON.stringify(x) === JSON.stringify(y),
           seed: SEED,
         },
       );
@@ -323,7 +323,7 @@ it("a missing fire answer at any ordinal, including the last, never yields a cle
           msgs: run.msgs,
           encode: Schema.encodeSync(chaos.state.schema),
           decode: Schema.decodeUnknownSync(chaos.state.schema),
-          equals: (x, y) => json(x) === json(y),
+          equals: (x, y) => JSON.stringify(x) === JSON.stringify(y),
           seed: SEED,
         },
       );
@@ -342,7 +342,7 @@ it("every reachable JSON cut preserves the complete model and later Cmds", () =>
           msgs,
           encode: Schema.encodeSync(chaos.state.schema),
           decode: Schema.decodeUnknownSync(chaos.state.schema),
-          equals: (x, y) => json(x) === json(y),
+          equals: (x, y) => JSON.stringify(x) === JSON.stringify(y),
           seed: SEED,
         },
       );
@@ -421,10 +421,10 @@ it("the public stepper refuses a second active start without saving it", () => {
         throw new Error("valid start was refused");
       }
 
-      const before = json(first.model);
+      const before = JSON.stringify(first.model);
       const second = pure.step(first.model, { type: "start", ...start, id: id(40000) });
       expect(second._tag).toBe("refused");
-      expect(json(first.model)).toBe(before);
+      expect(JSON.stringify(first.model)).toBe(before);
     }),
     options,
   );

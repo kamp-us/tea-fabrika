@@ -14,8 +14,11 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
+import type * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -34,13 +37,14 @@ const serving = async () => {
     pathToFileURL(join(import.meta.dirname, "../../cloudflare/index.ts")).href,
   );
 
-  assert.equal(typeof worker.serveAsset, "function", "P16 library asset serving is absent");
+  assert.ok(Predicate.isFunction(worker.serveAsset), "P16 library asset serving is absent");
 
   return worker.serveAsset!;
 };
 
 // The installed packages' own versions, read now. A build report must say what really ran.
 const installed = (name: string) =>
+  // SAFETY: every installed package.json names its `version` as a string.
   (
     JSON.parse(readFileSync(join(import.meta.dirname, "../../../node_modules", name, "package.json"), "utf8")) as {
       version: string;
@@ -70,7 +74,7 @@ const cssRules = (css: string) => {
 };
 
 // Source locations change when the printer normalizes whitespace and escapes.
-const meaning = (rules: readonly Rule[]): unknown =>
+const meaning = (rules: readonly Rule[]): Schema.Json =>
   JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
 
 const names = fc.integer({ min: 0, max: 10000 }).map((n) => `View${n}`);
@@ -318,7 +322,7 @@ describe("P16 assets and Compiler", () => {
                 return {
                   ...output,
                   output: output.output.map((item) => {
-                    if (item.type !== "asset" || typeof item.source !== "string") {
+                    if (item.type !== "asset" || !Predicate.isString(item.source)) {
                       return item;
                     }
 
@@ -524,14 +528,19 @@ describe("P16 assets and Compiler", () => {
 
             previous(f, good);
 
-            const source =
-              kind === "ref"
-                ? `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`
-                : kind === "clock"
-                  ? `export const ${name}=()=> <b>{Date.now()}</b>`
-                  : kind === "directive"
-                    ? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
-                    : `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
+            const source = Match.value(kind).pipe(
+              Match.when(
+                "ref",
+                () =>
+                  `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`,
+              ),
+              Match.when("clock", () => `export const ${name}=()=> <b>{Date.now()}</b>`),
+              Match.when(
+                "directive",
+                () => `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`,
+              ),
+              Match.orElse(() => `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`),
+            );
 
             const path = "programs/compiler/window.tsx",
               ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
@@ -1020,7 +1029,11 @@ describe("P16 cleanup and recording", () => {
 
             if (fail) {
               writeFileSync(
-                phase === "brain" ? f.options.entry : phase === "window" ? f.file : join(dirname(f.file), "program.ts"),
+                Match.value(phase).pipe(
+                  Match.when("brain", () => f.options.entry),
+                  Match.when("window", () => f.file),
+                  Match.orElse(() => join(dirname(f.file), "program.ts")),
+                ),
                 "import './missing.ts';",
               );
             }
@@ -1138,7 +1151,7 @@ describe("P16 cleanup and recording", () => {
               expect(
                 data
                   .flatMap((row) => Object.entries(row.attributes))
-                  .some(([key, value]) => /bytes|size/.test(key) && typeof value === "number" && value > 0),
+                  .some(([key, value]) => /bytes|size/.test(key) && Predicate.isNumber(value) && value > 0),
               ).toBe(true);
             }
           }

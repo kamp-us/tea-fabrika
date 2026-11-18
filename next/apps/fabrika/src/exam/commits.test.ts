@@ -139,6 +139,7 @@ describe("signedText", () => {
       fc.property(anyNote, fc.string(), fc.string(), (n, key, sig) => {
         const expected = `fabrika-step attested v2\nstep ${n.step}\nticket ${n.ticket}\nversion ${n.version}\nfrom ${n.from}\nto ${n.to}\n`;
         expect(signedText(n)).toBe(expected);
+        // SAFETY: n plus `key` and `sig` is the whole Note schema in commits.ts; the law checks that signedText leaves those two out.
         expect(signedText({ ...n, key, sig } as Note)).toBe(expected);
         expect(signedText(n)).not.toContain("commit");
       }),
@@ -930,7 +931,12 @@ describe("trusted config files", () => {
         { "glob": "apps/fabrika/src/window/colors.test.ts", "why": "the app's color laws" },
         { "glob": "apps/fabrika/src/pipes.test.ts", "why": "the pipe color laws" },
         { "glob": "apps/fabrika/e2e.ts", "why": "today's app's keyboard focus laws and capture stages" },
-        { "glob": "apps/fabrika/aria/**", "why": "the approved ARIA snapshots" }
+        { "glob": "apps/fabrika/aria/**", "why": "the approved ARIA snapshots" },
+        { "glob": "kalfa/**/*.test.ts", "why": "Tooling package laws." },
+        { "glob": "kalfa/**/*Test.ts", "why": "Tooling package shared suites." },
+        { "glob": "kalfa/**/*.test-support.ts", "why": "Tooling package test support." },
+        { "glob": "kalfa/**/tsconfig*.json", "why": "Tooling package compiler and declaration checks." },
+        { "glob": "kalfa/config/test/**", "why": "Installed config consumer inputs." }
       ]
       "
     `);

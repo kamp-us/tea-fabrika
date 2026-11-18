@@ -9,11 +9,16 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
 import { vi } from "vitest";
+import type { devLife } from "./DevLife.ts";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
+
+/** The state a step moves from, as the life machine holds it. */
+type Life = typeof devLife.model.Type;
 
 const SEED = 119120;
 
@@ -42,7 +47,7 @@ const running = Effect.fnUntraced(function* (pid: number) {
     );
 
   // What the brain records once a step moved the state: the fact its new signal names.
-  const record = (_prev: unknown, next: { readonly signal: Signal }) =>
+  const record = (_prev: Life, next: { readonly signal: Signal }) =>
     Effect.gen(function* () {
       log.push({ step: next.signal === "SIGTERM" ? "replacing" : "killed", at: yield* now, vouched: true });
     });
@@ -191,12 +196,11 @@ describe("the memory restart's bounded stop, next/", () => {
       Effect.gen(function* () {
         const w = yield* running(pid);
 
-        const msg =
-          event === "exited"
-            ? ({ type: "exited", replacement: "start-1" } as const)
-            : event === "stop"
-              ? ({ type: "stop" } as const)
-              : ({ type: "started", start: "start-2", pid: pid + 1, build: "build-1", at: 0 } as const);
+        const msg = Match.value(event).pipe(
+          Match.when("exited", () => ({ type: "exited", replacement: "start-1" }) as const),
+          Match.when("stop", () => ({ type: "stop" }) as const),
+          Match.orElse(() => ({ type: "started", start: "start-2", pid: pid + 1, build: "build-1", at: 0 }) as const),
+        );
 
         const landed: Array<Fiber.Fiber<unknown>> = [];
 
@@ -208,7 +212,7 @@ describe("the memory restart's bounded stop, next/", () => {
         // A fact's write takes a while, as a synced file write does: other fibers run meanwhile.
         const write = Effect.yieldNow.pipe(Effect.repeat({ times: 5 }));
 
-        const record = (prev: unknown, next: { readonly signal: Signal }) =>
+        const record = (prev: Life, next: { readonly signal: Signal }) =>
           Effect.gen(function* () {
             const fact = next.signal === "SIGTERM" ? "replacing" : "killed";
             yield* land(`${fact}-start`);

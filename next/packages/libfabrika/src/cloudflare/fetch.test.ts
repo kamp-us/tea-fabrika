@@ -34,7 +34,9 @@ const law = (
 const world = (
   port: number,
   name: string,
-  settingsStart: (reply: unknown) => Promise<unknown> = async (reply) => reply,
+  settingsStart: (reply: ReturnType<typeof StartsTest.reply>) => Promise<ReturnType<typeof StartsTest.reply>> = async (
+    reply,
+  ) => reply,
 ) => {
   const calls: Array<{ to: string; method: string; args: unknown[] }> = [];
   const response = new Response("gateway", { status: 202 });
@@ -48,6 +50,7 @@ const world = (
     build: "build-test",
   });
 
+  // SAFETY: the public routes call only INSTANCE, CONNECTION's `fetch` and PROJECT's settings, grant and target, as doubled below.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members the public routes call
   const env = {
     INSTANCE: JSON.stringify(config),

@@ -10,6 +10,7 @@
  * container has when that is less. `fold` is the fixpoint on that geometry: a tile folds only when
  * it is drawn under 220x120 where it folds, and the focused tile never folds.
  */
+import * as Predicate from "effect/Predicate";
 import { GAP, order, type Rect } from "./Layout.ts";
 import type { Container, Layout, TileId, Workspace } from "./Workspace.ts";
 
@@ -38,7 +39,7 @@ type Size = { readonly width: number; readonly height: number };
  * @category getters
  */
 export const shut = (node: Layout, strips: ReadonlySet<TileId>): boolean =>
-  typeof node === "string" ? strips.has(node) : node.parts.every((p) => shut(p.inner, strips));
+  Predicate.isString(node) ? strips.has(node) : node.parts.every((p) => shut(p.inner, strips));
 
 /**
  * Returns each part's length along a container of `length` pixels, gaps not counted: a part that is
@@ -101,7 +102,7 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
   };
 
   const walk = (node: Layout, r: Rect): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       out.set(node, r);
 
       return;
@@ -118,7 +119,7 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
         ? { x: at, y: r.y, width: share, height: r.height }
         : { x: r.x, y: at, width: r.width, height: share };
 
-      if (typeof p.inner !== "string" && shut(p.inner, strips)) {
+      if (!Predicate.isString(p.inner) && shut(p.inner, strips)) {
         band(order(p.inner), box, row);
       } else {
         walk(p.inner, box);

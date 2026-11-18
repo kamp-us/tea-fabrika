@@ -59,7 +59,7 @@ export const suite = (
     const authority = yield* database("authority");
     const next = ids(...PIDS);
     // `throws`: the program's init throws, as a program bug would; `loaded`: what each init was given.
-    const controls = { build: BUILD, throws: false, loaded: [] as Array<Model | null> };
+    const controls = { build: BUILD, throws: false, loaded: Array.of<Model | null>() };
     const alarms: Array<number | null> = [];
 
     const machine = Machine.make({

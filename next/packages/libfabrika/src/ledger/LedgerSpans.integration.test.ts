@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Duration, Effect, Exit, Layer, Schema, type Scope, Stream, Tracer } from "effect";
+import { Duration, Effect, Exit, Layer, Predicate, Schema, type Scope, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -140,7 +140,7 @@ const heldShort = (span: Record<string, unknown>, key: string, full: string) => 
     return;
   }
 
-  expect(typeof span[key], key).toBe("string");
+  expect(span[key], key).toBeTypeOf("string");
   expect(String(span[key]).length, key).toBeLessThanOrEqual(MOST);
   expect(span[`${key}.length`], `${key}.length`).toBe(full.length);
 };
@@ -343,7 +343,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           expect(tags("ledger.ring")).toHaveLength(1);
 
           const texts = all()
-            .filter((value) => typeof value === "string")
+            .filter((value) => Predicate.isString(value))
             .map((value) => String(value));
 
           expect(texts.length).toBeGreaterThan(0);

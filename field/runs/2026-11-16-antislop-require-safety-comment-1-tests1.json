@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-require-safety-comment-1-tests1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T21:48:00-08:00",
+  "ended": "2026-11-15T22:07:32-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step of anti-slop judgment slice AS-require-safety-comment-1 (decisions 0561 and 0563), in next/ and our tooling. Rule anti-slop/require-safety-comment-for-type-assertion with its SAFETY marker, forced to error in a scratch config outside the repo, over next/packages/libfabrika/src/client, .agents and next/programs/tezgah on origin/main at bcad008. Hits met: 300 (client 159, .agents 135, tezgah 6). None is in a file of pull request 1366, so 0 wait on it. Exam and test paths: 261 hits in 19 test files, all fixed by hand with a SAFETY comment above the cast or its statement that says why that cast holds, read from the code (the Own Msg case it builds, the cell that reads only m.value, the guard that checked a value, the writer of a parsed file). Tool: a scratch script that inserts each written comment at its line, then pnpm format; no checker quick fix. No assertion deleted or narrowed, no disable line, no lock line, no .oxlintrc.json change. One test input changed: drive.test.ts's ended helper now gives its Read value changed: 0, the one Read field it lacked; drive.ts reads only read.changed > 0, so the law behaves the same. Left for the build step: 39 hits in product files, listed in the note.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 19.5,
+  "note": "Left, product files (build step): next/programs/tezgah/src/program.ts:102; next/packages/libfabrika/src/client/WindowMachine.ts:1253, 1524 (2), 1993; next/packages/libfabrika/src/client/Tezgah.ts:173; next/packages/libfabrika/src/client/HandsMachine.ts:652; .agents/skills/lead/scripts/flow/machine.ts:103; agents.ts:297 (2); gc.ts:374; codexexec.ts:225; chain.ts:156, 162, 255, 352, 873 (2), 1632; boxfiles.ts:196; quest.ts:93, 111, 136, 211, 223; plants.ts:92; drive.ts:708, 714 (3), 1059, 1065, 1263, 1784, 1868, 2348, 2349, 2360, 2362. Checks: pnpm format, pnpm lint (whole tree, NODE_OPTIONS=--max-old-space-size=6144) passed; the ratchet exited 0; the scratch count is 0 in every touched file. Tests: the 19 touched files under nice -n 15 vitest --maxWorkers=3 at bcad008 plus this diff: 17 files passed; box.test.ts failed 40 of 47 because ssh-keygen is missing in this box (spawnSync ssh-keygen ENOENT), and run.test.ts failed its two T300 laws that signal and stop child process groups, which this box does not allow; neither is counted red or green, and no test process was left. No new law, so no plant.",
+  "step": "tests"
+}

@@ -72,7 +72,7 @@ const asked = (ask: typeof Ask.Type) => {
     delete operands[key];
   }
 
-  // A malformed Cmd on purpose: the host, not the type, refuses it.
+  // SAFETY: a malformed Cmd on purpose: the host, not the type, refuses it.
   return startChild(operands as never);
 };
 
@@ -89,8 +89,10 @@ export const childStarter = (config: { readonly name: string; readonly declare: 
     msg: Msg,
     cmds: config.declare ? [startChild, exit] : [],
     init: (loaded) => [loaded ?? idle, []],
+    // SAFETY: each key is a case of the Msg schema or the `_ok` or `_err` answer of a declared Cmd, the messages tea dispatches; the handlers are typed by hand, in shapes tea's update type does not take.
     update: {
       start: (s: Model, m: typeof Start.Type) => [{ ...s, stepped: s.stepped + 1 }, [asked(m.ask)]],
+      // SAFETY: extra fields on purpose: the host, not the type, refuses them.
       end: (s: Model, m: typeof End.Type) => [
         { ...s, stepped: s.stepped + 1 },
         [...m.before.map(asked), exit({ ...m.extra } as never), ...(m.twice ? [exit({})] : []), ...m.after.map(asked)],

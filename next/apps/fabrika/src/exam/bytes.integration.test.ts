@@ -6,7 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Match, Path, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -36,7 +36,7 @@ type Observed = {
   readonly assets: ReadonlyArray<string>;
 };
 
-const observations = vi.hoisted(() => ({ builds: [] as Observed[] }));
+const observations = vi.hoisted(() => ({ builds: Array.of<Observed>() }));
 
 const moduleReport = (modules: ReadonlyArray<string>): string =>
   modules.map((id) => `P8 module: ${JSON.stringify(id)}\n`).join("");
@@ -114,7 +114,7 @@ vi.mock("rolldown", async (original) => {
           }
 
           const assets = Object.values(output).flatMap((o) =>
-            o.type === "asset" ? [typeof o.source === "string" ? o.source : new TextDecoder().decode(o.source)] : [],
+            o.type === "asset" ? [Predicate.isString(o.source) ? o.source : new TextDecoder().decode(o.source)] : [],
           );
 
           observations.builds.push({ input: options.input, modules, chunks, assets });
@@ -160,7 +160,7 @@ const TEXT = "\0fabrika-text:";
 const joined = (graph: Observed) => graph.chunks.map((c) => c.code).join("\n");
 
 const realBrain = (all: ReadonlyArray<Observed>) => {
-  const found = all.find((b) => typeof b.input === "string" && b.input.endsWith("/src/brain.ts"));
+  const found = all.find((b) => Predicate.isString(b.input) && b.input.endsWith("/src/brain.ts"));
 
   if (found === undefined) {
     throw new Error("no actual P12 brain build observed");
@@ -192,9 +192,8 @@ const APP_TAB = new URL("../entry/browser.tsx", import.meta.url).pathname;
 const TAB_ROUTES: ReadonlyArray<string> = ["/window.js", "/index.html"];
 
 const isWindow = (graph: Observed) =>
-  typeof graph.input === "object" &&
-  graph.input !== null &&
-  Object.values(graph.input).every((v) => typeof v === "string" && v.startsWith("fabrika:window:"));
+  Predicate.isObjectOrArray(graph.input) &&
+  Object.values(graph.input).every((v) => Predicate.isString(v) && v.startsWith("fabrika:window:"));
 
 // The whole build's check: every Rolldown call is clean, and every text the brain carries is the
 // output of an observed program, window or tab call, so no carried script escapes its own graph's check.
@@ -440,7 +439,13 @@ type BundleGraph = typeof BundleGraphs extends Arbitrary.Arbitrary<infer G> ? G 
 // A module tree that has exactly g.modules modules and up to 2 imports per module. Its depth is g.depth when that
 // many modules can reach it, else the nearest depth they can: one module has depth 0, 8 need depth 3 at 2 imports.
 const graphShape = (g: BundleGraph) => {
-  const capacity = (depth: number, fan: number) => (fan === 0 ? 1 : fan === 1 ? depth + 1 : 2 ** (depth + 1) - 1);
+  const capacity = (depth: number, fan: number) =>
+    Match.value(fan).pipe(
+      Match.when(0, () => 1),
+      Match.when(1, () => depth + 1),
+      Match.orElse(() => 2 ** (depth + 1) - 1),
+    );
+
   let least = 0;
 
   while (capacity(least, 2) < g.modules) {

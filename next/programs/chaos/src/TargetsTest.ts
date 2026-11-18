@@ -4,7 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, Effect, flow, Schema, type Scope } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 
 type World = Effect.Success<RunnerOpen>;
@@ -30,7 +30,7 @@ export type Open = Effect.Effect<
     ) => ReturnType<World["session"]>;
     readonly person: Incoming["envelope"]["by"];
     readonly agent: Incoming["envelope"]["by"];
-    readonly letter: (n: number, input: unknown, by?: Incoming["envelope"]["by"]) => Incoming;
+    readonly letter: (n: number, input: Schema.Json, by?: Incoming["envelope"]["by"]) => Incoming;
     readonly fault: {
       readonly arm: (name: string, letter: string, errors: ReadonlyArray<ErrorClass>) => Effect.Effect<void>;
       readonly before: (input: Before) => Effect.Effect<void>;
@@ -61,11 +61,10 @@ const View = Schema.Struct({
   left: Schema.Int,
 });
 
-const shown = (raw: unknown) => {
-  const view = Schema.decodeUnknownSync(View)(raw);
-
-  return { ...view, items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)) };
-};
+const shown = flow(Schema.decodeUnknownSync(View), (view) => ({
+  ...view,
+  items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)),
+}));
 
 const Controller = Schema.TaggedStruct("armed", {
   attempts: Schema.Array(Schema.Struct({ process: Schema.String, error: Schema.String })),
@@ -93,7 +92,7 @@ export const suite = (open: Open, checklist: unknown) =>
 
             const send = Effect.fnUntraced(function* (
               runner: ProgramRunner["Service"],
-              input: unknown,
+              input: Schema.Json,
               by = world.person,
             ) {
               const sent = world.letter(++serial, input, by);

@@ -6,7 +6,7 @@ import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
+import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream, Match } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Archive, Mailbox, ProcessStore, RecordManager, SessionManager, Writer } from "../coordination/index.ts";
@@ -132,22 +132,23 @@ const world = (
     invalid: false,
     build: BUILD,
     loads: 0,
-    init: [] as Array<{ build: string; loaded: unknown }>,
-    steps: [] as string[],
+    init: Array.of<{ build: string; loaded: unknown }>(),
+    steps: Array.of<string>(),
     cmds: 0,
-    writes: [] as string[],
+    writes: Array.of<string>(),
     loseWriteReply: false,
     flushOnce: false,
     flushFailures: 0,
-    flushes: [] as string[][],
+    flushes: Array.of<string[]>(),
     adds: 0,
     crashAdd: 0,
     cut: "",
     wakeAt,
-    hits: [] as string[],
-    downs: [] as Array<typeof Down.Type>,
-    timers: [] as number[],
+    hits: Array.of<string>(),
+    downs: Array.of<typeof Down.Type>(),
+    timers: Array.of<number>(),
     /** P34c: when set, the poison step and the saved fold throw this instead of their fixed errors. */
+    // SAFETY: error starts unset; P34c sets it to the name and message to throw.
     error: null as { readonly name: string; readonly message: string } | null,
   };
 
@@ -775,7 +776,12 @@ describe("P34 runner supervision", () => {
           (id, time, delay) =>
             Effect.runPromise(
               Effect.gen(function* () {
-                const wakeAt = path === "due ready" ? time : path === "due early" ? time + delay : null;
+                const wakeAt = Match.value(path).pipe(
+                  Match.when("due ready", () => time),
+                  Match.when("due early", () => time + delay),
+                  Match.orElse(() => null),
+                );
+
                 const w = world(false, true, wakeAt);
                 const process = path === "restart" ? B : A;
                 const request = { id: `restart-${id}`, build: BUILD };
@@ -2304,7 +2310,10 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
 
           const exits = rows
             .filter((row) => row._tag === "exited")
-            .map((row) => valueFor(row) as { process: string; reason: unknown })
+            .map(
+              // SAFETY: an `exited` row's value names the process and its reason.
+              (row) => valueFor(row) as { process: string; reason: unknown },
+            )
             .map(({ process, reason }) => ({ process, reason }));
 
           expect(exits, "each exit holds its producer's phase and captured class").toEqual(expected.exits);
@@ -2314,7 +2323,10 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
           );
 
           const signals = (yield* read(`client:${brain().recipient.client}/inbox`).pipe(Effect.provide(w.manager())))
-            .map((row) => valueFor(row) as { m: typeof Down.Type })
+            .map(
+              // SAFETY: each row of a client's inbox here is a DOWN letter, its value `{ m }`.
+              (row) => valueFor(row) as { m: typeof Down.Type },
+            )
             .map(({ m }) => [m.process, m.reason] as const);
 
           expect(signals, "each DOWN carries its exit's reason unchanged").toEqual(

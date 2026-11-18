@@ -12,7 +12,7 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Match, Path, Schema } from "effect";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -149,7 +149,12 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
         insert.run(note, body, data);
 
         if (target && plant !== null && planted !== null) {
-          const column = plant.place === "cell" ? "note" : plant.place === "overflow" ? "body" : "data";
+          const column = Match.value(plant.place).pipe(
+            Match.when("cell", () => "note"),
+            Match.when("overflow", () => "body"),
+            Match.orElse(() => "data"),
+          );
+
           expected = {
             file: name,
             place: Place.cases.cell.make({ table: tableName, row, column }),

@@ -2,7 +2,7 @@
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
  */
-import { Result, Schema } from "effect";
+import { Predicate, Result, Schema } from "effect";
 
 /**
  * Schema for one RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs, and
@@ -26,9 +26,13 @@ export type Patch = typeof Patch.Type;
 /** A JSON Pointer token: `~` as `~0`, `/` as `~1` (RFC 6901). */
 const token = (key: string | number): string => String(key).replaceAll("~", "~0").replaceAll("/", "~1");
 
-type Plain = { [key: string]: unknown };
-
-const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Array.isArray(u);
+/**
+ * Narrows a JSON value to its object case: an object, not an array or a leaf. `Predicate.isObject`
+ * alone narrows to a plain record, which no rest pattern over `Schema.JsonObject` takes.
+ *
+ * @category guards
+ */
+export const isJsonObject = (json: Schema.Json): json is Schema.JsonObject => Predicate.isObject(json);
 
 /** The value an object holds under `key` as its own, never one from its prototype. */
 const own = (object: Schema.JsonObject, key: string): Schema.Json | undefined =>
@@ -40,7 +44,7 @@ const same = (a: Schema.Json, b: Schema.Json): boolean => {
     return a.length === b.length && a.every((one, i) => same(one, b[i]));
   }
 
-  if (isPlain(a) && isPlain(b)) {
+  if (isJsonObject(a) && isJsonObject(b)) {
     const entries = Object.entries(a);
 
     return (
@@ -79,7 +83,7 @@ const walk = (path: string, before: Schema.Json, after: Schema.Json, out: Array<
     return;
   }
 
-  if (isPlain(before) && isPlain(after)) {
+  if (isJsonObject(before) && isJsonObject(after)) {
     for (const key of Object.keys(before)) {
       if (!Object.hasOwn(after, key)) {
         out.push({ op: "remove", path: `${path}/${token(key)}` });
@@ -175,7 +179,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
         }
 
         parent = parent[Number(part)] ?? null;
-      } else if (isPlain(parent) && Object.hasOwn(parent, part)) {
+      } else if (Predicate.isObject(parent) && Object.hasOwn(parent, part)) {
         parent = parent[part];
       } else {
         return invalid();
@@ -198,7 +202,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
       } else {
         parent[index] = structuredClone(op.value);
       }
-    } else if (isPlain(parent)) {
+    } else if (Predicate.isObject(parent)) {
       if (op.op !== "add" && !Object.hasOwn(parent, key)) {
         return invalid();
       }

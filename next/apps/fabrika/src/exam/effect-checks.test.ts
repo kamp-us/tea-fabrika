@@ -12,9 +12,10 @@ const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 
 const PLUGIN = "@effect/language-service";
 
-const NEXT = ["next/**/*.ts", "next/**/*.tsx"];
+// next/ and the kalfa/ tooling packages, in the order tsconfig.base.json lists them.
+const NEXT = ["next/**/*.ts", "kalfa/**/*.ts", "next/**/*.tsx", "kalfa/**/*.tsx"];
 
-const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx"];
+const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx", "kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"];
 
 /** Each check, and what its override leaves out of `next/`. */
 const CHECKS: ReadonlyArray<readonly [check: string, exclude: ReadonlyArray<string>]> = [
@@ -49,7 +50,7 @@ const Config = Schema.Struct({
 // oxc-parser's tree, read loosely: only literals, arrays and objects are walked.
 type Tree = any;
 
-const toValue = (node: Tree): unknown => {
+const toValue = (node: Tree): Schema.Json => {
   if (node.type === "ObjectExpression") {
     return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }

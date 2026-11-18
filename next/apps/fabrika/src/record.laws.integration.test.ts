@@ -10,7 +10,7 @@ import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -42,7 +42,7 @@ const node: Driver = Effect.fnUntraced(function* (name: string, cap: number) {
   const sql = nodeSql(db);
 
   // Only the state handles read by the four exported services; real SQLite, no fake queries.
-  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the platform handles the real record service reads
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies only the platform handles the real record service reads
   const state = {
     id: { name },
     storage: {
@@ -82,7 +82,7 @@ const Input = Schema.Struct({
 // A finding records it; this law compares well-formed text.
 const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
   const repair = (value: unknown): unknown => {
-    if (typeof value === "string") {
+    if (Predicate.isString(value)) {
       return value.replace(/\p{Cs}/gu, "�");
     }
 
@@ -90,7 +90,7 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
       return value.map(repair);
     }
 
-    if (value !== null && typeof value === "object") {
+    if (Predicate.isObjectOrArray(value)) {
       return Object.fromEntries(
         Object.entries(value).map(([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]),
       );
@@ -126,7 +126,7 @@ const WireLive = Layer.effect(
         return yield* Effect.die(new Error("record binding is missing a method"));
       }
 
-      const call = <A>(schema: Schema.Codec<A>, invoke: () => Promise<unknown>) =>
+      const call = <A, B>(schema: Schema.Codec<A>, invoke: () => Promise<B>) =>
         recordCall(invoke).pipe(
           Effect.flatMap((value) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.orDie)),
         );

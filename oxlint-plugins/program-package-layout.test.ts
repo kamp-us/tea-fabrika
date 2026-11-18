@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate, Result } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterEach, describe, expect, it } from "vitest";
@@ -35,7 +36,7 @@ const name = fc.integer({ min: 0, max: 100000 }).map((n) => `program${n}`);
 // The manifest a package is written with, from the fields the harness gives it, and symlinks:
 // each path in the package points to a path given from the package folder.
 type Package = {
-  readonly manifest?: (fields: Readonly<Record<string, unknown>>) => unknown;
+  readonly manifest?: (fields: Readonly<Record<string, unknown>>) => string | object;
   readonly links?: Readonly<Record<string, string>>;
 };
 
@@ -73,7 +74,7 @@ const write = (scratch: string, plants: readonly Plant[]): readonly (readonly st
     const pkg = `${i}/next/programs/${name}`;
     mkdirSync(join(scratch, pkg), { recursive: true });
     const written = manifest({ name: `@p16/${name}`, type: "module", exports });
-    writeFileSync(join(scratch, pkg, "package.json"), typeof written === "string" ? written : JSON.stringify(written));
+    writeFileSync(join(scratch, pkg, "package.json"), Predicate.isString(written) ? written : JSON.stringify(written));
 
     for (const [path, text] of Object.entries(sources)) {
       mkdirSync(dirname(join(scratch, pkg, path)), { recursive: true });
@@ -122,17 +123,17 @@ const inProcess = (plants: readonly Plant[]): Finding[][] => {
       const found: Finding[] = [];
 
       for (const file of files) {
-        try {
+        const ran = Result.try(() =>
           tester.run(CODE, recording(found, file), {
             valid: [{ code: readFileSync(join(scratch, file), "utf8"), filename: join(scratch, file) }],
             invalid: [],
-          });
-        } catch (error) {
-          // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
-          // parse, so that file has no finding here either; the law's oxlint run checks the same.
-          if (!(error instanceof Error && error.message === "Parsing failed")) {
-            throw error;
-          }
+          }),
+        );
+
+        // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
+        // parse, so that file has no finding here either; the law's oxlint run checks the same.
+        if (Result.isFailure(ran) && !(ran.failure instanceof Error && ran.failure.message === "Parsing failed")) {
+          throw ran.failure;
         }
       }
 
@@ -744,6 +745,7 @@ describe("fabrika/program-package-layout", () => {
         fc.constantFrom(...links),
         fc.constantFrom(...entries),
         fc.constantFrom("workerd", "worker", "browser", "import", "node", "default"),
+        // SAFETY: `Object.keys` of the `manifests` table answers exactly its own keys.
         fc.constantFrom(...(Object.keys(manifests) as (keyof typeof manifests)[])),
         (
           name,

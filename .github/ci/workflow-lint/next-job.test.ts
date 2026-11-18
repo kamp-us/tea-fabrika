@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Predicate } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -203,6 +204,7 @@ const plants: Plant[] = [
     (w) => {
       const found = step(w, "next", "vitest");
       found.run = String(found.run).replace("--project next ", "$PROJECTS ");
+      // SAFETY: `valid` writes the next job's vitest step with an `env` map of strings.
       (found["env"] as Record<string, string>)["PROJECTS"] =
         `\${{ github.event_name == 'push' && '--project next --project next-integration' || '--project next' }}`;
     },
@@ -241,7 +243,7 @@ const plants: Plant[] = [
     `next ${fault}`,
     (w) => {
       setLegs(w, legs);
-      const count = legs.filter((leg) => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg)).length;
+      const count = legs.filter((leg) => Predicate.isString(leg) && /^e2e-[1-9]\d*$/.test(leg)).length;
       step(w, "next", "end to end").env!.SHARD = e2eShard(count);
     },
   ]),
@@ -252,7 +254,7 @@ const plants: Plant[] = [
       setLegs(
         w,
         legsOf(w).filter(
-          (leg, _, all) => leg !== all.filter((l) => typeof l === "string" && l.startsWith("e2e-")).at(-1),
+          (leg, _, all) => leg !== all.filter((l) => Predicate.isString(l) && l.startsWith("e2e-")).at(-1),
         ),
       );
     },
@@ -261,7 +263,7 @@ const plants: Plant[] = [
     "next adds an e2e leg and keeps its /N",
     (w) => {
       const legs = legsOf(w);
-      const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
+      const count = legs.filter((leg) => Predicate.isString(leg) && leg.startsWith("e2e-")).length;
       legs.splice(count, 0, `e2e-${count + 1}`);
       setLegs(w, legs);
     },
@@ -285,7 +287,7 @@ const plants: Plant[] = [
           "vitest's": `\${{ matrix.shard }}/\${{ needs.legs.outputs.vitest || ${count} }}`,
         };
 
-        env.SHARD = typeof fault === "number" ? e2eShard(count + fault) : wrong[fault]!;
+        env.SHARD = Predicate.isNumber(fault) ? e2eShard(count + fault) : wrong[fault]!;
       },
     ],
   ),
@@ -572,6 +574,7 @@ const plants: Plant[] = [
   [
     "next has no filter",
     (w) => {
+      // SAFETY: the vitest step from `valid` has an `env` map that holds FILTER.
       delete (step(w, "next", "vitest").env as Record<string, string>)["FILTER"];
     },
   ],
@@ -580,6 +583,7 @@ const plants: Plant[] = [
   [
     "next narrows the reader tests with --changed",
     (w) => {
+      // SAFETY: this plant sets CHANGED in the vitest step's `env`, which `valid` writes as a string map.
       (step(w, "next", "vitest").env as Record<string, string>)["CHANGED"] = changedOnPullRequests;
     },
   ],
@@ -604,12 +608,14 @@ const plants: Plant[] = [
     (w) => {
       const step = w.jobs.next.steps[0]!;
       step.run = step.run.replace("$FILTER ", "$FILTER $CHANGED ");
+      // SAFETY: the first next step in `valid` is vitest, whose `env` holds SHARD and FILTER as strings.
       (step.env as Record<string, string>)["CHANGED"] = changedUnlessReaders;
     },
   ],
   [
     "next's vitest step takes another env key",
     (w) => {
+      // SAFETY: next's first step is the vitest step, and `valid` gives it an `env` map of strings.
       (w.jobs.next.steps[0]!.env as Record<string, string>)["READERS"] = `\${{ needs.changes.outputs.readers }}`;
     },
   ],
@@ -781,7 +787,7 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
     "the e2e legs written out of order",
     (w) => {
       const legs = legsOf(w);
-      const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
+      const count = legs.filter((leg) => Predicate.isString(leg) && leg.startsWith("e2e-")).length;
       legs.splice(0, count, ...legs.slice(0, count).toReversed());
 
       // One e2e leg cannot be out of order, so a second one comes first.
