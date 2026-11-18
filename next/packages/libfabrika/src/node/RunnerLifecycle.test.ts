@@ -54,15 +54,15 @@ const person = Writer.cases.person.make({ key: "SHA256:input", for: "test-person
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int, wake: Schema.NullOr(Schema.Finite) });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("inc") }),
-  Schema.Struct({ type: Schema.Literal("work") }),
-  Schema.Struct({ type: Schema.Literal("stop") }),
-  Schema.Struct({ type: Schema.Literal("crash") }),
-  Schema.Struct({ type: Schema.Literal("schedule") }),
-  Schema.Struct({ type: Schema.Literal("start_child"), name: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("stop_child"), name: Schema.String }),
-]);
+const Msg = Schema.TaggedUnion({
+  inc: {},
+  work: {},
+  stop: {},
+  crash: {},
+  schedule: {},
+  start_child: { name: Schema.String },
+  stop_child: { name: Schema.String },
+});
 
 const work = Cmd.make("work", { input: Schema.Struct({}), ok: Schema.Null, err: ["failed"] });
 
@@ -312,10 +312,11 @@ const open = Effect.fnUntraced(function* () {
       | "stop"
       | "crash"
       | "schedule"
-      | { readonly type: "start_child" | "stop_child"; readonly name: string },
+      | typeof Msg.cases.start_child.Type
+      | typeof Msg.cases.stop_child.Type,
   ) {
     input += 1;
-    const message = typeof asked === "string" ? { type: asked } : asked;
+    const message = typeof asked === "string" ? Msg.cases[asked].make({}) : asked;
 
     return yield* current.msg({
       id: `letter-${input}`,
@@ -340,9 +341,9 @@ const open = Effect.fnUntraced(function* () {
         return yield* send(move);
       // The latest name is the child the last start made, or none the program started: `child:0` is no child.
       case "start_child":
-        return yield* send({ type: "start_child", name: `child:${++children}` });
+        return yield* send(Msg.cases.start_child.make({ name: `child:${++children}` }));
       case "stop_child":
-        return yield* send({ type: "stop_child", name: `child:${children}` });
+        return yield* send(Msg.cases.stop_child.make({ name: `child:${children}` }));
       // The program throws, so the call fails with `ProgramDown`: the failure is the move's answer.
       case "crash":
         return yield* Effect.exit(send("crash"));

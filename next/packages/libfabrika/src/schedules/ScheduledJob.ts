@@ -28,7 +28,7 @@ export const Model = Schema.TaggedUnion({
  */
 export type Model = typeof Model.Type;
 
-const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite });
+const Timer = Schema.TaggedStruct("timer", { at: Schema.Finite });
 
 /**
  * The period given to `make` is not a whole, positive number of milliseconds.

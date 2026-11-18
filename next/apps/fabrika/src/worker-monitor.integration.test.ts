@@ -33,6 +33,16 @@ import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  forget: {},
+  quit: {},
+  start: {},
+  stop: {},
+  watch: {},
+});
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const SENT = "2026-11-15T04:00:00.000Z";
@@ -56,11 +66,7 @@ import {Schema} from "effect";
 import {Program} from "@kampus/libfabrika/runtime/Program";
 import {demonitor, monitor} from "@kampus/libfabrika/runtime/Monitor";
 const Model = Schema.Struct({log: Schema.Array(Schema.Json)});
-const Msg = Schema.Union([
- Schema.Struct({type: Schema.Literal("watch"), name: Schema.String}),
- Schema.Struct({type: Schema.Literal("forget"), ref: Schema.String}),
- Schema.Struct({type: Schema.Literal("DOWN"), ref: Schema.String, process: Schema.String, name: Schema.optionalKey(Schema.String), reason: Schema.Json})
-]);
+const Msg = Schema.TaggedUnion({ watch: { name: Schema.String }, forget: { ref: Schema.String }, DOWN: { ref: Schema.String, process: Schema.String, name: Schema.optionalKey(Schema.String), reason: Schema.Json } });
 const logged = (s, entry) => ({log: [...s.log, entry]});
 const machine = Machine.make({model: Model, msg: Msg, cmds: [monitor, demonitor],
  init: (loaded) => [loaded ?? {log: []}, []],
@@ -84,7 +90,7 @@ import {Schema} from "effect";
 import {Program} from "@kampus/libfabrika/runtime/Program";
 import {exit} from "@kampus/libfabrika/runtime/StartChild";
 const Model = Schema.Struct({quit: Schema.Boolean});
-const Msg = Schema.Struct({type: Schema.Literal("quit")});
+const Msg = Schema.TaggedStruct("quit", {});
 const machine = Machine.make({model: Model, msg: Msg, cmds: [exit],
  init: (loaded) => [loaded ?? {quit: false}, []],
  update: {
@@ -103,10 +109,7 @@ import {Schema} from "effect";
 import {Program} from "@kampus/libfabrika/runtime/Program";
 import {startChild, stopChild} from "@kampus/libfabrika/runtime/StartChild";
 const Model = Schema.Struct({log: Schema.Array(Schema.Json)});
-const Msg = Schema.Union([
- Schema.Struct({type: Schema.Literal("start"), program: Schema.String, name: Schema.String}),
- Schema.Struct({type: Schema.Literal("stop"), name: Schema.String})
-]);
+const Msg = Schema.TaggedUnion({ start: { program: Schema.String, name: Schema.String }, stop: { name: Schema.String } });
 const logged = (s, entry) => ({log: [...s.log, entry]});
 const why = (m) => m.reason ?? m.error ?? null;
 const machine = Machine.make({model: Model, msg: Msg, cmds: [startChild, stopChild],
@@ -361,14 +364,14 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
       expect(await client.call("process.send", letter(pid, id, m))).toMatchObject({ result: { _tag: "accepted" } });
 
     // The refusal is reply data across the Project's RPC, and the reader folds it as the Cmd's error.
-    await send(reader, "watch-0", { type: "watch", name: "absent:1" });
+    await send(reader, "watch-0", { ...Tag.cases.watch.make({}), name: "absent:1" });
     const refused = await until("the reader folds its refusal", log, (rows) => rows.length > 0);
     expect(refused, "M13: a name nobody registered is refused no_name").toEqual([
       { type: "monitor_err", reason: "no_name" },
     ]);
 
-    await send(reader, "watch-1", { type: "watch", name: "writer:1" });
-    await send(reader, "watch-2", { type: "watch", name: "writer:1" });
+    await send(reader, "watch-1", { ...Tag.cases.watch.make({}), name: "writer:1" });
+    await send(reader, "watch-2", { ...Tag.cases.watch.make({}), name: "writer:1" });
     const answered = await until("the reader folds both monitor answers", log, (rows) => rows.length > 2);
     const watched = (ref: string) => ({ type: "monitor_ok", ref, process: writer, name: "writer:1" });
     expect(answered, "M13: each watch is answered monitor_ok, bound to the writer's life").toEqual([
@@ -380,14 +383,14 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     expect(kept, "M13: each watch has its own ref").not.toBe(dropped);
 
     // The demonitor crosses the same RPC: the first watch ends before the writer does.
-    await send(reader, "forget-1", { type: "forget", ref: dropped });
+    await send(reader, "forget-1", { ...Tag.cases.forget.make({}), ref: dropped });
     const forgotten = await until("the reader folds its demonitor answer", log, (rows) => rows.length > 3);
     expect(forgotten, "M13: the demonitor is answered").toEqual([...answered, { type: "demonitor_ok" }]);
 
     // The writer's own step ends it with the built-in exit; the law reads only what the reader folds.
     // The exit's turn writes each live watch's DOWN in the order the watches were made, so a DOWN
     // for the dropped watch would fold before the kept one's.
-    await client.call("process.send", letter(writer, "quit-1", { type: "quit" }));
+    await client.call("process.send", letter(writer, "quit-1", Tag.cases.quit.make({})));
 
     const folded = await until("the reader folds the writer's DOWN", log, (rows) =>
       Arr.some(rows, (r) => r.type === "DOWN" && r.ref === kept),
@@ -415,13 +418,13 @@ it("scenario: M16, a watcher that only waits folds the DOWN with no call into it
     });
 
     expect(
-      await client.call("process.send", letter(reader, "watch-1", { type: "watch", name: "writer:1" })),
+      await client.call("process.send", letter(reader, "watch-1", { ...Tag.cases.watch.make({}), name: "writer:1" })),
     ).toMatchObject({ result: { _tag: "accepted" } });
     await pushed(client, reader, "monitor_ok");
 
     // Nothing below calls the reader's object: the quit goes to the writer's, and the reader has no
     // timer. Polling view.open here would itself catch the reader's inbox up and hide a missing wake.
-    await client.call("process.send", letter(writer, "quit-1", { type: "quit" }));
+    await client.call("process.send", letter(writer, "quit-1", Tag.cases.quit.make({})));
     await pushed(client, reader, "DOWN");
 
     expect(
@@ -460,7 +463,7 @@ it("scenario: M16, a watcher that only waits folds one DOWN with shutdown when t
     };
 
     // The parent starts the writer as its child; reading the parent's view never calls the reader.
-    await send(parent, "start-1", { type: "start", program: "m13/writer", name: "writer:2" });
+    await send(parent, "start-1", { ...Tag.cases.start.make({}), program: "m13/writer", name: "writer:2" });
     const parentLog = async () => (await client.call("view.open", { pid: parent })).result?.view?.log ?? [];
     const [started] = await until("the parent folds its child's start", parentLog, (rows) => rows.length > 0);
     expect(started, "M16: the parent started the writer as its child").toEqual({
@@ -474,12 +477,12 @@ it("scenario: M16, a watcher that only waits folds one DOWN with shutdown when t
     expect((await client.call("view.open", { pid: reader })).result?.view, "M16: the reader starts empty").toEqual({
       log: [],
     });
-    await send(reader, "watch-1", { type: "watch", name: "writer:2" });
+    await send(reader, "watch-1", { ...Tag.cases.watch.make({}), name: "writer:2" });
     await pushed(client, reader, "monitor_ok");
 
     // Nothing below calls the reader's object: the stop goes to the parent's, and the reader has no
     // timer. The DOWN reaches the reader only if the Project wakes it after the stop's turn.
-    await send(parent, "stop-1", { type: "stop", name: "writer:2" });
+    await send(parent, "stop-1", { ...Tag.cases.stop.make({}), name: "writer:2" });
     await pushed(client, reader, "DOWN");
 
     const watched = { ref: expect.stringMatching(new RegExp(`^${reader}/`)), process: child, name: "writer:2" };

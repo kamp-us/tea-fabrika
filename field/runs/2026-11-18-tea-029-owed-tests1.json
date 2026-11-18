@@ -1,0 +1,121 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-tea-029-owed-tests1",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1619",
+  "started": "2026-11-18T01:51:00-08:00",
+  "ended": "2026-11-18T02:49:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "In next/ and the root tooling, wrote the laws of slice 1 of the kalfa program plan (the tea-msg-tag quest's slice 2) and the owner's amendment. The bump to tea 0.29.0 is pinned exact, with one local patch built from 0.29.0's release commit plus demlik pull requests 982 (owed) and 983 (answerTo) only. B1 takes PR 1431's laws K1, K2, K2b, K2c and K3 and the counter's laws by checkout and three-way merge, with the rest of PR 1431's test side (153 files) merged onto main's newer style. K1, K2, K2b and K2c pass on the patched 0.29.0, since they test tea itself. K3 and the counter's laws are red now: K3 fails with `expected { _tag: 'refused', reason: 'bad_msg' } to match object { _tag: 'stepped', ... }` and the counter's 'Program.make keeps the exported machine and uses its own schemas' fails with `SchemaError: Expected { readonly \"type\": \"inc\", ... }`, because product Msgs are still keyed type; 14 laws in Program.test.ts and the counter files are red in all. B2 is red now: the full typecheck finds 1,366 errors, all in product code still keyed type or in test files that import product code PR 1431 renames, and none in the new law files. B3 (no range in the catalog) is the version check's existing law and holds. P1 and P2 are one property in libfabrika's runtime/Owed.test.ts on the logged store, green on the patch: an owed job stays in the ledger and is handed out again with its first id after a restart; an answer with answerTo clears it in one write; a repeat answer resolves and writes nothing, before or after a restart (demlik commitment.ts decideAnswer, `atomic` decides repeat); an id never owed is refused as unknown_answer and writes nothing. P3 is in the version check, oxlint-plugins/exact-versions.ts: a patchedDependencies row is keyed on one exact version, and on a version a catalog pins, so the 0.29.0 row turns red at the bump that takes the release.",
+  "note": "Started time is the brief's arrival, read from the first shell timestamp; usage and cost are not recorded, and effort was not given in the brief. P3 does not say 'exactly one tea row': today's version keeps its own '@demlik/tea@0.25.0' patch row on catalogs.old, so the law says each row is at a version a catalog pins instead. Not carried in the patch: demlik #980 and #981, which merged between 0.29.0 and 982; six demlik tests fail only on #981's leak check without it, and all 62 pass with it. Plants not run here: B2's plant (one Msg schema left keyed type) and the red-now K3 and counter laws need the build's product rename; their plants were run on PR 1431. The first typecheck stopped at the first failing package, so a second run with --no-bail, under the same lock file, read every package. loosening.sh with the PR's rename table: the three renamed laws clear; the hits left are type-to-_tag rewrites of expect lines, one expect on Mail.Reply's type field that PR 1431's product side deletes (Schema.is(Mail.Reply) on the line above still checks the shape), and Merger.laws.test.ts line 223, the same 0 to LAST bound in a new shape.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "84f51f8017e1d1a00b36f85dd1856f11b661da9b",
+  "plants": [
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "The plain published 0.29.0 dist in place of the patched one, so owed is no export",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "The completion confirms an owed call (!own.owed dropped from the completion check)",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "Boot hands no surviving delivery out (publishLogged given [] in place of the ledger's list)",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "The answer's message record loses answerTo, so nothing clears the owed entry",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "A repeat answer is refused (decideAnswer's atomic case decided as unknown_answer)",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "An id never owed is taken as a repeat (decideAnswer's missing case with no delivery decided as repeat)",
+      "result": "red"
+    },
+    {
+      "law": "K1 a TaggedUnion Msg is taken by Machine.make, and its cells and answers are keyed on _tag",
+      "plant": "Main's tea 0.27.0 types in place of the patched 0.29.0",
+      "result": "red"
+    },
+    {
+      "law": "K2: run and foldMsgs reach the plain reduce's model; Cmds, answers and the timer go by _tag",
+      "plant": "Main's tea 0.27.0 dist in place of the patched 0.29.0",
+      "result": "red"
+    },
+    {
+      "law": "K2b: a Transitions machine over a TaggedUnion model folds like the same machine as a reducer",
+      "plant": "Main's tea 0.27.0 dist in place of the patched 0.29.0",
+      "result": "red"
+    },
+    {
+      "law": "K2c: a TaggedUnion door with a state table and two answered Cmds folds alike on the Promise and Effect engines, across a restart from its saved State",
+      "plant": "Main's tea 0.27.0 dist in place of the patched 0.29.0",
+      "result": "red"
+    },
+    {
+      "law": "a pnpm-workspace.yaml: catalog is refused",
+      "plant": "The catalog's tea pin written ^0.29.0 in the real pnpm-workspace.yaml",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: refuses a bare name, a range, and a version no catalog pins, naming each",
+      "plant": "inWorkspace reads no patchedDependencies",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: refuses a bare name, a range, and a version no catalog pins, naming each",
+      "plant": "refusedPatches skips the catalog check",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: refuses a bare name, a range, and a version no catalog pins, naming each",
+      "plant": "refusedPatches takes any text after the @ as a version",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: refuses a bare name, a range, and a version no catalog pins, naming each",
+      "plant": "The real catalog moves tea to 0.30.0 and leaves the 0.29.0 patch row",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: refuses a bare name, a range, and a version no catalog pins, naming each",
+      "plant": "The real patch row keyed @demlik/tea@^0.29.0",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: refuses a bare name, a range, and a version no catalog pins, naming each",
+      "plant": "The real patch row keyed on the bare name @demlik/tea",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: passes a row at each version a catalog pins, and a row for a package no catalog names",
+      "plant": "pins reads only the default catalog, not catalogs.<name>",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: passes a row at each version a catalog pins, and a row for a package no catalog names",
+      "plant": "A row for a package no catalog names is refused",
+      "result": "red"
+    }
+  ]
+}

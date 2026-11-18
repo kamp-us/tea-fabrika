@@ -64,6 +64,23 @@ class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: uniq
 const promised = <A>(run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  admitted: {},
+  ask_again: {},
+  beat: {},
+  check: {},
+  open_ok: {},
+  ping_err: {},
+  press: {},
+  write_err: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 const SEED = 119120;
 
 const BUILD = "build_test";
@@ -366,7 +383,12 @@ const services = (socket: Layer.Layer<Socket.WebSocketConstructor>, rows: Array<
     Id.Generator.layer,
   );
 
-const press = { type: "press", tile: "tile_1", m: { type: "check", name: "item 0" }, via: "button" } as const;
+const press = {
+  ...Tag.cases.press.make({}),
+  tile: "tile_1",
+  m: { ...Tag.cases.check.make({}), name: "item 0" },
+  via: "button",
+} as const;
 
 const choice = fc.record({
   move: fc.nat(),
@@ -731,7 +753,7 @@ describe("L9: failure classes through the real runtime", () => {
                 yield* run.dispatch({
                   ...press,
                   tile: open.id,
-                  m: { type: "check", name: `item ${Math.abs(pick) % 4}` },
+                  m: { ...Tag.cases.check.make({}), name: `item ${Math.abs(pick) % 4}` },
                 });
               }
             }
@@ -771,7 +793,7 @@ describe("L12: wire formats are refused as typed values", () => {
     () =>
       Effect.gen(function* () {
         // The parent also validates this public protocol value before its reducer sees it.
-        const openAnswer = { type: "open_ok", id: 1, dial: 1, ms: 0 };
+        const openAnswer = { ...Tag.cases.open_ok.make({}), id: 1, dial: 1, ms: 0 };
 
         for (const value of [{}, { rev: "one", view: list(1) }, { rev: 1 }]) {
           expect(Schema.is(window.msg)({ ...openAnswer, value }), "an invalid open_ok.value passed").toBe(false);
@@ -903,7 +925,7 @@ const Act = Schema.Union([
 /** The number id of a call the start wrote, read from the text it sent. */
 const callId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Finite })));
 
-type FrameMsg = { readonly type: "frame"; readonly dial: number; readonly text: string; readonly ms?: number };
+type FrameMsg = { readonly _tag: "frame"; readonly dial: number; readonly text: string; readonly ms?: number };
 
 /** The id of the scripted window's write for a past dial, past any id the real window names. */
 const STALE = 1_000_000;
@@ -914,13 +936,13 @@ const STALE = 1_000_000;
  * kept in `answers` before the real window takes it, and each frame the start hands it in `frames`.
  */
 const scripted = (
-  answers: Array<{ readonly type: string; readonly dial: number }>,
+  answers: Array<{ readonly _tag: string; readonly dial: number }>,
   frames: Array<FrameMsg>,
 ): typeof window => {
   const real = window.update;
 
-  const kept = (m: { readonly type: string; readonly cmd: { readonly dial: number } }) => {
-    answers.push({ type: m.type, dial: m.cmd.dial });
+  const kept = (m: { readonly _tag: string; readonly cmd: { readonly dial: number } }) => {
+    answers.push({ ...keyed(m._tag), dial: m.cmd.dial });
   };
 
   return {
@@ -983,7 +1005,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
         const key = yield* identity;
         const rows: Array<ClientRow> = [];
         const made: Array<{ readonly ws: MemorySocket; readonly dial: number | null; sentBefore: number | null }> = [];
-        const answers: Array<{ readonly type: string; readonly dial: number }> = [];
+        const answers: Array<{ readonly _tag: string; readonly dial: number }> = [];
         const frames: Array<FrameMsg> = [];
         // The call ids the door has answered, per socket.
         const replied = new Map<MemorySocket, Set<number>>();
@@ -1092,9 +1114,9 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
             owed++;
             ws.receive(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
           } else if (act._tag === "admit" && state.link._tag === "dialing" && dial !== null) {
-            yield* run.dispatch({ type: "admitted", dial, ping: 30_000, ms: 0 });
+            yield* run.dispatch({ ...Tag.cases.admitted.make({}), dial, ping: 30_000, ms: 0 });
           } else if (act._tag === "beat" && state.link._tag === "online" && dial !== null) {
-            yield* run.dispatch({ type: "beat", dial });
+            yield* run.dispatch({ ...Tag.cases.beat.make({}), dial });
           } else if (act._tag === "frame" && ws?.readyState === 1) {
             ws.receive(act.text);
           } else if (act._tag === "close" && ws !== undefined && ws.readyState < 2 && dial !== null) {
@@ -1104,7 +1126,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           } else if (act._tag === "throw") {
             armed = true;
           } else if (act._tag === "again" && state.link._tag === "removed") {
-            yield* run.dispatch({ type: "ask_again", dial: state.dials + 1 });
+            yield* run.dispatch({ ...Tag.cases.ask_again.make({}), dial: state.dials + 1 });
           } else if (act._tag === "wait") {
             yield* TestClock.adjust(act.ms);
           } else if (
@@ -1126,7 +1148,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
 
             stale = { dial: past.dial, newer: ws, before: ws.sent.length };
             answers.length = 0;
-            yield* run.dispatch({ type: "beat", dial: past.dial });
+            yield* run.dispatch({ ...Tag.cases.beat.make({}), dial: past.dial });
           } else if (act._tag === "answer" && ws?.readyState === 1) {
             const done = replied.get(ws) ?? new Set<number>();
             replied.set(ws, done);
@@ -1181,8 +1203,8 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           // A ping and a write for a past dial fail at once, and no byte of theirs reaches the newer dial.
           if (stale !== null) {
             expect(answers, `the ping and the write for past dial ${stale.dial}`).toEqual([
-              { type: "ping_err", dial: stale.dial },
-              { type: "write_err", dial: stale.dial },
+              { ...Tag.cases.ping_err.make({}), dial: stale.dial },
+              { ...Tag.cases.write_err.make({}), dial: stale.dial },
             ]);
             expect(stale.newer.sent.slice(stale.before), "the newer dial took a past dial's bytes").toEqual([]);
           }
@@ -1354,7 +1376,12 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         }
 
         expect(run.getState().tiles[0]?.reach._tag, "the tile opened").toBe("open");
-        yield* run.dispatch({ type: "press", tile: "tile_1", m: { type: "add", name: s.body }, via: "button" });
+        yield* run.dispatch({
+          ...Tag.cases.press.make({}),
+          tile: "tile_1",
+          m: { ...Tag.cases.add.make({}), name: s.body },
+          via: "button",
+        });
 
         for (let n = 0; n < 4; n++) {
           yield* door.tick(1_000);
@@ -1454,7 +1481,7 @@ const LIVE = Schema.Literals([
 const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => {
   const step = (s: WindowModel, m: WindowMsg): readonly [WindowModel, ReadonlyArray<WindowCmd>] => {
     const [next, cmds] = applyCell<WindowModel, WindowMsg, WindowCmd>(window, s, m);
-    writes.push(...Arr.filter(cmds, (c): c is ReturnType<typeof write> => c.type === "write"));
+    writes.push(...Arr.filter(cmds, (c): c is ReturnType<typeof write> => c._tag === "write"));
 
     return [next, cmds];
   };

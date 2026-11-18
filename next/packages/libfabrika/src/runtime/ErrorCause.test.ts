@@ -24,6 +24,12 @@ import { ProgramLoader } from "./Entry.ts";
 import { executionFailure, nodeExecution } from "./Execution.ts";
 import { ProgramDown, stepper } from "./Program.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+});
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 const RUNS = 100;
@@ -49,7 +55,7 @@ const holdsSchemaError = (cause: unknown): boolean =>
 
 const Model = Schema.Struct({ count: Schema.Int });
 
-const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+const Msg = Schema.TaggedStruct("inc", {});
 
 const Refusal = { reason: "limit", now: 3, most: 3 };
 
@@ -140,8 +146,8 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
 
         const work = Match.value(call).pipe(
           Match.when("init", () => run.init(saved)),
-          Match.when("step", () => run.step(saved, { type: "inc" })),
-          Match.orElse(() => run.fold(saved, { type: "inc" })),
+          Match.when("step", () => run.step(saved, Tag.cases.inc.make({}))),
+          Match.orElse(() => run.fold(saved, Tag.cases.inc.make({}))),
         );
 
         const error = yield* Effect.flip(work);
@@ -168,7 +174,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
           ...(view === undefined ? {} : { view: { count: view } }),
         };
 
-        const error = yield* Effect.flip(nodeExecution(program(faults)).step({ count }, { type: "inc" }));
+        const error = yield* Effect.flip(nodeExecution(program(faults)).step({ count }, Tag.cases.inc.make({})));
         expect(error.reason, "the reason stays the one the check returned").toBe("step");
         expect(holdsSchemaError(error.cause), "the cause holds the failed results").toBe(true);
       }),
@@ -185,7 +191,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
     ({ count, field, bad }) =>
       Effect.gen(function* () {
         const refusal = { ...Refusal, [field]: bad };
-        const error = yield* Effect.flip(nodeExecution(program({ refusal })).step({ count }, { type: "inc" }));
+        const error = yield* Effect.flip(nodeExecution(program({ refusal })).step({ count }, Tag.cases.inc.make({})));
         expect(error.reason).toBe("step");
         expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
       }),
@@ -303,10 +309,12 @@ const row1 = { v: 1, build: "b-1", model: { count: 1 }, after: 0 };
 /** A step, upgrade or load that fails at a site this ticket gave a cause, and the call it makes. */
 const causedAt = {
   saved_model: (bad: unknown) => nodeExecution(program({})).init({ count: bad }),
-  step_model: (bad: unknown) => nodeExecution(program({ model: { count: bad } })).step({ count: 1 }, { type: "inc" }),
-  step_view: (bad: unknown) => nodeExecution(program({ view: { count: bad } })).step({ count: 1 }, { type: "inc" }),
+  step_model: (bad: unknown) =>
+    nodeExecution(program({ model: { count: bad } })).step({ count: 1 }, Tag.cases.inc.make({})),
+  step_view: (bad: unknown) =>
+    nodeExecution(program({ view: { count: bad } })).step({ count: 1 }, Tag.cases.inc.make({})),
   refusal: (bad: unknown) =>
-    nodeExecution(program({ refusal: { ...Refusal, reason: bad } })).step({ count: 1 }, { type: "inc" }),
+    nodeExecution(program({ refusal: { ...Refusal, reason: bad } })).step({ count: 1 }, Tag.cases.inc.make({})),
   saved_row: (bad: unknown) => nodeExecution(program({})).upgrade({ ...row1, after: bad }),
   upgrade_throws: (bad: unknown) => nodeExecution(program({ upgrade: { throws: bad } })).upgrade(row1),
   upgrade_gives: (bad: unknown) => nodeExecution(program({ upgrade: { gives: { count: bad } } })).upgrade(row1),
@@ -351,7 +359,7 @@ describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing 
   /** The call that feeds `seen`, keyed by `key`, to the decoder at one site. */
   const feed = (call: (typeof calls)[number], seen: Record<string, unknown>) => {
     const saved = { count: 1, seen };
-    const inc = { type: "inc" };
+    const inc = Tag.cases.inc.make({});
 
     switch (call) {
       case "init":

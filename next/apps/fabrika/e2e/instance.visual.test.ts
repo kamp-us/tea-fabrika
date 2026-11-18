@@ -5,11 +5,17 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { it } from "@effect/vitest";
-import { String as Str, Array as Arr, Effect, Option, type Schema } from "effect";
+import { String as Str, Array as Arr, Effect, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+});
 
 interface BrowserDriver {
   readonly frames: Array<any>;
@@ -386,7 +392,7 @@ describe("P12 real browser protocol", () => {
           rpc(a, "process.send", {
             pid,
             letter: "browser-once",
-            m: { type: "inc" },
+            m: Tag.cases.inc.make({}),
             sentAt: "2026-11-08T04:00:00.000Z",
             seen: 0,
           }),
@@ -413,7 +419,7 @@ describe("P12 real browser protocol", () => {
           rpc(a, "process.send", {
             pid,
             letter: "browser-once",
-            m: { type: "inc" },
+            m: Tag.cases.inc.make({}),
             sentAt: "2026-11-08T04:00:00.000Z",
             seen: 0,
           }),

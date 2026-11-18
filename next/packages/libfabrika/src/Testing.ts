@@ -3,7 +3,7 @@
 // `senderTest` is law p69: every write matches an expected table built from the inputs, never from
 // the parents the program returned. Both throw a diagnostic on a difference. Remove `syncTest`
 // when tea ships the matching helper.
-import { applyCell, type Cmd, type Machine, type Sub } from "@demlik/tea";
+import { applyCell, type Cmd, type Machine, type Sub, type Tagged } from "@demlik/tea";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import type * as Schema from "effect/Schema";
@@ -18,7 +18,7 @@ type Options<S, M, E> = {
 };
 
 /** Checks every cut, the first and the last included. Never runs a Cmd. */
-export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, U extends Sub, Ctx, E>(
+export const syncTest = <S, M extends Tagged, C extends Cmd, U extends Sub, Ctx, E>(
   machine: Machine<S, M, C, U, Ctx>,
   ctx: Ctx,
   { msgs, encode, decode, equals, seed }: Options<S, M, E>,

@@ -25,11 +25,19 @@ import { stepper } from "./Program.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 import { ProgramRunner } from "./Runner.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  put: {},
+  boom: {},
+});
+
 const PID = Effect.runSync(processId);
 
 const Model = Schema.Struct({ count: Schema.Int });
 
-const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+const Msg = Schema.TaggedStruct("inc", {});
 
 const program = {
   name: "counter",
@@ -77,7 +85,7 @@ describe("P12 saved mail recovery", () => {
                     return Result.getOrThrow(pure.fresh(model, msg));
                   },
                   update: async (model, msg) => Result.getOrThrow(pure.update(model, msg)),
-                  audit: async () => ({ _tag: "ok", value: { type: "inc" } }),
+                  audit: async () => ({ _tag: "ok", value: Tag.cases.inc.make({}) }),
                   admit: async () => {
                     if (down && point === "admit") {
                       return Promise.reject(new Error("temporary RPC loss"));
@@ -205,20 +213,15 @@ describe("P12 saved mail recovery", () => {
                   expect(yield* runner.open("before")).toMatchObject({ rev: 0, view: { count: 0 } });
 
                   for (let n = 0; n < total; n++) {
-                    yield* mailbox.send(
-                      "counter:1",
-                      `${letter}-${n}`,
-                      { type: "inc" },
-                      {
-                        by: "SHA256:fixture",
-                        for: "person-test",
-                        sentAt: "2026-11-08T00:00:00Z",
-                        seen: 0,
-                        parent: null,
-                        traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-                        build: "test",
-                      },
-                    );
+                    yield* mailbox.send("counter:1", `${letter}-${n}`, Tag.cases.inc.make({}), {
+                      by: "SHA256:fixture",
+                      for: "person-test",
+                      sentAt: "2026-11-08T00:00:00Z",
+                      seen: 0,
+                      parent: null,
+                      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+                      build: "test",
+                    });
                   }
 
                   down = true;
@@ -253,10 +256,7 @@ describe("P12 saved mail recovery", () => {
 });
 
 // Ticket 402: the runner's own id_reused refusal, on both paths that know a letter.
-const Reuse = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("inc"), n: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("boom"), n: Schema.Int }),
-]);
+const Reuse = Schema.TaggedUnion({ inc: { n: Schema.Int }, boom: { n: Schema.Int } });
 
 const ReuseModel = Schema.Struct({ count: Schema.Int });
 
@@ -312,7 +312,7 @@ describe("P34 id reuse at the runner", () => {
 
                       return Result.getOrThrow(pure.update(model, msg));
                     },
-                    audit: async () => ({ _tag: "ok", value: { type: "put" } }),
+                    audit: async () => ({ _tag: "ok", value: Tag.cases.put.make({}) }),
                     step: async (model, msg) => {
                       steps++;
 
@@ -435,7 +435,7 @@ describe("P34 id reuse at the runner", () => {
                       id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
                       by: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
                       arrivedAt: 0,
-                      input: { type, n },
+                      input: { ...Tag.cases[type].make({}), n },
                     },
                     sentAt: "2026-11-08T00:00:00Z",
                     seen: 0,

@@ -69,12 +69,15 @@ const declaration = (name: string, ports: ReadonlyArray<Port>, keys?: ReadonlyAr
   // An internal message must never appear in a tool's value schema.
 
   const msg = Schema.Union([
-    ...writes.map((e) => Schema.Struct({ type: Schema.Literal(e.key), ...fields(e.port.shape) })),
-    Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
+    ...writes.map((e) => Schema.TaggedStruct(e.key, fields(e.port.shape))),
+    Schema.TaggedStruct("timer", { at: Schema.Int }),
   ]);
 
   const machine = Machine.make({
     model: Schema.Null,
+    // Ports drawn at run time: the Msg tags are data, so tea's literal-tag rule (demlik #936) cannot
+    // hold, and `update` is built from the same keys, so no cell name can be misspelled.
+    // @ts-expect-error every msg tag must be a literal, and a drawn port's key is not one
     msg,
     cmds: [],
     init: () => [null, []],
@@ -113,20 +116,15 @@ const richDeclaration = (fallback: string, reverse: boolean) => {
   const left = { side: Schema.Literal("left"), n: Schema.Int };
   const right = { side: Schema.Literal("right"), text: Schema.String };
   const defaulted = { note: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(fallback))) };
-
-  const alternatives = [
-    Schema.Struct({ type: Schema.Literal("choose"), ...left }),
-    Schema.Struct({ type: Schema.Literal("choose"), ...right }),
-  ];
-
+  const alternatives = [Schema.TaggedStruct("choose", left), Schema.TaggedStruct("choose", right)];
   const shared = Schema.Struct({ label: Schema.String }).annotate({ identifier: "ToolShared" });
   const sharedPair = Schema.Struct({ first: shared, second: shared });
 
   const msg = Schema.Union([
-    Schema.Struct({ type: Schema.Literal("bounds"), ...bounds }).check(ordered),
+    Schema.TaggedStruct("bounds", bounds).check(ordered),
     ...(reverse ? alternatives.toReversed() : alternatives),
-    Schema.Struct({ type: Schema.Literal("defaulted"), ...defaulted }),
-  ]).check(Schema.makeFilter((value) => value.type !== "choose" || value.side !== "left" || value.n >= 0));
+    Schema.TaggedStruct("defaulted", defaulted),
+  ]).check(Schema.makeFilter((value) => !Predicate.isTagged(value, "choose") || value.side !== "left" || value.n >= 0));
 
   const machine = Machine.make({
     model: Schema.Null,
@@ -181,9 +179,9 @@ type SchemaForm = (typeof schemaForms)[number];
 const schemaDeclaration = (form: SchemaForm, reverse: boolean, encodedKey: string) => {
   const left = Schema.Struct({ side: Schema.Literal("left"), n: Schema.Int });
   const right = Schema.Struct({ side: Schema.Literal("right"), text: Schema.String });
-  const leftMessage = Schema.Struct({ type: Schema.Literal("choose"), ...left.fields });
-  const rightMessage = Schema.Struct({ type: Schema.Literal("choose"), ...right.fields });
-  const timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int });
+  const leftMessage = Schema.TaggedStruct("choose", left.fields);
+  const rightMessage = Schema.TaggedStruct("choose", right.fields);
+  const timer = Schema.TaggedStruct("timer", { at: Schema.Int });
   const alternatives = Schema.Union(reverse ? [rightMessage, leftMessage] : [leftMessage, rightMessage]);
   const plain = Schema.Union([alternatives, timer]);
   const encodedLeft = left.pipe(Schema.encodeKeys({ n: encodedKey }));
@@ -202,7 +200,7 @@ const schemaDeclaration = (form: SchemaForm, reverse: boolean, encodedKey: strin
           ? Schema.Union([Schema.suspend(() => alternatives), timer])
           : form === "multiple tags"
             ? Schema.Union([
-                Schema.Struct({ type: Schema.Literals(["choose", "other"]), ...left.fields }),
+                Schema.Struct({ _tag: Schema.Literals(["choose", "other"]), ...left.fields }),
                 rightMessage,
                 timer,
               ])
@@ -315,7 +313,7 @@ it.prop(
           ? { _tag: "refused", reason: "bad_input" }
           : port.read
             ? { _tag: "query", program: program.name, name: key, query: decoded.success.value }
-            : { _tag: "write", program: program.name, m: { ...decoded.success.value, type: key } },
+            : { _tag: "write", program: program.name, m: { ...decoded.success.value, _tag: key } },
       );
       const invalid = port.read && port.shape === "text" ? false : null;
       expect(Tools.read([program], tool, { value: invalid })).toEqual({ _tag: "refused", reason: "bad_input" });
@@ -323,7 +321,7 @@ it.prop(
       expect(Tools.read([program], tool, { value })).toEqual(
         port.read
           ? { _tag: "query", program: program.name, name: key, query: value }
-          : { _tag: "write", program: program.name, m: { ...value, type: key } },
+          : { _tag: "write", program: program.name, m: { ...value, _tag: key } },
       );
 
       const alternate =
@@ -332,7 +330,7 @@ it.prop(
       expect(Tools.read([program], tool, { value: alternate })).toEqual(
         port.read
           ? { _tag: "query", program: program.name, name: key, query: alternate }
-          : { _tag: "write", program: program.name, m: { ...alternate, type: key } },
+          : { _tag: "write", program: program.name, m: { ...alternate, _tag: key } },
       );
       expect(Tools.read([program], tool, { value, unexpected: input })).toEqual({
         _tag: "refused",
@@ -422,7 +420,11 @@ const Declaration = Schema.Struct({ ...Supported.fields, outside: Schema.optiona
 
 type Declaration = typeof Declaration.Type;
 
-type Message = { readonly type: string; readonly [key: string]: unknown };
+type MessageFields = Readonly<Record<string, Schema.Top & Schema.Codec<unknown, unknown>>>;
+
+const taggedMessage = (tag: string, fields: MessageFields = {}) => Schema.TaggedStruct(tag, fields);
+
+type Message = ReturnType<typeof taggedMessage>["Type"];
 
 type Tree = { readonly label: string; readonly children: ReadonlyArray<Tree> };
 
@@ -608,7 +610,7 @@ const makeForm = (form: Declaration & { readonly odd?: OddPart }) => {
       }),
     );
 
-    const plain = Schema.Struct({ type: Schema.Literals(member.tags), ...fields });
+    const plain = Schema.Struct({ _tag: Schema.Literals(member.tags), ...fields });
     const first = Object.keys(fields)[0];
     const encoded = first === undefined ? plain : plain.pipe(Schema.encodeKeys({ [first]: `wire_${first}` }));
 
@@ -630,32 +632,23 @@ const makeForm = (form: Declaration & { readonly odd?: OddPart }) => {
   const outside = form.outside;
 
   if (outside === "tag_renamed" || outside === "tag_renamed_beside_plain") {
-    const renamed = Schema.Struct({ type: Schema.Literal("a"), renamed: Schema.String }).pipe(
-      Schema.encodeKeys({ type: "kind" }),
-    );
-
+    const renamed = taggedMessage("a", { renamed: Schema.String }).pipe(Schema.encodeKeys({ _tag: "kind" }));
     parts = outside === "tag_renamed" ? [renamed] : [...parts, renamed];
   } else if (outside === "not_an_object") {
     parts.push(Schema.String);
   } else if (outside === "min_properties") {
-    parts.push(
-      Schema.Struct({ type: Schema.Literal("a"), limited: Schema.optionalKey(Schema.String) }).check(
-        Schema.isMinProperties(2),
-      ),
-    );
+    parts.push(taggedMessage("a", { limited: Schema.optionalKey(Schema.String) }).check(Schema.isMinProperties(2)));
   } else if (outside === "index_signature") {
-    parts.push(
-      Schema.StructWithRest(Schema.Struct({ type: Schema.Literal("a") }), [Schema.Record(Schema.String, Schema.Json)]),
-    );
+    parts.push(Schema.StructWithRest(taggedMessage("a"), [Schema.Record(Schema.String, Schema.Json)]));
   }
 
   const odd = form.odd;
 
   if (odd !== undefined && odd.port !== "read") {
-    parts.push(Schema.Struct({ type: Schema.Literal("odd"), held: odd.schema }));
+    parts.push(taggedMessage("odd", { held: odd.schema }));
   }
 
-  parts.push(Schema.Struct({ type: Schema.Literal("timer"), internal_timer: Schema.Int }));
+  parts.push(taggedMessage("timer", { internal_timer: Schema.Int }));
 
   for (const nested of form.nest) {
     if (nested && parts.length > 1) {
@@ -688,6 +681,9 @@ const makeForm = (form: Declaration & { readonly odd?: OddPart }) => {
 
   const machine = Machine.make({
     model: Schema.Null,
+    // Ports drawn at run time: the Msg tags are data, so tea's literal-tag rule (demlik #936) cannot
+    // hold, and `update` is built from the same keys, so no cell name can be misspelled.
+    // @ts-expect-error every msg tag must be a literal, and a drawn port's key is not one
     msg,
     cmds: [],
     init: () => [null, []],
@@ -731,14 +727,14 @@ type Form = ReturnType<typeof makeForm>;
 const jsonTrip = (value: unknown): unknown =>
   Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(value));
 
-const withoutType = (value: unknown) => {
+const withoutTag = (value: unknown) => {
   expect(Predicate.isObject(value)).toBe(true);
 
   if (!Predicate.isObject(value)) {
     throw new Error("The Msg must encode as an object");
   }
 
-  const { type: _, ...fields } = value;
+  const { _tag: _, ...fields } = value;
 
   return fields;
 };
@@ -756,8 +752,8 @@ const sent = (description: typeof Supported.Type) => {
   const form = makeForm(description);
 
   return Arbitrary.schema(form.msg).pipe(
-    Arbitrary.filter((msg) => form.visible.includes(msg.type)),
-    Arbitrary.map((msg) => ({ description, msg, value: withoutType(encoded(form, msg)) })),
+    Arbitrary.filter((msg) => form.visible.includes(msg._tag)),
+    Arbitrary.map((msg) => ({ description, msg, value: withoutTag(encoded(form, msg)) })),
   );
 };
 
@@ -781,7 +777,7 @@ const Forms = {
           const other =
             form.visible.length === 1
               ? Arbitrary.Constant(sample)
-              : sent(description).pipe(Arbitrary.filter((next) => next.msg.type !== sample.msg.type));
+              : sent(description).pipe(Arbitrary.filter((next) => next.msg._tag !== sample.msg._tag));
 
           return Arbitrary.all({
             other,
@@ -789,13 +785,13 @@ const Forms = {
             mode: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 5 }))),
           }).pipe(
             Arbitrary.map(({ other, json, mode }) => {
-              const key = sample.msg.type;
+              const key = sample.msg._tag;
               const { [Object.keys(sample.value)[0] ?? "absent"]: _, ...dropped } = sample.value;
 
               const values: ReadonlyArray<unknown> = [
                 json,
                 dropped,
-                { ...sample.value, type: key },
+                { ...sample.value, _tag: key },
                 { ...sample.value, unexpected: json },
                 other.value,
                 sample.value,
@@ -871,8 +867,8 @@ it.prop(
   { sample: Forms.Sent },
   ({ sample: { description, msg, value } }) => {
     const form = makeForm(description);
-    expect(validator(toolFor(form, msg.type).inputSchema)({ value })).toBe(true);
-    const port = Programs.port(form.program, msg.type);
+    expect(validator(toolFor(form, msg._tag).inputSchema)({ value })).toBe(true);
+    const port = Programs.port(form.program, msg._tag);
     expect(Option.isSome(port)).toBe(true);
 
     if (Option.isSome(port)) {
@@ -882,11 +878,11 @@ it.prop(
       expect(Result.isSuccess(expected)).toBe(true);
 
       if (Result.isSuccess(fields) && Result.isSuccess(expected)) {
-        expect(fields.success).toEqual(withoutType(expected.success));
+        expect(fields.success).toEqual(withoutTag(expected.success));
       }
     }
 
-    const call = Tools.read([form.program], `drawn_${msg.type}`, { value });
+    const call = Tools.read([form.program], `drawn_${msg._tag}`, { value });
     expect(call._tag).toBe("write");
 
     if (Tools.Call.isAnyOf(["write"])(call)) {
@@ -905,13 +901,13 @@ it.prop(
 );
 
 const oracle = (form: Form, key: string, value: unknown) => {
-  if (!Predicate.isObject(value) || Array.isArray(value) || Object.hasOwn(value, "type")) {
+  if (!Predicate.isObject(value) || Array.isArray(value) || Object.hasOwn(value, "_tag")) {
     return false;
   }
 
-  const result = expectedMessage(form, { ...value, type: key });
+  const result = expectedMessage(form, { ...value, _tag: key });
 
-  return Result.isSuccess(result) && result.success.type === key;
+  return Result.isSuccess(result) && result.success._tag === key;
 };
 
 it.prop(
@@ -1071,7 +1067,7 @@ it("vector: V1 ordered bounds, alternatives in both orders, default and shared d
             if (Tools.Call.isAnyOf(["write"])(call)) {
               expect(Schema.decodeUnknownSync(Schema.toCodecJson(program.msg), closed)(jsonTrip(call.m))).toEqual({
                 ...decoded.success,
-                type: key,
+                _tag: key,
               });
             }
           }
@@ -1107,7 +1103,7 @@ for (const form of schemaForms) {
           expect(call).toEqual(
             Result.isFailure(decoded)
               ? { _tag: "refused", reason: "bad_input" }
-              : { _tag: "write", program: program.name, m: { ...value, type: key } },
+              : { _tag: "write", program: program.name, m: { ...value, _tag: key } },
           );
 
           if (Result.isSuccess(decoded)) {
@@ -1122,9 +1118,7 @@ for (const form of schemaForms) {
 // vector: review 4's suspended codec must leave the encoded fields in the letter.
 it("vector: V1 suspended wire_name codec", () => {
   const msg = Schema.suspend(() =>
-    Schema.Struct({ type: Schema.Literal("check"), name: Schema.String }).pipe(
-      Schema.encodeKeys({ name: "wire_name" }),
-    ),
+    Schema.TaggedStruct("check", { name: Schema.String }).pipe(Schema.encodeKeys({ name: "wire_name" })),
   );
 
   const machine = Machine.make({
@@ -1158,13 +1152,13 @@ it("vector: V1 suspended wire_name codec", () => {
   expect(Tools.read([program], "probe_check", { value })).toEqual({
     _tag: "write",
     program: program.name,
-    m: { type: "check", ...value },
+    m: { _tag: "check", ...value },
   });
   expect(Tools.read([program], "probe_check", { value: { name: "ok" } })).toEqual({
     _tag: "refused",
     reason: "bad_input",
   });
-  expect(Tools.read([program], "probe_check", { value: { ...value, type: "check" } })).toEqual({
+  expect(Tools.read([program], "probe_check", { value: { ...value, _tag: "check" } })).toEqual({
     _tag: "refused",
     reason: "bad_input",
   });
@@ -1172,7 +1166,7 @@ it("vector: V1 suspended wire_name codec", () => {
 
   if (Tools.Call.isAnyOf(["write"])(call)) {
     expect(Schema.decodeUnknownSync(Schema.toCodecJson(msg), closed)(jsonTrip(call.m))).toEqual({
-      type: "check",
+      _tag: "check",
       name: "ok",
     });
   }
@@ -1308,7 +1302,7 @@ it.effect.prop(
 
       for (const x of [sample.drawn, sample.edge]) {
         const letter = Wire.letter(x);
-        const { m, taken } = yield* throughTool(x.type, withoutType(letter));
+        const { m, taken } = yield* throughTool(x._tag, withoutTag(letter));
         expect(m, "m equals the letter a person's window sends for the same Msg").toStrictEqual(letter);
 
         for (const got of taken) {
@@ -1458,19 +1452,23 @@ for (const [name, schema] of empties) {
 }
 
 const probes: ReadonlyArray<readonly [name: string, value: Readonly<Record<string, string>>, expected: Wire.Msg]> = [
-  ["Schema.BigInt", { n: "123" }, { type: "big", n: 123n }],
-  ["Schema.Uint8Array", { body: "AQID" }, { type: "bytes", body: new Uint8Array([1, 2, 3]) }],
-  ["Schema.Date", { at: "2026-11-12T16:47:00.000Z" }, { type: "date", at: new Date("2026-11-12T16:47:00.000Z") }],
-  ["Schema.Number NaN", { x: "NaN" }, { type: "number", x: Number.NaN }],
-  ["Schema.Number Infinity", { x: "Infinity" }, { type: "number", x: Infinity }],
-  ["Schema.Number -Infinity", { x: "-Infinity" }, { type: "number", x: -Infinity }],
+  ["Schema.BigInt", { n: "123" }, Wire.Msg.cases.big.make({ n: 123n })],
+  ["Schema.Uint8Array", { body: "AQID" }, Wire.Msg.cases.bytes.make({ body: new Uint8Array([1, 2, 3]) })],
+  [
+    "Schema.Date",
+    { at: "2026-11-12T16:47:00.000Z" },
+    Wire.Msg.cases.date.make({ at: new Date("2026-11-12T16:47:00.000Z") }),
+  ],
+  ["Schema.Number NaN", { x: "NaN" }, Wire.Msg.cases.number.make({ x: Number.NaN })],
+  ["Schema.Number Infinity", { x: "Infinity" }, Wire.Msg.cases.number.make({ x: Infinity })],
+  ["Schema.Number -Infinity", { x: "-Infinity" }, Wire.Msg.cases.number.make({ x: -Infinity })],
 ];
 
 for (const [name, value, expected] of probes) {
   // vector: each is one of review 5's four probes, kept by name so a regression points at its review.
   it.effect(`vector: W5 review 5's ${name} probe lists, is accepted and reaches update`, () =>
     Effect.gen(function* () {
-      const { taken } = yield* throughTool(expected.type, value);
+      const { taken } = yield* throughTool(expected._tag, value);
 
       for (const got of taken) {
         expect(Schema.toEquivalence(Wire.Msg)(got, expected), `update takes ${name}'s own value`).toBe(true);

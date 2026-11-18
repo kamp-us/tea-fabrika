@@ -45,6 +45,15 @@ import {
 } from "./p14.test-support.ts";
 import { stored } from "./stored.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  check: {},
+  uncheck: {},
+  add: {},
+  remove: {},
+});
+
 const SEED = 119120;
 
 /** The registered name of the process the window's one tile shows: its streams are read by it. */
@@ -276,14 +285,14 @@ const useChecklist = (
 
       if (pick === 0) {
         const name = pool[p.name % pool.length]!;
-        msg = { type: "add", name };
+        msg = { ...Tag.cases.add.make({}), name };
         yield* Effect.promise(() => t.field.fill(name));
         yield* Effect.promise(() => t.field.press("Enter"));
       } else if (pick === 1) {
-        msg = { type: row!.checked ? "uncheck" : "check", name: row!.name };
+        msg = { ...(row!.checked ? Tag.cases.uncheck : Tag.cases.check).make({}), name: row!.name };
         yield* Effect.promise(() => t.box(row!.name).click());
       } else {
-        msg = { type: "remove", name: row!.name };
+        msg = { ...Tag.cases.remove.make({}), name: row!.name };
         yield* Effect.promise(() => t.remove(row!.name).click());
       }
 
@@ -298,7 +307,7 @@ const useChecklist = (
       yield* settle(
         Effect.all([t.shown, t.refusal], { concurrency: 1 }),
         ([r, said]) => JSON.stringify(r) === JSON.stringify(want) && said === words[at],
-        `tab ${at} after ${msg.type}`,
+        `tab ${at} after ${msg._tag}`,
       );
       yield* observe;
       yield* afterPress(msg, at);
@@ -523,7 +532,7 @@ describe("L15: use in two tabs (W2)", () => {
               for (const entry of Arr.filter(inbox, (entry) => !letters.has(entry.id))) {
                 expect(entry._tag, "inbox entries are mailbox sends").toBe("send");
                 const { m } = Schema.decodeUnknownSync(Schema.Struct({ m: checklist.msg }))(entry.body);
-                expect(m.type, "every remaining inbox entry is a runner timer").toBe("timer");
+                expect(m._tag, "every remaining inbox entry is a runner timer").toBe("timer");
                 expect(entry.id, "the runner timer has its own revision-scoped id").toMatch(/\/due\/\d+\/\d+$/);
               }
             }),
@@ -609,7 +618,8 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   } else {
                     yield* settle(
                       tile(t.page, REGION).refusal,
-                      (words) => words === checklistWindow.refused!({ type: "add", name: `itm_${item}` }, "taken"),
+                      (words) =>
+                        words === checklistWindow.refused!({ ...Tag.cases.add.make({}), name: `itm_${item}` }, "taken"),
                       "the duplicate sentinel is refused",
                     );
                   }

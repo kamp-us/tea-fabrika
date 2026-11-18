@@ -16,10 +16,23 @@ import {
   Formatter,
   Match,
   Option,
+  Predicate,
   Schema,
 } from "effect";
 import type { Scope } from "effect";
 import { chaos } from "./program.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  check: {},
+  fire_err: {},
+  fire_ok: {},
+  start: {},
+  stop: {},
+  uncheck: {},
+});
 
 const SEED = 119120;
 
@@ -120,9 +133,13 @@ const target = (process: string) =>
 
 const startTarget = Effect.fnUntraced(function* (world: World, checklist: unknown) {
   const session = yield* world.session(TARGET, "fabrika/checklist", checklist, {});
-  const added = yield* session.runner.msg(world.letter(100, { type: "add", name: "task" }));
+  const added = yield* session.runner.msg(world.letter(100, { ...Tag.cases.add.make({}), name: "task" }));
   expect(added._tag).toBe("accepted");
-  const checked = yield* session.runner.msg(world.letter(101, { type: "check", name: "task", note: "agent-note" }));
+
+  const checked = yield* session.runner.msg(
+    world.letter(101, { ...Tag.cases.check.make({}), name: "task", note: "agent-note" }),
+  );
+
   expect(checked._tag).toBe("accepted");
 
   return target(session.process);
@@ -177,7 +194,7 @@ export const suite = (open: Open, checklist: unknown) =>
 
                 yield* runner.msg(
                   world.letter(1, {
-                    type: "start",
+                    ...Tag.cases.start.make({}),
                     id: experimentId,
                     seed: input.seed,
                     most: 1,
@@ -196,14 +213,18 @@ export const suite = (open: Open, checklist: unknown) =>
                 expect(calls).toHaveLength(allowed ? 1 : 0);
 
                 const answers = Arr.filter(yield* world.letters(NAME), (letter) =>
-                  Schema.is(Schema.Struct({ type: Schema.Literals(["fire_ok", "fire_err"]) }))(letter.m),
+                  Schema.is(Schema.TaggedUnion({ fire_ok: {}, fire_err: {} }))(letter.m),
                 );
 
                 expect(answers).toHaveLength(1);
                 expect(answers[0]?.m).toMatchObject(
                   allowed
-                    ? { type: "fire_ok" }
-                    : { type: "fire_err", error: Schema.TaggedStruct("bad_cmd", {}).make({}), reason: "bad_cmd" },
+                    ? Tag.cases.fire_ok.make({})
+                    : {
+                        ...Tag.cases.fire_err.make({}),
+                        error: Schema.TaggedStruct("bad_cmd", {}).make({}),
+                        reason: "bad_cmd",
+                      },
                 );
               }),
             ),
@@ -239,7 +260,7 @@ export const suite = (open: Open, checklist: unknown) =>
 
             const sent = yield* runner.msg(
               world.letter(1, {
-                type: "start",
+                ...Tag.cases.start.make({}),
                 id: experimentId,
                 seed: input.seed,
                 most: input.most,
@@ -298,11 +319,11 @@ export const suite = (open: Open, checklist: unknown) =>
               });
 
             const handlers = { now, fire, inspect: read(world, binding) };
-            const start = { type: "start", id: experimentId, ...input, target: binding };
+            const start = { ...Tag.cases.start.make({}), id: experimentId, ...input, target: binding };
 
             // Only the declared start fields are sent; test controls are never program inputs.
             const startInput = {
-              type: start.type,
+              ...Tag.cases.start.make({}),
               id: start.id,
               seed: start.seed,
               most: start.most,
@@ -389,12 +410,10 @@ export const suite = (open: Open, checklist: unknown) =>
             );
             const letters = yield* world.letters(NAME);
 
-            const answers = Arr.filter(letters, (l) =>
-              Schema.is(Schema.Struct({ type: Schema.Literal("fire_ok") }))(l.m),
-            );
+            const answers = Arr.filter(letters, (l) => Schema.is(Schema.TaggedStruct("fire_ok", {}))(l.m));
 
             expect(answers).toHaveLength(input.most);
-            const timers = Arr.filter(letters, (l) => Schema.is(Schema.Struct({ type: Schema.Literal("timer") }))(l.m));
+            const timers = Arr.filter(letters, (l) => Schema.is(Schema.TaggedStruct("timer", {}))(l.m));
             expect(timers).toHaveLength(input.most);
 
             for (const [index, answer] of answers.entries()) {
@@ -464,7 +483,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   if (before === null) {
                     yield* runner.msg(
                       world.letter(1, {
-                        type: "start",
+                        ...Tag.cases.start.make({}),
                         id: experimentId,
                         seed: input.seed,
                         most: input.most,
@@ -539,9 +558,9 @@ export const suite = (open: Open, checklist: unknown) =>
               expect(result).toHaveLength(1);
               expect(result[0]).toMatchObject(
                 mode === "refused"
-                  ? { type: "fire_ok", value: Chaos.Fired.cases.refused.make({ reason: "stale" }) }
+                  ? { ...Tag.cases.fire_ok.make({}), value: Chaos.Fired.cases.refused.make({ reason: "stale" }) }
                   : {
-                      type: "fire_err",
+                      ...Tag.cases.fire_err.make({}),
                       error: Schema.TaggedStruct(mode === "off" ? "NemesisError" : "handler_failed", {}).make({}),
                       reason: mode === "off" ? "NemesisError" : "handler_failed",
                     },
@@ -623,7 +642,7 @@ export const suite = (open: Open, checklist: unknown) =>
             };
 
             const start = (id: typeof Chaos.ExperimentId.Type) => ({
-              type: "start",
+              ...Tag.cases.start.make({}),
               id,
               seed: input.seed,
               most: input.most,
@@ -692,7 +711,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 > | null = null;
 
                 if (delivery === "replaced") {
-                  expect((yield* runner.msg(world.letter(2, { type: "stop" })))._tag).toBe("accepted");
+                  expect((yield* runner.msg(world.letter(2, Tag.cases.stop.make({}))))._tag).toBe("accepted");
                   expect((yield* runner.msg(world.letter(3, start(nextId))))._tag).toBe("accepted");
                   yield* advance(runner, input.ordinal - 1);
                   const deadline = yield* nextDeadline(world);
@@ -777,7 +796,7 @@ export const suite = (open: Open, checklist: unknown) =>
 
             expect(late).toHaveLength(1);
             expect(late[0]?.m).toMatchObject({
-              type: outcome === "off" || outcome === "failed" ? "fire_err" : "fire_ok",
+              ...(outcome === "off" || outcome === "failed" ? Tag.cases.fire_err : Tag.cases.fire_ok).make({}),
             });
             yield* Effect.scoped(
               Effect.gen(function* () {
@@ -819,7 +838,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 yield* runner.open("watch");
                 yield* runner.msg(
                   world.letter(1, {
-                    type: "start",
+                    ...Tag.cases.start.make({}),
                     id: experimentId,
                     seed: input.seed,
                     most: 1,
@@ -866,8 +885,8 @@ export const suite = (open: Open, checklist: unknown) =>
               const world = yield* open;
               const binding = yield* startTarget(world, checklist);
               const body = yield* world.session(TARGET, "fabrika/checklist", checklist, {});
-              yield* body.runner.msg(world.letter(102, { type: "uncheck", name: "task" }));
-              yield* body.runner.msg(world.letter(103, { type: "check", name: "task", note: marker }));
+              yield* body.runner.msg(world.letter(102, { ...Tag.cases.uncheck.make({}), name: "task" }));
+              yield* body.runner.msg(world.letter(103, { ...Tag.cases.check.make({}), name: "task", note: marker }));
 
               const handlers: Readonly<Record<string, Handler<never>>> = {
                 now,
@@ -900,7 +919,7 @@ export const suite = (open: Open, checklist: unknown) =>
               yield* runner.open("watch");
               yield* runner.msg(
                 world.letter(1, {
-                  type: "start",
+                  ...Tag.cases.start.make({}),
                   id: experimentId,
                   seed: input.seed,
                   most: 1,
@@ -920,8 +939,7 @@ export const suite = (open: Open, checklist: unknown) =>
               const answers = Arr.filter(
                 letters,
                 (l) =>
-                  Schema.is(Schema.Struct({ type: Schema.String }))(l.m) &&
-                  /_(ok|err)$/.test(Schema.decodeSync(Schema.Struct({ type: Schema.String }))(l.m).type),
+                  Predicate.hasProperty(l.m, "_tag") && Predicate.isString(l.m._tag) && /_(ok|err)$/.test(l.m._tag),
               );
 
               expect(answers.length).toBeGreaterThanOrEqual(3);

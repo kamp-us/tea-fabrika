@@ -184,15 +184,18 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     ahead = none,
     replay?: { readonly message: string; readonly recovery: string },
   ) => {
-    const next = applyCell(machine(account), load(account), {
-      type: "propose",
-      at: entry.arrivedAt,
-      operation: "ledger",
-      writes: 1,
-      bytes: encodedBytes(entry),
-      ahead,
-      ...(replay === undefined ? {} : { replay }),
-    })[0];
+    const next = applyCell(
+      machine(account),
+      load(account),
+      Quota.Msg.cases.propose.make({
+        at: entry.arrivedAt,
+        operation: "ledger",
+        writes: 1,
+        bytes: encodedBytes(entry),
+        ahead,
+        ...(replay === undefined ? {} : { replay }),
+      }),
+    )[0];
 
     if (next._tag === "reserve_fault") {
       throw new QuotasError({ reason: next.fault });
@@ -362,11 +365,14 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     }
 
     save(
-      applyCell(machine(step.payer), load(step.payer), {
-        type: "settle",
-        bytes: encodedBytes(entry),
-        ahead: { writes: 1, bytes: step.bytes },
-      })[0],
+      applyCell(
+        machine(step.payer),
+        load(step.payer),
+        Quota.Msg.cases.settle.make({
+          bytes: encodedBytes(entry),
+          ahead: { writes: 1, bytes: step.bytes },
+        }),
+      )[0],
     );
     sql.exec("UPDATE quota_steps SET settled=1 WHERE name=? AND message=?", target.name, step.message);
     charged(entry, step.payer);
@@ -427,14 +433,17 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
 
       const ahead = entry.stream === `${target.name}/inbox` ? { writes: 1, bytes: aheadFor(entry, target) } : none;
       save(
-        applyCell(unlimited, load(account), {
-          type: "propose",
-          at: entry.arrivedAt,
-          operation: "restore",
-          writes: 1,
-          bytes: encodedBytes(entry),
-          ahead,
-        })[0],
+        applyCell(
+          unlimited,
+          load(account),
+          Quota.Msg.cases.propose.make({
+            at: entry.arrivedAt,
+            operation: "restore",
+            writes: 1,
+            bytes: encodedBytes(entry),
+            ahead,
+          }),
+        )[0],
       );
       charged(entry, account);
 
@@ -462,7 +471,11 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
           restore();
 
           return use(
-            applyCell(machine(account), load(account), { type: "advance", at: clock.currentTimeMillisUnsafe() })[0],
+            applyCell(
+              machine(account),
+              load(account),
+              Quota.Msg.cases.advance.make({ at: clock.currentTimeMillisUnsafe() }),
+            )[0],
           );
         }),
       catch: failed,
@@ -684,14 +697,17 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
         throw new QuotasError({ reason: stopped.fault });
       }
 
-      const next = applyCell(machine(account), load(account), {
-        type: "propose",
-        at,
-        operation,
-        writes,
-        bytes,
-        ahead: none,
-      })[0];
+      const next = applyCell(
+        machine(account),
+        load(account),
+        Quota.Msg.cases.propose.make({
+          at,
+          operation,
+          writes,
+          bytes,
+          ahead: none,
+        }),
+      )[0];
 
       if (next._tag === "reserve_fault") {
         throw new Stopped({ pending: { operation, writes, bytes }, fault: next.fault });
@@ -702,10 +718,13 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
     status: Effect.clockWith((clock) =>
       Effect.try({
         try: () => {
-          const reserve = applyCell(machine(recovery), load(recovery), {
-            type: "advance",
-            at: clock.currentTimeMillisUnsafe(),
-          })[0];
+          const reserve = applyCell(
+            machine(recovery),
+            load(recovery),
+            Quota.Msg.cases.advance.make({
+              at: clock.currentTimeMillisUnsafe(),
+            }),
+          )[0];
 
           return { program: load(local).total, recovery: use(reserve), fault: fault()?.fault ?? null };
         },
@@ -723,14 +742,22 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
             }
 
             const m = machine(recovery);
-            const ready = applyCell(m, load(recovery), { type: "resume", at: clock.currentTimeMillisUnsafe() })[0];
 
-            const trial = applyCell(m, ready, {
-              type: "propose",
-              at: clock.currentTimeMillisUnsafe(),
-              ...stopped,
-              ahead: none,
-            })[0];
+            const ready = applyCell(
+              m,
+              load(recovery),
+              Quota.Msg.cases.resume.make({ at: clock.currentTimeMillisUnsafe() }),
+            )[0];
+
+            const trial = applyCell(
+              m,
+              ready,
+              Quota.Msg.cases.propose.make({
+                at: clock.currentTimeMillisUnsafe(),
+                ...stopped,
+                ahead: none,
+              }),
+            )[0];
 
             if (trial._tag === "reserve_fault") {
               throw new QuotasError({ reason: trial.fault });

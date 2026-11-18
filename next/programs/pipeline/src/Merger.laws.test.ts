@@ -23,6 +23,20 @@ import * as Mail from "./Mail.ts";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  abandon: {},
+  checks: {},
+  land: {},
+  behind: {},
+  send_err: {},
+  timer: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 type Program = ReturnType<typeof merger>;
 
 type Model = Program["machine"]["model"]["Type"];
@@ -92,7 +106,7 @@ const id = (w: World, char: string) => Schema.decodeSync(Commit)(Str.repeat(w.si
 
 const tree = (w: World, char: string) => Schema.decodeSync(Tree)(Str.repeat(w.size)(char));
 
-const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
+const land = (w: World) => Mail.Land.make({ ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
 
 const equal = (a: Model, b: Model) => expect(a).toEqual(b);
 
@@ -120,7 +134,7 @@ const valueFor = (
   cmd: Command,
   pick: number,
 ): typeof Change.Type | typeof Updated.Type | typeof Checks.Type | typeof Merged.Type | typeof Queued.Type => {
-  if (cmd.type === "change") {
+  if (cmd._tag === "change") {
     if (pick % 8 === 0) {
       return Change.cases.missing.make({ change: cmd.change });
     }
@@ -133,7 +147,7 @@ const valueFor = (
     });
   }
 
-  if (cmd.type === "update") {
+  if (cmd._tag === "update") {
     if (pick % 7 === 0) {
       return Updated.cases.moved.make({ head: id(w, "c") });
     }
@@ -151,11 +165,11 @@ const valueFor = (
       : Updated.cases.updated.make({ head: id(w, "b"), tree: tree(w, "e"), main: id(w, "d") });
   }
 
-  if (cmd.type === "checks") {
+  if (cmd._tag === "checks") {
     return Schema.decodeSync(Checks)(pick % 11 === 0 ? [] : [runAt(w, pick)]);
   }
 
-  if (cmd.type === "merge") {
+  if (cmd._tag === "merge") {
     if (pick % 7 === 0) {
       return Merged.cases.moved.make({ head: id(w, "c") });
     }
@@ -176,29 +190,36 @@ const valueFor = (
 
 const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): Msg => {
   const pick = w.complete
-    ? cmd.type === "change"
+    ? cmd._tag === "change"
       ? 2
-      : cmd.type === "update"
+      : cmd._tag === "update"
         ? 4
-        : cmd.type === "checks" && w.ending !== "checks"
+        : cmd._tag === "checks" && w.ending !== "checks"
           ? 7
-          : cmd.type === "merge" && w.ending === "merged"
+          : cmd._tag === "merge" && w.ending === "merged"
             ? 3
             : drawn
     : drawn;
 
-  return Schema.decodeSync(p.msg)(
-    cmd.type !== "send" && pick % 5 === 0
+  // The answer as the runner sends it (Runner.ts `ok` and `err`): wire data, so it is decoded as unknown.
+  return Schema.decodeUnknownSync(p.msg)(
+    cmd._tag !== "send" && pick % 5 === 0
       ? {
-          type: `${cmd.type}_err`,
+          ...keyed(`${cmd._tag}_err`),
           cmd,
           error: Schema.TaggedStruct(faults[Math.floor(pick / 5) % faults.length]!, {}).make({}),
           reason: faults[Math.floor(pick / 5) % faults.length],
           at,
         }
-      : cmd.type === "send" && pick % 2 === 0
-        ? { type: "send_err", cmd, error: Schema.TaggedStruct("forbidden", {}).make({}), reason: "forbidden", at }
-        : { type: `${cmd.type}_ok`, cmd, value: valueFor(w, cmd, pick), at },
+      : cmd._tag === "send" && pick % 2 === 0
+        ? {
+            ...Tag.cases.send_err.make({}),
+            cmd,
+            error: Schema.TaggedStruct("forbidden", {}).make({}),
+            reason: "forbidden",
+            at,
+          }
+        : { ...keyed(`${cmd._tag}_ok`), cmd, value: valueFor(w, cmd, pick), at },
   );
 };
 
@@ -220,8 +241,8 @@ const guided = (p: Program, w: World) => {
     {
       outside: {
         land: fc.constant(land(w)),
-        timer: fc.record({ type: fc.constant("timer" as const), at: fc.integer({ min: 0, max: LAST }) }),
-        ...(w.complete ? {} : { abandon: fc.constant(Mail.Abandon.make({ type: "abandon", ref: w.ref })) }),
+        timer: fc.integer({ min: 0, max: LAST }).map((at) => ({ ...Tag.cases.timer.make({}), at })),
+        ...(w.complete ? {} : { abandon: fc.constant(Mail.Abandon.make({ ref: w.ref })) }),
       },
       answers: cells,
     },
@@ -237,7 +258,7 @@ const guided = (p: Program, w: World) => {
       for (const event of raw) {
         let msg: Msg = Schema.decodeSync(p.msg)(event);
 
-        if (event.type === "timer") {
+        if (event._tag === "timer") {
           const due = p.wake(model);
 
           const at =
@@ -247,11 +268,11 @@ const guided = (p: Program, w: World) => {
                 ? Math.max(clock, due - 1)
                 : Math.max(clock, due);
 
-          msg = Schema.decodeSync(p.msg)({ type: "timer", at });
+          msg = Schema.decodeSync(p.msg)({ ...Tag.cases.timer.make({}), at });
           clock = at;
-        } else if ("cmd" in event && event.cmd.type !== "send") {
+        } else if ("cmd" in event && event.cmd._tag !== "send") {
           const command = Option.getOrUndefined(
-            Arr.findFirst(out, (c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt),
+            Arr.findFirst(out, (c) => c._tag === event.cmd._tag && "attempt" in c && c.attempt === model.attempt),
           );
 
           if (command === undefined || model._tag === "idle" || model.step._tag !== "asking") {
@@ -264,20 +285,21 @@ const guided = (p: Program, w: World) => {
               event.at % 7 === 0 && model._tag === "checking" ? model.until : clock + (event.at % 10_000),
             ),
           );
-          msg = Schema.decodeSync(p.msg)({ ...event, cmd: command, at: clock });
-        } else if ("cmd" in event && event.cmd.type === "send") {
+          // The drawn answer re-pointed at the Cmd really waiting: wire data, decoded as unknown.
+          msg = Schema.decodeUnknownSync(p.msg)({ ...event, cmd: command, at: clock });
+        } else if ("cmd" in event && event.cmd._tag === "send") {
           clock = Math.max(clock, event.at);
           msg = Schema.decodeSync(p.msg)({ ...event, at: clock });
-        } else if (event.type === "land" || event.type === "abandon") {
+        } else if (event._tag === "land" || event._tag === "abandon") {
           if (p.refuse(model, event) !== null) {
             continue;
           }
 
-          if (event.type === "land" && started) {
+          if (event._tag === "land" && started) {
             break;
           }
 
-          if (event.type === "land") {
+          if (event._tag === "land") {
             started = true;
           }
         }
@@ -302,7 +324,7 @@ const guided = (p: Program, w: World) => {
           started = true;
         } else if (model.step._tag === "waiting" || (model.step.at !== null && cell.pick % 7 === 0)) {
           clock = Math.max(clock, model.step.at!);
-          msg = Schema.decodeSync(p.msg)({ type: "timer", at: clock });
+          msg = Schema.decodeSync(p.msg)({ ...Tag.cases.timer.make({}), at: clock });
         } else {
           const cmd = Option.getOrUndefined(
             Arr.findLast(out, (c) => service(c) && "attempt" in c && c.attempt === model.attempt),
@@ -329,7 +351,7 @@ const guided = (p: Program, w: World) => {
   );
 };
 
-const service = (cmd: Command) => cmd.type !== "send" && cmd.type !== "exit";
+const service = (cmd: Command) => cmd._tag !== "send" && cmd._tag !== "exit";
 
 const stateCmd = (model: Model) =>
   Match.value(model).pipe(
@@ -355,11 +377,14 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
   let asks = 0;
 
   for (const { prev, msg, next, cmds } of folded.steps) {
-    const sent = Arr.filter(cmds, (c) => c.type === "send");
+    const sent = Arr.filter(cmds, (c) => c._tag === "send");
     const asked = Arr.filter(cmds, service);
 
     if (law === "L9") {
-      const own = Mail.Abandon.make({ type: "abandon", ref: prev._tag === "idle" ? w.ref : prev.job.ref });
+      const own = Mail.Abandon.make({
+        ref: prev._tag === "idle" ? w.ref : prev.job.ref,
+      });
+
       expect(p.refuse(prev, own)?.reason ?? null).toBe(
         Match.value(prev).pipe(
           Match.tag("idle", () => "idle"),
@@ -369,7 +394,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       );
     }
 
-    if (prev._tag === "idle" && msg.type === "land") {
+    if (prev._tag === "idle" && msg._tag === "land") {
       replies = 0;
       checkedHead = null;
       checkedTree = null;
@@ -378,7 +403,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
     }
 
     if (
-      msg.type === "update_ok" &&
+      msg._tag === "update_ok" &&
       prev._tag === "updating" &&
       prev.step._tag === "asking" &&
       msg.cmd.attempt === prev.attempt &&
@@ -395,7 +420,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
     }
 
     if (
-      msg.type === "checks_ok" &&
+      msg._tag === "checks_ok" &&
       prev._tag === "checking" &&
       prev.step._tag === "asking" &&
       msg.cmd.attempt === prev.attempt
@@ -405,7 +430,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
 
     if (law === "L1") {
       for (const cmd of cmds) {
-        if (cmd.type === "merge") {
+        if (cmd._tag === "merge") {
           reached = true;
           expect(green).toBe(true);
           expect(cmd.head).toBe(checkedHead);
@@ -418,22 +443,21 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       reached ||= sent.length > 0;
 
       if (sent.length > 0) {
-        expect(Arr.map(cmds, (c) => c.type)).toEqual(["send", "exit"]);
+        expect(Arr.map(cmds, (c) => c._tag)).toEqual(["send", "exit"]);
 
         for (const cmd of sent) {
-          if (cmd.type === "send") {
+          if (cmd._tag === "send") {
             expect(Schema.is(Mail.Reply)(cmd.m)).toBe(true);
-            expect(cmd.m).toMatchObject({ type: "reply" });
           }
         }
       } else {
-        expect(Arr.filter(cmds, (c) => c.type === "exit")).toEqual([]);
+        expect(Arr.filter(cmds, (c) => c._tag === "exit")).toEqual([]);
       }
     }
 
     if (law === "L10") {
       for (const cmd of sent) {
-        if (cmd.type === "send" && Schema.is(Mail.Reply)(cmd.m) && cmd.m._tag === "merged") {
+        if (cmd._tag === "send" && Schema.is(Mail.Reply)(cmd.m) && cmd.m._tag === "merged") {
           reached = true;
           expect(cmd.m.checked).toBe(checkedTree);
         }
@@ -450,31 +474,31 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
 
       if (prev._tag !== "idle" && next._tag === "idle") {
         expect(replies).toBe(1);
-        expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ ref: prev.job.ref, change: prev.job.change });
+        expect(sent[0]?._tag === "send" && sent[0].m).toMatchObject({ ref: prev.job.ref, change: prev.job.change });
       } else if (next._tag !== "idle") {
         expect(replies).toBe(0);
       }
 
       if ("value" in msg) {
-        if (msg.type === "change_ok") {
+        if (msg._tag === "change_ok") {
           const value = msg.value;
 
           if (value._tag === "missing") {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: "missing" });
+            expect(sent[0]?._tag === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: "missing" });
           } else if (value._tag === "found" && value.state !== "open") {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: value.state });
+            expect(sent[0]?._tag === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: value.state });
           }
         }
 
-        if (msg.type === "update_ok" || msg.type === "merge_ok") {
+        if (msg._tag === "update_ok" || msg._tag === "merge_ok") {
           if (msg.value._tag === "conflict") {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({
+            expect(sent[0]?._tag === "send" && sent[0].m).toMatchObject({
               _tag: "conflict",
               main: msg.value.main,
               paths: msg.value.paths,
@@ -484,12 +508,12 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           if (msg.value._tag === "closed") {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: msg.value.state });
+            expect(sent[0]?._tag === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: msg.value.state });
           }
         }
       }
 
-      if (msg.type === "send_err" || msg.type === "send_ok") {
+      if (msg._tag === "send_err" || msg._tag === "send_ok") {
         equal(next, prev);
         expect(cmds).toEqual([]);
       }
@@ -502,7 +526,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
 
       expect(p.wake(next)).toBe(next._tag === "idle" ? null : next.step.at);
 
-      if (msg.type === "timer" && (prev._tag === "idle" || prev.step.at === null || msg.at < prev.step.at)) {
+      if (msg._tag === "timer" && (prev._tag === "idle" || prev.step.at === null || msg.at < prev.step.at)) {
         equal(next, prev);
         expect(cmds).toEqual([]);
       }
@@ -511,11 +535,11 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
     if (
       law === "L8" &&
       "value" in msg &&
-      (msg.type === "change_ok" || msg.type === "update_ok" || msg.type === "merge_ok")
+      (msg._tag === "change_ok" || msg._tag === "update_ok" || msg._tag === "merge_ok")
     ) {
       if (
         msg.value._tag === "moved" ||
-        (msg.type === "change_ok" &&
+        (msg._tag === "change_ok" &&
           msg.value._tag === "found" &&
           msg.value.state === "open" &&
           prev._tag !== "idle" &&
@@ -523,22 +547,22 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       ) {
         expect(next._tag).toBe("idle");
         expect(sent).toHaveLength(1);
-        expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "moved", head: msg.value.head });
+        expect(sent[0]?._tag === "send" && sent[0].m).toMatchObject({ _tag: "moved", head: msg.value.head });
         reached = true;
         expect(asked).toEqual([]);
       }
     }
 
-    if (law === "L9" && msg.type === "abandon" && prev._tag !== "idle" && prev._tag !== "merging") {
+    if (law === "L9" && msg._tag === "abandon" && prev._tag !== "idle" && prev._tag !== "merging") {
       reached = true;
       expect(next._tag).toBe("idle");
       expect(p.wake(next)).toBeNull();
-      expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "abandoned", ref: prev.job.ref });
+      expect(sent[0]?._tag === "send" && sent[0].m).toMatchObject({ _tag: "abandoned", ref: prev.job.ref });
     }
 
     if (
       law === "L13" &&
-      msg.type === "change_ok" &&
+      msg._tag === "change_ok" &&
       prev._tag === "reading" &&
       msg.value._tag === "found" &&
       msg.value.state === "open" &&
@@ -550,7 +574,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
         reached = true;
         expect(asked).toEqual([]);
         expect(next._tag).toBe("idle");
-        expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "unset", kind });
+        expect(sent[0]?._tag === "send" && sent[0].m).toMatchObject({ _tag: "unset", kind });
       }
     }
 
@@ -559,18 +583,18 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
 
       const taken =
         "cmd" in msg &&
-        msg.cmd.type === stateCmd(prev) &&
+        msg.cmd._tag === stateCmd(prev) &&
         "attempt" in msg.cmd &&
         msg.cmd.attempt === prev.attempt &&
         prev.step._tag === "asking";
 
       const verdict =
-        taken && msg.type === "checks_ok" && prev._tag === "checking"
+        taken && msg._tag === "checks_ok" && prev._tag === "checking"
           ? ChangeKind.verdict(prev.checks, msg.value)._tag
           : null;
 
       const fault =
-        (taken && Str.endsWith("_err")(msg.type)) ||
+        (taken && Str.endsWith("_err")(msg._tag)) ||
         verdict === "lost" ||
         (verdict === "pending" && prev._tag === "checking" && at !== null && at >= prev.until);
 
@@ -612,16 +636,16 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
         );
       }
 
-      if (msg.type === "timer" && prev.step.at !== null && msg.at >= prev.step.at) {
+      if (msg._tag === "timer" && prev.step.at !== null && msg.at >= prev.step.at) {
         reached = true;
         expect(asked).toHaveLength(1);
-        expect(asked[0]?.type).toBe(stateCmd(prev));
+        expect(asked[0]?._tag).toBe(stateCmd(prev));
 
         if (next._tag !== "idle") {
           expect(next.step.tries).toBe(prev.step.tries + (prev.step._tag === "asking" ? 1 : 0));
         }
 
-        if (asked[0]?.type === "checks") {
+        if (asked[0]?._tag === "checks") {
           expect(asked[0].start).toBe(!(prev.step._tag === "waiting" && prev.step.reason === "pending"));
         }
       }
@@ -632,7 +656,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           expect(next.step.at).toBe(clamp(at + w.wait * 60_000));
         }
 
-        expect(cmd.type).toBe(next._tag === "idle" ? "none" : stateCmd(next));
+        expect(cmd._tag).toBe(next._tag === "idle" ? "none" : stateCmd(next));
       }
 
       if (next._tag !== prev._tag && next._tag !== "idle") {
@@ -710,14 +734,14 @@ describe("the merger, next/", () => {
                         prev.step._tag !== "asking" ||
                         !("attempt" in c) ||
                         c.attempt !== prev.attempt ||
-                        c.type !== stateCmd(prev)),
+                        c._tag !== stateCmd(prev)),
                   );
 
                   const moves: Array<() => Msg> = [
                     () => land(w),
                     () =>
                       Schema.decodeSync(p.msg)({
-                        type: "abandon",
+                        ...Tag.cases.abandon.make({}),
                         ref: cell.pick % 2 === 0 && prev._tag !== "idle" ? prev.job.ref : `${w.ref}other`,
                       }),
                   ];
@@ -727,14 +751,19 @@ describe("the merger, next/", () => {
                   }
 
                   if (prev._tag !== "idle" && prev.step.at !== null) {
-                    moves.push(() => Schema.decodeSync(p.msg)({ type: "timer", at: Math.max(m.clock, prev.step.at!) }));
+                    moves.push(() =>
+                      Schema.decodeSync(p.msg)({
+                        ...Tag.cases.timer.make({}),
+                        at: Math.max(m.clock, prev.step.at!),
+                      }),
+                    );
                   }
 
                   if (late.length > 0) {
                     moves.push(() => answer(p, w, late[cell.pick % late.length]!, cell.pick, m.clock));
                   }
 
-                  const send = Option.getOrUndefined(Arr.findFirst(m.history, (c) => c.type === "send"));
+                  const send = Option.getOrUndefined(Arr.findFirst(m.history, (c) => c._tag === "send"));
 
                   if (send !== undefined) {
                     moves.push(() => answer(p, w, send, cell.pick, m.clock));
@@ -743,8 +772,8 @@ describe("the merger, next/", () => {
                   const msg = moves[cell.move % moves.length]!();
 
                   const refused = Match.value(msg).pipe(
-                    Match.discriminator("type")("land", () => (prev._tag !== "idle" ? "busy" : null)),
-                    Match.discriminator("type")("abandon", (abandon) =>
+                    Match.discriminator("_tag")("land", () => (prev._tag !== "idle" ? "busy" : null)),
+                    Match.discriminator("_tag")("abandon", (abandon) =>
                       prev._tag === "idle"
                         ? "idle"
                         : prev._tag === "merging"
@@ -756,7 +785,7 @@ describe("the merger, next/", () => {
                     Match.orElse(() => null),
                   );
 
-                  if (msg.type === "land" || msg.type === "abandon") {
+                  if (msg._tag === "land" || msg._tag === "abandon") {
                     expect(p.refuse(prev, msg)?.reason ?? null).toBe(refused);
 
                     if (refused !== null) {
@@ -768,25 +797,25 @@ describe("the merger, next/", () => {
 
                   const [next, cmds] = applyCell<Model, Msg, Command>(p.machine, prev, msg);
 
-                  if (msg.type === "land" && prev._tag === "idle") {
+                  if (msg._tag === "land" && prev._tag === "idle") {
                     m.replies = 0;
                   }
 
-                  m.replies += Arr.filter(cmds, (c) => c.type === "send").length;
+                  m.replies += Arr.filter(cmds, (c) => c._tag === "send").length;
                   expect(m.replies).toBeLessThanOrEqual(1);
 
                   if (prev._tag !== "idle" && next._tag === "idle") {
                     expect(m.replies).toBe(1);
                   }
 
-                  if (msg.type === "send_ok" || msg.type === "send_err") {
+                  if (msg._tag === "send_ok" || msg._tag === "send_err") {
                     equal(next, prev);
                     expect(cmds).toEqual([]);
                   } else if (
                     "cmd" in msg &&
                     (prev._tag === "idle" ||
                       prev.step._tag !== "asking" ||
-                      msg.cmd.type !== stateCmd(prev) ||
+                      msg.cmd._tag !== stateCmd(prev) ||
                       !("attempt" in msg.cmd) ||
                       msg.cmd.attempt !== prev.attempt)
                   ) {
@@ -835,7 +864,7 @@ describe("the merger, next/", () => {
 // This walk answers only the current request. Every update may discover another main.
 const roundWalk = (p: Program, w: World) => {
   const ok = (cmd: Command, value: Schema.Json): Msg =>
-    Schema.decodeSync(p.msg)({ type: `${cmd.type}_ok`, cmd, value, at: w.at });
+    Schema.decodeUnknownSync(p.msg)({ ...keyed(`${cmd._tag}_ok`), cmd, value, at: w.at });
 
   return arbGuidedSequence(
     p.machine,
@@ -845,12 +874,12 @@ const roundWalk = (p: Program, w: World) => {
       answers: {
         change: {
           draw: fc.constant(null),
-          make: (cmd: Extract<Command, { type: "change" }>) =>
+          make: (cmd: Extract<Command, { _tag: "change" }>) =>
             ok(
               cmd,
               Change.cases.found.make({
                 change: cmd.change,
-                head: cmd.type === "change" ? land(w).head : id(w, "a"),
+                head: cmd._tag === "change" ? land(w).head : id(w, "a"),
                 state: "open",
                 paths: ["src/a.ts"],
               }),
@@ -858,7 +887,7 @@ const roundWalk = (p: Program, w: World) => {
         },
         update: {
           draw: fc.boolean(),
-          make: (cmd: Extract<Command, { type: "update" }>, moved: boolean) =>
+          make: (cmd: Extract<Command, { _tag: "update" }>, moved: boolean) =>
             ok(
               cmd,
               moved
@@ -872,11 +901,11 @@ const roundWalk = (p: Program, w: World) => {
         },
         checks: {
           draw: fc.constant(null),
-          make: (cmd: Extract<Command, { type: "checks" }>) => ok(cmd, [runAt(w, 7)]),
+          make: (cmd: Extract<Command, { _tag: "checks" }>) => ok(cmd, [runAt(w, 7)]),
         },
         merge: {
           draw: fc.constant(null),
-          make: (cmd: Extract<Command, { type: "merge" }>) =>
+          make: (cmd: Extract<Command, { _tag: "merge" }>) =>
             ok(cmd, Merged.cases.merged.make({ commit: id(w, "f"), tree: tree(w, "e") })),
         },
       },
@@ -900,26 +929,25 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
         let rounds = 0;
 
         for (const { prev, msg, next, cmds } of foldEvents(p.machine, ctx, null, msgs).steps) {
-          if (prev._tag === "idle" && msg.type === "land") {
+          if (prev._tag === "idle" && msg._tag === "land") {
             rounds = 0;
           }
 
           const updated =
             prev._tag === "updating" &&
-            msg.type === "update_ok" &&
+            msg._tag === "update_ok" &&
             prev.step._tag === "asking" &&
             msg.cmd.attempt === prev.attempt &&
             msg.value._tag === "updated";
 
-          if (updated && msg.type === "update_ok" && msg.value._tag === "updated") {
+          if (updated && msg._tag === "update_ok" && msg.value._tag === "updated") {
             if (rounds === w.rounds) {
               bounded++;
               expect(next._tag).toBe("idle");
               expect(Arr.filter(cmds, service)).toEqual([]);
-              expect(Option.getOrUndefined(Arr.findFirst(cmds, (c) => c.type === "send"))).toMatchObject({
+              expect(Option.getOrUndefined(Arr.findFirst(cmds, (c) => c._tag === "send"))).toMatchObject({
                 m: {
-                  type: "reply",
-                  _tag: "behind",
+                  ...Tag.cases.behind.make({}),
                   head: msg.value.head,
                   main: msg.value.main,
                   rounds: w.rounds,
@@ -929,7 +957,7 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
               rounds++;
               expect(next).toMatchObject({ _tag: "checking", round: rounds, head: msg.value.head });
               expect(cmds).toContainEqual(
-                expect.objectContaining({ type: "checks", head: msg.value.head, start: true }),
+                expect.objectContaining({ ...Tag.cases.checks.make({}), head: msg.value.head, start: true }),
               );
             }
           }
@@ -940,12 +968,12 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
 
           if (
             prev._tag === "updating" &&
-            msg.type === "update_ok" &&
+            msg._tag === "update_ok" &&
             msg.value._tag === "current" &&
             next._tag === "checking"
           ) {
             expect(cmds).toContainEqual(
-              expect.objectContaining({ type: "checks", head: msg.value.head, start: false }),
+              expect.objectContaining({ ...Tag.cases.checks.make({}), head: msg.value.head, start: false }),
             );
           }
         }

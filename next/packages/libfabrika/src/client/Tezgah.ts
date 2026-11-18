@@ -72,34 +72,38 @@ export const TezgahClient = Schema.Struct({
  */
 export type TezgahClient = typeof TezgahClient.Type;
 
-const Msg = Schema.Union([
+/**
+ * Schema for what the window's tezgah child takes, each Msg made with its case's maker.
+ *
+ * @category schemas
+ */
+export const TezgahMsg = Schema.TaggedUnion({
   /** A whole view from tezgah, as the wire carries it. */
-  Schema.Struct({ type: Schema.Literal("server"), rev: Schema.Int, view: Schema.Unknown }),
+  server: { rev: Schema.Int, view: Schema.Unknown },
   /** One view patch from tezgah, from revision `base` to `rev`. */
-  Schema.Struct({ type: Schema.Literal("patch"), base: Schema.Int, rev: Schema.Int, patch: Schema.Unknown }),
+  patch: { base: Schema.Int, rev: Schema.Int, patch: Schema.Unknown },
   /** The window moved focus from `from` to `to`, leaving `cursor` on `from`, as the letter in press
    *  slot `n`. */
-  Schema.Struct({
-    type: Schema.Literal("move"),
+  move: {
     n: Schema.Int,
     from: TileId,
     to: TileId,
     cursor: Schema.NullOr(CursorKey),
-  }),
+  },
   /** Press slot `n` was given its letter id. */
-  Schema.Struct({ type: Schema.Literal("dated"), n: Schema.Int, letter: Schema.String }),
+  dated: { n: Schema.Int, letter: Schema.String },
   /** tezgah took `letter` at inbox position `pos`, answered after `ms`. */
-  Schema.Struct({ type: Schema.Literal("accepted"), letter: Schema.String, pos: Schema.Int, ms: Ms }),
+  accepted: { letter: Schema.String, pos: Schema.Int, ms: Ms },
   /** tezgah refused `letter`, answered after `ms`: its state did not change. */
-  Schema.Struct({ type: Schema.Literal("refused"), letter: Schema.String, ms: Ms }),
-]);
+  refused: { letter: Schema.String, ms: Ms },
+});
 
 /**
  * The type of a Msg the window's tezgah child takes: a whole view, or a patch.
  *
  * @category models
  */
-export type TezgahMsg = typeof Msg.Type;
+export type TezgahMsg = typeof TezgahMsg.Type;
 
 /** Ask tezgah for a whole view: the shown one stays until it comes. The window turns it into its
  *  own open call and never runs it. */
@@ -171,7 +175,7 @@ const encodeView = Schema.encodeUnknownResult(TezgahView);
  */
 export const tezgahMachine = Machine.make({
   model: TezgahClient,
-  msg: Msg,
+  msg: TezgahMsg,
   cmds: [ask, settled],
   // SAFETY: tea's `types` slot only carries the ctx type, the workspace's number; tea never reads
   // this empty value (0561).

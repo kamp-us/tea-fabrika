@@ -43,20 +43,20 @@ export const Model = Schema.TaggedUnion({
 /** @internal */
 export type Model = typeof Model.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("propose"),
+/** @internal */
+export const Msg = Schema.TaggedUnion({
+  propose: {
     at: Schema.Finite,
     operation: Schema.String,
     ...Amount.fields,
     ahead: Amount,
     replay: Schema.optionalKey(Schema.Struct({ message: Schema.String, recovery: Schema.String })),
-  }),
-  Schema.Struct({ type: Schema.Literal("advance"), at: Schema.Finite }),
-  Schema.Struct({ type: Schema.Literal("resume"), at: Schema.Finite }),
-  Schema.Struct({ type: Schema.Literal("restore"), model: Model }),
-  Schema.Struct({ type: Schema.Literal("settle"), bytes: Schema.Finite, ahead: Amount }),
-]);
+  },
+  advance: { at: Schema.Finite },
+  resume: { at: Schema.Finite },
+  restore: { model: Model },
+  settle: { bytes: Schema.Finite, ahead: Amount },
+});
 
 /** @internal */
 export type Msg = typeof Msg.Type;

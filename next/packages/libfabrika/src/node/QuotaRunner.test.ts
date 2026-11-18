@@ -60,12 +60,12 @@ const Model = Schema.Struct({
 });
 
 const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("inc"), text: Schema.optionalKey(Schema.String) }),
-  Schema.Struct({ type: Schema.Literal("throw") }),
-  Schema.Struct({ type: Schema.Literal("work") }),
-  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Finite }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }),
-  Schema.Struct({ ...Down.fields, type: Schema.Literal("DOWN") }),
+  Schema.TaggedStruct("inc", { text: Schema.optionalKey(Schema.String) }),
+  Schema.TaggedStruct("throw", {}),
+  Schema.TaggedStruct("work", {}),
+  Schema.TaggedStruct("schedule", { at: Schema.Finite }),
+  Schema.TaggedStruct("timer", { at: Schema.Finite }),
+  Down,
 ]);
 
 const work = Cmd.make("work", { input: Schema.Struct({}), ok: Schema.Null, err: ["failed"] });

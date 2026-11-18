@@ -52,6 +52,12 @@ import { type From, Mailbox } from "./Mailbox.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  land: {},
+});
+
 /**
  * One real store. `reopen` opens the same file again, then closes the old handle; `probe.open`
  * counts open handles.
@@ -932,7 +938,10 @@ const walk = (
               child: { ...base, input: choose([() => 1, 1n, Symbol("x"), { f: () => 1 }], cell.name) },
               reason: "bad_input",
             })),
-            Match.orElse((): Bad => ({ child: { ...base, input: { type: "land", deep: [1n] } }, reason: "bad_input" })),
+            Match.orElse((): Bad => ({
+              child: { ...base, input: { ...Tag.cases.land.make({}), deep: [1n] } },
+              reason: "bad_input",
+            })),
           );
 
           // SAFETY: `bad.child` is a child with one invalid field on purpose, so the law sees `startChild` refuse it.
@@ -1523,7 +1532,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
               name: `merger:${n}`,
               code: { program: MERGER, hash: HASH },
               requester: Recipient.cases.process.make({ process: boot.process }),
-              input: { type: "land", token: secret, nested: [`Bearer ${secret}`, cell.m] },
+              input: { ...Tag.cases.land.make({}), token: secret, nested: [`Bearer ${secret}`, cell.m] },
             });
 
       if (move === "storage") {

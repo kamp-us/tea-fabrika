@@ -41,7 +41,7 @@ import type { ProcessObjectCalls } from "../../runtime/ObjectCalls.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
-import { type devLife, type DevState, latest, pending, Pid, reachable, recovering, target } from "./DevLife.ts";
+import { DevMsg, type devLife, type DevState, latest, pending, Pid, reachable, recovering, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory, lifeCell, signal, terminate } from "./local-dev.ts";
 
 /**
@@ -427,7 +427,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           ),
         );
 
-        const [prev, next] = yield* send({ type: "listened", port });
+        const [prev, next] = yield* send(DevMsg.cases.listened.make({ port }));
         yield* Deferred.succeed(listening, undefined);
         const id = consumed(prev, next);
         const ready = id === null ? undefined : replacements.get(id);
@@ -441,7 +441,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   );
 
   const stopRuntime = Effect.fn("brain.stop")(function* () {
-    const [, stopping] = yield* send({ type: "stop" });
+    const [, stopping] = yield* send(DevMsg.cases.stop.make({}));
     yield* Scope.close(runtimeScope, Exit.void);
     const start = latest(stopping);
 
@@ -452,7 +452,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       yield* flush.pipe(Effect.ignore);
     }
 
-    yield* send({ type: "stopped" });
+    yield* send(DevMsg.cases.stopped.make({}));
     // The stop discards any replacement still waiting; its restart ends with the scope.
     replacements.clear();
   });
@@ -485,7 +485,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         replacements.set(start, ready);
         // The exit is folded before its row is written, so no call dials the ended process while
         // the write is under way.
-        const [prev] = yield* send({ type: "exited", replacement: start });
+        const [prev] = yield* send(DevMsg.cases.exited.make({ replacement: start }));
         const old = pending(prev);
 
         // A second exit before any listener replaces the token, as main replaced the wait.
@@ -521,7 +521,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
         const next = yield* ids.next;
         const at = yield* Clock.currentTimeMillis;
-        const [, up] = yield* send({ type: "started", start: next, pid, build: config.build, at });
+        const [, up] = yield* send(DevMsg.cases.started.make({ start: next, pid, build: config.build, at }));
 
         // Braked and stopping refuse a start.
         if (up._tag !== "spawned" && up._tag !== "online") {
@@ -543,7 +543,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         yield* Deferred.succeed(started, undefined);
       } else if (event.type === "restart") {
         const until = (yield* Clock.currentTimeMillis) + event.delay;
-        yield* send({ type: "waiting", until, reason });
+        yield* send(DevMsg.cases.waiting.make({ until, reason }));
         const at = yield* Clock.currentTimeMillis;
         yield* outbox.add(
           BrainEvent.cases.restarting.make({
@@ -558,7 +558,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           }),
         );
       } else if (event.type === "stop") {
-        const [prev, next] = yield* send({ type: "braked", reason: event.reason });
+        const [prev, next] = yield* send(DevMsg.cases.braked.make({ reason: event.reason }));
         const id = consumed(prev, next);
         const ready = id === null ? undefined : replacements.get(id);
 

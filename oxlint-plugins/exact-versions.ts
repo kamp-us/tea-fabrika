@@ -1,7 +1,8 @@
 // `pnpm lint:versions`: no ranged npm version, in any package.json or pnpm-workspace.yaml git tracks
 // (docs/direction/pin-exact-versions.md). It lists what passes (an exact version, `workspace:*`, and
 // `catalog:` or `catalog:<name>`, whose catalog entry is checked exact), so a range, a tag, a `git:`
-// or a `file:` all fail without being named here.
+// or a `file:` all fail without being named here. A `patchedDependencies` row is keyed on one exact
+// version.
 //
 //   node oxlint-plugins/exact-versions.ts            # this repo
 //   node oxlint-plugins/exact-versions.ts <folder>   # another git tree, as the test does
@@ -57,6 +58,22 @@ const inPackage = (file: string, text: string): readonly string[] => {
   ];
 };
 
+/** A patch row's key: a package name, scoped or not, then `@` and the version it names. */
+const PATCH_KEY = /^(?:@[^@/\s]+\/)?[^@/\s]+@(.*)$/;
+
+/** A patch row names one exact version (`name@1.2.3`), never a bare name or a range: pnpm applies
+ * such a row to whatever version it installs, a later release included. A row at a version nothing
+ * installs is pnpm's own refusal, not this check's: the install fails with ERR_PNPM_UNUSED_PATCH, so
+ * the bump that takes a release finds its old row there (decision 0569). */
+const refusedPatches = (file: string, patched: unknown): readonly string[] =>
+  isMap(patched)
+    ? pipe(
+        Rec.keys(patched),
+        Arr.filter((key) => !EXACT.test(PATCH_KEY.exec(key)?.[1] ?? "")),
+        Arr.map((key) => `${file}: patchedDependencies: ${key}: not one exact version`),
+      )
+    : [];
+
 const inWorkspace = (file: string, text: string): readonly string[] => {
   const workspace: unknown = parse(text);
 
@@ -64,7 +81,7 @@ const inWorkspace = (file: string, text: string): readonly string[] => {
     return [];
   }
 
-  const { catalog, catalogs, overrides } = workspace;
+  const { catalog, catalogs, overrides, patchedDependencies } = workspace;
 
   return [
     ...refused(file, "catalog", catalog),
@@ -72,6 +89,7 @@ const inWorkspace = (file: string, text: string): readonly string[] => {
       ? Arr.flatMap(Rec.toEntries(catalogs), ([name, map]) => refused(file, `catalogs.${name}`, map))
       : []),
     ...refused(file, "overrides", overrides),
+    ...refusedPatches(file, patchedDependencies),
   ];
 };
 

@@ -60,6 +60,30 @@ import { Input, Program, ProgramDown } from "./Program.ts";
 import type { RecoveryStoreError } from "./RecoveryStore.ts";
 import type { WatchersError } from "./Watchers.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  fire_err: {},
+  fire_ok: {},
+  add: {},
+  background: {},
+  fire: {},
+  request: {},
+  schedule: {},
+  throw: {},
+  timer: {},
+  unknown: {},
+  work: {},
+  work_err: {},
+  work_ok: {},
+  write: {},
+  write_err: {},
+  write_ok: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 const SEED = 119120;
 
 const PROCESS = Effect.runSync(processId);
@@ -119,27 +143,18 @@ const Model = Schema.Struct({
 
 type Model = typeof Model.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int }),
-  Schema.Struct({
-    type: Schema.Literal("request"),
-    token: Schema.String,
-    parent: Schema.NullOr(Schema.String),
-    tag: Schema.String,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("work"),
-    n: Schema.Int,
-    parent: Schema.optionalKey(Schema.String),
-  }),
-  Schema.Struct({ type: Schema.Literal("approve") }),
-  Schema.Struct({ type: Schema.Literal("comment") }),
-  Schema.Struct({ type: Schema.Literal("background"), token: Schema.String, tag: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("throw") }),
-  Schema.Struct({ type: Schema.Literal("fire") }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Number }),
-]);
+const Msg = Schema.TaggedUnion({
+  add: { n: Schema.Int },
+  request: { token: Schema.String, parent: Schema.NullOr(Schema.String), tag: Schema.String },
+  work: { n: Schema.Int, parent: Schema.optionalKey(Schema.String) },
+  approve: {},
+  comment: {},
+  background: { token: Schema.String, tag: Schema.String },
+  throw: {},
+  fire: {},
+  timer: { at: Schema.Number },
+  schedule: { at: Schema.Number },
+});
 
 const write = Cmd.make("write", {
   input: Schema.Struct({ stream: Schema.String, write: Schema.Json }),
@@ -234,7 +249,7 @@ const authoring = (name = "queue") => ({
   state: { v: 1, upgrades: [] },
   view: (s: Model) => s,
   refuse: (s: Model, m: typeof Msg.Type) =>
-    m.type === "add" && s.count + m.n > 1000 ? { reason: "limit", now: s.count, most: 1000 } : null,
+    m._tag === "add" && s.count + m.n > 1000 ? { reason: "limit", now: s.count, most: 1000 } : null,
   inputs: {
     add: "Add",
     approve: { description: "Approve", personOnly: true } satisfies {
@@ -378,9 +393,9 @@ const steps = read(PROCESS).pipe(Effect.map((rows) => Arr.filter(rows, (r) => r.
 const resultLetters = inbox.pipe(
   Effect.map((rows) =>
     Arr.filter(rows, (r) => {
-      const m = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ type: Schema.String }) }))(r.body);
+      const m = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ _tag: Schema.String }) }))(r.body);
 
-      return Option.isSome(m) && /_(ok|err)$/.test(m.value.m.type);
+      return Option.isSome(m) && /_(ok|err)$/.test(m.value.m._tag);
     }),
   ),
 );
@@ -453,7 +468,7 @@ const worldOn = async (
     readonly storage?: ActivityStorage;
     readonly onStep?: () => void;
     readonly noPorts?: boolean;
-    readonly addPort?: Schema.Codec<(typeof Msg.members)[0]["Type"]>;
+    readonly addPort?: Schema.Codec<typeof Msg.cases.add.Type>;
     readonly execution?: (actual: Execution) => Execution;
   } = {},
 ) => {
@@ -481,7 +496,7 @@ const worldOn = async (
             ...machine,
             update: {
               ...machine.update,
-              add: (s: Model, m: { readonly type: "add"; readonly n: number }) => {
+              add: (s: Model, m: { readonly _tag: "add"; readonly n: number }) => {
                 options.onStep?.();
 
                 return [{ ...s, count: s.count + m.n }, []] as const;
@@ -1030,7 +1045,7 @@ describe("ticket 884, next/ brain mail", () => {
 
   it.live.prop(
     "B1: brain letters step a machine without ports once each and survive a storage reopen",
-    [Arbitrary.array(Arbitrary.schema(Msg.members[0]), { minLength: 1, maxLength: 30 })],
+    [Arbitrary.array(Arbitrary.schema(Msg.cases.add), { minLength: 1, maxLength: 30 })],
     ([msgs]) =>
       onDisks(async (world) => {
         const w = await world({ noPorts: true });
@@ -1079,7 +1094,7 @@ describe("ticket 884, next/ brain mail", () => {
                 : writer(sender);
 
             for (const id of ["client-letter", notice("client-letter")]) {
-              const input = w.input(1, { type: "add", n: 7 });
+              const input = w.input(1, { ...Tag.cases.add.make({}), n: 7 });
               expect(yield* r.msg({ ...input, id, envelope: { ...input.envelope, by } })).toEqual({
                 _tag: "refused",
                 reason: "bad_msg",
@@ -1088,12 +1103,16 @@ describe("ticket 884, next/ brain mail", () => {
             }
 
             const mailbox = yield* Mailbox;
-            expect(yield* mailbox.send(NAME, notice("mail"), { type: "add", n: 7 }, from({ by: by.key }))).toEqual({
+            expect(
+              yield* mailbox.send(NAME, notice("mail"), { ...Tag.cases.add.make({}), n: 7 }, from({ by: by.key })),
+            ).toEqual({
               _tag: "refused",
               reason: "forbidden",
             });
             expect(yield* inbox).toEqual([]);
-            expect(yield* mailbox.send(NAME, "plain-mail", { type: "add", n: 7 }, from({ by: by.key }))).toMatchObject({
+            expect(
+              yield* mailbox.send(NAME, "plain-mail", { ...Tag.cases.add.make({}), n: 7 }, from({ by: by.key })),
+            ).toMatchObject({
               _tag: "placed",
             });
             expect((yield* r.open("after")).view).toEqual(before);
@@ -1112,14 +1131,14 @@ describe("ticket 884, next/ brain mail", () => {
         Arbitrary.map(
           (index): Schema.Json =>
             [
-              { type: "unknown" },
-              { type: "add", n: "bad" },
-              { type: "timer", at: 42 },
-              { type: "work_ok", cmd: { type: "work", n: 1 }, value: 1, at: 42 },
+              Tag.cases.unknown.make({}),
+              { ...Tag.cases.add.make({}), n: "bad" },
+              { ...Tag.cases.timer.make({}), at: 42 },
+              { ...Tag.cases.work_ok.make({}), cmd: { ...Tag.cases.work.make({}), n: 1 }, value: 1, at: 42 },
               null,
-              { type: "add", n: 7, parent: "forged" },
-              { type: "throw" },
-              { type: "add", n: 1001 },
+              { ...Tag.cases.add.make({}), n: 7, parent: "forged" },
+              Tag.cases.throw.make({}),
+              { ...Tag.cases.add.make({}), n: 1001 },
             ][index]!,
         ),
       ),
@@ -1135,7 +1154,7 @@ describe("ticket 884, next/ brain mail", () => {
             expect((yield* r.open("bad")).view).toEqual(before);
             expect(Arr.filter(yield* read(PROCESS), (row) => row._tag === "down")).toEqual([]);
             expect(yield* steps).toEqual([]);
-            yield* appendNotice(notice("good"), { type: "add", n: 2 });
+            yield* appendNotice(notice("good"), { ...Tag.cases.add.make({}), n: 2 });
             expect((yield* r.open("good")).view).toEqual({ ...before, count: 2 });
             expect(Arr.map(yield* steps, (row) => body(row).input)).toEqual([notice("good")]);
           }).pipe(Effect.provide(w.layer())),
@@ -1152,7 +1171,7 @@ describe("ticket 884, next/ brain mail", () => {
         const checked: Array<number> = [];
 
         const w = await world({
-          addPort: Msg.members[0].check(
+          addPort: Msg.cases.add.check(
             Schema.makeFilter((m) => {
               checked.push(m.n);
 
@@ -1170,7 +1189,7 @@ describe("ticket 884, next/ brain mail", () => {
             const r = yield* w.ProgramRunner;
             const before = (yield* r.open("before")).view;
             const mailbox = yield* Mailbox;
-            yield* mailbox.send(NAME, "throwing-port", { type: "add", n: -n }, from());
+            yield* mailbox.send(NAME, "throwing-port", { ...Tag.cases.add.make({}), n: -n }, from());
             expect((yield* r.open("bad-port")).view).toEqual(before);
             expect((yield* r.open("after-bad-port")).view).toEqual(before);
             expect(checked).toEqual([-n]);
@@ -1178,10 +1197,10 @@ describe("ticket 884, next/ brain mail", () => {
             expect(yield* steps).toEqual([]);
 
             // The same Msg is valid brain mail even though this client's port would throw.
-            yield* appendNotice(notice("bypass-port"), { type: "add", n: -n });
+            yield* appendNotice(notice("bypass-port"), { ...Tag.cases.add.make({}), n: -n });
             expect((yield* r.open("brain-mail")).view).toEqual({ ...before, count: -n });
             expect(checked).toEqual([-n]);
-            yield* mailbox.send(NAME, "good-port", { type: "add", n: n + 1 }, from());
+            yield* mailbox.send(NAME, "good-port", { ...Tag.cases.add.make({}), n: n + 1 }, from());
             expect((yield* r.open("good-port")).view).toEqual({ ...before, count: 1 });
             expect(checked).toEqual([-n, n + 1]);
             expect((yield* r.open("after-good-port")).view).toEqual({ ...before, count: 1 });
@@ -1227,14 +1246,14 @@ describe("ticket 884, next/ brain mail", () => {
             const r = yield* w.ProgramRunner;
             const before = (yield* r.open("before")).view;
             const mailbox = yield* Mailbox;
-            yield* mailbox.send(NAME, "retry-mail", { type: "add", n }, from());
+            yield* mailbox.send(NAME, "retry-mail", { ...Tag.cases.add.make({}), n }, from());
             expect(yield* failure(r.open("failed"))).toMatchObject({ _tag: "ProgramDown", reason: "step", source });
             expect(yield* steps).toEqual([]);
             expect(yield* ProcessStore.use((s) => s.placed("retry-mail"))).toBeNull();
             failing = false;
             expect((yield* r.open("retry")).view).toEqual({ ...before, count: n });
             expect(Arr.map(yield* steps, (row) => body(row).input)).toEqual(["retry-mail"]);
-            yield* mailbox.send(NAME, "later-mail", { type: "add", n: 1 }, from());
+            yield* mailbox.send(NAME, "later-mail", { ...Tag.cases.add.make({}), n: 1 }, from());
             expect((yield* r.open("later")).view).toEqual({ ...before, count: n + 1 });
             expect(Arr.map(yield* steps, (row) => body(row).input)).toEqual(["retry-mail", "later-mail"]);
             expect(Arr.filter(yield* read(PROCESS), (row) => row._tag === "down")).toEqual([]);
@@ -1258,7 +1277,7 @@ describe("P11 activity durability, experiment 231", () => {
       await Effect.runPromise(
         Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
-          expect(yield* r.msg(w.input(1, { type: "add", n: 1 }))).toMatchObject({ _tag: "accepted" });
+          expect(yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 1 }))).toMatchObject({ _tag: "accepted" });
           const step = activity.calls.indexOf("step");
           expect(step).toBeGreaterThanOrEqual(0);
           expect(activity.calls.slice(0, step + 1).slice(-3)).toEqual([
@@ -1293,7 +1312,7 @@ describe("P11 activity durability, experiment 231", () => {
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
-                expect(yield* failure(r.msg(w.input(1, { type: "add", n: value })))).toMatchObject({
+                expect(yield* failure(r.msg(w.input(1, { ...Tag.cases.add.make({}), n: value })))).toMatchObject({
                   _tag: "ProgramDown",
                   reason: "step",
                 });
@@ -1329,7 +1348,7 @@ describe("p14 turns and watcher revisions", () => {
           // Refresh the first client, so insertion order alone picks the wrong eviction.
           yield* r.open("client-0");
           expect(yield* r.open("client-1024")).toEqual({ rev: 0, view: initial });
-          yield* r.msg(w.input(1, { type: "add", n: 1 }));
+          yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 1 }));
           expect(w.published.get("client-1")).toEqual([{ type: "whole", rev: 0, view: initial }]);
 
           for (let n = 0; n <= 1024; n++) {
@@ -1355,7 +1374,7 @@ describe("p14 turns and watcher revisions", () => {
           const r: Runner = yield* w.ProgramRunner;
           yield* r.open("a");
           yield* r.open("b");
-          const messages = Array.from({ length: 24 }, (_, i) => w.input(i + 1, { type: "add", n: 1 }));
+          const messages = Array.from({ length: 24 }, (_, i) => w.input(i + 1, { ...Tag.cases.add.make({}), n: 1 }));
 
           const answers = yield* Effect.forEach(messages, (m) => r.msg(m), {
             concurrency: "unbounded",
@@ -1386,9 +1405,9 @@ describe("p14 turns and watcher revisions", () => {
           const r: Runner = yield* w.ProgramRunner;
           const ledger = yield* Ledger;
           yield* r.open("a");
-          yield* r.msg(w.input(1, { type: "add", n: 2 }));
+          yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 2 }));
           yield* ledger.append("elsewhere", "noise", lineFor(from(), { _tag: "noise" }));
-          yield* r.msg(w.input(2, { type: "add", n: 3 }));
+          yield* r.msg(w.input(2, { ...Tag.cases.add.make({}), n: 3 }));
           const updates = w.published.get("a");
           expect(updates === undefined ? undefined : Arr.map(updates, (u) => u.rev)).toEqual([0, 1, 2]);
           expect((yield* r.open("inspect")).view.count).toBe(5);
@@ -1400,8 +1419,12 @@ describe("p14 turns and watcher revisions", () => {
 
 describe("p22 refusal and p25 thrown steps", () => {
   for (const [label, msg, answer] of [
-    ["bad fresh shape", { type: "add", n: "bad" }, { _tag: "refused", reason: "bad_msg" }],
-    ["program refusal", { type: "add", n: 1001 }, { _tag: "refused", reason: "limit", now: 0, most: 1000 }],
+    ["bad fresh shape", { ...Tag.cases.add.make({}), n: "bad" }, { _tag: "refused", reason: "bad_msg" }],
+    [
+      "program refusal",
+      { ...Tag.cases.add.make({}), n: 1001 },
+      { _tag: "refused", reason: "limit", now: 0, most: 1000 },
+    ],
   ] as const) {
     it.effect.prop(
       `plant, append before refusal: ${label} changes no history, view or Cmd`,
@@ -1451,7 +1474,7 @@ describe("p22 refusal and p25 thrown steps", () => {
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
                 yield* r.open("a");
-                expect(yield* failure(r.msg(w.input(1, { type: "throw" })))).toMatchObject({
+                expect(yield* failure(r.msg(w.input(1, Tag.cases.throw.make({}))))).toMatchObject({
                   _tag: "ProgramDown",
                   reason: "step",
                 });
@@ -1485,7 +1508,7 @@ describe("p22 refusal and p25 thrown steps", () => {
                   ["bad", poison],
                   ["good-b", 2],
                 ] as const) {
-                  const sent = yield* m.send(NAME, id, { type: "add", n: value }, from());
+                  const sent = yield* m.send(NAME, id, { ...Tag.cases.add.make({}), n: value }, from());
 
                   if (sent._tag === "placed") {
                     placed.push({ id, rev: sent.rev, pos: sent.pos });
@@ -1512,7 +1535,7 @@ describe("p22 refusal and p25 thrown steps", () => {
                   _tag: "ProgramDown",
                   reason: "saved_letter",
                 });
-                expect(yield* failure(r.msg(w.input(4, { type: "add", n: 3 })))).toMatchObject({
+                expect(yield* failure(r.msg(w.input(4, { ...Tag.cases.add.make({}), n: 3 })))).toMatchObject({
                   _tag: "ProgramDown",
                 });
                 expect(yield* inbox).toEqual(before);
@@ -1528,9 +1551,14 @@ describe("p22 refusal and p25 thrown steps", () => {
 
 describe("p35 Cmd order, replay and recorded failures", () => {
   for (const [mode, ok, answer, failures] of [
-    ["tagged", Schema.Int, { type: "work_err", error: { _tag: "disk" }, reason: "disk" }, ["disk"]],
-    ["class", Schema.Struct({ n: Schema.Int }), { type: "work_ok", value: { n: 29 } }, []],
-    ["non_json", Schema.Unknown, { type: "work_err", error: { _tag: "bad_cmd" }, reason: "bad_cmd" }, ["bad_cmd"]],
+    ["tagged", Schema.Int, { ...Tag.cases.work_err.make({}), error: { _tag: "disk" }, reason: "disk" }, ["disk"]],
+    ["class", Schema.Struct({ n: Schema.Int }), { ...Tag.cases.work_ok.make({}), value: { n: 29 } }, []],
+    [
+      "non_json",
+      Schema.Unknown,
+      { ...Tag.cases.work_err.make({}), error: { _tag: "bad_cmd" }, reason: "bad_cmd" },
+      ["bad_cmd"],
+    ],
   ] as const) {
     it.effect.prop(
       `plant, save raw ${mode} handler answer: encode it or save bad_cmd, then step once`,
@@ -1559,7 +1587,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               await Effect.runPromise(
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
-                  expect(yield* r.msg(w.input(1, { type: "work", n: value }))).toMatchObject({
+                  expect(yield* r.msg(w.input(1, { ...Tag.cases.work.make({}), n: value }))).toMatchObject({
                     _tag: "accepted",
                   });
                   const answers = yield* resultLetters;
@@ -1610,7 +1638,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
       await Effect.runPromise(
         Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
-          expect(yield* r.msg(w.input(1, { type: "work", n: 17 }))).toMatchObject({ _tag: "accepted" });
+          expect(yield* r.msg(w.input(1, { ...Tag.cases.work.make({}), n: 17 }))).toMatchObject({ _tag: "accepted" });
           expect(w.workCalls()).toBe(1);
           expect(yield* resultLetters).toHaveLength(1);
           expect((yield* r.open("a")).view.replies).toBe(1);
@@ -1629,7 +1657,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             const r: Runner = yield* w.ProgramRunner;
             yield* r.open("a");
             const alarmCount = w.alarms.length;
-            const result = yield* Effect.exit(r.msg(w.input(1, { type: "work", n: 19 })));
+            const result = yield* Effect.exit(r.msg(w.input(1, { ...Tag.cases.work.make({}), n: 19 })));
             expect(Exit.isFailure(result) || (Exit.isSuccess(result) && result.value._tag === "refused")).toBe(true);
             expect(w.workCalls()).toBe(0);
             expect(yield* inbox).toEqual([]);
@@ -1660,10 +1688,10 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               await Effect.runPromise(
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
-                  yield* r.msg(w.input(1, { type: "work", n: value }));
+                  yield* r.msg(w.input(1, { ...Tag.cases.work.make({}), n: value }));
                   const answers = yield* resultLetters;
                   expect(answers).toHaveLength(1);
-                  expect(answers[0]?.body).toMatchObject({ m: { type: "work_err", reason } });
+                  expect(answers[0]?.body).toMatchObject({ m: { ...Tag.cases.work_err.make({}), reason } });
                   expect((yield* r.open("inspect")).view.replies).toBe(1);
                 }).pipe(Effect.provide(w.layer())),
               );
@@ -1696,12 +1724,12 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               await Effect.runPromise(
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
-                  yield* r.msg(w.input(1, { type: "fire" }));
+                  yield* r.msg(w.input(1, Tag.cases.fire.make({})));
                   expect(w.fireCalls()).toBe(value === "fabrika/chaos" ? 1 : 0);
                   expect(yield* resultLetters).toHaveLength(1);
                   expect((yield* resultLetters)[0]?.body).toMatchObject({
                     m: {
-                      type: value === "fabrika/chaos" ? "fire_ok" : "fire_err",
+                      ...(value === "fabrika/chaos" ? Tag.cases.fire_ok : Tag.cases.fire_err).make({}),
                       ...(value === "fabrika/chaos" ? {} : { error: { _tag: "bad_cmd" }, reason: "bad_cmd" }),
                     },
                   });
@@ -1719,7 +1747,10 @@ describe("p35 Cmd order, replay and recorded failures", () => {
       const w = await world();
       await Effect.runPromise(
         Effect.gen(function* () {
-          const sent = yield* Mailbox.use((m) => m.send(NAME, "prior-work", { type: "work", n: 27 }, from()));
+          const sent = yield* Mailbox.use((m) =>
+            m.send(NAME, "prior-work", { ...Tag.cases.work.make({}), n: 27 }, from()),
+          );
+
           expect(sent._tag).toBe("placed");
 
           if (sent._tag === "placed") {
@@ -1771,7 +1802,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           const ids: Array<string> = [];
 
           for (const [n, arrivedAt] of arrivals.entries()) {
-            yield* r.msg(w.input(n + 1, { type: "schedule", at: asked }));
+            yield* r.msg(w.input(n + 1, { ...Tag.cases.schedule.make({}), at: asked }));
             const before = yield* r.open("scheduled");
             expect(before.view.wake).toBe(asked);
             ids.push(`${PROCESS}/due/${asked}/${before.rev}`);
@@ -1784,7 +1815,11 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               wake: asked + 10,
             });
             expect(Arr.map(timers, (row) => body(row).m)).toEqual(
-              Arr.map(arrivals.slice(0, n + 1), (clock) => ({ type: "timer", at: asked, arrivedAt: clock })),
+              Arr.map(arrivals.slice(0, n + 1), (clock) => ({
+                ...Tag.cases.timer.make({}),
+                at: asked,
+                arrivedAt: clock,
+              })),
             );
             expect(w.workCalls()).toBe(n + 1);
           }
@@ -1820,7 +1855,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
         const arrivedAt = 1_000_000 + asked + lag;
         yield* Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
-          yield* r.msg(w.input(1, { type: "schedule", at: asked }));
+          yield* r.msg(w.input(1, { ...Tag.cases.schedule.make({}), at: asked }));
           const before = yield* r.open("scheduled");
           const saved = yield* ProcessStore.use((store) => store.load);
           w.fault.record = true;
@@ -1829,7 +1864,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           const first = Arr.filter(yield* inbox, (row) => Str.includes("/due/")(row.id));
           expect(first).toHaveLength(1);
           expect(first[0]!.id).toBe(`${PROCESS}/due/${asked}/${before.rev}`);
-          expect(body(first[0]!).m).toEqual({ type: "timer", at: asked, arrivedAt });
+          expect(body(first[0]!).m).toEqual({ ...Tag.cases.timer.make({}), at: asked, arrivedAt });
           expect(yield* ProcessStore.use((store) => store.load)).toEqual(saved);
           expect(w.workCalls()).toBe(0);
           yield* TestClock.adjust(lag);
@@ -1873,7 +1908,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 
             yield* Effect.gen(function* () {
               const r: Runner = yield* w.ProgramRunner;
-              yield* r.msg(w.input(1, { type: "schedule", at: asked }));
+              yield* r.msg(w.input(1, { ...Tag.cases.schedule.make({}), at: asked }));
               expect((yield* r.open("scheduled")).view.wake).toBe(asked);
             }).pipe(Effect.provide(w.layer()));
             const now = 1_000_000 + asked + lag;
@@ -1941,7 +1976,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           yield* r.due(at);
           expect(yield* inbox).toEqual(initialRows);
           expect(yield* steps).toEqual(initialSteps);
-          yield* r.msg(w.input(1, { type: "schedule", at: at + gap }));
+          yield* r.msg(w.input(1, { ...Tag.cases.schedule.make({}), at: at + gap }));
           const scheduled = yield* r.open("later");
           const scheduledRows = yield* inbox;
           const scheduledSteps = yield* steps;
@@ -1961,13 +1996,13 @@ describe("p35 Cmd order, replay and recorded failures", () => {
       await Effect.runPromise(
         Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
-          yield* r.msg(w.input(1, { type: "schedule", at: 40 }));
+          yield* r.msg(w.input(1, { ...Tag.cases.schedule.make({}), at: 40 }));
           yield* r.due(40);
           yield* r.due(40);
           expect(w.workCalls()).toBe(1);
           expect((yield* r.open("a")).view).toMatchObject({ count: 1, replies: 1, wake: 50 });
           expect(
-            Arr.filter(yield* inbox, (row) => Str.includes('"type":"timer"')(JSON.stringify(row.body))),
+            Arr.filter(yield* inbox, (row) => Str.includes('"_tag":"timer"')(JSON.stringify(row.body))),
           ).toHaveLength(1);
           expect(w.alarms.at(-1)).toBe(50);
         }).pipe(Effect.provide(w.layer())),
@@ -1990,7 +2025,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
       await Effect.runPromise(
         Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
-          const running = yield* r.msg(w.input(1, { type: "work", n: 31 })).pipe(Effect.forkChild);
+          const running = yield* r.msg(w.input(1, { ...Tag.cases.work.make({}), n: 31 })).pipe(Effect.forkChild);
           yield* Deferred.await(w.entered);
           yield* Fiber.interrupt(running);
           expect(w.workCalls()).toBe(1);
@@ -2032,7 +2067,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
         (value) =>
           onDisks(async (world) => {
             const w = await world();
-            const person = w.input(1, { type: "request", token: "person", tag: "answered" });
+            const person = w.input(1, { ...Tag.cases.request.make({}), token: "person", tag: "answered" });
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
@@ -2042,7 +2077,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                   yield* m.send(
                     NAME,
                     "borrowed-mail",
-                    { type: "request", token: value, parent: person.envelope.id, tag: "answered" },
+                    { ...Tag.cases.request.make({}), token: value, parent: person.envelope.id, tag: "answered" },
                     from({ by: writer("agent").key }),
                   ),
                 ).toMatchObject({ _tag: "placed" });
@@ -2053,7 +2088,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 expect(w.signCalls).toEqual([]);
                 expect(w.authority.db().prepare("SELECT count(*) AS n FROM gateway_receipts").get()?.n).toBe(0);
                 // Mail still works on a public port; only the borrowed parent is refused.
-                yield* m.send(NAME, "ordinary-mail", { type: "add", n: 2 }, from());
+                yield* m.send(NAME, "ordinary-mail", { ...Tag.cases.add.make({}), n: 2 }, from());
                 expect((yield* r.open("ordinary")).view.count).toBe(2);
               }).pipe(Effect.provide(w.layer())),
             );
@@ -2079,14 +2114,14 @@ describe("p69 sender survives queued work and Cmd replies", () => {
             const r: Runner = yield* w.ProgramRunner;
             expect(
               yield* Mailbox.use((m) =>
-                m.send(NAME, "person-only-mail", { type: "add", n: 7 }, from({ by: writer(as).key })),
+                m.send(NAME, "person-only-mail", { ...Tag.cases.add.make({}), n: 7 }, from({ by: writer(as).key })),
               ),
             ).toMatchObject({ _tag: "placed" });
             expect((yield* r.open("person-only")).view).toEqual(initial);
             expect(yield* steps).toEqual([]);
             expect(yield* ProcessStore.use((s) => s.placed("person-only-mail"))).toBeNull();
             // The same port works for a checked person input through the door.
-            expect(yield* r.msg(w.input(2, { type: "add", n: 3 }))).toMatchObject({ _tag: "accepted" });
+            expect(yield* r.msg(w.input(2, { ...Tag.cases.add.make({}), n: 3 }))).toMatchObject({ _tag: "accepted" });
             expect((yield* r.open("door-person")).view.count).toBe(3);
           }).pipe(Effect.provide(w.layer())),
         );
@@ -2103,7 +2138,12 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           const r: Runner = yield* w.ProgramRunner;
           expect(
             yield* Mailbox.use((m) =>
-              m.send(NAME, id, { type: "work_ok", cmd: { type: "work", n: 7 }, value: 7, at: 1 }, from()),
+              m.send(
+                NAME,
+                id,
+                { ...Tag.cases.work_ok.make({}), cmd: { ...Tag.cases.work.make({}), n: 7 }, value: 7, at: 1 },
+                from(),
+              ),
             ),
           ).toMatchObject({ _tag: "placed" });
           expect((yield* r.open("forged-reply")).view).toEqual(initial);
@@ -2122,7 +2162,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
         await Effect.runPromise(
           Effect.gen(function* () {
             const r = yield* w.ProgramRunner;
-            expect(yield* r.msg(w.input(1, { type: "add", n: 1, parent }))).toMatchObject({
+            expect(yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 1, parent }))).toMatchObject({
               _tag: "refused",
             });
             expect(yield* inbox).toEqual([]);
@@ -2144,14 +2184,14 @@ describe("p69 sender survives queued work and Cmd replies", () => {
             const w = await world();
 
             const person = w.input(1, {
-              type: "request",
+              ...Tag.cases.request.make({}),
               token: "person",
               tag: "answered",
             });
 
             const agent = w.input(
               2,
-              { type: "request", token: value, parent: person.envelope.id, tag: "answered" },
+              { ...Tag.cases.request.make({}), token: value, parent: person.envelope.id, tag: "answered" },
               "agent",
             );
 
@@ -2184,13 +2224,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
         (value) =>
           onDisks(async (world) => {
             const w = await world();
-
-            const Stamped = Schema.Struct({
-              type: Schema.Literal("work"),
-              n: Schema.Int,
-              parent: Schema.optionalKey(Schema.String),
-            });
-
+            const Stamped = Schema.TaggedStruct("work", { n: Schema.Int, parent: Schema.optionalKey(Schema.String) });
             Object.assign(
               w.p,
               Program.make({
@@ -2218,7 +2252,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 },
               }),
             );
-            const input = w.input(1, { type: "work", n: value }, "agent");
+            const input = w.input(1, { ...Tag.cases.work.make({}), n: value }, "agent");
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r = yield* w.ProgramRunner;
@@ -2245,8 +2279,8 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           onDisks(async (world) => {
             const w = await world();
             w.fault.pause = true;
-            const a = w.input(1, { type: "work", n: 37 });
-            const b = w.input(2, { type: "request", token: value, tag: "saved" }, "agent");
+            const a = w.input(1, { ...Tag.cases.work.make({}), n: 37 });
+            const b = w.input(2, { ...Tag.cases.request.make({}), token: value, tag: "saved" }, "agent");
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
@@ -2296,13 +2330,13 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 for (const [index, asPerson] of senders.entries()) {
                   const token = `request-${index}`;
                   const as = asPerson ? "person" : "agent";
-                  const m = w.input(index + 1, { type: "request", token, tag: "saved" }, as);
+                  const m = w.input(index + 1, { ...Tag.cases.request.make({}), token, tag: "saved" }, as);
                   expected.push({ token, by: writer(as).key, parent: m.envelope.id });
                   yield* w.deliver(m, "comment");
                   yield* r.msg(m);
                 }
 
-                const own = w.input(99, { type: "background", token: "own", tag: "polled" });
+                const own = w.input(99, { ...Tag.cases.background.make({}), token: "own", tag: "polled" });
                 yield* r.msg(own);
                 expected.push({ token: "own", by: owner.key, parent: null });
                 expect(
@@ -2337,7 +2371,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           (value) =>
             onDisks(async (world) => {
               const w = await world();
-              const i = w.input(1, { type: "request", token: value, tag: "answered" }, as);
+              const i = w.input(1, { ...Tag.cases.request.make({}), token: value, tag: "answered" }, as);
               await Effect.runPromise(
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
@@ -2355,7 +2389,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                   expect(yield* events).toEqual([]);
                   expect(Arr.filter(w.calls, (c) => c.parent === null)).toEqual([]);
                   expect((yield* resultLetters).at(-1)?.body).toMatchObject({
-                    m: { type: "write_err", reason },
+                    m: { ...Tag.cases.write_err.make({}), reason },
                   });
                 }).pipe(Effect.provide(w.layer())),
               );
@@ -2388,7 +2422,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 },
               }),
             );
-            const first = w.input(1, { type: "request", token: value, tag: "answered" });
+            const first = w.input(1, { ...Tag.cases.request.make({}), token: value, tag: "answered" });
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
@@ -2415,7 +2449,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
-                yield* r.msg(w.input(1, { type: "background", token: value, tag: "answered" }));
+                yield* r.msg(w.input(1, { ...Tag.cases.background.make({}), token: value, tag: "answered" }));
                 expect(yield* events).toEqual([]);
                 expect(w.calls, "the runner must refuse before reaching the permissive own writer").toEqual([]);
                 expect((yield* resultLetters).at(-1)?.body).toMatchObject({
@@ -2440,7 +2474,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
             onDisks(async (world) => {
               const w = await world();
               w.fault[lost] = true;
-              const i = w.input(1, { type: "request", token: value, tag: "saved" }, "agent");
+              const i = w.input(1, { ...Tag.cases.request.make({}), token: value, tag: "saved" }, "agent");
               await Effect.runPromise(
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
@@ -2480,8 +2514,8 @@ describe("p69 sender survives queued work and Cmd replies", () => {
           onDisks(async (world) => {
             const w = await world();
             w.fault.pause = true;
-            const a = w.input(1, { type: "work", n: 41 });
-            const b = w.input(2, { type: "request", token: value, tag: "saved" }, "agent");
+            const a = w.input(1, { ...Tag.cases.work.make({}), n: 41 });
+            const b = w.input(2, { ...Tag.cases.request.make({}), token: value, tag: "saved" }, "agent");
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
@@ -2514,7 +2548,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 );
                 yield* r.open("late-answer");
                 expect((yield* ProcessStore.use((s) => s.load))?.cmds).toMatchObject([
-                  { cmd: { type: "write", write: { _tag: "caused", parent: b.envelope.id } } },
+                  { cmd: { ...Tag.cases.write.make({}), write: { _tag: "caused", parent: b.envelope.id } } },
                 ]);
 
                 const session = yield* SessionManager.use((s) => s.signer(b.envelope.id, PROCESS, "saved")).pipe(
@@ -2540,7 +2574,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
         (value) =>
           onDisks(async (world) => {
             const w = await world({ process: REPLACEMENT });
-            const i = w.input(1, { type: "request", token: value, tag: "saved" }, "agent");
+            const i = w.input(1, { ...Tag.cases.request.make({}), token: value, tag: "saved" }, "agent");
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
@@ -2564,17 +2598,17 @@ describe("p69 sender survives queued work and Cmd replies", () => {
 
 describe("P11 review: fresh input, accepted history, and brain-only ids", () => {
   for (const msg of [
-    { type: "work_ok", cmd: work({ n: 1 }), value: 1, at: 42 },
+    { ...Tag.cases.work_ok.make({}), cmd: work({ n: 1 }), value: 1, at: 42 },
     {
-      type: "write_ok",
+      ...Tag.cases.write_ok.make({}),
       cmd: write({ stream: "facts", write: { _tag: "own", event: { _tag: "polled", token: "forged" } } }),
       value: {},
       at: 42,
     },
-    { type: "timer", at: 42 },
+    { ...Tag.cases.timer.make({}), at: 42 },
   ]) {
     it.effect.prop(
-      `plant, accept a client answer: fresh ${msg.type} cannot settle work or fire the timer`,
+      `plant, accept a client answer: fresh ${msg._tag} cannot settle work or fire the timer`,
       { generated: Schema.Record(Schema.String, Schema.Json) },
       ({ generated }) =>
         Effect.forEach(
@@ -2586,7 +2620,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
                 Effect.gen(function* () {
                   const r = yield* w.ProgramRunner;
                   yield* r.open("before");
-                  expect(yield* r.msg(w.input(1, { ...value, type: msg.type }))).toMatchObject({
+                  expect(yield* r.msg(w.input(1, { ...value, ...keyed(msg._tag) }))).toMatchObject({
                     _tag: "refused",
                     reason: "bad_msg",
                   });
@@ -2609,14 +2643,16 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
       await Effect.runPromise(
         Effect.gen(function* () {
           const r = yield* w.ProgramRunner;
-          yield* r.msg(w.input(1, { type: "add", n: 800 }));
+          yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 800 }));
           const mailbox = yield* Mailbox;
-          expect(yield* mailbox.send(NAME, "outside-limit", { type: "add", n: 300 }, from())).toMatchObject({
+          expect(
+            yield* mailbox.send(NAME, "outside-limit", { ...Tag.cases.add.make({}), n: 300 }, from()),
+          ).toMatchObject({
             _tag: "placed",
           });
           expect((yield* r.open("after-mail")).view).toMatchObject({ count: 800 });
           expect(yield* ProcessStore.use((s) => s.placed("outside-limit"))).toBeNull();
-          expect(yield* r.msg(w.input(2, { type: "add", n: 1 }))).toMatchObject({ _tag: "accepted" });
+          expect(yield* r.msg(w.input(2, { ...Tag.cases.add.make({}), n: 1 }))).toMatchObject({ _tag: "accepted" });
           expect((yield* r.open("still-live")).view).toMatchObject({ count: 801 });
         }).pipe(Effect.provide(w.layer())),
       );
@@ -2624,10 +2660,10 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
   );
 
   for (const [label, m] of [
-    ["bad input", { type: "add", n: "bad" }],
+    ["bad input", { ...Tag.cases.add.make({}), n: "bad" }],
     ["malformed value", null],
-    ["forged settled reply", { type: "work_ok", cmd: work({ n: 1 }), value: 1, at: 42 }],
-    ["throwing fresh input", { type: "throw" }],
+    ["forged settled reply", { ...Tag.cases.work_ok.make({}), cmd: work({ n: 1 }), value: 1, at: 42 }],
+    ["throwing fresh input", Tag.cases.throw.make({})],
   ] as const) {
     it.live(`plant, treat other mail as accepted: receive is total for ${label}`, () =>
       onDisks(async (world) => {
@@ -2644,7 +2680,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
               expect(received.value.view).toMatchObject({ count: 0, replies: 0 });
             }
 
-            expect(yield* r.msg(w.input(1, { type: "add", n: 2 }))).toMatchObject({ _tag: "accepted" });
+            expect(yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 2 }))).toMatchObject({ _tag: "accepted" });
             expect((yield* r.open("still-live")).view).toMatchObject({ count: 2, replies: 0 });
             expect(yield* inbox).toHaveLength(2);
           }).pipe(Effect.provide(w.layer())),
@@ -2682,7 +2718,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
                   expect(opened.value.view).toMatchObject({ count: 0 });
                 }
 
-                expect(yield* r.msg(w.input(1, { type: "add", n: 1 }))).toMatchObject({
+                expect(yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 1 }))).toMatchObject({
                   _tag: "accepted",
                 });
                 expect((yield* r.open("still-live")).view).toMatchObject({ count: 1 });
@@ -2717,7 +2753,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
               await Effect.runPromise(
                 Effect.gen(function* () {
                   const mailbox = yield* Mailbox;
-                  expect(yield* mailbox.send(NAME, value, { type: "add", n: 999 }, from())).toEqual({
+                  expect(yield* mailbox.send(NAME, value, { ...Tag.cases.add.make({}), n: 999 }, from())).toEqual({
                     _tag: "refused",
                     reason: "forbidden",
                   });
@@ -2732,7 +2768,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
     it.live(`plant, authorize ${id}: a caused write cannot spend a parent under a runner-owned id`, () =>
       onDisks(async (world) => {
         const w = await world();
-        const input = w.input(1, { type: "add", n: 1 });
+        const input = w.input(1, { ...Tag.cases.add.make({}), n: 1 });
         await Effect.runPromise(
           Effect.gen(function* () {
             yield* w.deliver(input);
@@ -2759,7 +2795,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
         await Effect.runPromise(
           Effect.gen(function* () {
             const r = yield* w.ProgramRunner;
-            const sent = yield* r.msg({ ...w.input(1, { type: "add", n: 1 }), id });
+            const sent = yield* r.msg({ ...w.input(1, { ...Tag.cases.add.make({}), n: 1 }), id });
             expect(sent).toMatchObject({ _tag: "refused" });
             expect(yield* inbox).toEqual([]);
           }).pipe(Effect.provide(w.layer())),
@@ -2809,7 +2845,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
                     },
                   }),
                 );
-                const input = w.input(1, { type: "work", n: 1 });
+                const input = w.input(1, { ...Tag.cases.work.make({}), n: 1 });
                 await Effect.runPromise(
                   Effect.gen(function* () {
                     const r = yield* w.ProgramRunner;
@@ -2818,7 +2854,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
                     expect(w.calls, "no checked commit may be attempted on this stream").toEqual([]);
                     expect(yield* read(stream)).toEqual([]);
                     expect(Arr.map(yield* resultLetters, (row) => row.body)).toMatchObject([
-                      { m: { type: "write_err", reason: expect.any(String) } },
+                      { m: { ...Tag.cases.write_err.make({}), reason: expect.any(String) } },
                     ]);
                   }).pipe(Effect.provide(w.layer())),
                 );
@@ -2854,7 +2890,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
                   },
                 }),
               );
-              const input = w.input(1, { type: "work", n: 1 });
+              const input = w.input(1, { ...Tag.cases.work.make({}), n: 1 });
               await Effect.runPromise(
                 Effect.gen(function* () {
                   const r = yield* w.ProgramRunner;
@@ -2862,7 +2898,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
                   yield* r.msg(input);
                   expect(w.calls).toHaveLength(1);
                   expect(Arr.map(yield* resultLetters, (row) => row.body)).toMatchObject([
-                    { m: { type: "write_err", reason: value, error: { _tag: value } } },
+                    { m: { ...Tag.cases.write_err.make({}), reason: value, error: { _tag: value } } },
                   ]);
                   expect(yield* events).toEqual([]);
                 }).pipe(Effect.provide(w.layer())),
@@ -2898,7 +2934,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
           Effect.gen(function* () {
             const r = yield* w.ProgramRunner;
             yield* r.open("before");
-            expect(yield* r.msg(w.input(1, { type: "add", n: 4 }, "agent"))).toMatchObject({
+            expect(yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 4 }, "agent"))).toMatchObject({
               _tag: "refused",
             });
             expect(yield* inbox).toEqual([]);
@@ -2919,7 +2955,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
           const r = yield* w.ProgramRunner;
           yield* r.open(Str.repeat(256)("c"));
           expect((yield* Effect.exit(r.open(over)))._tag).toBe("Failure");
-          yield* r.msg(w.input(1, { type: "add", n: 1 }));
+          yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 1 }));
           expect(w.published.has(over)).toBe(false);
           expect(w.published.get(Str.repeat(256)("c"))).toHaveLength(2);
         }).pipe(Effect.provide(w.layer())),
@@ -2946,7 +2982,7 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
           }
 
           w.published.clear();
-          yield* r.msg(w.input(1, { type: "add", n: 1 }));
+          yield* r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 1 }));
           expect(w.published.size, "one process cannot retain every client ever opened").toBeLessThanOrEqual(most);
           expect(w.published.size).toBeGreaterThan(0);
         }).pipe(Effect.provide(w.layer())),
@@ -2963,7 +2999,7 @@ describe("P11 recovery gaps and durable installation", () => {
         () =>
           onDisks(async (world) => {
             const w = await world();
-            const i = w.input(1, { type: "work", n: 71 });
+            const i = w.input(1, { ...Tag.cases.work.make({}), n: 71 });
 
             if (cut === "after append") {
               w.fault.append = "after";
@@ -2987,7 +3023,7 @@ describe("P11 recovery gaps and durable installation", () => {
               expect(Arr.map(yield* inbox, (row) => row.id)).toEqual([i.id]);
               expect(w.workCalls()).toBe(0);
               expect((yield* ProcessStore.use((s) => s.load))?.cmds).toMatchObject([
-                { id: `${PROCESS}/1/0`, state: "dispatched", cmd: { type: "work", n: 71 } },
+                { id: `${PROCESS}/1/0`, state: "dispatched", cmd: { ...Tag.cases.work.make({}), n: 71 } },
               ]);
             });
 
@@ -3045,7 +3081,7 @@ describe("P11 recovery gaps and durable installation", () => {
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r = yield* w.ProgramRunner;
-                expect(yield* failure(r.msg(w.input(1, { type: "work", n: 1 })))).toMatchObject({
+                expect(yield* failure(r.msg(w.input(1, { ...Tag.cases.work.make({}), n: 1 })))).toMatchObject({
                   _tag: "LedgerError",
                 });
                 expect(yield* resultLetters).toHaveLength(1);
@@ -3084,7 +3120,9 @@ describe("P11 recovery gaps and durable installation", () => {
       );
       w.fault.answer = true;
       await Effect.runPromise(
-        w.ProgramRunner.use((r) => failure(r.msg(w.input(1, { type: "work", n: 72 })))).pipe(Effect.provide(w.layer())),
+        w.ProgramRunner.use((r) => failure(r.msg(w.input(1, { ...Tag.cases.work.make({}), n: 72 })))).pipe(
+          Effect.provide(w.layer()),
+        ),
       );
       w.reopen();
       await Effect.runPromise(
@@ -3097,7 +3135,7 @@ describe("P11 recovery gaps and durable installation", () => {
             saved === null
               ? undefined
               : Arr.filter(saved.cmds, (cmd) => Predicate.hasProperty(cmd, "id") && cmd.id === `${PROCESS}/2/0`),
-          ).toMatchObject([{ id: `${PROCESS}/2/0`, state: "dispatched", cmd: { type: "work", n: 73 } }]);
+          ).toMatchObject([{ id: `${PROCESS}/2/0`, state: "dispatched", cmd: { ...Tag.cases.work.make({}), n: 73 } }]);
         }).pipe(Effect.provide(w.layer())),
       );
     }),
@@ -3108,7 +3146,9 @@ describe("P11 recovery gaps and durable installation", () => {
       const { ProcessStore } = await import("./ProcessStore.ts");
       w.fault.append = "before";
       await Effect.runPromise(
-        w.ProgramRunner.use((r) => failure(r.msg(w.input(1, { type: "add", n: 7 })))).pipe(Effect.provide(w.layer())),
+        w.ProgramRunner.use((r) => failure(r.msg(w.input(1, { ...Tag.cases.add.make({}), n: 7 })))).pipe(
+          Effect.provide(w.layer()),
+        ),
       );
       w.reopen();
       await Effect.runPromise(
@@ -3157,9 +3197,9 @@ describe("P11 recovery gaps and durable installation", () => {
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
-                expect((yield* r.msg(w.input(1, { type: "work", n: value })))._tag).toBe("accepted");
+                expect((yield* r.msg(w.input(1, { ...Tag.cases.work.make({}), n: value })))._tag).toBe("accepted");
                 expect(Arr.map(yield* resultLetters, (row) => row.body)).toMatchObject([
-                  { m: { type: "work_err", reason: "bad_cmd" } },
+                  { m: { ...Tag.cases.work_err.make({}), reason: "bad_cmd" } },
                 ]);
               }).pipe(Effect.provide(w.layer())),
             );
@@ -3173,7 +3213,7 @@ describe("P11 recovery gaps and durable installation", () => {
     it.live(`plant, trust a prepared model: recovery ${cut} saves one accepted input at its original placing`, () =>
       onDisks(async (world) => {
         const w = await world();
-        const i = w.input(1, { type: "add", n: 7 });
+        const i = w.input(1, { ...Tag.cases.add.make({}), n: 7 });
 
         if (cut === "before append") {
           w.fault.append = "before";
@@ -3225,12 +3265,12 @@ describe("P11 recovery gaps and durable installation", () => {
   it.live("plant, check refusal before duplicate id: resend returns the original placing despite later state", () =>
     onDisks(async (world) => {
       const w = await world();
-      const i = w.input(1, { type: "add", n: 800 });
+      const i = w.input(1, { ...Tag.cases.add.make({}), n: 800 });
       await Effect.runPromise(
         Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
           const answer = yield* r.msg(i);
-          yield* r.msg(w.input(2, { type: "add", n: 100 }));
+          yield* r.msg(w.input(2, { ...Tag.cases.add.make({}), n: 100 }));
           expect(yield* r.msg({ ...i, seen: 999999, sentAt: "retry clock" })).toEqual(answer);
           expect((yield* r.open("a")).view.count).toBe(900);
           expect(yield* inbox).toHaveLength(2);
@@ -3307,7 +3347,7 @@ describe("P11 recovery gaps and durable installation", () => {
             const w = await world();
 
             const i = w.input(1, {
-              type: "request",
+              ...Tag.cases.request.make({}),
               token: "undeclared",
               tag: value,
               personOnly: false,
@@ -3353,7 +3393,7 @@ describe("P11 recovery gaps and durable installation", () => {
                   },
                 }),
               );
-              const i = w.input(1, { type: "request", token: value, tag });
+              const i = w.input(1, { ...Tag.cases.request.make({}), token: value, tag });
               await Effect.runPromise(
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
@@ -3432,7 +3472,7 @@ describe("P11 recovery gaps and durable installation", () => {
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
-                yield* r.msg(w.input(1, { type: "fire", extra: value }));
+                yield* r.msg(w.input(1, { ...Tag.cases.fire.make({}), extra: value }));
                 expect(w.fireCalls()).toBe(0);
                 expect((yield* resultLetters).at(-1)?.body).toMatchObject({ m: { reason: "bad_cmd" } });
               }).pipe(Effect.provide(w.layer())),
@@ -3453,7 +3493,7 @@ describe("P11 monitoring, content and storage failures", () => {
         Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
           yield* r.open("a");
-          const i = w.input(1, { type: "request", token: "linked", tag: "saved" }, "agent");
+          const i = w.input(1, { ...Tag.cases.request.make({}), token: "linked", tag: "saved" }, "agent");
           yield* w.deliver(i, "comment");
           yield* r.msg(i);
           yield* r.due(50);
@@ -3490,8 +3530,8 @@ describe("P11 monitoring, content and storage failures", () => {
         (value) =>
           onDisks(async (world) => {
             const w = await world();
-            const agent = w.input(1, { type: "request", token: value, tag: "saved" }, "agent");
-            const person = w.input(2, { type: "add", n: 1 });
+            const agent = w.input(1, { ...Tag.cases.request.make({}), token: value, tag: "saved" }, "agent");
+            const person = w.input(2, { ...Tag.cases.add.make({}), n: 1 });
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
@@ -3525,7 +3565,9 @@ describe("P11 monitoring, content and storage failures", () => {
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
-                yield* r.msg(w.input(1, { type: "work", n: 59, signature, body: "private model body P11" }));
+                yield* r.msg(
+                  w.input(1, { ...Tag.cases.work.make({}), n: 59, signature, body: "private model body P11" }),
+                );
                 const rows: ReadonlyArray<SpanRow> = yield* recorded();
 
                 const tags = Formatter.formatJson(
@@ -3586,7 +3628,7 @@ describe("P11 monitoring, content and storage failures", () => {
       await Effect.runPromise(
         Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
-          expect(yield* failure(r.msg(w.input(1, { type: "throw" })))).toMatchObject({
+          expect(yield* failure(r.msg(w.input(1, Tag.cases.throw.make({}))))).toMatchObject({
             _tag: "ProgramDown",
           });
           expect(Arr.some(yield* recorded(), (row) => row.name === "runner.step" && !row.ok)).toBe(true);
@@ -3619,7 +3661,7 @@ describe("P11 monitoring, content and storage failures", () => {
                 Effect.gen(function* () {
                   const r: Runner = yield* w.ProgramRunner;
                   // The recovery store's own error keeps the Sql throw beneath it.
-                  expect(yield* failure(r.msg(w.input(1, { type: "work", n: value })))).toMatchObject(
+                  expect(yield* failure(r.msg(w.input(1, { ...Tag.cases.work.make({}), n: value })))).toMatchObject(
                     piece === "sink"
                       ? { reason: "storage" }
                       : {
