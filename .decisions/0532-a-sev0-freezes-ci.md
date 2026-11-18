@@ -1,7 +1,7 @@
 ---
 id: 0532
 title: A sev0 is the owner's call, and it empties the merge queue, cancels every CI run, and lands the fixes one at a time by admin merge
-status: amended-in-part by [0542](0542-two-sev-levels-one-skill.md), [0603](0603-no-stacks-and-sev0-admin-merges.md)
+status: amended-in-part by [0542](0542-two-sev-levels-one-skill.md)
 date: 2026-11-14
 tags: [ci, sev0, freeze, merge, queue, admin, lead, owner, tooling]
 ---

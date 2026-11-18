@@ -81,11 +81,14 @@ the queue.**
 
 ## Consequences
 
-- [0599](0599-native-stack-upkeep.md) and [0004](0004-squash-merges-and-native-stacks.md) change in
-  part: no native stack links, and no stack lands in one merge. Merging a parent's head into a child
-  still holds.
-- [0532](0532-a-sev0-freezes-ci.md), the sev0 rule, changes in part: in a sev0 every ready pull
-  request lands by admin merge, not only the fixes, and a green one is not caught up with main first.
+- This replaces part of what three older records say, and their rules' homes (the lead and sev
+  skills, `land.ts`) change in this pull request. Their status lines stay as they are, since a
+  record is only accepted or superseded:
+  - [0599](0599-native-stack-upkeep.md) and [0004](0004-squash-merges-and-native-stacks.md): no
+    native stack links, and no stack lands in one merge. Merging a parent's head into a child still
+    holds.
+  - [0532](0532-a-sev0-freezes-ci.md), the sev0 rule: in a sev0 every ready pull request lands by
+    admin merge, not only the fixes, and a green one is not caught up with main first.
 - `land.ts merge --admin` keeps its gate: a docs-only pull request, or a branch an open sev0 allows,
   with green `ci-required` and the leak gate. The lead allows each branch as its turn comes.
 - Not decided here: whether the sev0 rules become the normal-day route.

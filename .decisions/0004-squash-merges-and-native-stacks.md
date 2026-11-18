@@ -1,7 +1,7 @@
 ---
 id: 0004
 title: Every pull request squash-merges, stacked ones included, and a stack moves with `gh stack rebase`, never a merge-only catch-up
-status: amended-in-part by [0599](0599-native-stack-upkeep.md), [0603](0603-no-stacks-and-sev0-admin-merges.md)
+status: amended-in-part by [0599](0599-native-stack-upkeep.md)
 date: 2026-11-09
 tags: [merge, squash, stacks, rebase, signing]
 ---

@@ -1,7 +1,7 @@
 ---
 id: 0599
 title: Native stacks link whole chains and keep children current by merging
-status: amended-in-part by [0603](0603-no-stacks-and-sev0-admin-merges.md)
+status: accepted
 date: 2026-11-17
 tags: [stacks, merge, queue, signing]
 ---
