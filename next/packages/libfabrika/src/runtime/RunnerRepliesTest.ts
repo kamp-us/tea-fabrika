@@ -7,7 +7,22 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
@@ -188,28 +203,36 @@ const faulty = (sql: Sql, control: Control): Sql => ({
 
 /** The cells of tables main never had that hold this letter's reply as a JSON object. */
 const replyRows = (sql: Sql, id: string) =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-    .map(({ name }) => String(name))
-    .filter((table) => !KNOWN.has(table))
-    .flatMap((table) =>
-      sql
-        .exec(`SELECT * FROM "${table}"`)
-        .flatMap((row) =>
-          Object.entries(row).flatMap(([column, value]) =>
-            typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
-          ),
+  Arr.flatMap(
+    Arr.filter(
+      Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"), ({ name }) =>
+        String(name),
+      ),
+      (table) => !KNOWN.has(table),
+    ),
+    (table) =>
+      Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) =>
+        Arr.flatMap(Rec.toEntries(row), ([column, value]) =>
+          Predicate.isString(value) && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
         ),
-    );
+      ),
+  );
 
 /** The rows of every table main never had, as text. */
 const replyCells = (sql: Sql): ReadonlyArray<string> =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-    .map(({ name }) => String(name))
-    .filter((table) => !KNOWN.has(table))
-    .flatMap((table) => sql.exec(`SELECT * FROM "${table}"`).flatMap((row) => Object.values(row)))
-    .filter((cell): cell is string => typeof cell === "string");
+  Arr.filter(
+    Arr.flatMap(
+      Arr.filter(
+        Arr.map(
+          sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"),
+          ({ name }) => String(name),
+        ),
+        (table) => !KNOWN.has(table),
+      ),
+      (table) => Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) => Rec.values(row)),
+    ),
+    (cell): cell is string => Predicate.isString(cell),
+  );
 
 let counter = 0;
 
@@ -344,8 +367,7 @@ const walk = (
       live = yield* connect();
     });
 
-    const patches = () => published.filter((u) => u.type === "patch").length;
-
+    const patches = () => Arr.filter(published, (u) => u.type === "patch").length;
     const inboxCount = Effect.suspend(() =>
       mailbox === undefined ? Effect.die("no connection") : Stream.runCount(mailbox.read(NAME, 0)).pipe(Effect.orDie),
     );
@@ -366,14 +388,14 @@ const walk = (
     const expected = (patchesNow: number) => ({
       letters: accepted,
       patches: patchesNow,
-      view: { notes: Object.fromEntries([...versions].sort(([a], [b]) => a.localeCompare(b))) },
+      view: { notes: Rec.fromEntries([...versions].sort(([a], [b]) => Str.localeCompare(b)(a))) },
       rev: accepted,
     });
 
     const sorted = (view: unknown) => {
+      // SAFETY: the view compared here is this program's own model, which holds `notes`.
       const notes = (view as Model).notes;
-
-      return { notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => a.localeCompare(b))) };
+      return { notes: Rec.fromEntries(Rec.toEntries(notes).sort(([a], [b]) => Str.localeCompare(b)(a))) };
     };
 
     const letter = (note: string, base: number, body: string, by = { key: "SHA256:writer", for: "person-writer" }) =>
@@ -419,7 +441,7 @@ const walk = (
     /** A call that must fail, then its retry, which returns what committed. */
     const failed = Effect.fnUntraced(function* (sent: Incoming) {
       const exit = yield* Effect.exit(live.runner.msg(sent));
-      expect(Exit.isFailure(exit), `a failed write or flush gave an answer: ${JSON.stringify(exit)}`).toBe(true);
+      expect(Exit.isFailure(exit), `a failed write or flush gave an answer: ${Formatter.formatJson(exit)}`).toBe(true);
 
       if (Exit.isFailure(exit)) {
         errors.push(Cause.pretty(exit.cause));
@@ -430,12 +452,13 @@ const walk = (
     const broken = Effect.fnUntraced(function* (prior: Answered, cell: string) {
       const before = yield* observe();
       const exit = yield* Effect.exit(live.runner.msg(prior.letter));
-      expect(Exit.isFailure(exit), `a damaged reply gave an answer: ${JSON.stringify(exit)}`).toBe(true);
+      expect(Exit.isFailure(exit), `a damaged reply gave an answer: ${Formatter.formatJson(exit)}`).toBe(true);
 
       if (Exit.isFailure(exit)) {
         errors.push(Cause.pretty(exit.cause));
         // A throw or defect is not a typed failure.
         expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
+        // SAFETY: the expect above failed the law unless the cause holds a typed failure, a RunnerFailure, and the next expect fails it unless that failure is a RepliesError.
         const error = Cause.squash(exit.cause) as RepliesError;
         expect(error._tag).toBe("RepliesError");
         expect(error.reason).toBe("bad_row");
@@ -446,13 +469,12 @@ const walk = (
     });
 
     for (const [n, step] of steps.entries()) {
-      const intact = answered.filter((a) => !damaged.has(a.letter.id));
-      const stored = intact.filter((a) => a.first._tag === "refused");
-      const futures = answered.filter((a) => a.first._tag === "refused" && a.base > current(a.note));
-
-      const moves = enabled.filter((move) =>
+      const intact = Arr.filter(answered, (a) => !damaged.has(a.letter.id));
+      const stored = Arr.filter(intact, (a) => a.first._tag === "refused");
+      const futures = Arr.filter(answered, (a) => a.first._tag === "refused" && a.base > current(a.note));
+      const moves = Arr.filter(enabled, (move) =>
         move === "older"
-          ? NOTES.some((note) => current(note) > 0)
+          ? Arr.some(NOTES, (note) => current(note) > 0)
           : move === "advance"
             ? futures.length > 0
             : move === "retry" || move === "reuse"
@@ -470,7 +492,7 @@ const walk = (
       } else if (move === "future") {
         yield* fresh(note, current(note) + step.ahead, step.secret);
       } else if (move === "older") {
-        const older = NOTES.filter((x) => current(x) > 0);
+        const older = Arr.filter(NOTES, (x) => current(x) > 0);
         const chosen = nth(older, step.kind);
         yield* fresh(chosen, step.kind % current(chosen), step.secret);
       } else if (move === "advance") {
@@ -485,6 +507,7 @@ const walk = (
       } else if (move === "reuse") {
         // The same letter with one bound part changed: its payload, or for a refusal its caller.
         const prior = nth(intact, step.kind);
+        // SAFETY: this letter was a Save the walk sent, so its input is a Save.
         const input = prior.letter.envelope.input as typeof Save.Type;
         const parts = prior.first._tag === "refused" ? 3 : 1;
         const part = step.pick % parts;
@@ -566,23 +589,29 @@ const walk = (
         const prior = nth(stored, step.kind);
         const located = replyRows(live.inbox, prior.letter.id);
         expect(located, "one stored JSON value holds the refusal").toHaveLength(1);
+        // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
-        const json = JSON.parse(value) as Record<string, unknown>;
+        const json = yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+        )(value);
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
 
-        const cell =
-          kind === "json"
-            ? `${value.slice(0, -1)}${step.secret}`
-            : kind === "missing"
-              ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
-                )
-              : kind === "key"
-                ? JSON.stringify({ ...json, id: `${prior.letter.id}-other` })
-                : kind === "accepted"
-                  ? JSON.stringify({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
-                  : JSON.stringify({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) });
+        const cell = Match.value(kind).pipe(
+          Match.when("json", () => `${Str.slice(0, -1)(value)}${step.secret}`),
+          Match.when("missing", () =>
+            Formatter.formatJson(
+              Rec.fromEntries(Arr.filter(Rec.toEntries(json), ([f]) => f !== fields[n % fields.length])),
+            ),
+          ),
+          Match.when("key", () => Formatter.formatJson({ ...json, id: `${prior.letter.id}-other` })),
+          Match.when("accepted", () =>
+            Formatter.formatJson({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) }),
+          ),
+          Match.orElse(() =>
+            Formatter.formatJson({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) }),
+          ),
+        );
 
         secrets.push(step.secret);
         live.inbox.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, cell, value);
@@ -602,7 +631,7 @@ const walk = (
       expect({ ...seen, view: sorted(seen.view) }, `after ${move}`).toEqual(expected(seen.patches));
       // No reply row, failure or span holds a refused body (R11).
       const kept = new Set(damaged.values());
-      unleaked([...replyCells(live.inbox).filter((cell) => !kept.has(cell)), ...errors, ...spans.text()], secrets);
+      unleaked([...Arr.filter(replyCells(live.inbox), (cell) => !kept.has(cell)), ...errors, ...spans.text()], secrets);
     }
 
     // Every first answer survives a last reopen and a successor.

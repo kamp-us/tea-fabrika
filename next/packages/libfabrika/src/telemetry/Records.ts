@@ -11,6 +11,7 @@
  * `deleteContent`.
  */
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import type { Sql } from "../Sql.ts";
 import { type Chain, Content, partName, Rolled, SinkError, SpanRow, sinkError } from "./Trace.ts";
 
@@ -32,9 +33,12 @@ export const Written = Schema.TaggedUnion({
  */
 export type Written = typeof Written.Type;
 
-/** One span as the sink sends it, with its failure's message when it failed. */
-const Sent = Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) });
-
+/**
+ * Schema for one span as the sink sends it, with its failure's message when it failed.
+ *
+ * @category schemas
+ */
+export const Sent = Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) });
 type Sent = typeof Sent.Type;
 
 /** One page of a part's spans, oldest first; `after` is where the next page starts. */
@@ -54,9 +58,12 @@ const Lookup = Schema.TaggedUnion({
 
 type Lookup = typeof Lookup.Type;
 
-/** Who deleted a content row, when on the caller's clock, and why. */
-const Deletion = Schema.Struct({ by: Schema.String, at: Schema.Int, reason: Schema.String });
-
+/**
+ * Schema for who deleted a content row, when on the caller's clock, and why.
+ *
+ * @category schemas
+ */
+export const Deletion = Schema.Struct({ by: Schema.String, at: Schema.Int, reason: Schema.String });
 type Deletion = typeof Deletion.Type;
 
 /** How many spans one page holds. */
@@ -105,10 +112,9 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
   return {
     write: (rows: ReadonlyArray<Sent>): Written =>
       store.atomic(() => {
-        const held = store.holds(rows.map((row) => row.span.spanId));
+        const held = store.holds(Arr.map(rows, (row) => row.span.spanId));
         const seen = new Set(held);
-
-        const left = rows.filter((row) => {
+        const left = Arr.filter(rows, (row) => {
           if (seen.has(row.span.spanId)) {
             return false;
           }
@@ -122,8 +128,10 @@ const part = (store: Store, chain: Chain, at: number, cap: number) => {
           return Written.cases.written.make({});
         }
 
-        const had = rows.map((row) => row.span.spanId).filter((id) => held.has(id));
-
+        const had = Arr.filter(
+          Arr.map(rows, (row) => row.span.spanId),
+          (id) => held.has(id),
+        );
         const rolled = Option.getOrElse(store.rolled(), () => {
           const bytes = store.size();
 
@@ -329,7 +337,7 @@ const sqlStore = (sql: Sql): Store => {
       const last = rows.at(-1);
 
       return {
-        spans: rows.map((row) => {
+        spans: Arr.map(rows, (row) => {
           const { ok, ...span } = decodeSpan(row);
 
           return { ...span, ok: ok === 1 };
@@ -398,7 +406,7 @@ const memoryStore = (): Store => {
 
   return {
     atomic: (step) => step(),
-    holds: (ids) => new Set(ids.filter((id) => spans.has(id))),
+    holds: (ids) => new Set(Arr.filter(ids, (id) => spans.has(id))),
     rolled: () => rolled,
     roll: (made) => {
       rolled = Option.some(made);

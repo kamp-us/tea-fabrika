@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e83-review2",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-16T01:58:08-08:00",
+  "ended": "2026-11-16T01:59:01-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of E83's fix round (0177), in next/, 034499e0f..f526a3155: merge-ready, no new finding. The build's one owns helper in next/packages/libfabrika/src/settings/TomlParser.ts (Predicate.hasProperty, then Rec.has on String(name)) is Object.hasOwn on an object, so put's creation check and its next read keep the own-property answer for __proto__, constructor and array indexes, and the array-hole guard reads own elements again, as before the sweep. The tests commit's L5 lines in TomlEdit.test.ts are honest: a sparse array whose prototype holds index 0, alone and nested in a table, must be refused with the missing-element message; that goes red with TomlParser.ts from 034499e0f, and with the guard set to false. Nothing else changed: the range holds only TomlEdit.test.ts, TomlParser.ts and the two finding rows, saved as written plus a fix key on the first.",
+  "plants": [
+    {
+      "law": "TomlEdit.test.ts L5, a hole the prototype fills is refused",
+      "plant": "TomlParser.ts put back as at 034499e0f, where the guard used the in operator, in a scratch copy",
+      "result": "red"
+    },
+    {
+      "law": "TomlEdit.test.ts L3, L5 and L9, own keys at every owns call",
+      "plant": "owns cut to Predicate.hasProperty alone, in a scratch copy",
+      "result": "red"
+    },
+    {
+      "law": "TomlEdit.test.ts L5, the array-hole guard",
+      "plant": "the guard's test replaced by false, in a scratch copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Read-only apart from this row; plants ran in a scratch copy and were taken back. Head f526a315594973ac5fde307132745d49e7085541. Tests under nice -n 19, --maxWorkers=1 and Node 26.13.0, one file at a time, all green: TomlEdit.test.ts 18, TomlParser.test.ts 4, Toml.types.test.ts 1. Not run: pnpm typecheck, the full suite.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

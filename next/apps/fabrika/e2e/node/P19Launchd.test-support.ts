@@ -21,11 +21,14 @@ import * as Sources from "@kampus/libfabrika/settings/Fabrika";
 import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import { Written } from "@kampus/libfabrika/telemetry/Records";
 import {
+  Array as Arr,
   Clock,
+  Config as Env,
   Context,
   Effect,
   Exit,
   FileSystem,
+  Formatter,
   Layer,
   Path,
   Redacted,
@@ -33,10 +36,12 @@ import {
   Schedule,
   Schema,
   Stream,
+  String as Str,
 } from "effect";
 import { Digest } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
+
 import { rolldown, type PreRenderedChunk } from "rolldown";
 import { build } from "../../src/build.ts";
 import { BrainInput } from "./P19Brain.test-support.ts";
@@ -92,15 +97,10 @@ const processes = Effect.fn("P19Host.processes")(function* () {
   yield* checked(out.code === 0, "cannot-observe-processes");
 
   return yield* Schema.decodeUnknownEffect(Schema.Array(ProcessGroups.Row))(
-    out.stdout
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [pid, parent, group] = line.trim().split(/\s+/).map(Number);
-
-        return { pid, parent, group };
-      }),
+    Arr.map(Arr.filter(Str.split(Str.trim(out.stdout), "\n"), Boolean), (line) => {
+      const [pid, parent, group] = Arr.map(Str.split(Str.trim(line), /\s+/), Number);
+      return { pid, parent, group };
+    }),
   );
 });
 
@@ -167,7 +167,7 @@ const guard = Effect.fn("P19Host.guard")(function* (file: string) {
         groups.add(group);
       }
 
-      yield* fs.writeFileString(`${config.home}/groups.json`, JSON.stringify([...groups]));
+      yield* fs.writeFileString(`${config.home}/groups.json`, Formatter.formatJson([...groups]));
     }
   });
 
@@ -205,14 +205,14 @@ const guard = Effect.fn("P19Host.guard")(function* (file: string) {
     );
     yield* wait(gone, config.stopTimeout);
     yield* fs.remove(`${config.home}/brain.plist`, { force: true });
-    yield* fs.writeFileString(`${config.home}/guard.result`, JSON.stringify({ leftovers: [] }));
+    yield* fs.writeFileString(`${config.home}/guard.result`, Formatter.formatJson({ leftovers: [] }));
   });
 
   yield* Effect.acquireRelease(Effect.void, () =>
     cleanup.pipe(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
-          const result = JSON.stringify({ leftovers: Exit.isSuccess(exit) ? [] : ["cleanup-unconfirmed"] });
+          const result = Formatter.formatJson({ leftovers: Exit.isSuccess(exit) ? [] : ["cleanup-unconfirmed"] });
           yield* fs.writeFileString(`${config.home}/guard.result`, result);
 
           if (!(yield* alive(config.owner))) {
@@ -426,15 +426,15 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
 export const check = Effect.fn("P19Host.check")(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
-
-  yield* checked(process.platform === "darwin" && process.env.FABRIKA_P19_HOST === "1", "host-opt-in-required");
+  const optIn = yield* Env.String("FABRIKA_P19_HOST").pipe(Env.withDefault(""));
+  yield* checked(process.platform === "darwin" && optIn === "1", "host-opt-in-required");
   const app = path.resolve(import.meta.dirname, "../..");
   const root = path.resolve(app, "../../..");
   const temporary = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "p19-" });
   const home = yield* fs.realPath(temporary);
   const executable: string = createRequire(path.join(app, "package.json"))("electron");
   // The OS chooses a disposable listener only in this host check, never in BrainService policy.
-  const chosen = Number(process.env.FABRIKA_P19_PORT);
+  const chosen = Number(yield* Env.String("FABRIKA_P19_PORT").pipe(Env.withDefault("")));
   yield* checked(Number.isInteger(chosen) && chosen > 1024 && chosen < 65535, "supply-isolated-host-port");
   const url = `http://127.0.0.1:${chosen}`;
   yield* checked(!(yield* listening(url)), "host-port-is-already-owned");
@@ -457,7 +457,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const brainFile = `${home}/brain.json`;
   yield* fs.writeFileString(
     brainFile,
-    JSON.stringify(
+    Formatter.formatJson(
       yield* Schema.encodeEffect(BrainInput)({
         built: { build: built.build, brain: built.brain, programs: built.programs },
         options: {
@@ -471,13 +471,12 @@ export const check = Effect.fn("P19Host.check")(function* () {
     ),
   );
   yield* bundle(
-    `import ${JSON.stringify(path.resolve(import.meta.dirname, "P19Brain.test-support.ts"))};`,
+    `import ${Formatter.formatJson(path.resolve(import.meta.dirname, "P19Brain.test-support.ts"))};`,
     runtime,
     root,
   );
-  yield* bundle(`import ${JSON.stringify(helper)};`, controllerFile, root);
-  yield* bundle(`import ${JSON.stringify(helper)};`, guardFile, root);
-
+  yield* bundle(`import ${Formatter.formatJson(helper)};`, controllerFile, root);
+  yield* bundle(`import ${Formatter.formatJson(helper)};`, guardFile, root);
   const spec = yield* Schema.decodeEffect(BrainSpec)({
     home,
     executable,
@@ -486,9 +485,11 @@ export const check = Effect.fn("P19Host.check")(function* () {
     url,
     build: built.build,
   });
-
-  yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(Schema.encodeSync(BrainSpec)(spec)));
-  yield* fs.writeFileString(`${home}/snapshot.json`, JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(settings)));
+  yield* fs.writeFileString(`${home}/spec.json`, yield* Schema.encodeEffect(Schema.fromJsonString(BrainSpec))(spec));
+  yield* fs.writeFileString(
+    `${home}/snapshot.json`,
+    yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(settings),
+  );
   const native = yield* Layer.build(Native.layer(spec, settings));
   yield* Context.get(native, BrainControl).install;
   // plutil, not a hand-written XML parser, verifies the native compiler preserves checked values.
@@ -500,22 +501,20 @@ export const check = Effect.fn("P19Host.check")(function* () {
   )(plist.stdout);
 
   yield* checked(
-    JSON.stringify(job.ProgramArguments) === JSON.stringify([executable, ...spec.args]),
+    Formatter.formatJson(job.ProgramArguments) === Formatter.formatJson([executable, ...spec.args]),
     "plist-argv-changed",
   );
   const uid = yield* command("id", ["-u"]);
 
   const config = Config.make({
     home,
-    target: `gui/${uid.stdout.trim()}/${job.Label}`,
+    target: `gui/${Str.trim(uid.stdout)}/${job.Label}`,
     url,
     owner: process.pid,
     stopTimeout: Number(settings.values["desktop.brain-stop-timeout"]),
     poll: Number(settings.values["desktop.brain-poll"]),
   });
-
-  yield* fs.writeFileString(`${home}/guard.json`, JSON.stringify(config));
-
+  yield* fs.writeFileString(`${home}/guard.json`, Formatter.formatJson(config));
   const watcher = yield* ChildProcess.make(process.execPath, [guardFile, "p19:guard", `${home}/guard.json`], {
     cwd: root,
     detached: true,
@@ -536,7 +535,13 @@ export const check = Effect.fn("P19Host.check")(function* () {
 
     const child = yield* ChildProcess.make(
       process.execPath,
-      [controllerFile, "p19:controller", `${home}/spec.json`, `${home}/snapshot.json`, ...(mode ? [mode] : [])],
+      [
+        controllerFile,
+        "p19:controller",
+        `${home}/spec.json`,
+        `${home}/snapshot.json`,
+        ...(mode !== undefined && mode !== "" ? [mode] : []),
+      ],
       { stdin: "ignore", stdout: "ignore", stderr: "ignore" },
     );
 
@@ -571,8 +576,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
         const observed = yield* fs
           .readFileString(`${home}/groups.json`)
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProcessGroups.Saved))));
-
-        return expected.every((group) => observed.includes(group));
+        return Arr.every(expected, (group) => observed.includes(group));
       }),
       config.stopTimeout,
     );
@@ -592,12 +596,12 @@ export const check = Effect.fn("P19Host.check")(function* () {
     yield* checked(first._tag === "loaded" && first.pid !== null, "no-running-brain");
     yield* client.kill({ killSignal: "SIGKILL" });
     yield* checked(
-      JSON.stringify(yield* status(config.target)) === JSON.stringify(first) && (yield* listening(url)),
+      Formatter.formatJson(yield* status(config.target)) === Formatter.formatJson(first) && (yield* listening(url)),
       "controller-death-stopped-brain",
     );
     yield* launch("--release");
     yield* checked(
-      JSON.stringify(yield* status(config.target)) === JSON.stringify(first),
+      Formatter.formatJson(yield* status(config.target)) === Formatter.formatJson(first),
       "reuse-started-another-brain",
     );
 
@@ -642,9 +646,13 @@ export const check = Effect.fn("P19Host.check")(function* () {
 
   // The small job proves a successful exit is not restarted. The four starts above used the real brain.
   const fixture = `${home}/fixture.mjs`;
-  yield* bundle(`import ${JSON.stringify(path.join(root, "fixtures/next/p19-launchd/brain.ts"))};`, fixture, root);
+  yield* bundle(
+    `import ${Formatter.formatJson(path.join(root, "fixtures/next/p19-launchd/brain.ts"))};`,
+    fixture,
+    root,
+  );
   const normal = yield* Schema.decodeEffect(BrainSpec)({ ...spec, args: [fixture] });
-  yield* fs.writeFileString(`${home}/spec.json`, JSON.stringify(Schema.encodeSync(BrainSpec)(normal)));
+  yield* fs.writeFileString(`${home}/spec.json`, yield* Schema.encodeEffect(Schema.fromJsonString(BrainSpec))(normal));
   const normalContext = yield* Layer.build(Native.layer(normal, settings));
   const normalControl = Context.get(normalContext, BrainControl);
   yield* normalControl.install;
@@ -684,7 +692,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   yield* fs.makeDirectory(path.join(root, "runs/p19"), { recursive: true });
   yield* fs.writeFileString(
     path.join(root, "runs/p19/host.json"),
-    JSON.stringify({
+    Formatter.formatJson({
       starts,
       stops,
       replacementMs,

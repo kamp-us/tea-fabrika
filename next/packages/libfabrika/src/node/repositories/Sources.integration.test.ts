@@ -4,13 +4,19 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
 import type { RepositoriesError, Repository } from "../../repositories/Repositories.ts";
@@ -84,7 +90,7 @@ const personBases = Effect.fnUntraced(function* (root: string) {
         expected = [];
 
       for (const from of [".", "./", "./.", "..", "../", "./.."]) {
-        const reads: ReadonlyArray<readonly [string, string]> = from.includes("..")
+        const reads: ReadonlyArray<readonly [string, string]> = Function.pipe(from, Str.includes(".."))
           ? [
               ["entry.txt", parent],
               ["./.fabrika/entry.txt", own],
@@ -97,13 +103,13 @@ const personBases = Effect.fnUntraced(function* (root: string) {
         const result = yield* resolve(from, "person").pipe(
           Effect.flatMap((source) =>
             Effect.gen(function* () {
-              expect(JSON.stringify(source)).not.toContain(root);
+              expect(Formatter.formatJson(source)).not.toContain(root);
               const values = [];
 
               for (const [file] of reads) {
                 const value = yield* source.read(file);
                 const read = Schema.decodeSync(Schema.NullOr(SourceRead))(value);
-                expect(JSON.stringify(value)).not.toContain(root);
+                expect(Formatter.formatJson(value)).not.toContain(root);
                 values.push(read === null ? null : { tag: read._tag, text: new TextDecoder().decode(read.bytes) });
               }
 
@@ -121,7 +127,7 @@ const personBases = Effect.fnUntraced(function* (root: string) {
           from,
           result: absent
             ? { reason: "MissingPath" }
-            : { tag: "disk", values: reads.map(([, text]) => ({ tag: "disk", text })) },
+            : { tag: "disk", values: Arr.map(reads, ([, text]) => ({ tag: "disk", text })) },
         });
       }
 
@@ -143,13 +149,13 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
   const blobs = new Map<string, string>([["traversal/entry.txt", "regular file"]]);
 
   const entries = new Map<string, { mode: string; type: string; id: string }>([
-    ["traversal", { mode: "040000", type: "tree", id: "b".repeat(40) }],
-    ["traversal/entry.txt", { mode: "100644", type: "blob", id: "c".repeat(40) }],
+    ["traversal", { mode: "040000", type: "tree", id: Function.pipe("b", Str.repeat(40)) }],
+    ["traversal/entry.txt", { mode: "100644", type: "blob", id: Function.pipe("c", Str.repeat(40)) }],
   ]);
 
   const links = [
     { name: "file-link", target: "entry.txt" },
-    ...directorySuffixes.map((suffix, index) => ({ name: `target-${index}`, target: `entry.txt${suffix}` })),
+    ...Arr.map(directorySuffixes, (suffix, index) => ({ name: `target-${index}`, target: `entry.txt${suffix}` })),
   ];
 
   for (const folder of [path.join(root, "repo/traversal"), path.join(root, "disk traversal")]) {
@@ -159,7 +165,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
     for (const link of links) {
       yield* fs.symlink(link.target, path.join(folder, link.name));
       blobs.set(`traversal/${link.name}`, link.target);
-      entries.set(`traversal/${link.name}`, { mode: "120000", type: "blob", id: "d".repeat(40) });
+      entries.set(`traversal/${link.name}`, { mode: "120000", type: "blob", id: Function.pipe("d", Str.repeat(40)) });
     }
   }
 
@@ -199,7 +205,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
         expect(string(yield* source.read("entry.txt"))).toBe("regular file");
       }
 
-      expect(actual, JSON.stringify(actual)).toEqual(expected);
+      expect(actual, Formatter.format(actual)).toEqual(expected);
     }),
   };
 });
@@ -229,17 +235,24 @@ it.effect.prop(
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
         yield* fs.makeDirectory(path.join(repo, "inside space"));
         yield* fs.makeDirectory(person);
-        const commit = Schema.decodeSync(ObjectId)("a".repeat(40));
+        const commit = Schema.decodeSync(ObjectId)(Function.pipe("a", Str.repeat(40)));
 
         const entries = new Map<string, { mode: string; type: string; id: string }>([
-          [".fabrika", { mode: "040000", type: "tree", id: "b".repeat(40) }],
-          ["inside space", { mode: "040000", type: "tree", id: "c".repeat(40) }],
-          ["inside space/entry.txt", { mode: "100644", type: "blob", id: "e".repeat(40) }],
-          ...["local", "outside", "absolute", "cycle"].map(
-            (name) => [`.fabrika/${name}`, { mode: "120000", type: "blob", id: "d".repeat(40) }] as const,
+          [".fabrika", { mode: "040000", type: "tree", id: Function.pipe("b", Str.repeat(40)) }],
+          ["inside space", { mode: "040000", type: "tree", id: Function.pipe("c", Str.repeat(40)) }],
+          ["inside space/entry.txt", { mode: "100644", type: "blob", id: Function.pipe("e", Str.repeat(40)) }],
+          ...Arr.map(
+            ["local", "outside", "absolute", "cycle"],
+            (name) =>
+              [`.fabrika/${name}`, { mode: "120000", type: "blob", id: Function.pipe("d", Str.repeat(40)) }] as const,
           ),
-          ...["local-file", "outside-file", "absolute-local", "absolute-outside"].map(
-            (name) => [`inside space/${name}`, { mode: "120000", type: "blob", id: "d".repeat(40) }] as const,
+          ...Arr.map(
+            ["local-file", "outside-file", "absolute-local", "absolute-outside"],
+            (name) =>
+              [
+                `inside space/${name}`,
+                { mode: "120000", type: "blob", id: Function.pipe("d", Str.repeat(40)) },
+              ] as const,
           ),
         ]);
 
@@ -322,9 +335,9 @@ it.effect.prop(
             expect(source.value._tag).toBe(pick < 3 ? "committed" : "disk");
             expect(string(yield* source.value.read("entry.txt"))).toBe(pick < 3 ? "committed" : disk);
             checkRead(yield* source.value.read("entry.txt"), pick < 3, commit, pick < 3 ? "committed" : disk, root);
-            expect(JSON.stringify(source.value)).not.toContain(root);
+            expect(Formatter.formatJson(source.value)).not.toContain(root);
           } else {
-            const fail = source.cause.reasons.find((reason) => reason._tag === "Fail");
+            const fail = Option.getOrUndefined(Arr.findFirst(source.cause.reasons, (reason) => reason._tag === "Fail"));
             expect(fail?._tag === "Fail" && fail.error.reason._tag).toBe("MissingPath");
           }
 
@@ -357,7 +370,7 @@ it.effect.prop(
             { concurrency: 1 },
           );
 
-          expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
+          expect(Arr.map(baseReads, (read) => read.actual)).toEqual(Arr.map(baseReads, (read) => read.expected));
           checkRead(yield* (yield* resolve("./local", "repo")).read("entry.txt"), true, commit, "committed", root);
           yield* traversal.check(resolve, cell.traversal);
         }
@@ -381,8 +394,8 @@ const realGitRunBudget = 30_000;
 // It runs on memory git, and on real git too at depth `full` (0535, GitLaws).
 it.each(GitLaws.gits)(
   "L7: bases, pinned bytes and outside targets on $name git (20 git runs; 200 injected runs cover the same paths)",
-  async ({ services }) => {
-    await fc.assert(
+  ({ services }) =>
+    fc.assert(
       fc.asyncProperty(
         fc.array(
           fc.record({
@@ -506,9 +519,12 @@ it.each(GitLaws.gits)(
                         expect(resolved.value.commit).toBe(pinned);
                       }
 
-                      expect(JSON.stringify(resolved.value)).not.toContain(root);
+                      expect(Formatter.formatJson(resolved.value)).not.toContain(root);
                     } else {
-                      const reason = resolved.cause.reasons.find((r) => r._tag === "Fail");
+                      const reason = Option.getOrUndefined(
+                        Arr.findFirst(resolved.cause.reasons, (r) => r._tag === "Fail"),
+                      );
+
                       expect(reason?._tag === "Fail" && reason.error.reason._tag).toBe("MissingPath");
                     }
 
@@ -542,7 +558,9 @@ it.each(GitLaws.gits)(
                       { concurrency: 1 },
                     );
 
-                    expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
+                    expect(Arr.map(baseReads, (read) => read.actual)).toEqual(
+                      Arr.map(baseReads, (read) => read.expected),
+                    );
                     checkRead(yield* stillGood.read("entry.txt"), true, pinned, "commit 0", root);
                     expect(selected.snapshot.commit).toBe(pinned);
                     yield* traversal.check(selected.resolve, cell.traversal);
@@ -553,7 +571,6 @@ it.each(GitLaws.gits)(
           ),
       ),
       { seed: 119120, numRuns: realGitRuns },
-    );
-  },
+    ),
   realGitRuns * realGitRunBudget,
 );

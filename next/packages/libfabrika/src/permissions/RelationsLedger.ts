@@ -3,6 +3,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -13,7 +14,7 @@ import { Relations, RelationsError } from "./Relations.ts";
 
 const decodeRow = Schema.decodeUnknownResult(Row);
 
-const isRow = (entry: Entry): boolean => Object.hasOwn(Row.cases, entry._tag);
+const isRow = (entry: Entry): boolean => Rec.has<string, unknown>(Row.cases, entry._tag);
 
 /**
  * Layer that provides `Relations` on the ledger, through `LedgerTransaction`.

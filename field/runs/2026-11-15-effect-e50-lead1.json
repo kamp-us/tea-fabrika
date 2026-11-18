@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e50-lead1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:35:56-08:00",
+  "ended": "2026-11-15T20:53:42-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Slice E50 of the Effect-checker sweep, strictEffectProvide in .agents/, as one lead step (lead tooling, fast-tracked), on branch fabrikalfa/effect-e50 with no pull request (owner ruling: one pull request per sweep). The check flags every Effect.provide of a Layer. Where a function of ours provided a layer to itself, the provide is gone, the function's type now names what it needs, and the script's entry point provides once: agents.ts (adaptersReady, makeStepAgents, runTurn, the pnpm install), boxnode.ts (boxEnv), drive.ts (the publish runner, the mutbox run, the mutation draft; the entry and driveStep's type), chain.ts (the typecheck, pr_open, host and land runners; one services layer at main, which tea's run carries out of the interpreter), flow/host.ts (the plan digest, now given by flow/run.ts, chain.ts and host.test.ts), box.ts (one provide in place of two). sev.ts gives its four GitHub subcommands their layer with effect/cli's Command.provide, the CLI's own tool for a layer built from the command's input. The laws that run those functions now provide Node's services at the place Vitest runs them (chain.test.ts, drive.test.ts, agents.test.ts).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "Counted with only strictEffectProvide at error. effect-tsgo diagnostics --project said 68 before and 56 after; the compiler through a scratch tsconfig that extends .agents/tsconfig.json (files reached by import included) says 70 before and 57 after: boxnode.ts:122 and gcloop.ts:573 are reached only by import. Of the 70: 18 provides removed by hand edits (no quick fix exists: the rule is not fixable), 5 new provides at two entry points and three law edges that replace them, so 70 - 18 + 5 = 57 left. Left, by kind: 15 script entry points (the maker's own message says to disable the check there), 13 law edges where Vitest runs a law with its layer, 1 step that builds its layer from what it read at run time (flow/landing.ts:212, unclear fix), 28 laws that hand a call its own fake world on purpose (Incident.test.ts 14, walk.test.ts 9, Freeze.test.ts 2, BoxTest.ts, clauderow.test.ts:114, mutbox.test.ts:1040). An ignore line cannot land in this slice: a reasoned @effect-diagnostics-next-line strictEffectProvide:off line does silence the hit (the ' -- reason' tail is read correctly on checker 0.63.0, tried here), but while the project keeps the check off, each such line is a TS377000 'directive has no effect' warning, and that warning alone made tsc exit 1. So the 28 entry and edge hits wait for the lock pull request, and the 28 fake-world laws go back to the owner as one class. Behavior changes: chain.ts's ChecksGh ETag cache now lives for the quest, not one runner call (a 304 still only confirms the same head's answer); sev.ts's GitHub subcommands read the repo twice (setup, then the layer). No file of PR 1366 is in .agents/. Tests on the final tree (base origin/main e613fa4): 15 files, 278 passed and 40 failed, all 40 in box.test.ts with 'spawnSync ssh-keygen ENOENT'; the same 40 fail on a clean origin/main worktree in this box, which has no ssh-keygen. tsc -p .agents/tsconfig.json clean; pnpm lint exit 0.",
+  "plants": [],
+  "step": "lead"
+}

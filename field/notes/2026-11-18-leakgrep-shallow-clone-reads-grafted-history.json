@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-18-leakgrep-shallow-clone-reads-grafted-history",
+  "date": "2026-11-18",
+  "quests": ["tea-fabrika#1562"],
+  "stage": "ship",
+  "kind": "failure",
+  "what": "Today's lead tooling: in a shallow cloud clone, the PR 1562 lead ran leakgrep.sh --commits origin/main..HEAD and got 2,587 hits in 1,917 commits dated 2026-10-04 to 2026-11-09. It then told the coordinator that main had been re-rooted and that the branch carried old leaky history. Both claims were wrong: main's history stopped at the clone's shallow boundary, 1ffb6633, so the range held old main commits that the clone could not see as main's.",
+  "cause": "A shallow clone makes main's oldest fetched commit look like a root. Then origin/main..HEAD reaches every older commit through the branch's full history. leakgrep.sh does not check for a shallow repository, and the lead did not run git rev-parse --is-shallow-repository before reading the result.",
+  "person": false,
+  "primitive": null,
+  "fix": "Deepen with git fetch --deepen=200 origin main <branch> until main's history meets the branch's, then run leakgrep.sh --commits $(git merge-base origin/main HEAD)..HEAD and leak-grep the net diff. On PR 1562 that read 408 commits and found the added text clean.",
+  "test": "Code that would have caught it: leakgrep.sh --commits refusing, or warning, when git rev-parse --is-shallow-repository is true and a commit in the range has a parent that is not present.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1562"]
+}

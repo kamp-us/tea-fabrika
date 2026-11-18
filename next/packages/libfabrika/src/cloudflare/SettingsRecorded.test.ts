@@ -1,6 +1,6 @@
 // T753, next/, L4 and L14. RecordedStart is granted only after the checked append succeeds.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Match } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { RecordedStart } from "../settings/RecordedStart.ts";
@@ -56,12 +56,11 @@ describe("recorded settings dependency, next/", () => {
 
         for (const choice of choices) {
           // Each new build is an attempted entry; failure cuts target its next record call.
-          reason =
-            choice % 3 === 0
-              ? new Starts.Refused({ cause: detail })
-              : choice % 3 === 1
-                ? new Starts.Storage({ cause: detail })
-                : new Starts.Unreachable({ cause: detail });
+          reason = Match.value(choice % 3).pipe(
+            Match.when(0, () => new Starts.Refused({ cause: detail })),
+            Match.when(1, () => new Starts.Storage({ cause: detail })),
+            Match.orElse(() => new Starts.Unreachable({ cause: detail })),
+          );
 
           const exits = yield* Effect.forEach(
             Array.from({ length: 1 + (choice % 5) }),

@@ -4,6 +4,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import { Match } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as Quota from "./quota.ts";
@@ -40,14 +41,13 @@ describe("P34c quota machine", () => {
 
           const arrival = Math.max(at, previous);
           const window = history.filter((h) => h.at > arrival - 60_000).reduce((s, h) => s + h.writes, 0);
-          const delta =
-            move === "release"
-              ? -Math.min(bytes, 1 + (c.amount % bytes))
-              : move === "replace"
-                ? c.pick % 2 === 0
-                  ? 0
-                  : 1 + (c.amount % (limits.bytes - bytes + 2))
-                : 1 + (c.amount % (limits.bytes - bytes + 2));
+
+          const delta = Match.value(move).pipe(
+            Match.when("release", () => -Math.min(bytes, 1 + (c.amount % bytes))),
+            Match.when("replace", () => (c.pick % 2 === 0 ? 0 : 1 + (c.amount % (limits.bytes - bytes + 2)))),
+            Match.orElse(() => 1 + (c.amount % (limits.bytes - bytes + 2))),
+          );
+
           const writes = move === "replace" && delta === 0 ? 0 : 1;
           const admitted = window + writes <= limits.writes && bytes + delta <= limits.bytes;
           const msg = {

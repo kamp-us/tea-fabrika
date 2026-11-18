@@ -6,7 +6,17 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
+import {
+  Array as Arr,
+  Record as Rec,
+  String as Str,
+  Arbitrary,
+  ConfigProvider,
+  Effect,
+  Match,
+  Option,
+  Schema,
+} from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -64,8 +74,11 @@ const settingsFor = (w: World) =>
         {
           queue: {
             kinds: { rows: ["rows/**"], docs: ["docs/**"] },
-            checks: Object.fromEntries(
-              ["rows", "docs", "code"].map((kind, i) => [kind, w.empty[i] ? [] : [{ name: w.name, source: w.source }]]),
+            checks: Rec.fromEntries(
+              Arr.map(["rows", "docs", "code"], (kind, i) => [
+                kind,
+                w.empty[i] === true ? [] : [{ name: w.name, source: w.source }],
+              ]),
             ),
           },
           merger: { wait: w.wait, poll: w.poll, backoff: w.backoff, rounds: w.rounds },
@@ -75,13 +88,13 @@ const settingsFor = (w: World) =>
     ),
   );
 
-const id = (w: World, char: string) => Schema.decodeSync(Commit)(char.repeat(w.size));
+const id = (w: World, char: string) => Schema.decodeSync(Commit)(Str.repeat(w.size)(char));
 
-const tree = (w: World, char: string) => Schema.decodeSync(Tree)(char.repeat(w.size));
+const tree = (w: World, char: string) => Schema.decodeSync(Tree)(Str.repeat(w.size)(char));
 
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
 
-const equal = (a: unknown, b: unknown) => expect(a).toEqual(b);
+const equal = (a: Model, b: Model) => expect(a).toEqual(b);
 
 const runAt = (w: World, choice: number) => ({
   name: w.name,
@@ -102,7 +115,11 @@ const runAt = (w: World, choice: number) => ({
         }),
 });
 
-const valueFor = (w: World, cmd: Command, pick: number): unknown => {
+const valueFor = (
+  w: World,
+  cmd: Command,
+  pick: number,
+): typeof Change.Type | typeof Updated.Type | typeof Checks.Type | typeof Merged.Type | typeof Queued.Type => {
   if (cmd.type === "change") {
     if (pick % 8 === 0) {
       return Change.cases.missing.make({ change: cmd.change });
@@ -233,7 +250,9 @@ const guided = (p: Program, w: World) => {
           msg = Schema.decodeSync(p.msg)({ type: "timer", at });
           clock = at;
         } else if ("cmd" in event && event.cmd.type !== "send") {
-          const command = out.find((c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt);
+          const command = Option.getOrUndefined(
+            Arr.findFirst(out, (c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt),
+          );
 
           if (command === undefined || model._tag === "idle" || model.step._tag !== "asking") {
             continue;
@@ -285,7 +304,9 @@ const guided = (p: Program, w: World) => {
           clock = Math.max(clock, model.step.at!);
           msg = Schema.decodeSync(p.msg)({ type: "timer", at: clock });
         } else {
-          const cmd = out.findLast((c) => service(c) && "attempt" in c && c.attempt === model.attempt);
+          const cmd = Option.getOrUndefined(
+            Arr.findLast(out, (c) => service(c) && "attempt" in c && c.attempt === model.attempt),
+          );
 
           if (cmd === undefined) {
             break;
@@ -311,13 +332,12 @@ const guided = (p: Program, w: World) => {
 const service = (cmd: Command) => cmd.type !== "send" && cmd.type !== "exit";
 
 const stateCmd = (model: Model) =>
-  model._tag === "reading"
-    ? "change"
-    : model._tag === "updating"
-      ? "update"
-      : model._tag === "checking"
-        ? "checks"
-        : "merge";
+  Match.value(model).pipe(
+    Match.tag("reading", () => "change"),
+    Match.tag("updating", () => "update"),
+    Match.tag("checking", () => "checks"),
+    Match.orElse(() => "merge"),
+  );
 
 // Each invariant reads a complete tea fold. A cut-off job is checked for its prefix, never for a
 // reply it has not sent yet.
@@ -335,13 +355,17 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
   let asks = 0;
 
   for (const { prev, msg, next, cmds } of folded.steps) {
-    const sent = cmds.filter((c) => c.type === "send");
-    const asked = cmds.filter(service);
+    const sent = Arr.filter(cmds, (c) => c.type === "send");
+    const asked = Arr.filter(cmds, service);
 
     if (law === "L9") {
       const own = Mail.Abandon.make({ type: "abandon", ref: prev._tag === "idle" ? w.ref : prev.job.ref });
       expect(p.refuse(prev, own)?.reason ?? null).toBe(
-        prev._tag === "idle" ? "idle" : prev._tag === "merging" ? "merging" : null,
+        Match.value(prev).pipe(
+          Match.tag("idle", () => "idle"),
+          Match.tag("merging", () => "merging"),
+          Match.orElse(() => null),
+        ),
       );
     }
 
@@ -394,7 +418,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       reached ||= sent.length > 0;
 
       if (sent.length > 0) {
-        expect(cmds.map((c) => c.type)).toEqual(["send", "exit"]);
+        expect(Arr.map(cmds, (c) => c.type)).toEqual(["send", "exit"]);
 
         for (const cmd of sent) {
           if (cmd.type === "send") {
@@ -403,7 +427,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           }
         }
       } else {
-        expect(cmds.filter((c) => c.type === "exit")).toEqual([]);
+        expect(Arr.filter(cmds, (c) => c.type === "exit")).toEqual([]);
       }
     }
 
@@ -546,7 +570,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           : null;
 
       const fault =
-        (taken && msg.type.endsWith("_err")) ||
+        (taken && Str.endsWith("_err")(msg.type)) ||
         verdict === "lost" ||
         (verdict === "pending" && prev._tag === "checking" && at !== null && at >= prev.until);
 
@@ -673,9 +697,13 @@ describe("the merger, next/", () => {
                 check: () => true,
                 run: (m, { p, w }) => {
                   const prev = m.model;
-                  const active = m.current.find((c) => service(c) && "attempt" in c && c.attempt === prev.attempt);
 
-                  const late = m.history.filter(
+                  const active = Option.getOrUndefined(
+                    Arr.findFirst(m.current, (c) => service(c) && "attempt" in c && c.attempt === prev.attempt),
+                  );
+
+                  const late = Arr.filter(
+                    m.history,
                     (c) =>
                       service(c) &&
                       (prev._tag === "idle" ||
@@ -706,7 +734,7 @@ describe("the merger, next/", () => {
                     moves.push(() => answer(p, w, late[cell.pick % late.length]!, cell.pick, m.clock));
                   }
 
-                  const send = m.history.find((c) => c.type === "send");
+                  const send = Option.getOrUndefined(Arr.findFirst(m.history, (c) => c.type === "send"));
 
                   if (send !== undefined) {
                     moves.push(() => answer(p, w, send, cell.pick, m.clock));
@@ -714,20 +742,19 @@ describe("the merger, next/", () => {
 
                   const msg = moves[cell.move % moves.length]!();
 
-                  const refused =
-                    msg.type === "land"
-                      ? prev._tag !== "idle"
-                        ? "busy"
-                        : null
-                      : msg.type === "abandon"
-                        ? prev._tag === "idle"
-                          ? "idle"
-                          : prev._tag === "merging"
-                            ? "merging"
-                            : msg.ref !== prev.job.ref
-                              ? "other_job"
-                              : null
-                        : null;
+                  const refused = Match.value(msg).pipe(
+                    Match.discriminator("type")("land", () => (prev._tag !== "idle" ? "busy" : null)),
+                    Match.discriminator("type")("abandon", (abandon) =>
+                      prev._tag === "idle"
+                        ? "idle"
+                        : prev._tag === "merging"
+                          ? "merging"
+                          : abandon.ref !== prev.job.ref
+                            ? "other_job"
+                            : null,
+                    ),
+                    Match.orElse(() => null),
+                  );
 
                   if (msg.type === "land" || msg.type === "abandon") {
                     expect(p.refuse(prev, msg)?.reason ?? null).toBe(refused);
@@ -745,7 +772,7 @@ describe("the merger, next/", () => {
                     m.replies = 0;
                   }
 
-                  m.replies += cmds.filter((c) => c.type === "send").length;
+                  m.replies += Arr.filter(cmds, (c) => c.type === "send").length;
                   expect(m.replies).toBeLessThanOrEqual(1);
 
                   if (prev._tag !== "idle" && next._tag === "idle") {
@@ -768,7 +795,7 @@ describe("the merger, next/", () => {
                     expect(p.wake(next)).toBe(p.wake(prev));
                   }
 
-                  for (const cmd of cmds.filter(service)) {
+                  for (const cmd of Arr.filter(cmds, service)) {
                     expect("attempt" in cmd && cmd.attempt).toBe(++m.asks);
                   }
 
@@ -807,7 +834,7 @@ describe("the merger, next/", () => {
 
 // This walk answers only the current request. Every update may discover another main.
 const roundWalk = (p: Program, w: World) => {
-  const ok = (cmd: Command, value: unknown): Msg =>
+  const ok = (cmd: Command, value: Schema.Json): Msg =>
     Schema.decodeSync(p.msg)({ type: `${cmd.type}_ok`, cmd, value, at: w.at });
 
   return arbGuidedSequence(
@@ -836,7 +863,7 @@ const roundWalk = (p: Program, w: World) => {
               cmd,
               moved
                 ? Updated.cases.updated.make({
-                    head: Schema.decodeSync(Commit)((cmd.attempt + 16).toString(16).padStart(w.size, "0")),
+                    head: Schema.decodeSync(Commit)(Str.padStart(w.size, "0")((cmd.attempt + 16).toString(16))),
                     tree: tree(w, "e"),
                     main: id(w, "d"),
                   })
@@ -888,8 +915,8 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
             if (rounds === w.rounds) {
               bounded++;
               expect(next._tag).toBe("idle");
-              expect(cmds.filter(service)).toEqual([]);
-              expect(cmds.find((c) => c.type === "send")).toMatchObject({
+              expect(Arr.filter(cmds, service)).toEqual([]);
+              expect(Option.getOrUndefined(Arr.findFirst(cmds, (c) => c.type === "send"))).toMatchObject({
                 m: {
                   type: "reply",
                   _tag: "behind",

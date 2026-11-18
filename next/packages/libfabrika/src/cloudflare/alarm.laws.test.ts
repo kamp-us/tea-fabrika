@@ -1,25 +1,37 @@
 // Ticket 866, next/. Exercise the real Cloudflare Alarm through processRuntime.
-import { createHash } from "node:crypto";
 import {
   DurableObjectState as ObjectState,
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import { Stub } from "@kampus/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Cause, Deferred, Effect, Exit, Layer, Option, type Scope } from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import type * as Scope from "effect/Scope";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Alarm } from "../runtime/Entry.ts";
 import { ProgramRunner, Sent } from "../runtime/Runner.ts";
+import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import type { ProjectBinding } from "./bindings.ts";
 import * as ProcessObject from "./ProcessObject.ts";
 import { processRuntime, settings } from "./runtime.ts";
 
 type State = Parameters<typeof processRuntime>[0];
 type Environment = Parameters<typeof processRuntime>[1];
+
+// SAFETY: each call gives `platform` what processRuntime and the Process object read in its law: the id, the storage calls, the bindings, the (empty) runtime context, or the implementation `Process.make` was handed.
 const platform = <A>(value: object): A => value as A;
 
 // Ticket 502 slice S2: keep only what the Process object's Layer hands to Alchemy's `make`, so law
@@ -73,9 +85,7 @@ const checkAlarmTime = (at: number) => {
 
 // The process records its start with the Project object before it runs (T753), so the law's
 // environment carries a start's input, and its Project answers that one call and no other.
-const start = StartsTest.fixture({ name: "alarm-project", port: 8787 }, (algorithm, data) =>
-  createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-);
+const start = await Effect.runPromise(StartsTest.fixture({ name: "alarm-project", port: 8787 }));
 
 const categories = ["zero", "negative", "past", "now", "future", "far", "clear"] as const;
 type Move = (typeof categories)[number] | "replace" | "repeat" | "advance" | "clear-again";
@@ -165,17 +175,16 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
             ),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
-          const stub = new Proxy({}, { get: unexpected });
-          const project = new Proxy(
-            {},
-            { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(start) : unexpected()) },
-          );
+          const stub = Stub.make<R2Bucket>(unexpected);
+          const project = Stub.make<ProjectBinding>(unexpected, {
+            settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(start) }),
+          });
           const runtime = yield* Effect.acquireRelease(
             Effect.sync(() =>
               processRuntime(
-                platform<State>({ id: { name: JSON.stringify(["alarm-project", "alarm:866"]) }, storage }),
+                platform<State>({ id: { name: Formatter.formatJson(["alarm-project", "alarm:866"]) }, storage }),
                 platform<Environment>({
-                  INSTANCE: JSON.stringify(start),
+                  INSTANCE: Formatter.formatJson(start),
                   PROJECT: { getByName: () => project },
                   MEASUREMENTS: stub,
                 }),
@@ -360,11 +369,14 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
                     due: (at) =>
                       Effect.suspend(() => {
                         dues.push(at);
-                        return now.outcome === "fails"
-                          ? Effect.fail(new LedgerError({ reason: "storage", message: now.text }))
-                          : now.outcome === "dies"
-                            ? Effect.die(new Error(now.text))
-                            : Effect.void;
+
+                        return Match.value(now.outcome).pipe(
+                          Match.when("fails", () =>
+                            Effect.fail(new LedgerError({ reason: "storage", message: now.text })),
+                          ),
+                          Match.when("dies", () => Effect.die(new Error(now.text))),
+                          Match.orElse(() => Effect.void),
+                        );
                       }),
                     mailed: Effect.void,
                     restart: () => Effect.void,
@@ -375,11 +387,10 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             ),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
-          const stub = new Proxy({}, { get: unexpected });
-          const project = new Proxy(
-            {},
-            { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(start) : unexpected()) },
-          );
+          const stub = Stub.make<R2Bucket>(unexpected);
+          const project = Stub.make<ProjectBinding>(unexpected, {
+            settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(start) }),
+          });
           // The app's checked read of the instance setting, as next/apps/fabrika/src/runtime.ts has it.
           ProcessObject.layer({
             programs: {},
@@ -389,13 +400,13 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
           const constructor = platform<Constructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
           const state = fromDurableObjectState(
             platform<Parameters<typeof fromDurableObjectState>[0]>({
-              id: { name: JSON.stringify(["alarm-project", "alarm:502"]) },
+              id: { name: Formatter.formatJson(["alarm-project", "alarm:502"]) },
               storage,
               abort: unexpected,
             }),
           );
           const environment = platform<WorkerEnvironment["Service"]>({
-            INSTANCE: JSON.stringify(start),
+            INSTANCE: Formatter.formatJson(start),
             PROJECT: { getByName: () => project },
             MEASUREMENTS: stub,
           });

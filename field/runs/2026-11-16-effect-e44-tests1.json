@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e44-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T04:36:20Z",
+  "ended": "2026-11-16T04:53:00Z",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E44 (preferEffectString), in next/. Recount on origin/main at e613fa45b with only this check at error through --lspconfig over libfabrika, tuval, the five programs of the row and the app: 292 hits in the row's 15 folders, as the plan counted. 238 sit in exam paths, 54 in product files, 0 in a file of pull request 1366. Fixed 235 exam hits: 219 by a scratch codemod (each native call to its effect/String helper, curried with the string last, a chain of two or more as one pipe), and 16 by hand where the helper answers an Option (indexOf, lastIndexOf, at, charAt, charCodeAt, codePointAt, match) or the call was an optional chain; each hand edit keeps what the code answered. Left 3 exam hits: two padStart calls inside a page.evaluate callback that runs in the browser, where the Effect import does not exist, and one matchAll whose answer the loop reads m.index from, which Effect types as optional. The 54 product hits are left for the build. The checker has no quick fix for this check. No lock line, per the owner's ruling for judgment slices. No pull request, per the owner's later ruling.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Per-check report for preferEffectString: hits met 292, fixed by quick fix 0, fixed by codemod 219, hand edits 16, left 3 (exam) and 54 (product, for the build), waiting on 1366 0. A file that already imports the effect barrel takes String as Str there; the two codehost files, which import by module path, take import * as Str from \"effect/String\". Per-package tsc on libfabrika, tuval, checklist, pipeline, chaos, counter and tezgah: 0 errors. vitest --changed origin/main: 57 of 59 files passed, 825 of 829 tests; the 4 failures need ssh-keygen (Sshsig.integration.test.ts) and a Playwright browser (key.laws.visual.test.ts), neither in this box. pnpm lint passed; the list ratchet exited 0.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/Id.test.ts: rejects malformed suffixes, overflow, whitespace, versions, and variants without repair (its reference model now reads the first letter through Str.indexOf)",
+      "plant": "next/packages/libfabrika/src/Id.ts:40, the first-letter bound > 7 changed to > 8; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/checklist/src/window.laws.test.ts: the add field is labeled by the add input's description ... carries the refusal words (its byId helper now finds the closing tag through Str.indexOf)",
+      "plant": "next/programs/checklist/src/window.tsx:58, the refusal paragraph shows refusal.slice(1); restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/desktop/Menu.laws.test.ts: L9, prompts and items keep the code and the safe label within the pinned 256-unit limit (its hasLabel helper now reads Str.codePointAt)",
+      "plant": "next/packages/libfabrika/src/desktop/Menu.ts:148, the label cut 256 changed to 255; restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

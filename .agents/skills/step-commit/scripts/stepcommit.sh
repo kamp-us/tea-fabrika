@@ -1,5 +1,7 @@
 #!/bin/sh
 # stepcommit.sh [--commit-only] <step> <ticket> <subject> <file>...
+# <step> is tests, build, mutation, lead, or fix (a 0177 fix round: one agent writes the law and the
+# fix, so it may hold exam paths and takes tests' and build's paths; it signs nothing).
 # The unsigned route is for boxes; MAIN signs the saved run at fetch.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd -P)
@@ -13,7 +15,7 @@ def refuse(why, code=1):
     print("stepcommit: " + why, file=sys.stderr); sys.exit(code)
 if len(args) < 4: refuse("name step, ticket, subject and named paths", 2)
 step, ticket, subject, *paths = args
-if step not in ("tests", "build", "mutation", "lead"): refuse("unknown step " + step, 2)
+if step not in ("tests", "build", "mutation", "lead", "fix"): refuse("unknown step " + step, 2)
 role = "tests" if step == "mutation" else step
 def git(*args, **kw):
     return subprocess.run(["git", *args], capture_output=True, **kw)
@@ -210,7 +212,7 @@ def unlisted_exam(paths):
     # checkout's, so a step cannot widen the exam to take a path. exam.py prints "path<TAB>glob" per
     # hit and exits 1; any other answer allows nothing.
     unlisted = [p for p in paths if owner_of(p) is None]
-    if step != "tests" or not unlisted: return set()
+    if step not in ("tests", "fix") or not unlisted: return set()
     listed = git("show", state.get("base", "") + ":exam-paths.json")
     if listed.returncode: return set()
     with tempfile.NamedTemporaryFile(suffix=".json") as exam_list:
@@ -224,8 +226,10 @@ def check(paths):
         if exam.returncode: refuse("a build may not commit exam paths; answer send to tests", 3)
     if owners is not None:
         exam = unlisted_exam(paths)
+        # mutation takes tests' paths too; a fix round (0177) is tests and build in one agent.
+        mine = {"mutation": {"mutation", "tests"}, "fix": {"tests", "build"}}.get(step, {step})
         for p in paths:
-            if owner_of(p) != step and not (step == "mutation" and owner_of(p) == "tests") and p not in exam:
+            if owner_of(p) not in mine and p not in exam:
                 refuse("not_owner: " + p)
 check(named)
 # A case-only rename on a disk that ignores case (id.ts to Id.ts): git keeps the index's old name
@@ -283,15 +287,15 @@ if not coauthor:
     coauthor = f"{name} <{email}>"
 commit = subprocess.run(["git", "-c", "user.name=fabrikalfa[bot]", "-c", "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com", "commit", "-q", "-m", subject, "-m", "Co-authored-by: " + coauthor])
 if commit.returncode: sys.exit(commit.returncode)
-if not only:
+if not only and step != "fix":
     # STEPCOMMIT_SIGNER: drive.ts names main's own signer when the tree holds an agent's edits.
     signer = os.environ.get("STEPCOMMIT_SIGNER", "pnpm commits").split()
     signed = subprocess.run([*signer, "sign", "--step", role, "--ticket", ticket, "--key", str(pathlib.Path.home() / ".fabrika/step-keys" / role)])
     if signed.returncode: sys.exit(signed.returncode)
 subprocess.run(["git", "log", "--oneline", "-1"])
-# 0134: a signed commit leaves the laptop now. A box's commit (STEPCOMMIT_BOX, a detached sign
+# 0134: a commit leaves the laptop now. A box's commit (STEPCOMMIT_BOX, a detached sign
 # worktree) is pushed by the quest's host part right after: drive.ts's pushing phase, the host step.
 if not only and not named_box:
     publisher = os.environ["STEPCOMMIT_PUBLISHER"].split() if os.environ.get("STEPCOMMIT_PUBLISHER") else ["node", str(here / "../../lead/scripts/publish.ts")]
-    if subprocess.run([*publisher, branch]).returncode: refuse(f"committed and signed, but not pushed (0134); run node .agents/skills/lead/scripts/publish.ts {branch or '<branch>'} where the push can run", 6)
+    if subprocess.run([*publisher, branch]).returncode: refuse(f"committed{'' if step == 'fix' else ' and signed'}, but not pushed (0134); run node .agents/skills/lead/scripts/publish.ts {branch or '<branch>'} where the push can run", 6)
 PY

@@ -3,6 +3,7 @@ import { applyCell } from "@demlik/tea";
 import { foldEvents } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { syncTest } from "../../Testing.ts";
 import { nth } from "../RepliesTest.ts";
 import { Model, watchers } from "./watchers.ts";
@@ -42,13 +43,13 @@ describe("saved view membership, next/", () => {
           const [again, cmds] = applyCell(watchers, state, msg);
           expect(again).toEqual(state);
           expect(cmds).toEqual([]);
-          expected = expected.filter((c) => c.client !== client);
+          expected = Arr.filter(expected, (c) => c.client !== client);
         } else {
           const watch = { ...fresh, client };
           const msg = { type: "open" as const, watch };
           msgs.push(msg);
           [state] = applyCell(watchers, state, msg);
-          expected = [...expected.filter((c) => c.client !== client), watch].slice(-1024);
+          expected = [...Arr.filter(expected, (c) => c.client !== client), watch].slice(-1024);
         }
 
         expect(clients(state)).toEqual(expected);
@@ -95,19 +96,19 @@ describe("saved view membership, next/", () => {
 
       for (const [pick, fresh] of walk) {
         const held = clients(state);
-        const client = held.length && pick % 3 ? nth(held, pick).client : fresh.client;
+        const client = held.length > 0 && pick % 3 !== 0 ? nth(held, pick).client : fresh.client;
 
         if (pick % 3 === 2) {
           [state] = applyCell(watchers, state, { type: "end", client });
-          expected = expected.filter((c) => c.client !== client);
+          expected = Arr.filter(expected, (c) => c.client !== client);
         } else {
           const watch = { ...fresh, client };
           [state] = applyCell(watchers, state, { type: "open", watch });
-          expected = [...expected.filter((c) => c.client !== client), watch].slice(-1024);
+          expected = [...Arr.filter(expected, (c) => c.client !== client), watch].slice(-1024);
         }
 
         expect(clients(state)).toEqual(expected);
-        expect(new Set(clients(state).map((c) => c.client)).size).toBe(clients(state).length);
+        expect(new Set(Arr.map(clients(state), (c) => c.client)).size).toBe(clients(state).length);
         expect(clients(state).length).toBeLessThanOrEqual(1024);
       }
 

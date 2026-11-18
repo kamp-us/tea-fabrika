@@ -10,6 +10,7 @@
 // Two oracles: the walk's own model of what it recorded, delivered, ended and removed, and `signer`
 // itself, asked under a kind and an id no other call uses, so its answer is the one it would sign.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Brand from "effect/Brand";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -47,7 +48,7 @@ type Client = (typeof CLIENTS)[number];
 
 const inputId = Brand.nominal<Id.InputId>(); // The test plays the trusted door, never a public decoder.
 
-const PARENTS = [1, 2, 3].map((n) => inputId(`in-${START}-${n}`));
+const PARENTS = Arr.map([1, 2, 3], (n) => inputId(`in-${START}-${n}`));
 
 const writer = (client: Client) =>
   Writer.cases[client].make({ key: client === "person" ? "SHA256:person-window" : "SHA256:agent", for: PERSON });
@@ -68,19 +69,14 @@ const record = (parent: string, client: Client, process: string) => ({
 /** Every saved row, by table. A table the manager made on first use and left empty holds nothing. */
 const snapshot = (sql: Sql) =>
   JSON.stringify(
-    sql
-      .exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .map(
+    Arr.filter(
+      Arr.map(
+        sql.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"),
         ({ name }) =>
-          [
-            name,
-            sql
-              .exec(`SELECT * FROM "${String(name)}"`)
-              .map((row) => JSON.stringify(row))
-              .sort(),
-          ] as const,
-      )
-      .filter(([, rows]) => rows.length > 0),
+          [name, Arr.map(sql.exec(`SELECT * FROM "${String(name)}"`), (row) => JSON.stringify(row)).sort()] as const,
+      ),
+      ([, rows]) => rows.length > 0,
+    ),
   );
 
 const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
@@ -212,7 +208,7 @@ const walk = (open: Open) =>
         SessionManager.layer(
           sql,
           (key: string) =>
-            CLIENTS.some((c) => c === key && world.live.has(c))
+            Arr.some(CLIENTS, (c) => c === key && world.live.has(c))
               ? Effect.succeed(writer(key === "agent" ? "agent" : "person"))
               : Effect.fail(NotGranted.make({})),
           { input: () => false, event: () => false },
@@ -226,10 +222,11 @@ export const suite = (open: Open) =>
     // Plant: implement `sender` by calling `signer` with a fixed kind (SessionManager.ts).
     it.effect("L9: sender answers the writer signer would sign for, refuses alike, and writes no receipt", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const law = walk(open);
         const tapes = fc.array(Cell, { minLength: 1, maxLength: 30 });
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(tapes, (cells) => Effect.runPromise(Effect.scoped(law(cells))));
+        const property = fc.asyncProperty(tapes, (cells) => Effect.runPromiseWith(context)(Effect.scoped(law(cells))));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 100, endOnFailure: true }));
       }),

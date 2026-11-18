@@ -7,7 +7,11 @@
 //   internal/programMail.ts: `mailId(command)` and `granted(grants, source, to)`.
 //   ProgramMail.ts: `Grants`, `MailRefusal` (the closed refusal reasons) and `ProgramMailError`.
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { PIDS } from "../Process.test-support.ts";
@@ -49,7 +53,7 @@ describe("P41 slice 1: program mail rules", () => {
         expect(id, "the documented suffix on the dispatched command").toBe(`${command}/mail`);
         expect(mailId(command), "derived once: the same command gives the same ID").toBe(id);
         expect(mailId(other) === id, "two commands never share a delivery ID").toBe(other === command);
-        expect(id.endsWith("/answer"), "never the runner's own answer namespace").toBe(false);
+        expect(Str.endsWith("/answer")(id), "never the runner's own answer namespace").toBe(false);
         expect(inRunnerSpace(id), "never a runner's answer or alarm letter").toBe(false);
         expect(inSignalSpace(id), "never a monitor signal").toBe(false);
         expect(brainOnly({ stream: `${to}/inbox`, id, tag: "send" }), "an ordinary inbox letter").toBe(false);
@@ -61,11 +65,11 @@ describe("P41 slice 1: program mail rules", () => {
   it("L8: a destination is permitted only when the host's closed grant for that source names it", () => {
     fc.assert(
       fc.property(fcGrants, fcName, fcName, (grants, source, to) => {
-        const own = Object.hasOwn(grants, source) ? grants[source] : undefined;
+        const own = Rec.has(grants, source) ? grants[source] : undefined;
         const expected = own !== undefined && own.includes(to);
         expect(granted(grants, source, to), `${source} -> ${to} in ${JSON.stringify(grants)}`).toBe(expected);
         expect(granted(grants, to, source), "a grant is one way").toBe(
-          Object.hasOwn(grants, to) && (grants[to] ?? []).includes(source),
+          Rec.has(grants, to) && (grants[to] ?? []).includes(source),
         );
       }),
       {
@@ -88,18 +92,19 @@ describe("P41 slice 1: program mail rules", () => {
         fc.constantFrom(...MailRefusal.literals, "storage" as const, "full" as const),
         fc.nat({ max: 16_384 }),
         (reason, unread) => {
-          const error =
-            reason === "full"
-              ? ProgramMailError.full(unread)
-              : reason === "storage"
-                ? ProgramMailError.storage()
-                : ProgramMailError.refused(reason);
+          const error = Match.value(reason).pipe(
+            Match.when("full", () => ProgramMailError.full(unread)),
+            Match.when("storage", () => ProgramMailError.storage()),
+            Match.orElse((refused) => ProgramMailError.refused(refused)),
+          );
+
           const encoded = Schema.encodeUnknownSync(ProgramMailError)(error);
           expect(encoded).toMatchObject({
             _tag: "ProgramMailError",
             reason: reason === "full" ? { _tag: reason, unread } : { _tag: reason },
           });
-          expect(Object.keys(encoded as object)).not.toContain("kind");
+          // SAFETY: ProgramMailError is a tagged struct (ProgramMail.ts), so its encoded form is an object with `_tag` and `reason`.
+          expect(Rec.keys(encoded as object)).not.toContain("kind");
           expect(Schema.decodeUnknownSync(ProgramMailError)(encoded), "it decodes back to the same error").toEqual(
             error,
           );

@@ -5,8 +5,15 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
@@ -22,7 +29,7 @@ const u32 = (n: number) => {
 };
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
 
   return Buffer.concat([u32(b.length), b]);
 };
@@ -34,7 +41,7 @@ const armor = (bytes: Uint8Array) =>
     ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`;
 
 const signedBytes = (text: string, space: string = SPACE) =>
   Buffer.concat([
@@ -58,8 +65,12 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
     ]),
   );
 
-const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: call, catch: () => new Error("test WebCrypto failed") });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
+const web = <A>(call: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
+  Effect.tryPromise({ try: call, catch: () => WebCryptoError.make({ message: "test WebCrypto failed" }) });
 
 const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
@@ -123,7 +134,7 @@ const passkey = Effect.fn("test.passkey")(function* () {
         space = over.space ?? SPACE;
 
       const clientDataJSON = utf8(
-        JSON.stringify({
+        Formatter.formatJson({
           type: over.type ?? "webauthn.get",
           challenge: Buffer.from(over.challenge ?? signedBytes(text, space)).toString("base64url"),
           origin: over.origin ?? origin,
@@ -205,7 +216,8 @@ const check = (armored: string, signer: string = line, body: string = text, over
 
 const refused = { _tag: "refused", reason: "bad_signature" };
 
-const blob = (armored = realArmor) => Buffer.from(armored.trim().split("\n").slice(1, -1).join(""), "base64");
+const blob = (armored = realArmor) =>
+  Buffer.from(Arr.join(Function.pipe(armored, Str.trim, Str.split("\n")).slice(1, -1), ""), "base64");
 
 const runs = { seed: 119120, numRuns: 40 };
 
@@ -247,7 +259,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         passkeyLineArb,
         fc.integer({ min: 0, max: 255 }).filter((n) => n !== 4),
         (line, prefix) => {
-          const bytes = Buffer.from(line.split(" ")[1]!, "base64");
+          const bytes = Buffer.from(Str.split(line, " ")[1]!, "base64");
           let at = 0;
 
           for (let i = 0; i < 2; i++) {
@@ -255,13 +267,13 @@ describe("P10 WebAuthn SSHSIG", () => {
           }
 
           bytes[at + 4] = prefix;
-          expect(Schema.is(PasskeyLine)(`${line.split(" ")[0]} ${bytes.toString("base64")}`)).toBe(false);
+          expect(Schema.is(PasskeyLine)(`${Str.split(line, " ")[0]} ${bytes.toString("base64")}`)).toBe(false);
         },
       ),
       { ...runs, examples: [[line, 3]] },
     );
   });
-  it("writer: malformed DER answers with a typed BadAssertion", async () => {
+  it("writer: malformed DER answers with a typed BadAssertion", () => {
     // Plant: rename the error tag to InvalidAssertion. The BadAssertion match must fail.
     const invalid = fc.oneof(
       fc.uint8Array({ maxLength: 1 }),
@@ -273,8 +285,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         .map(([head, tail]) => new Uint8Array([head, ...tail])),
       fc.uint8Array({ maxLength: 253 }).map((tail) => new Uint8Array([0x30, tail.length + 1, ...tail])),
     );
-
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(invalid, (signature) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -297,9 +308,9 @@ describe("P10 WebAuthn SSHSIG", () => {
       { ...runs, examples: [[new Uint8Array([0x30, 0])]] },
     );
   });
-  it("p27: an ECDSA scalar with an unnecessary leading zero is refused", async () => {
+  it("p27: an ECDSA scalar with an unnecessary leading zero is refused", () =>
     // Plant: allow a redundant sign-padding byte in fixed(). The refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(signedArb, (input) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -346,7 +357,7 @@ describe("P10 WebAuthn SSHSIG", () => {
             const scalar = BigInt(`0x${s.toString("hex")}`);
 
             const low = Buffer.from(
-              (scalar < order - scalar ? scalar : order - scalar).toString(16).padStart(64, "0"),
+              Str.padStart(64, "0")((scalar < order - scalar ? scalar : order - scalar).toString(16)),
               "hex",
             );
 
@@ -373,27 +384,24 @@ describe("P10 WebAuthn SSHSIG", () => {
         ),
       ),
       { ...runs, examples: [[recorded]] },
-    );
-  });
-  it("p27: a raw WebAuthn object outside SSHSIG is refused", async () => {
+    ));
+  it("p27: a raw WebAuthn object outside SSHSIG is refused", () =>
     // Plant: return a key on parser failure. A raw JSON object must still be refused.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(fc.record({ authenticatorData: bodyArb, clientDataJSON: bodyArb, signature: bodyArb }), (raw) =>
         Effect.runPromise(
           Effect.gen(function* () {
-            expect(yield* check(JSON.stringify(raw))).toEqual(refused);
+            expect(yield* check(Formatter.formatJson(raw))).toEqual(refused);
           }),
         ),
       ),
       { ...runs, examples: [[real]] },
-    );
-  });
+    ));
   it.effect("vector: p27: the independent ordinary ECDSA vector stays refused by the shared verifier", () =>
     Effect.gen(function* () {
       const read = (file: string) =>
         readFileSync(new URL(`../../../../../fixtures/next/sshsig/${file}`, import.meta.url), "utf8");
-
-      expect(yield* check(read("ecdsa.sig"), read("ecdsa.pub").trim(), read("text.txt"))).toEqual(refused);
+      expect(yield* check(read("ecdsa.sig"), Str.trim(read("ecdsa.pub")), read("text.txt"))).toEqual(refused);
     }),
   );
   it.effect("vector: p27: the exact real assertion passes, with signed backup flags and counter zero", () =>
@@ -442,8 +450,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     ["cross origin", { crossOrigin: true }],
     ["wrong challenge", { challenge: utf8("only a hash would be wrong too") }],
   ] as const;
-
-  it("p27 policy: refuses invalid assertions even with a valid P-256 signature", async () => {
+  it("p27 policy: refuses invalid assertions even with a valid P-256 signature", () => {
     // Plant: require UP alone, without UV. A signed UP-only assertion must be refused.
     const invalid = fc.oneof(
       fc
@@ -457,8 +464,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       fc.constant({ crossOrigin: true }),
       fc.uint8Array({ maxLength: 64 }).map((challenge) => ({ challenge })),
     );
-
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(bodyArb, invalid, (body, options) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -470,13 +476,16 @@ describe("P10 WebAuthn SSHSIG", () => {
       ),
       {
         ...runs,
-        examples: policyCases.map(([, options]): [string, typeof options] => [text, options]),
+        examples: Arr.map(
+          policyCases,
+          ([, options]: (typeof policyCases)[number]): [string, (typeof policyCases)[number][1]] => [text, options],
+        ),
       },
     );
   });
-  it("question 19: signed backup flags and counters pass", async () => {
+  it("question 19: signed backup flags and counters pass", () =>
     // Plant: invert the returned BE flag. The signed flag match must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(bodyArb, fc.constantFrom(5, 13, 29), fc.nat({ max: 0xffffffff }), (body, flags, counter) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -499,31 +508,27 @@ describe("P10 WebAuthn SSHSIG", () => {
           [text, 29, 0],
         ],
       },
-    );
-  });
-
+    ));
   const bindingCases = [
     ["text", `${text}!`, {}],
     ["RP", text, { rp: "other.test" }],
     ["origin allowlist", text, { origins: ["https://other.test"] }],
   ] as const;
-
-  it("p27 binding: changing expected text, RP or origin allowlist refuses the real assertion", async () => {
+  it("p27 binding: changing expected text, RP or origin allowlist refuses the real assertion", () => {
     // Plant: ignore policy.rp. The changed-RP example must still be refused.
     const changed: fc.Arbitrary<{
       body: string;
       over: { rp?: string; origins?: ReadonlyArray<string> };
     }> = fc.oneof(
       bodyArb
-        .filter((body) => !Buffer.from(utf8(body)).equals(Buffer.from(utf8(text))))
+        .filter((body) => Buffer.from(utf8(body)).equals(Buffer.from(utf8(text))) !== true)
         .map((body) => ({ body, over: {} })),
       bodyArb.filter((rp) => rp !== policy.rp).map((rp) => ({ body: text, over: { rp } })),
       fc
         .array(bodyArb.filter((origin) => origin !== policy.origins[0]))
         .map((origins) => ({ body: text, over: { origins } })),
     );
-
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(changed, ({ body, over }) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -533,13 +538,13 @@ describe("P10 WebAuthn SSHSIG", () => {
       ),
       {
         ...runs,
-        examples: bindingCases.map(([, body, over]): [{ body: string; over: typeof over }] => [{ body, over }]),
+        examples: Arr.map(bindingCases, ([, body, over]): [{ body: string; over: typeof over }] => [{ body, over }]),
       },
     );
   });
-  it("p27: a different admitted signer cannot borrow the embedded key", async () => {
+  it("p27: a different admitted signer cannot borrow the embedded key", () =>
     // Plant: choose the first parseable signer without comparing its blob. Refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(signedArb, (input) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -550,11 +555,10 @@ describe("P10 WebAuthn SSHSIG", () => {
         ),
       ),
       { ...runs, examples: [[recorded]] },
-    );
-  });
-  it("p27: a valid signature in another namespace is refused", async () => {
+    ));
+  it("p27: a valid signature in another namespace is refused", () =>
     // Plant: trust the embedded namespace for both selection and signed bytes. Refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(
         bodyArb,
         bodyArb.filter((space) => space !== SPACE),
@@ -568,9 +572,7 @@ describe("P10 WebAuthn SSHSIG", () => {
           ),
       ),
       { ...runs, examples: [[text, "other"]] },
-    );
-  });
-
+    ));
   const corruptions = [
     "version",
     "key length",
@@ -580,17 +582,23 @@ describe("P10 WebAuthn SSHSIG", () => {
     "truncated",
     "trailing",
   ] as const;
-
-  it("p27 bytes: refuses corrupt fields, signatures, truncation and trailing bytes", async () => {
+  it("p27 bytes: refuses corrupt fields, signatures, truncation and trailing bytes", () =>
     // Plant: ignore the SSHSIG version. The version-2 example must still be refused.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(fc.constantFrom(...corruptions), fc.nat({ max: 0xffffffff }), (kind, change) =>
         Effect.runPromise(
           Effect.gen(function* () {
             let bytes = blob();
 
             if (kind === "version") {
-              bytes.writeUInt32BE(change === 0 ? 2 : change === 1 ? 0 : change, 6);
+              bytes.writeUInt32BE(
+                Match.value(change).pipe(
+                  Match.when(0, () => 2),
+                  Match.when(1, () => 0),
+                  Match.orElse(() => change),
+                ),
+                6,
+              );
             }
 
             if (kind === "key length") {
@@ -604,7 +612,8 @@ describe("P10 WebAuthn SSHSIG", () => {
                 at += 4 + bytes.readUInt32BE(at);
               }
 
-              bytes[at + 4 + 5] = change % 2 === 0 ? "3".charCodeAt(0) : "4".charCodeAt(0);
+              // 0x33 and 0x34 are "3" and "4".
+              bytes[at + 4 + 5] = change % 2 === 0 ? 0x33 : 0x34;
             }
 
             if (kind === "signature algorithm") {
@@ -616,7 +625,8 @@ describe("P10 WebAuthn SSHSIG", () => {
 
               at += 4;
               const size = bytes.readUInt32BE(at);
-              bytes[at + 4 + size - 1] = ("m".charCodeAt(0) + 1 + (change % 127)) % 256;
+              // 0x6d is "m".
+              bytes[at + 4 + size - 1] = (0x6d + 1 + (change % 127)) % 256;
             }
 
             if (kind === "signature byte") {
@@ -646,12 +656,11 @@ describe("P10 WebAuthn SSHSIG", () => {
           }),
         ),
       ),
-      { ...runs, examples: corruptions.map((kind) => [kind, 0]) },
-    );
-  });
-  it("P7: the compatibility checker keeps SK out and returns an Ed25519 signer as supplied", async () => {
+      { ...runs, examples: Arr.map(corruptions, (kind) => [kind, 0]) },
+    ));
+  it("P7: the compatibility checker keeps SK out and returns an Ed25519 signer as supplied", () =>
     // Plant: strip the returned signer's comment. The supplied-line equality must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(bodyArb, bodyArb, (body, comment) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -678,14 +687,13 @@ describe("P10 WebAuthn SSHSIG", () => {
         ),
       ),
       { ...runs, examples: [[text, "public-test-comment"]] },
-    );
-  });
+    ));
   it("P7: ordinary ECDSA is not a passkey line", () => {
     // Plant: ignore the outer key type word. The ordinary ECDSA line must still throw.
     fc.assert(
       fc.property(passkeyLineArb, (line) => {
         expect(Schema.decodeSync(PasskeyLine)(line)).toBe(line);
-        expect(() => Schema.decodeSync(PasskeyLine)(line.replace("sk-ecdsa", "ecdsa"))).toThrow();
+        expect(() => Schema.decodeSync(PasskeyLine)(Str.replace("sk-ecdsa", "ecdsa")(line))).toThrow();
       }),
       { ...runs, examples: [[line]] },
     );

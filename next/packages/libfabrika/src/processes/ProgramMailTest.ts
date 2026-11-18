@@ -15,7 +15,17 @@
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -38,7 +48,7 @@ export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`,
 );
 
 const ids = (...values: ReadonlyArray<string>) => {
@@ -62,6 +72,7 @@ const BRAIN = "SHA256:brain";
 
 const brain = () => ({
   owner: Owner.cases.brain.make({}),
+  // SAFETY: PIDS holds 40 ids (Process.test-support.ts), so index 3 is present.
   recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[3] as string }),
   by: BRAIN,
 });
@@ -119,7 +130,7 @@ const CODE = { program: "mail", hash: "build-a" };
 /** The host's closed grant: each source reaches only the names listed for it. */
 const GRANTS: Grants = { [REQUESTER]: [RESPONDER, HELPER, GHOST], [RESPONDER]: [REQUESTER] };
 
-const granted = (source: string, to: string) => Object.hasOwn(GRANTS, source) && GRANTS[source]?.includes(to) === true;
+const granted = (source: string, to: string) => Rec.has(GRANTS, source) && GRANTS[source]?.includes(to) === true;
 
 type Delivery = Parameters<ProgramMail["Service"]["deliver"]>[0];
 
@@ -142,7 +153,7 @@ type World = {
 };
 
 /** Values Schema.Json refuses: a function, a bigint, a symbol, `undefined`. */
-const BAD: ReadonlyArray<() => unknown> = [
+const BAD: ReadonlyArray<() => object | undefined> = [
   () => ({ type: "request", f: () => 1 }),
   () => [1n],
   () => undefined,
@@ -180,7 +191,7 @@ type Move =
 const said = (cell: Cell, over: Partial<From> = {}): From =>
   from({
     by: "SHA256:program-writer",
-    sentAt: new Date(Date.UTC(2026, 10, 11) + cell.clock).toISOString(),
+    sentAt: DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 11) + cell.clock)),
     build: cell.build,
     traceId: cell.trace,
     ...over,
@@ -188,6 +199,7 @@ const said = (cell: Cell, over: Partial<From> = {}): From =>
 
 /** The store's Sql, with a cut that throws on the `after`-th INSERT of the next call. */
 const cutting = (sql: Sql) => {
+  // SAFETY: widens `after` from `null` so the cut can hold a count; `null` means no cut is armed.
   const fault = { after: null as number | null, hit: false };
 
   const wrapped: Sql = {
@@ -217,7 +229,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
 
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const layer = (sql: Sql, next: Effect.Effect<string>) =>
@@ -278,6 +290,7 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     retry_other: world.sent.size > 0,
     stop: stoppable(world).length > 0,
     restart: ended(world).length > 0 && world.pids < PIDS.length - 1,
+    // SAFETY: SOURCES is a tuple of names; widened only so `includes` can test any stale name.
     stale_send: world.stale.some((s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
     register: !world.lives.has(HELPER) && world.pids < PIDS.length - 1,
     cut: sources.some((s) => reachable(world, s.name).length > 0),
@@ -392,7 +405,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       expect(receipt.to.state._tag, "the target's lifecycle state at acceptance").toBe(
         target?.live === true ? "live" : "ended",
       );
-      expect(typeof receipt.arrivedAt, "the referee's clock is kept").toBe("number");
+      expect(receipt.arrivedAt, "the referee's clock is kept").toBeTypeOf("number");
       world.sent.set(delivery.command, { delivery, receipt });
       world.targetState.set(delivery.command, target?.live === true ? "live" : "ended");
       const inbox = world.inbox.get(delivery.to) ?? [];
@@ -505,6 +518,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
         case "stale_send": {
           const old = choose(
+            // SAFETY: SOURCES is widened to a string list only so `includes` can test each stale entry's name.
             world.stale.filter((s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
             cell.pick,
           );
@@ -594,11 +608,11 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 40 }),
@@ -655,13 +669,13 @@ const pair = (a: string, b: string) => JSON.stringify([a, b].sort());
 
 /** The model's mail rule: the host grant lists the pair, or one is the other's first requester. */
 const mayMail = (family: Family, source: string, to: string) =>
-  (Object.hasOwn(HOST, source) && HOST[source]?.includes(to) === true) ||
+  (Rec.has(HOST, source) && HOST[source]?.includes(to) === true) ||
   family.first.get(to) === source ||
   family.first.get(source) === to;
 
 /** Why a pair may or may not mail, for the walk's tally of what it reached. */
 const relation = (family: Family, source: string, to: string): string => {
-  if (Object.hasOwn(HOST, source) && HOST[source]?.includes(to) === true) {
+  if (Rec.has(HOST, source) && HOST[source]?.includes(to) === true) {
     return "host";
   }
 
@@ -826,6 +840,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
       switch (move) {
         case "start_child": {
           const starter = choose(starters(), cell.pick);
+          // SAFETY: `starter` comes from `starters()`, which lists only names the world holds.
           const self = world.names.get(starter) as { program: string; process: string };
           const program = choose(startsTo(self.program), cell.alt);
           const name = `${program}:${100 + ++world.n}`;
@@ -864,6 +879,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
             cell.pick,
           );
 
+          // SAFETY: the starter picked above is one of `starters()`, each a name `world.names` holds.
           const self = world.names.get(starter) as { program: string; process: string };
 
           const [name, held] = choose(
@@ -897,6 +913,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         }
 
         case "start_forbidden": {
+          // SAFETY: rogue:1 is booted, and `world.names` never drops a name; this move is offered only while it is live.
           const self = world.names.get("rogue:1") as { program: string; process: string };
 
           const name = choose(
@@ -929,6 +946,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
 
         case "exit": {
           const name = choose(live(), cell.pick);
+          // SAFETY: `name` is picked from `live()`, which lists only names in `world.names`.
           const held = world.names.get(name) as { process: string; live: boolean };
           yield* must(
             ProcessManager.use((p) => p.exit(held.process, SHUTDOWN, from())),
@@ -974,6 +992,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
             cell.alt,
           );
 
+          // SAFETY: `source` is a name the world holds, as this move is only offered for one.
           const self = world.names.get(source) as { process: string };
 
           const answer = yield* run(
@@ -1131,6 +1150,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
       const move = choose(options, cell.move);
       const before = snapshot(store.sql);
       const unchanged = (message: string) => expect(snapshot(store.sql), message).toEqual(before);
+      // SAFETY: the writer is started before the walk and kept live, so `lives` has its process.
       const writer = { name: WRITER, process: lives.get(WRITER) as string };
 
       switch (move) {
@@ -1151,6 +1171,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
             done.add("full");
           } else {
             expect(Result.isSuccess(answer), `L6: ${unread} unread under cap ${cap} is saved`).toBe(true);
+            // SAFETY: the `isSuccess` check above proved the send saved, and a saved send answers a receipt.
             sent.push({ delivery, receipt: Result.getOrThrow(answer) as Receipt });
             world.newest++;
             done.add(unread === cap - 1 ? "fills" : "send");
@@ -1176,6 +1197,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
               ? world.acked + 1 + (cell.pick % (world.newest - world.acked))
               : 1 + (cell.pick % world.acked);
 
+          // SAFETY: the reader is started before the walk, so `lives` holds its process.
           const answer = yield* run(ProcessManager.use((p) => p.ack(lives.get(READER) as string, pos, from())));
           expect(Result.isSuccess(answer), `L8: the live reader acks pos ${pos}`).toBe(true);
 
@@ -1198,6 +1220,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
         }
 
         case "restart": {
+          // SAFETY: the reader is put in `lives` before the walk, and `lives` is only ever set, never cleared.
           const process = lives.get(READER) as string;
           const exited = yield* run(ProcessManager.use((p) => p.exit(process, SHUTDOWN, from())));
           expect(Result.isSuccess(exited), "the reader stops").toBe(true);
@@ -1262,12 +1285,13 @@ const capLaw = (
     name,
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const done = new Set<string>();
         const law = capWalk(open, moves, done);
         const scoped = (cap: number, tape: Iterable<fc.AsyncCommand<object, CapWalk>>) => Effect.scoped(law(cap, tape));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each walk
-        const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => Effect.runPromise(scoped(cap, tape)));
-
+        const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => runPromise(scoped(cap, tape)));
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 50 }),
@@ -1337,12 +1361,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "L14: a child and the program that started it mail each other with no grant, across restarts; nobody else gains a right",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const seen = new Set<string>();
           const done = new Set<FamilyMove>();
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-          const property = fc.asyncProperty(FamilyTape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-
+          const property = fc.asyncProperty(FamilyTape, (tape) => runPromise(Effect.scoped(law(tape))));
           const checks = {
             seed: SEED,
             // Every relation the law names must be mailed across: 60 walks miss some at this seed.

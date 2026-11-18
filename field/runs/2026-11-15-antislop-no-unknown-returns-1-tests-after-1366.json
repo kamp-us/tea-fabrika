@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-unknown-returns-1-tests-after-1366",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:13:27-08:00",
+  "ended": "2026-11-15T23:21:19-08:00",
+  "parent": "2026-11-15-antislop-no-unknown-returns-1-review",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests round after pull request 1366 merged, for anti-slop judgment slice AS-no-unknown-returns-1, in next/ and our tooling. anti-slop/no-unknown-returns, forced to error in a scratch config outside the repo over the slice's folders at 99c941e3d (which merges origin/main), meets 57 hits: the 55 the review counted, with the line numbers the merge moved, plus two new exam hits the merge brought, next/apps/fabrika/src/exam/edge-config.test.ts:33 (toValue) and next/packages/libfabrika/src/settings/QuotaSettings.test.ts:25 (numeric). Fixed by hand edits with the Edit tool, 5: record-wire.test-support.ts:30 recordCall is generic over the Promise's value; edge-config.test.ts:33 toValue returns Schema.Json, the tree it walks being literals, arrays and objects; Runner.integration.test.ts:468 loaded drops its unknown annotation and returns the program it builds; RuntimeCauseTest.ts:595 delivery drops its unknown annotation and returns the object it builds; Client.laws.test.ts:506 noteRev returns number | null like noteType above it, which gives the same answer on every note the walks make (each carries a number rev) and drops a Reflect.get. Left, 52. Exam hits stopped because unknown is the honest type, 20: the 19 the earlier rows listed less noteRev (client-protocol.test-support.ts:250 and 318, chaos-revoke.integration.test.ts:247, instance-one-file.integration.test.ts:113, worker-usage.integration.test.ts:253, instance-records.integration.test.ts:31, TomlEdit.test.ts:94, scheduled.ts:92, AccessSpans.integration.test.ts:154, Connection.test.ts:708, runtime.decode.test.ts:124, processTable.laws.test.ts:326, counter runner.laws.integration.test.ts:46, record.laws.integration.test.ts:78, Patch.test.ts:11,116,120 twice,148), and QuotaSettings.test.ts:25, which maps ByteSize leaves of a settings value it takes as unknown and passes every other leaf through as it is. Patch.test.ts stays stopped: its helpers take unknown and read gives back undefined for a missing path, so Schema.Json is not clearly right. Product hits for the build step, 32: cloudflare/SettingsStartsRemote.ts:27,28, cloudflare/index.ts:59, ledger/Ledger.ts:70,71,72, ledger/Log.ts:114, node/dev/dev.ts:52, runtime/Audit.ts:98, runtime/Client.ts:133,204,220,254, runtime/Execution.ts:52,165-174, runtime/Program.ts:124,244,256,706, runtime/Runner.ts:318,1620,2924, settings/internal/edit.ts:60. Outside the slice's folders the rule also hits telemetry/Sink.ts:149. Waiting on 1366: 0. No disable line, no lock line, no .oxlintrc.json change.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/runtime/Client.laws.test.ts: a whole installs exactly when its pid's decoder passes, else keeps the last view and asks once",
+      "plant": "noteRev gives back the note's rev plus one",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "No law was added, changed or narrowed; no assertion removed. The plant ran once on a saved copy of Client.laws.test.ts, restored by copy (1 of 10 red under it). Ran at 99c941e3d plus this diff on Node 26.13.0, after pnpm install --frozen-lockfile: Client.laws.test.ts 10, edge-config.test.ts 5, node/ErrorCause.test.ts 29 (reaches RuntimeCauseTest.ts), runtime/Runner.integration.test.ts 117, record.laws.integration.test.ts 7, instance-records.integration.test.ts 13, all green; the 0178 guard allowed the integration runs (the branch holds pull request 1508). tsc --noEmit -p . clean in next/packages/libfabrika and next/apps/fabrika. pnpm format, pnpm lint with a 6 GB heap: red only on the eight held zero-lock lines for anti-slop/no-unknown-returns (.agents, oxlint-plugins, libfabrika src root, client, gateway, tasks, programs checklist and pipeline), which the owner ruling holds for the later lock pull request. ratchet.ts exits 0.",
+  "step": "tests"
+}

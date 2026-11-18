@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Option, Predicate, Schema } from "effect";
 import type { Row } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
@@ -30,9 +30,9 @@ const planter = Effect.acquireRelease(
       const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
       roots.push(root);
 
-      for (const [path, body] of Object.entries({ "package.json": { name: "plant", private: true }, ...files })) {
+      for (const [path, body] of Rec.toEntries({ "package.json": { name: "plant", private: true }, ...files })) {
         mkdirSync(dirname(join(root, path)), { recursive: true });
-        writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
+        writeFileSync(join(root, path), Predicate.isString(body) ? body : JSON.stringify(body));
       }
 
       return root;
@@ -48,7 +48,7 @@ const planter = Effect.acquireRelease(
     }),
 );
 
-const lines = (...each: ReadonlyArray<string>): string => `${each.join("\n")}\n`;
+const lines = (...each: ReadonlyArray<string>): string => `${Arr.join(each, "\n")}\n`;
 
 const RuleRow = Schema.Struct({
   name: Schema.String,
@@ -67,7 +67,7 @@ type Rules = typeof RuleFile.Type;
 
 /** Each row that has a layer, by its name. */
 const layersByName = (rows: Rules["layers"]): ReadonlyMap<string, number> =>
-  new Map(rows.flatMap((row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])));
+  new Map(Arr.flatMap(rows, (row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])));
 
 /** The rule file `pnpm lint:layers` reads. Its paths start at the top of the repo. */
 const REAL: Rules = Schema.decodeUnknownSync(RuleFile)(
@@ -104,7 +104,7 @@ const runJson = (root: string, rules: Rules) => {
     run.status === 2
       ? { violations: [], unclaimed: [] }
       : (({ violations, unclaimed }: typeof Report.Type) => ({
-          violations: violations.map((v) => ({ ...v, rule: v.rule ?? "upward" })),
+          violations: Arr.map(violations, (v) => ({ ...v, rule: v.rule ?? "upward" })),
           unclaimed,
         }))(readReport(run.stdout));
 
@@ -116,8 +116,8 @@ const runTool = (root: string, rules: Rules) => {
   const run = runJson(root, rules);
 
   return {
-    edges: [...new Set(run.violations.map((v): Edge => `${v.from} -> ${v.toLayer} [${v.rule}]`))].sort(),
-    unclaimed: run.unclaimed.map((u) => u.file).sort(),
+    edges: [...new Set(Arr.map(run.violations, (v): Edge => `${v.from} -> ${v.toLayer} [${v.rule}]`))].sort(),
+    unclaimed: Arr.map(run.unclaimed, (u) => u.file).sort(),
     status: run.status,
     stderr: run.stderr,
   };
@@ -129,9 +129,11 @@ const RANKS = ["upward", "sideways"];
 const rowEdges = (root: string, rules: Rules): ReadonlyArray<Edge> =>
   [
     ...new Set(
-      runJson(root, rules)
-        .violations.filter((v) => RANKS.includes(v.rule))
-        .map((v): Edge => `${v.fromLayer} -> ${v.toLayer} [${v.rule}]`),
+      pipe(
+        runJson(root, rules).violations,
+        Arr.filter((v) => RANKS.includes(v.rule)),
+        Arr.map((v): Edge => `${v.fromLayer} -> ${v.toLayer} [${v.rule}]`),
+      ),
     ),
   ].sort();
 
@@ -232,9 +234,8 @@ describe("the real rule file on planted trees", () => {
       expect(runTool(tree, REAL)).toMatchObject({ edges: walls, unclaimed: [], status: 1 });
 
       const store = `${LIB}/runtime/ProcessStore.ts`;
-
-      const moved = REAL.layers.map((row) =>
-        row.name === "next-runtime-coordination" ? { ...row, paths: row.paths.filter((p) => p !== store) } : row,
+      const moved = Arr.map(REAL.layers, (row) =>
+        row.name === "next-runtime-coordination" ? { ...row, paths: Arr.filter(row.paths, (p) => p !== store) } : row,
       );
 
       expect(runTool(tree, { ...REAL, layers: moved }).edges).toEqual(
@@ -260,12 +261,16 @@ describe("the real rule file on planted trees", () => {
         [`${LIB}/processes/Process.ts`]: lines("export const member = 1;"),
         [`${LIB}/ledger/Log.ts`]: lines("export const log = 1;"),
         [`${LIB}/transport/Wire.ts`]: lines("export const wire = 1;"),
-        ...Object.fromEntries(
-          lower.map((module) => [`${LIB}/${module}/Up.ts`, lines('import {Gateway} from "../gateway/Gateway.ts";')]),
+        ...Rec.fromEntries(
+          Arr.map(lower, (module) => [
+            `${LIB}/${module}/Up.ts`,
+            lines('import {Gateway} from "../gateway/Gateway.ts";'),
+          ]),
         ),
       });
-
-      expect(runTool(tree, REAL).edges).toEqual(lower.map((module) => `${LIB}/${module}/Up.ts -> next-door [upward]`));
+      expect(runTool(tree, REAL).edges).toEqual(
+        Arr.map(lower, (module) => `${LIB}/${module}/Up.ts -> next-door [upward]`),
+      );
     }),
   );
 
@@ -442,16 +447,17 @@ describe("the real rule file on planted trees", () => {
 
       expect(runTool(tree, REAL)).toMatchObject({ edges: parts, unclaimed: [], status: 1 });
 
-      const node = REAL.layers.findIndex((row) => row.name === "next-node");
-
+      const node = Option.getOrThrowWith(
+        Arr.findFirstIndex(REAL.layers, (row) => row.name === "next-node"),
+        () => new Error("the real layer rules have a next-node row"),
+      );
       const below = [
         ...REAL.layers.slice(0, 1),
         ...REAL.layers.slice(node, node + 2),
         ...REAL.layers.slice(1, node),
         ...REAL.layers.slice(node + 2),
       ];
-
-      expect(below.map((row) => row.name).slice(0, 4)).toEqual([
+      expect(Arr.map(below, (row) => row.name).slice(0, 4)).toEqual([
         "next-apps",
         "next-node",
         "next-workers",
@@ -471,13 +477,19 @@ describe("the real rule file on planted trees", () => {
     Effect.gen(function* () {
       const { plant } = yield* planter;
 
-      const claimed = REAL.layers
-        .flatMap((row) => row.paths)
-        .filter((path) => (path.startsWith(`${LIB}/`) || path.startsWith(`${TUVAL}/`)) && !path.includes("*"))
-        .map((path) => (/\.tsx?$/.test(path) ? path : `${path}/Probe.ts`));
+      const claimed = pipe(
+        REAL.layers,
+        Arr.flatMap((row) => row.paths),
+        Arr.filter(
+          (path) =>
+            (pipe(path, Str.startsWith(`${LIB}/`)) || pipe(path, Str.startsWith(`${TUVAL}/`))) &&
+            !pipe(path, Str.includes("*")),
+        ),
+        Arr.map((path) => (/\.tsx?$/.test(path) ? path : `${path}/Probe.ts`)),
+      );
 
       const tree = plant({
-        ...Object.fromEntries(claimed.map((path) => [path, lines("export const probe = 1;")])),
+        ...Rec.fromEntries(Arr.map(claimed, (path) => [path, lines("export const probe = 1;")])),
         [`${LIB}/sync/Merge.ts`]: lines("export const merge = 1;"),
         [`${LIB}/sync/Merge.test.ts`]: lines("export const merge = 1;"),
         [`${LIB}/Loose.ts`]: lines("export const loose = 1;"),
@@ -503,7 +515,7 @@ describe("the real rule file on planted trees", () => {
       expect(runTool(tree, REAL).status).toBe(0);
 
       const twice = [
-        ...REAL.layers.map((row) =>
+        ...Arr.map(REAL.layers, (row) =>
           row.name === "next-ledger" ? { ...row, paths: [...row.paths, `${LIB}/ledger/*`] } : row,
         ),
         { name: "plant-twin", paths: [`${LIB}/*/Log.ts`] },
@@ -547,8 +559,10 @@ describe("the real rule file on planted trees", () => {
 
   // The rule file's modules: one probe file per row that has a layer, each importing the probe of
   // every other row. The tool breaks exactly the imports that do not go down a layer.
-  const SRC_ROWS = REAL.layers.filter((row) => row.layer !== undefined && row.paths.every((p) => p.startsWith(LIB)));
-
+  const SRC_ROWS = Arr.filter(
+    REAL.layers,
+    (row) => row.layer !== undefined && Arr.every(row.paths, (p) => pipe(p, Str.startsWith(LIB))),
+  );
   const probe = (row: Row): string => {
     const first = row.paths[0] ?? "";
 
@@ -556,10 +570,11 @@ describe("the real rule file on planted trees", () => {
   };
 
   const expectedEdges = (rows: ReadonlyArray<Row>): ReadonlyArray<Edge> => {
-    const ranks = new Map(rows.flatMap((row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])));
-
-    return SRC_ROWS.flatMap((from) =>
-      SRC_ROWS.flatMap((to): ReadonlyArray<Edge> => {
+    const ranks = new Map(
+      Arr.flatMap(rows, (row) => (row.layer === undefined ? [] : [[row.name, row.layer] as const])),
+    );
+    return Arr.flatMap(SRC_ROWS, (from) =>
+      Arr.flatMap(SRC_ROWS, (to): ReadonlyArray<Edge> => {
         const [a, b] = [ranks.get(from.name), ranks.get(to.name)];
 
         return from.name === to.name || a === undefined || b === undefined || a > b
@@ -572,15 +587,18 @@ describe("the real rule file on planted trees", () => {
   const plantedReal = planter.pipe(
     Effect.map(({ plant }) =>
       plant(
-        Object.fromEntries(
-          SRC_ROWS.map((row) => [
+        Rec.fromEntries(
+          Arr.map(SRC_ROWS, (row) => [
             probe(row),
             lines(
-              ...SRC_ROWS.filter((other) => other.name !== row.name).map((other, n) => {
-                const spec = relative(dirname(probe(row)), probe(other));
-
-                return `import * as m${n} from "${spec.startsWith(".") ? spec : `./${spec}`}";`;
-              }),
+              ...pipe(
+                SRC_ROWS,
+                Arr.filter((other) => other.name !== row.name),
+                Arr.map((other, n) => {
+                  const spec = relative(dirname(probe(row)), probe(other));
+                  return `import * as m${n} from "${pipe(spec, Str.startsWith(".")) ? spec : `./${spec}`}";`;
+                }),
+              ),
               "export const p = 1;",
             ),
           ]),
@@ -613,18 +631,18 @@ describe("the real rule file on planted trees", () => {
       const realTree = yield* plantedReal;
 
       const runtime =
-        REAL.layers.find((row) => row.name === "next-runtime")?.layer ?? expect.fail("the runtime has a layer");
-
-      const beside = REAL.layers.map((row) => (row.name === "next-access" ? { ...row, layer: runtime } : row));
+        Option.getOrUndefined(Arr.findFirst(REAL.layers, (row) => row.name === "next-runtime"))?.layer ??
+        expect.fail("the runtime has a layer");
+      const beside = Arr.map(REAL.layers, (row) => (row.name === "next-access" ? { ...row, layer: runtime } : row));
       const before = rowEdges(realTree, REAL);
       const after = rowEdges(realTree, { ...REAL, layers: beside });
       expect(after).toEqual(expectedEdges(beside));
-      expect(after.filter((edge) => !before.includes(edge))).toEqual([
+      expect(Arr.filter(after, (edge) => !before.includes(edge))).toEqual([
         "next-access -> next-runtime [sideways]",
         "next-runtime -> next-access [sideways]",
         "next-tezgah -> next-access [upward]",
       ]);
-      expect(before.filter((edge) => !after.includes(edge))).toEqual([
+      expect(Arr.filter(before, (edge) => !after.includes(edge))).toEqual([
         "next-access -> next-runtime [upward]",
         "next-access -> next-tezgah [sideways]",
         "next-tezgah -> next-access [sideways]",
@@ -640,7 +658,7 @@ describe("the real rule file on planted trees", () => {
   // T953 moved every row from the processes up by one, to put the permission core on layer 3 between
   // the ledger and the processes.
   it("pinned: the modules are on the layers the plan gives them", () => {
-    expect(Object.fromEntries(layersByName(REAL.layers))).toEqual({
+    expect(Rec.fromEntries(layersByName(REAL.layers))).toEqual({
       "next-node": 10,
       "next-workers": 9,
       "next-libfabrika-entry": 8,
@@ -699,9 +717,8 @@ describe("the real rule file on planted trees", () => {
     };
 
     const now = layersByName(REAL.layers);
-
-    const changed = Object.entries(main).flatMap(([a, before]) =>
-      Object.entries(main).flatMap(([b, other]) => {
+    const changed = Arr.flatMap(Rec.toEntries(main), ([a, before]) =>
+      Arr.flatMap(Rec.toEntries(main), ([b, other]) => {
         const [after, then] = [now.get(a), now.get(b)];
 
         return after === undefined || then === undefined
@@ -721,9 +738,14 @@ describe("the real rule file on planted trees", () => {
   // a program's box and tuval's entry file have no list, on purpose.
   // Plant: drop `next-mcp`'s `imports`. Its row then shows here.
   it("pinned: every library row names the rows it may import", () => {
-    const open = REAL.layers.filter((row) => row.imports === undefined && row.paths.some((p) => p.startsWith("next/")));
-    expect(open.filter((row) => row.paths.some((p) => p.startsWith("next/packages/libfabrika")))).toEqual([]);
-    expect(open.map((row) => row.name)).toEqual([
+    const open = Arr.filter(
+      REAL.layers,
+      (row) => row.imports === undefined && Arr.some(row.paths, (p) => pipe(p, Str.startsWith("next/"))),
+    );
+    expect(
+      Arr.filter(open, (row) => Arr.some(row.paths, (p) => pipe(p, Str.startsWith("next/packages/libfabrika")))),
+    ).toEqual([]);
+    expect(Arr.map(open, (row) => row.name)).toEqual([
       "next-apps",
       "next-program-windows",
       "next-programs",
@@ -843,7 +865,7 @@ describe("the patched code-graph", () => {
         "mid1 -> top [upward]",
         "mid2 -> mid1 [sideways]",
       ]);
-      const listed = ranked.map(({ layer: _layer, ...row }) => row);
+      const listed = Arr.map(ranked, ({ layer: _layer, ...row }) => row);
       expect(rowEdges(tree, { layers: listed })).toEqual(["mid1 -> top [upward]", "mid2 -> mid1 [upward]"]);
     }),
   );

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-unknown-type-aliases-1-review2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:48:24-08:00",
+  "ended": "2026-11-15T23:50:48-08:00",
+  "parent": "2026-11-16-antislop-no-unknown-type-aliases-1-build2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice AS-no-unknown-type-aliases-1 at a409215, on branch fabrikalfa/antislop-no-unknown-type-aliases-1, after the merge of origin/main at c51c692 (pull request 1366 merged): merge-ready, no findings. The merge touches none of the slice's files. a409215 fixes the last hit, next/packages/libfabrika/src/runtime/Entry.ts:38, by the rule's named fix, the parsed owner type: View becomes Schema.Json, Runner.ts:406 Live.view becomes View, and internal/supervisor.ts:49 CodeChange.view becomes Schema.Json. Each step's view is already decoded as Schema.Json (Program.ts:506 and 777), so the runner's live view was always JSON and now says so. The stored journal keeps its shape and behavior: RecoveryStore.ts:130 saves and reads each row through Schema.fromJsonString, so a saved view is JSON text both before and after; any row that decoded with Schema.Unknown in that field decodes the same with Schema.Json, and encoding a JSON value writes the same text. The rule meets 0 hits in next/; a scratch copy of Entry.ts with View put back to unknown gives 1 hit, so the rule reaches the fix. No disable line, no lock line, no .oxlintrc.json change, no assertion touched. Hits over the slice: met 3, hand edits 3 (2 in the tests round, 1 in build round 2), left 0. The build2 row's counts match.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 2,
+  "note": "Read-only apart from this row. Ran at a409215, Node 26.13.0, one file at a time: libfabrika runtime Entry.test.ts 1, internal/supervisor.laws.test.ts 9, RunnerRecovery.laws.test.ts 4, Program.test.ts 44, Runner.integration.test.ts 117, RunnerSupervision.integration.test.ts 60, RunnerOptions.integration.test.ts 2, all green, none refused by the 0178 guard. tsc --noEmit clean for next/packages/libfabrika, next/programs/inbox, checklist, counter, tezgah, chaos, next/packages/tuval and next/apps/fabrika. Not run: 0178 guard, next/apps/fabrika/src/inbox-runner.laws.integration.test.ts and checklist-runner.laws.integration.test.ts. Not run here: next/apps/fabrika instance-wire.integration and the e2e visual tests, which need ssh-keygen and Playwright Chromium and which the diff does not reach. loosening.sh on the range: 2 hits, the same two added type import lines as review1, no law loosened. git merge-tree with origin/main: clean. The tests commit 731de8d and the build commit a409215 carry a Co-authored-by: Claude trailer, left as is.",
+  "step": "review"
+}

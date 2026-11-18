@@ -6,6 +6,8 @@
  * Rows come from the declarations, never from the snapshot's keys. Defaults and releases are derived documentation, never extra settings facts.
  */
 import { Schema } from "effect";
+import * as Function from "effect/Function";
+import * as Str from "effect/String";
 import * as Codec from "./Codec.ts";
 import { newer } from "./Files.ts";
 import type * as Setting from "./Setting.ts";
@@ -98,7 +100,8 @@ export const warnings = (rows: ReadonlyArray<Row>, minimum: string): Array<Warni
     .map((row) => ({ path: row.path, since: row.since, minimum, app: row.app.name }));
 
 /** Words as Markdown shows them as written: every character Markdown reads is escaped. */
-const escape = (text: string) => text.replace(/[\\`*_[\]<>#|&~+!-]/g, "\\$&").replace(/^(\s*\d+)\./gm, "$1\\.");
+const escape = (text: string) =>
+  Function.pipe(text, Str.replace(/[\\`*_[\]<>#|&~+!-]/g, "\\$&"), Str.replace(/^(\s*\d+)\./gm, "$1\\."));
 
 const code = (text: string) => `\`${text}\``;
 

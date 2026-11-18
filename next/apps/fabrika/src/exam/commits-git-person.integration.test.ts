@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -24,7 +25,7 @@ describe("person keys (p87b)", () => {
     fc.assert(
       fc.property(fc.uniqueArray(id, { minLength: 2, maxLength: 2 }), fc.boolean(), name, (ids, reverse, name) => {
         const lines = [personLine(ids[0]!), personLine(ids[1]!, "stranger")];
-        const r = new Repo(`${GOOD_KEYS}${(reverse ? lines.reverse() : lines).join("\n")}\n`);
+        const r = new Repo(`${GOOD_KEYS}${Arr.join(reverse ? lines.reverse() : lines, "\n")}\n`);
         r.change(`${name}.ts`);
         r.sign("tests");
         const out = r.check();
@@ -46,7 +47,7 @@ describe("person keys (p87b)", () => {
           [personLine("")],
           [keyLine(`person:${id}`, "person")],
         ]) {
-          const r = new Repo(`${GOOD_KEYS}${people.join("\n")}\n`);
+          const r = new Repo(`${GOOD_KEYS}${Arr.join(people, "\n")}\n`);
           r.change(`${name}.ts`);
           r.sign("tests");
           const out = r.check();

@@ -15,6 +15,7 @@ export const watcher = Machine.make({
   model: Model,
   msg: Msg,
   cmds: [],
+  // SAFETY: `types` only carries the empty ctx type; tea never reads this value at run time.
   types: { ctx: {} as Record<string, never> },
   init: (loaded) => [loaded ?? Model.cases.booting.make({}), []],
   update: {

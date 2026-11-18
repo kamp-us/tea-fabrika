@@ -1,6 +1,19 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import {
+  Array as Arr,
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Formatter,
+  Logger,
+  Match,
+  Redacted,
+  Schema,
+} from "effect";
+import type { Scope, Tracer } from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 
@@ -37,7 +50,7 @@ export type World = {
   readonly reopen: Effect.Effect<void, unknown>;
   readonly fire: Effect.Effect<void, unknown>;
   readonly green: Effect.Effect<void>;
-  readonly deliver: (input: unknown) => Effect.Effect<unknown, unknown>;
+  readonly deliver: (input: typeof Mail.Land.Type | typeof Mail.Abandon.Type) => Effect.Effect<unknown, unknown>;
   readonly land: (ref: string) => Effect.Effect<unknown, unknown>;
   readonly savedReplies: Effect.Effect<ReadonlyArray<unknown>, unknown>;
 };
@@ -51,7 +64,7 @@ export type Driver = {
 const NAME = "merger:1";
 
 const replies = Effect.fnUntraced(function* (h: World) {
-  return (yield* h.current().letters("queue")).map((letter) => Schema.decodeUnknownSync(Mail.Reply)(letter.m));
+  return Arr.map(yield* h.current().letters("queue"), (letter) => Schema.decodeUnknownSync(Mail.Reply)(letter.m));
 });
 
 const finish = Effect.fnUntraced(function* (h: World) {
@@ -85,12 +98,11 @@ const secret = Arbitrary.schema(
 
     return {
       token,
-      text:
-        form === "token"
-          ? token
-          : form === "bearer"
-            ? `Bearer ${token}`
-            : `https://invalid.test/auth?access_token=${token}`,
+      text: Match.value(form).pipe(
+        Match.when("token", () => token),
+        Match.when("bearer", () => `Bearer ${token}`),
+        Match.orElse(() => `https://invalid.test/auth?access_token=${token}`),
+      ),
     };
   }),
 );
@@ -132,7 +144,7 @@ export const suite = (driver: Driver) =>
         expect(yield* h.alarms.saved).toEqual(before);
         yield* h.green;
         yield* h.fire;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(1);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge")).toHaveLength(1);
         expect(yield* replies(h)).toHaveLength(1);
       }),
     );
@@ -150,9 +162,9 @@ export const suite = (driver: Driver) =>
         expect((yield* h.host.read(1))?.state).toBe("merged");
         expect(yield* replies(h)).toEqual([]);
         yield* h.reopen;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(1);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge")).toHaveLength(1);
         yield* h.fire;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(2);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge")).toHaveLength(2);
         expect((yield* replies(h))[0]?._tag).toBe("merged");
         expect((yield* replies(h))[0]?.ref).toBe("r3");
         expect(yield* replies(h)).toHaveLength(1);
@@ -210,13 +222,11 @@ export const suite = (driver: Driver) =>
             );
           } else {
             yield* r.h.host.fail(
-              state._tag === "reading"
-                ? cell.pick % 3 === 0
-                  ? "update"
-                  : "change"
-                : state._tag === "updating"
-                  ? "update"
-                  : "merge",
+              Match.value(state).pipe(
+                Match.tag("reading", () => (cell.pick % 3 === 0 ? ("update" as const) : ("change" as const))),
+                Match.tag("updating", () => "update" as const),
+                Match.orElse(() => "merge" as const),
+              ),
               cell.pick % 2 === 0 ? { kind: "fault", reason: cell.reason } : { kind: "defect" },
             );
           }
@@ -269,9 +279,9 @@ export const suite = (driver: Driver) =>
           const savedReplies = yield* h.savedReplies;
           driver.unleaked(
             [
-              JSON.stringify(letters),
-              JSON.stringify(checkpoint),
-              JSON.stringify(savedReplies),
+              Formatter.formatJson(letters),
+              Formatter.formatJson(checkpoint),
+              Formatter.formatJson(savedReplies),
               ...captured.text(),
               ...logs,
             ],
@@ -283,7 +293,7 @@ export const suite = (driver: Driver) =>
         yield* inspect;
         yield* finish(h);
         yield* inspect;
-        const failures = (yield* h.current().letters(NAME)).map((letter) => letter.m);
+        const failures = Arr.map(yield* h.current().letters(NAME), (letter) => letter.m);
 
         for (const reason of ["unavailable", "handler_failed"]) {
           expect(failures).toContainEqual(
@@ -306,10 +316,10 @@ export const suite = (driver: Driver) =>
             Effect.gen(function* () {
               driver.unleaked(
                 [
-                  JSON.stringify(yield* walk.h.current().checkpoint),
-                  JSON.stringify(yield* walk.h.current().letters(NAME)),
-                  JSON.stringify(yield* walk.h.current().letters("queue")),
-                  JSON.stringify(yield* walk.h.savedReplies),
+                  Formatter.formatJson(yield* walk.h.current().checkpoint),
+                  Formatter.formatJson(yield* walk.h.current().letters(NAME)),
+                  Formatter.formatJson(yield* walk.h.current().letters("queue")),
+                  Formatter.formatJson(yield* walk.h.savedReplies),
                   ...captured.text(),
                   ...logs,
                 ],
@@ -336,9 +346,9 @@ export const suite = (driver: Driver) =>
           yield* finish(final);
           driver.unleaked(
             [
-              JSON.stringify(yield* final.current().checkpoint),
-              JSON.stringify(yield* final.current().letters(NAME)),
-              JSON.stringify(yield* final.current().letters("queue")),
+              Formatter.formatJson(yield* final.current().checkpoint),
+              Formatter.formatJson(yield* final.current().letters(NAME)),
+              Formatter.formatJson(yield* final.current().letters("queue")),
               ...captured.text(),
               ...logs,
             ],
@@ -347,11 +357,11 @@ export const suite = (driver: Driver) =>
         }
 
         yield* inspect;
-        const spans = captured.text().join("\n");
+        const spans = Arr.join(captured.text(), "\n");
         expect(spans).toContain("fab.change");
         expect(spans).toContain("fab.head");
         expect((yield* h.current().letters(NAME)).length).toBeGreaterThan(0);
-        expect((yield* h.savedReplies).some((reply) => reply !== null)).toBe(true);
+        expect(Arr.some(yield* h.savedReplies, (reply) => reply !== null)).toBe(true);
       }).pipe(Effect.withTracer(captured.tracer), Effect.provide(Logger.layer([logger])));
     });
 

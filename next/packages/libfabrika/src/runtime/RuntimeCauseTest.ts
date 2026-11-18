@@ -19,7 +19,13 @@
 // builds the error without its `cause`. The other stores keep the ledger's error until their slices.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
-import { Effect, Layer, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -34,7 +40,7 @@ import { Activity, Owner, Recipient, recoverActivity, Start } from "../processes
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { QuotasError } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
-import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
@@ -106,7 +112,11 @@ const recoveryCalls = fc.constantFrom<RecoveryCall>("load", "input", "receipt");
 
 const callRecovery = (call: RecoveryCall) =>
   RecoveryStore.use((store) =>
-    call === "load" ? store.load : call === "input" ? store.input("letter-1") : store.receipt("letter-1"),
+    Match.value(call).pipe(
+      Match.when("load", () => store.load),
+      Match.when("input", () => store.input("letter-1")),
+      Match.orElse(() => store.receipt("letter-1")),
+    ),
   );
 
 /** The session manager's own error, named through `end`, which fails with nothing else. */
@@ -294,7 +304,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           sql.exec(
             "INSERT INTO process_recovery (name, value) VALUES (?, ?)",
             "counter:1",
-            JSON.stringify({ v: 1, name, policy: bad }),
+            Formatter.formatJson({ v: 1, name, policy: bad }),
           );
           const error = yield* Effect.flip(Effect.provide(callRecovery("load"), recoveryStore(sql)));
           expect(error._tag).toBe("RecoveryStoreError");
@@ -502,6 +512,8 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           const dead = { tries: 3, limit: 3, m: "m-1", build: "b-1", errors: ["E", "E", "E"], [field]: bad };
           const error = yield* Effect.flip(
             Effect.provide(
+              // SAFETY: not a DeadInput on purpose, since one field holds a damaged value; ProcessManager's
+              // dead decodes its input with DeadInput first, and that decode's failure is what this law reads.
               ProcessManager.use((m) => m.dead(PROCESS, dead as never, from())),
               manager,
             ),
@@ -592,7 +604,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
       );
     };
 
-    const delivery = (traceId: unknown): unknown => ({
+    const delivery = (traceId: unknown) => ({
       id: "letter-1",
       envelope: {
         id: "in-process_0000000000e008000000000000-1",
@@ -613,7 +625,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
         Effect.gen(function* () {
           const error = yield* Effect.flip(
             Effect.provide(
-              ProgramRunner.use((r) => r.msg(delivery(traceId) as Incoming)),
+              ProgramRunner.use((r) => r.msg(delivery(traceId))),
               runner(),
             ),
           );
@@ -638,7 +650,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           };
           const error = yield* Effect.flip(
             Effect.provide(
-              ProgramRunner.use((r) => r.msg(delivery("4bf92f3577b34da6a3ce929d0e0e4736") as Incoming)),
+              ProgramRunner.use((r) => r.msg(delivery("4bf92f3577b34da6a3ce929d0e0e4736"))),
               runner(policy),
             ),
           );
@@ -660,6 +672,8 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
       ({ bad, part }) =>
         Effect.gen(function* () {
           const sql = fresh();
+          // SAFETY: not a Model on purpose: `n` is a string, a boolean or a fraction, which Schema.Int
+          // refuses, so the step's model or view fails to encode, the failure this law is about.
           const wrong = { n: bad } as typeof Model.Type;
           const broken = {
             ...program,
@@ -679,15 +693,16 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
             Effect.gen(function* () {
               const r = yield* ProgramRunner;
               yield* r.open("before");
-              return yield* Effect.flip(r.msg(delivery("4bf92f3577b34da6a3ce929d0e0e4736") as Incoming));
+
+              return yield* Effect.flip(r.msg(delivery("4bf92f3577b34da6a3ce929d0e0e4736")));
             }),
             runner(undefined, broken, sql),
           );
           expect(sent).toBeInstanceOf(ProgramDown);
           const saved = yield* openRecovery(sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }).load;
           const stored = [
-            ...(saved?.receipts ?? []).flatMap((receipt) => receipt.errors),
-            ...(saved?.observations ?? []).flatMap((o) => ("error" in o && o.error !== undefined ? [o.error] : [])),
+            ...Arr.flatMap(saved?.receipts ?? [], (receipt) => receipt.errors),
+            ...Arr.flatMap(saved?.observations ?? [], (o) => ("error" in o && o.error !== undefined ? [o.error] : [])),
           ];
           expect(stored.length, "the failed step is stored").toBeGreaterThan(0);
 

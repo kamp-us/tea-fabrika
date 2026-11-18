@@ -1,0 +1,43 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e48-tests4",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:36:07-08:00",
+  "ended": "2026-11-15T23:42:00-08:00",
+  "parent": "2026-11-15-effect-e48-review3",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round after the first send-back of judgment slice E48 (globalDate and globalDateInEffect), in today's CI tooling. The review found that round 3's fix of .github/ci/gate.mjs changed how the gate fails: a newest full run on main with no job start that parses used to fail the step (a RangeError, no start, the report judges red), and at 873308e it exited 0 with skip, too_soon on all-null starts and start, due on text that is not a time. Fixed by a hand edit in gate.mjs read: when no start of the newest full run equals the earliest parsed time (no start, so Infinity, or a start that does not parse, so NaN), read throws 'gate: the last full run on main gave no start time', and main answers code 1 with no output and no summary, as for any answer it cannot read. The 'at a time GitHub did not give' branch in main is gone; the header and the read and Read doc comments say the new fail case. Round 3's design stays: the top-level started field and the start text picked by parsed time. The old version threw that RangeError out of main itself (an unhandled rejection, exit 1, nothing written); the new one returns code 1 through main's catch, so the step still fails with no start and no summary. A scratch comparison of main at f29fdf6 and at this change over 3000 generated GitHub answers (seed 119120) agreed on every one, code, output and summary, once the start text is read as GitHub's form (14:00:00Z in place of 14:00:00.000Z): 2181 start=true, 801 start=false, 18 failures, all the same. Recount over .github/ci with only globalDate and globalDateInEffect at error through --lspconfig on .github/ci/tsconfig.json: 0 hits (a planted new Date() made it 1, then undone). No lock line, no disable comment, no existing law changed. No product-file hit is left, so the build has nothing to do.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "New law G8 in .github/ci/gate.test.ts: over generated histories with a newest full run on main whose job starts are each null or text Date.parse cannot read (all null, all text and mixed, gated and old-shape runs, all three events, older full runs with good starts reached), main answers code 1 with empty output and summary. Before the fix (873308e) it was red: counterexample [[],\"push\",false,[null]], code 0, skip, too_soon, -Infinity minutes ago. Tests ran at the merge of origin/main plus this change: .github/ci/gate.test.ts 8 of 8, .github/ci/proof.test.ts 8 of 8. pnpm format clean, pnpm lint green (NODE_OPTIONS=--max-old-space-size=6144), ratchet exit 0. No typecheck run here; CI runs it. The review row 2026-11-15-effect-e48-review3 was committed with plain git, since stepcommit.sh answers 'unknown step review'.",
+  "step": "tests",
+  "laws": [
+    {
+      "law": "G8 property, .github/ci/gate.test.ts: when the newest full run on main gives no job start that parses, every start null or text that is not a time, the step exits 1 with no start line and no summary",
+      "red": "at 873308e main answered code 0 with start=false: 'skip, too_soon; ... started null, -Infinity minutes ago' (expected +0 to be 1)"
+    }
+  ],
+  "plants": [
+    {
+      "law": "G8, .github/ci/gate.test.ts",
+      "plant": ".github/ci/gate.mjs read drops the throw when no start parses and keeps started as null",
+      "result": "red"
+    },
+    {
+      "law": "G8, .github/ci/gate.test.ts",
+      "plant": ".github/ci/gate.mjs put back as it was at 873308e (round 3)",
+      "result": "red"
+    },
+    {
+      "law": "G1 to G7, .github/ci/gate.test.ts",
+      "plant": ".github/ci/gate.mjs put back as it was at 873308e (round 3)",
+      "result": "green"
+    }
+  ]
+}

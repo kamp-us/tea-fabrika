@@ -1,7 +1,15 @@
 // P33 review round 2, one rule instead of single guarded ids: every event the brain writes about a
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Result, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
 import { Mailbox } from "./Mailbox.ts";
@@ -56,7 +64,7 @@ const examples =
 const nameInput = Start.cases.first.fields.name.check(Schema.isPattern(/^[a-z][a-z0-9._:-]{0,30}$/));
 
 const validName = Arbitrary.schema(nameInput).pipe(
-  Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !name.startsWith("client:")),
+  Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !Str.startsWith("client:")(name)),
 );
 
 const textInput = Schema.NonEmptyString.check(Schema.isMaxLength(40));
@@ -68,8 +76,7 @@ const options = { arbitrary: { seed: 119120, runs: 20, size: 60 } };
 const POLICY = { reason: "crashed", crashes: 1, until: 0 };
 
 const toW = Recipient.cases.process.make({ process: W });
-
-const brainSide = (process: string) => process === "processes" || process.startsWith("processes/");
+const brainSide = (process: string) => process === "processes" || Str.startsWith("processes/")(process);
 
 const seed = (store: Storage, name = "counter:1") =>
   Effect.gen(function* () {
@@ -108,7 +115,7 @@ describe("P33, every process event lives on a stream only the brain may write", 
     [
       Arbitrary.schema(nameInput).pipe(
         Arbitrary.filter(
-          (name) => !["processes", "gateway", "watcher:1"].includes(name) && !name.startsWith("client:"),
+          (name) => !["processes", "gateway", "watcher:1"].includes(name) && !Str.startsWith("client:")(name),
         ),
       ),
     ],
@@ -128,8 +135,8 @@ describe("P33, every process event lives on a stream only the brain may write", 
           }),
         ).pipe(Effect.provide(manager(store, brain(), ids(B).next)));
         const rows = store.rows();
-        const events = rows.filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));
-        expect(new Set(events.map((row) => row._tag))).toEqual(new Set(Object.keys(ProcessEvent.cases)));
+        const events = rows.filter((row) => Rec.has<string, unknown>(ProcessEvent.cases, row._tag));
+        expect(new Set(events.map((row) => row._tag))).toEqual(new Set(Rec.keys(ProcessEvent.cases)));
         expect(events.filter((row) => !brainSide(row.stream))).toEqual([]);
         // The start request's own id is a lifecycle line too.
         expect(rows.find((row) => row.id === "start:counter:1")?.stream).toSatisfy(brainSide);
@@ -362,8 +369,7 @@ describe("P33, an inbox read is total", () => {
     Schema.Struct({ m: Schema.TaggedStruct("DOWN", { ref: json(1) }) }),
   ]);
 
-  const hasM = (body: unknown): body is { readonly m: unknown } =>
-    typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");
+  const hasM = (body: unknown): body is { readonly m: unknown } => Predicate.isObject(body) && Rec.has(body, "m");
 
   // Plant: drop nested mail in envelopes with 2 to 4 keys. Shrinks to {ref: 0, m: []}.
   it.effect.prop(
@@ -380,12 +386,13 @@ describe("P33, an inbox read is total", () => {
             ledger.append("watcher:1/inbox", `junk:${n}`, {
               ...from({ by: CLIENT }),
               _tag: "send",
+              // SAFETY: `body` is a junk letter drawn as JSON on purpose, to see the inbox take it as data.
               body: body as Schema.Json,
             }),
           ).pipe(Effect.provide(manager(store)));
 
           if (placed._tag === "placed" && hasM(body)) {
-            want.push(JSON.stringify(body.m));
+            want.push(Formatter.formatJson(body.m));
           }
         }
 
@@ -410,6 +417,7 @@ describe("P33, every brain-written line records who asked", () => {
 
     for (const row of rows) {
       expect(row.by).toBe(BRAIN);
+      // SAFETY: each brain row here answers an `asked` call and keeps the key in its body.
       expect((row.body as { readonly asked?: unknown }).asked).toBe(key);
     }
   };
@@ -449,7 +457,7 @@ describe("P33, every brain-written line records who asked", () => {
     "asked is kept out of the trust check: another writer's line naming the brain counts for nothing",
     [
       Arbitrary.schema(nameInput).pipe(
-        Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !name.startsWith("client:")),
+        Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !Str.startsWith("client:")(name)),
       ),
     ],
     examples([["counter:1"]], (name: string) => {

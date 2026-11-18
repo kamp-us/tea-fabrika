@@ -1,7 +1,16 @@
 // P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Option, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as ByteSize from "effect/ByteSize";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Fabrika.ts";
 import * as Sources from "./Fabrika.ts";
@@ -27,8 +36,8 @@ const numeric = (value: unknown): unknown => {
     return ByteSize.toNumberUnsafe(value);
   }
 
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, numeric(v)]));
+  if (Predicate.isObjectKeyword(value)) {
+    return Rec.fromEntries(Rec.toEntries(value).map(([key, v]) => [key, numeric(v)]));
   }
 
   return value;
@@ -109,7 +118,7 @@ describe("P34c Q11 settings", () => {
           const defaults = new Map<string, number>([
             ["writes", 13_760],
             ["storage", 1_000_000_000],
-            ...Object.entries(measured).flatMap(([location, value]) => [
+            ...Rec.toEntries(measured).flatMap(([location, value]) => [
               [`recovery.${location}.writes`, value.writes] as const,
               [`recovery.${location}.bytes`, value.bytes] as const,
               [`recovery.${location}.message.writes`, value.message.writes] as const,
@@ -121,12 +130,16 @@ describe("P34c Q11 settings", () => {
           for (const cell of tape) {
             const paths = [...selected.keys()];
             const key = paths[cell.pick % paths.length]!;
-            const cap = key === "writes" ? 13_760 : key === "storage" ? 1_000_000_000 : 1_000_000;
+            const cap = Match.value(key).pipe(
+              Match.when("writes", () => 13_760),
+              Match.when("storage", () => 1_000_000_000),
+              Match.orElse(() => 1_000_000),
+            );
             selected.set(key, cell.remove ? defaults.get(key)! : 1 + (cell.value % cap));
             const tables = new Map<string, string[]>();
 
             for (const [key, value] of selected) {
-              const segments = key.split(".");
+              const segments = Str.split(key, ".");
               const field = segments.pop()!;
               const table = ["limits", ...segments].join(".");
               const rows = tables.get(table) ?? [];
@@ -138,12 +151,12 @@ describe("P34c Q11 settings", () => {
             const resolved = yield* resolve(text);
             const g = group();
             const saved = yield* Snapshot.make(g, resolved);
-            const transport = Schema.decodeSync(Schema.fromJsonString(Snapshot.Snapshot))(JSON.stringify(saved));
+            const transport = Schema.decodeSync(Schema.fromJsonString(Snapshot.Snapshot))(Formatter.formatJson(saved));
             const restored = yield* Snapshot.read(g, transport);
             expect(numeric(restored.values)).toEqual({
               writes: selected.get("writes"),
               storage: selected.get("storage"),
-              recovery: Object.fromEntries(
+              recovery: Rec.fromEntries(
                 ["project", "process"].map((location) => [
                   location,
                   {
@@ -192,7 +205,7 @@ describe("P34c Q11 settings", () => {
 
           const recovery = declaration("limits.recovery");
           const encoded = Schema.encodeUnknownSync(recovery.schema)(recovery.default);
-          expect(typeof encoded).toBe("object");
+          expect(encoded).toBeTypeOf("object");
 
           // Mutate a schema-valid recovery value, rather than inventing another error schema.
           for (const location of ["project", "process"]) {

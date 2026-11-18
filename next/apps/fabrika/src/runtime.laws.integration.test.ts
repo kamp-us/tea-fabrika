@@ -1,6 +1,5 @@
 // P12, next/. Project and Connection use their real composition and SQLite services.
 // Only platform handles are supplied here. No sockets or substitute authority rules.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { Descriptor, Incoming, Sent } from "@kampus/libfabrika";
 import { SigningRefused } from "@kampus/libfabrika/access/SessionManager";
@@ -16,17 +15,44 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { stopOnAbort } from "@kampus/libfabrika/Testing.test-support";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Match,
+  Option,
+  Predicate,
+  Schedule,
+  Schema,
+  Scope,
+  Tracer,
+  Array as Arr,
+  String as Str,
+  DateTime,
+  Formatter,
+  Record as Rec,
+} from "effect";
+
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
 
+class ReopenError extends Schema.TaggedError<ReopenError, { readonly brand: unique symbol }>()("ReopenError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+// SAFETY: the table starts with no program, and the code below writes only `{ hash, source }` rows into it.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 
 vi.mock("./table.ts", () => table);
@@ -41,71 +67,28 @@ vi.mock("effect", async (importOriginal) => {
   return { ...actual, Layer: { ...actual.Layer } };
 });
 
-const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+/** A built program's table row: its hash is the SHA-256 of its source, as the builder's is. */
+const built = (source: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(source))).pipe(
+      Effect.map((hash) => ({ hash, source })),
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
 
-const counterCode = built("counter");
+const counterCode = await built("counter");
 
-const checklistCode = built("checklist");
+const checklistCode = await built("checklist");
 
-const tezgahCode = built("tezgah");
+const tezgahCode = await built("tezgah");
 
-const approvalCode = built("approvals");
+const approvalCode = await built("approvals");
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const SENT = "2026-11-08T04:00:00.000Z";
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    size = Buffer.alloc(4);
-
-  size.writeUInt32BE(body.length);
-
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 const generated = fc.record({
   letter: fc.uuid(),
@@ -218,12 +201,12 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
   // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
   table.programs["fabrika/tezgah"] = tezgahCode;
   table.programs["p12/approvals"] = approvalCode;
-  const key = identity();
+  const key = await Effect.runPromise(SshsigTest.identity);
   // The ledger is in memory: a file would sync every commit to disk, which took half of L4's time
   // on a laptop, and no law reads the file. A reopen keeps this same handle.
   const db = new DatabaseSync(":memory:");
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
     storage: storage(db),
@@ -244,28 +227,31 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
 
   let onRing: () => Promise<void> = async () => {};
 
-  // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
-      RecordWireTest.settingsFixture({
-        name: "project-test",
-        person: PERSON,
-        founder: key.line,
-        window: key.raw,
-        port: 18787,
-        build: "brain-test",
-        ...(options.starts === undefined ? {} : { starts: options.starts }),
-      }),
+      await Effect.runPromise(
+        RecordWireTest.settingsFixture({
+          name: "project-test",
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: 18787,
+          build: "brain-test",
+          ...(options.starts === undefined ? {} : { starts: options.starts }),
+        }),
+      ),
     ),
     PROCESS: {
       // Ticket 402 keys a Process object by its registered name, so the stub key may be a
       // name: descriptors are keyed by their own process ID, and delivery names that ID.
       getByName: (name: string) => {
+        // SAFETY: the name is the JSON pair of namespace and storage key that the runtime writes for getByName.
         const [, storageKey] = JSON.parse(name) as [string, string];
 
         const owned = () =>
-          descriptors.get(storageKey) ?? [...descriptors.values()].findLast((d) => d.name === storageKey);
-
+          descriptors.get(storageKey) ??
+          Option.getOrUndefined(Arr.findLast([...descriptors.values()], (d) => d.name === storageKey));
         return {
           configure: async (descriptor: Descriptor) => {
             if (options.callback === true) {
@@ -295,8 +281,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
     RECORD: {
       getByName: () => ({
         write: async (_chain: unknown, _part: number, rows: ReadonlyArray<{ span: SpanRow }>) => {
-          recorded.push(...rows.map((row) => row.span));
-
+          recorded.push(...Arr.map(rows, (row) => row.span));
           return { _tag: "written" };
         },
       }),
@@ -310,7 +295,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
               value: Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(message),
             }),
           describe: async () =>
-            id.startsWith(`${approvalCode.hash}/`)
+            Str.startsWith(`${approvalCode.hash}/`)(id)
               ? {
                   name: "p12/approvals",
                   v: 1,
@@ -390,7 +375,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
           platform: "headless",
           os: "linux",
           sentAt: SENT,
-          signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\ntab-a\n${nonce}`),
+          signed: await Effect.runPromise(key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\ntab-a\n${nonce}`)),
         },
         { url: "http://127.0.0.1:18787", tab: "tab-a", name: key.fingerprint },
       ),
@@ -427,7 +412,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
       ).process,
     send: (pid: string, type: string, letter = type) =>
       run(p.route(client, "process.send", { pid, letter, m: { type }, sentAt: SENT, seen: 0 })),
-    revoke: () => {
+    revoke: async () => {
       const text = revokeText({
         id: "revoke-1",
         key: key.raw,
@@ -437,7 +422,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
         sentAt: SENT,
       });
 
-      return run(p.grant({ text, armored: key.proof(text) }));
+      return run(p.grant({ text, armored: await Effect.runPromise(key.proof(text)) }));
     },
     message: (f: typeof onMessage) => {
       onMessage = f;
@@ -447,7 +432,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
     },
     reopen: async () => {
       await runtime.dispose();
-      table.programs["fabrika/counter"] = built(`changed counter:${build}`);
+      table.programs["fabrika/counter"] = await built(`changed counter:${build}`);
       runtime = projectRuntime(ctx, env);
       const reopened = await run(ProjectService);
       await settled(db);
@@ -489,20 +474,20 @@ StartsTest.law(
 
       const checkSaved = Effect.fnUntraced(function* () {
         const rows = w.db.prepare("SELECT * FROM entries").all();
-        expect(rows.some((row) => row._tag === "instance_started")).toBe(true);
+        expect(Arr.some(rows, (row) => row._tag === "instance_started")).toBe(true);
 
         for (const row of rows) {
           const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(row.body);
           expect(body).not.toHaveProperty("starts");
-          expect(JSON.stringify(row)).not.toContain(`unused-${word}`);
-          expect(JSON.stringify(row)).not.toContain(`unused-target-${word}`);
+          expect(Formatter.formatJson(row)).not.toContain(`unused-${word}`);
+          expect(Formatter.formatJson(row)).not.toContain(`unused-target-${word}`);
         }
 
         const input = yield* Schema.decodeEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
         const receipt = yield* w.settingsRead(input.start);
         expect(receipt).toMatchObject({ _tag: "ok" });
         expect(receipt).not.toHaveProperty("value.starts");
-        expect(JSON.stringify(receipt)).not.toContain(`unused-${word}`);
+        expect(Formatter.formatJson(receipt)).not.toContain(`unused-${word}`);
       });
 
       for (const [index, choice] of choices.entries()) {
@@ -543,7 +528,7 @@ const bends: ReadonlyArray<(name: string) => string> = [
   () => "fabrika/counter",
   (name) => `fabrika/${name}`,
   (name) => `${name}/x`,
-  (name) => name.replace(/[:.]/, "/"),
+  (name) => Str.replace(/[:.]/, "/")(name),
 ];
 
 // The walk: from the brain's own bootstrap, each step starts the core code under a fresh valid
@@ -562,10 +547,12 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     [...list].sort((a, b) => (a.name < b.name ? -1 : 1));
 
   const others = (list: ReadonlyArray<{ readonly name: string; readonly program: string }>) =>
-    list.filter((p) => p.program !== "fabrika/counter").map((p) => ({ name: p.name, program: p.program }));
-
+    Arr.map(
+      Arr.filter(list, (p) => p.program !== "fabrika/counter"),
+      (p) => ({ name: p.name, program: p.program }),
+    );
   let refused = 0;
-  expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
+  expect(Arr.map(w.configured, (d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
     ...boots,
   ]);
@@ -591,10 +578,10 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     }
 
     const info = await w.run(w.p.info);
-    expect(info.map((p) => p.name).sort()).toEqual([...names, ...boots.map((b) => b.name)].sort());
+    expect(Arr.map(info, (p) => p.name).sort()).toEqual([...names, ...Arr.map(boots, (b) => b.name)].sort());
     expect(byName(others(info))).toEqual(byName(boots));
     expect(byName(others(w.configured))).toEqual(byName(boots));
-    expect(w.configured.every((d) => !d.name.includes("/"))).toBe(true);
+    expect(Arr.every(w.configured, (d) => !Str.includes("/")(d.name))).toBe(true);
   }
 
   expect(refused).toBeGreaterThan(0);
@@ -702,7 +689,7 @@ describe("P12 Project authority", () => {
 
     const pending = w.send(pid, "inc", letter).then(
       (answer) => ({ answer }),
-      (error: unknown) => ({ error }),
+      (cause: unknown) => ({ error: cause }),
     );
 
     await Effect.runPromise(Deferred.await(entered));
@@ -722,14 +709,12 @@ describe("P12 Project authority", () => {
       const w = await open(),
         pid = w.p.boot.process;
 
-      const stream =
-        operation === "own"
-          ? "events"
-          : operation === "inbox"
-            ? "counter:1/inbox"
-            : operation === "start"
-              ? "processes/approvals:1"
-              : "processes/counter:1";
+      const stream = Match.value(operation).pipe(
+        Match.when("own", () => "events"),
+        Match.when("inbox", () => "counter:1/inbox"),
+        Match.when("start", () => "processes/approvals:1"),
+        Match.orElse(() => "processes/counter:1"),
+      );
 
       const after = (await w.run(w.p.read(stream, 0, "audit"))).at(-1)?.rev ?? 0;
       await w.run(w.p.wait(stream, after, "gateway-test"));
@@ -781,7 +766,7 @@ describe("P12 Project authority", () => {
     const result = await Effect.runPromiseExit(
       Effect.tryPromise({
         try: w.reopen,
-        catch: (cause) => new Error("project reopen failed", { cause }),
+        catch: (cause) => ReopenError.make({ message: "project reopen failed", cause }),
       }),
     );
 
@@ -804,7 +789,7 @@ describe("P12 Project authority", () => {
       const built = await Effect.runPromise(Effect.promise(() => building).pipe(Effect.timeoutOption("3 seconds")));
       const w = await building;
       expect(Option.isSome(built), "the Project's build waited on its own bootstrap's configure").toBe(true);
-      expect(w.configured.filter((d) => d.id === w.p.boot.process)).toHaveLength(1);
+      expect(Arr.filter(w.configured, (d) => d.id === w.p.boot.process)).toHaveLength(1);
       // P14 slice 2: the boot is a list, so each entry's configure calls back once, in the list's order.
       expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
         { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
@@ -833,7 +818,7 @@ describe("P12 Project authority", () => {
 });
 
 describe("P12 Project saved and wire readers", () => {
-  const malformed = fc.jsonValue().filter((value) => typeof value !== "string");
+  const malformed = fc.jsonValue().filter((value) => !Predicate.isString(value));
 
   const typed = (exit: Exit.Exit<unknown, unknown>) => {
     expect(Exit.isFailure(exit)).toBe(true);
@@ -953,9 +938,9 @@ describe("P12 WebCrypto failures", () => {
                   reason: "crypto",
                 });
               } else {
-                // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
+                // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: the digest must fail before any R2 method runs
                 const bucket = { put } as unknown as R2Bucket;
-                await expect(bucketCalls(bucket).put("measurements", body, "0".repeat(64))).rejects.toMatchObject({
+                await expect(bucketCalls(bucket).put("measurements", body, Str.repeat(64)("0"))).rejects.toMatchObject({
                   _tag: "LedgerError",
                   reason: "crypto",
                 });
@@ -1006,16 +991,16 @@ describe("P12 Connection recording", () => {
         close: () => {},
       };
 
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Connection
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node fixture supplies the hibernating socket and SQL members consumed by Connection
       const ctx = {
         id: { name: "gateway-test" },
         storage: storage(db),
         getWebSockets: () => [ws],
         getTags: () => ["session-test", "tab-a", w.key.fingerprint],
-        getWebSocketAutoResponseTimestamp: () => new Date(42),
+        getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
       } as unknown as DurableObjectState;
 
-      // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: this Node RPC double has no workerd namespace brand
       const project = {
         getByName: () => ({
           settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
@@ -1024,7 +1009,7 @@ describe("P12 Connection recording", () => {
         }),
       } as unknown as Env["PROJECT"];
 
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node socket double implements attachment, send and close without workerd's socket brand
       const socket = ws as unknown as WebSocket;
       const config = await Effect.runPromise(settings(w.env));
       const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, config);
@@ -1047,10 +1032,10 @@ describe("P12 Connection recording", () => {
         };
         await runtime.runPromise(Effect.exit(actions[operation]()));
         const rows = w.recorded.slice(before);
-        expect(rows.some((row) => row.name === `connection.${operation}`)).toBe(true);
+        expect(Arr.some(rows, (row) => row.name === `connection.${operation}`)).toBe(true);
 
         if (operation === "notify") {
-          expect(rows.some((row) => !row.ok)).toBe(true);
+          expect(Arr.some(rows, (row) => !row.ok)).toBe(true);
         }
       } finally {
         await runtime.dispose();
@@ -1095,16 +1080,16 @@ describe("P12 Connection recording", () => {
       close: () => {},
     };
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture supplies the hibernating socket and SQL members consumed by Gateway
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node fixture supplies the hibernating socket and SQL members consumed by Gateway
     const ctx = {
       id: { name: "gateway-test" },
       storage: storage(db),
       getWebSockets: () => [ws],
       getTags: () => ["session-test", "tab-a", w.key.fingerprint],
-      getWebSocketAutoResponseTimestamp: () => new Date(42),
+      getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
     } as unknown as DurableObjectState;
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: this Node RPC double has no workerd namespace brand
     const project = {
       getByName: () => ({
         settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
@@ -1114,7 +1099,7 @@ describe("P12 Connection recording", () => {
       }),
     } as unknown as Env["PROJECT"];
 
-    // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
+    // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node socket double implements attachment, send and close without workerd's socket brand
     const socket = ws as unknown as WebSocket;
     const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, await Effect.runPromise(settings(w.env)));
 
@@ -1138,12 +1123,12 @@ describe("P12 Connection recording", () => {
     await fc.assert(
       fc.asyncProperty(
         rejected,
-        fc.string({ minLength: 8, maxLength: 64 }).filter((text) => !FRAME.includes(text)),
+        fc.string({ minLength: 8, maxLength: 64 }).filter((text) => !Str.includes(text)(FRAME)),
         (kind, text) =>
           owned(async (open) => {
             const { sent } = await refusedCall(open, kind.make(text));
             expect(sent).toEqual([FRAME]);
-            expect(sent.join("")).not.toContain(text);
+            expect(Arr.join(sent, "")).not.toContain(text);
           }, signal),
       ),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
@@ -1157,12 +1142,12 @@ describe("P12 Connection recording", () => {
       fc.asyncProperty(rejected, fc.string({ minLength: 8, maxLength: 64 }), (kind, text) =>
         owned(async (open) => {
           const { spans } = await refusedCall(open, kind.make(text));
-          const refused = spans.filter((row) => row.name === "gateway.refused");
+          const refused = Arr.filter(spans, (row) => row.name === "gateway.refused");
           expect(refused).toHaveLength(1);
           expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
           // Failure text is deletable content (P37), never a span tag.
           expect(
-            Object.values(refused[0]!.attributes).filter((tag) => typeof tag === "string" && tag.includes(text)),
+            Arr.filter(Rec.values(refused[0]!.attributes), (tag) => Predicate.isString(tag) && Str.includes(text)(tag)),
           ).toEqual([]);
         }, signal),
       ),

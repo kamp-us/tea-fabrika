@@ -1,0 +1,15 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-ready-run-canceled-by-racing-push",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": null,
+  "rule": "bug",
+  "location": {"path": ".github/workflows/check.yaml", "line": 46},
+  "says": "When a pull request is marked ready within a second of a push, the ready_for_review run starts on the old head and the push's synchronize run cancels it (cancel-in-progress is true for synchronize in group check-<number>), while that synchronize run still reads the pull request as a draft, so the new head gets only the draft jobs and no ready run, which the comment above this line says cannot happen.",
+  "proof": "Pull request 1601's check.yaml runs (GitHub Actions API, list_workflow_runs on branch fabrikalfa/gitattributes-quiet, then list_workflow_jobs): run 44223817563, actor the owner, created 2026-11-18T02:30:54Z on the old head 87c18f2cf8eabc90a06242703a606502c02ff05d, has the ready job names `check` and `ci-required` (not `lint` and `ci-required (draft)`), so it is the ready_for_review run; its jobs were canceled at 02:30:55Z and its `ci-required` (job 134531964804) failed. Run 44223819819, actor the fabrikalfa bot, created 02:30:55Z on the new head 0339ac213b693d38196acbb4cf584207e9ce4f5f (the push of that commit), ran `lint` and `typecheck`, skipped `select`, `related` and `next`, and ended with `ci-required (draft)` green at 02:34:31Z: its event payload still said draft. No other run existed at that head until run 44228317745 at 03:08:45Z, actor the owner, which ran the ready set (`check`, `select`, `ci-required`) and passed at 03:29:53Z; the pull request merged at 03:40:37Z. The ready event's own time is taken from run 44223817563's creation, since the issue timeline API is not among this session's tools.",
+  "cost": "A ready pull request sat about 38 minutes (02:30:55Z to 03:08:45Z) with no ready check at its head, so the ruleset's required `ci-required` was missing and the merge could not move until a person noticed and started the run again by hand. Any agent that marks ready right after its own push meets the same race, and nothing reports it: the head's only run is green.",
+  "head": "0339ac213b693d38196acbb4cf584207e9ce4f5f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1601"
+}

@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, posix, relative } from "node:path";
+import { Array as Arr, pipe } from "effect";
 import { parseSync } from "oxc-parser";
 
 /**
@@ -62,9 +63,11 @@ const word = (name) => new RegExp(`(?<![\\w.-])${escape(name)}(?![\\w.-])`);
  * @returns {Map<string, string>} each reached path, to the path that named it
  */
 export const reached = (tree, exists, test) => {
-  const names = [...tree.keys()]
-    .filter((path) => !isTest(path))
-    .map((path) => ({ path, word: word(posix.basename(path)) }));
+  const names = pipe(
+    [...tree.keys()],
+    Arr.filter((path) => !isTest(path)),
+    Arr.map((path) => ({ path, word: word(posix.basename(path)) })),
+  );
 
   /** @type {Map<string, string>} */
   const via = new Map();
@@ -112,11 +115,13 @@ export const reached = (tree, exists, test) => {
  * @param {string} source
  */
 const bare = (test, source) =>
-  parseSync(test, source, { sourceType: "module" })
-    .module.staticImports.filter((statement) => statement.entries.length === 0)
-    .map((statement) => statement.moduleRequest.value)
-    .filter((request) => request.endsWith("?raw"))
-    .map((request) => posix.join(posix.dirname(test), request.slice(0, -"?raw".length)));
+  pipe(
+    parseSync(test, source, { sourceType: "module" }).module.staticImports,
+    Arr.filter((statement) => statement.entries.length === 0),
+    Arr.map((statement) => statement.moduleRequest.value),
+    Arr.filter((request) => request.endsWith("?raw")),
+    Arr.map((request) => posix.join(posix.dirname(test), request.slice(0, -"?raw".length))),
+  );
 
 /**
  * What `pnpm lint` refuses in the scripts tree.
@@ -131,8 +136,8 @@ const bare = (test, source) =>
  * @returns {{raw: {test: string, path: string}[], unreached: string[]}}
  */
 export const scriptReads = (tree, exists, prose) => {
-  const tests = [...tree.keys()].filter(isTest);
-  const reach = new Set(tests.flatMap((test) => [...reached(tree, exists, test).keys()]));
+  const tests = Arr.filter([...tree.keys()], isTest);
+  const reach = new Set(Arr.flatMap(tests, (test) => [...reached(tree, exists, test).keys()]));
 
   /** @param {string} path */
   const tool = (path) => {
@@ -146,8 +151,8 @@ export const scriptReads = (tree, exists, prose) => {
   };
 
   return {
-    raw: tests.flatMap((test) => bare(test, tree.get(test) ?? "").map((path) => ({ test, path }))),
-    unreached: [...tree.keys()].filter((path) => !isTest(path) && !reach.has(path) && !tool(path)),
+    raw: Arr.flatMap(tests, (test) => Arr.map(bare(test, tree.get(test) ?? ""), (path) => ({ test, path }))),
+    unreached: Arr.filter([...tree.keys()], (path) => !isTest(path) && !reach.has(path) && !tool(path)),
   };
 };
 
@@ -157,11 +162,13 @@ export const scriptReads = (tree, exists, prose) => {
  */
 export const load = (root) => {
   const tree = new Map(
-    readdirSync(join(root, ".agents/skills"), { recursive: true, withFileTypes: true })
-      .filter((entry) => entry.isFile())
-      .map((entry) => relative(root, join(entry.parentPath, entry.name)))
-      .filter(isScript)
-      .map((path) => [path, readFileSync(join(root, path), "utf8")]),
+    pipe(
+      readdirSync(join(root, ".agents/skills"), { recursive: true, withFileTypes: true }),
+      Arr.filter((entry) => entry.isFile()),
+      Arr.map((entry) => relative(root, join(entry.parentPath, entry.name))),
+      Arr.filter(isScript),
+      Arr.map((path) => [path, readFileSync(join(root, path), "utf8")]),
+    ),
   );
 
   /** @param {string} path */

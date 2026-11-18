@@ -3,7 +3,6 @@
 // the loader's transport are supplied here; no quota decision is made in this file.
 // The accounts are read with the public quota services from the two stores the objects wrote, and
 // the oracle is the committed entries themselves, measured with the ledger's own encoder.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 // edge: Effect has no synchronous SQLite handle for the object stores
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
@@ -24,6 +23,8 @@ import { send } from "@kampus/libfabrika/runtime/Send";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { targetStream } from "@kampus/libfabrika/tasks/Tasks";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import type { ProcessBinding, ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import {
   commitReply,
   configureProcess,
@@ -33,14 +34,18 @@ import {
   ProjectService,
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
-import { runsFor } from "@kampus/vitest";
-import { ByteSize, Clock, Effect, Option, Schema } from "effect";
+import { runsFor, Stub } from "@kampus/vitest";
+import { ByteSize, Clock, Effect, Match, Option, Predicate, Schema, String as Str, Record as Rec } from "effect";
+import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
+
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
+// SAFETY: the program table starts empty, and world() writes only `built(...)` rows into it, each a
+// `{ hash, source }` pair.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
 // Only the platform base class is fake. The box methods run the real programBox.
@@ -61,51 +66,9 @@ const PROGRAMS = ["quota/alpha", "quota/beta"] as const;
 // Where the brain records how far each name's reader has read its inbox. An ack is the brain's own
 // record, so no account pays for one.
 const ACKS: ReadonlyArray<string> = NAMES.map(acked);
-const programFor = (name: string) => (name.startsWith("alpha:") ? "quota/alpha" : "quota/beta");
+const programFor = (name: string) => (Str.startsWith("alpha:")(name) ? "quota/alpha" : "quota/beta");
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
 const live = TestClock.withLive;
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-  return Buffer.concat([size, body]);
-};
-
-/** A fresh SSH identity for this test's own door: its key, its fingerprint and a signer for the hello. */
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-      const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
-      return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 // One program under two identities. It counts `inc`, throws on `throw`, on `tell` mails an `inc`
 // to another registered name, and on `ask` asks the hands for a task; `told` and `failed` record
@@ -170,12 +133,19 @@ const worker = (name: string) => ({
 const View = Schema.Struct({ view: Model });
 
 /** A built program's table row: its hash is the SHA-256 of its source, as the builder's is. */
-const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
-const counterCode = built("counter");
-const checklistCode = built("checklist");
-const tezgahCode = built("tezgah");
-const alphaCode = built("alpha");
-const betaCode = built("beta");
+const built = (source: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(source))).pipe(
+      Effect.map((hash) => ({ hash, source })),
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
+
+const counterCode = await built("counter");
+const checklistCode = await built("checklist");
+const tezgahCode = await built("tezgah");
+const alphaCode = await built("alpha");
+const betaCode = await built("beta");
 
 /** A recovery allowance as the recovery setting's value holds it once decoded. */
 const allowance = (limits: Limits["recovery"]["project"]) => ({
@@ -193,13 +163,13 @@ const declared = (limits: Limits) => ({
 
 /** Row counts of every table, so a law can say "nothing was saved" without naming a table. */
 const counts = (db: DatabaseSync) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .all()
       .map(({ name }) => [
         String(name),
-        db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+        db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
       ]),
   );
 
@@ -209,6 +179,17 @@ type Store = {
   readonly values: Map<string, unknown>;
   alarm: number | null;
 };
+
+/** The two fields of a saved descriptor a store is found by, each as loose as the old read. */
+const Saved = Schema.Struct({ name: Schema.optionalKey(Schema.Unknown), id: Schema.optionalKey(Schema.Unknown) });
+
+/** The descriptor a store's Process saved, decoded once, or undefined where it saved none. */
+const saved = (store: Store) =>
+  Option.getOrUndefined(Schema.decodeUnknownOption(Saved)(store.values.get("descriptor")));
+
+/** The member a name picks on a service, own or inherited, as the platform's RPC reaches it. */
+const picked = (service: object, method: string): unknown =>
+  Predicate.hasProperty(service, method) ? service[method] : undefined;
 
 /** The platform's storage handles over one SQLite database. The alarm is a saved time, fired by `settle`. */
 const storage = (db: DatabaseSync, alarm: (at: number | null) => void) => {
@@ -243,14 +224,18 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   table.programs["fabrika/tezgah"] = tezgahCode;
   table.programs["quota/alpha"] = alphaCode;
   table.programs["quota/beta"] = betaCode;
-  const key = identity();
+  const key = yield* SshsigTest.identity;
   // A hands key the person named, which never connects: a hands Cmd's task stays waiting.
-  const handsKey = identity();
+  const handsKey = yield* SshsigTest.identity;
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (held) => Effect.sync(() => held.close()),
   );
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
+
+  // SAFETY: cloudflare/runtime.ts's Project reads `id.name`, the `storage` handles and, for the tail,
+  // `exports.IsolateTail`, all supplied here; the WebSocket members are read only by the Connection
+  // object, which this file never builds, and workerd's own state class cannot be made in Node.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles the real Project service reads
   const ctx = {
     id: { name: PROJECT },
@@ -268,7 +253,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     traceId: TRACE,
     build: "quota-laws",
   };
-  const everyone = Object.fromEntries(NAMES.map((name) => [name, NAMES.filter((other) => other !== name)]));
+  const everyone = Rec.fromEntries(NAMES.map((name) => [name, NAMES.filter((other) => other !== name)]));
+  // SAFETY: `undefined` is a member of the union, so the cast only widens the declared type, and
+  // each read below goes through required(), which refuses the value while boot has not set it.
   let projectHeld = undefined as ReturnType<typeof projectRuntime> | undefined;
   // What the Project class hands off: one service call on the object's runtime.
   const project = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) =>
@@ -282,50 +269,52 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     );
   /** The start's whole input, as `INSTANCE` carries it, with these limits under its own start id. */
   const instance = (values: Limits, start?: string) =>
-    JSON.stringify(
-      RecordWireTest.settingsFixture({
-        name: PROJECT,
-        person: PERSON,
-        founder: key.line,
-        window: key.raw,
-        port: 18787,
-        build: "quota-laws",
-        ...(start === undefined ? {} : { start }),
-        mail: { grants: everyone },
-        limits: { recordBytes: 1_000_000_000 },
-        values: { ...declared(values), handsTarget: handsKey.fingerprint },
-      }),
-    );
+    RecordWireTest.settingsFixture({
+      name: PROJECT,
+      person: PERSON,
+      founder: key.line,
+      window: key.raw,
+      port: 18787,
+      build: "quota-laws",
+      ...(start === undefined ? {} : { start }),
+      mail: { grants: everyone },
+      limits: { recordBytes: 1_000_000_000 },
+      values: { ...declared(values), handsTarget: handsKey.fingerprint },
+    }).pipe(Effect.map((input) => JSON.stringify(input)));
+  // The start's input the platform hands the next boot; a widen replaces it, and `env` reads it.
+  let instanceInput = yield* instance(limits);
+
+  // SAFETY: the runtime reaches each Durable Object namespace only through `getByName` and the
+  // loader through `get`, which these doubles answer; DurableObjectNamespace is workerd's abstract
+  // class with RPC brand types, which no plain Node object can carry.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
   const env = {
-    INSTANCE: instance(limits),
+    get INSTANCE() {
+      return instanceInput;
+    },
     // Every Project RPC a Process makes reaches the real service, with the two typed replies the class adds.
     PROJECT: {
       getByName: () =>
-        new Proxy(
-          {},
+        Stub.make<ProjectBinding>(
+          (method) =>
+            (...args: ReadonlyArray<unknown>) =>
+              Effect.runPromise(
+                project((p) => {
+                  const member = picked(p, method);
+                  const work = Predicate.isFunction(member) ? Reflect.apply(member, p, args) : member;
+
+                  return Match.value(method).pipe(
+                    Match.when("sign", () => signingReply(work)),
+                    Match.when("commit", () => commitReply(work)),
+                    Match.orElse(() => work),
+                  );
+                }),
+              ),
           {
-            get: (_target, method) =>
-              typeof method !== "string" || method === "then"
-                ? undefined
-                : // A Process records its start on the Project's own small runtime, beside its service.
-                  method === "settingsStart"
-                  ? (input: Parameters<ReturnType<typeof projectRuntime>["settingsStart"]>[0]) =>
-                      Effect.runPromise(required(projectHeld).settingsStart(input))
-                  : method === "settingsRead"
-                    ? (start: string) => Effect.runPromise(required(projectHeld).settingsRead(start))
-                    : (...args: ReadonlyArray<unknown>) =>
-                        Effect.runPromise(
-                          project((p) => {
-                            const member = Reflect.get(p, method);
-                            const work = typeof member === "function" ? Reflect.apply(member, p, args) : member;
-                            return method === "sign"
-                              ? signingReply(work)
-                              : method === "commit"
-                                ? commitReply(work)
-                                : work;
-                          }),
-                        ),
+            // A Process records its start on the Project's own small runtime, beside its service.
+            settingsStart: (input: Parameters<ReturnType<typeof projectRuntime>["settingsStart"]>[0]) =>
+              Effect.runPromise(required(projectHeld).settingsStart(input)),
+            settingsRead: (start: string) => Effect.runPromise(required(projectHeld).settingsRead(start)),
           },
         ),
     },
@@ -341,6 +330,10 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           const handles = storage(processDb, (at) => {
             made.alarm = at;
           });
+
+          // SAFETY: a Process runtime reads its object's `id.name`, its `storage` (SQL, values, alarm)
+          // and the IsolateTail loopback in `exports`; this object holds those three and nothing else
+          // a Process touches.
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor and alarm handles the real Process reads
           const processCtx = { id: { name }, storage: handles, exports: loopbacks } as unknown as DurableObjectState;
           const made: Store = { db: processDb, ctx: processCtx, values: handles.values, alarm: null };
@@ -350,29 +343,31 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         }
 
         const current = store;
-        return new Proxy(
-          {},
-          {
-            get: (_target, method) =>
-              typeof method !== "string" || method === "then"
-                ? undefined
-                : (...args: ReadonlyArray<unknown>) =>
-                    Effect.runPromise(
-                      method === "configure"
-                        ? configureProcess(
-                            current.ctx,
-                            args[0] as Descriptor,
-                            required(runtimes.get(current)),
-                            args[1] === true,
-                          )
-                        : method === "descriptor"
-                          ? processDescriptor(current.ctx)
-                          : process(current, (p): Effect.Effect<unknown, unknown> => {
-                              const member = Reflect.get(p, method);
-                              return typeof member === "function" ? Reflect.apply(member, p, args) : Effect.void;
-                            }),
+        return Stub.make<ProcessBinding>(
+          (method) =>
+            (...args: ReadonlyArray<unknown>) =>
+              Effect.runPromise(
+                Match.value(method).pipe(
+                  Match.when("configure", () =>
+                    configureProcess(
+                      current.ctx,
+                      // SAFETY: the Project's deliver in cloudflare/runtime.ts sends
+                      // `configure(descriptor, drain)` through ProcessClient, whose binding types
+                      // that first argument as a Descriptor; this stub hands it on unchanged.
+                      args[0] as Descriptor,
+                      required(runtimes.get(current)),
+                      args[1] === true,
                     ),
-          },
+                  ),
+                  Match.when("descriptor", () => processDescriptor(current.ctx)),
+                  Match.orElse(() =>
+                    process(current, (p): Effect.Effect<unknown, unknown> => {
+                      const member = picked(p, method);
+                      return Predicate.isFunction(member) ? Reflect.apply(member, p, args) : Effect.void;
+                    }),
+                  ),
+                ),
+              ),
         );
       },
     },
@@ -384,9 +379,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          const alpha = id.startsWith(`${alphaCode.hash}/`);
+          const alpha = Str.startsWith(`${alphaCode.hash}/`)(id);
 
-          if (alpha || id.startsWith(`${betaCode.hash}/`)) {
+          if (alpha || Str.startsWith(`${betaCode.hash}/`)(id)) {
             // The real box around the fixture program.
             const Box = programBox(
               worker(alpha ? "quota/alpha" : "quota/beta"),
@@ -408,7 +403,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
             };
           }
 
-          if (id.startsWith(`${checklistCode.hash}/`)) {
+          if (Str.startsWith(`${checklistCode.hash}/`)(id)) {
             const Box = programBox(checklist, checklistCode.hash);
             return Reflect.construct(Box, []);
           }
@@ -484,12 +479,8 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   /** The store of a registered name, found by the descriptor its Process saved. */
   const storeFor = Effect.fnUntraced(function* (name: string) {
     const current = yield* pid(name);
-    const named = [...stores.values()].filter(
-      (store) => Reflect.get(Object(store.values.get("descriptor")), "name") === name,
-    );
-    return required(
-      named.find((store) => Reflect.get(Object(store.values.get("descriptor")), "id") === current) ?? named[0],
-    );
+    const named = [...stores.values()].filter((store) => saved(store)?.name === name);
+    return required(named.find((store) => saved(store)?.id === current) ?? named[0]);
   });
 
   for (const name of NAMES) {
@@ -509,6 +500,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   const client = yield* project((p) => p.connect());
   const nonce = yield* project((p) => p.challenge(client));
   const tab = "quota-laws";
+  const signed = yield* key.proof(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
   expect(
     yield* project((p) =>
       p.initialize(
@@ -523,7 +515,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           platform: "headless",
           os: "linux",
           sentAt: SENT,
-          signed: key.proof(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
+          signed,
         },
         { url: URL, tab, name: key.fingerprint },
       ),
@@ -531,7 +523,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   ).toMatchObject({ _tag: "online" });
   const view = Effect.fnUntraced(function* (name: string) {
     const store = yield* storeFor(name);
-    return Schema.decodeUnknownSync(View)(yield* process(store, (p) => p.open("audit"))).view;
+    return (yield* Schema.decodeUnknownEffect(View)(yield* process(store, (p) => p.open("audit")))).view;
   });
   /** Fires each saved alarm that is due, as the platform would, until `done` holds and none is saved. */
   const settle = Effect.fnUntraced(function* (done: Effect.Effect<boolean, unknown>) {
@@ -606,9 +598,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       "the live assembly installs accounting in both stores; a read never creates it",
     ).toEqual(rows);
     return {
-      program: Object.fromEntries(program),
-      recovery: Object.fromEntries(recovery),
-      local: Object.fromEntries(local),
+      program: Rec.fromEntries(program),
+      recovery: Rec.fromEntries(recovery),
+      local: Rec.fromEntries(local),
     };
   });
   return {
@@ -631,7 +623,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           (entry) =>
             entry.rev > rev &&
             entry.stream !== "gateway" &&
-            !entry.stream.startsWith("gateway/") &&
+            !Str.startsWith("gateway/")(entry.stream) &&
             !ACKS.includes(entry.stream),
         ),
       ),
@@ -644,7 +636,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       ),
     head: Effect.sync(() => accountingEntries(sql).at(-1)?.rev ?? 0),
     /** One input through the door, to the name's live process. */
-    input: Effect.fnUntraced(function* (name: string, id: string, m: unknown) {
+    input: Effect.fnUntraced(function* (name: string, id: string, m: Schema.Json) {
       const to = yield* pid(name);
       // `letter` is the door's own key for the message id (0547 keeps saved and wire names).
       return yield* project((p) => p.route(client, "process.send", { pid: to, letter: id, m, sentAt: SENT, seen: 0 }));
@@ -657,7 +649,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     /** A platform restart into a new start whose program storage wall is the decided ceiling. */
     widen: Effect.gen(function* () {
       yield* halt;
-      Reflect.set(env, "INSTANCE", instance({ ...limits, storage: 1_000_000_000 }, "quota-laws-widened"));
+      instanceInput = yield* instance({ ...limits, storage: 1_000_000_000 }, "quota-laws-widened");
       yield* boot;
       yield* project((p) => p.info);
     }),
@@ -733,12 +725,11 @@ describe("P34c live wiring, both object stores", () => {
             } else {
               const peer = required(NAMES.filter((registered) => registered !== name)[c.amount % 2]);
               const stepped = move === "tell" ? [name, peer] : [name];
-              const m =
-                move === "tell"
-                  ? { type: "tell", to: peer }
-                  : move === "ask"
-                    ? { type: "ask" }
-                    : { type: "inc", text: "é😀".repeat(c.amount % 64) };
+              const m = Match.value(move).pipe(
+                Match.when("tell", () => ({ type: "tell", to: peer })),
+                Match.when("ask", () => ({ type: "ask" })),
+                Match.orElse(() => ({ type: "inc", text: Str.repeat(c.amount % 64)("é😀") })),
+              );
               expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
 
               if (move === "tell") {
@@ -883,7 +874,7 @@ describe("P34c live wiring, both object stores", () => {
               Effect.map(w.entries(0), (entries) => cost(entries.filter((e) => ids.includes(e.id))).bytes);
             const bare = yield* pair(["first", "step:first"]);
             const left = cap - required((yield* w.accounts).program["quota/alpha"]).bytes;
-            const text = "a".repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)));
+            const text = Str.repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)))("a");
 
             if (!(yield* one("alpha:1", "aimed", text))) {
               // A refusal is true only if the message did not fit: with the wall moved away the same
@@ -898,7 +889,7 @@ describe("P34c live wiring, both object stores", () => {
 
           for (const [n, c] of tape.entries()) {
             const name = required(NAMES[c.pick % 2]);
-            const text = resource === "storage" ? "é😀".repeat(c.amount) : "";
+            const text = resource === "storage" ? Str.repeat(c.amount)("é😀") : "";
             yield* one(name, `fill:${n}`, text);
 
             if (c.reopen) {
@@ -910,7 +901,7 @@ describe("P34c live wiring, both object stores", () => {
 
           // Drive to the wall: the refusal must occur, and it repeats without a new row.
           for (let n = 0; n < 12 && refusals < 2; n++) {
-            yield* one("alpha:2", `wall:${n}`, resource === "storage" ? "😀".repeat(cap) : "");
+            yield* one("alpha:2", `wall:${n}`, resource === "storage" ? Str.repeat(cap)("😀") : "");
           }
 
           expect(refusals).toBeGreaterThanOrEqual(2);

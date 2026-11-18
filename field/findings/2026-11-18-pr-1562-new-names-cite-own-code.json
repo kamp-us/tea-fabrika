@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-pr-1562-new-names-cite-own-code",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/apps/fabrika/src/workerd.test-support.ts",
+    "line": 23
+  },
+  "says": "In next/, PR 1562's New names lines for tree, lineStart, fromSigner, sign, proof and sshFingerprint cite our own source files, and make cites decision 0095, so none gives the industry's word with a source that names it, as 0587 asks.",
+  "proof": "The PR 1562 description: the tree line links next/apps/fabrika/src/workerd.test-support.ts, the lineStart line links next/packages/libfabrika/src/settings/internal/edit.ts, the fromSigner/sign/proof/sshFingerprint line links Sshsig.test-support.ts, and the make line links .decisions/0095; .decisions/0587-new-helpers-and-names-cite-sources.md says each line gives 'what the industry calls it, with the source'.",
+  "cost": "No reviewer can check these names against the industry's word, and the names check passes on lines that only point back to our own code.",
+  "head": "7b5abfa0da65980a549cbb3ed9f280713cf64790",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1562"
+}
