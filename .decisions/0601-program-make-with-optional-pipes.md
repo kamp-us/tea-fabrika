@@ -79,7 +79,9 @@ What makes it safe to run a program's Effects inside one tea Cmd. Each fact was 
   `packages/tea/src/internal/journal/index.ts`, so it maps onto one ledger turn.
 - Long work uses tea's `owed()` and `dispatch(msg, { answerTo })`, from demlik's pull requests
   [982](https://github.com/kamp-us/demlik/pull/982) and
-  [983](https://github.com/kamp-us/demlik/pull/983). tea 0.29.0, the newest release, ships both.
+  [983](https://github.com/kamp-us/demlik/pull/983). Both merged after tea 0.29.0 was published,
+  so 0.29.0 does not ship them. The build moves tea to 0.29.0 for the logged store, and long work
+  through `owed()` and `answerTo` waits for the next demlik release or a local `pnpm patch`.
 
 The known ways it follows:
 
