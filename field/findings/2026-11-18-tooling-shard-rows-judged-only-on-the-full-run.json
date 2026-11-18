@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tooling-shard-rows-judged-only-on-the-full-run",
+  "date": "2026-11-18",
+  "by": "ci-weight-rows-plan",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": ".github/ci/shard-rows.ts",
+    "line": 12
+  },
+  "says": "In today's CI, shard-rows.ts (pnpm lint) judges only next/ rows of vitest.shards.json and vitest.shards.full.json; a tooling row whose file is renamed or deleted is caught only by vitest.shards.test.ts's 'names only files that are in the repo' tests, which a pull request does not select unless it reaches vitest.shards.ts, so the first red is main's full run.",
+  "proof": "stale() filters path.startsWith(\"next/\"); vitest.shards.json holds 437 non-next rows; a deleted tooling test changes nothing vitest.shards.test.ts imports.",
+  "cost": "A pull request that renames a tooling test with a row turns main's scheduled run red, a sev1.",
+  "head": "397e63f",
+  "ticket": null,
+  "pr": null
+}
