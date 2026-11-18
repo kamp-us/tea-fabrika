@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-antislop-judgment-1057-format",
+  "ticket": "1057",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1593",
+  "branch": "fabrikalfa/antislop-judgment-1057",
+  "started": "2026-11-18T01:37:59+00:00",
+  "ended": "2026-11-18T01:50:00+00:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "step": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "done",
+  "why": "One mechanical step after the judgment fold merged main and kept main's blank lines: pnpm format was run so the merged code meets the spacing rules where they are already on. The first run left double blank lines in 8 files (the lint fix pass added them after the formatter ran), so it was run a second time and the formatter then agreed. Result: 36 files changed, 38 lines added and 18 removed, all blank lines; a diff filter for non-blank changed lines printed nothing. .oxlintrc.json and both ledger files (agents-ledger.json, next-ledger.json) were not changed by either run, so none had to be restored. No code meaning changed, no disable line added.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Format commit 7fce3e4226f77573bd8007a669b1a539ec6339f4. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 after it: 17 of 18 parts pass; oxlint-plugins/lint.ts fails only on the 0563 asks to add folders with no hit left to their blocks (53 lines), and oxlint reports 0 blocking, 1263 advice. The format check passes. Lint was run before the first format pass settled too, and then failed also on oxfmt for 8 files; the second pnpm format fixed that. Nothing else was run: no tests, no typecheck."
+}
