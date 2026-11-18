@@ -19,6 +19,7 @@ import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -27,11 +28,11 @@ import * as Formatter from "effect/Formatter";
 import * as Function from "effect/Function";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
-import * as Order from "effect/Order";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
@@ -63,15 +64,18 @@ class NotificationError extends Schema.TaggedError<NotificationError, { readonly
 
 const SEED = 119120;
 
-/** Sorts `[program, from]` pairs so two lists compare as sets. */
-const byPair = Order.Tuple([Order.String, Order.String]);
-
 const ROOT = new URL("../../../../../../", import.meta.url).pathname;
 
-/** Every real Rolldown watcher and result the laws saw, and which were closed. */
+/**
+ * Every real Rolldown watcher and result the laws saw, and which were closed. Per watcher, `ends`
+ * counts the `END` notifications that reached the product's listener, real and replayed, and
+ * `changes` holds the ids of Rolldown's own `change` events, absolute temp paths kept in memory only.
+ * `notify` runs after each `change`, so a law can wait on a report without polling.
+ */
 const opened = vi.hoisted(() => ({
-  watchers: Array.of<{ closed: boolean; repeat: Effect.Effect<void> }>(),
+  watchers: Array.of<{ closed: boolean; repeat: Effect.Effect<void>; ends: number; changes: Array<string> }>(),
   results: Array.of<{ code: string; closed: boolean }>(),
+  notify: () => {},
 }));
 
 vi.mock("rolldown", async (original) => {
@@ -81,22 +85,39 @@ vi.mock("rolldown", async (original) => {
     ...actual,
     watch: (...args: Parameters<typeof actual.watch>) => {
       const watcher = actual.watch(...args);
-      const seen = { closed: false, repeat: Effect.void };
+      const seen = { closed: false, repeat: Effect.void, ends: 0, changes: Array.of<string>() };
       opened.watchers.push(seen);
       const close = watcher.close.bind(watcher);
       watcher.close = () => {
         seen.closed = true;
+        // A closed watcher replays nothing. Dropping the replay also lets go of the product's
+        // listener and every run's state it holds, which `opened` would otherwise keep for the file.
+        seen.repeat = Effect.void;
 
         return close();
       };
 
       const on = watcher.on.bind(watcher);
+      // Rolldown's own report of a modified file, read through the real watcher unchanged.
+      on("change", (id) => {
+        seen.changes.push(id);
+        opened.notify();
+      });
       // SAFETY: the wrapper has only the `event` overload of Rolldown's `on`, the one watch.ts calls (`watcher.on("event", ...)`).
       watcher.on = ((
         name: "event",
         listener: (event: import("rolldown").RolldownWatcherEvent) => void | Promise<void>,
       ) => {
         let cycle: Array<import("rolldown").RolldownWatcherEvent> = [];
+
+        // Every notification the product's listener receives, real or replayed, goes through here.
+        const deliver = (event: import("rolldown").RolldownWatcherEvent) => {
+          if (event.code === "END") {
+            seen.ends++;
+          }
+
+          return listener(event);
+        };
 
         return on(name, (event) => {
           if (event.code === "START") {
@@ -120,7 +141,7 @@ vi.mock("rolldown", async (original) => {
               completed,
               (notification) =>
                 Effect.tryPromise({
-                  try: () => Promise.resolve(listener(notification)),
+                  try: () => Promise.resolve(deliver(notification)),
                   catch: (cause: unknown) =>
                     NotificationError.make({ message: "the repeated Rolldown notification failed", cause }),
                 }).pipe(Effect.orDie),
@@ -139,7 +160,7 @@ vi.mock("rolldown", async (original) => {
             };
           }
 
-          return listener(event);
+          return deliver(event);
         });
       }) as typeof watcher.on;
 
@@ -361,6 +382,8 @@ const fixtureValue = (source: string) => {
         nested,
         own: kind(own),
         value: number(own),
+        // The array's elements as numeric literals, `[shared, own]`; `null` for one that is not.
+        values: right.type === "ArrayExpression" ? right.elements.map(number) : null,
         bindings: bindings.length,
         candidates: bindings.slice(0, 4).map((declaration) => ({
           init: kind(declaration.init),
@@ -727,6 +750,7 @@ describe("P15 slice 1: the watcher", () => {
                     nested: false,
                     own: "Literal",
                     value,
+                    values: [0, value],
                     bindings: 0,
                     candidates: [],
                   },
@@ -967,9 +991,353 @@ describe("P15 slice 1: the watcher", () => {
     }
   }, 300_000);
 
-  // L10, p77. Plant: hash the entry file only; push the swap to every process.
+  /** One install the watcher sent, with the rebuild span it ran in. */
+  type Seen = { readonly code: Install; readonly span: Tracer.Span };
+
+  /** What L10's walk can do to its two programs, with every install accounted for as it goes. */
+  type World = {
+    readonly reaches: Readonly<Record<string, ReadonlyArray<string>>>;
+    /** The value last written to a fixture file, 0 before any save. */
+    readonly value: (file: string) => number;
+    /** Writes a new value to a fixture file, and nothing else. */
+    readonly write: (file: string, value: number) => Effect.Effect<void>;
+    /** Takes every install a written file owes, waits for its change reports, then settles. */
+    readonly owe: (file: string) => Effect.Effect<void>;
+    readonly save: (file: string, value: number) => Effect.Effect<void>;
+    /** Replays every case watcher's last completed cycle, without changing any file. */
+    readonly repeat: Effect.Effect<void>;
+    /** Holds a program's next install until `release`, or until the scope closes. */
+    readonly hold: (
+      program: string,
+    ) => Effect.Effect<
+      { readonly held: Effect.Effect<Install>; readonly release: Effect.Effect<void> },
+      never,
+      Scope.Scope
+    >;
+    readonly settle: Effect.Effect<void>;
+    /** How each install was accounted for: the one change it owed, or an unchanged repeat. */
+    readonly accounted: (code: Install) => "change" | "repeat" | undefined;
+    /** The hash of a program's last change. */
+    readonly last: (program: string) => string | undefined;
+    readonly repeats: (program: string) => number;
+  };
+
+  // L10a-L10d. Every install is a change or a repeat; no wait is a quiet window. An owed change has
+  // its own 3 s bound, which a repeat never renews; `settle` waits on a count, never on quiet.
+  const accountedWalk = Effect.fnUntraced(function* (walk: (world: World) => Effect.Effect<void, never, Scope.Scope>) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { home, reaches, programs } = yield* fixture;
+    const real = yield* fs.realPath(home);
+    const firstWatcher = opened.watchers.length;
+    const watchers = () => opened.watchers.slice(firstWatcher);
+    const installs = yield* Queue.unbounded<Seen>();
+    // A wake-up after each ended rebuild and each change report, for waits on a condition.
+    const ticks = yield* Queue.unbounded<void>();
+    // Counts, hashes and weak collections only: a closed case's state can stay reachable for the rest
+    // of the file (finding 2026-11-18-watch-laws-closed-builds-stay-reachable), so nothing here keeps
+    // a span or a bundle's source, which is several MB.
+    let started = 0;
+    let ended = 0;
+    const running = new Map<string, string>();
+    const last = new Map<string, string>();
+    const tied = new WeakSet<Tracer.Span>();
+    const accounted = new WeakMap<Install, "change" | "repeat">();
+    const repeats = new Map<string, number>();
+    const values = new Map<string, number>();
+    const marks = new Map<string, ReadonlyArray<number>>();
+
+    const gates = new Map<
+      string,
+      { readonly held: Deferred.Deferred<Install>; readonly release: Deferred.Deferred<void> }
+    >();
+
+    const failures: Array<Failed> = [];
+    let closed = false;
+
+    const tracer = Tracer.make({
+      span(settings) {
+        const span = new Tracer.NativeSpan(settings);
+
+        if (span.name === "watch.rebuild") {
+          started++;
+        }
+
+        const end = span.end.bind(span);
+        span.end = (at, exit) => {
+          end(at, exit);
+
+          if (span.name === "watch.rebuild") {
+            ended++;
+            Queue.offerUnsafe(ticks, undefined);
+          }
+        };
+
+        return span;
+      },
+    });
+
+    /** Waits until `done` holds, rechecked on each wake-up. A condition with a bound, never a sleep. */
+    const until = (done: () => boolean, bound: Duration.Input, message: string) =>
+      Effect.gen(function* () {
+        while (!done()) {
+          yield* Queue.take(ticks);
+        }
+      }).pipe(Effect.timeoutOrElse({ duration: bound, orElse: () => Effect.die(new Error(message)) }));
+
+    const relative = (id: string) => {
+      const inside = path.relative(home, id);
+
+      return Function.pipe(inside, Str.startsWith("..")) ? path.relative(real, id) : inside;
+    };
+
+    /** The case watchers that reported a change for `file` since `from`, one count per watcher. */
+    const reported = (file: string, from: ReadonlyArray<number> = []) =>
+      Arr.filter(watchers(), (watcher, n) =>
+        Arr.some(watcher.changes.slice(from[n] ?? 0), (id) => relative(id) === file),
+      ).length;
+
+    const want = (program: string) => [
+      values.get("shared/shared.ts") ?? 0,
+      values.get(`programs/${Str.split(program, "/")[1]}/own.ts`) ?? 0,
+    ];
+
+    // The brain as the watcher sees it, which also keeps the span each install ran in.
+    const install = (code: Install) =>
+      Effect.gen(function* () {
+        const span = yield* Effect.orDie(Effect.currentSpan);
+        yield* Queue.offer(installs, { code, span });
+        const gate = gates.get(code.program);
+
+        if (gate !== undefined) {
+          gates.delete(code.program);
+          yield* Deferred.succeed(gate.held, code);
+          yield* Deferred.await(gate.release);
+        }
+
+        const same = running.get(code.program) === code.hash;
+        running.set(code.program, code.hash);
+
+        return same ? { _tag: "same" as const } : { _tag: "loaded" as const, processes: [] };
+      });
+
+    // An install's own rebuild: a `watch.rebuild` of its program that ended normally with this
+    // outcome, shared with no other install. A rebuild the closing scope cut writes no attributes.
+    const inOwnRebuild = Effect.fnUntraced(function* (seen: Seen, outcome: "same" | "loaded") {
+      expect(seen.span.name, "an install runs inside a rebuild").toBe("watch.rebuild");
+      expect(tied.has(seen.span), "one install per rebuild").toBe(false);
+      tied.add(seen.span);
+
+      const exit = () =>
+        Match.valueTags(seen.span.status, { Started: () => undefined, Ended: (status) => status.exit });
+
+      yield* until(() => exit() !== undefined, "10 seconds", "a started rebuild never ended");
+      const finished = exit();
+      assert(finished !== undefined, "the install's rebuild ended");
+
+      if (closed && Exit.hasInterrupts(finished)) {
+        return;
+      }
+
+      expect(Exit.isSuccess(finished), "the install's rebuild completed normally").toBe(true);
+      expect(seen.span.attributes.get("program"), "an install runs in its own program's rebuild").toBe(
+        seen.code.program,
+      );
+      expect(seen.span.attributes.get("outcome")).toBe(outcome);
+    });
+
+    const account = Effect.fnUntraced(function* (seen: Seen, pending: Set<string>) {
+      const code = seen.code;
+      const before = last.get(code.program);
+
+      // L10c: a repeat. Rolldown notified again, and the bytes did not change.
+      if (before !== undefined && code.hash === before) {
+        expect(code.from, "a repeat comes from the watcher").toBe("watch");
+        expect(yield* hash(code.source), "a repeat carries its program's last change, byte for byte").toBe(before);
+        yield* inOwnRebuild(seen, "same");
+        accounted.set(code, "repeat");
+        repeats.set(code.program, (repeats.get(code.program) ?? 0) + 1);
+
+        return;
+      }
+
+      // L10a and L10b: the one change a boot or a save owes this program.
+      expect(pending.has(code.program), "only a program the save reaches installs a changed hash").toBe(true);
+      expect(code.from, "the first install is the boot's, every later one the watcher's").toBe(
+        before === undefined ? "boot" : "watch",
+      );
+      expect(code.hash).toBe(yield* hash(code.source));
+      expect(fixtureValue(code.source), "the changed install carries the saved values").toMatchObject({
+        errors: 0,
+        assignments: 1,
+        facts: [{ values: want(code.program) }],
+      });
+      yield* inOwnRebuild(seen, "loaded");
+      accounted.set(code, "change");
+      last.set(code.program, code.hash);
+      pending.delete(code.program);
+    });
+
+    // L10d: each owed change has its own 3 s bound. A repeat is accounted inside it and pays nothing.
+    const owed = (owing: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const pending = new Set(owing);
+
+        while (pending.size > 0) {
+          const size = pending.size;
+          yield* Effect.gen(function* () {
+            while (pending.size === size) {
+              yield* account(yield* Queue.take(installs), pending);
+            }
+          }).pipe(
+            Effect.timeoutOrElse({
+              duration: "3 seconds",
+              orElse: () => Effect.die(new Error("an owed install never came")),
+            }),
+          );
+        }
+      });
+
+    /** Every `END` the case watchers delivered to the product, real and replayed. */
+    const delivered = () => Arr.reduce(watchers(), 0, (total, watcher) => total + watcher.ends);
+
+    // A rebuild starts only after the `END` that ends its cycle was delivered, so a count of started
+    // rebuilds, read before the delivered count, never exceeds it. A cut rebuild counts too.
+    const outnumbered = () => {
+      const rebuilds = started;
+      expect(rebuilds, "rebuilds never outnumber delivered Rolldown cycles").toBeLessThanOrEqual(delivered());
+    };
+
+    // Settled: every Rolldown cycle delivered so far has an ended rebuild. A count, not a quiet time.
+    const settle = Effect.gen(function* () {
+      outnumbered();
+      const cycles = delivered();
+      yield* until(() => ended >= cycles, "10 seconds", "a delivered Rolldown cycle never ended its rebuild");
+
+      for (const seen of yield* Queue.clear(installs)) {
+        yield* account(seen, new Set());
+      }
+    });
+
+    const write = (file: string, value: number) =>
+      Effect.gen(function* () {
+        values.set(file, value);
+        marks.set(
+          file,
+          Arr.map(watchers(), (watcher) => watcher.changes.length),
+        );
+
+        const name = Function.pipe(file, Str.endsWith("shared.ts"))
+          ? "shared"
+          : Function.pipe(file, Str.endsWith("unused.ts"))
+            ? "unused"
+            : "own";
+
+        yield* Effect.orDie(fs.writeFileString(path.join(home, file), `export const ${name} = ${value};\n`));
+      });
+
+    const owe = (file: string) =>
+      Effect.gen(function* () {
+        const reach = reaches[file] ?? [];
+        yield* owed(reach);
+        yield* until(
+          () => reported(file, marks.get(file)) >= reach.length,
+          "3 seconds",
+          "a watcher whose program reaches the saved file never reported its change",
+        );
+        yield* settle;
+      });
+
+    const world: World = {
+      reaches,
+      value: (file) => values.get(file) ?? 0,
+      write,
+      owe,
+      save: (file, value) => Effect.andThen(write(file, value), owe(file)),
+      // One watcher's replay after another, so each program's repeat lands in a known order.
+      repeat: Effect.suspend(() =>
+        Effect.forEach(watchers(), (watcher) => watcher.repeat, { discard: true, concurrency: 1 }),
+      ),
+      hold: (program) =>
+        Effect.gen(function* () {
+          const gate = { held: yield* Deferred.make<Install>(), release: yield* Deferred.make<void>() };
+          yield* Effect.addFinalizer(() => Deferred.succeed(gate.release, undefined));
+          gates.set(program, gate);
+
+          return {
+            held: Deferred.await(gate.held).pipe(
+              Effect.timeoutOrElse({
+                duration: "3 seconds",
+                orElse: () => Effect.die(new Error("the gate never held an install")),
+              }),
+            ),
+            release: Effect.asVoid(Deferred.succeed(gate.release, undefined)),
+          };
+        }),
+      settle,
+      accounted: (code) => accounted.get(code),
+      last: (program) => last.get(program),
+      repeats: (program) => repeats.get(program) ?? 0,
+    };
+
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            opened.notify = () => {
+              Queue.offerUnsafe(ticks, undefined);
+            };
+          }),
+          () =>
+            Effect.sync(() => {
+              opened.notify = () => {};
+            }),
+        );
+        yield* Effect.forkScoped(
+          Stream.runDrain(
+            watchPrograms({
+              root: home,
+              entry: path.join(home, "brain.ts"),
+              programs,
+              install,
+              failed: (fact) =>
+                Effect.sync(() => {
+                  failures.push(fact);
+                }),
+            }),
+          ).pipe(Effect.withTracer(tracer)),
+        );
+        // The boot: each program owes one change, with values [0, 0].
+        yield* owed(Arr.map(programs, (program) => program.name));
+        yield* settle;
+        yield* walk(world);
+        yield* settle;
+      }),
+    );
+
+    // The scope closed every watcher. Every install left over is accounted for.
+    closed = true;
+
+    for (const seen of yield* Queue.clear(installs)) {
+      yield* account(seen, new Set());
+    }
+
+    outnumbered();
+
+    for (const file of marks.keys()) {
+      expect(reported(file), `the watchers that report a change for ${file} number the programs that reach it`).toBe(
+        reaches[file]?.length,
+      );
+    }
+
+    expect(failures, "no build in the walk failed").toEqual([]);
+  });
+
+  // L10, p77. Plants: hash the entry file only (P1); install every program on any rebuild (P2); build
+  // each cycle twice (P3); install the previous rebuild's build (P4); watch shared/unused.ts (P5); add
+  // a per-rebuild counter to the hash (P6, red in the scenario below). Law plant: the old quiet drains.
   it.live(
-    "L10: a save changes the hash of exactly the programs whose bundle reaches the file, and only they install",
+    "L10: a save changes the hash of exactly the programs whose bundle reaches the file, and any other install is an unchanged repeat from that program's own rebuild",
     () =>
       Effect.gen(function* () {
         const seen = new Set<string>();
@@ -978,79 +1346,26 @@ describe("P15 slice 1: the watcher", () => {
             fc.asyncProperty(fc.gen(), (g) =>
               Effect.runPromise(
                 Effect.scoped(
-                  Effect.gen(function* () {
-                    const fs = yield* FileSystem.FileSystem;
-                    const path = yield* Path.Path;
-                    const { home, reaches, programs } = yield* fixture;
-                    const b = yield* brain;
+                  accountedWalk((world) =>
+                    Effect.gen(function* () {
+                      const edits = g(fc.integer, { min: 1, max: 4 });
 
-                    const stream = watchPrograms({
-                      root: home,
-                      entry: path.join(home, "brain.ts"),
-                      programs,
-                      install: b.install,
-                      failed: b.failed,
-                    });
+                      for (let n = 0; n < edits; n++) {
+                        // A file from the current set, and an edit: a new value, so the bytes change.
+                        const files = Rec.keys(world.reaches);
+                        const file = files[g(fc.nat, { max: files.length - 1 })]!;
+                        yield* world.save(file, world.value(file) + g(fc.integer, { min: 1, max: 99 }));
 
-                    yield* Effect.forkScoped(Stream.runDrain(stream));
-                    // The start: every program installs once, from the boot.
-                    const first = yield* drain(b.installs, 3000);
-                    expect(
-                      Arr.sort(
-                        Arr.map(first, (i): readonly [string, string] => [i.program, i.from]),
-                        byPair,
-                      ),
-                    ).toEqual(
-                      Arr.sort(
-                        Arr.map(programs, (p): readonly [string, string] => [p.name, "boot"]),
-                        byPair,
-                      ),
-                    );
-                    const hashes = new Map(Arr.map(first, (i) => [i.program, i.hash]));
-                    const values = new Map<string, number>();
-                    const edits = g(fc.integer, { min: 1, max: 4 });
-
-                    for (let n = 0; n < edits; n++) {
-                      // A file from the current set, and an edit: a new value, so the bytes change.
-                      const files = Rec.keys(reaches);
-                      const file = files[g(fc.nat, { max: files.length - 1 })]!;
-                      const value = (values.get(file) ?? 0) + g(fc.integer, { min: 1, max: 99 });
-                      values.set(file, value);
-
-                      const name = Function.pipe(file, Str.endsWith("shared.ts"))
-                        ? "shared"
-                        : Function.pipe(file, Str.endsWith("unused.ts"))
-                          ? "unused"
-                          : "own";
-
-                      yield* fs.writeFileString(path.join(home, file), `export const ${name} = ${value};\n`);
-                      const got = yield* drain(b.installs, 3000);
-
-                      const changed = Arr.map(
-                        Arr.filter(got, (i) => i.hash !== hashes.get(i.program)),
-                        (i) => i.program,
-                      );
-
-                      expect(new Set(changed), `a save to ${file}`).toEqual(new Set(reaches[file]));
-                      expect(Arr.every(got, (i) => i.from === "watch")).toBe(true);
-                      expect(
-                        new Set(Arr.map(got, (i) => i.program)),
-                        "only the programs that reach it install",
-                      ).toEqual(new Set(reaches[file]));
-
-                      for (const i of got) {
-                        hashes.set(i.program, i.hash);
+                        seen.add(
+                          Match.value(world.reaches[file]!.length).pipe(
+                            Match.when(2, () => "shared"),
+                            Match.when(1, () => "own"),
+                            Match.orElse(() => "outside"),
+                          ),
+                        );
                       }
-
-                      seen.add(
-                        Match.value(reaches[file]!.length).pipe(
-                          Match.when(2, () => "shared"),
-                          Match.when(1, () => "own"),
-                          Match.orElse(() => "outside"),
-                        ),
-                      );
-                    }
-                  }),
+                    }),
+                  ),
                 ).pipe(Effect.provide(NodeServices.layer)),
               ),
             ),
@@ -1063,6 +1378,71 @@ describe("P15 slice 1: the watcher", () => {
         }
       }),
     600_000,
+  );
+
+  // scenario: S1, the four orders the finding's run 2 and its save-time variants produce, each made
+  // on purpose with the wrapper's replay and one gate. Law plants: the old L10 assertions (case 1
+  // shows run 2's shape; cases 2 and 3 fail "only the programs that reach it install"); L10d's plant,
+  // any install of a pending program pays its owed change (case 4 red). Product plant: P6 (case 1).
+  it.live(
+    "scenario: L10 repeats at boot and inside saves are accounted for",
+    () =>
+      Effect.gen(function* () {
+        const cases: ReadonlyArray<(world: World) => Effect.Effect<void, never, Scope.Scope>> = [
+          // 1. A boot repeat: each program installs its boot hash again, from `watch`.
+          (world) =>
+            Effect.gen(function* () {
+              yield* world.repeat;
+              yield* world.settle;
+              expect(world.repeats("p15/one"), "program one repeated its boot install").toBeGreaterThanOrEqual(1);
+              expect(world.repeats("p15/two"), "program two repeated its boot install").toBeGreaterThanOrEqual(1);
+            }),
+          // 2. A repeat inside an own save: program two, which the save does not reach, installs unchanged code.
+          (world) =>
+            Effect.gen(function* () {
+              const before = world.repeats("p15/two");
+              yield* world.write("programs/one/own.ts", 37);
+              yield* world.repeat;
+              yield* world.owe("programs/one/own.ts");
+              expect(world.repeats("p15/two"), "the unreached program repeated inside the save").toBeGreaterThan(
+                before,
+              );
+            }),
+          // 3. A repeat inside an outside save: both programs install unchanged code while the save owes nothing.
+          (world) =>
+            Effect.gen(function* () {
+              const one = world.repeats("p15/one");
+              const two = world.repeats("p15/two");
+              yield* world.write("shared/unused.ts", 41);
+              yield* world.repeat;
+              yield* world.owe("shared/unused.ts");
+              expect(world.repeats("p15/one"), "program one repeated inside the outside save").toBeGreaterThan(one);
+              expect(world.repeats("p15/two"), "program two repeated inside the outside save").toBeGreaterThan(two);
+            }),
+          // 4. A held repeat released after the write: it is accounted as a repeat and pays nothing.
+          (world) =>
+            Effect.gen(function* () {
+              const boot = world.last("p15/one");
+              const gate = yield* world.hold("p15/one");
+              yield* world.repeat;
+              const held = yield* gate.held;
+              expect(held, "the gate held program one's unchanged install").toMatchObject({
+                hash: boot,
+                from: "watch",
+              });
+              yield* world.write("programs/one/own.ts", 53);
+              yield* gate.release;
+              yield* world.owe("programs/one/own.ts");
+              expect(world.accounted(held), "the held unchanged install is a repeat").toBe("repeat");
+              expect(world.last("p15/one"), "the save's own change paid what it owed").not.toBe(boot);
+            }),
+        ];
+
+        for (const order of cases) {
+          yield* Effect.scoped(accountedWalk(order));
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
+    300_000,
   );
 
   // L18. Plant: never close a BUNDLE_END result; close the watcher outside the scope.
