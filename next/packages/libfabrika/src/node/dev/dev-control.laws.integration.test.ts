@@ -7,22 +7,42 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
-import { TestClock } from "effect/testing";
-import { vi } from "vitest";
+import * as Arr from "effect/Array";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+
+import { vi, type Mock } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
-import { bodyText, fetchClient } from "./dev-client.test-support.ts";
+import { bodyText } from "./dev-client.test-support.ts";
 import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
 
 const SEED = 119120;
+
 const NAME = "control-test";
+
 // The brain's two settings as these laws start it: 0292's 500 MB mark and OTP's 5 s grace.
 const BRAIN = { memory: 500_000_000, grace: 5000 };
+
+// The bound of a call's wait for a replacement: the grace plus the 30 seconds dev.ts gives a start.
+const WAIT_BOUND = BRAIN.grace + 30_000;
 
 // The driver gives Alchemy its control plugin as a plain config with a `start`. The deploy's context
 // is typed as holding nothing, and Alchemy's contract also allows an Effect that builds a plugin,
@@ -55,6 +75,7 @@ const Move = Schema.Struct({
   answer: Schema.Literals(["value", "remote"]),
   reason: Schema.Literals(["intensity", "restart_failed"]),
 });
+
 type Move = typeof Move.Type;
 
 const Walk = Schema.Struct({
@@ -63,9 +84,11 @@ const Walk = Schema.Struct({
   pid: between(30_000, 39_000),
   moves: Schema.Array(Move).check(Schema.isMaxLength(14)),
 });
+
 type Walk = typeof Walk.Type;
 
 type Row = typeof BrainEvent.Type;
+
 type Cause = { readonly reason: "open" | "crash" | "memory"; readonly bytes?: number };
 
 // What a row must say, before its start ids are known.
@@ -84,10 +107,12 @@ type Call = {
 };
 
 type Answer = { readonly _tag: "value"; readonly value: unknown } | { readonly _tag: "error"; readonly error: unknown };
+
 type Span = { readonly span: { name: string; ok: boolean; attributes: Record<string, unknown> } };
 
 // `replacing`: the sampler sent the old process its SIGTERM, and the walk's process ends by its exit.
 type Phase = "up" | "replacing" | "exited" | "waiting" | "braked";
+
 type Kind = "exit" | "restart" | "start" | "brake" | "kill" | "listen" | "call" | "block" | "release";
 
 // The walk's own view of the platform: what Alchemy and workerd did, never the instance's model.
@@ -144,7 +169,7 @@ const legal = (world: World): ReadonlyArray<readonly [Kind, number]> => {
 
 const choose = (world: World, move: Move): Kind => {
   const moves = legal(world);
-  const total = moves.reduce((sum, [, weight]) => sum + weight, 0);
+  const total = Arr.reduce(moves, 0, (sum, [, weight]) => sum + weight);
   let left = move.pick % total;
 
   for (const [kind, weight] of moves) {
@@ -175,10 +200,10 @@ type Seen = {
   readonly woken: Woken | null;
 };
 
-const run = Effect.fnUntraced(function* (walk: Walk) {
+const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalThis.fetch>) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t708-" });
-  const clock = yield* Clock.Clock;
+  const clock = yield* TestClock.testClockWith((testClock) => Effect.succeed(testClock));
   const acks = yield* Queue.unbounded<void>();
   const killed = yield* Queue.unbounded<number>();
   const sleeps = yield* Queue.unbounded<void>();
@@ -193,10 +218,18 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   const platform = { rss: 0 };
   // When the sampler's current 1-second sleep ends: the moment a memory sample is taken.
   const sampler = { due: 0 };
+  // A call that waits while the pending-file write is held meets no event, since the brake or the stop
+  // behind that write is not folded yet, so it ends at its bound. A bound sleep waits on `lapse`, which
+  // the walk ends only while it awaits such a call. The brain's clock is not moved, so no timestamp or
+  // sample moves with it.
+  let lapse = Deferred.makeUnsafe<void>();
+  let lapsing = false;
+
   // Each call's chosen answer, by its name, so a call answered later still gets its own.
   const answers = new Map<string, Move["answer"]>();
   // Calls that met a pending replacement, with their answers still to come.
   const waiting: Array<{ readonly index: number; readonly answered: Promise<Answer> }> = [];
+
   const world: World = {
     phase: "up",
     port: walk.port,
@@ -211,112 +244,106 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   };
 
   // Count the instance's wall-clock reads, and tell the walk when the 1-second sampler sleeps again.
-  const counted = new Proxy(clock, {
-    get: (target, key) => {
-      if (key === "currentTimeMillis") {
-        return Effect.sync(() => {
-          reads.total++;
-          return target.currentTimeMillisUnsafe();
-        });
-      }
+  // A plain TestClock that forwards every other member, so the walk's own TestClock.setTime and
+  // adjust still reach the real one while this stands in as the Clock.
+  const counted: TestClock.TestClock = {
+    currentTimeMillis: Effect.sync(() => {
+      reads.total++;
 
-      if (key === "currentTimeMillisUnsafe") {
-        return () => {
-          reads.total++;
-          return target.currentTimeMillisUnsafe();
-        };
-      }
+      return clock.currentTimeMillisUnsafe();
+    }),
+    currentTimeMillisUnsafe: () => {
+      reads.total++;
 
-      if (key === "sleep") {
-        return (duration: Duration.Duration) => {
-          if (Duration.toMillis(duration) === 1000) {
-            sampler.due = target.currentTimeMillisUnsafe() + 1000;
-            Queue.offerUnsafe(sleeps, undefined);
-          }
-
-          return target.sleep(duration);
-        };
-      }
-
-      const value: unknown = Reflect.get(target, key);
-      return typeof value === "function" ? value.bind(target) : value;
+      return clock.currentTimeMillisUnsafe();
     },
-  });
+    sleep: (duration) => {
+      if (Duration.toMillis(duration) === WAIT_BOUND) {
+        return Effect.suspend(() => (lapsing ? Effect.void : Deferred.await(lapse)));
+      }
+
+      if (Duration.toMillis(duration) === 1000) {
+        sampler.due = clock.currentTimeMillisUnsafe() + 1000;
+        Queue.offerUnsafe(sleeps, undefined);
+      }
+
+      return clock.sleep(duration);
+    },
+    currentTimeNanos: clock.currentTimeNanos,
+    currentTimeNanosUnsafe: () => clock.currentTimeNanosUnsafe(),
+    monotonicTimeNanos: clock.monotonicTimeNanos,
+    monotonicTimeNanosUnsafe: () => clock.monotonicTimeNanosUnsafe(),
+    adjust: (duration) => clock.adjust(duration),
+    setTime: (timestamp) => clock.setTime(timestamp),
+    withLive: (effect) => clock.withLive(effect),
+  };
+
   // Hold each pending-file rename, and acknowledge the write once its folder sync has closed: the
   // instance then runs to its next queue take without another file step.
   let synced = false;
-  const gated = new Proxy(fs, {
-    get: (target, key) => {
-      if (key === "rename") {
-        return (from: string, to: string) =>
-          Effect.gen(function* () {
-            const held = to.endsWith("brain.pending.jsonl") ? gate : null;
 
-            if (held !== null) {
-              yield* Deferred.await(held);
-            }
+  const gated: FileSystem.FileSystem = {
+    ...fs,
+    rename: (from, to) =>
+      Effect.gen(function* () {
+        const held = Function.pipe(to, Str.endsWith("brain.pending.jsonl")) ? gate : null;
 
-            yield* target.rename(from, to);
-            // The startup flush rewrites the file too; only the walk's own writes are counted.
-            synced = to.endsWith("brain.pending.jsonl") && mode === "walk";
-          });
-      }
-
-      if (key === "open") {
-        return (path: string, options?: Parameters<FileSystem.FileSystem["open"]>[1]) => {
-          if (!synced || path !== home) {
-            return target.open(path, options);
-          }
-
-          synced = false;
-          // Registered first, so it runs after the folder handle's own release.
-          return Effect.addFinalizer(() => Effect.sync(() => Queue.offerUnsafe(acks, undefined))).pipe(
-            Effect.andThen(target.open(path, options)),
-          );
-        };
-      }
-
-      const value: unknown = Reflect.get(target, key);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-
-  yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        const body = JSON.parse(bodyText(options)) as Call["body"];
-        // The address as `fetch` parses it, given as a string or as the client's URL object.
-        sent.push({ url: new URL(String(url)).href, body });
-
-        if (mode === "startup") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+        if (held !== null) {
+          yield* Deferred.await(held);
         }
 
-        if (body.method === "brain") {
-          // Keep lifecycle rows in the real outbox so the walk can read every one.
-          return Response.json({ error: { reason: "offline" } });
-        }
-
-        if (body.target === "record") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
-        }
-
-        if (world.phase !== "up") {
-          throw new Error("connection refused");
-        }
-
-        const answer = answers.get(body.name) ?? "value";
-        return Response.json(
-          answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
-        );
+        yield* fs.rename(from, to);
+        // The startup flush rewrites the file too; only the walk's own writes are counted.
+        synced = Function.pipe(to, Str.endsWith("brain.pending.jsonl")) && mode === "walk";
       }),
-    ),
-    (spy) => Effect.sync(() => spy.mockRestore()),
-  );
+    open: (path, options) => {
+      if (!synced || path !== home) {
+        return fs.open(path, options);
+      }
+
+      synced = false;
+
+      // Registered first, so it runs after the folder handle's own release.
+      return Effect.addFinalizer(() => Effect.sync(() => Queue.offerUnsafe(acks, undefined))).pipe(
+        Effect.andThen(fs.open(path, options)),
+      );
+    },
+  };
+
+  fetch.mockImplementation(async (url, options) => {
+    // SAFETY: every fetch here is a dev.ts control call, whose body is the JSON of `{ target, project, name, method, args }`, a Call body.
+    const body = JSON.parse(bodyText(options)) as Call["body"];
+    // The address as `fetch` parses it, given as a string or as the client's URL object.
+    sent.push({ url: new URL(String(url)).href, body });
+
+    if (mode === "startup") {
+      return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+    }
+
+    if (body.method === "brain") {
+      // Keep lifecycle rows in the real outbox so the walk can read every one.
+      return Response.json({ error: { reason: "offline" } });
+    }
+
+    if (body.target === "record") {
+      return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+    }
+
+    if (world.phase !== "up") {
+      throw new Error("connection refused");
+    }
+
+    const answer = answers.get(body.name) ?? "value";
+
+    return Response.json(
+      answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
+    );
+  });
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(process, "kill").mockImplementation((pid) => {
         Queue.offerUnsafe(killed, Number(pid));
+
         return true;
       }),
     ),
@@ -324,32 +351,64 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   );
 
   let observe: (event: RuntimeEvent) => void = () => {};
+
   let listen: (port: number) => Effect.Effect<unknown> = () => Effect.void;
 
   const startup = yield* Effect.scoped(
     Effect.gen(function* () {
       yield* TestClock.setTime(walk.base);
+
       const dev = yield* startDev({ name: NAME, port: 18787, build: "test", home, ...BRAIN }, (local) =>
         Effect.gen(function* () {
           observe = Context.get(local, RuntimeLifecycle);
-          const plugin = [...local.mapUnsafe.values()].find(
-            (value) => typeof value === "object" && value !== null && "sockets" in value,
+
+          // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
+          const plugin = Option.getOrUndefined(
+            Arr.findFirst(
+              [...local.mapUnsafe.values()],
+              (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
+            ),
           ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
+
           listen = (port) => plugin.start({ "fabrika-control": port });
           observe({ type: "start", worker: NAME, pid: walk.pid });
           yield* listen(walk.port);
         }),
       );
+
       // The startup flush delivered the first started row; its brain call keeps what it said.
-      const startup = sent.find((call) => call.body.method === "brain")!.body.args[0] as Row;
+      // SAFETY: the brain call's first argument is the started row the startup flush delivered.
+      const startup = Option.getOrThrow(Arr.findFirst(sent, (call) => call.body.method === "brain")).body
+        .args[0] as Row;
+
       facts.push({ _tag: "started", at: walk.base, pid: walk.pid, cause: { reason: "open" } });
       world.cause = { reason: "crash" };
       mode = "walk";
       let ready = false;
+
+      // The answer of a call. While the pending-file write is held it ends at its bound, which lapses here.
+      const answer = Effect.fnUntraced(function* (answered: Promise<Answer>) {
+        if (world.held === null) {
+          return yield* Effect.promise(() => answered);
+        }
+
+        lapsing = true;
+        yield* Deferred.succeed(lapse, undefined);
+
+        return yield* Effect.promise(() => answered).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              lapsing = false;
+              lapse = Deferred.makeUnsafe<void>();
+            }),
+          ),
+        );
+      });
+
       // Every call that waited gets its answer before the walk moves on, so no answer races a move.
       const wake = Effect.fnUntraced(function* (woken: Woken) {
         for (const { index, answered } of waiting.splice(0)) {
-          const got = yield* Effect.promise(() => answered);
+          const got = yield* answer(answered);
           calls[index] = { ...calls[index]!, got, woken };
         }
       });
@@ -372,6 +431,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
         if (world.held !== null) {
           world.held++;
+
           return cause;
         }
 
@@ -467,16 +527,19 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
             got: { _tag: "value", value: undefined },
             woken: null,
           });
-          const answered = (Reflect.get(dev.process(name), "ping")() as Promise<unknown>).then(
+          // @ts-expect-error ping is no method of a Process; this law fakes fetch, so any name reaches the wire
+          const ping: () => Promise<unknown> = dev.process(name).ping;
+
+          const answered = ping().then(
             (value): Answer => ({ _tag: "value", value }),
-            (error: unknown): Answer => ({ _tag: "error", error }),
+            (cause: unknown): Answer => ({ _tag: "error", error: cause }),
           );
 
           if (world.pending) {
             // It waits for the replacement; the move that ends the wait collects its answer.
             waiting.push({ index: calls.length - 1, answered });
           } else {
-            const got = yield* Effect.promise(() => answered);
+            const got = yield* answer(answered);
             calls[calls.length - 1] = { ...calls.at(-1)!, got };
           }
         } else if (kind === "block") {
@@ -524,6 +587,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       world.now += 1;
       yield* TestClock.setTime(world.now);
       facts.push({ _tag: "stopped", at: world.now });
+
       return startup;
     }),
   ).pipe(
@@ -552,24 +616,32 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   ).pipe(Effect.provide(rssLayer(() => 0)));
 
   for (const [index, call] of calls.entries()) {
-    calls[index] = { ...call, sent: sent.filter((c) => c.body.target === "process" && c.body.name === call.name) };
+    calls[index] = { ...call, sent: Arr.filter(sent, (c) => c.body.target === "process" && c.body.name === call.name) };
   }
 
-  const spans = sent
-    .filter((call) => call.body.target === "record" && call.body.method === "write")
-    .flatMap((call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
+  const writes = Arr.filter(sent, (call) => call.body.target === "record" && call.body.method === "write");
+  // SAFETY: a record write's third argument is its list of spans, or absent.
+  const spans = Arr.flatMap(writes, (call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
+
   return { startup, rows, facts, calls, restartReads, spans, world, kills };
 });
 
-// Each run gets its own clock, file system, process ids and secrets.
-const walked = (walk: Walk) =>
-  run(walk).pipe(
-    Effect.provide(fetchClient),
-    Effect.provide(ProcessIdGenerator.layer),
-    Effect.provide(SecureRandom.layerWebCrypto),
-    Effect.provide(NodeServices.layer),
-    Effect.provide(TestClock.layer()),
+// Each run gets its own clock, file system, process ids, secrets and platform stand-in.
+const walked = (walk: Walk) => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+
+  return run(walk, fetch).pipe(
+    Effect.provide(
+      FetchHttpClient.layer.pipe(
+        Layer.provideMerge(ProcessIdGenerator.layer),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(TestClock.layer()),
+      ),
+    ),
+    Effect.provideService(FetchHttpClient.Fetch, fetch),
   );
+};
 
 describe("T708 dev control laws", () => {
   // Plant (the memory restart plan's L8, crash path): dial `address` in place of `reachable`: a call
@@ -623,7 +695,9 @@ describe("T708 dev control laws", () => {
     ({ walk }) =>
       Effect.gen(function* () {
         const { startup, rows, facts, restartReads } = yield* walked(walk);
-        expect([startup, ...rows].map((row) => [row._tag, row.at])).toEqual(facts.map((fact) => [fact._tag, fact.at]));
+        expect(Arr.map([startup, ...rows], (row) => [row._tag, row.at])).toEqual(
+          Arr.map(facts, (fact) => [fact._tag, fact.at]),
+        );
 
         // The restart deadline and the restarting row read the clock separately.
         for (const count of restartReads) {
@@ -640,8 +714,8 @@ describe("T708 dev control laws", () => {
       Effect.gen(function* () {
         const { startup, rows, facts, spans, world, kills } = yield* walked(walk);
         const all = [startup, ...rows];
-        expect(all.map((row) => row._tag)).toEqual(facts.map((fact) => fact._tag));
-        expect(new Set(all.map((row) => row.id)).size).toBe(all.length);
+        expect(Arr.map(all, (row) => row._tag)).toEqual(Arr.map(facts, (fact) => fact._tag));
+        expect(new Set(Arr.map(all, (row) => row.id)).size).toBe(all.length);
         let start: string | null = null;
 
         for (const [index, row] of all.entries()) {
@@ -680,10 +754,10 @@ describe("T708 dev control laws", () => {
         }
 
         // The listener completes a waiting replacement; a brake fails it with ControlError.
-        const restarts = spans.filter(({ span }) => span.name === "brain.restart");
-        expect(restarts.filter(({ span }) => span.ok)).toHaveLength(world.completed);
+        const restarts = Arr.filter(spans, ({ span }) => span.name === "brain.restart");
+        expect(Arr.filter(restarts, ({ span }) => span.ok)).toHaveLength(world.completed);
         expect(
-          restarts.filter(({ span }) => !span.ok && span.attributes["error.type"] === "ControlError"),
+          Arr.filter(restarts, ({ span }) => !span.ok && span.attributes["error.type"] === "ControlError"),
         ).toHaveLength(world.failed);
       }),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 10, full: 100 }) } },

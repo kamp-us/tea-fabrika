@@ -47,9 +47,8 @@ real surviving mutant as a ticket for a missing test, and
 Nothing tells the tests step that it keeps missing the same sort of case (tracker ticket 676).
 
 This amends 0066 in part: what the run files. A real gap is still one ticket for a missing test,
-as 0066 says; the gap now carries a category, and a repeat adds one ticket. The rest of 0066
-holds. 0067 is unchanged: where the run happens is the same, and its "files tickets, as 0066
-says" now reads through this file.
+as 0066 says; the gap now carries a category, and a repeat adds one ticket. 0067's "files
+tickets, as 0066 says" now reads through this file.
 
 The run keeps no store of its own: its answer is the CI artifact, and its real gaps are the
 tracker tickets it files. So the category goes on the ticket, and the count is a tracker query,

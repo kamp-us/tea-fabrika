@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e15-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T09:00:00-08:00",
+  "ended": "2026-11-16T09:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice E15 (returnEffectInGen), whole slice in one step after the coordinator's change of shape: all 7 hits fixed by hand with Edit, each a non-generator form with the same value (the generator returns the shape, then Effect.map to Effect.succeed(shape), or Effect.map from the setup to the inner Effect). Lock: overrides in next/packages/libfabrika/tsconfig.json (src/cloudflare, src/node) and next/apps/fabrika/tsconfig.json (src/*.ts). Report: hits met 7, fixed by quick fix 0 (the checker's return yield* breaks Alchemy's DurableObject.make, TS2379, and would open the node test databases once instead of per run), hand edits 7, left 0, waiting on 1366 0. libfabrika and app tsc are clean for the check. Narrow tests pass at the pushed head: CodeStore and Nemesis integration (12), sibling.laws.integration (1), connection and SettingsRecorded (14), alarm.laws, ObjectService and runtime-recovery.laws.integration (17). pnpm lint passed 16 of 17 parts; lint:dead died with SIGABRT in this box. One slip, undone: the 3 cloudflare edits were first made with a script; they were reverted with git checkout and redone with the Edit tool before any commit.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 40,
+  "note": "Counts from tsc per package. No script edited a file; every fix was an Edit.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "next/packages/libfabrika/src/node/plant.ts, a generator returning Effect.succeed(1): libfabrika tsc goes from 3 to 4 effect(returnEffectInGen) errors",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/node/**/*.ts dropped from libfabrika's override with the plant file in place: errors fall from 4 to 3, so the glob is what holds that folder",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

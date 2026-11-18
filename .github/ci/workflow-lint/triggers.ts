@@ -1,3 +1,4 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's triggers: the events that start a run, the paths
 // a pull request ignores, what cancels a run, and a draft's own check names.
 import { ignored } from "../changes.mjs";
@@ -22,6 +23,7 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
   const push = map(on["push"]),
     pr = map(on["pull_request"]),
     queue = map(on["merge_group"]);
+
   require("pull_request" in on &&
     "push" in on &&
     JSON.stringify(push["branches"]) === '["main"]', "run every PR and main push");
@@ -40,7 +42,7 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
   const skipped = pr["paths-ignore"];
   require(Array.isArray(skipped) &&
     skipped.every(
-      (pattern) => typeof pattern === "string" && /^[\w.-]+(?:\/[\w.*-]+)+$/.test(pattern) && !pattern.includes("**"),
+      (pattern) => Predicate.isString(pattern) && /^[\w.-]+(?:\/[\w.*-]+)+$/.test(pattern) && !pattern.includes("**"),
     ), "ignored paths use no wildcard but a single *");
 
   require(!("branches" in pr), "all PR bases remain enabled");
@@ -53,7 +55,7 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
     TYPES.every((type) => types.includes(type)), "pull requests run on open, push, reopen and ready for review");
   require(compact(map(workflow["concurrency"])["cancel-in-progress"]) === CANCEL, "only a new head cancels a run");
 
-  for (const [job, expected] of Object.entries(DRAFT_NAMES)) {
+  for (const [job, expected] of Rec.toEntries(DRAFT_NAMES)) {
     require(compact(map(jobs[job])["name"]) === expected, `${job} has its own name on a draft`);
   }
 };

@@ -12,9 +12,10 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
+import { String as Str, pipe, Array as Arr, Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
+
 import {
   Body,
   build,
@@ -32,6 +33,12 @@ import {
   world,
 } from "./runner-contract.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const replayRefuse = (spy: { calls: number }): never => {
   spy.calls++;
   throw new Error("refuse must not run on accepted history");
@@ -47,21 +54,29 @@ const failedAs = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 
 type World = Effect.Success<ReturnType<typeof world>>;
 
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
 // The real Gateway in front of a world's runner, for the delivery law below. Moved out of the
 // world unchanged; it reads the world's SQL and ledger.
 const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRunner.Service) {
   const { sql, ledger } = w;
+
   // Ephemeral signing material only. This helper reads no key file.
-  const web = <A>(f: () => Promise<A>) => Effect.tryPromise({ try: f, catch: () => new Error("test crypto failed") });
+  const web = <A>(f: () => Promise<A>) =>
+    Effect.tryPromise({ try: f, catch: () => WebCryptoError.make({ message: "test crypto failed" }) });
+
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const raw = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
-  const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
+  const fingerprint = `SHA256:${pipe(Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))), Str.replace(/=+$/, ""))}`;
   const blob = new Uint8Array(51);
   new DataView(blob.buffer).setUint32(0, 11);
   blob.set(new TextEncoder().encode("ssh-ed25519"), 4);
   new DataView(blob.buffer).setUint32(15, 32);
   blob.set(raw, 19);
-  const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+  const line = Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
+
   const founder = {
     name: "P8",
     person,
@@ -70,6 +85,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
     by: "SHA256:exam-founder",
     build,
   };
+
   const env = Layer.mergeAll(
     ledger,
     ClientManagerLedger.layer(founder).pipe(Layer.provide(ledger)),
@@ -93,7 +109,9 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
       Layer.provide(RateLimiterSql.layer(sql, { build, policy: { limit: 100_000, window: 60_000 } })),
     ),
   );
+
   let deliveries = 0;
+
   const layer = Gateway.layer({
     sql,
     founder,
@@ -112,6 +130,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
     deliver: (_p, _envelope, _span, input) =>
       Effect.suspend(() => {
         deliveries++;
+
         return runner.msg(input);
       }),
     notify: () => Effect.void,
@@ -119,14 +138,16 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
       schema: Msg,
       personOnly: [],
       raw: [],
-      name: (m) => m.type,
+      name: (m) => m._tag,
     },
     events: { personOnly: [] },
   }).pipe(Layer.provide(env));
+
   const connect = Effect.gen(function* () {
     const door = yield* Gateway.pipe(Effect.provide(layer)),
       client = yield* door.connect(),
       nonce = yield* door.challenge(client);
+
     const signed = yield* writeSshsig({
       text: `fabrika-hello\nhttps://fabrika.test/p8\nexam\n${nonce}`,
       line,
@@ -136,6 +157,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
           Effect.map((a) => new Uint8Array(a)),
         ),
     });
+
     expect(
       (yield* door.initialize(
         client,
@@ -155,12 +177,14 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
         { url: "https://fabrika.test/p8", tab: "exam", name: fingerprint },
       ))._tag,
     ).toBe("online");
+
     return { door, client };
   });
+
   return {
     connect,
     deliveries: () => deliveries,
-    bindings: () => sql.exec("SELECT value FROM gateway_bindings").map((r) => JSON.parse(String(r.value))),
+    bindings: () => Arr.map(sql.exec("SELECT value FROM gateway_bindings"), (r) => JSON.parse(String(r.value))),
   };
 });
 
@@ -211,6 +235,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const spy = { calls: 0 };
       const w = yield* world(makeProgram(() => replayRefuse(spy), true));
+
       const m = incoming(1, body),
         placed = yield* w.append(m);
 
@@ -221,8 +246,10 @@ it.effect.prop(
       yield* w.store.save({ saved: { v: 1, build, model: empty, after: 0 }, turn: null, cmds: [] }, [
         { id: m.id, rev: placed.rev, pos: placed.pos },
       ]);
+
       const before = yield* w.rows(),
         runner = yield* w.runner();
+
       failedAs(yield* Effect.exit(runner.open("watcher")), "saved_letter");
       unchanged(before, yield* w.rows());
       expect(w.updates).toEqual([]);
@@ -240,6 +267,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const w = yield* world(makeProgram(() => null, true));
       yield* w.boot;
+
       const runner = yield* w.runner(),
         input = incoming(1, body);
 
@@ -270,7 +298,7 @@ it.effect.prop(
   opts,
 );
 
-const terminalAnswer = (actual: unknown) => expect(actual).toEqual({ _tag: "refused", reason: "dead" });
+const terminalAnswer = (actual: object) => expect(actual).toEqual({ _tag: "refused", reason: "dead" });
 
 it.effect.prop(
   "p25: the real Gateway answers dead on terminal delivery and its saved settled retry",
@@ -279,13 +307,15 @@ it.effect.prop(
     Effect.gen(function* () {
       const w = yield* world(makeProgram(() => null, true));
       yield* w.boot;
+
       const runner = yield* w.runner(),
         sender = yield* openDoor(w, runner),
         first = yield* sender.connect;
+
       const request = {
         pid: process,
         letter: id("letter", 1),
-        m: { type: "save", body, base: 0, work: false },
+        m: { ...Tag.cases.save.make({}), body, base: 0, work: false },
         sentAt: "2030-01-01T00:00:00Z",
         seen: 0,
       };
@@ -334,6 +364,7 @@ it.effect.prop(
       const spy = { calls: 0 };
       const w = yield* world(makeProgram(() => replayRefuse(spy), true));
       yield* w.boot;
+
       const input = incoming(1, body),
         placed = yield* w.append(input);
 
@@ -344,8 +375,10 @@ it.effect.prop(
       yield* w.store.save({ saved: { v: 1, build, model: empty, after: 0 }, turn: null, cmds: [] }, [
         { id: input.id, rev: placed.rev, pos: placed.pos },
       ]);
+
       const before = yield* w.rows(),
         runner = yield* w.runner();
+
       failedAs(yield* Effect.exit(runner.open("watcher")), "saved_letter");
       expect(spy.calls).toBe(0);
       expect(w.down()).toEqual([]);
@@ -357,7 +390,7 @@ it.effect.prop(
       unchanged(before, yield* w.rows());
       expect(w.dead()).toEqual([]);
       expect(w.down()).toEqual([]);
-      expect(w.receipts().every((r) => r.tries === 0)).toBe(true);
+      expect(Arr.every(w.receipts(), (r) => r.tries === 0)).toBe(true);
     }),
   opts,
 );

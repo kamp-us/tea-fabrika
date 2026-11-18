@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t766-port-typecheck-fix6",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": "kamp-us/tea-fabrika#1506",
+  "head": "48669b2c30df51c44adc8603f4d5ae7ae32c423e",
+  "started": "2026-11-18T08:23:00-08:00",
+  "ended": "2026-11-18T08:30:00-08:00",
+  "parent": "2026-11-18-t766-port-typecheck-review2",
+  "active": null,
+  "role": "step",
+  "step": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Today's tooling, ticket 766, one fix round (tests and build together) for the review's two faults in scripts/typecheck/LocksFile.ts. Fault 1: Held.running wrote and removed <lock>.child whatever the label named, so a displaced holder's command start and end stamped on the next holder's guard. It now acts only while the label still names this process. Fault 2: the breaker removed the label before .child, so a taker that linked in between lost its guard. It now removes .child first. Laws: N3 gains a command move for a live or displaced holder (coverage list gains command); a pinned walk (take 501, take 502, old writes over 501, old ends, kill 502 with command, command of 501, take 503) and a gated scenario (Deferred gate after the breaker's first remove, a take, a kill) were written first and failed on the reviewed head. N3 itself stayed green on the old product at both fast and full depth, since its random walk does not reach the seven-move order, so the pinned walk is the law that fails.",
+  "plants": [
+    {
+      "law": "pinned: T766 a displaced holder's command start and end leave the next holder's running-child guard intact",
+      "plant": "The reviewed product as it was: two live holders, 502 and 503.",
+      "result": "red"
+    },
+    {
+      "law": "scenario: a take between the breaker's two removes keeps the taker's running-child guard",
+      "plant": "The reviewed product as it was: breaker 602 and command 703 both live.",
+      "result": "red"
+    },
+    {
+      "law": "pinned: T766 a displaced holder's command start and end leave the next holder's running-child guard intact",
+      "plant": "On the fixed product, running ignores the label check. Restored byte for byte.",
+      "result": "red"
+    },
+    {
+      "law": "scenario: a take between the breaker's two removes keeps the taker's running-child guard",
+      "plant": "On the fixed product, the breaker removes the label before .child again. Restored byte for byte.",
+      "result": "red"
+    },
+    {
+      "law": "N3",
+      "plant": "The reviewed product, at fast (100) and full (300) depth, with the new command move.",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "costUsd": null,
+  "driver_caused": false,
+  "billed": null,
+  "note": "Node 26.13.0, TYPESAFE_API_KEY unset, nice 15 and maxWorkers 1. scripts/typecheck-lock.test.ts and scripts/typecheck.test.ts pass (12 tests), and the lock file passes at full depth. oxfmt and the repo's oxlint pass on the two changed files with no hit in them. No pnpm typecheck, full lint or full suite ran. No test here sends a signal: kill is the process table saying a pid is gone."
+}

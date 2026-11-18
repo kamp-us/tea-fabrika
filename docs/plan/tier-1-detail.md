@@ -445,6 +445,17 @@ Why: no module state, no function in a model, and the tile's laws run with no We
 
 ## Agents through MCP
 
+**Library boundary, 2026-11-17:** [PR1099](https://github.com/kamp-us/tea-fabrika/pull/1099)
+supplies only `next/`'s library definitions: `Tools.list/read`, typed `Program.port` and the shared
+JSON codec for admission, step and fold. A library caller can describe visible program ports and
+decode their calls. It adds no MCP server, bridge, registered harness or real agent connection.
+Its code at `0e2bd3a9` passed [ordinary CI](https://github.com/kamp-us/tea-fabrika/actions/runs/44154987776),
+[full GitHub proof](https://github.com/kamp-us/tea-fabrika/actions/runs/44155042561) and fresh
+independent code review. Skipped capabilities remain unproved. The existing gateway audit's raw
+message decoder remains a finding for later gateway integration. Tickets 888 and 328 stay open.
+The commands, gateway, server, real harness experiment and write/demo delivery described below
+remain later work; the library proof does not establish them.
+
 *Changed 2026-11-11 (owner, [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the agent's program in Tier 1 is the checklist, not notes. Its tools are `checklist_check` (with an optional `note`), `checklist_uncheck`, `checklist_left` and `checklist_items`; `add`, `rename` and `remove` are a person's and get no tool. The checklist's half is built in [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019); P25 builds the tools. The notes example below stays for Tier 2.*
 
 **The answer:** an agent adds one line, and it has tools made from each program's inputs.

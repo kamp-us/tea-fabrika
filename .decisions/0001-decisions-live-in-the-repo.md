@@ -1,7 +1,7 @@
 ---
 id: 0001
 title: Every owner decision lands in `.decisions/` the turn it is made, one file per decision
-status: amended-in-part by [0585](0585-kalfa-is-six-domain-packages.md)
+status: accepted
 date: 2026-11-09
 tags: [decisions, governance, docs, lead]
 ---
@@ -23,6 +23,8 @@ and agents there find a ruling by its file name and title.
 **Decisions live in `.decisions/`, one short file per decision, written the turn the owner decides.**
 
 - The file is `NNNN-slug.md`, numbered in order, in the shape [the adr skill](../.agents/skills/adr/SKILL.md) gives.
+- The folder is `.decisions/` today. [0585](0585-kalfa-is-six-domain-packages.md) moves it under
+  `.kalfa/` when its records plan builds the move.
 - `docs/direction/` keeps the long design notes. A decision file links its note when one exists.
 - Before an agent asks the owner or writes a plan, it searches `.decisions/`, `.glossary/` and
   `docs/direction/`.

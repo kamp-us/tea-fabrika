@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-port-s1-s3-input-regressions",
+  "ticket": "766",
+  "pr": "kamp-us/tea-fabrika#1517",
+  "started": "2026-11-17T03:57:49-08:00",
+  "ended": "2026-11-17T04:04:21-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Today's lead tooling, approved script port S1/S3, fix round for the whole-source review. Extended the existing generated laws without deleting an assertion: fieldrow env values now include present empty model/effort with required coverage; every generated env -S interpreter/option prefix also checks quoted and --split-string forms. On exact old bb52 source bytes both laws failed at intended assertions: fieldrow after one case kept a default model instead of empty; extensionless script after five cases returned no finding for quoted sh. Other six tests passed. Normal format passed. No compiler, full API, full lint, real process or CI run. Runtime model/cost details were not exposed to this worker.",
+  "plants": [
+    {
+      "law": "The Codex row's fields, sums and list price match fieldrow.py's for the same events file",
+      "plant": "old bb52 provider treats a present empty environment value as missing",
+      "result": "red"
+    },
+    {
+      "law": "with no extension and a `#!` line naming a shell or Python fails lint unless listed or marked, and one naming node or tsx passes",
+      "plant": "old bb52 env parser only splits whitespace and skips --split-string= as an option",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 6.5,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}

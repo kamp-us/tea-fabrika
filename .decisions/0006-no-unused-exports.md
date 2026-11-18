@@ -1,7 +1,7 @@
 ---
 id: 0006
 title: An export no other file imports fails lint, with code-graph's strict unused-export check
-status: amended-in-part by [0524](0524-no-list-lets-broken-code-pass.md)
+status: accepted
 date: 2026-11-09
 tags: [lint, exports, code-graph, cleanup]
 ---
@@ -28,9 +28,9 @@ A hand check found two kinds of false alarm, and none of the other findings was 
   through ``import(`./${part}.ts`)``, and a bundle entry kept whole so its size is measured. Two
   more sit in `experiments/results/`, saved agent output that stays as it is.
 
-This builds on decision 0003, still open in
-[PR 567](https://github.com/usirin/tea-fabrika/pull/567): a clean repo is held by checks, not
-discipline.
+This builds on [0003](0003-a-clean-repo-kept-clean-by-code.md): a clean repo is held by checks, not
+discipline. [0524](0524-no-list-lets-broken-code-pass.md) later closed the ledger this record first
+left to the owner: no entry is added to it now.
 
 ## Decision
 
@@ -43,8 +43,10 @@ discipline.
 
 **Binding constraints**
 
-- A finding is fixed in code: drop the `export`, or delete the symbol. A ledger entry is the owner's
-  call, in a change of its own ([nobody writes their own exam](../docs/direction/nobody-writes-their-own-exam.md)).
+- A finding is fixed in code: drop the `export`, or delete the symbol. No entry is added to
+  `unreachable-ledger.json`: it only shrinks, and it is deleted when its last entry is fixed
+  ([0524](0524-no-list-lets-broken-code-pass.md),
+  [nobody writes their own exam](../docs/direction/nobody-writes-their-own-exam.md)).
 - An export that a runtime reads by name keeps its `export`. Never drop one to pass the check.
 - In `experiments/`, a value kept only so `tsc` checks it (a type probe, a spike, a shape sketch)
   stays, renamed with a leading `_`, and is not deleted.
@@ -54,8 +56,8 @@ discipline.
 
 - The cleanup landed in one pull request: 590 exports dropped, 12 of those symbols deleted outright, and
   13 type probes and spikes renamed with `_`.
-- The 14 exports read by name and the 2 saved results still fail `--unreachable --ci` until the
-  owner records them in `unreachable-ledger.json` or a code-graph setting covers them
-  ([kamp-us/demlik#906](https://github.com/kamp-us/demlik/issues/906)).
+- The 14 exports read by name and the 2 saved results fail `--unreachable --ci` until a code-graph
+  setting covers them ([kamp-us/demlik#906](https://github.com/kamp-us/demlik/issues/906)); no
+  ledger entry is added for them.
 - When a code-graph release fixes demlik#905, the bump deletes
   `patches/@demlik__code-graph@0.15.0.patch`.

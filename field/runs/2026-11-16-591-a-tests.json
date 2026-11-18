@@ -1,0 +1,132 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-a-tests",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-15T22:24:56-08:00",
+  "ended": "2026-11-15T23:16:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice A of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md at 262d4dc), on branch fabrikalfa/exam-to-lint-a. plant.ts and promise-types.ts moved to oxlint-plugins/ with every importer changed (34 oxlint-plugins tests, package.json's lint:promise-types, the law-20 import pattern in .oxlintrc.json). Twelve exam files left next/apps/fabrika/src/exam/: no-hand-tag, ledger-sql (to no-ledger-sql.test.ts), no-effect-run-outside-edge, edge-comment, effect-functions (its asks span law to exam/edges.integration.test.ts), one-store-hook, no-promises (split: oxlint half to no-promises.test.ts, typed half to promise-types.test.ts), layers and clock (to no-clock-in-view.test.ts) by git mv; no-of, object-imports and react-rules folded into no-of.test.ts, plants.test.ts and builtin-plants.ts, each old file removed in its own commit. compiler.test.ts moved to next/packages/libfabrika/src/node/build/; effect-checks.test.ts to oxlint-plugins/effect-checks-next.test.ts, since pull request 1417 adds oxlint-plugins/effect-checks.test.ts and 0573's file is not on main. Plan gap: moving plant.ts out of next/ made settings-generated.test.ts's L9 import cross out of its package (pnpm lint:boundaries red, B19), so L9 moved to oxlint-plugins/settings-imports.test.ts here (slice F's M8). Its plan break first stayed green at the old 10 runs (no start file drawn taking the adapter); it now runs 100 runs, as M8 says, with a coverage check, and is red under the break. Every moved law is green at the head and red under each break below. The old exam files ending in .integration.test.ts were not run side by side: the 0178 guard refuses them here; compiler.test.ts and effect-checks.test.ts were run green before their move.",
+  "plants": [
+    {
+      "law": "M1 oxlint-plugins/no-hand-tag.test.ts",
+      "plant": "skip the class field visitor (PropertyDefinition) in oxlint-plugins/no-hand-tag.ts",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-ledger-sql.test.ts",
+      "plant": "stop reading bracket-quoted table names (main.[entries]) in oxlint-plugins/no-ledger-sql.ts",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-effect-run-outside-edge.test.ts",
+      "plant": "drop makeRuntimePromise from the run set in oxlint-plugins/no-effect-run-outside-edge.ts",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/edge-comment.test.ts",
+      "plant": "accept Edge: as edge: (case-insensitive reason) in oxlint-plugins/edge-comment.ts",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/edge-comment.test.ts",
+      "plant": "an off line for fabrika/no-promises on next/packages/libfabrika/src/data/** in .oxlintrc.json",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/effect-functions.test.ts",
+      "plant": "skip the curried wrapper (an arrow returned by an arrow is not named) in oxlint-plugins/effect-functions.ts",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/one-store-hook.test.ts",
+      "plant": "drop the void call branch in oxlint-plugins/one-store-hook.ts",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-of.test.ts, the folded path laws",
+      "plant": "pass a named import of of in oxlint-plugins/no-of.ts",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/plants.test.ts, object contracts load only Alchemy",
+      "plant": "the cloudflare/objects.ts block's pattern group replaced by one that bans nothing, in .oxlintrc.json (the plan's side-effect import form is no field of that block)",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-clock-in-view.test.ts",
+      "plant": "drop performance.now and crypto.randomUUID from no-clock-in-view's reads (the rule has no handler visitor to drop)",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/plants.test.ts, built in, on in next/'s .tsx files: react(purity)",
+      "plant": "react/purity off in the next/**/*.tsx block of .oxlintrc.json",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/plants.test.ts, built in, on in next/'s .tsx files: react(refs), react(immutability), react(display-name)",
+      "plant": "react/immutability off in the next/**/*.tsx block of .oxlintrc.json",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/no-promises.test.ts",
+      "plant": "skip Stream.toAsyncIterable in oxlint-plugins/no-promises.ts",
+      "result": "red"
+    },
+    {
+      "law": "M2 oxlint-plugins/promise-types.test.ts",
+      "plant": "let a marker cover the five lines under it, not only the next line, in oxlint-plugins/promise-types.ts",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/layers.test.ts",
+      "plant": "drop roots from the patched code-graph's reading (a copy of its dist/index.js, the shared hard link kept aside and put back)",
+      "result": "red"
+    },
+    {
+      "law": "M1 oxlint-plugins/layers.test.ts",
+      "plant": "next-node moved to layer 11 in layer-rules.json",
+      "result": "red"
+    },
+    {
+      "law": "the moved compiler laws, next/packages/libfabrika/src/node/build/compiler.test.ts",
+      "plant": "ignore \"use no memo\" with no row in next/packages/libfabrika/src/node/build/compiler.ts",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/effect-checks-next.test.ts, T910 pinned",
+      "plant": "globalDateInEffect renamed away in tsconfig.base.json's next/ override",
+      "result": "red"
+    },
+    {
+      "law": "M8 oxlint-plugins/settings-imports.test.ts, at the old 10 runs",
+      "plant": "drop src/settings-start.integration.test.ts from the adapter's allowed files in .oxlintrc.json",
+      "result": "green"
+    },
+    {
+      "law": "M8 oxlint-plugins/settings-imports.test.ts, at 100 runs with its coverage check",
+      "plant": "drop src/settings-start.integration.test.ts from the adapter's allowed files in .oxlintrc.json",
+      "result": "red"
+    },
+    {
+      "law": "M5 pnpm -s lint:promise-types",
+      "plant": "a scratch copy of next/packages/libfabrika/src/Id.ts with a .then on a Promise",
+      "result": "red"
+    },
+    {
+      "law": "M5 oxlint over the same scratch copy",
+      "plant": "a .then, an xOf name and a hand-written _tag added to the copy: no-promises, no-of and no-hand-tag each fire",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 51,
+  "note": "Each plant ran once on a saved copy of the file and was restored by copy, checked with cmp. Not run here, 0178 guard: the old exam files clock, edge-comment, effect-functions, ledger-sql, no-effect-run-outside-edge, no-hand-tag, no-of, no-promises, object-imports, one-store-hook, react-rules and layers (each next/apps/fabrika/src/exam/<name>.integration.test.ts, at the parent of its move commit), and next/apps/fabrika/src/exam/edges.integration.test.ts, which now holds the asks span law. The shard tables lost the 13 rows of files that left next/, the compiler laws kept their 0.0 s row at the new path, and vitest.shards.test.ts's pinned samples and two scenarios follow (Access.types.test.ts stands in for the clock file). pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the list ratchet and one pnpm typecheck pass. No product line changed: no build step is needed for slice A.",
+  "step": "tests"
+}

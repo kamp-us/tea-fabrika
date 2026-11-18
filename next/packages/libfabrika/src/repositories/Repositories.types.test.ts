@@ -1,13 +1,16 @@
 // T878, next/, L13. The compiler checks the contract; the lead runs typecheck after build.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect } from "effect";
+import type * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
 import type { Repositories, RepositoriesError, Repository, Source, SourceMetadata } from "./Repositories.ts";
 
 const contract = (reader: Repository, source: Source, service: Context.Service.Shape<typeof Repositories>) => {
   expectTypeOf<ReturnType<typeof service.open>>().toEqualTypeOf<Effect.Effect<Repository, RepositoriesError>>();
   expectTypeOf<ReturnType<typeof reader.read>>().toEqualTypeOf<Effect.Effect<Uint8Array | null, RepositoriesError>>();
   expectTypeOf<ReturnType<typeof reader.resolve>>().toEqualTypeOf<Effect.Effect<Source, RepositoriesError>>();
+
   type Read = typeof SourceMetadata.Type & { readonly bytes: Uint8Array };
+
   expectTypeOf<ReturnType<Source["read"]>>().toEqualTypeOf<Effect.Effect<Read | null, RepositoriesError>>();
   // @ts-expect-error each source read must distinguish committed bytes from disk bytes
   const raw: Effect.Effect<Uint8Array | null, RepositoriesError> = source.read("entry.txt");
@@ -19,6 +22,7 @@ const contract = (reader: Repository, source: Source, service: Context.Service.S
   const textReason: RepositoriesError["reason"] = "ReadFailed";
   // @ts-expect-error an explicit repository needs both read operations
   const incomplete: Repository = { snapshot: reader.snapshot, read: reader.read };
+
   return [bytes, raw, textReason, incomplete];
 };
 

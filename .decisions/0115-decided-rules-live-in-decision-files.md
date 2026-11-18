@@ -1,7 +1,7 @@
 ---
 id: 0115
 title: A decided rule lives in a decision file, and the plan check lists the decisions a plan touches
-status: amended-in-part by [0130](0130-every-piece-of-knowledge-has-one-home.md), [0136](0136-guidelines-live-in-their-own-pages.md)
+status: accepted
 date: 2026-11-11
 tags: [decisions, direction, notes, plan, sweep, discovery, agents]
 ---
@@ -26,19 +26,24 @@ the notes. Ticket 767 tracks the work.
 
 ## Decision
 
-**A rule the owner decided, and that still holds, lives in a decision file in `.decisions/`; a note
-keeps the long reasoning and links the file.**
+**A rule the owner decided, and that still holds, lives in a decision file in `.decisions/`; the
+long reasoning goes in the decision's own Context or in the experiment that holds its evidence
+([0130](0130-every-piece-of-knowledge-has-one-home.md)).**
 
 - Each decided rule in a `docs/direction/` note moves into a decision file, with the date it was
-  decided and the version it is about (`next/` or today's). The note keeps its reasoning and one
-  line that links the file ([0002](0002-moving-a-decision-removes-it-from-its-source.md)).
+  decided and the version it is about (`next/` or today's), and is removed from its source
+  ([0002](0002-moving-a-decision-removes-it-from-its-source.md)). A note does not stay as the
+  reasoning and the history: its long reasoning goes in the decision's Context or in an
+  experiment, and each note becomes the kind of knowledge it holds (0130). A design area's
+  guidelines are the one exception: its principles live in one page under `docs/guidelines/`, not in
+  one decision file each ([0136](0136-guidelines-live-in-their-own-pages.md)).
 - Rules that came from one call share one file, as its bullets. The test is the title: a rule may
   be a bullet only if the file's title would still lead an agent to open it
   ([0008](0008-decision-discovery-is-the-agents-md-contract.md)). A rule the title would hide gets
   its own file.
 - Only a rule that is still true gets written. A rule a later decision replaced is written in its
   current form or left out, never as a live rule. A note that was replaced as a whole gets no
-  file. The notes stay as the history.
+  file.
 - The writer also drops a rule that a newer decision or the code has moved past, and lists every
   rule it dropped, with the reason, in the pull request.
 - A clash that no later decision settles goes to the owner as a question, not into a file.

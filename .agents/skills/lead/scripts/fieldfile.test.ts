@@ -12,7 +12,9 @@ import { plan, saved } from "./fieldfile.ts";
 // name, a counter id let through, two rows of one name both planned, and a clash that writes
 // the rows before it.
 const options = { seed: 119120, numRuns: 100 };
+
 const word = fc.stringMatching(/^[a-z0-9]{1,8}$/);
+
 const slug = fc.array(word, { minLength: 1, maxLength: 4 }).map((words) => words.join("-"));
 
 const day = fc
@@ -51,6 +53,7 @@ describe("fieldfile, today's lead tooling", () => {
           saved("runs", { run: name }),
           saved("runs", { date, run: `${name} ${name}` }),
         ];
+
         expect(bad.map((result) => Result.isFailure(result))).toEqual(bad.map(() => true));
       }),
       options,
@@ -78,6 +81,7 @@ describe("fieldfile, today's lead tooling", () => {
   it("scenario: writes one file per row, and on a clash writes none", () => {
     const dir = mkdtempSync(join(tmpdir(), "ff-"));
     const script = join(import.meta.dirname, "fieldfile.ts");
+
     const fieldfile = (...args: string[]) =>
       spawnSync(process.execPath, [script, ...args], {
         cwd: dir,

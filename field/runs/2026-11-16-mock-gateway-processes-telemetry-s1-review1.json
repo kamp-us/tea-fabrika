@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-gateway-processes-telemetry-s1-review1",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T00:49:00-08:00",
+  "ended": "2026-11-16T01:03:54-08:00",
+  "parent": "2026-11-16-mock-gateway-processes-telemetry-s1-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Review of slice 1 of the mock sweep in gateway and telemetry (decision 0555), in next/ and the lint config, head ee70b0ccf, against the plan as signed at c28109626. Sent back to tests for one blocking class: the lock is only half built. The plan's amendment of 2026-11-16 (the lead's ruling, oxc#29656) makes every lock block a pair: vitest/no-restricted-vi-methods plus eslint/no-restricted-properties with one object vi entry per banned member, at warn, writing out again the Data.TaggedError, JSON.parse and four Reflect entries the Reflect ban's warn block gives these folders, and M4 also runs a VI_PROPERTIES plant with the two chained lines. The branch's .oxlintrc.json block at line 2472 sets only the vitest rule, no object vi entry exists anywhere in the file, and builtin-plants.ts has no VI_PROPERTIES and no chained line. Proof: the slice's block alone, run by the installed oxlint on a scratch file under gateway/, refuses vi.spyOn(console, \"log\") but not vi.spyOn(console, \"warn\").mockImplementation(() => undefined) or vi.fn().mockReturnValue(1). The steps' rows cite the plan at 14e9b3134, from before that amendment. Everything else holds: Archive.ts and Gateway.ts read WebCrypto.WebCrypto under the same tryPromise with the edge comment directly above; C1 adds the asked and no-defect checks and the rejecting bucket calls tighten it; pausedChecks keeps seed and runs and only skips shrinking; the reached timeout adds a failure path; the layer-rules row and the crypto entry in fabrika/modules are what a new top-of-src file needs. loosening.sh: six unrecognized-change hits, none a loosening.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Ran here, one file at a time with nice -n 19 and --maxWorkers=1 at ee70b0ccf: telemetry/ErrorCause.test.ts 6 passed, gateway/GatewayRevocation.integration.test.ts 16 passed (in the box, no override), oxlint-plugins/plants.test.ts 254 passed, oxlint-plugins/modules.test.ts 16 passed. pnpm typecheck passed. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 16 of 18 parts passed; lint:dead and lint:promise-types died with EPIPE and each passed run again alone. A merge of origin/main (2623b9f39) into the head is clean by merge-tree. Plants by reading: Archive.ts on globalThis.crypto leaves asked empty and the digest succeeds, so C1's typed-failure check is red; Gateway.ts's hash past the reference never reaches the stand-in, so reached dies at 5 seconds; deleting telemetry/** from the block fails the scenario's coverage check. The pattern doc's line references drifted after the merge (crypto.test-support.ts :27 and :56 are now :29 and :59, Archive.ts :40-48 and :42-45 are now :36-44 and :38-41, plants.test.ts:634 is now :669), and its Holds it section must name the no-restricted-properties half once it lands.",
+  "step": "review"
+}

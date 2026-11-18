@@ -108,8 +108,8 @@ reference, and rebuilt on a fresh branch from main with every step signed fresh.
 
 - [Pipeline guidelines](../docs/direction/pipeline-guidelines.md#p4-resume-never-redo), P4,
   "resume, never redo" (decided 2026-11-01): a stuck or crashed lane goes on from the step that
-  broke. That still holds for a crash or a stuck. This record amends it in part: a change that
-  points the wrong way, or is sent back too often, is not a crash, and it is redone.
+  broke. A change that points the wrong way, or is sent back too often, is not a crash, so this
+  record has it redone, and amends P4 in part.
 - [0037](0037-implicit-state-machines-made-explicit.md) and
   [0046](0046-one-tea-machine-per-file.md): the redo is control state, so it is a phase of the one
   machine in `chain.ts`, with its transitions in its `update`.
@@ -119,8 +119,8 @@ reference, and rebuilt on a fresh branch from main with every step signed fresh.
   `Program.make`.
 - [0053](0053-exam-list-read-at-each-parent.md): no lane rewrites history. A redo rewrites nothing;
   it leaves the old branch as it is and starts a new one.
-- [0014](0014-the-lead-merges-when-every-step-passed.md), as amended by 0066: the redo's new pull
-  request goes through every step again, and merges by the same rule.
+- [0014](0014-the-lead-merges-when-every-step-passed.md): the redo's new pull request goes through
+  every step again, and merges by the same rule.
 - [0036](0036-a-flaky-test-is-fixed.md): a flaky test is fixed at its cause. A lane stuck on a
   flake is not a reason to redo it.
 - [Every pull request goes through the steps](../docs/direction/next-is-a-pipeline-pre-run.md): no

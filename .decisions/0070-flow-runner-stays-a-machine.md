@@ -56,8 +56,7 @@ that a program cannot run without the app yet:
 So a `Program.make` around the flow runner would be a declaration nothing runs. The lead tooling
 would still run the bare machine, and the wrapper would only look like a program.
 
-This amends the "Programs" half of 0031. Its "Agents" half stands: every agent the tooling starts
-goes through the Agent interface.
+This amends the "Programs" half of 0031.
 
 ## Decision
 
@@ -70,15 +69,10 @@ to run; it is not wrapped in `Program.make` before then (owner, 2026-11-10).**
   gap is the seven services above, which only the app's worker wires.
 - That move is a rethink at that time, against the notes that hold then. It is not a rename of the
   machine into a `Program.make`.
-- [0046](0046-one-tea-machine-per-file.md) still holds: the runner is one tea machine in its own
-  file. [0064](0064-the-lead-drives-with-flows.md) still holds: the lead drives with flows, and no
-  agent holds a loop.
 
 **Binding constraints:**
 
 - No `Program.make` in the lead scripts until a program can run without fabrika's app.
-- The flow runner keeps 0031's other rules: agents through `Agents`, and the scripts inside
-  `pnpm typecheck`.
 
 ## Consequences
 
@@ -92,5 +86,8 @@ to run; it is not wrapped in `Program.make` before then (owner, 2026-11-10).**
 - [0033](0033-agents-code-follows-next-rules.md) named `chain.ts` moving onto `Program.make` as the
   first big burn-down of its ledger. That move waits with this decision; the ledger still shrinks
   as scripts are touched.
-- Not decided here: what the runner looks like as a program, and which piece of the app moves into
-  libfabrika so a program can run outside it.
+- What the runner looks like as a program, and which piece of the app moves into libfabrika so a
+  program can run outside it, is answered in
+  [0601](0601-program-make-with-optional-pipes.md): kalfa defines the program, the ledger and the
+  wire, and libfabrika implements them. Until a program runs outside the app, the runner stays a
+  tea machine.

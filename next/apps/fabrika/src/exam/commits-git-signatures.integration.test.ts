@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -71,14 +72,20 @@ describe("person git signatures (p83b)", () => {
         const r = new Repo(PERSON_KEYS);
         const unsigned = r.change("a.ts");
         acceptPgp(r);
-        const decoys = ["xgpgsig", "gpgsig-sha256", `x-${name}`].map(
+
+        const decoys = Arr.map(
+          ["xgpgsig", "gpgsig-sha256", `x-${name}`],
           (header) => `${header} -----BEGIN SSH SIGNATURE-----`,
         );
+
         const pgp = ["gpgsig -----BEGIN PGP SIGNATURE-----", " fixture", " -----END PGP SIGNATURE-----"];
-        const raw = r
-          .git("cat-file", "commit", unsigned)
-          .replace("\n\n", ["", ...(before ? [...decoys, ...pgp] : [...pgp, ...decoys]), "", ""].join("\n"));
-        const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+
+        const raw = pipe(
+          r.git("cat-file", "commit", unsigned),
+          Str.replace("\n\n", Arr.join(["", ...(before ? [...decoys, ...pgp] : [...pgp, ...decoys]), "", ""], "\n")),
+        );
+
+        const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
         expect(verifyCommit(r, c)).toBe(0);
         const out = r.check([], r.base, c);
         expect(out.answers).toEqual([stuck("unsigned_commit", c)]);
@@ -104,17 +111,22 @@ describe("person git signatures (p83b)", () => {
             acceptPgp(r);
             const header = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
             const sig = "-----BEGIN SSH SIGNATURE-----\n";
-            const decoy = `x-${name} ${value}${lineBreak}${header} ${sig.trimEnd()}`;
-            const pgp = [`${header} -----BEGIN PGP SIGNATURE-----`, " fixture", " -----END PGP SIGNATURE-----"].join(
+            const decoy = `x-${name} ${value}${lineBreak}${header} ${Str.trimEnd(sig)}`;
+
+            const pgp = Arr.join(
+              [`${header} -----BEGIN PGP SIGNATURE-----`, " fixture", " -----END PGP SIGNATURE-----"],
               "\n",
             );
+
             const raw = r
               .git("cat-file", "commit", unsigned)
-              .replace("\n\n", () => `\n${(before ? [decoy, pgp] : [pgp, decoy]).join("\n")}\n\n`);
-            const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+              .replace("\n\n", () => `\n${Arr.join(before ? [decoy, pgp] : [pgp, decoy], "\n")}\n\n`);
+
+            const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
             expect(verifyCommit(r, c)).toBe(0);
             r.git("update-ref", "refs/heads/pr", c);
             const checked = r.check();
+
             const note = {
               _tag: "attested",
               step: "person",
@@ -125,6 +137,7 @@ describe("person git signatures (p83b)", () => {
               key: fingerprint("person"),
               sig,
             };
+
             const { squash, rows } = squashed(r, [{ note, commit: c }]);
             log(r, rows);
             const chained = r.run(["chain", "--squash", squash]);
@@ -163,10 +176,12 @@ describe("person git signatures (p83b)", () => {
 	syncBuiltinESMExports();
 	`,
         );
+
         const out = r.run(["check", "--base", r.base, "--head", "HEAD"], {
           ...ENV,
-          NODE_OPTIONS: `${ENV.NODE_OPTIONS ?? ""} --import=${preload}`.trim(),
+          NODE_OPTIONS: Str.trim(`${ENV.NODE_OPTIONS ?? ""} --import=${preload}`),
         });
+
         expect(out.code).toBe(2);
         expect(out.answers).toEqual([]);
         expect(out.err).toMatch(/commits: the run failed: \S/);
@@ -233,21 +248,25 @@ describe("person git signatures (p83b)", () => {
         const r = new Repo(PERSON_KEYS, undefined, "sha1", initial);
         const c = r.change("a.ts");
         const note = r.sign("tests");
+
         const sig = sh(
           r.dir,
           "ssh-keygen",
           ["-Y", "sign", "-n", "fabrika-step", "-f", join(KEYS, "person")],
           signedText(note),
         );
+
         const allowed = join(TOP, "person-step-signers");
         const signature = join(TOP, "person-step-signature");
         writeFileSync(allowed, `fixture namespaces="fabrika-step" ${pub("person")}\n`);
         writeFileSync(signature, sig);
+
         const verified = spawnSync(
           "ssh-keygen",
           ["-Y", "verify", "-f", allowed, "-I", "fixture", "-n", "fabrika-step", "-s", signature],
           { cwd: r.dir, env: ENV, input: signedText(note) },
         );
+
         expect(verified.status).toBe(0);
         r.setNote(c, JSON.stringify({ ...note, key: fingerprint("person"), sig }));
         const out = r.check();
@@ -267,7 +286,7 @@ describe("person git signatures (p83b)", () => {
         const original = r.gitSigned();
         expect(verifyCommit(r, original)).toBe(0);
         const raw = `${r.git("cat-file", "commit", original)}changed after signing\n`;
-        const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+        const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
         r.git("update-ref", "HEAD", c);
         expect(verifyCommit(r, c)).not.toBe(0);
         const out = r.check();

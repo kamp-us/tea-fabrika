@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-local-signal-guard-final-review",
+  "ticket": "tea-fabrika#1130",
+  "pr": null,
+  "started": "2026-11-16T21:16:18-08:00",
+  "ended": "2026-11-16T21:16:29-08:00",
+  "parent": "2026-11-16-local-signal-guard-recheck",
+  "role": "hand",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Bounded source review passed: all three new typed-tag branches use Match with unchanged guard outcomes, and both original caps faults remain resolved.",
+  "note": "Today's lead tooling. Read the two-file matcher follow-up and actual saved 11-safe-pass and 18-part lint results. No tests, compiler, signals, CI actions or public writes by this reviewer. This is source-only review, not GitHub approval or merge readiness. Exact eligible remote caps/box proof and final-head compiler checks remain the merger's responsibility.",
+  "head": "b050f6a1f572e03f66c03524fefeb1ea332a9bb9",
+  "base": "080dbb566399cd45d1ab71fbcc424b0b759b1f40",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

@@ -1,29 +1,48 @@
+import { join } from "node:path";
+import { it } from "@effect/vitest";
 // p32 and p65, strict layers: the law of `fabrika/package-imports`, the names of our own packages
 // each part of next/ may import (ticket 987, moved from the exam's `layers.test.ts`). Each generated
 // file sits at a path in one part, or in no part, and imports names drawn from every part's list and
 // from names no list holds. Each case runs in process through oxlint's RuleTester with the plan's
 // table; one oxlint run over every case's file then proves the repo's own `.oxlintrc.json` holds the
 // same table at the same paths.
-import { join } from "node:path";
+import { Array as Arr, Effect, pipe, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { expect } from "vitest";
 import { packageImports } from "./package-imports.ts";
+import { plant } from "./plant.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 const CODE = "fabrika(package-imports)";
+
 const LIBRARY = "@kampus/libfabrika";
+
 const VITEST = "@kampus/vitest";
+
+/** The test primitives' SQLite module, read through its own subpath (ticket 1029). */
+const TEST_DATABASE = `${VITEST}/TestDatabase`;
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so the rule reads each path as oxlint gives it there.
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 
 const TRANSPORT = [
   `${LIBRARY}/transport`,
-  ...["Answer", "ClientKey", "ClientRows", "Hello", "Link", "Sshsig", "Webauthn", "Wire"].map(
+  ...Arr.map(
+    ["Answer", "ClientKey", "ClientRows", "Hello", "Link", "Sshsig", "Webauthn", "Wire"],
     (front) => `${LIBRARY}/transport/${front}`,
   ),
 ];
@@ -43,7 +62,7 @@ const TABLE: { scope: string; parts: Part[] } = {
     {
       name: "library suites",
       files: ["next/packages/libfabrika/**/*Test.ts", "next/packages/libfabrika/**/*.test-support.ts"],
-      may: [VITEST],
+      may: [VITEST, TEST_DATABASE],
       tests: [LIBRARY, VITEST],
     },
     { name: "library", files: ["next/packages/libfabrika/**"], may: [], tests: [LIBRARY, VITEST] },
@@ -80,7 +99,7 @@ const TABLE: { scope: string; parts: Part[] } = {
     {
       name: "program suites",
       files: ["next/programs/*/src/**/*Test.ts", "next/programs/*/src/**/*.test-support.ts"],
-      may: [LIBRARY, VITEST],
+      may: [LIBRARY, VITEST, TEST_DATABASE],
     },
     { name: "program", files: ["next/programs/**"], may: [LIBRARY] },
   ],
@@ -90,11 +109,11 @@ const TABLE: { scope: string; parts: Part[] } = {
 const within =
   (...packages: ReadonlyArray<string>) =>
   (name: string) =>
-    packages.some((pkg) => name === pkg || name.startsWith(`${pkg}/`));
+    Arr.some(packages, (pkg) => name === pkg || name.startsWith(`${pkg}/`));
 
 /** What a file at each place may import by a name under the scope; `null` where nothing is judged. */
 const ALLOWS: Readonly<Record<string, ((name: string) => boolean) | null>> = {
-  ...Object.fromEntries(TABLE.parts.map((part) => [part.name, (name: string) => part.may.includes(name)])),
+  ...Rec.fromEntries(Arr.map(TABLE.parts, (part) => [part.name, (name: string) => part.may.includes(name)])),
   // A library test names the library itself and the test primitives, root or subpath, and nothing
   // else of ours. A test of the test primitives names only that package.
   "library test": within(LIBRARY, VITEST),
@@ -113,11 +132,16 @@ const base = fc.oneof(fc.constantFrom("Log", "Link", "Main", "View"), fc.stringM
  */
 const production = base.filter((name) => !/test$/i.test(name));
 
-const below = fc
-  .array(fc.constantFrom("internal", "build", "node", "a"), { maxLength: 2 })
-  .map((folders) => folders.map((folder) => `${folder}/`).join(""));
+const below = fc.array(fc.constantFrom("internal", "build", "node", "a"), { maxLength: 2 }).map((folders) =>
+  pipe(
+    folders,
+    Arr.map((folder) => `${folder}/`),
+    Arr.join(""),
+  ),
+);
 
 const program = fc.constantFrom("notes", "counter", "map");
+
 const ext = fc.constantFrom("ts", "tsx");
 
 /** Each place a file can sit, by its key in `ALLOWS`, and the paths there. */
@@ -156,7 +180,8 @@ const PLACES: ReadonlyArray<readonly [string, fc.Arbitrary<string>]> = [
       .tuple(fc.constantFrom("src/", "src/coordination/", "src/node/build/", "scripts/"), below, base, ext)
       .map(([top, at, name, end]) => `next/packages/libfabrika/${top}${at}${name}.test.${end}`),
   ],
-  ...["desktop", "window", "dom", "browser", "electron", "headless"].map(
+  ...Arr.map(
+    ["desktop", "window", "dom", "browser", "electron", "headless"],
     (folder) =>
       [
         folder,
@@ -202,7 +227,7 @@ const PLACES: ReadonlyArray<readonly [string, fc.Arbitrary<string>]> = [
 
 /** Names from every part's list, and names no list holds: other front files, other packages, not ours. */
 const target = fc.oneof(
-  { arbitrary: fc.constantFrom(...new Set(TABLE.parts.flatMap((part) => part.may))), weight: 2 },
+  { arbitrary: fc.constantFrom(...new Set(Arr.flatMap(TABLE.parts, (part) => part.may))), weight: 2 },
   // Next to a listed name, so a list that grew by one is seen.
   {
     arbitrary: fc.constantFrom(
@@ -273,9 +298,14 @@ type Case = { readonly text: string; readonly lines: ReadonlyArray<number> };
 
 const caseFor = (place: string, names: ReadonlyArray<readonly [string, number]>): Case => {
   const allows = ALLOWS[place] ?? null;
+
   return {
-    text: `${names.map(([from, form], n) => FORMS[form]?.(from, n) ?? "").join("\n")}\n`,
-    lines: names.flatMap(([from], n) =>
+    text: `${pipe(
+      names,
+      Arr.map(([from, form], n) => FORMS[form]?.(from, n) ?? ""),
+      Arr.join("\n"),
+    )}\n`,
+    lines: Arr.flatMap(names, ([from], n) =>
       allows !== null && from.startsWith(TABLE.scope) && !allows(from) ? [n + 1] : [],
     ),
   };
@@ -289,7 +319,7 @@ const check = (filename: string, { text: code, lines }: Case) => {
     invalid:
       lines.length === 0
         ? []
-        : [{ code, filename, options, errors: lines.map((line) => ({ line, message: /may not import/ })) }],
+        : [{ code, filename, options, errors: Arr.map(lines, (line) => ({ line, message: /may not import/ })) }],
   });
 };
 
@@ -302,86 +332,110 @@ const numbered = (path: string, n: number) => path.replace(/\/([^/]+)$/, `/N${n}
 // Plants, each run once and recorded in PR 1251: give the window part's `may` in `.oxlintrc.json`
 // `transport/Connection`; drop the library part's `tests` there; put the library part's glob back
 // to `src/**`; make the rule skip every test again. Each turns this law red.
-it("each part fires on exactly the names of ours its table refuses, wherever its file sits", async () => {
-  let n = 0;
-  const cases = new Map<string, Case>();
-  const places = new Set<string>();
-  fc.assert(
-    fc.property(
-      fc.oneof(...PLACES.map(([place, path]) => fc.tuple(fc.constant(place), path, imports))),
-      ([place, path, names]) => {
-        const one = caseFor(place, names);
-        check(path, one);
-        cases.set(numbered(path, n), one);
-        places.add(place);
-        n++;
+it.live("each part fires on exactly the names of ours its table refuses, wherever its file sits", () =>
+  Effect.gen(function* () {
+    let n = 0;
+    const cases = new Map<string, Case>();
+    const places = new Set<string>();
+    fc.assert(
+      fc.property(
+        fc.oneof(...Arr.map(PLACES, ([place, path]) => fc.tuple(fc.constant(place), path, imports))),
+        ([place, path, names]) => {
+          const one = caseFor(place, names);
+          check(path, one);
+          cases.set(numbered(path, n), one);
+          places.add(place);
+          n++;
+        },
+      ),
+      {
+        seed: 119120,
+        numRuns: 1000,
+        examples: [
+          // pinned: the review of PR 1251 found three library files the wall missed: a top-level
+          // test, a test in a folder whose row claims one file, and a file outside `src/`.
+          [["library test", "next/packages/libfabrika/src/Id.test.ts", [["@kampus/counter", 0]]]],
+          [["library test", "next/packages/libfabrika/src/coordination/Plant.test.ts", [["@kampus/tuval", 0]]]],
+          [["library", "next/packages/libfabrika/scripts/Plant.ts", [["@kampus/tuval", 0]]]],
+        ],
       },
-    ),
-    {
-      seed: 119120,
-      numRuns: 1000,
-      examples: [
-        // pinned: the review of PR 1251 found three library files the wall missed: a top-level
-        // test, a test in a folder whose row claims one file, and a file outside `src/`.
-        [["library test", "next/packages/libfabrika/src/Id.test.ts", [["@kampus/counter", 0]]]],
-        [["library test", "next/packages/libfabrika/src/coordination/Plant.test.ts", [["@kampus/tuval", 0]]]],
-        [["library", "next/packages/libfabrika/scripts/Plant.ts", [["@kampus/tuval", 0]]]],
-      ],
-    },
-  );
-  // Every place was drawn, and both fires and passes.
-  expect([...places].sort()).toEqual(PLACES.map(([place]) => place).sort());
-  expect([...cases.values()].some((one) => one.lines.length > 0)).toBe(true);
-  expect([...cases.values()].some((one) => one.lines.length === 0)).toBe(true);
+    );
+    // Every place was drawn, and both fires and passes.
+    expect([...places].sort()).toEqual(Arr.map(PLACES, ([place]) => place).sort());
+    expect(Arr.some([...cases.values()], (one) => one.lines.length > 0)).toBe(true);
+    expect(Arr.some([...cases.values()], (one) => one.lines.length === 0)).toBe(true);
 
-  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
-  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
-  );
-});
+    const result = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))),
+    );
+
+    expect(Rec.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+      Rec.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
+    );
+  }),
+);
 
 /** Where production code of ours sits, and where the suites that read the test depth sit. */
 const CODE_PLACES = ["library", "program"] as const;
+
 const SUITE_PLACES = ["library suites", "program suites"] as const;
+
 const pathAt = new Map(PLACES);
 
 // Plant, run once and recorded in PR 1274: give the library and program parts' `may` in
-// `.oxlintrc.json` `@kampus/vitest` again, as the PR first had it. This law turns red.
-it("the library's and a program's code may not import the test primitives, and their shared suites may", async () => {
-  let n = 0;
-  const cases = new Map<string, Case>();
-  const seen = new Set<string>();
-  fc.assert(
-    fc.property(
-      fc.oneof(
-        ...[...CODE_PLACES, ...SUITE_PLACES].map((place) =>
-          fc.tuple(fc.constant(place), pathAt.get(place)!, fc.nat({ max: FORMS.length - 1 })),
+// `.oxlintrc.json` `@kampus/vitest` again, as the PR first had it. This law turns red. Ticket 1029
+// draws the SQLite module's subpath too; its plant, run once and restored: leave it out of the
+// "program suites" `may` in `.oxlintrc.json` (red: a program suite's import of it fired).
+it.live("the library's and a program's code may not import the test primitives, and their shared suites may", () =>
+  Effect.gen(function* () {
+    let n = 0;
+    const cases = new Map<string, Case>();
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          ...Arr.map([...CODE_PLACES, ...SUITE_PLACES], (place) =>
+            fc.tuple(
+              fc.constant(place),
+              pathAt.get(place)!,
+              fc.nat({ max: FORMS.length - 1 }),
+              fc.constantFrom(VITEST, TEST_DATABASE),
+            ),
+          ),
         ),
+        ([place, path, form, name]) => {
+          // SAFETY: the code places are a tuple of strings; the cast widens it only so `includes` can test any place.
+          const refused = (CODE_PLACES as ReadonlyArray<string>).includes(place);
+          const one: Case = { text: `${FORMS[form]!(name, 0)}\n`, lines: refused ? [1] : [] };
+          check(path, one);
+          cases.set(numbered(path, n), one);
+          seen.add(place);
+          n++;
+        },
       ),
-      ([place, path, form]) => {
-        const refused = (CODE_PLACES as ReadonlyArray<string>).includes(place);
-        const one: Case = { text: `${FORMS[form]!(VITEST, 0)}\n`, lines: refused ? [1] : [] };
-        check(path, one);
-        cases.set(numbered(path, n), one);
-        seen.add(place);
-        n++;
+      {
+        seed: 119120,
+        numRuns: 200,
+        examples: [
+          // pinned: the review of PR 1274 named this file, which lint let import the test package.
+          [["library", "next/packages/libfabrika/src/tasks/Task.ts", 0, VITEST]],
+          [["library suites", "next/packages/libfabrika/src/tasks/TasksTest.ts", 0, VITEST]],
+          [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0, VITEST]],
+          // Ticket 1029 moves this test kit onto the SQLite module, so its suites' part must take it.
+          [["library suites", "next/packages/libfabrika/src/node/RecordPart.test-support.ts", 0, TEST_DATABASE]],
+          [["library", "next/packages/libfabrika/src/node/NodeSqlite.ts", 0, TEST_DATABASE]],
+          [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0, TEST_DATABASE]],
+        ],
       },
-    ),
-    {
-      seed: 119120,
-      numRuns: 200,
-      examples: [
-        // pinned: the review of PR 1274 named this file, which lint let import the test package.
-        [["library", "next/packages/libfabrika/src/tasks/Task.ts", 0]],
-        [["library suites", "next/packages/libfabrika/src/tasks/TasksTest.ts", 0]],
-        [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0]],
-      ],
-    },
-  );
-  expect([...seen].sort()).toEqual([...CODE_PLACES, ...SUITE_PLACES].sort());
+    );
+    expect([...seen].sort()).toEqual([...CODE_PLACES, ...SUITE_PLACES].sort());
 
-  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
-  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
-  );
-});
+    const result = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))),
+    );
+
+    expect(Rec.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+      Rec.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
+    );
+  }),
+);

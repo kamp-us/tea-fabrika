@@ -5,6 +5,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -14,7 +15,9 @@ const root = join(import.meta.dirname, "..");
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: root });
 
 /** Each form, one a line, with whether the rule reads its count as written. */
@@ -51,13 +54,15 @@ const law = (form: string, io: boolean): string => `it("law", () => { ${io ? "op
 
 /** The lines a file must fire on, the prelude being line 1 and the import line 2. */
 const expected = (n: number, io: boolean, held: boolean): ReadonlyArray<number> =>
-  held && io ? forms(n).flatMap(([, count], i) => (count ? [i + 3] : [])) : [];
+  held && io ? Arr.flatMap(forms(n), ([, count], i) => (count ? [i + 3] : [])) : [];
 
 const check = (filename: string, code: string, lines: ReadonlyArray<number>) => {
   tester.run("runs-from-depth", runsFromDepth, {
     valid: lines.length === 0 ? [{ code, filename }] : [],
     invalid:
-      lines.length === 0 ? [] : [{ code, filename, errors: lines.map((line) => ({ line, message: /test depth/ })) }],
+      lines.length === 0
+        ? []
+        : [{ code, filename, errors: Arr.map(lines, (line) => ({ line, message: /test depth/ })) }],
   });
 };
 
@@ -65,47 +70,64 @@ const check = (filename: string, code: string, lines: ReadonlyArray<number>) => 
 const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
   const out = spawnSync(
     join(root, "node_modules/.bin/oxlint"),
-    ["--format=json", ...[...cases.keys()].map((file) => relative(root, file))],
-    { cwd: root, encoding: "utf8" },
+    ["--format=json", ...Arr.map([...cases.keys()], (file) => relative(root, file))],
+    // A hundred runs' files report more than spawnSync's 1 MiB default holds, which cut the JSON short.
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
+
+  // SAFETY: oxlint's `--format=json` report holds these fields for each diagnostic.
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
-  const found = [...cases.keys()].map((file) => [
-    file,
-    report.diagnostics
-      .filter((d) => d.code === "fabrika(runs-from-depth)" && join(root, d.filename) === file)
-      .map((d) => d.labels[0]!.span.line)
-      .sort((a, b) => a - b),
-  ]);
-  expect(Object.fromEntries(found)).toEqual(Object.fromEntries(cases));
+
+  const found = Arr.map(
+    [...cases.keys()],
+    (file) =>
+      [
+        file,
+        pipe(
+          report.diagnostics,
+          Arr.filter((d) => d.code === "fabrika(runs-from-depth)" && join(root, d.filename) === file),
+          Arr.map((d) => d.labels[0]!.span.line),
+        ).sort((a, b) => a - b),
+      ] as const,
+  );
+
+  expect(Rec.fromEntries(found)).toEqual(Rec.fromEntries(cases));
 };
 
-/** Each way a file can import a name that is real IO, bound as `Real`. */
+/**
+ * Each way a file can import a name, bound as `Real`, with whether that name is real IO. Ticket 1029
+ * (R3) adds the test primitives' SQLite module, which is, and `runsFor` from their root, which is not.
+ */
 const IMPORTS = [
-  `import { DatabaseSync as Real } from "node:sqlite";`,
-  `import { spawnSync as Real } from "node:child_process";`,
-  `import { mkdtempSync as Real } from "node:fs";`,
-  `import Real from "miniflare";`,
-  `import * as Real from "@effect/sql-sqlite-node";`,
+  [`import { DatabaseSync as Real } from "node:sqlite";`, true],
+  [`import { spawnSync as Real } from "node:child_process";`, true],
+  [`import { mkdtempSync as Real } from "node:fs";`, true],
+  [`import Real from "miniflare";`, true],
+  [`import * as Real from "@effect/sql-sqlite-node";`, true],
+  [`import * as Real from "@kampus/vitest/TestDatabase";`, true],
+  [`import { make as Real } from "@kampus/vitest/TestDatabase";`, true],
+  [`import { runsFor as Real } from "@kampus/vitest";`, false],
 ] as const;
 
 /**
- * A law at any count, in each form, with whether it reaches real IO. Each false one
- * is a false alarm the rule had on the tree before it was fixed: a read of the file system, a draw of
- * values, a local that shares a helper's name, a spread whose count is replaced, an Effect read.
+ * A law at any count, in each form, with whether it reaches real IO when `Real` is real IO (`real`).
+ * Each false one is a false alarm the rule had on the tree before it was fixed: a read of the file
+ * system, a draw of values, a local that shares a helper's name, a spread whose count is replaced, an
+ * Effect read. The Effect write reaches real IO whatever `Real` is.
  */
-const ioForms = (n: number, from: string): ReadonlyArray<readonly [string, boolean]> => [
+const ioForms = (n: number, from: string, real: boolean): ReadonlyArray<readonly [string, boolean]> => [
   [from, false],
   [`import { existsSync, readFileSync } from "node:fs";`, false],
   [`import { NodeServices } from "@effect/platform-node";`, false],
   [`const open = () => Real(":memory:");`, false],
-  [`const CHECK = { seed: 119120, numRuns: ${n} };`, true],
+  [`const CHECK = { seed: 119120, numRuns: ${n} };`, real],
   [`const SPREAD = { seed: 119120, numRuns: ${n} };`, false],
-  [`it("io", () => { open(); fc.assert(p, { numRuns: ${n} }); });`, true],
+  [`it("io", () => { open(); fc.assert(p, { numRuns: ${n} }); });`, real],
   [`it("shared", () => { open(); fc.assert(p, CHECK); });`, false],
   [`it("override", () => { open(); fc.assert(p, { ...SPREAD, numRuns: runsFor({ fast: 3, full: 9 }) }); });`, false],
-  [`it.effect.prop("io", {}, () => Effect.sync(() => open()), { arbitrary: { seed: 119120, runs: ${n} } });`, true],
+  [`it.effect.prop("io", {}, () => Effect.sync(() => open()), { arbitrary: { seed: 119120, runs: ${n} } });`, real],
   [`it("pure", () => { fc.assert(p, { numRuns: ${n} }); });`, false],
   [`it("exists", () => { existsSync("x"); readFileSync("x"); fc.assert(p, { numRuns: ${n} }); });`, false],
   [`it("draw", () => { open(); fc.sample(a, { numRuns: ${n} }); });`, false],
@@ -158,16 +180,17 @@ const plant = (count: fc.Arbitrary<Plant>, numRuns: number, examples: Array<[Pla
 
 /** A case count and the file of every count form it makes in a law, with the lines that must fire. */
 const inLaw = (count: number, io: boolean): Plant => [
-  [PRELUDE, OPENS, ...forms(count).map(([line]) => law(line, io)), ""].join("\n"),
+  Arr.join([PRELUDE, OPENS, ...Arr.map(forms(count), ([line]) => law(line, io)), ""], "\n"),
   (held) => expected(count, io, held),
 ];
 
-/** A count and an IO import, with the IO laws' lines that must fire. */
-const overIo = (count: number, from: string): Plant => {
-  const lines = ioForms(count, from);
+/** A count and an import, with the IO laws' lines that must fire. */
+const overIo = (count: number, [from, real]: (typeof IMPORTS)[number]): Plant => {
+  const lines = ioForms(count, from, real);
+
   return [
-    [IO_PRELUDE, ...lines.map(([line]) => line), ""].join("\n"),
-    (held) => (held ? lines.flatMap(([, fires], i) => (fires ? [i + 2] : [])) : []),
+    Arr.join([IO_PRELUDE, ...Arr.map(lines, ([line]) => line), ""], "\n"),
+    (held) => (held ? Arr.flatMap(lines, ([, fires], i) => (fires ? [i + 2] : [])) : []),
   ];
 };
 
@@ -179,12 +202,15 @@ it("a written count in a law over real IO is refused in every form the rule read
   );
 });
 
+// R3 of ticket 1029: the law that reaches `TestDatabase` is held as real IO, and one that imports only
+// `runsFor` from the root stays in memory. Plant, run once and restored: leave the module out of `IO`
+// (red: the TestDatabase cases passed a bare count).
 it("a law that reaches real IO is refused any written count; a law in memory, a draw or a read keeps its own", () => {
   plant(
     fc
       .tuple(fc.integer({ min: 1, max: 5000 }), fc.constantFrom(...IMPORTS))
       .map(([count, from]) => overIo(count, from)),
-    6,
-    [...IMPORTS.map((from): [Plant] => [overIo(100, from)]), [overIo(3000, IMPORTS[0])]],
+    100,
+    [...Arr.map(IMPORTS, (from): [Plant] => [overIo(100, from)]), [overIo(3000, IMPORTS[0])]],
   );
 });

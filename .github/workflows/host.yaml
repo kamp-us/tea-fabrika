@@ -15,21 +15,30 @@ on:
       - next/packages/libfabrika/src/node/launchd/**
       - next/apps/fabrika/e2e/electron-launchd.visual.test.ts
       - next/apps/fabrika/e2e/node/P19Launchd.test-support.ts
+      - next/apps/fabrika/e2e/node/P19Guard.test-support.ts
       - next/apps/fabrika/e2e/node/P19Brain.test-support.ts
       - fixtures/next/p19-launchd/brain.ts
       - .github/workflows/host.yaml
   workflow_dispatch:
+    inputs:
+      suite:
+        description: The fixed host-law suite to prove
+        type: choice
+        required: true
+        default: l13
+        options: [l13, e88-r6, box]
 
 permissions:
   contents: read
 
-# A newer push to the same pull request stops the run it replaces.
+# A newer push replaces its own suite; different fixed suites keep independent runners.
 concurrency:
-  group: host-${{ github.event.pull_request.number || github.sha }}
+  group: host-${{ github.event.pull_request.number || github.sha }}-${{ inputs.suite || 'l13' }}
   cancel-in-progress: true
 
 jobs:
   launchd:
+    if: github.event_name != 'workflow_dispatch' || inputs.suite == 'l13'
     # The oldest macOS GitHub still hosts. The test's launchctl output was read on macOS 14, whose
     # images were retired on 2026-11-02 (actions/runner-images issue 15226): `macos-14` ends a job
     # before its first step with "The configuration 'macos-14-arm64-us-default' is not supported".
@@ -116,3 +125,55 @@ jobs:
           name: p19-host
           path: runs/p19
           if-no-files-found: ignore
+
+  e88-r6:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'e88-r6'
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: E88 R6
+        env:
+          FABRIKA_TEST_DEPTH: full
+        run: |
+          git rev-parse HEAD > "$RUNNER_TEMP/e88-r6-head.txt"
+          pnpm exec vitest run --project next-integration --maxWorkers=1 --fileParallelism=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/e88-r6.json" \
+            next/apps/fabrika/src/brain-life.integration.test.ts \
+            next/apps/fabrika/src/instance-wire.integration.test.ts \
+            next/apps/fabrika/src/worker-supervision.integration.test.ts
+      - name: E88 R6 proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e88-r6
+          path: ${{ runner.temp }}/e88-r6*
+          if-no-files-found: error
+
+  box:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'box'
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Box laws
+        env:
+          FABRIKA_TEST_DEPTH: full
+        run: |
+          git rev-parse HEAD > "$RUNNER_TEMP/box-head.txt"
+          pnpm exec vitest run --project tooling --maxWorkers=1 --fileParallelism=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/box.json" \
+            .agents/skills/lead/scripts/box.test.ts
+      - name: Box proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: box
+          path: ${{ runner.temp }}/box*
+          if-no-files-found: error

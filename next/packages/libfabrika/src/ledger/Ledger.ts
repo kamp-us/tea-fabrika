@@ -3,8 +3,6 @@
  * file is the contract only (0095). In the project object the service is the referee on that
  * object's SQLite (`LedgerSql.layer`); in any other object it is the project's stub
  * (`LedgerRemote.layer`).
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect, Stream } from "effect";
@@ -21,7 +19,6 @@ import type { Appended, Entry, Line, Waited } from "./Log.ts";
  * `reason: "refused"` is for a caller that needed the write, such as a step inside a ledger
  * transaction, where failing is what rolls the turn back.
  *
- * @stability unstable
  * @category errors
  */
 export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
@@ -46,7 +43,6 @@ export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError"
  * only in its span, and it never changes the append. In the project object a ring is a call to the
  * gateway connection named `to`.
  *
- * @stability unstable
  * @category services
  */
 export class Doorbell extends Context.Service<
@@ -63,11 +59,10 @@ export class Doorbell extends Context.Service<
  * `LedgerRemote.layer` takes one and decodes every answer, so a caller never reads an answer that
  * was not checked. The project object's binding type includes these calls.
  *
- * @stability unstable
  * @category models
  */
 export type LedgerCalls = {
-  append(stream: string, id: string, line: unknown): Promise<unknown>;
+  append(stream: string, id: string, line: Schema.Json): Promise<unknown>;
   read(stream: string, after: number, reader: string): Promise<unknown>;
   wait(stream: string, after: number, reader: string): Promise<unknown>;
 };
@@ -81,7 +76,6 @@ export type LedgerCalls = {
  * stub to the project object. A call fails only when the ledger could not answer; a line the
  * referee will not write comes back as `refused`, as data.
  *
- * @stability unstable
  * @category services
  */
 export class Ledger extends Context.Service<

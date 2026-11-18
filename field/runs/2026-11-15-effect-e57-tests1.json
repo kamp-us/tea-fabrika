@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e57-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T20:46:49-08:00",
+  "ended": "2026-11-15T21:14:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E57 of the Effect-checker sweep (ticket 1075, plan docs/plan/quests/effect-sweep-PLAN.md on fabrikalfa/effect-sweep), in next/ and our tooling: globalFetchInEffect and globalFetch, fixed in code, no lock line. Counted with only the two checks at error through --lspconfig on .github/ci, next/apps/fabrika and next/packages/libfabrika: 3 hits in this row's folders, all in exam paths, none in PR 1366's files. All 3 fixed by hand edits: .github/ci/time-table.ts:262 (globalFetchInEffect) now asks the jobs API through HttpClient.get with HttpClientResponse.filterStatusOk, Effect.timeout 5 seconds and FetchHttpClient.layer, every failure still the same Unread; next/apps/fabrika/e2e/instance.visual.test.ts:102 (globalFetch) polls readiness with HttpClient.get, a refused connection still 'not yet'; next/packages/libfabrika/src/node/dev/dev-client.test-support.ts:11 (globalFetch) loses fetchClient, which read the global fetch on each request because the laws patched it with vi.spyOn(globalThis, 'fetch'). The four dev laws files (dev, dev-errors, dev-secrets, dev-control) now make their stand-in with vi.fn and hand it to the client through Effect.provideService(FetchHttpClient.Fetch, fetch) beside FetchHttpClient.layer; the stand-ins made inside an Effect (dev-control's run, dev.laws' replaceWorld and L13) take the mock from their wrapper (walked, replaced) and set its answers with mockImplementation. Every assertion is unchanged. Two stub-less laws (the port law in dev.laws, start_timeout in dev-errors) keep the real fetch through FetchHttpClient.layer, as before. Recount after: 0 hits in the row's folders; the 18 app:src hits stay for E96 (after 1366). No product file had a hit, so no build step.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 27,
+  "note": "A PR body would say: globalFetchInEffect met 1, fixed 1 by hand (.github/ci/time-table.ts); globalFetch met 2, fixed 2 by hand (next/apps/fabrika/e2e/instance.visual.test.ts, next/packages/libfabrika/src/node/dev/dev-client.test-support.ts, with its four laws files); quick fix 0; left 0; waiting on 1366 0; build hits 0. A first fix kept fetchClient as a function of the stand-in; lint:dead refused it as only-called-from-tests, so the laws now provide FetchHttpClient.Fetch themselves and the support keeps only bodyText. Tests run here at the head before this commit plus the working-tree change: .github/ci/time-table.test.ts 7 passed; dev-errors 8, dev.laws 5, dev-secrets 3, dev-control 3 passed (all .integration., stand-ins for process.kill, no real signal); --changed origin/main 1761 passed, 3 failed: two vitest.shards.test.ts scenarios (F2, L18) failed once under load and passed on two reruns (finding row), and instance.visual.test.ts was pulled in by --changed and failed in 9 ms because the box has no ssh-keygen, before the changed readiness loop runs; no .visual. test was run on purpose. time-table.ts was run once by hand against a closed port: it printed the Unavailable section with the HttpClient transport reason and exited 0. Package typechecks (tsc --noEmit -p .) of libfabrika, .github/ci and the app passed; pnpm lint passed (17 parts, NODE_OPTIONS=--max-old-space-size=6144); the ratchet exited 0. No law is new or changed in what it asserts, so the plants prove the rewired laws still reach their stand-in.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "dev-errors.laws: the five ControlError reason laws and the two RSS sample laws",
+      "plant": "drop Effect.provideService(FetchHttpClient.Fetch, fetch), so the client sends through the real fetch",
+      "result": "red"
+    },
+    {
+      "law": "dev.laws: durable exits, L7, L8, L13",
+      "plant": "drop Effect.provideService(FetchHttpClient.Fetch, fetch); the brain dials 127.0.0.1:27002 and gets ECONNREFUSED",
+      "result": "red"
+    },
+    {
+      "law": "dev-secrets.laws: both [secrets] laws",
+      "plant": "drop Effect.provideService(FetchHttpClient.Fetch, fetch); TransportError on POST 127.0.0.1:27002",
+      "result": "red"
+    },
+    {
+      "law": "dev-control.laws: the three T708 walk laws",
+      "plant": "drop Effect.provideService(FetchHttpClient.Fetch, fetch); ECONNREFUSED on 127.0.0.1:40000",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

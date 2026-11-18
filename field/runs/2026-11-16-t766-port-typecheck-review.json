@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-review",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-16T00:55:16-08:00",
+  "ended": "2026-11-16T01:09:43-08:00",
+  "parent": "2026-11-16-t766-port-typecheck-build2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Today's tooling, the one review of the typecheck port at abfac52: sent back, two blocking classes. (1) The lock can have two live holders. LocksFile.ts:108-110 removes a .break whose holder is gone with no lock held, and :123 removes .break on the way out whatever it names now. With one breaker killed while it held .break, two live takers C and B can run: C reads the dead .break; B removes it and links its own; C removes B's .break and links its own; both look under their .break, both see the old label stale; B removes it and links its label; C then removes B's live label and links its own. A scratch scenario on the tests' in-memory disk, ordered by Deferred gates, ended with both hold calls returned and no release (vitest passed on the assertion [true, true]); it was deleted after the run. This breaks 0410's rule, one type check at a time across shells, and its 2026-11-15 amendment's 'following Mercurial's repository lock': Mercurial takes the .break lock as a lock instance with timeout=0, so a dead .break is itself broken under its own .break. The plan's line 'that only races if two breakers both died within a few milliseconds' is wrong: one dead breaker is enough. N3's walk kills only holders, never a breaker, so it cannot reach the case. (2) Decision 0567, which covers our tooling (and next/AGENTS.md, which 0033 applies here), says a tagged value is matched and never compared by hand. The new product files compare _tag by hand at LocksFile.ts:19, 104, 108, 117, 168 and 175, Look.ts:84 and Typecheck.ts:69 (NodeModulesFs.ts:20 sits straight inside Effect.catchIf, which the rule skips), and the two new test files do it 16 times. Everything else held: every caller of typecheck.sh left is a record or a history comment; caches.ts reads the buildinfo path from scripts/typecheck.ts; L2 repeats the lead-tooling block's list exactly, plus tea; E1's new body and the until waits in E2, E4 and E6 are tighter than before, not looser; signals are re-raised after the scope closes, since runMain removes its own listeners before the teardown; detached is false; pgrep exits 0 and 1 are listed and anything else refused; a broken node_modules link gives one line and exit 1.",
+  "plants": [
+    { "law": "scripts/typecheck-lock.test.ts N4", "plant": "break without .break (the link of .break taken as a success)", "result": "red" },
+    { "law": ".oxlintrc.json L2", "plant": "import type { Cmd } from @demlik/tea in scripts/typecheck.ts", "result": "red" },
+    { "law": "scripts/typecheck.test.ts N1", "plant": "read a refused pgrep as none, in silence", "result": "red" },
+    { "law": "scripts/typecheck-lock.test.ts N3", "plant": "none needed: a scratch scenario with a .break left by a dead breaker and two live takers gave two holders on the product as it is", "result": "green" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Read-only apart from this row. Each plant was made with the Edit tool and undone the same way; git status was clean after. Ran in a Linux box with CLAUDE_CODE_REMOTE=true at abfac52, maxWorkers=1, no override of the 0178 guard: scripts/typecheck.test.ts and scripts/typecheck-lock.test.ts (8 green, again after the plants), scripts/typecheck.integration.test.ts twice (7 green each), scripts/caps.test.ts (29 green, 173 s), caches.test.ts, oxlint-plugins/duplicate-packages.test.ts and skillscheck.test.ts (28 green). pnpm format changed nothing; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed all 18 parts; plancheck --approved passed; one pnpm typecheck through the new script exited 0, checked the scripts package and left no lock file. A scratch copy of scripts/typecheck.ts and scripts/typecheck/ beside a broken node_modules link printed the cannot-load line and exited 1. loosening.sh from the merge base flags only E1's and E6's reworded expects, which hold the same or more.",
+  "step": "review"
+}

@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-gateway-processes-telemetry-s1-tests3",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:05:58-08:00",
+  "ended": "2026-11-16T01:20:59-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round for slice 1 of the mock sweep (decisions 0555, 0573 and 0579; plan docs/plan/quests/mock-gateway-processes-telemetry-PLAN.md at eb7e56100, its 2026-11-16 pair-lock amendment and law M4), in next/ and the lint plants, after the review sent the slice back at 84e80580c because the lock had only vitest/no-restricted-vi-methods. The lock block over next/packages/libfabrika/src/gateway/** and telemetry/** in .oxlintrc.json now also sets eslint/no-restricted-properties at warn, after the Reflect ban's warn block: it writes out again the six entries those files take today (Data.TaggedError, JSON.parse, Reflect.get, Reflect.set, Reflect.has, globalThis.Reflect) and adds one object vi entry each for fn, mock, doMock, spyOn and stubEnv, with the vitest rule's messages. A vi fire still blocks at warn, since only a JSON.parse fire advises (oxlint-plugins/advice.ts). oxlint-plugins/builtin-plants.ts gains VI_PROPERTIES under eslint(no-restricted-properties), and VI_METHODS gains the two chained lines as false, under its own code. The M1 vi scenario in oxlint-plugins/plants.test.ts runs VI_PROPERTIES in every path of every block that sets the vitest rule, with a coverage check that the chained lines the vitest rule takes are refused by the other half. The REFLECT scenario now reads one entry per glob, since the lock block lists gateway/** and telemetry/** a second time, and its 'each glob gets a file of its own' check would otherwise count that glob twice; every folder still gets REFLECT's lines. The pattern doc .patterns/effect-crypto-through-services.md, the build's file, names the second rule under Holds it and has its drifted lines re-grounded, in its own build commit. The review's two finding rows are committed, with rule other mapped to rule_break and doc_drift, the nearest values field/README.md allows. No law is loosened.",
+  "laws": [
+    {
+      "law": "oxlint-plugins/plants.test.ts: M1 of the mock sweep, scenario: VI_METHODS' and VI_PROPERTIES' lines are refused exactly, in every folder of every block that sets the rule",
+      "red": "changed law: red with the vi entries dropped from the lock's eslint/no-restricted-properties (gateway/planted-vi-3.test.ts refused [] where [3, 4, 5, 6, 7, 8, 9] was wanted); green with them"
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts: L1 of the Reflect ban, scenario: REFLECT's lines are refused exactly, in every folder of every ban block",
+      "red": "not new: reads one entry per glob now; green in every locked path"
+    }
+  ],
+  "plants": [
+    {
+      "law": "oxlint-plugins/plants.test.ts: M1 VI_METHODS and VI_PROPERTIES scenario",
+      "plant": "drop the five vi entries from the lock block's eslint/no-restricted-properties in .oxlintrc.json: eslint(no-restricted-properties) in next/packages/libfabrika/src/gateway/planted-vi-3.test.ts refused [] where [3, 4, 5, 6, 7, 8, 9] was wanted, the two chained lines included; restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts: M1 VI_METHODS and VI_PROPERTIES scenario, REFLECT, TAGGED_ERROR L1 and L2",
+      "plant": "none: the config restored by copy, so the vi entries are back; the four laws passed, REFLECT and TAGGED_ERROR in the locked paths included",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Ran one file at a time with nice -n 19 and --maxWorkers=1, at the fix's tree on top of 84e80580c: oxlint-plugins/plants.test.ts 254 passed, oxlint-plugins/modules.test.ts 16 passed, next/packages/libfabrika/src/telemetry/ErrorCause.test.ts 6 passed, next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts 16 passed (in the box, no override). pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 17 of 18 parts passed; lint:promise-types died with EPIPE and passed when run again alone (0 findings). The list ratchet against the merge base with origin/main exited 0. No pnpm typecheck: no TypeScript changed outside the plants.",
+  "step": "tests"
+}

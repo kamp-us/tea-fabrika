@@ -38,12 +38,14 @@
 // This repo's own rule, not a copy. It blocks. Its fires when it was
 // added are in oxlint-plugins/README.md.
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import { below, dotted, grouped, isWritten, type Node, quoted } from "./match.ts";
 
 const SECRET =
   /^(?:.*_)?(?:(?:API|PRIVATE|SECRET|ACCESS|SIGNING)_?KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTH|CREDENTIALS?)(?:_.*)?$/;
 
 const NOT_SECRET = /^.*_(?:HASH|SOCK)$/;
+
 const isSecret = (name: string): boolean => SECRET.test(name) && !NOT_SECRET.test(name);
 
 const READ =
@@ -52,6 +54,7 @@ const READ =
 export const noSecretEnv: CreateRule = {
   create(context) {
     const source = context.sourceCode;
+
     /** `!x`, `delete x`, `x === undefined` and the like: an answer of yes or no, or a removal. */
     const onlyAsksIfSet = (node: Node & { readonly parent: Node }): boolean => {
       if (grouped(source, node) > 0) {
@@ -73,8 +76,10 @@ export const noSecretEnv: CreateRule = {
       }
 
       const other = parent.left === node ? parent.right : parent.left;
+
       return other.type === "Identifier" && other.name === "undefined" && grouped(source, other) === 0;
     };
+
     return {
       MemberExpression(node) {
         const isEnv = dotted(node.object) === "process.env";
@@ -103,7 +108,8 @@ export const noSecretEnv: CreateRule = {
           return;
         }
 
-        const secret = [...below(node.id)].some(
+        const secret = Arr.some(
+          [...below(node.id)],
           (part) =>
             part.type === "Property" &&
             part.shorthand &&
@@ -115,7 +121,7 @@ export const noSecretEnv: CreateRule = {
           return;
         }
 
-        const reads = [...below(node.init)].some((part) => dotted(part) === "process.env");
+        const reads = Arr.some([...below(node.init)], (part) => dotted(part) === "process.env");
 
         if (!reads) {
           return;

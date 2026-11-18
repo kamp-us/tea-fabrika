@@ -1,11 +1,9 @@
 /**
  * The shapes of one instance start: what a host hands in, what the ledger keeps of it, and what
  * comes back as its receipt.
- *
- * @stability unstable
  */
+import * as Snapshot from "@kalfa/config/Snapshot";
 import { Schema } from "effect";
-import * as Snapshot from "./Snapshot.ts";
 
 const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
 
@@ -13,7 +11,6 @@ const Text = Schema.NonEmptyString.check(Schema.isMaxLength(256));
  * Schema for who wrote a start's ledger entry: the writer, the person it works for, the writer's
  * own clock, and the trace the write belongs to.
  *
- * @stability unstable
  * @category schemas
  */
 export const Origin = Schema.Struct({
@@ -33,7 +30,6 @@ export const Origin = Schema.Struct({
  * The ledger keeps `start`, `settings`, `build` and `repo` as the entry's body, and `origin` as the
  * entry's writer fields.
  *
- * @stability unstable
  * @category schemas
  */
 export const Input = Schema.Struct({
@@ -58,10 +54,10 @@ export const Input = Schema.Struct({
   /** Which program may start which: a right the host hands in, never a declared setting or a recorded fact. */
   starts: Schema.optionalKey(Schema.Array(Schema.Struct({ source: Text, to: Text }))),
 });
+
 /**
  * The decoded Input value.
  *
- * @stability unstable
  * @category models
  */
 export type Input = typeof Input.Type;
@@ -70,7 +66,6 @@ export type Input = typeof Input.Type;
  * Schema for the part of a start the ledger saves as its entry's body: the start's id, its
  * settings, its build and its repo.
  *
- * @stability unstable
  * @category schemas
  */
 export const Body = Schema.Struct({
@@ -88,7 +83,6 @@ export const Body = Schema.Struct({
  * `entry` says where the entry sits in the ledger, when it arrived and who wrote it. Its `pos` is
  * always 1: a start is the first entry in its own stream.
  *
- * @stability unstable
  * @category schemas
  */
 export const Receipt = Schema.Struct({
@@ -102,10 +96,10 @@ export const Receipt = Schema.Struct({
     ...Origin.fields,
   }),
 });
+
 /**
  * The decoded Receipt value.
  *
- * @stability unstable
  * @category models
  */
 export type Receipt = typeof Receipt.Type;
@@ -119,7 +113,6 @@ export type Receipt = typeof Receipt.Type;
  * A failed reply carries no cause. A cause may hold the start's input, so it stays on the side
  * that failed.
  *
- * @stability unstable
  * @category schemas
  */
 export const Reply = Schema.TaggedUnion({
@@ -135,7 +128,6 @@ export const Reply = Schema.TaggedUnion({
  * Schema for a `StartsError` as it crosses RPC: the reason's tag and nothing else. The error on
  * the side that failed keeps its cause.
  *
- * @stability unstable
  * @category schemas
  */
 export const Failure = Schema.TaggedStruct("StartsError", {

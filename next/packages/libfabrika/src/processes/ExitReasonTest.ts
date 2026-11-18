@@ -3,7 +3,18 @@
 // scope and gives it back when that scope closes.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -63,6 +74,7 @@ const Cell = fc.record({
   other: fcExitReason,
   bad: fc.nat(),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
 
 const Tape = fc
@@ -97,7 +109,9 @@ const INSERT = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i;
 
 /** The store's Sql, with a cut that refuses the `after`-th insert of the next call. */
 const cutting = (sql: Sql) => {
+  // SAFETY: `after` is widened from `null` so the cut can hold a count of inserts; `null` means no cut is armed.
   const fault = { after: null as number | null };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (INSERT.test(query) && fault.after !== null) {
@@ -113,6 +127,7 @@ const cutting = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, fault };
 };
 
@@ -131,6 +146,7 @@ const facts = Effect.fnUntraced(function* (sql: Sql, world: World) {
     clientInbox(CLIENT.client),
     ...world.names.flatMap(({ name }) => [`processes/${name}`, `${name}/inbox`]),
   ];
+
   const rows: Array<Entry> = [];
 
   for (const stream of streams) {
@@ -148,16 +164,19 @@ const refused = (answer: Result.Result<unknown, unknown>, message: string, reaso
 };
 
 const decodeExit = Schema.decodeUnknownResult(ExitReason, { onExcessProperty: "error" });
+
 const decodeDown = Schema.decodeUnknownResult(DownReason, { onExcessProperty: "error" });
 
 /** The oracle: what the rows must say, checked against the fold's own world after every prefix. */
 const check = (rows: ReadonlyArray<Entry>, world: World) => {
   const exited = rows.filter((row) => row._tag === "exited" && row.by === BRAIN);
+  // SAFETY: an `exited` row written by the brain holds a body with its `process`, which `valueFor` reads.
   expect(exited.map((row) => (valueFor(row) as { process: string }).process).sort()).toEqual(
     [...world.exits.keys()].sort(),
   );
 
   for (const row of exited) {
+    // SAFETY: each brain `exited` row carries the process and its exit reason in its body.
     const { process, reason } = valueFor(row) as { process: string; reason: unknown };
     expect(
       Result.isSuccess(decodeExit(reason)),
@@ -170,6 +189,7 @@ const check = (rows: ReadonlyArray<Entry>, world: World) => {
   const seen = new Map<string, unknown>();
 
   for (const row of downs) {
+    // SAFETY: a brain `send` row here is a down message, whose body `m` holds ref, recipient and reason.
     const { m } = valueFor(row) as { m: { ref: string; to: typeof Recipient.Type; reason: unknown } };
     expect(
       Result.isSuccess(decodeDown(m.reason)),
@@ -180,7 +200,7 @@ const check = (rows: ReadonlyArray<Entry>, world: World) => {
     seen.set(key, m.reason);
   }
 
-  expect(Object.fromEntries(seen)).toEqual(Object.fromEntries(world.downs));
+  expect(Rec.fromEntries(seen)).toEqual(Rec.fromEntries(world.downs));
 };
 
 const startRequest = (world: World, slot: number) => {
@@ -188,6 +208,7 @@ const startRequest = (world: World, slot: number) => {
 
   if (known === undefined) {
     const name = `counter:${slot + 1}`;
+
     return { name, request: Start.cases.first.make({ id: `start:${name}`, name, code: CODE }) };
   }
 
@@ -204,6 +225,7 @@ const startRequest = (world: World, slot: number) => {
 };
 
 const live = (world: World) => world.names.filter((n) => n.live);
+
 const ended = (world: World) => world.names.filter((n) => !n.live);
 
 /** The item a tape cell's number picks; never called on an empty list. */
@@ -221,6 +243,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
   const ids = world.pids < PIDS.length - 1;
   const lives = live(world).length > 0;
+
   const can: Record<Move, boolean> = {
     start: world.names.length < 3 && ids,
     restart: ended(world).length > 0 && ids,
@@ -235,6 +258,7 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     retry_other: world.exits.size > 0,
     reopen: true,
   };
+
   return moves.filter((move) => can[move]);
 };
 
@@ -248,13 +272,16 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
     const { sql, fault } = cutting(store.sql);
     const next = ids(...PIDS);
     const world: World = { names: [], exits: new Map(), watches: new Map(), downs: new Map(), pids: 0, refs: 0 };
+
     const as = <A, E>(caller: Caller, call: (p: ProcessManager["Service"]) => Effect.Effect<A, E>) =>
       ProcessManager.use(call).pipe(Effect.provide(layer(sql, caller, next.next)), Effect.result);
+
     /** The writes one exit of `process` makes: its exit, a DOWN per live watch on it, a cancel per watch it holds. */
     const writes = (process: string) => {
       const watches = [...world.watches.values()].filter((w) => w.live);
       const inbound = watches.filter((w) => w.target === process).length;
       const outbound = watches.filter((w) => w.to._tag === "process" && w.to.process === process).length;
+
       return 1 + inbound + outbound;
     };
 
@@ -288,12 +315,14 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           break;
         }
+
         case "watch":
         case "watch_missing": {
           const target =
             move === "watch"
               ? choose(live(world), step.pick).process
               : choose([...world.exits.keys(), choose(PIDS, PIDS.length - 1)], step.pick);
+
           const watchers = [CLIENT, ...live(world).map((n) => Recipient.cases.process.make({ process: n.process }))];
           const to = choose(watchers, step.cut);
           const ref = `watch:${++world.refs}`;
@@ -312,18 +341,21 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           break;
         }
+
         case "cancel": {
           const [key, watch] = choose(
             [...world.watches.entries()].filter(([, w]) => w.live),
             step.pick,
           );
-          const ref = key.slice(key.lastIndexOf("|") + 1);
+
+          const ref = Arr.lastNonEmpty(Str.split(key, "|"));
           const caller = watch.to._tag === "client" ? brain() : watcher(watch.to.process);
           const answer = yield* as(caller, (p) => p.demonitor(ref, from()));
           expect(Result.isSuccess(answer), "a cancel of a live watch is placed").toBe(true);
           watch.live = false;
           break;
         }
+
         case "exit": {
           const target = choose(live(world), step.pick);
           const answer = yield* as(brain(), (p) => p.exit(target.process, copied(step.reason), from()));
@@ -346,6 +378,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
           break;
         }
+
         case "retry_equal":
         case "retry_other": {
           const [process, reason] = choose([...world.exits.entries()], step.pick);
@@ -361,23 +394,28 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           expect(yield* facts(sql, world), "a retry writes nothing").toEqual(before);
           break;
         }
+
         case "bad": {
           const target = choose(live(world), step.pick);
+          // SAFETY: `step.bad` is an invalid exit reason on purpose, so the law sees `exit` refuse it.
           const answer = yield* as(brain(), (p) => p.exit(target.process, step.bad as ExitReason, from()));
-          refused(answer, `invalid input is refused: ${JSON.stringify(step.bad)}`, "bad_text");
+          refused(answer, `invalid input is refused: ${Formatter.format(step.bad)}`, "bad_text");
           expect(yield* facts(sql, world), "a refused exit leaves every lifecycle fact as it was").toEqual(before);
           const still = yield* as(brain(), (p) => p.isLive(target.process));
           expect(Result.getOrThrow(still), "the process still lives").toBe(true);
           break;
         }
+
         case "exit_noproc": {
           // noproc is what a monitor answers for a missing target; no process exits with it.
           const target = choose(live(world), step.pick);
+          // SAFETY: noproc is not an exit reason, and is handed to `exit` on purpose to see it refused.
           const answer = yield* as(brain(), (p) => p.exit(target.process, NOPROC as never, from()));
           refused(answer, "noproc is refused as an exit reason");
           expect(yield* facts(sql, world), "a refused noproc exit writes nothing").toEqual(before);
           break;
         }
+
         case "cut": {
           const target = choose(live(world), step.pick);
           fault.after = step.cut % writes(target.process);
@@ -389,6 +427,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           expect(Result.getOrThrow(still), "the process still lives after the cut").toBe(true);
           break;
         }
+
         case "reopen":
           yield* store.reopen;
           break;
@@ -401,6 +440,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       for (const { process } of live(world)) {
         const letters = yield* as(brain(), (p) => Stream.runCollect(p.receive(process, 0)));
         expect(Result.isSuccess(letters), "a live process can receive").toBe(true);
+
         const downs = Result.isSuccess(letters)
           ? [...letters.success].flatMap(({ m }) =>
               Predicate.isObject(m) && Predicate.hasProperty(m, "_tag") && m._tag === "DOWN" ? [m] : [],
@@ -427,10 +467,11 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         const checks = { seed: 119120, numRuns: runsFor({ fast: 10, full: 40 }), includeErrorInReport: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));

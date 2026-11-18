@@ -43,10 +43,12 @@ export const noExpectInIf: CreateRule = {
   create(context) {
     const provenBodies = new Set<Node>();
     const guarded: { readonly node: ESTree.CallExpression; readonly body: Node | null }[] = [];
+
     return {
       CallExpression(node) {
         const name = plainCall(node);
         const isExpect = name === "expect";
+
         const counts =
           isExpect || name === "expect.assertions" || (name === "expect.hasAssertions" && node.arguments.length === 0);
 

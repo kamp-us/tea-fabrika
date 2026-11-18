@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-typed-handler-failure-reason",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 2105
+  },
+  "says": "No law asserts that a handler failing with a typed error is answered with reason handler_failed; the only law that reads the reason drives a handler defect.",
+  "proof": "The tests step planted err(job, \"bad_cmd\") at Runner.ts:2105 and the tracing law in runtime/EffectFunctions.test.ts stayed green. The one law that reads the reason, runtime/Runner.integration.test.ts mode throw, drives its handler with Effect.die, so a plant that answers only typed failures with another reason escapes both.",
+  "cost": "A change that splits typed failures from defects in the runner's handler answer could send the wrong reason to update with every law green.",
+  "head": "773588d33e1eed728169817ff1249750252d339e",
+  "ticket": null,
+  "pr": null
+}

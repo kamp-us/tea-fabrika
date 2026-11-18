@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-fix4",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-16T20:55:01-08:00",
+  "ended": "2026-11-16T21:00:10-08:00",
+  "parent": "2026-11-16-t766-port-typecheck-plan4",
+  "active": null,
+  "role": "step",
+  "step": "tests",
+  "model": "gpt-6",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling, the approved second lint amendment only. The zero lock now counts and accepts the port's four exact globs. The count after merging main requires 28 zero-hit entries across nine rules. L8 fails before the fix and passes after it. The four original scope refusals are gone. No wrapper, lock, compiler-wait, install, exit or resource behavior changed.",
+  "plants": [
+    { "law": "L8", "plant": "Remove the four port globs from folders(): L8 fails and audit refuses all four original no-manual-tag-comparison globs.", "result": "red" },
+    { "law": "L9a", "plant": "Remove the port paths from ROOTS: audit asks to add uncounted folders to the spacing block.", "result": "red" },
+    { "law": "L9b", "plant": "Remove scripts/typecheck.ts from no-unknown-returns: audit prints exactly its one missing-entry line.", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5.15,
+  "note": "Each plant was restored byte for byte, then audit was green. Explicit safe checks, nice19 and maxWorkers1: anti-slop.test.ts 27 passed; typecheck-lock.test.ts 4 passed on in-memory layers; workflow-lint/caches.test.ts 18 passed. Format passed after removing the import made unused by main's event-based readiness fix. No compiler, real-process-signal or integration test ran in this repair. Whole typecheck, the existing review's recheck and resulting-head remote proof remain the lead's checks."
+}

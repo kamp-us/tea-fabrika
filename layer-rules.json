@@ -69,7 +69,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -92,7 +93,8 @@
         "next-settings",
         "next-telemetry",
         "next-transport",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -119,7 +121,8 @@
         "next-settings",
         "next-telemetry",
         "next-transport",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -147,7 +150,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -170,7 +174,8 @@
         "next-settings",
         "next-telemetry",
         "next-transport",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -200,7 +205,8 @@
         "next-telemetry",
         "next-transport",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -242,8 +248,15 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
+    },
+    {
+      "name": "next-email",
+      "layer": 6,
+      "paths": ["next/packages/libfabrika/src/email"],
+      "imports": ["next-access", "next-ledger", "next-transport", "next-shared"]
     },
     {
       "name": "next-access",
@@ -261,7 +274,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -283,7 +297,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -297,7 +312,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -312,7 +328,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -327,7 +344,8 @@
         "next-settings",
         "next-telemetry",
         "next-shared",
-        "next-vitest"
+        "next-vitest",
+        "kalfa-config"
       ]
     },
     {
@@ -341,7 +359,8 @@
         "next-repositories",
         "next-settings",
         "next-telemetry",
-        "next-shared"
+        "next-shared",
+        "kalfa-config"
       ]
     },
     {
@@ -378,7 +397,7 @@
       "name": "next-settings",
       "layer": 2,
       "paths": ["next/packages/libfabrika/src/settings"],
-      "imports": ["next-telemetry", "next-shared"]
+      "imports": ["next-telemetry", "next-shared", "kalfa-config"]
     },
     {
       "name": "next-telemetry",
@@ -387,9 +406,20 @@
       "imports": ["next-shared"]
     },
     {
+      "name": "kalfa-config",
+      "layer": 1,
+      "paths": ["kalfa/config/src"],
+      "imports": ["next-vitest"]
+    },
+    {
       "name": "next-id-test-support",
       "paths": ["next/packages/libfabrika/src/Id.test-support.ts"],
       "imports": ["next-shared"]
+    },
+    {
+      "name": "next-crypto-test-support",
+      "paths": ["next/packages/libfabrika/src/telemetry/Crypto.test-support.ts"],
+      "imports": ["next-vitest"]
     },
     {
       "name": "next-shared",
@@ -455,7 +485,7 @@
       "paths": ["packages/fabrika/src/program"]
     }
   ],
-  "roots": ["next/packages/libfabrika/src", "next/packages/tuval/src", "next/packages/vitest/src"],
+  "roots": ["next/packages/libfabrika/src", "next/packages/tuval/src", "next/packages/vitest/src", "kalfa/config/src"],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],
   "allowed": [
     {

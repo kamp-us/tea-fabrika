@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-vitest-from-a-subfolder-skips-every-local-guard",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "vitest.config.ts",
+    "line": 1
+  },
+  "says": "Vitest started from a subfolder with no vitest.config.ts of its own (next/apps/fabrika, for one) loads no config at all, so the 0410 caps and the new host-only guard never run there.",
+  "proof": "From next/apps/fabrika with CI unset: `vitest list --filesOnly src/start-child.laws.integration.test.ts` printed the file and exited 0, while the same list from the repo root is refused. .agents/ has a throwing vitest.config.ts for this reason; other folders have none. host.yaml relies on this today: it runs `vitest run --root e2e` from next/apps/fabrika with CI cleared.",
+  "cost": "An agent that cd's into an app folder can start real-Worker or Electron laws on the laptop with no refusal, the same accident the guard is for.",
+  "head": "82296f5cf0a6e9cb16c1217809ab5f7aa3576f5e",
+  "ticket": null,
+  "pr": null
+}

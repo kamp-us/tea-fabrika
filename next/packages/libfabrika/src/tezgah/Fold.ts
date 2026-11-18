@@ -9,16 +9,16 @@
  * percent, except that the part leading to the focused tile is held at the floor, or at all the
  * container has when that is less. `fold` is the fixpoint on that geometry: a tile folds only when
  * it is drawn under 220x120 where it folds, and the focused tile never folds.
- *
- * @stability unstable
  */
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import { GAP, order, type Rect } from "./Layout.ts";
 import type { Container, Layout, TileId, Workspace } from "./Workspace.ts";
 
 /**
  * The smallest a tile may be drawn open: the readability floor from fold, not tabs. Not a setting.
  *
- * @stability unstable
  * @category constants
  */
 export const SMALLEST = { width: 220, height: 120 } as const;
@@ -27,7 +27,6 @@ export const SMALLEST = { width: 220, height: 120 } as const;
  * How far a strip reaches along its container's axis, in CSS pixels: 22px upright in a row, 20px
  * lying down in a column (the fold note).
  *
- * @stability unstable
  * @category constants
  */
 export const STRIP = { row: 22, column: 20 } as const;
@@ -39,11 +38,10 @@ type Size = { readonly width: number; readonly height: number };
  * Returns whether a layout draws as strips only: a tile in `strips`, or a container whose tiles all
  * are (a band).
  *
- * @stability unstable
  * @category getters
  */
 export const shut = (node: Layout, strips: ReadonlySet<TileId>): boolean =>
-  typeof node === "string" ? strips.has(node) : node.parts.every((p) => shut(p.inner, strips));
+  Predicate.isString(node) ? strips.has(node) : Arr.every(node.parts, (p) => shut(p.inner, strips));
 
 /**
  * Returns each part's length along a container of `length` pixels, gaps not counted: a part that is
@@ -52,7 +50,6 @@ export const shut = (node: Layout, strips: ReadonlySet<TileId>): boolean =>
  * the container, they share its length equally and the open parts get nothing: that window is too
  * small for the layout (plan amendment 14).
  *
- * @stability unstable
  * @category getters
  */
 export const lengths = (
@@ -62,28 +59,33 @@ export const lengths = (
   focus: TileId,
 ): ReadonlyArray<number> => {
   const left = length - (node.parts.length - 1) * GAP;
-  const fixed = node.parts.map((p) => shut(p.inner, strips));
-  const count = fixed.filter((f) => f).length;
+  const fixed = Arr.map(node.parts, (p) => shut(p.inner, strips));
+  const count = Arr.filter(fixed, (f) => f).length;
   const has = left - count * STRIP[node.dir];
 
   if (has < 0) {
-    return fixed.map((f) => (f ? Math.max(0, left) / count : 0));
+    return Arr.map(fixed, (f) => (f ? Math.max(0, left) / count : 0));
   }
 
-  const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
-  const shares = node.parts.map((p, i) => (fixed[i] ? STRIP[node.dir] : (has * p.percent) / total));
-  const lead = node.parts.findIndex((p) => order(p.inner).includes(focus));
+  const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] === true ? sum : sum + p.percent));
+  const shares = Arr.map(node.parts, (p, i) => (fixed[i] === true ? STRIP[node.dir] : (has * p.percent) / total));
+  const lead = Arr.findFirstWithIndex(node.parts, (p) => order(p.inner).includes(focus));
   const least = Math.min(node.dir === "row" ? SMALLEST.width : SMALLEST.height, has);
 
-  const held = node.parts[lead];
+  if (Option.isNone(lead)) {
+    return shares;
+  }
 
-  if (held === undefined || (shares[lead] ?? 0) >= least) {
+  const [held, at] = lead.value;
+
+  if ((shares[at] ?? 0) >= least) {
     return shares;
   }
 
   const rest = total - held.percent;
-  return node.parts.map((p, i) =>
-    i === lead ? least : fixed[i] ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+
+  return Arr.map(node.parts, (p, i) =>
+    i === at ? least : fixed[i] === true ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
   );
 };
 
@@ -91,11 +93,11 @@ export const lengths = (
  * Returns each tile's drawn box in an area of `size`, from its top left, when `strips` are drawn as
  * strips. A band's strips lie along it, one after another with `GAP` between, sharing its length.
  *
- * @stability unstable
  * @category getters
  */
 export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): ReadonlyMap<string, Rect> => {
   const out = new Map<TileId, Rect>();
+
   const band = (tiles: ReadonlyArray<TileId>, r: Rect, upright: boolean) => {
     const each = Math.max(0, ((upright ? r.height : r.width) - (tiles.length - 1) * GAP) / tiles.length);
 
@@ -104,9 +106,11 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
       out.set(t, upright ? { ...r, y: r.y + at, height: each } : { ...r, x: r.x + at, width: each });
     }
   };
+
   const walk = (node: Layout, r: Rect): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       out.set(node, r);
+
       return;
     }
 
@@ -116,11 +120,12 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
 
     for (const [i, p] of node.parts.entries()) {
       const share = shares[i] ?? 0;
+
       const box = row
         ? { x: at, y: r.y, width: share, height: r.height }
         : { x: r.x, y: at, width: r.width, height: share };
 
-      if (typeof p.inner !== "string" && shut(p.inner, strips)) {
+      if (!Predicate.isString(p.inner) && shut(p.inner, strips)) {
         band(order(p.inner), box, row);
       } else {
         walk(p.inner, box);
@@ -129,7 +134,9 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
       at += share + GAP;
     }
   };
+
   walk(w.layout, { x: 0, y: 0, width: size.width, height: size.height });
+
   return out;
 };
 
@@ -138,7 +145,6 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
  * tile but the focused one drawn under 220x120, again on the geometry that leaves, until nothing
  * changes. Strips only grow, so it ends within the tile count.
  *
- * @stability unstable
  * @category getters
  */
 export const fold = (w: Workspace, size: Size): ReadonlySet<TileId> => {
@@ -146,8 +152,10 @@ export const fold = (w: Workspace, size: Size): ReadonlySet<TileId> => {
 
   for (;;) {
     const boxes = drawn(w, size, strips);
-    const due = order(w.layout).filter((t) => {
+
+    const due = Arr.filter(order(w.layout), (t) => {
       const r = boxes.get(t);
+
       return (
         !strips.has(t) && t !== w.focus && r !== undefined && (r.width < SMALLEST.width || r.height < SMALLEST.height)
       );

@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1067-mock-fold-1-node-plan-resign-review",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:27:37-08:00",
+  "ended": "2026-11-16T01:32:25-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of mock sweep fold 1 (stack layer 7, decision 0555) on fabrikalfa/mock-fold-1 at 76daf337, the commits since the reviewed head da9bda73: merge-ready, no finding. Merge 07688081 (fabrikalfa/mock-plans at 4a17276e): its diff against the first parent equals eb7e5610..4a17276e byte for byte (one file, docs/plan/quests/mock-node-PLAN.md, 57 lines in, 11 out), and its diff against the second parent equals eb7e5610..da9bda73 byte for byte (1375 files); the merge tree is da9bda73's tree with only the plan file taken from 4a17276e, and the stack side never touched that file, so nothing is dropped from either side. The plan side is plan text only: the contract file renamed from cloudflare/Objects.ts to cloudflare/ObjectCalls.ts at every place, each old name kept and marked wrong; the node/*.ts lock block's eslint/no-restricted-properties at error in place of warn, which follows 0523 (a folder at zero blocks) and 0524 (no warn level); the block writes out the Data.TaggedError and JSON.parse entries again, so the override drops no wider entry (0524); re-signed with 0523 added. At the head, cloudflare/ holds objects.ts and no other name that matches Objects.ts or ObjectCalls.ts in any case, so the plan's clash claim holds. No code, disable, lock, @effect-diagnostics or list entry enters. fabrikalfa/mock-app-src-s1's head ab9dd3cf is an ancestor of 76daf337. Commit 76daf337 adds only the build's field row, whose keys match the other fold build rows and which holds no names, paths or secrets.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "loosening.sh da9bda73..76daf337: 0 hits in 0 exam files. loosening.sh over the merge's stack side (second parent to merge, the range already reviewed at da9bda73): 5 unrecognized-change hits, pnpm-workspace.yaml (tea 0.27.0 for next/ with an old catalog for today's version), programs/tracker/package.json (catalog:old), scripts/caps.test.ts (an idle compiler name and new host-only scenarios), tsconfig.base.json (new error locks; the libfabrika namespace-import lock moved to next/packages/libfabrika/tsconfig.json and widened) and vitest.config.ts (the 0178 host-only guard); none loosens a law. plancheck.sh --approved docs/plan/quests/mock-node-PLAN.md under the pinned Node after pnpm install --frozen-lockfile: exit 0, plan-sha256 882bc2bf5d8c matches the sign line, one advice line (line 586). No test ran, since the range changes no code. Not run, as briefed: pnpm lint and pnpm typecheck, which the coordinator runs.",
+  "driver_caused": false,
+  "step": "review"
+}

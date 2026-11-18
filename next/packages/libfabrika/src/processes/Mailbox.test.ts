@@ -15,7 +15,12 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -26,14 +31,28 @@ import type { Sql } from "../Sql.ts";
 import { type From, type Letter, Mailbox, RunnerMail } from "./Mailbox.ts";
 import { brainOnly, inRunnerSpace } from "./Process.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  delete: {},
+  save: {},
+});
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const READER = "connection:t1";
+
 const PARENT = `in-${Effect.runSync(processId)}-41`;
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const OTHER_TRACE = "5bf92f3577b34da6a3ce929d0e0e4737";
+
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 // The writer's clock is a date text, never a number, so a Letter that took it as its rev shows.
 const SENT = "2026-11-07T21:10:01.204Z";
+
 const LETTER = "letter_01m6v5270hetdrt4r8h9vvjwjr";
 
 // Every ledger is a fresh node:sqlite database in memory, closed by its layer's scope (0061). Never a
@@ -51,7 +70,9 @@ const fresh = Effect.acquireRelease(
 ).pipe(Effect.map(nodeSql));
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
 const onSql = (sql: Sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet));
+
 /** A Mailbox and the Ledger beneath it, so a test can read and write the log beside it. */
 const mail = () => Layer.unwrap(fresh.pipe(Effect.map((sql) => Mailbox.layer.pipe(Layer.provideMerge(onSql(sql))))));
 
@@ -95,7 +116,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
     const context = yield* Effect.context<R>();
     yield* Effect.promise(() =>
       fc.assert(
-        fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
+        fc.asyncProperty(arb, (a) => Effect.runPromiseWith(context)(law(a))),
         {
           seed: SEED,
           numRuns: runsFor({ fast: 4, full: 40 }),
@@ -116,8 +137,8 @@ describe("P33, only the owning runner writes its answers", () => {
       Effect.gen(function* () {
         // JSON whitespace changes the spelling, never ownership of the id space.
         for (const id of [
-          JSON.stringify(["notice", key]),
-          `${space}[${space}"notice",${JSON.stringify(key)}]${space}`,
+          Formatter.formatJson(["notice", key]),
+          `${space}[${space}"notice",${Formatter.formatJson(key)}]${space}`,
           '["notice"',
         ]) {
           expect(brainOnly({ stream: "notes:1/inbox", id, tag: "send" })).toBe(true);
@@ -138,6 +159,7 @@ describe("P33, only the owning runner writes its answers", () => {
     { suffix: Schema.String, process: processIds, step: Nat, count: Nat, m: Schema.Json },
     ({ suffix, process, step, count, m }) => {
       const name = `runner:${suffix}`;
+
       return Effect.gen(function* () {
         for (const [to, pid, allowed] of [
           [name, process, true],
@@ -203,7 +225,7 @@ describe("p21, send", () => {
     ),
   );
   it.effect("writes one send line in the name's inbox, with every field the writer gave", () =>
-    check(json, [{ type: "save", value: { text: "hello", n: 3 } }], (m) =>
+    check(json, [{ ...Tag.cases.save.make({}), value: { text: "hello", n: 3 } }], (m) =>
       Effect.gen(function* () {
         const answer = yield* send("notes:1", LETTER, m);
         expect(answer).toEqual({ _tag: "placed", rev: 1, pos: 1 });
@@ -255,7 +277,7 @@ describe("p21, send", () => {
   it.effect("a resend gets the first placing and writes nothing; another m under that id is refused", () =>
     check(
       fc.tuple(json, json).filter(([a, b]) => JSON.stringify(a) !== JSON.stringify(b)),
-      [[{ type: "save" }, { type: "delete" }]],
+      [[Tag.cases.save.make({}), Tag.cases.delete.make({})]],
       ([saved, changed]) =>
         Effect.gen(function* () {
           const first = yield* send("notes:1", LETTER, saved);
@@ -281,7 +303,7 @@ describe("p21, send", () => {
           _tag: "refused",
           reason: "bad_parent",
         });
-        expect(yield* send("notes:1", LETTER, m, { traceId: "0".repeat(32) })).toEqual({
+        expect(yield* send("notes:1", LETTER, m, { traceId: Str.repeat(32)("0") })).toEqual({
           _tag: "refused",
           reason: "bad_trace",
         });
@@ -293,7 +315,7 @@ describe("p21, send", () => {
 
 describe("p21, receive", () => {
   it.effect("plant, parent or traceId dropped: each Letter is its entry, field for field", () =>
-    check(fc.tuple(json, json), [[{ type: "save", value: 1 }, [1, "two", null]]], ([a, b]) =>
+    check(fc.tuple(json, json), [[{ ...Tag.cases.save.make({}), value: 1 }, [1, "two", null]]], ([a, b]) =>
       Effect.gen(function* () {
         yield* send("notes:1", "letter_a", a);
         yield* raw("other", "x-1", { _tag: "saved" });
@@ -388,7 +410,7 @@ describe("p21, receive", () => {
           yield* send("notes:1", "letter_a", 1);
           yield* raw("notes:1/inbox", "x-1", {
             _tag: "send",
-            body: Schema.decodeUnknownSync(Schema.Json)(body),
+            body: yield* Schema.decodeUnknownEffect(Schema.Json)(body),
           });
           const failed = yield* Effect.flip(receive("notes:1"));
           expect(failed).toBeInstanceOf(LedgerError);
@@ -411,13 +433,14 @@ describe("p21, receive", () => {
     ),
   );
 
-  it("over any sends with resends: each id comes out once, in first-send order, with its first m", async () => {
+  it("over any sends with resends: each id comes out once, in first-send order, with its first m", () => {
     const sendArb = fc.record({
       to: fc.constantFrom("notes:1", "notes:2"),
       id: fc.constantFrom("letter_a", "letter_b", "letter_c", "letter_d", "letter_e"),
       m: fc.oneof(fc.integer(), fc.string({ maxLength: 5 }), fc.constant(null), fc.record({ n: fc.nat() })),
     });
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(fc.array(sendArb, { maxLength: 30 }), (sends) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -427,7 +450,7 @@ describe("p21, receive", () => {
               const answer = yield* send(to, id, m);
               const box = want.get(to) ?? [];
               const known = box.find((l) => l.id === id);
-              const same = known !== undefined && JSON.stringify(known.m) === JSON.stringify(m);
+              const same = known !== undefined && Formatter.formatJson(known.m) === Formatter.formatJson(m);
               expect(answer._tag, `${to} ${id}`).toBe(known === undefined || same ? "placed" : "refused");
 
               if (known === undefined) {
@@ -457,6 +480,7 @@ describe("p21, no Layer fails at build", () => {
         read: () => Stream.fail(new LedgerError({ reason: "unreachable" })),
         wait: () => Effect.fail(new LedgerError({ reason: "unreachable" })),
       });
+
       return Effect.gen(function* () {
         expect((yield* Effect.flip(send("notes:1", LETTER, m))).reason).toBe("unreachable");
         expect((yield* Effect.flip(receive("notes:1"))).reason).toBe("unreachable");

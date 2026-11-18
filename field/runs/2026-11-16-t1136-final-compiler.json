@@ -1,0 +1,74 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1136-final-compiler",
+  "ticket": "1136",
+  "pr": null,
+  "started": "2026-11-16T22:04:26-08:00",
+  "ended": "2026-11-16T22:04:42-08:00",
+  "parent": "2026-11-16-t1136-l5-diagnostic",
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead-tooling ticket1136 passed one final whole-project pnpm typecheck at the exact reviewed head, using the reserved compiler slot.",
+  "note": "Private proof only. No source, index, branch ref, public record, commit or push changed. The earlier public row stays unchanged. This compiler pass proves neither the earlier lost child error nor the pending remote L5 capture.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 0.2814,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "checkedHead": "b468a03ec3f9e0fe5e7d6cdf986a805157852c57",
+  "branch": "fabrikalfa/l5-diagnostic",
+  "command": "nice -n 19 pnpm typecheck",
+  "exit": 0,
+  "runtime": [
+    {
+      "probe": "pnpm --version",
+      "exit": 0,
+      "version": "12.16.1",
+      "stderrEmpty": true
+    },
+    {
+      "probe": "node --version",
+      "exit": 0,
+      "version": "v26.13.0",
+      "stderrEmpty": true
+    },
+    {
+      "probe": "pnpm exec node --version",
+      "exit": 0,
+      "version": "v26.13.0",
+      "stderrEmpty": true
+    },
+    {
+      "probe": "python-nested",
+      "exit": 0,
+      "version": "v26.13.0",
+      "stderrEmpty": true
+    }
+  ],
+  "runtimeSetup": "Command-local real Node and native pnpm bins precede inherited tool bins. Native pnpm12.16.1 and Node26.13.0 verified directly and through Python-nested pnpm. TYPESAFE_API_KEY unset. No CI, lock, compiler or checker override. Existing typecheck wrapper keeps its default shared lock and compiler wait.",
+  "preservation": {
+    "trackedFiles": 5114,
+    "trackedFileChanges": [],
+    "indexEntriesUnchanged": true,
+    "indexBytesUnchanged": true,
+    "ownBranchRefUnchanged": true,
+    "status": ""
+  },
+  "resource": {
+    "pgrepExit": 1,
+    "remainingCompilers": [],
+    "released": true
+  },
+  "notRun": [
+    "Full pnpm lint18 and its typed API were not started after this reserved compiler-only assignment",
+    "Whole or guarded Vitest law/suite, process signals, Electron, launchd",
+    "CI dispatch, wait or remote L5 capture"
+  ],
+  "pending": ["Merger publication and actual eligible remote L5 capture"],
+  "modelUsage": "Exact model variant, tokens and billing unavailable."
+}

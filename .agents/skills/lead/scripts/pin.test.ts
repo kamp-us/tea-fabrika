@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { Pinned, pinLine, pinnedScript, pinState, pinText } from "./pin.ts";
 
 const commit = fc.stringMatching(/^[0-9a-f]{40}$/);
+
 const folder = fc.string({ minLength: 1 });
+
 const pinned = fc.record({ commit, folder }).map((p) => Pinned.make(p));
 
 describe("pinState", () => {

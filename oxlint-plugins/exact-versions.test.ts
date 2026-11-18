@@ -4,10 +4,14 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "@effect/vitest";
+import { Array as Arr, pipe, Record as Rec, Schema } from "effect";
+import * as fc from "fast-check";
 
 const SCRIPT = join(import.meta.dirname, "exact-versions.ts");
+
 const home = mkdtempSync(join(tmpdir(), "exact-versions-"));
+
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 let trees = 0;
@@ -19,7 +23,7 @@ const run = (files: Readonly<Record<string, string>>, untracked: readonly string
   mkdirSync(tree);
   spawnSync("git", ["init", "-q"], { cwd: tree });
 
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(tree, path)), { recursive: true });
     writeFileSync(join(tree, path), text);
 
@@ -29,6 +33,7 @@ const run = (files: Readonly<Record<string, string>>, untracked: readonly string
   }
 
   const ran = spawnSync("node", [SCRIPT, tree], { encoding: "utf8" });
+
   return { status: ran.status, said: ran.stdout + ran.stderr };
 };
 
@@ -63,7 +68,6 @@ const BAD = [
   "workspace:^",
   "workspace:~",
   "workspace:1.2.3",
-  "catalog:other",
   "git+https://example.com/a.git",
   "github:a/b",
   "file:../a",
@@ -92,6 +96,7 @@ describe("a package.json", () => {
     const { status, said } = run({
       "package.json": JSON.stringify({ pnpm: { overrides: { thing: "^1.2.3" } } }),
     });
+
     expect(status).toBe(1);
     expect(said).toContain('package.json: pnpm.overrides: thing: "^1.2.3"');
   });
@@ -100,6 +105,7 @@ describe("a package.json", () => {
     const { status, said } = run({
       "package.json": JSON.stringify({ overrides: { thing: { other: "^1.2.3" } } }),
     });
+
     expect(status).toBe(1);
     expect(said).toContain("package.json: overrides: thing:");
   });
@@ -115,6 +121,7 @@ describe("a package.json", () => {
     const { status, said } = run({
       "fixtures/toy/repo/package.json": JSON.stringify({ devDependencies: { thing: "^1.0.0" } }),
     });
+
     expect(status).toBe(1);
     expect(said).toContain("fixtures/toy/repo/package.json: devDependencies: thing:");
   });
@@ -127,6 +134,7 @@ describe("a package.json", () => {
       },
       ["scratch/package.json"],
     );
+
     expect(status).toBe(0);
   });
 
@@ -135,6 +143,7 @@ describe("a package.json", () => {
       "package.json": "{}",
       "results/98-package.json": JSON.stringify({ dependencies: { thing: "^1.0.0" } }),
     });
+
     expect(status).toBe(0);
   });
 });
@@ -162,6 +171,177 @@ describe("a pnpm-workspace.yaml", () => {
     const text = "packages:\n  - a\nsavePrefix: ''\ncatalog:\n  a: 1.2.3\noverrides:\n  b: 2.0.0\n";
     expect(run({ "pnpm-workspace.yaml": text }).status).toBe(0);
   });
+});
+
+// E1 (docs/plan/quests/tea-msg-tag-PLAN.md): a named catalog's pointer is exact too, since its entry
+// is checked exact in pnpm-workspace.yaml's `catalogs.<name>`. Today's version sits on `catalog:old`.
+// Plant (a): `POINTERS` left as it was, so `catalog:old` is refused. Plant (b): a pointer pattern that
+// takes any text after `catalog:`, so `catalog:^1` passes. Each run holds every case below at once,
+// so 10 runs reach them all.
+describe("a named catalog's pointer", () => {
+  const runs = { seed: 119120, numRuns: 10 };
+
+  // A plain name, one with a digit and one with a dash, so each is reached in every run.
+  const names = fc
+    .tuple(
+      fc.stringMatching(/^[a-z]{1,8}$/),
+      fc.stringMatching(/^[a-z][a-z]{0,3}[0-9][a-z0-9]{0,3}$/),
+      fc.stringMatching(/^[a-z][a-z0-9]{0,3}-[a-z0-9]{1,4}$/),
+    )
+    .map((drawn) => [...new Set(drawn)]);
+
+  /** Each name a catalog holding `thing` at `version`, and one package naming each by its pointer. */
+  const tree = (all: readonly string[], version: string) => ({
+    "pnpm-workspace.yaml": `catalogs:\n${pipe(
+      all,
+      Arr.map((name) => `  ${name}:\n    thing: ${version}\n`),
+      Arr.join(""),
+    )}`,
+    "packages/one/package.json": JSON.stringify({
+      dependencies: Rec.fromEntries(Arr.map(all, (name, i) => [`thing${i}`, `catalog:${name}`])),
+    }),
+  });
+
+  it("passes `catalog:<name>` for any lower-case name whose catalog is exact", () => {
+    fc.assert(
+      fc.property(names, (all) => {
+        expect(run(tree(all, "1.2.3"))).toEqual({ status: 0, said: expect.stringContaining("every version exact") });
+      }),
+      runs,
+    );
+  });
+
+  it("refuses a range inside that named catalog, naming it", () => {
+    fc.assert(
+      fc.property(names, (all) => {
+        const { status, said } = run(tree(all, "^1.2.3"));
+        expect(status).toBe(1);
+
+        for (const name of all) {
+          expect(said).toContain(`pnpm-workspace.yaml: catalogs.${name}: thing: "^1.2.3"`);
+        }
+      }),
+      runs,
+    );
+  });
+
+  // Everything after `catalog:` that is not one lower-case name, and the name alone as a bare tag.
+  const notNames = (name: string): readonly string[] => [
+    "catalog:^1",
+    `catalog:^${name}`,
+    `catalog:~${name}`,
+    `catalog: ${name}`,
+    `catalog:${name} `,
+    `catalog:${name.toUpperCase()}`,
+    `catalog:1${name}`,
+    `catalog:-${name}`,
+    `catalog:${name}/x`,
+    `catalog:${name}@1.2.3`,
+    `catalog:${name}:${name}`,
+    `catalog:${name}.x`,
+    `catalog:${name}_x`,
+    "catalog:*",
+    name,
+  ];
+
+  it("still refuses `catalog:^1`, `catalog: <name>`, any other text after `catalog:`, and a bare tag", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/), (name) => {
+        const bad = notNames(name);
+
+        const { status, said } = run({
+          "pnpm-workspace.yaml": `catalogs:\n  ${name}:\n    thing: 1.2.3\n`,
+          "packages/one/package.json": JSON.stringify({
+            dependencies: Rec.fromEntries(Arr.map(bad, (version, i) => [`thing${i}`, version])),
+          }),
+        });
+
+        expect(status).toBe(1);
+
+        for (const [i, version] of bad.entries()) {
+          expect(said).toContain(`packages/one/package.json: dependencies: thing${i}: ${JSON.stringify(version)}`);
+        }
+      }),
+      runs,
+    );
+  });
+});
+
+// P3 (slice 1 of the kalfa program plan): a `patchedDependencies` row is keyed on one exact
+// version, never a bare name or a range, which pnpm would apply to whatever version it installs, a
+// later release included. A row at a version nothing installs is pnpm's own refusal, so this check
+// passes it: the install fails with ERR_PNPM_UNUSED_PATCH, which is how the bump that takes demlik's
+// next release finds tea's old 0.29.0 row (0569, and 0040: the existing tool wins). Plants, each run
+// once: (a) `inWorkspace` reads no `patchedDependencies`; (b) `refusedPatches` takes any text after
+// the `@` as a version; (c) a row at a version no catalog pins is refused, as pnpm already does.
+describe("a patchedDependencies row", () => {
+  const Lower = Schema.String.check(Schema.isPattern(/^[a-z]{1,6}$/));
+  const Part = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 }));
+  const Version = Schema.Struct({ major: Part, minor: Part, patch: Part });
+  const Package = { name: Lower, scope: Lower, scoped: Schema.Boolean };
+
+  /** Every range or tag form a row could be keyed on, each one checked in every run. */
+  const RANGES = ["^", "~", ">=", "*", "latest", "1.x", " || 9.9.9", "workspace:*"];
+
+  const exact = ({ major, minor, patch }: typeof Version.Type) => `${major}.${minor}.${patch}`;
+
+  /** One package name per suffix, scoped or not, so the keys of one workspace never collide. */
+  const named = ({ name, scope, scoped }: { name: string; scope: string; scoped: boolean }, suffix: string) =>
+    scoped ? `@${scope}/${name}${suffix}` : `${name}${suffix}`;
+
+  const workspace = (pins: readonly (readonly [string, string])[], keys: readonly string[]) =>
+    [
+      "catalog:",
+      ...Arr.map(pins, ([key, version]) => `  '${key}': ${version}`),
+      "patchedDependencies:",
+      ...Arr.map(keys, (key, i) => `  '${key}': patches/${i}.patch`),
+      "",
+    ].join("\n");
+
+  it.prop(
+    "passes a row keyed on one exact version, the catalog's or one no catalog pins, which pnpm refuses at install",
+    { ...Package, pinned: Version, patched: Version },
+    (drawn) => {
+      const [a, b] = [named(drawn, "a"), named(drawn, "b")];
+
+      const pins = [
+        [a, exact(drawn.pinned)],
+        [b, exact(drawn.pinned)],
+      ] as const;
+
+      const keys = [`${a}@${exact(drawn.pinned)}`, `${b}@${exact(drawn.patched)}`];
+      expect(run({ "pnpm-workspace.yaml": workspace(pins, keys) })).toEqual({
+        status: 0,
+        said: expect.stringContaining("every version exact"),
+      });
+    },
+    { arbitrary: { runs: 10 } },
+  );
+
+  it.prop(
+    "refuses a bare name, each range form and an empty version, naming each, and passes the exact row beside them",
+    { ...Package, version: Version },
+    (drawn) => {
+      const good = `${named(drawn, "a")}@${exact(drawn.version)}`;
+
+      const bad = [
+        named(drawn, "b"),
+        `${named(drawn, "c")}@`,
+        ...Arr.map(RANGES, (range, i) => `${named(drawn, `r${i}`)}@${range}${exact(drawn.version)}`),
+        ...Arr.map(RANGES, (range, i) => `${named(drawn, `t${i}`)}@${range}`),
+      ];
+
+      const { status, said } = run({ "pnpm-workspace.yaml": workspace([], [good, ...bad]) });
+      expect(status).toBe(1);
+
+      for (const key of bad) {
+        expect(said).toContain(`pnpm-workspace.yaml: patchedDependencies: ${key}:`);
+      }
+
+      expect(said).not.toContain(`pnpm-workspace.yaml: patchedDependencies: ${good}:`);
+    },
+    { arbitrary: { runs: 10 } },
+  );
 });
 
 describe("what must never read as clean", () => {

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-decision-0081-says-its-sweep-is-owed",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0081-no-question-word-names.md",
+    "line": 144
+  },
+  "says": "Decision 0081's Consequences still say its sweep is owed and that the five words stay in the code until it lands, while its own Decision, as rewritten in records cleanup slice 2, says the sweep renamed the lint rule and the native rule holds all five words.",
+  "proof": ".decisions/0081-no-question-word-names.md:144-145 reads \"One sweep is owed, under ticket 682 ... Until it lands, the five words stay in the code\"; :73-74 of the same file reads \"(ticket 337 wrote it as `no-why-key`, and the sweep renamed it)\"; .oxlintrc.json:671 is `\"eslint/id-denylist\": [\"error\", \"where\", \"why\", \"what\", \"who\", \"how\"]`; commit e983ddef0 is \"T682: a question word is never a name in next/ and the lead tooling (#910)\".",
+  "cost": "A reader may plan a sweep that already landed, or think the five words are still allowed in next/ and .agents/.",
+  "head": "8e3ee0e254f26d63937cf8838fea2bd1782ca87f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1629"
+}

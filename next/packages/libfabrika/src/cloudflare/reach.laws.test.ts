@@ -8,6 +8,7 @@ import { reach } from "./reach.ts";
 import { recordStub, type Env } from "./runtime.ts";
 
 const unreachable = (cause: RpcCallError) => new SinkError({ reason: "unreachable", held: 0, cause });
+
 const Method = Schema.Literals(["write", "read", "content", "deleteContent"]);
 
 it.effect.prop(
@@ -50,13 +51,17 @@ it.effect.prop(
     Effect.gen(function* () {
       for (const typed of [true, false]) {
         const calls: Array<string> = [];
+
         const answer = (method: string) => {
           calls.push(method);
+
           // Platform RPC boundary: resolve the bridge envelope or reject the transport call.
           return typed
             ? Promise.resolve({ _tag: ErrorTag, error: encodeRpcError(new SinkError({ reason, held })) })
             : Promise.reject(thrown);
         };
+
+        // SAFETY: `recordStub` reaches only RECORD's `getByName`, whose four methods are doubled below.
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: only RECORD.getByName is consumed by recordStub; other platform handles are unused
         const env = {
           RECORD: {
@@ -68,9 +73,11 @@ it.effect.prop(
             }),
           },
         } as unknown as Env;
+
         yield* Effect.gen(function* () {
           const records = yield* RecordManager;
           const chain = Chain.cases.spans.make({});
+
           const operations: Array<Effect.Effect<unknown, SinkError>> = [
             records.write(chain, 0, []),
             Stream.runCollect(records.read(chain)),

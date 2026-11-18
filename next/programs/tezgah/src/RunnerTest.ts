@@ -12,11 +12,21 @@
 // workspace, whose first tile tezgah starts itself. Every move is picked from tezgah's view as it
 // stands: a split from a live tile, a close of a live tile.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Predicate, Schema, type Scope } from "effect";
+import { Array as Arr, Effect, Formatter, Option, Predicate, Schema } from "effect";
+import type { Scope } from "effect";
 import * as fc from "fast-check";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  attach: {},
+  did: {},
+});
+
 const SEED = 119120;
+
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
+
 /** How long a wait on the instance may take before the law fails with what it last saw. */
 const WAIT = 60;
 
@@ -39,7 +49,7 @@ const typeId = (prefix: string, n: number): string => {
  *  state: whether it is live now, and the exit reasons of its lives that exited. */
 export type Open = Effect.Effect<
   {
-    readonly send: (m: unknown) => Effect.Effect<unknown>;
+    readonly send: (m: Schema.Json) => Effect.Effect<unknown>;
     readonly view: Effect.Effect<unknown>;
     readonly process: (
       name: string,
@@ -56,32 +66,43 @@ const Answer = Schema.TaggedUnion({
   error: { reason: Schema.String },
 });
 
-const answered = (u: unknown) => Schema.decodeUnknownSync(Answer)(u);
+const answered = Schema.decodeUnknownSync(Answer);
 
 /** The keybindings note's Via, as the window sends it. */
 const Via = Schema.TaggedUnion({ key: { keys: Schema.String } });
 
+/** What the law reads of a layout: a tile's id, or a container's parts, each holding a layout. */
+type Node = string | { readonly parts: ReadonlyArray<{ readonly inner: Node }> };
+
+const Node: Schema.Codec<Node> = Schema.Union([
+  Schema.String,
+  Schema.Struct({ parts: Schema.Array(Schema.Struct({ inner: Schema.suspend((): Schema.Codec<Node> => Node) })) }),
+]);
+
 /** What the law reads of tezgah's view: each workspace's tiles in reading order, and each tile. */
 const View = Schema.Struct({
-  workspaces: Schema.Array(Schema.Struct({ n: Schema.Int, layout: Schema.Unknown })),
+  workspaces: Schema.Array(Schema.Struct({ n: Schema.Int, layout: Node })),
   tiles: Schema.Array(Schema.Struct({ id: Schema.String, shows: Schema.String, child: Schema.Boolean })),
 });
+
 type View = typeof View.Type;
 
-const order = (node: unknown): ReadonlyArray<string> =>
-  Predicate.isString(node)
-    ? [node]
-    : Predicate.hasProperty(node, "parts") && Array.isArray(node.parts)
-      ? node.parts.flatMap((p: unknown) => (Predicate.hasProperty(p, "inner") ? order(p.inner) : []))
-      : [];
+const order = (node: Node): ReadonlyArray<string> =>
+  Predicate.isString(node) ? [node] : Arr.flatMap(node.parts, (p) => order(p.inner));
 
-const tilesOn = (v: View, n: number) => {
-  const space = v.workspaces.find((w) => w.n === n);
-  return space === undefined ? [] : order(space.layout).flatMap((id) => v.tiles.filter((t) => t.id === id));
-};
+const tilesOn = (v: View, n: number) =>
+  Option.match(
+    Arr.findFirst(v.workspaces, (w) => w.n === n),
+    {
+      onNone: () => [],
+      onSome: (space) => Arr.flatMap(order(space.layout), (id) => Arr.filter(v.tiles, (t) => t.id === id)),
+    },
+  );
 
 const via = Schema.encodeSync(Via)(Via.cases.key.make({ keys: "ctrl+b x" }));
+
 let minted = 0;
+
 const fresh = () => typeId("tile", 70_000 + ++minted);
 
 type Live = Effect.Success<Open>;
@@ -101,7 +122,7 @@ const until = <A>(label: string, look: Effect.Effect<A>, done: (a: A) => boolean
       yield* Effect.sleep("1 second");
     }
 
-    return yield* Effect.die(new Error(`${label}: no answer in ${WAIT} s; last saw ${JSON.stringify(last)}`));
+    return yield* Effect.die(new Error(`${label}: no answer in ${WAIT} s; last saw ${Formatter.format(last)}`));
   });
 
 const readView = (live: Live) => Effect.map(live.view, (v) => Schema.decodeUnknownSync(View)(v));
@@ -124,26 +145,30 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
   if (m.kind !== "close") {
     const tile = fresh();
     const does = m.kind === "split_right" ? "tezgah.split_right" : "tezgah.split_down";
-    expect(answered(yield* live.send({ type: "did", does, from: from.id, via, tile }))._tag).toBe("accepted");
-    yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
-      tilesOn(v, n).some((t) => t.id === tile),
+    expect(answered(yield* live.send({ ...Tag.cases.did.make({}), does, from: from.id, via, tile }))._tag).toBe(
+      "accepted",
     );
+    yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
+      Arr.some(tilesOn(v, n), (t) => t.id === tile),
+    );
+
     return;
   }
 
   const was = yield* live.process(from.shows);
-  const answer = answered(yield* live.send({ type: "did", does: "tezgah.close", from: from.id, via }));
+  const answer = answered(yield* live.send({ ...Tag.cases.did.make({}), does: "tezgah.close", from: from.id, via }));
 
   if (tiles.length === 1) {
     expect(answer, "the last tile of a workspace never closes").toEqual(
       Answer.cases.refused.make({ reason: "last_tile" }),
     );
+
     return;
   }
 
   expect(answer._tag).toBe("accepted");
-  yield* until(`the close of ${from.id}`, readView(live), (v) => !tilesOn(v, n).some((t) => t.id === from.id));
-  const others = before.tiles.filter((t) => t.id !== from.id);
+  yield* until(`the close of ${from.id}`, readView(live), (v) => !Arr.some(tilesOn(v, n), (t) => t.id === from.id));
+  const others = Arr.filter(before.tiles, (t) => t.id !== from.id);
 
   seen[from.child ? "child" : "other"]++;
 
@@ -152,7 +177,7 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
     expect(ended.exited.length, `L8: one more exit for ${from.shows}`).toBe(was.exited.length + 1);
     expect(
       Predicate.isTagged(ended.exited.at(-1), "shutdown"),
-      `L8: ${from.shows}, a tile tezgah started, ends with shutdown, not ${JSON.stringify(ended.exited.at(-1))}`,
+      `L8: ${from.shows}, a tile tezgah started, ends with shutdown, not ${Formatter.format(ended.exited.at(-1))}`,
     ).toBe(true);
   } else {
     // A stop takes its turn within a second on a quiet instance; give it three before reading.
@@ -189,7 +214,9 @@ export const suite = (open: Open) =>
 
             for (const [i, moves] of fc.sample(Moves, { seed: SEED, numRuns: RUNS }).entries()) {
               const n = i + 1;
-              expect(answered(yield* live.send({ type: "attach", workspace: n, tile: fresh() }))._tag).toBe("accepted");
+              expect(
+                answered(yield* live.send({ ...Tag.cases.attach.make({}), workspace: n, tile: fresh() }))._tag,
+              ).toBe("accepted");
               const first = yield* until(`workspace ${n}`, readView(live), (v) => tilesOn(v, n).length === 1);
 
               if (n === 1) {
@@ -213,7 +240,7 @@ export const suite = (open: Open) =>
 
             expect(
               seen.child > 0 && seen.other > 0,
-              `L8: the walks closed a tile tezgah started and one it did not ${JSON.stringify(seen)}`,
+              `L8: the walks closed a tile tezgah started and one it did not ${Formatter.format(seen)}`,
             ).toBe(true);
           }),
         ),

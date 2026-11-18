@@ -1,0 +1,17 @@
+{
+  "id": "2026-11-16-full-run-checklist-notice-timeout",
+  "date": "2026-11-16",
+  "quests": ["tea-fabrika#766"],
+  "stage": "ci",
+  "kind": "failure",
+  "what": "Main's full run after the docs-only script-port plan merged failed in next/'s checklist process-notice law. The law at checklist-instance.laws.integration.test.ts:671 timed out at 60000 ms. The pull request's own check passed. The full run stopped its other active legs.",
+  "cause": "Not yet known. The merged pull request changed only a plan and field records.",
+  "person": false,
+  "primitive": null,
+  "fix": "The incident lead received the exact law and run for repair routing. No timeout or assertion was changed.",
+  "test": "L13: each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44004679465",
+    "https://github.com/kamp-us/tea-fabrika/pull/1505"
+  ]
+}

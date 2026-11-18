@@ -10,24 +10,38 @@ export type World = {
   /** Each run's jobs, by run id. */
   readonly jobs: Map<number, ReadonlyArray<Job>>;
   readonly asked: Array<string>;
+  /** A refusal of new-proof guidance, without changing how existing runs are read. */
+  preflight: string | null;
 };
 
-export const world = (): World => ({ runs: new Map(), jobs: new Map(), asked: [] });
+export const world = (): World => ({ runs: new Map(), jobs: new Map(), asked: [], preflight: null });
 
 /** `failing`, when given, is the reason every read fails with. */
 export const layer = (w: World, failing?: string): Layer.Layer<Runs> => {
-  const fails = failing === undefined ? Effect.void : Effect.fail(new RunsError({ reason: failing }));
+  const fails = failing === undefined ? Effect.void : Effect.fail(RunsError.make({ reason: failing }));
+
   return Layer.succeed(
     Runs,
     Runs.of({
+      preflight: (branch, head) =>
+        Effect.gen(function* () {
+          w.asked.push(`preflight ${branch} ${head}`);
+          yield* fails;
+
+          if (w.preflight !== null) {
+            return yield* RunsError.make({ reason: w.preflight });
+          }
+        }),
       on: (workflow, branch) =>
         Effect.map(fails, () => {
           w.asked.push(`runs ${workflow} ${branch}`);
+
           return w.runs.get(branch) ?? [];
         }),
       jobs: (id) =>
         Effect.map(fails, () => {
           w.asked.push(`jobs ${id}`);
+
           return w.jobs.get(id) ?? [];
         }),
     }),

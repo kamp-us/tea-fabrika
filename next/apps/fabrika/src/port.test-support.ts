@@ -14,6 +14,7 @@ import { createServer, type Server } from "node:net";
 import { Effect } from "effect";
 
 const FIRST = 20000;
+
 const PAIRS = 6000;
 
 // Start at a different pair per process, so parallel test files rarely meet at all. Then move on
@@ -53,6 +54,7 @@ export const heldPort = Effect.fn("port.heldPort")(function* () {
     }
 
     yield* close(free);
+
     return { port: lock + 1, release: close(held) };
   }
 

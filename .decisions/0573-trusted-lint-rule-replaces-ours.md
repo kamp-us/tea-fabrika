@@ -63,14 +63,16 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
     [0562](0562-nothing-teaches-the-wrong-shape.md). That file leaves open which rule holds the ban;
     this one says theirs.
   - `no-redacted-value`, to oxlint's `no-restricted-properties` on `Redacted.value`.
-  - `no-secret-env`, to the checker's `processEnv` and `processEnvInEffect`, folder by folder as each
-    reaches zero. Tests and tooling are not left out.
+  - ~~`no-secret-env`, to the checker's `processEnv` and `processEnvInEffect`, folder by folder as
+    each reaches zero. Tests and tooling are not left out.~~ Wrong: it stays, since theirs misses
+    a destructured read (amendment 2026-11-16, second).
   - `no-expect-in-if`, to oxlint's `vitest/no-conditional-expect`, folder by folder.
 - **Also go, where theirs is the same or wider:**
   - `no-implicit-effect-concurrency`, to the checker's `missingConcurrencyOption`, after
     `@effect/tsgo` moves to 0.69.0.
-  - `no-wall-clock` and `no-clock-in-view`, to the checker's `globalDate`, `globalDateInEffect`,
-    `globalRandom` and UUID checks.
+  - ~~`no-wall-clock` and `no-clock-in-view`, to the checker's `globalDate`, `globalDateInEffect`,
+    `globalRandom` and UUID checks.~~ Wrong: both stay, since theirs is narrower (amendment
+    2026-11-16).
   - `no-node-imports`, to oxlint's `import/no-nodejs-modules`.
   - `no-cause-squash` and `no-effect-run-outside-edge`, to oxlint's `no-restricted-properties` and
     `no-restricted-imports`.
@@ -119,3 +121,25 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
 ## Amendments
 
 - 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) overrides "`service-id` stays for now". The checker's `deterministicKeys` is an error and `service-id` is deleted.
+- 2026-11-15: `padding-line-between-statements` stays. The check this file asks for found that anti-slop's `require-readable-spacing` misses class-member lines (a method after a field, a method after a method), so it does not flag every line ours does. Upstream issue https://github.com/dmmulroy/anti-slop/issues/78, filed 2026-11-15.
+- 2026-11-16: `no-wall-clock` and `no-clock-in-view` stay, beside the checker's clock checks. The
+  list above put them under "theirs is the same or wider", and that was wrong. A probe in
+  `libfabrika/src/gateway`, run once with `globalDate`, `globalDateInEffect`, `globalRandom` and
+  `globalTimers` at error, flagged `Date.now()`, `new Date()`, `Math.random()` and
+  `crypto.randomUUID()`, but not `Date()`, `globalThis.Date()`, `performance.now()` or
+  `window.performance.now()`. Ours refuse all four (`oxlint-plugins/no-clock-in-view.ts`, its
+  `Date` call check and its `performance.now` set), and
+  `next/apps/fabrika/src/worker-mail.integration.test.ts` keeps a `performance.now()` that the
+  checker's zero recount passes. So this decision's own principle, ours stays wherever it catches
+  more, keeps both. The proof is the Effect sweep's E89 review row,
+  `field/runs/2026-11-16-effect-e89-review1.json` on `fabrikalfa/effect-e89`. Ruled by the merge
+  session's coordinator for E89, as an application of the owner's principle here, not a new call.
+- 2026-11-16, second: `no-secret-env` stays, beside the checker's `processEnv` and
+  `processEnvInEffect`. The list above sent it to them, and that was wrong. A probe with both
+  checks at error flagged `process.env.GITHUB_TOKEN`, `process.env["GITHUB_TOKEN"]` and
+  `process?.env.GITHUB_TOKEN`, but not `const { GITHUB_TOKEN } = process.env`, nor the same inside
+  `Effect.sync`. Ours refuses the destructured form (`oxlint-plugins/no-secret-env.ts`, its
+  `VariableDeclarator` handler), and it also runs on today's version, outside the checker. So this
+  decision's own principle keeps ours. The proof is the Effect sweep's E86 review row,
+  `field/runs/2026-11-16-effect-e86-review.json` on `fabrikalfa/effect-e86`. It applies the owner's
+  principle, as the first 2026-11-16 amendment did, and is not a new call.

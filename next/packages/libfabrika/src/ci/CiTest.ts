@@ -1,7 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
@@ -61,6 +64,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
       const reports = new Map<string, Map<string, Report>>();
       const started = new Set<string>();
       const faults: Record<"start" | "at", Array<Fault>> = { start: [], at: [] };
+
       const failure = (method: "start" | "at") =>
         Effect.suspend(() => {
           const fault = faults[method].shift();
@@ -68,7 +72,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           const cause = new Error(options.token === undefined ? "scripted CI failure" : Redacted.value(options.token));
 
           if (fault?.kind === "fault") {
-            return Effect.fail(new CiError({ reason: new reasons[fault.reason]({ cause }) }));
+            return Effect.fail(CiError.make({ reason: reasons[fault.reason].make({ cause }) }));
           }
 
           if (fault?.kind === "defect") {
@@ -81,6 +85,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
 
           return Effect.void;
         });
+
       const service = Ci.of({
         start: (commit) =>
           failure("start").pipe(
@@ -97,8 +102,11 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const groups: Array<Array<Report>> = [];
 
                 for (const report of reports.get(commit)?.values() ?? []) {
-                  const group = groups.find(
-                    (g) => g[0]?.run.name === report.run.name && g[0]?.run.source === report.run.source,
+                  const group = Option.getOrUndefined(
+                    Arr.findFirst(
+                      groups,
+                      (g) => g[0]?.run.name === report.run.name && g[0]?.run.source === report.run.source,
+                    ),
                   );
 
                   if (group === undefined) {
@@ -108,10 +116,11 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                   }
                 }
 
-                return groups.map((group) => {
-                  const unplaced = group.filter((r) => r.order === null);
+                return Arr.map(groups, (group) => {
+                  const unplaced = Arr.filter(group, (r) => r.order === null);
                   const candidates = unplaced.length > 0 ? unplaced : group;
-                  const selected = candidates.reduce((a, b) => {
+
+                  const selected = Arr.reduce(Arr.drop(candidates, 1), item(candidates, 0), (a, b) => {
                     if (unplaced.length === 0 && a.order !== b.order) {
                       return (a.order ?? 0) > (b.order ?? 0) ? a : b;
                     }
@@ -122,12 +131,14 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
 
                     return a.run.id > b.run.id ? a : b;
                   });
+
                   return unplaced.length > 0 ? { ...selected.run, status: Status.cases.queued.make({}) } : selected.run;
                 });
               }),
             ),
           ),
       });
+
       return Context.make(Ci, service).pipe(
         Context.add(Control, {
           report: (report: Report) =>
@@ -170,21 +181,27 @@ const order = fc.option(fc.integer({ min: -2, max: 3 }), { nil: null });
 
 // The oracle filters candidates by the written order, rather than using the Layer's reduction.
 const expected = (reports: ReadonlyArray<Report>, commit: string) => {
-  const latest = reports.filter(
+  const latest = Arr.filter(
+    reports,
     (r, i) =>
       r.commit === commit &&
-      !reports.slice(i + 1).some((later) => later.commit === commit && later.run.id === r.run.id),
+      !Arr.some(reports.slice(i + 1), (later) => later.commit === commit && later.run.id === r.run.id),
   );
-  const keys = latest.filter(
-    (r, i) => !latest.slice(0, i).some((p) => p.run.name === r.run.name && p.run.source === r.run.source),
+
+  const keys = Arr.filter(
+    latest,
+    (r, i) => !Arr.some(latest.slice(0, i), (p) => p.run.name === r.run.name && p.run.source === r.run.source),
   );
-  return keys.map(({ run: key }) => {
-    const group = latest.filter((r) => r.run.name === key.name && r.run.source === key.source);
-    const unknown = group.filter((r) => r.order === null);
+
+  return Arr.map(keys, ({ run: key }) => {
+    const group = Arr.filter(latest, (r) => r.run.name === key.name && r.run.source === key.source);
+    const unknown = Arr.filter(group, (r) => r.order === null);
+
     const pool =
       unknown.length > 0
         ? unknown
-        : group.filter((r) => r.order === Math.max(...group.map((p) => p.order ?? -Infinity)));
+        : Arr.filter(group, (r) => r.order === Math.max(...Arr.map(group, (p) => p.order ?? -Infinity)));
+
     const priority = (r: typeof CheckRun.Type) =>
       r.status._tag !== "done"
         ? 4
@@ -193,12 +210,14 @@ const expected = (reports: ReadonlyArray<Report>, commit: string) => {
           : ["cancelled", "startup_failure"].includes(r.status.conclusion)
             ? 2
             : 1;
+
     const worst =
-      unknown.length > 0 ? pool : pool.filter((r) => priority(r.run) === Math.max(...pool.map((p) => priority(p.run))));
-    const winner = item(
-      worst.toSorted((a, b) => (a.run.id < b.run.id ? 1 : -1)),
-      0,
-    );
+      unknown.length > 0
+        ? pool
+        : Arr.filter(pool, (r) => priority(r.run) === Math.max(...Arr.map(pool, (p) => priority(p.run))));
+
+    const winner = item(Arr.sort(worst, Order.flip(Order.mapInput(Order.String, (r: Report) => r.run.id))), 0);
+
     return unknown.length > 0 ? { ...winner.run, status: Status.cases.queued.make({}) } : winner.run;
   });
 };
@@ -212,7 +231,9 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
   describe("C2: the CI contract", () => {
     it("reports replace their id; selection is current, pessimistic and confined to the commit", () => {
       type Model = { reports: Array<Report>; commits: Array<string>; starts: Set<string> };
+
       type Real = { ci: Ci["Service"]; control: Control["Service"] };
+
       const command = fc
         .record({ move: fc.nat(), pick: fc.nat(), report: run, order, commit: word })
         .map((cell): fc.Command<Model, Real> => ({
@@ -226,6 +247,7 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
 
             if (cell.move % 3 === 0) {
               const old = m.reports[cell.pick % Math.max(1, m.reports.length)];
+
               const report: Report = {
                 commit,
                 order: cell.order,
@@ -239,6 +261,7 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
                       }
                     : cell.report,
               };
+
               m.reports.push(report);
               sync(r.control.report(report));
             } else if (cell.move % 3 === 1) {
@@ -256,52 +279,53 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
           },
           toString: () => JSON.stringify(cell),
         }));
+
       fc.assert(
         fc.property(fc.commands([command], { maxCommands: 45 }), run, (commands, first) => {
-          sync(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const context = yield* Layer.build(testLayer);
-                const real = { ci: Context.get(context, Ci), control: Context.get(context, Control) };
-                expect(yield* real.ci.at("empty")).toEqual([]);
-                const reports: Array<Report> = [];
+          Effect.gen(function* () {
+            const context = yield* Layer.build(testLayer);
+            const real = { ci: Context.get(context, Ci), control: Context.get(context, Control) };
+            expect(yield* real.ci.at("empty")).toEqual([]);
+            const reports: Array<Report> = [];
 
-                for (const [index, [name, source]] of (
-                  [
-                    ["a\u0000b", "c"],
-                    ["a", "b\u0000c"],
-                  ] as const
-                ).entries()) {
-                  const report = {
-                    commit: "commit",
-                    order: 0,
-                    run: { ...first, id: String(index), name, source },
-                  };
-                  reports.push(report);
-                  yield* real.control.report(report);
-                }
+            for (const [index, [name, source]] of (
+              [
+                ["a\u0000b", "c"],
+                ["a", "b\u0000c"],
+              ] as const
+            ).entries()) {
+              const report = {
+                commit: "commit",
+                order: 0,
+                run: { ...first, id: String(index), name, source },
+              };
 
-                fc.modelRun(
-                  () => ({ model: { reports, commits: ["commit", "empty"], starts: new Set<string>() }, real }),
-                  commands,
-                );
-                expect(Schema.is(Checks)(yield* real.ci.at("commit"))).toBe(true);
-                const latest = reports.filter(
-                  (r, i) => !reports.slice(i + 1).some((p) => p.commit === r.commit && p.run.id === r.run.id),
-                );
-                const second = yield* Layer.build(testLayer);
-                const control = Context.get(second, Control);
+              reports.push(report);
+              yield* real.control.report(report);
+            }
 
-                for (const report of latest.toReversed()) {
-                  yield* control.report(report);
-                }
+            fc.modelRun(
+              () => ({ model: { reports, commits: ["commit", "empty"], starts: new Set<string>() }, real }),
+              commands,
+            );
+            expect(Schema.is(Checks)(yield* real.ci.at("commit"))).toBe(true);
 
-                for (const commit of new Set(reports.map((r) => r.commit))) {
-                  expect(sorted(yield* Context.get(second, Ci).at(commit))).toEqual(sorted(yield* real.ci.at(commit)));
-                }
-              }),
-            ),
-          );
+            const latest = Arr.filter(
+              reports,
+              (r, i) => !Arr.some(reports.slice(i + 1), (p) => p.commit === r.commit && p.run.id === r.run.id),
+            );
+
+            const second = yield* Layer.build(testLayer);
+            const control = Context.get(second, Control);
+
+            for (const report of Arr.reverse(latest)) {
+              yield* control.report(report);
+            }
+
+            for (const commit of new Set(Arr.map(reports, (r) => r.commit))) {
+              expect(sorted(yield* Context.get(second, Ci).at(commit))).toEqual(sorted(yield* real.ci.at(commit)));
+            }
+          }).pipe(Effect.scoped, sync);
         }),
         { seed: 119120, numRuns: 200 },
       );

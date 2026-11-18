@@ -7,7 +7,7 @@
 // shared with every window; a program's box takes them from the library's root, as every name.
 import { Machine } from "@demlik/tea/effect";
 import { Layout, Program, type Refusal, StartChild, type Started, Workspace } from "@kampus/libfabrika";
-import { Schema } from "effect";
+import { Array as Arr, String as Str, Option, Schema } from "effect";
 
 /** The program a new tile shows. A constant until programs read pack settings (P38 slice 5); then
  *  it is the pack's `tezgah.new`, and `fabrika/fabsh` its default once the shell lands. */
@@ -38,10 +38,9 @@ const Leaves = Schema.optionalKey(Schema.NullOr(Workspace.CursorKey));
 
 const Msg = Schema.Union([
   /** A window's first look at workspace `workspace`: makes it, with `tile` first, when it is missing. */
-  Schema.Struct({ type: Schema.Literal("attach"), workspace: Schema.Int, tile: Workspace.TileId }),
+  Schema.TaggedStruct("attach", { workspace: Schema.Int, tile: Workspace.TileId }),
   /** A split, given in tile `from`; `tile` is the new tile's id, minted by the window. */
-  Schema.Struct({
-    type: Schema.Literal("did"),
+  Schema.TaggedStruct("did", {
     does: Schema.Literals(["tezgah.split_right", "tezgah.split_down"]),
     from: Workspace.TileId,
     via: Via,
@@ -50,8 +49,7 @@ const Msg = Schema.Union([
   }),
   /** A focus move from tile `from` to tile `to`, which the window worked out on its own drawn
    *  layout and sends absolute (0278); tezgah takes moves in arrival order, never by `sentAt`. */
-  Schema.Struct({
-    type: Schema.Literal("did"),
+  Schema.TaggedStruct("did", {
     does: Schema.Literals(FOCUS),
     from: Workspace.TileId,
     to: Workspace.TileId,
@@ -59,13 +57,13 @@ const Msg = Schema.Union([
     cursor: Leaves,
   }),
   /** A close of tile `from`. */
-  Schema.Struct({
-    type: Schema.Literal("did"),
+  Schema.TaggedStruct("did", {
     does: Schema.Literal("tezgah.close"),
     from: Workspace.TileId,
     via: Via,
   }),
 ]);
+
 type Msg = typeof Msg.Type;
 
 /** A start tezgah asked for and waits on: a workspace's first tile, or a split's new tile. As on the
@@ -80,6 +78,7 @@ const Starting = Schema.TaggedUnion({
     name: Schema.String,
   },
 });
+
 type Starting = typeof Starting.Type;
 
 const Model = Schema.Struct({
@@ -89,6 +88,7 @@ const Model = Schema.Struct({
   next: Schema.Int,
   starting: Schema.Array(Starting),
 });
+
 type Model = typeof Model.Type;
 
 type Step = readonly [
@@ -99,19 +99,20 @@ type Step = readonly [
 const DIRS = { "tezgah.split_right": "row", "tezgah.split_down": "column" } as const;
 
 const holding = (m: Model, tile: string) =>
-  m.workspaces.find((w) => Layout.order(w.layout).includes(tile as Workspace.TileId));
+  Arr.findFirst(m.workspaces, (w) => Arr.some(Layout.order(w.layout), (id) => id === tile));
 
-const known = (m: Model, tile: string) => m.tiles.some((t) => t.id === tile) || m.starting.some((s) => s.tile === tile);
+const known = (m: Model, tile: string) =>
+  Arr.some(m.tiles, (t) => t.id === tile) || Arr.some(m.starting, (s) => s.tile === tile);
 
 const exists = (m: Model, n: number) =>
-  m.workspaces.some((w) => w.n === n) || m.starting.some((s) => s._tag === "attach" && s.workspace === n);
+  Arr.some(m.workspaces, (w) => w.n === n) || Arr.some(m.starting, (s) => s._tag === "attach" && s.workspace === n);
 
 /** A workspace takes its first tile's id body: windows mint ids, and tezgah mints none. */
 const workspaceId = Schema.decodeSync(Workspace.WorkspaceId);
 
 /** `from`'s tile keeps the cursor a letter leaves on it, when the letter carries one. */
 const leaving = (m: Model, from: Workspace.TileId, cursor: string | null | undefined): Model =>
-  cursor === undefined ? m : { ...m, tiles: m.tiles.map((t) => (t.id === from ? { ...t, cursor } : t)) };
+  cursor === undefined ? m : { ...m, tiles: Arr.map(m.tiles, (t) => (t.id === from ? { ...t, cursor } : t)) };
 
 /** The tile a start's answer makes, numbered next. */
 const made = (m: Model, s: Starting, answer: Started): Workspace.Tile => ({
@@ -127,33 +128,41 @@ const made = (m: Model, s: Starting, answer: Started): Workspace.Tile => ({
 /** A start answered: a first tile makes its workspace; a split's tile goes after its tile, or after
  *  the focused one when its tile closed while the start waited (plan amendment, 2026-11-14). */
 const placed = (m: Model, s: Starting, answer: Started): Model => {
-  const rest = { ...m, starting: m.starting.filter((x) => x !== s) };
+  const rest = { ...m, starting: Arr.filter(m.starting, (x) => x !== s) };
 
   if (s._tag === "attach") {
-    if (m.workspaces.some((w) => w.n === s.workspace)) {
+    if (Arr.some(m.workspaces, (w) => w.n === s.workspace)) {
       return rest;
     }
 
+    const body = Option.match(Str.lastIndexOf("_")(s.tile), {
+      onNone: () => s.tile,
+      onSome: (underscore) => Str.slice(underscore + 1)(s.tile),
+    });
+
     const space = Workspace.Workspace.make({
-      id: workspaceId(`workspace_${s.tile.slice(s.tile.lastIndexOf("_") + 1)}`),
+      id: workspaceId(`workspace_${body}`),
       n: s.workspace,
       layout: s.tile,
       focus: s.tile,
       recent: [s.tile],
     });
+
     return { ...rest, workspaces: [...m.workspaces, space], tiles: [...m.tiles, made(m, s, answer)], next: m.next + 1 };
   }
 
-  const w = m.workspaces.find((x) => x.id === s.space);
+  const found = Arr.findFirst(m.workspaces, (x) => x.id === s.space);
 
-  if (w === undefined) {
+  if (Option.isNone(found)) {
     return rest;
   }
 
+  const w = found.value;
   const at = Layout.order(w.layout).includes(s.at) ? s.at : w.focus;
+
   return {
     ...rest,
-    workspaces: m.workspaces.map((x) => (x === w ? Layout.split(w, at, s.dir, s.tile) : x)),
+    workspaces: Arr.map(m.workspaces, (x) => (x === w ? Layout.split(w, at, s.dir, s.tile) : x)),
     tiles: [...m.tiles, made(m, s, answer)],
     next: m.next + 1,
   };
@@ -171,6 +180,7 @@ export const tezgahMachine = Machine.make({
       }
 
       const name = msg.workspace === 1 ? FIRST : Workspace.childName(NEW_TILE, msg.tile);
+
       return [
         {
           ...m,
@@ -180,31 +190,39 @@ export const tezgahMachine = Machine.make({
       ];
     },
     did: (m, msg): Step => {
-      const w = holding(m, msg.from);
+      const found = holding(m, msg.from);
 
-      if (w === undefined) {
+      if (Option.isNone(found)) {
         return [m, []];
       }
 
+      const w = found.value;
+
       if (msg.does === "tezgah.close") {
-        const shown = m.tiles.find((t) => t.id === msg.from);
+        const shown = Arr.findFirst(m.tiles, (t) => t.id === msg.from);
+
         return [
           {
             ...m,
-            workspaces: m.workspaces.map((x) => (x === w ? Layout.remove(w, msg.from) : x)),
-            tiles: m.tiles.filter((t) => t.id !== msg.from),
+            workspaces: Arr.map(m.workspaces, (x) => (x === w ? Layout.remove(w, msg.from) : x)),
+            tiles: Arr.filter(m.tiles, (t) => t.id !== msg.from),
           },
-          shown?.child === true ? [StartChild.stopChild({ name: shown.shows })] : [],
+          Option.isSome(shown) && shown.value.child ? [StartChild.stopChild({ name: shown.value.shows })] : [],
         ];
       }
 
       // A focus move: the only letter that names a `to`.
       if ("to" in msg) {
         const moved = leaving(m, msg.from, msg.cursor);
-        return [{ ...moved, workspaces: moved.workspaces.map((x) => (x === w ? Layout.focus(w, msg.to) : x)) }, []];
+
+        return [
+          { ...moved, workspaces: Arr.map(moved.workspaces, (x) => (x === w ? Layout.focus(w, msg.to) : x)) },
+          [],
+        ];
       }
 
       const name = Workspace.childName(NEW_TILE, msg.tile);
+
       const split = Starting.cases.split.make({
         space: w.id,
         at: msg.from,
@@ -212,17 +230,19 @@ export const tezgahMachine = Machine.make({
         tile: msg.tile,
         name,
       });
+
       return [
         { ...leaving(m, msg.from, msg.cursor), starting: [...m.starting, split] },
         [StartChild.startChild({ program: NEW_TILE, name })],
       ];
     },
     start_child_ok: (m, msg): Step => {
-      const s = m.starting.find((x) => x.name === msg.cmd.name);
-      return s === undefined ? [m, []] : [placed(m, s, msg.value), []];
+      const s = Arr.findFirst(m.starting, (x) => x.name === msg.cmd.name);
+
+      return Option.isNone(s) ? [m, []] : [placed(m, s.value, msg.value), []];
     },
     // A refused start drops what waited on it, and nothing else changes.
-    start_child_err: (m, msg): Step => [{ ...m, starting: m.starting.filter((x) => x.name !== msg.cmd.name) }, []],
+    start_child_err: (m, msg): Step => [{ ...m, starting: Arr.filter(m.starting, (x) => x.name !== msg.cmd.name) }, []],
     stop_child_ok: (m): Step => [m, []],
     // `noproc`: the tile's process ended before its close; the tile is already gone.
     stop_child_err: (m): Step => [m, []],
@@ -234,7 +254,7 @@ export const tezgahMachine = Machine.make({
  *  `last_tile` for a close of a workspace's only tile; `id_reused` for a new tile's id that is
  *  already a tile's or a waiting start's. */
 const refuse = (m: Model, msg: Msg): Refusal | null => {
-  if (msg.type === "attach") {
+  if (msg._tag === "attach") {
     return !exists(m, msg.workspace) && known(m, msg.tile) ? { reason: "id_reused" } : null;
   }
 
@@ -242,11 +262,13 @@ const refuse = (m: Model, msg: Msg): Refusal | null => {
     return { reason: "no_workspace" };
   }
 
-  const w = holding(m, msg.from);
+  const found = holding(m, msg.from);
 
-  if (w === undefined) {
+  if (Option.isNone(found)) {
     return { reason: "missing" };
   }
+
+  const w = found.value;
 
   if (msg.does === "tezgah.close") {
     return Layout.order(w.layout).length === 1 ? { reason: "last_tile" } : null;

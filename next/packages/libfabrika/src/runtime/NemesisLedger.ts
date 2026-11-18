@@ -1,21 +1,20 @@
 /**
  * Bounded ledger reads with a caller-supplied trusted fault operation.
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import { ProcessHistory, type ProcessHistoryError } from "../processes/ProcessHistory.ts";
 import * as Chaos from "./Chaos.ts";
 import { BadRow, Nemesis, NemesisError, Storage, Unreachable } from "./Nemesis.ts";
 
 const translate = (cause: ProcessHistoryError): NemesisError =>
   new NemesisError({
-    reason:
-      cause.reason._tag === "Unreachable"
-        ? new Unreachable({ cause })
-        : cause.reason._tag === "BadRow"
-          ? new BadRow({ cause })
-          : new Storage({ cause }),
+    reason: Match.valueTags(cause.reason, {
+      Unreachable: () => new Unreachable({ cause }),
+      BadRow: () => new BadRow({ cause }),
+      Storage: () => new Storage({ cause }),
+    }),
   });
 
 const make = Effect.fnUntraced(function* (operation: Nemesis["Service"]["fire"]) {
@@ -35,6 +34,7 @@ const make = Effect.fnUntraced(function* (operation: Nemesis["Service"]["fire"])
         "fab.nemesis.boundary": snapshot.boundary,
         "fab.nemesis.processBoundary": snapshot.processBoundary,
       });
+
       return Chaos.Report.make({
         ...counts,
         ...snapshot,
@@ -46,7 +46,6 @@ const make = Effect.fnUntraced(function* (operation: Nemesis["Service"]["fire"])
 /**
  * Compose history checking with an explicitly supplied fault operation.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (operation: Nemesis["Service"]["fire"]): Layer.Layer<Nemesis, never, ProcessHistory> =>

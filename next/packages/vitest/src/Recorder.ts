@@ -15,8 +15,6 @@
  * dies before it is recorded. A service with an overloaded method does not compile as a Recorder
  * layer: TypeScript's `infer` reads only an overload's last signature, so no one argument list is
  * true of every call, and the layer refuses it rather than type its records wrong.
- *
- * @stability unstable
  */
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -25,6 +23,9 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
+
+/** What a watched method answers: an Effect or a Stream. */
+type Answer = Effect.Effect<unknown, unknown, unknown> | Stream.Stream<unknown, unknown, unknown>;
 
 /** A member the Recorder watches: an Effect, or a function that answers an Effect or a Stream. */
 type Watched =
@@ -37,7 +38,6 @@ type Watched =
  * `Sink` and a symbol key are not methods. An optional member is read without its `undefined`, so
  * an optional method is a method too, as `watch` records it.
  *
- * @stability unstable
  * @category models
  */
 export type Method<S> = { [K in keyof S]-?: NonNullable<S[K]> extends Watched ? K : never }[keyof S] & string;
@@ -46,11 +46,10 @@ export type Method<S> = { [K in keyof S]-?: NonNullable<S[K]> extends Watched ? 
  * What one call of a method was handed: its own parameter list, made readonly, and `[]` for an
  * Effect member. For a union of names, it is each name's own list.
  *
- * @stability unstable
  * @category models
  */
 export type Args<S, M extends Method<S>> = M extends unknown
-  ? NonNullable<S[M]> extends (...args: infer A) => unknown
+  ? NonNullable<S[M]> extends (...args: infer A) => Answer
     ? Readonly<A>
     : readonly []
   : never;
@@ -68,7 +67,6 @@ type Raised<F> =
 /**
  * The error a method fails with, read from its own type: `never` for a method that cannot fail.
  *
- * @stability unstable
  * @category models
  */
 export type Failure<S, M extends Method<S>> = M extends unknown ? Raised<NonNullable<S[M]>> : never;
@@ -77,7 +75,6 @@ export type Failure<S, M extends Method<S>> = M extends unknown ? Raised<NonNull
  * One recorded call. It is a union over the methods, so a check on `method` narrows `args` to that
  * method's own list.
  *
- * @stability unstable
  * @category models
  */
 export type Call<S> = { [M in Method<S>]: { readonly method: M; readonly args: Args<S, M> } }[Method<S>];
@@ -87,7 +84,6 @@ export type Call<S> = { [M in Method<S>]: { readonly method: M; readonly args: A
  * has `Failure` of `never`, so it cannot be named, and nor can a method outside `Given`: the methods
  * `impl` gives, when `layer` reads it.
  *
- * @stability unstable
  * @category models
  */
 export type Fails<S, Given extends Method<S> = Method<S>> = {
@@ -132,7 +128,6 @@ declare const RecordedId: unique symbol;
  * The record a Recorder layer adds beside its service, so `calls` can find it. Only its type is
  * read: it names, in an Effect's environment, the service whose calls are kept.
  *
- * @stability unstable
  * @category models
  */
 export interface Recorded<in out I> {
@@ -164,12 +159,13 @@ const watch = <S extends object>(
     get: (target, prop) => {
       const member = Predicate.hasProperty(target, prop) ? target[prop] : undefined;
 
-      if (typeof prop === "symbol") {
+      if (Predicate.isSymbol(prop)) {
         return member;
       }
 
       const failure = Predicate.hasProperty(fails, prop) ? Option.some(fails[prop]) : Option.none();
       const write = (args: ReadonlyArray<unknown>) => Ref.update(kept, (list) => [...list, { method: prop, args }]);
+
       const effect = (out: Effect.Effect<unknown, unknown, unknown>, args: ReadonlyArray<unknown>) =>
         Effect.andThen(
           write(args),
@@ -206,7 +202,6 @@ const watch = <S extends object>(
  * recorded at its start. A Stream method is recorded when its stream starts. Each build of the layer
  * starts with no calls.
  *
- * @stability unstable
  * @category constructors
  */
 export const layer = <I, S extends object, K extends keyof S = keyof S>(
@@ -225,7 +220,6 @@ export const layer = <I, S extends object, K extends keyof S = keyof S>(
  * method. It needs the record a Recorder layer provides, so reading the calls of a service no
  * Recorder provides does not compile.
  *
- * @stability unstable
  * @category getters
  */
 export function calls<I, S>(service: Context.Key<I, S>): Effect.Effect<ReadonlyArray<Call<S>>, never, Recorded<I>>;

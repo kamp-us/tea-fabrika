@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-transport-s1-tests",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-15T23:12:18-08:00",
+  "ended": "2026-11-15T23:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 1 of the transport mock sweep (docs/plan/quests/mock-transport-PLAN.md at 14e9b3134, next/ only): A1 to A6 in next/packages/libfabrika/src/transport/Answer.test.ts on Recorder.layer(Routes, ...) and Layer.mock(Routes, ...), C5 moved from vi.spyOn to WebCrypto.layer and new C6 in next/packages/libfabrika/src/transport/ErrorCause.test.ts, and the new stand-in next/packages/libfabrika/src/transport/internal/rejecting.test-support.ts. Red on main for the right reason: Answer.test.ts does not load, since ./Routes.ts does not exist yet (the build's new file), so A1 to A5 and every other law in the file wait on the build; A6 is a type law, red only in a typecheck. C5 is red because the edge reads globalThis.crypto and ignores the provided WebCrypto, so the real digest answers; C6 is red because the real digest answers and the hello reaches admission, whose stand-in dies. C3 stays green. Every vi.fn, vi.spyOn and toHaveBeenCalled* in both files is gone. All old law titles are kept as they were.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: p23: ok has one matching reply (A1)",
+      "plant": "pass null as the identity on an online connection",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: p23: failure sends nothing and permits a real retry (A2)",
+      "plant": "cache a failed frame and answer its retry with a cached ok reply, skipping the second route call",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: p23: no reply for junk, response or notification (A3)",
+      "plant": "make the request id optional, so a notification is routed",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: d2: for any unauthenticated state, method and id, only a waiting gateway.knock is routed (A4)",
+      "plant": "pass the waiting client's key as an identity to the knock route",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: p82: additive request fields leave the reply id and checked writer alone (A5)",
+      "plant": "pass the request's params as the route's identity",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Answer.test.ts: A6 type: answerFrame's environment is exactly Routes, so it cannot reach admission",
+      "plant": "answerFrame also yields a second service; tsc on next/packages/libfabrika fails at Answer.test.ts line 336",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/ErrorCause.test.ts: C5",
+      "plant": "const fail = () => new WebCryptoError({ cause: undefined }) in internal/binary.ts",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/ErrorCause.test.ts: C6 scenario",
+      "plant": "read globalThis.crypto.subtle in internal/binary.ts again",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "The plants ran on a dry build, never committed: the plan's own sketches of Routes.ts, the new answerFrame(text, attached) and the one WebCrypto line in internal/binary.ts, written in place from saved copies. On it both files ran green (18 and 3 tests) and one tsc --noEmit on next/packages/libfabrika exited 0. Each plant was one change on that build, one law run, then restored by copy; the dry build was then undone by copy and Routes.ts deleted, and git status showed no product file. Gap in the plan: its C6 row says C5 stays green under the C6 plant by luck of no spy; it does not, C5 is red there too, since the real digest answers. A2's failure case now fails with the build's RouteError, since Routes allows only RouteError or RateCountFailure. pnpm format, the list ratchet and every pnpm lint part pass; lint:promise-types failed once inside pnpm lint when the kernel killed a process for memory, and passed run alone with 0 findings.",
+  "step": "tests"
+}

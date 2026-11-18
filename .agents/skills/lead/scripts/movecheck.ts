@@ -66,11 +66,14 @@ const Change = Schema.TaggedUnion({
   added: { path: Schema.String, after: Schema.String },
   deleted: { path: Schema.String, before: Schema.String },
 });
+
 type Change = typeof Change.Type;
+
 type Modified = typeof Change.cases.modified.Type;
 
 /** One row of a table: a file's old and new path, or a name's old and new spelling. */
 const Pair = Schema.Struct({ from: Schema.String, to: Schema.String });
+
 type Pair = typeof Pair.Type;
 
 /** Where a diff did more than it may: the file, and what is wrong in plain words. */
@@ -222,12 +225,19 @@ const linesIn = (text: string): ReadonlyArray<Line> =>
   });
 
 const IMPORT_LINE = /^import\s[^;()=]*["'];?$/;
+
 const IMPORT_OPEN = /^import\s[^;()='"]*\{$/;
+
 const IMPORT_NAME = /^(?:type\s)?[\w$]+(?:\sas\s[\w$]+)?,?$/;
+
 const IMPORT_CLOSE = /^\}\sfrom\s(["'])[^'"]*\1;?$/;
+
 const INTERNAL = "/** @internal */";
+
 const CLOSING = "};";
+
 const HEADER = /^export (?:const|function\*?) ([\w$]+)\b.*(?:=>|\)) \{$/;
+
 const CALL = /^(?:yield\* )?([\w$]+)\([^;]*\);$/;
 
 /** Which lines are part of an import statement, one over several lines included. */
@@ -251,6 +261,7 @@ const importMarks = (lines: ReadonlyArray<Line>): ReadonlyArray<boolean> => {
 const partsIn = (old: ReadonlyArray<Line>, after: ReadonlyArray<File>): ReadonlyArray<Part> => {
   const known = new Set(old.map((line) => line.text));
   const files = after.map((file) => ({ path: file.path, lines: linesIn(file.text) }));
+
   // The functions cut out: a header that is new. A call counts only when it calls one of them.
   const cut = new Set(
     files.flatMap((file) =>
@@ -296,10 +307,12 @@ const countFaults = (path: string, old: ReadonlyArray<Line>, parts: ReadonlyArra
   const all = parts.flatMap((part) => part.lines);
   const total = tally(all.map((line) => line.text));
   const logic = tally(all.filter((line) => !line.wiring).map((line) => line.text));
+
   const gone = old
     .filter((line, n) => old.findIndex((other) => other.text === line.text) === n)
     .filter((line) => (total.get(line.text) ?? 0) < (was.get(line.text) ?? 0))
     .map((line) => ({ path, reason: `old line ${line.at} is gone: ${short(line.text)}` }));
+
   const extra = parts.flatMap((part) =>
     part.lines
       .filter((line) => !line.wiring && (logic.get(line.text) ?? 0) > (was.get(line.text) ?? 0))
@@ -464,6 +477,7 @@ const splitPr = (changes: ReadonlyArray<Change>, old: string, named: ReadonlyArr
   const parts = changes.flatMap((change) =>
     change._tag === "added" && !named.includes(change.path) ? [{ path: change.path, text: change.after }] : [],
   );
+
   const rest = changes.filter((change) => change !== front && !parts.some((part) => part.path === pathIn(change)));
 
   return [
@@ -483,6 +497,7 @@ const renamePr = (
       ? []
       : [{ path: pathIn(change), before: change.before, after: change.after }],
   );
+
   const rest = changes.filter((change) => change._tag === "added" || change._tag === "deleted");
 
   return [...renameFaults(texts, names), ...moveFaults(rest, { moves: [], named })];
@@ -500,6 +515,7 @@ class Failed extends Schema.TaggedError<Failed>()("Failed", {
 class Found extends Schema.TaggedError<Found>()("Found", { total: Schema.Number }) {}
 
 const MoveTable = Schema.fromJsonString(Schema.Struct({ moves: Schema.Array(Pair) }));
+
 const NameTable = Schema.fromJsonString(Schema.Struct({ names: Schema.Array(Pair) }));
 
 const RuleFile = Schema.fromJsonString(
@@ -515,9 +531,11 @@ const text = Effect.fnUntraced(function* (bytes: Stream.Stream<Uint8Array, unkno
 /** One git command's output. Nothing it prints is run. */
 const git = Effect.fn("movecheck.git")(function* (args: ReadonlyArray<string>) {
   const failed = (cause?: unknown) => new Failed({ reason: "git", message: `git ${args.join(" ")} failed`, cause });
+
   const { out, code } = yield* Effect.scoped(
     Effect.gen(function* () {
       const proc = yield* ChildProcess.make("git", [...args], { stdin: "ignore" });
+
       const [out, , code] = yield* Effect.all([text(proc.stdout), text(proc.stderr), proc.exitCode], {
         concurrency: 3,
       });
@@ -643,6 +661,7 @@ const movecheck = Command.make(
 
     if (Option.isSome(given.moves)) {
       const path = given.moves.value;
+
       const table = yield* Schema.decodeUnknownEffect(MoveTable)(yield* readFile(path)).pipe(
         Effect.mapError(
           (cause) =>
@@ -653,13 +672,16 @@ const movecheck = Command.make(
             }),
         ),
       );
+
       const rules = {
         base: yield* rowsIn(base, given.rules),
         head: yield* rowsIn(given.head, given.rules),
       };
+
       faults = movePr(changes, table.moves, rules, { named: given.named, except: given.except });
     } else if (Option.isSome(given.renamed)) {
       const path = given.renamed.value;
+
       const table = yield* Schema.decodeUnknownEffect(NameTable)(yield* readFile(path)).pipe(
         Effect.mapError(
           (cause) =>
@@ -670,6 +692,7 @@ const movecheck = Command.make(
             }),
         ),
       );
+
       faults = renamePr(changes, table.names, given.named);
     } else {
       faults = splitPr(

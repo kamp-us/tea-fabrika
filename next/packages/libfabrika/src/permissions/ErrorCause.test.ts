@@ -9,7 +9,11 @@
 // encoded Error stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Exit, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { SendersError } from "./Senders.ts";
 
@@ -20,6 +24,7 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
  * in the encoded form `Schema.Defect()` writes, the one case where `Defect` and `Unknown` differ.
  */
 type Form = "absent" | "undefined" | "json" | "error";
+
 const FORMS: ReadonlyArray<Form> = ["absent", "undefined", "json", "error"];
 
 /** The schema `SendersError` had before 0568. */
@@ -31,8 +36,18 @@ const encodedError = fc
   .map(({ name, message }) => Schema.encodeUnknownSync(Schema.Defect())(Object.assign(new Error(message), { name })));
 
 /** The cause in each form, or no key at all. */
-const causeKey = (form: Form, json: fc.JsonValue, error: unknown): { cause?: unknown } =>
-  form === "absent" ? {} : { cause: form === "undefined" ? undefined : form === "json" ? json : error };
+const causeKey = (
+  form: Form,
+  json: fc.JsonValue,
+  error: Schema.Json,
+): { readonly cause?: fc.JsonValue | Schema.Json | undefined } =>
+  Match.value(form).pipe(
+    Match.when("absent", () => ({})),
+    Match.when("undefined", () => ({ cause: undefined })),
+    Match.when("json", () => ({ cause: json })),
+    Match.when("error", () => ({ cause: error })),
+    Match.exhaustive,
+  );
 
 /**
  * One encoded `SendersError`: made with its reason drawn from its own literals and no cause, encoded
@@ -47,7 +62,7 @@ const encoded = fc
   })
   .map(({ reason, form, json, error }) => ({
     form,
-    value: { ...Schema.encodeUnknownSync(before)(new SendersError({ reason })), ...causeKey(form, json, error) },
+    value: { ...Schema.encodeUnknownSync(before)(SendersError.make({ reason })), ...causeKey(form, json, error) },
   }));
 
 /**
@@ -55,10 +70,11 @@ const encoded = fc
  * field: an Error keeps `message` as an own key that does not enumerate.
  */
 const own = (value: object) =>
-  Object.fromEntries(
-    Object.getOwnPropertyNames(value)
-      .filter((key) => key !== "stack")
-      .map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value]),
+  Rec.fromEntries(
+    Arr.map(
+      Arr.filter(Object.getOwnPropertyNames(value), (key) => key !== "stack"),
+      (key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value],
+    ),
   );
 
 describe("T1062 L4, a sender error whose cause may be missing reads a cause written as undefined", () => {

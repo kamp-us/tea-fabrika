@@ -1,0 +1,28 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1067-mock-fold-1-main-merge",
+  "ticket": "1067",
+  "pr": "kamp-us/tea-fabrika#1526",
+  "started": "2026-11-18T15:40:00Z",
+  "ended": "2026-11-18T16:25:00Z",
+  "parent": null,
+  "active": null,
+  "role": "session",
+  "step": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "In next/ and our lint tooling: merged origin/main at 2594c20d1 into fabrikalfa/mock-fold-1 (old head b90061329), merge commit b3ee00f4a, a plain merge with no rebase. The pull request is not stale: main still spies on crypto.getRandomValues in Id.test.ts, on fetch and console in grant-readers.laws.test.ts and on crypto.subtle in transport/ErrorCause.test.ts, which this branch replaces. Fourteen files conflicted with main's spacing (#1525), Effect collections (#1562), anti-slop (#1593), Reflect (#1494, #1609) and knock (#1620) work, each read hunk by hunk. Gateway.ts is main's file plus the branch's three WebCrypto lines; the rest of the branch's diff there was blank lines main already had. transport/Routes.ts types params as Schema.Json | undefined, as main now types answerFrame's route params; Answer.ts keeps the branch's Routes-based answerFrame. The branch's rewritten laws keep the branch side and take main's newer forms where main changed the same old lines: readJson in Answer.test.ts, Match, DateTime and Rec.keys in grant-readers.laws.test.ts, Str.startsWith, Predicate.isString and Arr.join in Id.test.ts, failure: object and WebCryptoError.make in transport/ErrorCause.test.ts, whose binary.ts line references now point at the merged lines 105 and 106. GatewayRevocation keeps the branch's paused-hash laws with main's test openers and closers around them. door.integration.test.ts takes main's FileSystem temp folder. Imports are the union of both sides; the now-unused promised helper and Layer import in Id.test.ts are dropped.",
+  "laws": [
+    { "law": "the 8 changed unit test files (grant-readers, Id, Id.cause, Id.types, telemetry and transport ErrorCause, Answer, ErrorCause.types)", "result": "green, 74 of 74" },
+    { "law": "oxlint-plugins/plants.test.ts and the three integration files (GatewayRevocation, file-services laws, door)", "result": "green, 438 of 438" }
+  ],
+  "plants": [],
+  "note": "Checks on the merged tree, run before the owner's 2026-11-18 rule that drops local hand checks CI runs: pnpm install --frozen-lockfile, pnpm format (clean after the fixes), pnpm lint (18 parts passed), pnpm typecheck (exit 0 after adding two imports to Answer.test.ts), and vitest with CI=1 on Node 22 (the repo pins Node 26). loosening.sh origin/main HEAD gives the same hit list as loosening.sh on the old head against its base, so the merge loosens no law; the one extra hit it first showed was the text change id.startsWith to Str.startsWith, fixed by taking main's form. Started time is approximate. The merge commit is authored and committed by fabrikalfa[bot]; it carries no Co-authored-by trailer for the person, since that trailer would write private words into the commit.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 45,
+  "costUsd": null,
+  "billed": null
+}

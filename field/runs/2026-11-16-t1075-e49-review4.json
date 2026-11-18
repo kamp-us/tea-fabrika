@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1075-e49-review4",
+  "ticket": 1075,
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T01:50:51-08:00",
+  "parent": "2026-11-16-t1075-e49-build6",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice E49 of the Effect-checker sweep (processEnv and processEnvInEffect, in next/ and our tooling) after build6, the diff 50c2dd6..d3e2d6d, under the lead's later ruling that a judgment slice adds no @effect-diagnostics ignore line and takes one out where typecheck reports TS377000: merge-ready. The commit removes exactly the three lines and nothing else: next/apps/fabrika/dev.ts and next/apps/fabrika/src/local-instance.ts carry no @effect-diagnostics line, and local-instance.ts is identical to origin/main's. build6's row lists each site with its code and the exact removed line text: dev.ts:86 (processEnv), local-instance.ts:36 and :37 (processEnvInEffect), at this head's line numbers. The diff from origin/main, field rows aside, adds no @effect-diagnostics, LOCKED or oxlint-disable line, and changes no tsconfig, .oxlintrc.json, agents-ledger.json or effect-checks.test.ts. The three sites stay as hits, left with their reason (Alchemy reads both variables from process.env itself, and Config cannot write one) for the sweep's lock pull request.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from this row. After the worktree moved to d3e2d6d its index again held the old dev.ts, local-instance.ts and lacked the build6 row; restored with git checkout HEAD on those three paths before reading. Ran at d3e2d6d: next/apps/fabrika's own typecheck (tsc --noEmit -p .) exit 0 with no output, so no TS377000; local-instance.integration.test.ts 3 passed (TYPESAFE_API_KEY unset, CLAUDE_CODE_REMOTE=true); loosening.sh 50c2dd6..HEAD 0 hits; pnpm lint with the heap setting, 18 parts passed. Not run: the whole pnpm typecheck, since only next/apps/fabrika's files changed. Started time not read at the start, so null.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-port-s4-review",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T00:35:00-08:00",
+  "parent": "2026-11-16-port-s4-build",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of slice S4 of docs/plan/quests/port-scripts-0113-PLAN.md (keepruns.sh becomes box/RunsFs.ts, the Runs service's layer on Effect's FileSystem; lead tooling under 0033) at 2530d54, the slice's commits bc66217, aaebe9f and 2530d54 read line by line: merge-ready, four finding rows. RunsFs keeps every rule of the deleted keepruns.sh (lstat so a runs/ link or file is refused, an empty runs/ is nothing, MAIN's own runs/ refused by real path, a -<n> suffix so nothing is overwritten, any PlatformError answers kept false), box.ts and gc.ts use it, RunsProcess.ts is gone, and box/BoxTestGit.ts runs RunsFs on the real disk. Law 2's dropped err field is no loosening: box/Runs.ts's Kept has no stderr, RunsFs writes none, and RunsProcess already ignored it. The keepruns.sh deletion in the tests commit is right: its NOT_YET_PORTED line is in an exam path and a stale entry fails lint, so file and line had to go together. Seven plants of my own on a scratch copy of RunsFs.ts, never the branch: taken name overwritten (red), empty-runs check dropped (red), stat in place of lstat (2 laws red), a failure answered kept (red), destination without the folder's name (red), makeDirectory dropped (red), MAIN check dropped (green: rename refuses a move into its own subtree, so the outcome holds). Finding rows: the rm suite checks only the kept line (box/BoxTest.ts:280); two law comments still name keepruns.sh; keepruns.test.ts holds a type error no typecheck sees (line 144); the Runs service never says why it refused.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from this row and the four finding files. The start time was not read, so it is null. Ran at 2530d54: nice -n 15 pnpm exec vitest run --maxWorkers=3 on keepruns.test.ts, box.rm.test.ts, boxrm.test.ts and gc.test.ts, 102 of 102 pass; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint under the shared lock, exit 0 (two advice warnings on the tests and build rows' role and outcome words); one pnpm typecheck under the lock, exit 0, .agents included; tsc on a scratch tsconfig that adds keepruns.test.ts, exit 1 (the finding row); node gc.ts --dry-run with a missing BOXES, 'gc: no boxes folder' and exit 0, and node gc.ts --bogus, exit 2, so the runMain entry starts and exits as before. loosening.sh e617a1a HEAD: two removed-expect hits in keepruns.test.ts (the err field and an assertion message) and two unrecognized changes (the test's imports, the list line), none a loosening. git merge-tree with origin/main b5b68d3: clean. The cross-device move that now refuses where mv copied is judged acceptable: BOXES defaults beside MAIN and worktrees sit under it, and a refusal keeps the folder, so no data is lost. No .integration. or .visual. law is reached.",
+  "step": "review",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}

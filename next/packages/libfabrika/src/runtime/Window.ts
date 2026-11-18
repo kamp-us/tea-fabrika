@@ -1,10 +1,12 @@
 /**
  * A program's window contract: its data, presses and optional tile machine.
- *
- * @stability unstable
  */
+import type { Cmd } from "@demlik/tea";
 import type { Machine } from "@demlik/tea/effect";
-import type { Schema } from "effect";
+import { type Schema } from "effect";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import type { Program } from "./Program.ts";
 
 // --- A program's window -------------------------------------------------------------------------
@@ -14,14 +16,13 @@ type AnyProgram = Program<any, any, any, any, any>;
 /**
  * The data a program's window gets: what its view selector returns.
  *
- * @stability unstable
  * @category models
  */
 export type WindowData<P extends AnyProgram> = Readonly<ReturnType<P["view"]["select"]>>;
+
 /**
  * The Msgs a program's window may send: the program's own, and nothing else.
  *
- * @stability unstable
  * @category models
  */
 export type WindowMsg<P extends AnyProgram> = P["machine"]["msg"]["Type"];
@@ -30,7 +31,6 @@ export type WindowMsg<P extends AnyProgram> = P["machine"]["msg"]["Type"];
  * What a program's window is given: its checked data, and `press` for one of its own Msgs. `hint`
  * and `refusal` are optional extras.
  *
- * @stability unstable
  * @category models
  */
 export type WindowProps<P extends AnyProgram> = {
@@ -44,7 +44,6 @@ export type WindowProps<P extends AnyProgram> = {
 /**
  * A pure child machine stepped by a window parent. Its only output is a program press.
  *
- * @stability unstable
  * @category models
  */
 export type AnyTile = Machine<any, any, any, any, any> & {
@@ -56,7 +55,6 @@ export type AnyTile = Machine<any, any, any, any, any> & {
  * What a window's view is given for its tile machine: the tile's model and `send` for its own Msgs.
  * With no tile machine (`never`), it is `unknown`, which adds nothing to the window's props.
  *
- * @stability unstable
  * @category models
  */
 export type TileProps<T extends AnyTile = never> = [T] extends [never]
@@ -69,17 +67,11 @@ export type TileProps<T extends AnyTile = never> = [T] extends [never]
 type TileCommand<T> = T extends Machine<any, any, infer C, any, any> ? C : never;
 
 type CheckedTile<P extends AnyProgram, T extends AnyTile> =
-  TileCommand<T> extends {
-    readonly type: "press";
-    readonly m: WindowMsg<P>;
-  }
-    ? T
-    : never;
+  TileCommand<T> extends Cmd<"press"> & { readonly m: WindowMsg<P> } ? T : never;
 
 /**
  * A command name for one of the program's inputs, such as `counter.inc`.
  *
- * @stability unstable
  * @category models
  */
 export type WindowCommand<P extends AnyProgram> = `${string}.${keyof P["inputs"] & string}`;
@@ -88,7 +80,6 @@ export type WindowCommand<P extends AnyProgram> = `${string}.${keyof P["inputs"]
  * How a window is registered: the decoder its data must pass at runtime, the view, and the default
  * key rows for its inputs. A tile machine and a `refused` message writer are optional.
  *
- * @stability unstable
  * @category models
  */
 export type WindowRegistration<P extends AnyProgram, View = unknown, T extends AnyTile = never> = {
@@ -104,7 +95,6 @@ export type WindowRegistration<P extends AnyProgram, View = unknown, T extends A
  * registration is typed as the contract itself, not inferred, so a key row the program lacks is
  * refused.
  *
- * @stability unstable
  * @category constructors
  */
 export const defineWindow = <P extends AnyProgram, View, T extends AnyTile = never>(
@@ -112,14 +102,23 @@ export const defineWindow = <P extends AnyProgram, View, T extends AnyTile = nev
   registration: WindowRegistration<NoInfer<P>, View, NoInfer<T>> & { readonly tile?: T },
 ): WindowRegistration<P, View, T> => registration;
 
+/** A Msg named only by its key, with no fields: what a key command sends. */
+// oxlint-disable-next-line fabrika/no-hand-tag -- a writer that knows no cases: a key command names any program's input, so its key is an open string (as for ledger/Log.ts)
+type Named = { readonly _tag: string };
+
+// oxlint-disable-next-line fabrika/no-hand-tag -- a writer that knows no cases: a key command names any program's input, so its key is an open string (as for ledger/Log.ts)
+const named = (name: string): Named => ({ _tag: name });
+
 /**
  * Returns the Msg a key command sends: the input named after the program's dot, with no fields.
  * Returns `null` when the command has no dot, starts with one, or ends with one.
  *
- * @stability unstable
  * @category combinators
  */
-export const commandMsg = (command: string): { readonly type: string } | null => {
-  const dot = command.indexOf(".");
-  return dot <= 0 || dot === command.length - 1 ? null : { type: command.slice(dot + 1) };
-};
+export const commandMsg = (command: string): Named | null =>
+  Function.pipe(
+    Str.indexOf(".")(command),
+    Option.filter((dot) => dot > 0 && dot < command.length - 1),
+    Option.map((dot) => named(Str.slice(dot + 1)(command))),
+    Option.getOrNull,
+  );

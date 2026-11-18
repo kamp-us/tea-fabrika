@@ -1,0 +1,19 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-codex-row-text-names-deleted-fieldrow-py",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".agents/skills/lead/scripts/agents.ts",
+    "line": 571
+  },
+  "says": "In today's lead tooling, slice S3 of ticket 766 deletes .agents/skills/lead/scripts/fieldrow.py, but two places still name it. agents.ts line 571 writes \"Dollars are <model>'s standard list price (fieldrow.py's table)\" into the why of every priced Codex step row, so new field rows cite a file that no longer exists. env.sh line 17 says \"fieldrow.py prices the model\". The S3 build changed agents.ts's two comments that named fieldrow.py and missed this row text; env.sh belongs to slice S6.",
+  "proof": "At 8491d53, .agents/skills/lead/scripts/fieldrow.py is deleted, and rg 'fieldrow\\.py' finds agents.ts:571 (a template string in stepRow, which writes the row's why) and env.sh:17.",
+  "cost": "Each Codex step row written from now on points a reader at a deleted file for its price source; the true sources are fieldrow.ts and packages/pipeline/src/stages/price.ts.",
+  "next": "Change agents.ts:571 to name fieldrow.ts's table (or price.ts), and env.sh:17 to name fieldrow.ts, in slice S5 (which owns agents.ts next) and slice S6 (env.sh).",
+  "head": "8491d530717778fe21794079ae940287c762fdef",
+  "ticket": null,
+  "pr": null
+}

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e49-review1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T21:09:56-08:00",
+  "ended": "2026-11-15T21:20:30-08:00",
+  "parent": "2026-11-15-t1075-e49-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of record for slice E49 of the Effect-checker sweep (processEnvInEffect and processEnv, in next/ and our tooling), the whole diff origin/main...c3fefa7: merge-ready, one finding row. Hits met 74; fixed by hand with Effect's Config 37 (21 in exam paths by the tests step, 16 in product files by the build), none by the quick fix; left 37 (32 exam, 5 product), each with a valid reason; 0 waiting on 1366, and no file of pull request 1366's 58 touched. A recount with only the two checks at error over the five tsconfigs found exactly the 37 left in the slice's folders and no new hit. Unset and empty values keep their old meaning: every product read uses ConfigProvider.fromEnv({ preserveEmptyStrings: true }), so an empty MAIN, BOXES, PATH, FABRIKA_HOME, FILTER or chain limit stays empty and an unset one stays unset; the exam reads on the default provider drop an empty value, which changes nothing a law or CI sets (an empty CI, P34_INSTANCE_DRIVER or SHOTS already read as off; an empty P14_E2E_FAULT or TRACE or fixture FABRIKA_HOME was a crash before). The fresh provider per read is right: in Effect 4.1.3 ConfigProvider's default is a Context.Reference whose defaultValue is cached once per process (Context.ts line 1685), and fromEnv copies process.env when it is made, while file-services.laws.integration.test.ts stubs FABRIKA_HOME and FABRIKA_INSTANCE_PORT per case and imports dev.ts again in the same process, so the cached default would read the first case's values. No law loosened: loosening.sh's 10 hits are all the new effect import line in each changed test file, and the Depth and RecoveryGaps assertions read the same variable with the same meaning. No disable or effect-diagnostics comment, no tsconfig, ledger or lint-rule file changed; no-secret-env untouched (0573 leaves it to E86).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Read-only apart from this row. Ran at c3fefa7, one file each with TYPESAFE_API_KEY unset: legs.test.ts 21, apt.test.ts 18, Depth.test.ts 4 (and 4 with FABRIKA_TEST_DEPTH=full), chain.test.ts 63, box.rm.test.ts 44, RepositoriesGit.test.ts 5, RecoveryGaps.integration 12 and 1 skipped, hands-launcher.integration 2, file-services.laws.integration 13, settings-start.integration 7, repository-open.integration 1, OpenRepository.integration 1, all passed. pnpm typecheck exit 0; pnpm lint exit 0 with the heap setting. git merge-tree with origin/main ac87118: no conflict. Plants by reading: dropping the fresh provider in dev.ts should turn file-services L11 red on its second case, since effect is not reset by vi.resetModules (about 75% sure, not run); dropping PATH from RepositoriesGit's inherited set fails the git spawn in RepositoriesGit.test.ts; the tests step's Depth and legs plants ran red. Gap: no law sets an empty FILTER for legs.ts, but CI's expression never passes one. Not run: the .visual. files, box.test.ts (no ssh-keygen here, red at base too), the host-only P19 check. Finding: lib:runtime reached zero and was not locked.",
+  "step": "review"
+}

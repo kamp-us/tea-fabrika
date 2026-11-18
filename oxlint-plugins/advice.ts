@@ -4,6 +4,7 @@
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
 // deleted.
 import { matchesGlob } from "node:path";
+import { Array as Arr, Predicate, Record as Rec } from "effect";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
@@ -69,39 +70,44 @@ export interface WarnLine {
 /** What a whole run says about a warn line: its folder has no fire left, or it names a file. */
 type Stale = { readonly _tag: "zero"; readonly line: WarnLine } | { readonly _tag: "file"; readonly line: WarnLine };
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => Predicate.isObject(value);
 
-/** A rule's level: the setting itself, or the first item of `[level, ...options]`. */
-const level = (setting: unknown): unknown => (Array.isArray(setting) ? setting[0] : setting);
+/** Whether a rule's level is warn: the setting itself, or the first item of `[level, ...options]`. */
+const warns = (setting: unknown): boolean => (Arr.isArray(setting) ? setting[0] : setting) === "warn";
 
 /** The warn lines for the six, read from `oxlint --print-config`, oxlint's own reading of the config. */
 export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
-  const overrides = isRecord(printed) && Array.isArray(printed.overrides) ? printed.overrides : [];
-  return overrides.flatMap((override: unknown) => {
-    if (!isRecord(override) || !isRecord(override.rules) || !Array.isArray(override.files)) {
+  const overrides = isRecord(printed) && Arr.isArray(printed.overrides) ? printed.overrides : [];
+
+  return Arr.flatMap(overrides, (override: unknown) => {
+    if (!isRecord(override) || !isRecord(override.rules) || !Arr.isArray(override.files)) {
       return [];
     }
 
-    const globs = override.files.filter(
-      (glob: unknown): glob is string => typeof glob === "string" && !FROZEN.has(glob),
+    const globs = Arr.filter(
+      override.files,
+      (glob: unknown): glob is string => Predicate.isString(glob) && !FROZEN.has(glob),
     );
-    return Object.entries(override.rules).flatMap(([key, setting]) => {
+
+    return Arr.flatMap(Rec.toEntries(override.rules), ([key, setting]) => {
       const rule = CODES.get(key);
-      return rule !== undefined && level(setting) === "warn" ? globs.map((glob) => ({ rule, glob })) : [];
+
+      return rule !== undefined && warns(setting) ? Arr.map(globs, (glob) => ({ rule, glob })) : [];
     });
   });
 };
 
 /** Each warn line no advice fire of its rule matches, and each one whose last part names a file. */
 export const stale = (lines: ReadonlyArray<WarnLine>, advice: ReadonlyArray<Fire>): ReadonlyArray<Stale> =>
-  lines.flatMap((line): ReadonlyArray<Stale> => {
+  Arr.flatMap(lines, (line): ReadonlyArray<Stale> => {
     if (!(line.glob.split("/").at(-1) ?? "").includes("*")) {
       return [{ _tag: "file", line }];
     }
 
-    const held = advice.some(
+    const held = Arr.some(
+      advice,
       (fire) => fire.code === line.rule && fire.filename !== undefined && matchesGlob(fire.filename, line.glob),
     );
+
     return held ? [] : [{ _tag: "zero", line }];
   });

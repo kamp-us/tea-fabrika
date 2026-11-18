@@ -5,7 +5,7 @@
 // - `handshakeMachine`: a pure tea machine, no socket and no clock, whose Model is `Handshake`:
 //   opened {dial, since, sent} | initializing {dial, since, sent, id} | knocking {dial, since, sent, id}
 //   | waiting {dial, since, sent, code, until} | admitted {dial, ping, ms} | failed {dial, reason}.
-// - Msgs by `type`: opened {dial, at} (a socket opened), challenge {dial, nonce, at}, granted {dial,
+// - Msgs by `_tag`: opened {dial, at} (a socket opened), challenge {dial, nonce, at}, granted {dial,
 //   nonce, at}, waiting {dial, code, until, at}, answer {dial, id, result, reason?, at} (the door's
 //   answer to a string id), and tea's answers to its two Cmds.
 // - Cmds: `hello {dial, id, nonce}` (sign and send `initialize`), errors `key` and `closed`; and
@@ -23,25 +23,46 @@
 // back. Stale moves are chosen on purpose.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import { handshakeMachine } from "./Handshake.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  answer: {},
+  challenge: {},
+  granted: {},
+  hello_err: {},
+  opened: {},
+  waiting: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 
 const SEED = 119120;
 
-type Msg = { readonly type: string; readonly [key: string]: unknown };
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
+type Msg = { readonly _tag: string; readonly [key: string]: unknown };
+
+type Cmd = { readonly _tag: string; readonly [key: string]: unknown };
+
 type State = { readonly _tag: string; readonly dial: number; readonly [key: string]: unknown };
 
 const step = (s: State, m: Msg): readonly [State, ReadonlyArray<Cmd>] =>
   applyCell(handshakeMachine as never, s as never, m as never) as never;
 
 const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: "person_x", as: "window" } };
+
 /** The door's admission of a generated person: Desk S2a keeps the person on `admitted`, so a window
  *  can name that person's tezgah (the plan's "Where tezgah runs"). */
 const admission = (person: string) => ({ ...ADMITTED, identity: { ...ADMITTED.identity, person } });
 
 const isAdmission = Schema.is(
-  Schema.Struct({ ping: Schema.Number, identity: Schema.Struct({ person: Schema.String }) }),
+  Schema.Struct({ ping: Schema.Finite, identity: Schema.Struct({ person: Schema.String }) }),
 );
 
 /** A blind draw the fold reads in the state it reached. */
@@ -59,7 +80,9 @@ const Pick = Schema.Struct({
   // The person the door admits: a person id, or any text a door could send.
   person: Schema.Union([Schema.String.check(Schema.isPattern(/^person_[0-9a-hjkmnp-tv-z]{26}$/)), Schema.String]),
 });
+
 type Pick = typeof Pick.Type;
+
 const Picks = Schema.Array(Pick).check(Schema.isMinLength(10), Schema.isMaxLength(120));
 
 type World = {
@@ -77,63 +100,65 @@ type Event = {
   readonly known: ReadonlyArray<{ readonly id: string; readonly dial: number }>; // ids named before this step
 };
 
-const liveId = (s: State): string | undefined => (typeof s["id"] === "string" ? s["id"] : undefined);
+const liveId = (s: State): string | undefined => (Predicate.isString(s["id"]) ? s["id"] : undefined);
 
 /** Every move the world allows now. */
 const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
   const s = w.s;
   const at = Math.max(0, w.at);
   const other = s.dial + 1 + (c.aux % 3);
+
   const out: Array<() => Msg> = [
-    () => ({ type: "opened", dial: s.dial + 1, at }),
-    () => ({ type: "challenge", dial: s.dial, nonce: c.nonce, at }),
-    () => ({ type: "challenge", dial: other, nonce: c.nonce, at }),
-    () => ({ type: "granted", dial: s.dial, nonce: c.nonce, at }),
-    () => ({ type: "granted", dial: other, nonce: c.nonce, at }),
-    () => ({ type: "waiting", dial: s.dial, code: c.code, until: c.until, at }),
-    () => ({ type: "waiting", dial: other, code: c.code, until: c.until, at }),
+    () => ({ ...Tag.cases.opened.make({}), dial: s.dial + 1, at }),
+    () => ({ ...Tag.cases.challenge.make({}), dial: s.dial, nonce: c.nonce, at }),
+    () => ({ ...Tag.cases.challenge.make({}), dial: other, nonce: c.nonce, at }),
+    () => ({ ...Tag.cases.granted.make({}), dial: s.dial, nonce: c.nonce, at }),
+    () => ({ ...Tag.cases.granted.make({}), dial: other, nonce: c.nonce, at }),
+    () => ({ ...Tag.cases.waiting.make({}), dial: s.dial, code: c.code, until: c.until, at }),
+    () => ({ ...Tag.cases.waiting.make({}), dial: other, code: c.code, until: c.until, at }),
   ];
+
   const id = liveId(s);
 
   if (id !== undefined) {
     // The door's answers to the live request, favored so walks go through every state.
     for (let n = 0; n < 3; n++) {
       out.push(
-        () => ({ type: "answer", dial: s.dial, id, result: ADMITTED, at }),
-        () => ({ type: "answer", dial: s.dial, id, result: admission(c.person), at }),
-        () => ({ type: "answer", dial: s.dial, id, result: null, reason: "not_granted", at }),
-        () => ({ type: "answer", dial: s.dial, id, result: { code: c.code, until: c.until }, at }),
-        () => ({ type: "answer", dial: s.dial, id, result: null, reason: c.reason, at }),
+        () => ({ ...Tag.cases.answer.make({}), dial: s.dial, id, result: ADMITTED, at }),
+        () => ({ ...Tag.cases.answer.make({}), dial: s.dial, id, result: admission(c.person), at }),
+        () => ({ ...Tag.cases.answer.make({}), dial: s.dial, id, result: null, reason: "not_granted", at }),
+        () => ({ ...Tag.cases.answer.make({}), dial: s.dial, id, result: { code: c.code, until: c.until }, at }),
+        () => ({ ...Tag.cases.answer.make({}), dial: s.dial, id, result: null, reason: c.reason, at }),
       );
     }
 
     out.push(
-      () => ({ type: "answer", dial: s.dial, id, result: { nonce: c.nonce }, at }),
-      () => ({ type: "answer", dial: other, id, result: ADMITTED, at }),
+      () => ({ ...Tag.cases.answer.make({}), dial: s.dial, id, result: { nonce: c.nonce }, at }),
+      () => ({ ...Tag.cases.answer.make({}), dial: other, id, result: ADMITTED, at }),
     );
   }
 
-  const past = w.ids.filter((known) => known.id !== id);
+  const past = Arr.filter(w.ids, (known) => known.id !== id);
 
   if (past.length > 0) {
     const old = past[c.pick % past.length]!;
     out.push(
-      () => ({ type: "answer", dial: s.dial, id: old.id, result: ADMITTED, at }),
-      () => ({ type: "answer", dial: s.dial, id: old.id, result: null, reason: "not_granted", at }),
-      () => ({ type: "answer", dial: s.dial, id: old.id, result: null, reason: c.reason, at }),
-      () => ({ type: "answer", dial: old.dial, id: old.id, result: ADMITTED, at }),
+      () => ({ ...Tag.cases.answer.make({}), dial: s.dial, id: old.id, result: ADMITTED, at }),
+      () => ({ ...Tag.cases.answer.make({}), dial: s.dial, id: old.id, result: null, reason: "not_granted", at }),
+      () => ({ ...Tag.cases.answer.make({}), dial: s.dial, id: old.id, result: null, reason: c.reason, at }),
+      () => ({ ...Tag.cases.answer.make({}), dial: old.dial, id: old.id, result: ADMITTED, at }),
     );
   }
 
   if (w.waiting.length > 0) {
     const cmd = w.waiting[c.pick % w.waiting.length]!;
     out.push(
-      () => ({ type: `${cmd.type}_ok`, cmd, value: null }),
-      () => ({ type: `${cmd.type}_ok`, cmd, value: null }),
+      () => ({ ...keyed(`${cmd._tag}_ok`), cmd, value: null }),
+      () => ({ ...keyed(`${cmd._tag}_ok`), cmd, value: null }),
       () =>
-        cmd.type === "hello" && c.aux % 2 === 0
-          ? { type: "hello_err", cmd, error: { _tag: "key" } }
-          : { type: `${cmd.type}_err`, cmd, error: { _tag: "closed" } },
+        cmd._tag === "hello" && c.aux % 2 === 0
+          ? { ...Tag.cases.hello_err.make({}), cmd, error: { _tag: "key" } }
+          : { ...keyed(`${cmd._tag}_err`), cmd, error: { _tag: "closed" } },
     );
   }
 
@@ -143,7 +168,7 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
 /** Folds a walk from the real init, opened on dial 1, and hands each step to `each`. */
 const fold = (list: ReadonlyArray<Pick>, each: (e: Event) => void): void => {
   const [s0, cmds0]: readonly [State, ReadonlyArray<Cmd>] = handshakeMachine.init(null, {} as never);
-  const [s1, cmds1] = step(s0, { type: "opened", dial: 1, at: 0 });
+  const [s1, cmds1] = step(s0, { ...Tag.cases.opened.make({}), dial: 1, at: 0 });
   const w: World = { s: s1, waiting: [...cmds0, ...cmds1], ids: [], at: 0 };
 
   for (const c of list) {
@@ -153,10 +178,10 @@ const fold = (list: ReadonlyArray<Pick>, each: (e: Event) => void): void => {
     const prev = w.s;
     const known = [...w.ids];
     const [next, cmds] = step(prev, m);
-    w.waiting = [...w.waiting.filter((cmd) => !("cmd" in m) || m["cmd"] !== cmd), ...cmds];
+    w.waiting = [...Arr.filter(w.waiting, (cmd) => !("cmd" in m) || m["cmd"] !== cmd), ...cmds];
 
     for (const cmd of cmds) {
-      if (typeof cmd["id"] === "string") {
+      if (Predicate.isString(cmd["id"])) {
         w.ids.push({ id: cmd["id"], dial: Number(cmd["dial"]) });
       }
     }
@@ -175,46 +200,46 @@ describe("P18 L2: the handshake answers only its own request", () => {
     ({ list }) => {
       fold(list, ({ prev, m, next, cmds, known }) => {
         const own = liveId(prev);
-        const dialed = typeof m["dial"] === "number" ? m["dial"] : null;
-        const label = `${m.type} in ${prev._tag}`;
+        const dialed = Predicate.isNumber(m["dial"]) ? m["dial"] : null;
+        const label = `${m._tag} in ${prev._tag}`;
 
-        if (m.type === "answer" && (m["id"] !== own || dialed !== prev.dial)) {
+        if (m._tag === "answer" && (m["id"] !== own || dialed !== prev.dial)) {
           expect([next, cmds], `${label}: an answer to ${String(m["id"])} on dial ${dialed} moved it`).toEqual([
             prev,
             [],
           ]);
         }
 
-        if (["challenge", "granted", "waiting", "answer"].includes(m.type) && dialed !== prev.dial) {
+        if (["challenge", "granted", "waiting", "answer"].includes(m._tag) && dialed !== prev.dial) {
           expect([next, cmds], `${label}: dial ${dialed} is not the state's ${prev.dial}`).toEqual([prev, []]);
         }
 
         // Each hello goes out on the dial and with the nonce of the challenge or grant just folded.
-        const hellos = cmds.filter((c) => c.type === "hello");
+        const hellos = Arr.filter(cmds, (c) => c._tag === "hello");
         expect(
-          hellos.map((h) => [h["dial"], h["nonce"]]),
+          Arr.map(hellos, (h) => [h["dial"], h["nonce"]]),
           `${label} sent a hello that is not this Msg's`,
         ).toEqual(hellos.length === 0 ? [] : [[m["dial"], m["nonce"]]]);
-        expect(hellos.length === 0 || ["challenge", "granted"].includes(m.type), `${label} sent a hello`).toBe(true);
+        expect(hellos.length === 0 || ["challenge", "granted"].includes(m._tag), `${label} sent a hello`).toBe(true);
 
-        if (m.type === "challenge" && dialed === prev.dial && prev._tag === "opened") {
+        if (m._tag === "challenge" && dialed === prev.dial && prev._tag === "opened") {
           expect(hellos, "a challenge on an opened socket is answered with one hello").toHaveLength(1);
         }
 
-        if (m.type === "granted" && dialed === prev.dial && prev._tag === "waiting") {
+        if (m._tag === "granted" && dialed === prev.dial && prev._tag === "waiting") {
           expect(hellos, "a grant while waiting is answered with one hello, with the grant's nonce").toHaveLength(1);
         }
 
         // A request id is never named twice, so an answer to an old one can never match.
-        for (const c of cmds.filter((c) => typeof c["id"] === "string")) {
+        for (const c of Arr.filter(cmds, (c) => Predicate.isString(c["id"]))) {
           expect(
-            known.some((k) => k.id === c["id"]),
-            `${c.type} reused ${String(c["id"])}`,
+            Arr.some(known, (k) => k.id === c["id"]),
+            `${c._tag} reused ${String(c["id"])}`,
           ).toBe(false);
-          expect(liveId(next), `${c.type}'s id is the state's live id`).toBe(c["id"]);
+          expect(liveId(next), `${c._tag}'s id is the state's live id`).toBe(c["id"]);
         }
 
-        const matched = m.type === "answer" && m["id"] === own && dialed === prev.dial;
+        const matched = m._tag === "answer" && m["id"] === own && dialed === prev.dial;
 
         if (next._tag === "admitted" && prev._tag !== "admitted") {
           expect(matched && prev._tag === "initializing", `${label} admitted`).toBe(true);
@@ -223,15 +248,13 @@ describe("P18 L2: the handshake answers only its own request", () => {
 
         if (next._tag === "waiting" && prev._tag !== "waiting") {
           expect(
-            (matched && prev._tag === "knocking") || (m.type === "waiting" && dialed === prev.dial),
+            (matched && prev._tag === "knocking") || (m._tag === "waiting" && dialed === prev.dial),
             `${label} reached waiting`,
           ).toBe(true);
         }
 
         if (next._tag === "failed" && prev._tag !== "failed") {
-          expect(m.type === "hello_err" && Reflect.get(Object(m["error"]), "_tag") === "key", `${label} failed`).toBe(
-            true,
-          );
+          expect(m._tag === "hello_err" && Predicate.isTagged(m["error"], "key"), `${label} failed`).toBe(true);
         }
 
         // The door's admission, answered to the live `initialize`, admits, and keeps the person it
@@ -250,13 +273,13 @@ describe("P18 L2: the handshake answers only its own request", () => {
         // A refused `initialize` knocks once.
         if (matched && prev._tag === "initializing" && m["reason"] === "not_granted") {
           expect(next._tag).toBe("knocking");
-          expect(cmds.filter((c) => c.type === "knock")).toHaveLength(1);
+          expect(Arr.filter(cmds, (c) => c._tag === "knock")).toHaveLength(1);
         }
 
         // Any other reason ends the dial's exchange as refused, keeping the door's word when it is
         // one and `other` when it is not, and sends nothing.
         const refusal = m["reason"];
-        const refusedNow = matched && prev._tag === "initializing" && typeof refusal === "string";
+        const refusedNow = matched && prev._tag === "initializing" && Predicate.isString(refusal);
 
         if (refusedNow && refusal !== "not_granted") {
           expect([next, cmds], `${label}: the door refused for ${refusal}`).toMatchObject([
@@ -271,9 +294,10 @@ describe("P18 L2: the handshake answers only its own request", () => {
 
         for (const field of ["ms", "since"]) {
           const n = next[field];
-          expect(n === undefined || (typeof n === "number" && n >= 0), `${field} ${String(n)}`).toBe(true);
+          expect(n === undefined || (Predicate.isNumber(n) && n >= 0), `${field} ${String(n)}`).toBe(true);
         }
       });
+
       return true;
     },
     runs,
@@ -291,14 +315,15 @@ describe("P18 L2: the handshake answers only its own request", () => {
             seen[next._tag]!++;
           }
 
-          seen["stale"]! += m.type === "answer" && m["id"] !== liveId(prev) ? 1 : 0;
+          seen["stale"]! += m._tag === "answer" && m["id"] !== liveId(prev) ? 1 : 0;
         });
       }
 
       expect(
-        Object.values(seen).every((n) => n > 0),
+        Arr.every(Rec.values(seen), (n) => n > 0),
         JSON.stringify(seen),
       ).toBe(true);
+
       return true;
     },
     { arbitrary: { seed: SEED, runs: 3, size: 120 } },

@@ -1,3 +1,4 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's Q1: the record a ready pull request run leaves
 // for the merge queue, its one upload, and every job testing the tree the record names.
 import { allSteps, classifier, compact, FLAGS, map, type Rule, sameEntries, steps, uses } from "./shared.ts";
@@ -6,8 +7,11 @@ import { isTimings, TIMED_LEGS } from "./time-tables.ts";
 // Q1. The record a ready pull request run leaves for the merge queue: its pass of changes.mjs, on a
 // ready pull request alone, the merge commit the run checks out, and the upload of what it wrote
 // under the name it printed. `retention-days` is a setting (0069), so only its being there is held.
+
 const RECORD = "node .github/ci/changes.mjs --record";
+
 const RECORD_IF = "github.event_name=='pull_request'&&!github.event.pull_request.draft";
+
 const TESTED = `\${{ github.sha }}`;
 
 const RECORD_UPLOAD = {
@@ -20,7 +24,9 @@ const RECORD_UPLOAD = {
 export const record: Rule = ({ jobs }, require) => {
   const changes = map(jobs["changes"]),
     outputs = map(changes["outputs"]);
+
   const changeSteps = steps(changes);
+
   const sizing = changeSteps.find((s) => s["id"] === "size");
 
   // Q1. A merge queue group a ready pull request run already tested skips its tests (changes.mjs's
@@ -29,10 +35,14 @@ export const record: Rule = ({ jobs }, require) => {
   // changes printed through the very expressions of changes' outputs, so the selection it records
   // is the one the jobs ran. It and its upload may fail without failing the run: then no record, and
   // the group runs its tests.
+
   const recordStep = changeSteps.filter((s) => s["run"] === RECORD);
+
   const recorder = recordStep[0];
+
   const recordEnv = map(recorder?.["env"]);
-  const selected = Object.fromEntries([...FLAGS, "next", "filter"].map((name) => [name.toUpperCase(), outputs[name]]));
+
+  const selected = Rec.fromEntries([...FLAGS, "next", "filter"].map((name) => [name.toUpperCase(), outputs[name]]));
   require(recordStep.length === 1 &&
     recorder?.["id"] === "record" &&
     compact(recorder["if"]) === RECORD_IF &&
@@ -42,15 +52,18 @@ export const record: Rule = ({ jobs }, require) => {
       changeSteps.indexOf(
         recorder,
       ), "Q1: changes records the tested tree once, after the size step, on a ready pull request alone, and its failure fails nothing");
-  require(JSON.stringify(Object.keys(recordEnv).toSorted()) ===
-    JSON.stringify([...Object.keys(classifier), "TESTED", ...Object.keys(selected)].toSorted()) &&
-    Object.entries(classifier).every(([key, expected]) => recordEnv[key] === expected) &&
+  require(JSON.stringify(Rec.keys(recordEnv).toSorted()) ===
+    JSON.stringify([...Rec.keys(classifier), "TESTED", ...Rec.keys(selected)].toSorted()) &&
+    Rec.toEntries(classifier).every(([key, expected]) => recordEnv[key] === expected) &&
     recordEnv["TESTED"] === TESTED &&
-    Object.entries(selected).every(
+    Rec.toEntries(selected).every(
       ([key, expected]) => compact(recordEnv[key]) === compact(expected),
     ), "Q1: the record step reads the run's event, the merge commit it tests, and changes' outputs as changes exposes them");
+
   const uploads = changeSteps.filter((s) => uses(s, "actions/upload-artifact"));
+
   const upload = uploads[0];
+
   const kept = map(upload?.["with"])["retention-days"];
   require(uploads.length === 1 &&
     recorder !== undefined &&
@@ -59,10 +72,10 @@ export const record: Rule = ({ jobs }, require) => {
     compact(upload["if"]) === "steps.record.outputs.name!=''" &&
     upload["continue-on-error"] === true &&
     sameEntries(
-      Object.entries(map(upload["with"])).filter(([key]) => key !== "retention-days"),
-      Object.entries(RECORD_UPLOAD),
+      Rec.toEntries(map(upload["with"])).filter(([key]) => key !== "retention-days"),
+      Rec.toEntries(RECORD_UPLOAD),
     ) &&
-    typeof kept === "number" &&
+    Predicate.isNumber(kept) &&
     kept >=
       1, "Q1: changes uploads the record once, after the record step, under the name it printed, and its failure fails nothing");
 
@@ -73,7 +86,8 @@ export const record: Rule = ({ jobs }, require) => {
   // workflow that uploads one, whatever action does it, beside the test legs' timings uploads: each
   // in a job of TIMED_LEGS (next alone since 0539), with exactly TT2's `with:`, so its name is
   // `timings-...` and never a record's.
-  for (const [name, job] of Object.entries(jobs)) {
+
+  for (const [name, job] of Rec.toEntries(jobs)) {
     for (const step of allSteps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
       const given = map(step["with"]);
       require(!("ref" in given) &&
@@ -81,13 +95,52 @@ export const record: Rule = ({ jobs }, require) => {
     }
   }
 
-  const uploaders = Object.values(jobs).flatMap((job) =>
-    allSteps(map(job)).filter((s) => typeof s["uses"] === "string" && /(?:^|\/)upload-artifact@/.test(s["uses"])),
+  const uploaders = Rec.values(jobs).flatMap((job) =>
+    allSteps(map(job)).filter((s) => Predicate.isString(s["uses"]) && /(?:^|\/)upload-artifact@/.test(s["uses"])),
   );
+
+  const reports = [
+    [
+      "select",
+      "selected files",
+      {
+        name: "related-set",
+        path: `\${{ runner.temp }}/related-set.json`,
+        "if-no-files-found": "ignore",
+        "retention-days": 90,
+      },
+    ],
+    [
+      "related",
+      "results",
+      {
+        name: `results-related-\${{ matrix.shard }}`,
+        path: `\${{ runner.temp }}/related.json`,
+        "if-no-files-found": "error",
+        "retention-days": 7,
+      },
+    ],
+  ] as const;
+
+  const reportUploads = reports.flatMap(([job, name, expected]) => {
+    const found = allSteps(map(jobs[job])).filter(
+      (step) =>
+        uses(step, "actions/upload-artifact") &&
+        step["name"] === name &&
+        compact(step["if"]) === "!cancelled()" &&
+        Object.keys(step).length === 4 &&
+        sameEntries(Object.entries(map(step["with"])), Object.entries(expected)),
+    );
+
+    require(found.length === 1, `Q1: ${job} uploads only its exact related report once`);
+
+    return found;
+  });
+
   const timingsUploads = TIMED_LEGS.flatMap(([name]) => allSteps(map(jobs[name])).filter(isTimings));
   require(upload !== undefined &&
     uploaders.filter((s) => s === upload).length === 1 &&
     uploaders.every(
-      (s) => s === upload || timingsUploads.includes(s),
+      (s) => s === upload || timingsUploads.includes(s) || reportUploads.includes(s),
     ), "Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings");
 };

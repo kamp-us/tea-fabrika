@@ -1,5 +1,5 @@
 ---
-state: "decided 2026-11-02"
+state: "decided 2026-11-02; amended in part 2026-11-18 by [0601](../../.decisions/0601-program-make-with-optional-pipes.md): a program decides in Effects run inside one tea Cmd, with tea underneath"
 summary: "`next/`. Anything that replaces a tea machine is banned: no Effect `Workflow` for agent turns or anything else, no replay engine, no actor runtime that holds a machine's state. Effect stays as the engine under tea's Cmds, as services, and as ideas copied from cluster (dedup by request id). Cluster may come back later, with a written reason. From experiment 174."
 ---
 

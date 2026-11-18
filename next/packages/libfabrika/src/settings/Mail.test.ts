@@ -7,20 +7,25 @@
 //   `mailChunk` at `mail.chunk`, a byte size from 1 KiB to 1 MiB written as text ("64 KiB"), both in
 //   `all`, scope `["repo"]`, reload on restart.
 import { describe, expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
+import type { TomlDocument } from "@kalfa/config/Toml";
 import { ByteSize, Effect, Exit, Result, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
-import * as Files from "./Files.ts";
-import * as Sources from "./Sources.ts";
-import type { TomlDocument } from "./Toml.ts";
+import * as Sources from "./Fabrika.ts";
 
 const KIB = 1_024;
+
 const MIB = 1_024 * KIB;
+
 /** The cap's bounds: at least one letter, and no more than experiment 295 measured. */
 const UNREAD = { least: 1, most: 16_384 };
+
 /** The chunk's bounds: room for a part's own fields, and half the ledger's 2,000,000-byte row. */
 const CHUNK = { least: KIB, most: MIB };
+
 /** `catchUp` holds every unread letter at once: a full inbox of full chunks fits one eighth of 128 MB. */
 const HELD = 16 * MIB;
 
@@ -60,6 +65,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
     () =>
       Effect.gen(function* () {
         const reached = new Set<string>();
+
         const check = Effect.fnUntraced(function* (unread: number, chunk: number, source: Source, unit: boolean) {
           const unreadOk = Number.isInteger(unread) && unread >= UNREAD.least && unread <= UNREAD.most;
           const chunkOk = chunk >= CHUNK.least && chunk <= CHUNK.most;
@@ -73,6 +79,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
             const answer = yield* Sources.resolve(Declarations.all, slots(source, setting, value, text)).pipe(
               Effect.exit,
             );
+
             const read = key === "mailUnread" ? unread : chunk;
 
             if (source === "default") {
@@ -99,7 +106,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
                 );
                 expect(failure?._tag === "Fail" ? failure.error : null).toMatchObject({ reason: "invalid" });
                 const message = failure?._tag === "Fail" ? String(failure.error.message) : "";
-                expect(message.includes(setting.path), `the refusal names ${setting.path}`).toBe(true);
+                expect(Str.includes(setting.path)(message), `the refusal names ${setting.path}`).toBe(true);
               }
 
               reached.add(`${key}_refused`);
@@ -138,6 +145,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
             ).toBe(true);
           }
         });
+
         yield* property(
           fc.tuple(around(UNREAD.least, UNREAD.most), around(CHUNK.least, CHUNK.most), Source, fc.boolean()),
           ([unread, chunk, source, unit]) => check(unread, chunk, source, unit),

@@ -1,7 +1,7 @@
 ---
 id: 0107
 title: fabrika provides the merge queue as its own primitive, in its official pipeline pack, and the code host only holds the code and performs the merge it is told to
-status: amended-in-part by [0162](0162-no-friction-before-a-merge.md)
+status: accepted
 date: 2026-11-11
 tags: [merge-queue, ship, code-host, queue, primitive, github]
 ---
@@ -19,8 +19,8 @@ flowchart LR
   merge --> after["close the ticket, tell what follows a merge"]
 ```
 
-**What this decides:** who owns the job of landing finished changes in order, and that this repo
-does not move to an organization to get the code host's queue.
+**What this decides:** who owns the job of landing finished changes in order, and that GitHub's
+merge queue, if this repo moves to an organization, is only a stopgap beside fabrika's own.
 
 ## Context
 
@@ -32,11 +32,13 @@ lead has landed changes with scripts and three rules written around that gap
 [0097](0097-a-green-pull-request-lands-without-catching-up.md),
 [0098](0098-the-signed-chain-covers-the-branch-not-main.md)).
 
-Moving the repo to an organization would give GitHub's queue. The owner ruled on 2026-11-11 not
-to: GitHub is the code host and nothing more, reached through `CodeHost`
+Moving the repo to an organization would give GitHub's queue. The owner ruled on 2026-11-11 that
+GitHub is the code host and nothing more, reached through `CodeHost`
 ([0349](0349-we-build-and-use-our-tools.md),
-[0079](0079-size-counts-governed-paths-name-who.md)). A team on another code host, or on none
-with a queue, needs the same job done. So fabrika has to provide it.
+[0079](0079-size-counts-governed-paths-name-who.md)), and on 2026-11-13 that the repo may move to
+an organization to use GitHub's queue as a stopgap
+([0162](0162-no-friction-before-a-merge.md)). A team on another code host, or on none with a
+queue, needs the same job done. So fabrika has to provide it, and its own queue stays the design.
 
 ## Decision
 
@@ -54,7 +56,8 @@ with a queue, needs the same job done. So fabrika has to provide it.
   ([0083](0083-every-program-in-a-pack.md), [0084](0084-own-pack-listed-by-path.md)), so a team
   that takes the pack gets it with the other pipeline programs.
 - It is proven on this repo first: our own pull requests land through it before anyone else's.
-- This repo stays where it is.
+- This repo may move to an organization to use GitHub's merge queue as a stopgap; fabrika's own
+  queue stays the design.
 
 **Binding constraints**
 

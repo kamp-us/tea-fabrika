@@ -1,7 +1,10 @@
+import * as Arr from "effect/Array";
 // The check's walk over the live tuples (0526): Zanzibar's `_this` and `computed_userset` with
 // union. A permission holds when some relation its unions reach holds for the subject on the object.
 // The visited set ends a loop of permissions, so no depth needs a number, and a loop alone holds
 // nothing.
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import type { Tuples } from "../Relation.ts";
 import { holds, tupleKey } from "./relationsTable.ts";
 
@@ -20,7 +23,8 @@ export interface Declared {
  *
  * @internal
  */
-export const objectType = (ref: string): string => ref.slice(0, Math.max(0, ref.indexOf(":")));
+export const objectType = (ref: string): string =>
+  Option.match(Str.indexOf(":")(ref), { onNone: () => "", onSome: (colon) => Str.slice(0, colon)(ref) });
 
 /**
  * Whether `subject` holds `permission` on `object` in these tuples, by the declared types.
@@ -41,6 +45,7 @@ export const evaluate = (
   }
 
   const visited = new Set<string>();
+
   const reaches = (name: string): boolean => {
     if (declared.relations.has(name)) {
       return holds(tuples, tupleKey(subject, name, object));
@@ -51,7 +56,9 @@ export const evaluate = (
     }
 
     visited.add(name);
-    return (declared.permissions.get(name) ?? []).some(reaches);
+
+    return Arr.some(declared.permissions.get(name) ?? [], reaches);
   };
+
   return reaches(permission);
 };

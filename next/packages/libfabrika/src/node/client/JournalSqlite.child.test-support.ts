@@ -5,7 +5,11 @@
 // starts `<n>:`. It prints `ready` once one full round is saved, so every one of the sixteen keys
 // holds an entry the journal already said was saved, then writes until it is killed.
 import { NodeRuntime } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Str from "effect/String";
+
 import { Entry, Journal } from "../../client/Journal.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
 import { Result } from "../../tasks/Task.ts";
@@ -22,13 +26,13 @@ const loop = Effect.gen(function* () {
   for (let n = 0; ; n++) {
     const task = TASKS[n % TASKS.length] ?? "P/0/0";
     // About 64 KiB a value, so a write is many pages and a kill can land inside one.
-    const version = `${n}:`.padEnd(64 * 1024, String.fromCharCode(97 + (n % 26)));
+    const version = Function.pipe(`${n}:`, Str.padEnd(64 * 1024, String.fromCharCode(97 + (n % 26))));
     yield* journal.write(
       task,
       Entry.cases.result.make({
         execution: `execution-${n}`,
         result: Result.cases.exited.make({ code: 0, version }),
-        at: `2026-11-15T10:00:00.${String(n % 1000).padStart(3, "0")}Z`,
+        at: `2026-11-15T10:00:00.${Function.pipe(String(n % 1000), Str.padStart(3, "0"))}Z`,
       }),
     );
 

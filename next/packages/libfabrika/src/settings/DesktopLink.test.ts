@@ -1,11 +1,12 @@
 // next/, ticket 887, P21 L10. The declaration, Config, files and generated editors agree.
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Result, Schema } from "effect";
+import * as Files from "@kalfa/config/Files";
+import { ConfigProvider, Effect, Result, Schema, Match } from "effect";
 import * as Declarations from "./Declarations.ts";
-import * as Files from "./Files.ts";
-import * as Sources from "./Sources.ts";
+import * as Sources from "./Fabrika.ts";
 
 const seed = 119120;
+
 const ttl = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }));
 
 it.effect.prop(
@@ -21,18 +22,26 @@ it.effect.prop(
       const setting = Declarations.desktopLinkTtl;
       const direct = yield* setting.parse(ConfigProvider.fromUnknown({ desktop: { "link-ttl": file } }));
       expect(direct).toBe(file);
+
       const document = (value: number | undefined) => ({
         value: value === undefined ? {} : { desktop: { "link-ttl": value } },
         spans: value === undefined ? [] : [{ path: ["desktop", "link-ttl"], line: 2 }],
       });
+
       const resolved = yield* Sources.resolve(Declarations.all, {
         flags: Sources.flags(source === "flag" ? { [setting.path]: String(flag) } : {}),
         env: Sources.env(source === "flag" || source === "env" ? { [setting.env]: String(env) } : {}),
         repo: Sources.file("repo.toml", document(undefined)),
         person: Sources.file("person.toml", document(source === "default" ? undefined : file)),
       });
+
       expect(resolved.values.desktopLinkTtl).toBe(
-        source === "flag" ? flag : source === "env" ? env : source === "file" ? file : setting.default,
+        Match.value(source).pipe(
+          Match.when("flag", () => flag),
+          Match.when("env", () => env),
+          Match.when("file", () => file),
+          Match.orElse(() => setting.default),
+        ),
       );
       expect(resolved.origins[setting.path]?._tag).toBe(source);
       expect(
@@ -74,11 +83,14 @@ it.effect.prop(
         "later",
         true,
       ][pick];
+
       const setting = Declarations.desktopLinkTtl;
       expect(Schema.is(setting.schema)(bad)).toBe(false);
+
       const result = yield* setting
         .parse(ConfigProvider.fromUnknown({ desktop: { "link-ttl": bad } }, { preserveEmptyStrings: true }))
         .pipe(Effect.result);
+
       expect(result._tag).toBe("Failure");
     }),
   { arbitrary: { seed, runs: 100 } },

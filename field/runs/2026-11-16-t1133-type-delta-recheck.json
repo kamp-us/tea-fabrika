@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1133-type-delta-recheck",
+  "ticket": "1133",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T22:35:32-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Same-reviewer source recheck at 0fd5b50069bbdb555e42d21fbfbd461c522d791e read the six-path type/API delta. Installed escape and Schema construction APIs preserve valid behavior; annotations, matcher callbacks and guided narrowing remove no assertion. Ten declaration comments match all ten unchanged plant row records. No active plant metadata gate was removed; future 0580 option/check and seed prerequisites are not claimed or waived. No tests/compiler/adapters/CI actions ran. Full lead checks and actual adapter proof remain separate.",
+  "note": "Source-only verdict. Start timestamp and model usage were not captured and remain null. Private manual-plant-type-delta-recheck.md. No public run row requested or committed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billing": null
+}

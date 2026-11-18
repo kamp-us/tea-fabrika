@@ -1,10 +1,13 @@
 /**
  * Menu bar extra state and items. Checks and signatures are commands, never I/O here.
- *
- * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as Access from "../access/Access.ts";
 import * as Id from "../Id.ts";
 
@@ -13,7 +16,6 @@ const Kind = Access.Grant.fields.as;
 /**
  * Words for every admitted client kind. A new kind must have words before it can be drawn.
  *
- * @stability unstable
  * @category models
  */
 export const words: Record<typeof Kind.Type, string> = { window: "window", agent: "agent", hands: "hands" };
@@ -21,7 +23,6 @@ export const words: Record<typeof Kind.Type, string> = { window: "window", agent
 /**
  * Schema for one waiting key, shared by its tabs. A pass is a digest only.
  *
- * @stability unstable
  * @category schemas
  */
 export const Row = Schema.Struct({
@@ -34,6 +35,7 @@ export const Row = Schema.Struct({
   has: Schema.Array(Schema.String),
   as: Kind,
 });
+
 type Row = typeof Row.Type;
 
 const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
@@ -41,7 +43,6 @@ const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
 /**
  * Schema for an admitted client, with its current tab count or an unknown probe result.
  *
- * @stability unstable
  * @category schemas
  */
 export const Client = Schema.Struct({
@@ -59,7 +60,8 @@ const Act = Schema.TaggedUnion({
 });
 
 const Link = Schema.TaggedUnion({ connecting: {}, online: {}, lost: {} });
-const Pass = Schema.Struct({ digest: Schema.String, until: Schema.Number });
+
+const Pass = Schema.Struct({ digest: Schema.String, until: Schema.Finite });
 
 const Shown = {
   link: Link,
@@ -74,29 +76,29 @@ const Model = Schema.TaggedUnion({
   idle: { ...Shown },
   checking: { ...Shown, act: Act, cmd: Id.Cmd },
 });
+
 type Model = typeof Model.Type;
 
 const clickFields = { key: Schema.String, cmd: Id.Cmd };
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("link"), link: Link }),
-  Schema.Struct({ type: Schema.Literal("rows"), rows: Schema.Array(Row), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("clients"), clients: Schema.Array(Client) }),
-  Schema.Struct({ type: Schema.Literal("approve"), ...clickFields }),
-  Schema.Struct({ type: Schema.Literal("deny"), ...clickFields }),
-  Schema.Struct({ type: Schema.Literal("remove"), ...clickFields }),
-  Schema.Struct({ type: Schema.Literal("enter") }),
-  Schema.Struct({ type: Schema.Literal("checked"), cmd: Id.Cmd, check: Schema.Literals(["touch", "click"]) }),
-  Schema.Struct({
-    type: Schema.Literal("not_checked"),
+const Msg = Schema.TaggedUnion({
+  link: { link: Link },
+  rows: { rows: Schema.Array(Row), at: Schema.Finite },
+  clients: { clients: Schema.Array(Client) },
+  approve: { ...clickFields },
+  deny: { ...clickFields },
+  remove: { ...clickFields },
+  enter: {},
+  checked: { cmd: Id.Cmd, check: Schema.Literals(["touch", "click"]) },
+  not_checked: {
     cmd: Id.Cmd,
     reason: Schema.Literals(["declined", "unavailable"]),
-  }),
-  Schema.Struct({ type: Schema.Literal("open_browser"), cmd: Id.Cmd }),
-  Schema.Struct({ type: Schema.Literal("opened"), cmd: Id.Cmd, digest: Schema.String, at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("open_window") }),
-  Schema.Struct({ type: Schema.Literal("quit") }),
-]);
+  },
+  open_browser: { cmd: Id.Cmd },
+  opened: { cmd: Id.Cmd, digest: Schema.String, at: Schema.Finite },
+  open_window: {},
+  quit: {},
+});
 
 const check = Cmd.make("check", {
   input: Schema.toType(Schema.Struct({ cmd: Id.Cmd, reason: Schema.String })),
@@ -123,14 +125,15 @@ const deny = Cmd.make("deny", {
 });
 
 const open = Cmd.make("open", { input: Schema.toType(Schema.Struct({ cmd: Id.Cmd })), ok: Schema.Null, err: [] });
+
 const openWindow = Cmd.make("open_window", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
+
 const quit = Cmd.make("quit", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
 
 /**
  * Schema for one item a popover draws, with its words: the status, an empty note, a waiting key, an admitted
  * client or an action.
  *
- * @stability unstable
  * @category schemas
  */
 export const Item = Schema.TaggedUnion({
@@ -141,15 +144,17 @@ export const Item = Schema.TaggedUnion({
   action: { id: Schema.Literals(["open_window", "open_browser", "quit"]), words: Schema.String },
 });
 
-const safe = (text: string) => text.replace(/[\uD800-\uDFFF]/gu, "\uFFFD").replace(/[\p{Cc}\p{Cf}]/gu, "");
+const safe = (text: string) =>
+  Function.pipe(text, Str.replace(/[\uD800-\uDFFF]/gu, "\uFFFD"), Str.replace(/[\p{Cc}\p{Cf}]/gu, ""));
 
 // The brain-line text cap is 256 UTF-16 units. Keep a pair whole at its boundary.
 const label = (text: string) => {
-  const cut = safe(text).slice(0, 256);
-  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+  const cut = Str.slice(0, 256)(safe(text));
+
+  return /[\uD800-\uDBFF]$/.test(cut) ? Str.slice(0, -1)(cut) : cut;
 };
 
-const code = (text: string) => safe(text).replace(/^(\d{3})(\d{3})$/, "$1 $2");
+const code = (text: string) => Str.replace(/^(\d{3})(\d{3})$/, "$1 $2")(safe(text));
 
 const named = (row: { readonly label: string; readonly location: string }) =>
   `${label(row.label)} on ${safe(row.location)}`;
@@ -181,14 +186,13 @@ const current = (model: Model) => ({
 const idle = (model: Model): Model => Model.cases.idle.make(current(model));
 
 const unique = <A extends { readonly key: string }>(rows: ReadonlyArray<A>): ReadonlyArray<A> => [
-  ...new Map(rows.map((row) => [row.key, row])).values(),
+  ...new Map(Arr.map(rows, (row) => [row.key, row])).values(),
 ];
 
 /**
  * Creates the menu's one machine from a browser link's lifetime and whether that link is offered. Its model is
  * never loaded: every start is idle and connecting, with no rows, no clients and no check in flight.
  *
- * @stability unstable
  * @category constructors
  */
 export const machine = (options: { readonly linkTtl: number; readonly browserLink: boolean }) =>
@@ -212,22 +216,24 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
       clients: (s, m) => {
         const clients = unique(m.clients);
         // Snapshots arrive separately. The latest list decides a shared key's row.
-        const rows = s.rows.filter((row) => !clients.some((client) => client.key === row.key));
+        const rows = Arr.filter(s.rows, (row) => !Arr.some(clients, (client) => client.key === row.key));
+
         return [{ ...s, rows, clients }, []];
       },
       rows: (s, m) => {
-        let passes = s.passes.filter((p) => m.at < p.until);
+        let passes = Arr.filter(s.passes, (p) => m.at < p.until);
         const commands: Array<ReturnType<typeof signGrant>> = [];
         const rows = unique(m.rows);
 
         for (const row of rows) {
-          if (row.pass !== null && passes.some((p) => p.digest === row.pass)) {
-            passes = passes.filter((p) => p.digest !== row.pass);
+          if (row.pass !== null && Arr.some(passes, (p) => p.digest === row.pass)) {
+            passes = Arr.filter(passes, (p) => p.digest !== row.pass);
             commands.push(signGrant({ key: row.key, as: row.as, saw: saw(row, "link", "none") }));
           }
         }
 
-        const clients = s.clients.filter((client) => !rows.some((row) => row.key === client.key));
+        const clients = Arr.filter(s.clients, (client) => !Arr.some(rows, (row) => row.key === client.key));
+
         return [{ ...s, rows, clients, passes }, commands];
       },
       approve: (s, m) => {
@@ -235,13 +241,14 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
           return [s, []];
         }
 
-        const row = s.rows.find((r) => r.key === m.key);
+        const row = Option.getOrUndefined(Arr.findFirst(s.rows, (r) => r.key === m.key));
 
         if (row === undefined) {
           return [s, []];
         }
 
         const shown = Row.make({ ...row, has: [...row.has] });
+
         return [
           Model.cases.checking.make({
             ...current(s),
@@ -256,13 +263,14 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
           return [s, []];
         }
 
-        const client = s.clients.find((c) => c.key === m.key && !c.own);
+        const client = Option.getOrUndefined(Arr.findFirst(s.clients, (c) => c.key === m.key && !c.own));
 
         if (client === undefined) {
           return [s, []];
         }
 
         const shown = Client.make({ ...client, tabs: { ...client.tabs } });
+
         return [
           Model.cases.checking.make({
             ...current(s),
@@ -273,7 +281,8 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         ];
       },
       deny: (s, m) => {
-        const row = s.rows.find((r) => r.key === m.key);
+        const row = Option.getOrUndefined(Arr.findFirst(s.rows, (r) => r.key === m.key));
+
         return [s, row === undefined ? [] : [deny({ key: row.key, saw: saw(row, "compare", "none") })]];
       },
       checked: (s, m) => {
@@ -316,9 +325,9 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         return [
           {
             ...s,
-            opens: s.opens.filter((cmd) => cmd !== m.cmd),
+            opens: Arr.filter(s.opens, (cmd) => cmd !== m.cmd),
             passes: [
-              ...s.passes.filter((p) => p.digest !== m.digest),
+              ...Arr.filter(s.passes, (p) => p.digest !== m.digest),
               { digest: m.digest, until: m.at + options.linkTtl },
             ],
           },
@@ -349,7 +358,6 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
  * keys, the admitted clients, then the actions. Every item has words, also for an unknown tab count and while a
  * check runs.
  *
- * @stability unstable
  * @category getters
  */
 export const view = (model: Model): ReadonlyArray<typeof Item.Type> => {
@@ -391,5 +399,6 @@ export const view = (model: Model): ReadonlyArray<typeof Item.Type> => {
   }
 
   items.push(Item.cases.action.make({ id: "quit", words: "Quit" }));
+
   return items;
 };

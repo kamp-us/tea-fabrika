@@ -189,7 +189,7 @@ unchanged as its own file in `field/findings/`.
 
 ## Go easy on the machine
 
-The test config and typecheck.sh hold worker, home and typecheck limits.
+The test config and typecheck.ts hold worker, home and typecheck limits.
 
 ## Never
 

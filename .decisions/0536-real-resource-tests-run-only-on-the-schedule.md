@@ -1,7 +1,7 @@
 ---
 id: 0536
 title: Pull requests and the merge queue test only against our interfaces' in-memory layers, and every test that needs a real resource runs only on the 3-hour schedule
-status: amended-in-part by [0581](0581-main-full-run-starts-on-push-and-hourly.md), [0584](0584-a-tests-kind-follows-what-it-uses.md)
+status: amended-in-part by [0581](0581-main-full-run-starts-on-push-and-hourly.md), [0584](0584-a-tests-kind-follows-what-it-uses.md), [0590](0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)
 date: 2026-11-14
 tags: [ci, tests, schedule, integration, memory-layer, merge-queue]
 ---

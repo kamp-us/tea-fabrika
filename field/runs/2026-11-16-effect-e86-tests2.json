@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e86-tests2",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-16T01:11:00-08:00",
+  "ended": "2026-11-16T01:16:00-08:00",
+  "parent": "2026-11-16-effect-e86-tests",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix before review for judgment slice E86 of the Effect-checker sweep, in next/, after the lead's ruling that a judgment slice adds no ignore lines, as it adds no lock lines (0589's first amendment): each reasoned line lands in the final lock pull request with the lock that makes it mean something. The 4 @effect-diagnostics-next-line lines from the first round are taken out and the code under them is unchanged, so pnpm typecheck no longer fails on TS377000 (directive has no effect) while processEnv is off. env.test-support.ts's header no longer says each write has a reasoned line. For the lock pull request to add, each above the line named, in next/: (1) next/apps/fabrika/src/env.test-support.ts, above line 19 `delete process.env[key];`: `// @effect-diagnostics-next-line processEnv:off -- puts an unset variable back as unset, and Config cannot write a variable`. (2) the same file, above line 21 `process.env[key] = value;`: `// @effect-diagnostics-next-line processEnv:off -- the code under test reads this variable from process.env itself, and Config cannot write a variable`. (3) the same file, above line 64 `process.env.DO_NOT_TRACK = \"1\";`: `// @effect-diagnostics-next-line processEnv:off -- Alchemy reads DO_NOT_TRACK from process.env itself, and Config cannot write a variable`. (4) next/apps/fabrika/src/sibling-objects.test-support.ts, above line 58 `dev: { host: \"127.0.0.1\", port: Number(process.env.T502_PORT), strictPort: true },`: `// @effect-diagnostics-next-line processEnv:off -- read as this module loads, in Node and in workerd, where no Effect runs; sibling.laws hands its held port through it`. Each was checked in the first round to silence its line when the check is at error. With them out, app:src holds 6 hits when the lock turns processEnv on: these 4 exam lines and the build's 2 in local-instance.ts:36 and :37.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "plants": [],
+  "note": "No plant this round: no law changed, only comment lines went. pnpm format passes. pnpm typecheck, the second and last run in this step: exit 0, every package Done, next/apps/fabrika included. pnpm lint: all 18 parts pass. The list ratchet exits 0. Not run: the changed .integration. files, as in the first round; the lead or a box runs them. The LOCKED-table finding from the first round's report is not committed here: the lead files it.",
+  "step": "tests"
+}

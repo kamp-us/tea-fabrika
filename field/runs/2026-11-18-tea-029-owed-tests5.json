@@ -1,0 +1,86 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-tea-029-owed-tests5",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1619",
+  "started": "2026-11-18T04:37:17-08:00",
+  "ended": "2026-11-18T05:07:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The review's fix round, in next/ and the root tooling. P3's check that a patch row's version is one a catalog pins is removed with its laws: pnpm 12.16.1 already fails the install with ERR_PNPM_UNUSED_PATCH on a row at a version nothing installs (decision 0040), which the review's own probe showed. What stays of P3, a row keyed on one exact version, is two it.prop laws on Schema inputs. P1 and P2 are one it.effect.prop law on a Schema-drawn walk of 10 to 40 moves, each played only when what is owed allows it, plus a scenario: law that the walks reached every case; no law carries a seed (decision 0579). The tea patch drops the source map links of the 13 rewritten files, so no stack trace reads 0.29.0's published maps at the wrong lines. Not done: the port-home fixture still holds a Msg keyed type, because its writer is an integration law that needs real workerd, which the test config refuses on this laptop (decisions 0178 and 0594).",
+  "note": "Started is the review's findings file's time; ended is an estimate written just before the commit. Usage and cost are not recorded, and effort was not given in the brief. P3's plant (c) was first planted where the catalog was out of scope, so the check crashed with exit 2 in place of a refusal; it was planted again in inWorkspace, where both laws went red. P1 and P2's plants ran on the installed patch before its source map links were dropped; the JavaScript they change is the same in both. The data plants were run on the check script, which plain node exits 1 on; volta's wrapper reports that as 126.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "e9988e2592474ab4e012049a374eed6687b810f9",
+  "plants": [
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "The plain published 0.29.0 dist in place of the patched one, so owed is no export",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "The completion confirms an owed call (!own.owed dropped from the completion check)",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "Boot hands no surviving delivery out (publishLogged given [] in place of the ledger's list)",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "The answer's message record loses answerTo, so nothing clears the owed entry",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "A repeat answer is refused (decideAnswer's atomic case decided as unknown_answer)",
+      "result": "red"
+    },
+    {
+      "law": "P1 and P2: owed work stays owed and is handed out again with its first id; one answer clears it, a repeat writes nothing, a stranger is refused",
+      "plant": "An id never owed is taken as a repeat (decideAnswer's missing case with no delivery decided as repeat)",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: refuses a bare name, each range form and an empty version, naming each, and passes the exact row beside them",
+      "plant": "inWorkspace reads no patchedDependencies",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: refuses a bare name, each range form and an empty version, naming each, and passes the exact row beside them",
+      "plant": "refusedPatches takes any text after the @ as a version",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: passes a row keyed on one exact version, the catalog's or one no catalog pins, which pnpm refuses at install",
+      "plant": "A row at a version no catalog pins is refused, as pnpm already does",
+      "result": "red"
+    },
+    {
+      "law": "a patchedDependencies row: refuses a bare name, each range form and an empty version, naming each, and passes the exact row beside them",
+      "plant": "A row at a version no catalog pins is refused, as pnpm already does",
+      "result": "red"
+    },
+    {
+      "law": "exact-versions.ts on the real pnpm-workspace.yaml",
+      "plant": "The tea 0.29.0 patch row keyed on ^0.29.0",
+      "result": "red"
+    },
+    {
+      "law": "exact-versions.ts on the real pnpm-workspace.yaml",
+      "plant": "The tea 0.29.0 patch row keyed on the bare name",
+      "result": "red"
+    }
+  ]
+}

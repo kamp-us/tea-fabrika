@@ -1,14 +1,21 @@
 // L14 next/. Only the declarations and lower settings services belong in this law. The memory restart
 // plan (docs/plan/quests/memory-restart-PLAN.md) adds L9: the memory limit and the grace.
 import { expect, it } from "@effect/vitest";
-import { ByteSize, ConfigProvider, Effect, Exit, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Files from "@kalfa/config/Files";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import { Toml } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
+import * as ByteSize from "effect/ByteSize";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as Declarations from "./Declarations.ts";
-import * as Files from "./Files.ts";
-import * as Snapshot from "./Snapshot.ts";
-import * as Sources from "./Sources.ts";
-import { Toml } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
+import * as Sources from "./Fabrika.ts";
 
 const paths = [
   "desktop.brain-throttle",
@@ -29,6 +36,7 @@ const slots = (flags: Record<string, string>) => ({
 const declaration = (path: string) => {
   const value = Declarations.all.declarations.find((d) => d.path === path);
   expect(value, `${path} is declared`).toBeDefined();
+
   return value!;
 };
 
@@ -37,7 +45,7 @@ it.effect.prop(
   [Schema.Tuple([Positive, Positive, Positive, Positive])],
   ([values]) =>
     Effect.gen(function* () {
-      const flags = Object.fromEntries(paths.map((path, i) => [path, String(values[i])]));
+      const flags = Rec.fromEntries(paths.map((path, i) => [path, String(values[i])]));
       const resolved = yield* Sources.resolve(Declarations.all, slots(flags));
       const saved = yield* Snapshot.make(Declarations.all, resolved);
       const checked = yield* Snapshot.read(Declarations.all, saved);
@@ -46,7 +54,7 @@ it.effect.prop(
         const d = declaration(path);
         expect(d.scope).toEqual(["person"]);
         expect(d.reload).toBe("restart");
-        expect(yield* d.parse(ConfigProvider.fromUnknown({ desktop: { [path.split(".")[1]!]: values[i] } }))).toBe(
+        expect(yield* d.parse(ConfigProvider.fromUnknown({ desktop: { [Str.split(path, ".")[1]!]: values[i] } }))).toBe(
           values[i],
         );
         expect(yield* d.parse(ConfigProvider.fromUnknown({}))).toBe(d.default);
@@ -69,24 +77,28 @@ it.effect.prop(
       const d = declaration(path);
       expect(
         Exit.isFailure(
-          yield* d.parse(ConfigProvider.fromUnknown({ desktop: { [path.split(".")[1]!]: bad } })).pipe(Effect.exit),
+          yield* d
+            .parse(ConfigProvider.fromUnknown({ desktop: { [Str.split(path, ".")[1]!]: bad } }))
+            .pipe(Effect.exit),
         ),
       ).toBe(true);
       const toml = yield* Toml;
-      const repo = yield* toml.parse(`[desktop]\n${path.split(".")[1]} = 1\n`);
+      const repo = yield* toml.parse(`[desktop]\n${Str.split(path, ".")[1]} = 1\n`);
       const own = yield* toml.parse("");
+
       const failed = yield* Files.validate(
         Declarations.all,
         { repo: { file: "repo", document: repo }, person: { file: "person", document: own } },
         { version: "0.0.0" },
       ).pipe(Effect.exit);
+
       expect(Exit.isFailure(failed)).toBe(true);
     }).pipe(Effect.provide(TomlParser.layer)),
   { arbitrary: { seed: 119120, runs: 100 } },
 );
 
 // The group's own name for a declared path, so a law reads the decoded value it resolved.
-const named = (path: string) => Object.entries(Declarations.all.settings).find(([, d]) => d.path === path)?.[0];
+const named = (path: string) => Rec.toEntries(Declarations.all.settings).find(([, d]) => d.path === path)?.[0];
 
 // L9. Plant: default the limit to 50 MB, or leave the grace out of `all`: L9 fails.
 it.effect.prop(
@@ -139,11 +151,13 @@ it.effect.prop(
       const toml = yield* Toml;
       const person = yield* toml.parse(`[desktop]\nbrain-memory = "${zero}"\n`);
       const repo = yield* toml.parse("");
+
       const failed = yield* Files.validate(
         Declarations.all,
         { repo: { file: "repo", document: repo }, person: { file: "person", document: person } },
         { version: "0.0.0" },
       ).pipe(Effect.flip);
+
       expect(failed.reason).toBe("invalid");
       // A person reads which setting, and the schema's own title in place of "a valid value".
       expect(failed.message).toContain("desktop.brain-memory");

@@ -17,34 +17,49 @@
 //   it refuses an unknown key and a key of the other file. A file whose scope holds no
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Files from "@kalfa/config/Files";
+import * as Reference from "@kalfa/config/Reference";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import { Toml } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
+import * as ByteSize from "effect/ByteSize";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
-import * as Files from "./Files.ts";
-import * as Reference from "./Reference.ts";
-import * as Setting from "./Setting.ts";
-import * as Snapshot from "./Snapshot.ts";
-import * as Sources from "./Sources.ts";
-import { Toml } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
+import * as Setting from "./Fabrika.ts";
+import * as Sources from "./Fabrika.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 const REPO = ".fabrika/fabrika.toml";
+
 const PERSON = "~/.fabrika/fabrika.toml";
 
+/** Both files parsed and validated whole, as the instance does at start. */
+const validation = (repo: string, person: string, version: string) =>
+  Effect.gen(function* () {
+    const toml = yield* Toml;
+
+    const files = {
+      repo: { file: REPO, document: yield* toml.parse(repo) },
+      person: { file: PERSON, document: yield* toml.parse(person) },
+    };
+
+    return yield* Files.validate(Declarations.all, files, { version });
+  }).pipe(Effect.provide(TomlParser.layer));
+
 const validate = (repo: string, person: string, version: string) =>
-  Effect.runPromiseExit(
-    Effect.gen(function* () {
-      const toml = yield* Toml;
-      const files = {
-        repo: { file: REPO, document: yield* toml.parse(repo) },
-        person: { file: PERSON, document: yield* toml.parse(person) },
-      };
-      return yield* Files.validate(Declarations.all, files, { version });
-    }).pipe(Effect.provide(TomlParser.layer)),
-  );
+  Effect.runPromiseExit(validation(repo, person, version));
 
 /** The one typed failure of an exit, or undefined when it succeeded. */
 const failure = (exit: Exit.Exit<unknown, unknown>) => {
@@ -53,7 +68,8 @@ const failure = (exit: Exit.Exit<unknown, unknown>) => {
   }
 
   const reason = exit.cause.reasons.find((r) => r._tag === "Fail");
-  return reason?._tag === "Fail" && reason.error instanceof Files.SettingsError ? reason.error : "not a SettingsError";
+
+  return reason?._tag === "Fail" && Schema.is(Files.SettingsError)(reason.error) ? reason.error : "not a SettingsError";
 };
 
 // A word no setting uses, for unknown keys and tables.
@@ -91,7 +107,7 @@ const text = (entries: ReadonlyArray<Entry>) => {
     } else if ((e._tag === "port" || e._tag === "bad-port") && !port) {
       port = true;
       instance.push(`port = ${e._tag === "port" ? e.port : e.raw}`);
-    } else if (e._tag === "sibling" && !instance.some((l) => l.startsWith(`${e.key} =`))) {
+    } else if (e._tag === "sibling" && !instance.some((l) => Str.startsWith(`${e.key} =`)(l))) {
       instance.push(`${e.key} = ${e.raw}`);
     } else if (e._tag === "table" && !tables.includes(`[${e.name}]`)) {
       tables.push(`[${e.name}]`, ...(e.empty ? [] : ["key = 1"]));
@@ -99,12 +115,14 @@ const text = (entries: ReadonlyArray<Entry>) => {
   }
 
   const lines = [...top, ...(instance.length > 0 ? ["[instance]", ...instance] : []), ...tables];
+
   return `${lines.join("\n")}\n`;
 };
 
 /** The plan's scope table: what a file may hold. Repeated keys keep only their first in `text`. */
 const allowed = (entries: ReadonlyArray<Entry>, file: "repo" | "person") => {
   const firstPort = entries.find((e) => e._tag === "port" || e._tag === "bad-port");
+
   return entries.every((e) => {
     if (e._tag === "version") {
       return file === "repo";
@@ -122,28 +140,31 @@ const scopeOnly = (entries: ReadonlyArray<Entry>, file: "repo" | "person") =>
   entries.length > 0 && entries.every((e) => (file === "repo" ? e._tag === "port" : e._tag === "version"));
 
 describe("L7, every file is strict and whole, and a key outside its file's scope fails", () => {
-  it("both files pass only when every key in each is declared, valid and in scope", async () => {
+  it("both files pass only when every key in each is declared, valid and in scope", () => {
     const entries = fc.array(entry, { maxLength: 4 });
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(entries, entries, async (repo, person) => {
         const exit = await validate(text(repo), text(person), "1.2.3");
         const ok = allowed(repo, "repo") && allowed(person, "person");
         const error = failure(exit);
-        expect(error instanceof Files.SettingsError, `repo:\n${text(repo)}\nperson:\n${text(person)}`).toBe(!ok);
+        expect(Schema.is(Files.SettingsError)(error), `repo:\n${text(repo)}\nperson:\n${text(person)}`).toBe(!ok);
         expect(Exit.isSuccess(exit)).toBe(ok);
+
         // A file whose only fault is a key the other file owns says so.
         const scope =
           (allowed(repo, "repo") && scopeOnly(person, "person")) ||
           (allowed(person, "person") && scopeOnly(repo, "repo"));
-        expect(!scope || (error instanceof Files.SettingsError && error.reason === "scope")).toBe(true);
+
+        expect(!scope || (Schema.is(Files.SettingsError)(error) && error.reason === "scope")).toBe(true);
       }),
       check,
     );
   });
 });
 
-it("T753 L3 file bytes keep exact values and origins through checked snapshots and reports", async () => {
-  await fc.assert(
+it("T753 L3 file bytes keep exact values and origins through checked snapshots and reports", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({
         count: fc.integer({ min: 0, max: 1000000 }),
@@ -161,6 +182,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
           since: "1.2.3",
           format: "text",
         });
+
         const group = Setting.group({ record: d });
         const expected = BigInt(v.count) * v.unit.scale + (v.half ? v.unit.scale / 2n : 0n);
         const spelling = `${v.count}${v.half ? ".5" : ""} ${v.unit.name}`;
@@ -181,24 +203,34 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
         const exit = await Effect.runPromiseExit(
           Effect.gen(function* () {
             const toml = yield* Toml;
-            const document = yield* toml.parse(`[limits]\nrecord = ${JSON.stringify(spelling)}\n`);
+            const document = yield* toml.parse(`[limits]\nrecord = ${Formatter.formatJson(spelling)}\n`);
+
             const files = {
               repo: { file: REPO, document: v.file === "repo" ? document : { value: {}, spans: [] } },
               person: { file: PERSON, document: v.file === "person" ? document : { value: {}, spans: [] } },
             };
+
             yield* Files.validate(group, files, { version: "1.2.3" });
+
             const resolved = yield* Sources.resolve(group, {
               flags: Sources.flags({}),
               env: Sources.env({}),
               repo: Sources.file(REPO, files.repo.document),
               person: Sources.file(PERSON, files.person.document),
             });
+
             const saved = yield* Snapshot.make(group, resolved);
-            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(saved));
+
+            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(
+              Formatter.formatJson(saved),
+            );
+
             const checked = yield* Snapshot.read(group, transported);
+
             return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
           }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto])),
         );
+
         expect(Exit.isSuccess(exit)).toBe(true);
 
         if (Exit.isSuccess(exit)) {
@@ -221,18 +253,19 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
               scope: d.scope,
               reload: d.reload,
               since: d.since,
+              app: { name: "fabrika", list: "fabrika settings" },
             },
           ]);
         }
       },
     ),
     check,
-  );
-});
+  ));
 
 describe("L8, the version refusal comes first, and a supported version goes on", () => {
   const triple = fc.tuple(fc.nat(12), fc.nat(12), fc.nat(12));
   const companion = fc.constantFrom("none", "unknown-repo", "unknown-person", "bad-port", "scope");
+
   const COMPANION: Record<string, { repo: string; person: string }> = {
     none: { repo: "", person: "" },
     "unknown-repo": { repo: "[nope]\nkey = 1\n", person: "" },
@@ -241,8 +274,8 @@ describe("L8, the version refusal comes first, and a supported version goes on",
     scope: { repo: "[instance]\nport = 18800\n", person: "" },
   };
 
-  it("a repo needing a newer fabrika is refused before any other error; an older or equal one goes on", async () => {
-    await fc.assert(
+  it("a repo needing a newer fabrika is refused before any other error; an older or equal one goes on", () =>
+    fc.assert(
       fc.asyncProperty(
         triple,
         fc.oneof(
@@ -255,11 +288,12 @@ describe("L8, the version refusal comes first, and a supported version goes on",
             ? wanted[wanted.findIndex((part, n) => part !== running[n])]! >
               running[wanted.findIndex((part, n) => part !== running[n])]!
             : false;
+
           const repo = `fabrika-version = "${wanted.join(".")}"\n${COMPANION[other]!.repo}`;
           const exit = await validate(repo, COMPANION[other]!.person, running.join("."));
 
           const error = failure(exit);
-          const got = error === undefined ? "started" : error instanceof Files.SettingsError ? error.reason : error;
+          const got = error === undefined ? "started" : Schema.is(Files.SettingsError)(error) ? error.reason : error;
           // Newer: the refusal. Otherwise the companion's own error, or a clean pass with none.
           expect(
             newer
@@ -272,8 +306,7 @@ describe("L8, the version refusal comes first, and a supported version goes on",
         },
       ),
       { ...check, examples: [[[0, 9, 0], [0, 10, 0], "unknown-repo"]] },
-    );
-  });
+    ));
 });
 
 describe("L10, the three S5 messages, word for word", () => {
@@ -282,60 +315,68 @@ describe("L10, the three S5 messages, word for word", () => {
   const person = (line: string) =>
     ["# ~/.fabrika/fabrika.toml, the person's", "#:schema ./person.json", "", "[instance]", line, ""].join("\n");
 
-  it("format: a port out of range names the file, line, key, value and the rule, and stops", async () => {
-    // format: settings.md S5 gives these words, and a person reads them at start.
-    const exit = await validate("", person("port = 70000"), "0.0.0");
-    expect(failure(exit)).toMatchObject({
-      reason: "invalid",
-      message:
-        "~/.fabrika/fabrika.toml, line 5: instance.port = 70000 is not a port.\n" +
-        "  A port is a whole number from 1 to 65535. The instance did not start.",
-    });
-  });
+  it.live("format: a port out of range names the file, line, key, value and the rule, and stops", () =>
+    Effect.gen(function* () {
+      // format: settings.md S5 gives these words, and a person reads them at start.
+      const exit = yield* Effect.exit(validation("", person("port = 70000"), "0.0.0"));
+      expect(failure(exit)).toMatchObject({
+        reason: "invalid",
+        message:
+          "~/.fabrika/fabrika.toml, line 5: instance.port = 70000 is not a port.\n" +
+          "  A port is a whole number from 1 to 65535. The instance did not start.",
+      });
+    }),
+  );
 
-  it("format: a typo names the key and offers the key it meant, and stops", async () => {
-    // format: settings.md S5 gives these words, and a person reads them at start.
-    const exit = await validate("", person("prot = 18800"), "0.0.0");
-    expect(failure(exit)).toMatchObject({
-      reason: "unknown",
-      message:
-        "~/.fabrika/fabrika.toml, line 5: there is no setting instance.prot. Did you mean instance.port?\n" +
-        "  fabrika settings lists every setting. The instance did not start.",
-    });
-  });
+  it.live("format: a typo names the key and offers the key it meant, and stops", () =>
+    Effect.gen(function* () {
+      // format: settings.md S5 gives these words, and a person reads them at start.
+      const exit = yield* Effect.exit(validation("", person("prot = 18800"), "0.0.0"));
+      expect(failure(exit)).toMatchObject({
+        reason: "unknown",
+        message:
+          "~/.fabrika/fabrika.toml, line 5: there is no setting instance.prot. Did you mean instance.port?\n" +
+          "  fabrika settings lists every setting. The instance did not start.",
+      });
+    }),
+  );
 
-  it("format: a person's setting in the repo's file says where it may be set, and stops", async () => {
-    // format: settings.md S5 gives these words, and a person reads them at start.
-    const exit = await validate("[instance]\nport = 18800\n", "", "0.0.0");
-    expect(failure(exit)).toMatchObject({
-      reason: "scope",
-      message:
-        ".fabrika/fabrika.toml, line 2: instance.port is a person's setting, so a repo's file may not set it.\n" +
-        "  Set it in ~/.fabrika/fabrika.toml, as FABRIKA_INSTANCE_PORT, or with --instance.port. The instance did not start.",
-    });
-  });
+  it.live("format: a person's setting in the repo's file says where it may be set, and stops", () =>
+    Effect.gen(function* () {
+      // format: settings.md S5 gives these words, and a person reads them at start.
+      const exit = yield* Effect.exit(validation("[instance]\nport = 18800\n", "", "0.0.0"));
+      expect(failure(exit)).toMatchObject({
+        reason: "scope",
+        message:
+          ".fabrika/fabrika.toml, line 2: instance.port is a person's setting, so a repo's file may not set it.\n" +
+          "  Set it in ~/.fabrika/fabrika.toml, as FABRIKA_INSTANCE_PORT, or with --instance.port. The instance did not start.",
+      });
+    }),
+  );
 
-  it("a typo in the repo's file is never offered a person-only key", async () => {
+  it("a typo in the repo's file is never offered a person-only key", () => {
     // One edit away from `port`: each is a typo of a key the repo's file may not set.
     const typo = fc
       .tuple(fc.nat(3), fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz"), fc.constantFrom("swap", "add", "drop"))
       .map(([at, letter, edit]) => {
         const word = "port";
-        return edit === "swap"
-          ? word.slice(0, at) + letter + word.slice(at + 1)
-          : edit === "add"
-            ? word.slice(0, at) + letter + word.slice(at)
-            : word.slice(0, at) + word.slice(at + 1);
+
+        return Match.value(edit).pipe(
+          Match.when("swap", () => Str.slice(0, at)(word) + letter + Str.slice(at + 1)(word)),
+          Match.when("add", () => Str.slice(0, at)(word) + letter + Str.slice(at)(word)),
+          Match.orElse(() => Str.slice(0, at)(word) + Str.slice(at + 1)(word)),
+        );
       })
       .filter((w) => w !== "port" && w.length > 0);
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(typo, async (key) => {
         const exit = await validate(`[instance]\n${key} = 18800\n`, "", "0.0.0");
         const error = failure(exit);
         expect(error).toMatchObject({ reason: "unknown" });
         // The whole key, so the typo `instance.portt` itself is not counted as the offer.
-        expect(error instanceof Files.SettingsError ? error.message : "").not.toMatch(/instance\.port(?![a-z0-9-])/);
-        expect(error instanceof Files.SettingsError ? error.message : "").toContain(`instance.${key}`);
+        expect(Schema.is(Files.SettingsError)(error) ? error.message : "").not.toMatch(/instance\.port(?![a-z0-9-])/);
+        expect(Schema.is(Files.SettingsError)(error) ? error.message : "").toContain(`instance.${key}`);
       }),
       check,
     );
@@ -365,7 +406,9 @@ const KINDS = {
 } as const;
 
 type Kind = keyof typeof KINDS;
+
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
+
 const scopes = fc.constantFrom<Setting.Scope>(["person"], ["repo"], ["person", "repo"]);
 
 const declared = fc.uniqueArray(
@@ -377,7 +420,7 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 
 const grouped = (ds: Declared) =>
   Setting.group(
-    Object.fromEntries(
+    Rec.fromEntries(
       ds.map((d, n) => [
         `s${n}`,
         Setting.make(`${d.table}.${d.key}`, {
@@ -400,7 +443,7 @@ const document = (ds: Declared) =>
       ...ds.map((d) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
-          KINDS[d.kind].valid.map((value: unknown) => ({ _tag: "valid" as const, value })),
+          KINDS[d.kind].valid.map((value: number | string | boolean) => ({ _tag: "valid" as const, value })),
           KINDS[d.kind].invalid.map((value) => ({ _tag: "invalid" as const, value })),
         ),
       ),
@@ -438,6 +481,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
 
           // A stray key is one no declaration names at its place, so it is unknown there.
           const stray = doc.stray;
+
           const taken =
             stray === undefined
               ? true
@@ -456,7 +500,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
           }
 
           // A table that holds only the other file's keys is unknown to this file, even empty.
-          for (const table of Object.keys(tree)) {
+          for (const table of Rec.keys(tree)) {
             if (ds.every((d) => d.table !== table || !d.scope.includes(doc.file))) {
               ok = false;
             }
@@ -465,6 +509,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
           const exit = Schema.decodeUnknownExit(Files.schema(grouped(ds), doc.file))(tree, {
             onExcessProperty: "error",
           });
+
           expect(Exit.isSuccess(exit), JSON.stringify({ file: doc.file, tree })).toBe(ok);
 
           // Nothing is filled in: an omitted key stays omitted, so no default reaches the file's value.
