@@ -13,21 +13,20 @@ const One = Schema.Union([
 ]);
 
 /** Every Msg of the fixture. `timer` is internal: no port names it. */
-export const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("big"), n: Schema.BigInt }),
-  Schema.Struct({ type: Schema.Literal("bytes"), body: Schema.Uint8Array }),
-  Schema.Struct({ type: Schema.Literal("date"), at: Schema.Date }),
-  Schema.Struct({ type: Schema.Literal("number"), x: Schema.Number }),
-  Schema.Struct({
-    type: Schema.Literal("mixed"),
+export const Msg = Schema.TaggedUnion({
+  big: { n: Schema.BigInt },
+  bytes: { body: Schema.Uint8Array },
+  date: { at: Schema.Date },
+  number: { x: Schema.Number },
+  mixed: {
     n: Schema.optionalKey(Schema.BigInt),
     at: Schema.optional(Schema.Date),
     body: Schema.NullOr(Schema.Uint8Array),
     xs: Schema.Array(Schema.Number),
     one: One,
-  }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
-]);
+  },
+  timer: { at: Schema.Int },
+});
 
 export type Msg = typeof Msg.Type;
 
@@ -37,15 +36,14 @@ export const Query = One;
 export type Query = typeof Query.Type;
 
 /** A Msg whose Type and Encoded sides are equal: what every shipped write port has today. */
-export const PlainMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("text"), s: Schema.String, n: Schema.Int }),
-  Schema.Struct({
-    type: Schema.Literal("pick"),
+export const PlainMsg = Schema.TaggedUnion({
+  text: { s: Schema.String, n: Schema.Int },
+  pick: {
     side: Schema.Literals(["left", "right"]),
     note: Schema.optionalKey(Schema.String),
-  }),
-  Schema.Struct({ type: Schema.Literal("list"), xs: Schema.Array(Schema.Union([Schema.String, Schema.Int])) }),
-]);
+  },
+  list: { xs: Schema.Array(Schema.Union([Schema.String, Schema.Int])) },
+});
 
 export type PlainMsg = typeof PlainMsg.Type;
 
@@ -135,34 +133,33 @@ export const plain = () => {
 };
 
 // The amendment's edges, each in its member, and the mixed member at both ends of its optional fields.
-const first: Msg = { type: "big", n: 2n ** 64n };
+const first: Msg = Msg.cases.big.make({ n: 2n ** 64n });
 
 const edges: ReadonlyArray<Msg> = [
   first,
-  { type: "big", n: -1n },
-  { type: "bytes", body: new Uint8Array(0) },
-  { type: "bytes", body: new Uint8Array([0, 255]) },
-  { type: "date", at: new Date(0) },
-  { type: "number", x: Number.NaN },
-  { type: "number", x: Infinity },
-  { type: "number", x: -Infinity },
-  { type: "number", x: -0 },
-  { type: "mixed", body: null, xs: [], one: { k: "b", n: -1n } },
-  {
-    type: "mixed",
+  Msg.cases.big.make({ n: -1n }),
+  Msg.cases.bytes.make({ body: new Uint8Array(0) }),
+  Msg.cases.bytes.make({ body: new Uint8Array([0, 255]) }),
+  Msg.cases.date.make({ at: new Date(0) }),
+  Msg.cases.number.make({ x: Number.NaN }),
+  Msg.cases.number.make({ x: Infinity }),
+  Msg.cases.number.make({ x: -Infinity }),
+  Msg.cases.number.make({ x: -0 }),
+  Msg.cases.mixed.make({ body: null, xs: [], one: { k: "b", n: -1n } }),
+  Msg.cases.mixed.make({
     n: 2n ** 64n,
     at: new Date(0),
     body: new Uint8Array([0, 255]),
     xs: [Number.NaN, Infinity, -Infinity, -0],
     one: { k: "a", at: new Date(0) },
-  },
+  }),
 ];
 
 const Edge = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: edges.length - 1 }));
 
 /** One drawn Msg a port names and one edge; a run checks both. */
 export const Sent = Arbitrary.all({
-  drawn: Arbitrary.schema(Msg).pipe(Arbitrary.filter((m) => m.type !== "timer")),
+  drawn: Arbitrary.schema(Msg).pipe(Arbitrary.filter((m) => m._tag !== "timer")),
   edge: Arbitrary.schema(Edge).pipe(Arbitrary.map((i) => edges[i] ?? first)),
 });
 

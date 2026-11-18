@@ -37,14 +37,12 @@ const Ask = Schema.Struct({
   drop: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
-const Start = Schema.Struct({
-  type: Schema.Literal("start"),
+const Start = Schema.TaggedStruct("start", {
   ask: Ask,
   parent: Schema.optionalKey(Schema.String),
 });
 
-const End = Schema.Struct({
-  type: Schema.Literal("end"),
+const End = Schema.TaggedStruct("end", {
   /** Cmds this step lists before its `exit`, which the host performs first, in order. */
   before: Schema.Array(Ask),
   /** Cmds after it, which the host never performs; `twice` lists a second `exit` among them. */
@@ -55,10 +53,10 @@ const End = Schema.Struct({
   parent: Schema.optionalKey(Schema.String),
 });
 
-const Ping = Schema.Struct({ type: Schema.Literal("ping"), parent: Schema.optionalKey(Schema.String) });
+const Ping = Schema.TaggedStruct("ping", { parent: Schema.optionalKey(Schema.String) });
 
 /** @internal */
-export const Msg = Schema.Union([Start, End, Ping]);
+export const Msg = Schema.Union([Start, End, Ping]).pipe(Schema.toTaggedUnion("_tag"));
 
 /** The Cmd for one ask, with its extra fields beside and its dropped operands gone. */
 const asked = (ask: typeof Ask.Type) => {

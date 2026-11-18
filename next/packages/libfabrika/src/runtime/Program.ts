@@ -158,7 +158,7 @@ Object.defineProperty(readCase, "make", { value: readPort });
 Object.defineProperty(writeCase, "make", { value: writePort });
 
 /**
- * Schema for one input port of a program, kept in `inputs` under its Msg `type`.
+ * Schema for one input port of a program, kept in `inputs` under its Msg `_tag`.
  *
  * **Details**
  *
@@ -228,7 +228,8 @@ const Declaration = Schema.Struct({
 /** A declaration the runner can load: one that also declares every port its built-in Cmds answer on. */
 const Loadable = Declaration.check(downDeclared);
 
-type Typed = { readonly type: string };
+// oxlint-disable-next-line fabrika/no-hand-tag -- a reader that knows no cases: any program's Msg or Cmd, so its key is an open string (as for ledger/Log.ts)
+type Typed = { readonly _tag: string };
 
 type ProgramMachine = Steps & {
   readonly model: Schema.Schema<unknown>;
@@ -250,7 +251,7 @@ type Port<M extends Typed, K, P> = P extends Pick<typeof InputSchema.cases.read.
   ? P extends ReadPort<Q, (view: never, input: Q["Type"]) => unknown>
     ? P
     : never
-  : K extends M["type"]
+  : K extends M["_tag"]
     ? Description
     : never;
 
@@ -476,7 +477,7 @@ const makeEffect = Effect.fn("program.make")(function* <
  */
 export const Program = { schema: Declaration, make, makeEffect };
 
-type PortFields<M, K extends string> = M extends Typed ? (K extends M["type"] ? Omit<M, "type"> : never) : never;
+type PortFields<M, K extends string> = M extends Typed ? (K extends M["_tag"] ? Omit<M, "_tag"> : never) : never;
 
 type PortSchema<P extends typeof Declaration.Type, K extends string> = string extends K
   ? Declared
@@ -491,47 +492,50 @@ type PortSchema<P extends typeof Declaration.Type, K extends string> = string ex
     : Declared;
 
 const Payload = Schema.Record(Schema.String, Schema.Json).check(
-  Schema.makeFilter((value) => !Object.hasOwn(value, "type")),
+  Schema.makeFilter((value) => !Object.hasOwn(value, "_tag")),
 );
 
 const Fields = Schema.Record(Schema.String, Schema.Unknown);
 
 // Keep the Msg's codecs and checks intact. Only add and remove the port's discriminator.
-const writePortCodec = (msg: Declared, key: string) =>
-  Payload.pipe(
+const writePortCodec = (msg: Declared, key: string) => {
+  const tagged = Schema.TaggedStruct(key, {}).make({});
+
+  return Payload.pipe(
     Schema.decodeTo(
       Schema.toCodecJson(msg),
       SchemaTransformation.transform<Schema.Json, Readonly<Record<string, Schema.Json>>>({
-        decode: (value) => ({ ...value, type: key }),
+        decode: (value) => ({ ...value, ...tagged }),
         encode: (wire) => {
           if (!isJsonObject(wire)) {
             return {};
           }
 
-          const { type: _, ...value } = wire;
+          const { _tag: _, ...value } = wire;
 
           return value;
         },
       }),
     ),
-    Schema.decodeTo(Fields.check(Schema.makeFilter((m) => m.type === key))),
+    Schema.decodeTo(Fields.check(Schema.makeFilter((m) => m._tag === key))),
     Schema.decodeTo(
       Fields,
       SchemaTransformation.transform({
         decode: (m) => {
-          const { type: _, ...fields } = Predicate.isObject(m) ? m : {};
+          const { _tag: _, ...fields } = Predicate.isObject(m) ? m : {};
 
           return fields;
         },
-        encode: (fields) => ({ ...fields, type: key }),
+        encode: (fields) => ({ ...fields, ...tagged }),
       }),
     ),
   );
+};
 
 /**
  * Returns the schema of one of a program's ports, or none when the program declares no port by
  * that name. A read port gives its own schema. A write port gives a codec for its Msg's fields
- * without `type`, which decodes and checks them with the Msg's own JSON codec.
+ * without `_tag`, which decodes and checks them with the Msg's own JSON codec.
  *
  * @category getters
  */
@@ -681,7 +685,7 @@ const decodeRefusal = Schema.decodeUnknownResult(Schema.NullOr(Refusal));
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const isTyped = (u: unknown): u is Typed =>
-  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, "type") && Predicate.isString(u.type);
+  Predicate.isObjectOrArray(u) && Predicate.hasProperty(u, "_tag") && Predicate.isString(u._tag);
 
 const decodeTyped = (u: unknown): Option.Option<Typed> => (isTyped(u) ? Option.some(u) : Option.none());
 
@@ -722,7 +726,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
     return Option.none();
   }
 
-  const type = typed.value.type;
+  const type = typed.value._tag;
   const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.okType === type || d.errType === type));
 
   if (def === undefined || !Predicate.isObjectOrArray(msg)) {
@@ -730,7 +734,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
   }
 
   const cmd = Predicate.hasProperty(msg, "cmd") ? msg.cmd : undefined;
-  const sameCmd = Option.exists(decodeTyped(cmd), (c) => c.type === def.cmdType);
+  const sameCmd = Option.exists(decodeTyped(cmd), (c) => c._tag === def.cmdType);
 
   if (!sameCmd || !Predicate.hasProperty(msg, "at") || !Predicate.isNumber(msg.at)) {
     return Option.some(false);
@@ -799,7 +803,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       !saved &&
       Option.exists(
         typed,
-        (m) => m.type === "timer" || Arr.some(defs, (d) => d.okType === m.type || d.errType === m.type),
+        (m) => m._tag === "timer" || Arr.some(defs, (d) => d.okType === m._tag || d.errType === m._tag),
       )
     ) {
       return Option.none();
@@ -826,7 +830,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       return false;
     }
 
-    const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.cmdType === typed.value.type));
+    const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.cmdType === typed.value._tag));
 
     if (def === undefined) {
       return true;
@@ -879,7 +883,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const now = model(raw, "saved_state");
       const m = message(msg, false);
 
-      if (Option.isNone(m) || !cells.has(m.value.type)) {
+      if (Option.isNone(m) || !cells.has(m.value._tag)) {
         return Admission.cases.invalid.make({});
       }
 
@@ -899,7 +903,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const now = model(raw, "saved_state");
       const m = message(msg, false);
 
-      if (Option.isNone(m) || !cells.has(m.value.type)) {
+      if (Option.isNone(m) || !cells.has(m.value._tag)) {
         throw new ProgramDown({ reason: "step" });
       }
 
@@ -946,7 +950,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const typed = decodeTyped(msg);
 
       // tea drops a Msg whose cell is gone by its turn; a saved one is dropped the same way.
-      if (Option.isSome(typed) && !cells.has(typed.value.type)) {
+      if (Option.isSome(typed) && !cells.has(typed.value._tag)) {
         return prepare(now, [], "saved_letter");
       }
 

@@ -253,6 +253,11 @@
       ]
     },
     {
+      "name": "next-email",
+      "layer": 6,
+      "paths": ["next/packages/libfabrika/src/email"]
+    },
+    {
       "name": "next-access",
       "layer": 5,
       "paths": ["next/packages/libfabrika/src/access"],
@@ -409,6 +414,11 @@
       "name": "next-id-test-support",
       "paths": ["next/packages/libfabrika/src/Id.test-support.ts"],
       "imports": ["next-shared"]
+    },
+    {
+      "name": "next-crypto-test-support",
+      "paths": ["next/packages/libfabrika/src/telemetry/Crypto.test-support.ts"],
+      "imports": ["next-vitest"]
     },
     {
       "name": "next-shared",

@@ -13,6 +13,14 @@ import { programs } from "virtual:fabrika-built";
 import { Project as RealProject } from "../src/brain.ts";
 import * as Hold from "./chaos-revoke.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  arm: {},
+  arrive: {},
+  release: {},
+});
+
 export { Connection, Control, IsolateTail, Process, RecordPart } from "../src/brain.ts";
 
 // oxlint-disable-next-line import/no-default-export -- edge: the local runtime loads the real Worker's default fetch
@@ -61,7 +69,7 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
               deliver: (pid, _envelope, _span, incoming) => options.deliver(pid, incoming),
               policy: Effect.fnUntraced(function* (pid: string) {
                 const policy = yield* options.policy(pid);
-                const [previous, next] = yield* move({ type: "arrive", process: pid });
+                const [previous, next] = yield* move({ ...Tag.cases.arrive.make({}), process: pid });
 
                 // Gateway.route calls policy only after online has checked this real connection.
                 if (previous._tag === "armed" && next._tag === "held") {
@@ -75,8 +83,8 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
                 raw: [],
                 personOnly: [],
                 name: (m) =>
-                  Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "type") && Predicate.isString(m.type)
-                    ? m.type
+                  Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "_tag") && Predicate.isString(m._tag)
+                    ? m._tag
                     : undefined,
               },
               events: { personOnly: [] },
@@ -104,9 +112,9 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
                   params,
                 ).pipe(Effect.mapError((cause) => LedgerError.make({ reason: "bad_row", cause })));
 
-                yield* move({ type: "arm", process });
+                yield* move({ ...Tag.cases.arm.make({}), process });
               } else if (method === "p90.release") {
-                yield* move({ type: "release" });
+                yield* move(Tag.cases.release.make({}));
                 yield* Deferred.succeed(release, undefined);
               }
 

@@ -26,6 +26,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { checklist, checklistMachine } from "./program.ts";
 import { checklistWindow } from "./window.tsx";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  check: {},
+  remove: {},
+  timer: {},
+  uncheck: {},
+});
+
 const SEED = 119120;
 
 const DAY = 86_400_000;
@@ -121,15 +131,15 @@ const fold = (list: ReadonlyArray<Choice>): ReadonlyArray<View> => {
     const wake = checklist.wake(model);
 
     const options: Array<Msg> = [
-      { type: "add", name: c.name },
+      { ...Tag.cases.add.make({}), name: c.name },
       // Once an item is stamped, its real wake time makes the late state reachable.
-      ...(wake === null ? [] : [{ type: "timer" as const, at: wake, arrivedAt: Math.max(now, wake) + c.later }]),
+      ...(wake === null ? [] : [{ ...Tag.cases.timer.make({}), at: wake, arrivedAt: Math.max(now, wake) + c.later }]),
       ...(held === null
         ? []
         : ([
-            { type: "check", name: held },
-            { type: "uncheck", name: held },
-            { type: "remove", name: held },
+            { ...Tag.cases.check.make({}), name: held },
+            { ...Tag.cases.uncheck.make({}), name: held },
+            { ...Tag.cases.remove.make({}), name: held },
           ] as const)),
     ];
 
@@ -138,7 +148,7 @@ const fold = (list: ReadonlyArray<Choice>): ReadonlyArray<View> => {
 
     if (checklist.refuse(model, msg) === null) {
       model = applyCell(checklistMachine, model, msg)[0];
-      now = msg.type === "timer" ? msg.arrivedAt : now;
+      now = msg._tag === "timer" ? msg.arrivedAt : now;
       views.push(checklist.view.select(model));
     }
   }
@@ -240,7 +250,7 @@ describe("L24: the checklist window's markup", () => {
     let shown = 0;
     fc.assert(
       fc.property(views, fc.string({ maxLength: 80 }), fc.option(REASONS), name, (view, draft, reason, item) => {
-        const words = reason === null ? null : refused({ type: "add", name: item }, reason);
+        const words = reason === null ? null : refused({ ...Tag.cases.add.make({}), name: item }, reason);
         const html = render(view, words, draft);
         const fields = tags(html, /<input[^>]*type="text"[^>]*>/g);
         expect(fields).toHaveLength(1);
@@ -275,15 +285,15 @@ describe("L24: the checklist window's markup", () => {
   it("refused words name the item for taken and missing; other reasons get the default, which never echoes free text", () => {
     fc.assert(
       fc.property(name, REASONS, REASONS, (item, a, b) => {
-        const taken = refused({ type: "add", name: item }, "taken");
-        const missing = refused({ type: "check", name: item }, "missing");
+        const taken = refused({ ...Tag.cases.add.make({}), name: item }, "taken");
+        const missing = refused({ ...Tag.cases.check.make({}), name: item }, "missing");
         expect(taken).toContain(`"${item}"`);
         expect(missing).toContain(`"${item}"`);
         expect(taken).not.toBe(missing);
         const word = (r: string) => /^[a-z_]{1,40}$/.test(r);
 
         for (const r of Arr.filter([a, b], (r) => r !== "taken" && r !== "missing")) {
-          const said = refused({ type: "remove", name: item }, r);
+          const said = refused({ ...Tag.cases.remove.make({}), name: item }, r);
           expect(Str.includes(`"${item}"`)(said), `${r} named the item`).toBe(false);
           expect(Str.includes(r)(said), `${r}'s words`).toBe(word(r));
         }
@@ -291,7 +301,9 @@ describe("L24: the checklist window's markup", () => {
         const free = Arr.filter([a, b], (r) => !word(r));
 
         if (free.length === 2) {
-          expect(refused({ type: "add", name: item }, free[0]!)).toBe(refused({ type: "add", name: item }, free[1]!));
+          expect(refused({ ...Tag.cases.add.make({}), name: item }, free[0]!)).toBe(
+            refused({ ...Tag.cases.add.make({}), name: item }, free[1]!),
+          );
         }
       }),
       { seed: SEED, numRuns: 50 },

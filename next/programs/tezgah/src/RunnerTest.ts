@@ -16,6 +16,13 @@ import { Array as Arr, Effect, Formatter, Option, Predicate, Schema } from "effe
 import type { Scope } from "effect";
 import * as fc from "fast-check";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  attach: {},
+  did: {},
+});
+
 const SEED = 119120;
 
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -138,7 +145,9 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
   if (m.kind !== "close") {
     const tile = fresh();
     const does = m.kind === "split_right" ? "tezgah.split_right" : "tezgah.split_down";
-    expect(answered(yield* live.send({ type: "did", does, from: from.id, via, tile }))._tag).toBe("accepted");
+    expect(answered(yield* live.send({ ...Tag.cases.did.make({}), does, from: from.id, via, tile }))._tag).toBe(
+      "accepted",
+    );
     yield* until(`the split's ${tile} on workspace ${n}`, readView(live), (v) =>
       Arr.some(tilesOn(v, n), (t) => t.id === tile),
     );
@@ -147,7 +156,7 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
   }
 
   const was = yield* live.process(from.shows);
-  const answer = answered(yield* live.send({ type: "did", does: "tezgah.close", from: from.id, via }));
+  const answer = answered(yield* live.send({ ...Tag.cases.did.make({}), does: "tezgah.close", from: from.id, via }));
 
   if (tiles.length === 1) {
     expect(answer, "the last tile of a workspace never closes").toEqual(
@@ -205,7 +214,9 @@ export const suite = (open: Open) =>
 
             for (const [i, moves] of fc.sample(Moves, { seed: SEED, numRuns: RUNS }).entries()) {
               const n = i + 1;
-              expect(answered(yield* live.send({ type: "attach", workspace: n, tile: fresh() }))._tag).toBe("accepted");
+              expect(
+                answered(yield* live.send({ ...Tag.cases.attach.make({}), workspace: n, tile: fresh() }))._tag,
+              ).toBe("accepted");
               const first = yield* until(`workspace ${n}`, readView(live), (v) => tilesOn(v, n).length === 1);
 
               if (n === 1) {

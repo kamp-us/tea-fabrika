@@ -51,6 +51,13 @@ import {
   spanOutputs,
 } from "./reload.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  dec: {},
+});
+
 /** What the driver leaves on the page for later calls. */
 declare global {
   interface Window {
@@ -298,7 +305,7 @@ const session = (url: string, key: string) =>
         rpc(p, "process.send", {
           pid,
           letter: `press-${++letters}`,
-          m: { type },
+          m: Tag.cases[type].make({}),
           sentAt: "2026-11-11T04:00:00.000Z",
           seen: 0,
         }),

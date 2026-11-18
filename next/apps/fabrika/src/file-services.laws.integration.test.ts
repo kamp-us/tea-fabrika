@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
-import { runsFor } from "@kampus/vitest";
+import { Recorder, runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Array as Arr,
@@ -88,38 +88,58 @@ const instanceFailure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   });
 };
 
-it("dev refuses every invalid parent with reason parent_gone before touching settings", async () => {
-  const invalid = fc.oneof(
-    fc.string().map((text) => `not-a-pid-${text}`),
-    fc.integer().map((n) => String(n + 0.5)),
-    fc.integer({ min: -100, max: 1 }).map(String),
-    fc
-      .integer({ min: 2 })
-      .filter((pid) => pid !== process.ppid)
-      .map(String),
-  );
+it.effect.prop(
+  "dev refuses every invalid parent with reason parent_gone before touching settings",
+  {
+    text: Schema.String.check(Schema.isPattern(/^[\x20-\x7e]*$/)),
+    fraction: Schema.Int.check(Schema.isBetween({ minimum: -2147483648, maximum: 2147483647 })),
+    small: Schema.Int.check(Schema.isBetween({ minimum: -100, maximum: 1 })),
+    other: Schema.Int.check(
+      Schema.isBetween({ minimum: 2, maximum: 2147483647 }),
+      Schema.makeFilter((pid) => pid !== process.ppid),
+    ),
+  },
+  ({ text, fraction, small, other }) =>
+    Effect.forEach(
+      // Keep both old examples and exercise every old input class in each generated case.
+      ["1", "1.5", `not-a-pid-${text}`, String(fraction + 0.5), String(small), String(other)],
+      (parent) =>
+        Effect.gen(function* () {
+          yield* Effect.acquireRelease(
+            Effect.sync(() => process.argv),
+            (argv) =>
+              Effect.sync(() => {
+                process.argv = argv;
+                cli.layer = undefined;
+                cli.work = undefined;
+              }),
+          );
 
-  await fc.assert(
-    fc.asyncProperty(invalid, async (parent) => {
-      const argv = process.argv;
-      const touched = vi.fn(() => Effect.never);
-      cli.layer = Layer.merge(FileSystem.layerNoop({ makeDirectory: touched }), Path.layer);
-      process.argv = [process.execPath, "dev.ts", "--child", `--parent=${parent}`];
+          process.argv = [process.execPath, "dev.ts", "--child", `--parent=${parent}`];
 
-      try {
-        vi.resetModules();
-        await import("../dev.ts");
-        instanceFailure(await Effect.runPromiseExit(cli.work!), "parent_gone");
-        expect(touched).not.toHaveBeenCalled();
-      } finally {
-        process.argv = argv;
-        cli.layer = undefined;
-        cli.work = undefined;
-      }
-    }),
-    { seed: 119120, numRuns: runsFor({ fast: 4, full: 30 }), examples: [["1"], ["1.5"]] },
-  );
-});
+          // dev.ts provides its own layers, so the Recorder is built once here and its built context
+          // handed to the hoisted cli.layer: one store, which the law reads after dev.ts ran.
+          // Plant (run once): in dev.ts, call fs.makeDirectory before the parent check; the recorded
+          // list is not [].
+          const files = yield* Layer.build(
+            Recorder.layer(FileSystem.FileSystem, FileSystem.makeNoop({ makeDirectory: () => Effect.never })),
+          );
+
+          cli.layer = Layer.merge(Layer.succeedContext(files), Path.layer);
+          vi.resetModules();
+          yield* Effect.tryPromise({
+            try: () => import("../dev.ts"),
+            catch: (cause: unknown) => new Error("dev import failed", { cause }),
+          });
+          instanceFailure(yield* Effect.exit(cli.work!), "parent_gone");
+          expect(
+            yield* Recorder.calls(FileSystem.FileSystem, "makeDirectory").pipe(Effect.provideContext(files)),
+          ).toEqual([]);
+        }).pipe(Effect.scoped),
+      { concurrency: 1, discard: true },
+    ),
+  { arbitrary: { size: 100, runs: runsFor({ fast: 4, full: 30 }) } },
+);
 
 it("dev defaults to a scoped detached child and reports its nonzero exit as child_failed", async () => {
   await fc.assert(

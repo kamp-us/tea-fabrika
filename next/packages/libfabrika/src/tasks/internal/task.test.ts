@@ -12,6 +12,7 @@ import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 
 import * as fc from "fast-check";
@@ -28,6 +29,16 @@ import {
   fcTypeId,
 } from "../TasksTest.ts";
 import { task } from "./task.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  collect: {},
+  finish: {},
+  request: {},
+  start: {},
+  take: {},
+});
 
 const RUNS = { seed: 119120, numRuns: 100 };
 
@@ -185,37 +196,45 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
 
   switch (move) {
     case "request_new":
-      return [{ type: "request", request: copied(request) }, { phase: "requested", request }, { answer: "accepted" }];
+      return [
+        { ...Tag.cases.request.make({}), request: copied(request) },
+        { phase: "requested", request },
+        { answer: "accepted" },
+      ];
     case "early": {
       const msgs: ReadonlyArray<Msg> = [
-        { type: "take", executor: able(request, cell, base), execution: cell.execution },
-        { type: "start", execution: cell.execution },
-        { type: "finish", execution: cell.execution, result: cell.result },
+        { ...Tag.cases.take.make({}), executor: able(request, cell, base), execution: cell.execution },
+        { ...Tag.cases.start.make({}), execution: cell.execution },
+        { ...Tag.cases.finish.make({}), execution: cell.execution, result: cell.result },
       ];
 
       return [choose(msgs, cell.variant), world, refuse("not_found")];
     }
 
     case "request_equal":
-      return [{ type: "request", request: copied(request) }, world, same];
+      return [{ ...Tag.cases.request.make({}), request: copied(request) }, world, same];
     case "request_changed": {
       const changed = changedRequest(request, cell.variant, choose(tape.requests, cell.variant + 1));
 
-      return [{ type: "request", request: changed }, world, refuse("conflict")];
+      return [{ ...Tag.cases.request.make({}), request: changed }, world, refuse("conflict")];
     }
 
     case "take_ok": {
       const executor = able(request, cell, base);
       const next = { ...world, phase: "assigned" as const, executor, execution: cell.execution };
 
-      return [{ type: "take", executor: copied(executor), execution: cell.execution }, next, { answer: "accepted" }];
+      return [
+        { ...Tag.cases.take.make({}), executor: copied(executor), execution: cell.execution },
+        next,
+        { answer: "accepted" },
+      ];
     }
 
     case "take_again": {
       // The take reply was lost: the same key on a new connection proposes a new identity, and keeps the first.
       const executor = able(request, cell, base);
 
-      return [{ type: "take", executor, execution: near(execution, cell.variant) }, world, same];
+      return [{ ...Tag.cases.take.make({}), executor, execution: near(execution, cell.variant) }, world, same];
     }
 
     case "take_other": {
@@ -226,55 +245,63 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
 
       const executor = { ...able(request, cell, base), key, has: [...CAPABILITIES] };
 
-      return [{ type: "take", executor, execution: cell.execution }, world, refuse("not_target")];
+      return [{ ...Tag.cases.take.make({}), executor, execution: cell.execution }, world, refuse("not_target")];
     }
 
     case "take_lacking": {
       const missing = choose(request.needs, cell.variant);
       const executor = { ...able(request, cell, base), has: Arr.filter(CAPABILITIES, (c) => c !== missing) };
 
-      return [{ type: "take", executor, execution: cell.execution }, world, refuse("lacks_capability")];
+      return [{ ...Tag.cases.take.make({}), executor, execution: cell.execution }, world, refuse("lacks_capability")];
     }
 
     case "out_of_order": {
       // Before a take nothing may start or finish; an assigned task may not finish, even by its own execution.
       const msgs: ReadonlyArray<Msg> =
         world.phase === "assigned"
-          ? [{ type: "finish", execution, result: cell.result }]
+          ? [{ ...Tag.cases.finish.make({}), execution, result: cell.result }]
           : [
-              { type: "start", execution: cell.execution },
-              { type: "finish", execution: cell.execution, result: cell.result },
+              { ...Tag.cases.start.make({}), execution: cell.execution },
+              { ...Tag.cases.finish.make({}), execution: cell.execution, result: cell.result },
             ];
 
       return [choose(msgs, cell.variant), world, refuse("wrong_state")];
     }
 
     case "start_ok":
-      return [{ type: "start", execution: `${execution}` }, { ...world, phase: "started" }, { answer: "accepted" }];
+      return [
+        { ...Tag.cases.start.make({}), execution: `${execution}` },
+        { ...world, phase: "started" },
+        { answer: "accepted" },
+      ];
     case "start_again":
-      return [{ type: "start", execution: `${execution}` }, world, same];
+      return [{ ...Tag.cases.start.make({}), execution: `${execution}` }, world, same];
     case "start_wrong":
-      return [{ type: "start", execution: near(execution, cell.variant) }, world, refuse("wrong_execution")];
+      return [
+        { ...Tag.cases.start.make({}), execution: near(execution, cell.variant) },
+        world,
+        refuse("wrong_execution"),
+      ];
     case "finish_ok": {
       const next = { ...world, phase: "finished" as const, result: cell.result };
 
-      return [{ type: "finish", execution, result: copied(cell.result) }, next, { answer: "accepted" }];
+      return [{ ...Tag.cases.finish.make({}), execution, result: copied(cell.result) }, next, { answer: "accepted" }];
     }
 
     case "finish_equal":
-      return [{ type: "finish", execution, result: copied(world.result ?? cell.result) }, world, same];
+      return [{ ...Tag.cases.finish.make({}), execution, result: copied(world.result ?? cell.result) }, world, same];
     case "finish_other": {
       const other =
         JSON.stringify(cell.result) === JSON.stringify(world.result)
           ? Result.cases.exited.make({ code: 1, version: `${JSON.stringify(cell.result)}-other` })
           : cell.result;
 
-      return [{ type: "finish", execution, result: other }, world, refuse("conflict")];
+      return [{ ...Tag.cases.finish.make({}), execution, result: other }, world, refuse("conflict")];
     }
 
     case "finish_wrong":
       return [
-        { type: "finish", execution: near(execution, cell.variant), result: cell.result },
+        { ...Tag.cases.finish.make({}), execution: near(execution, cell.variant), result: cell.result },
         world,
         refuse("wrong_execution"),
       ];
@@ -282,16 +309,20 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
       const collection = { process: request.process, letter: `${request.id}/answer` };
       const next = { ...world, phase: "collected" as const, collection };
 
-      return [{ type: "collect", collection: copied(collection) }, next, { answer: "accepted" }];
+      return [{ ...Tag.cases.collect.make({}), collection: copied(collection) }, next, { answer: "accepted" }];
     }
 
     case "collect_again":
-      return [{ type: "collect", collection: copied(world.collection ?? { process: "", letter: "" }) }, world, same];
+      return [
+        { ...Tag.cases.collect.make({}), collection: copied(world.collection ?? { process: "", letter: "" }) },
+        world,
+        same,
+      ];
     case "collect_conflict": {
       // The same process names another letter: one result goes in one answer letter.
       const collection = { process: request.process, letter: `${request.id}/answer/${cell.letter}` };
 
-      return [{ type: "collect", collection }, world, refuse("conflict")];
+      return [{ ...Tag.cases.collect.make({}), collection }, world, refuse("conflict")];
     }
 
     case "collect_other": {
@@ -299,7 +330,7 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
       const process = cell.stranger === request.process ? `${request.process}x` : cell.stranger;
 
       return [
-        { type: "collect", collection: { process, letter: `${request.id}/answer` } },
+        { ...Tag.cases.collect.make({}), collection: { process, letter: `${request.id}/answer` } },
         world,
         refuse("wrong_process"),
       ];
@@ -308,7 +339,11 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
     case "collect_early": {
       const collection = { process: request.process, letter: `${request.id}/answer` };
 
-      return [{ type: "collect", collection }, world, refuse(world.phase === "absent" ? "not_found" : "wrong_state")];
+      return [
+        { ...Tag.cases.collect.make({}), collection },
+        world,
+        refuse(world.phase === "absent" ? "not_found" : "wrong_state"),
+      ];
     }
   }
 };

@@ -21,21 +21,26 @@ export const Part = Schema.Struct({
 });
 
 /**
- * Schema for one letter of a chunked send: the reader's input `type`, its share of the items, and
- * its part.
+ * Schema for one letter of a chunked send: a Msg keyed by the reader's input name, its share of the
+ * items, and its part.
  *
  * @category schemas
  */
-export const Chunk = Schema.Struct({ type: Schema.NonEmptyString, items: Schema.Array(Schema.Json), part: Part });
+export const Chunk = Schema.Struct({
+  // oxlint-disable-next-line fabrika/no-hand-tag -- a writer that knows no cases: a chunk letter is the Msg of any reader's chunked input, so its key is an open string (as for ledger/Log.ts)
+  _tag: Schema.NonEmptyString,
+  items: Schema.Array(Schema.Json),
+  part: Part,
+});
 
 /**
- * Returns the reader's typed input for one chunked port: letters of `type` whose items decode
+ * Returns the reader's typed input for one chunked port: letters named `type` whose items decode
  * with `item`.
  *
  * @category schemas
  */
 export const input = <const T extends string, S extends Schema.Top>(type: T, item: S) =>
-  Schema.Struct({ type: Schema.Literal(type), items: Schema.Array(item), part: Part });
+  Schema.TaggedStruct(type, { items: Schema.Array(item), part: Part });
 
 /**
  * Error for an item whose letter alone is over the chunk size, so the send cannot be cut.
@@ -69,7 +74,8 @@ const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value)).
  */
 export const cut = (send: Send, size: number): Result.Result<Arr.NonEmptyReadonlyArray<Chunk>, TooBig> => {
   const letter = (items: ReadonlyArray<Schema.Json>, seq: number, last: boolean): Chunk => ({
-    type: send.type,
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a writer that knows no cases: a chunk letter is the Msg of any reader's chunked input, so its key is an open string (as for ledger/Log.ts)
+    _tag: send.type,
     items,
     part: { id: send.id, seq, last },
   });

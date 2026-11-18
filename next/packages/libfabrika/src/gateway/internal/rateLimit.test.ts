@@ -7,6 +7,12 @@ import * as fc from "fast-check";
 import * as RateLimit from "../RateLimit.ts";
 import * as Rate from "./rateLimit.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  take: {},
+});
+
 type Model = typeof Rate.machine.model.Type;
 
 type Msg = typeof Rate.machine.msg.Type;
@@ -37,7 +43,7 @@ const trace = (initial: typeof Policy.Type, picks: typeof Tape.Type) => {
         : [18];
 
     const msg: Msg = {
-      type: "take",
+      ...Tag.cases.take.make({}),
       at: times[pick % times.length]!,
       policy: pick % 7 === 0 ? (pick % 2 !== 0 ? { ...p, window: p.window + 1 } : { ...p, limit: p.limit + 1 }) : p,
     };
@@ -64,7 +70,7 @@ it.prop(
         let trusted = -Infinity;
 
         for (const { msg, cmds, next } of steps) {
-          if (msg.type !== "take") {
+          if (msg._tag !== "take") {
             return "the generated trace supplied an answer without a pending command";
           }
 
@@ -119,7 +125,7 @@ it.prop(
     const state = Rate.machine.init(null, {})[0];
 
     const [next, cmds] = applyCell<Model, Msg, Cmd>(Rate.machine, state, {
-      type: "take",
+      ...Tag.cases.take.make({}),
       at: Number.MAX_SAFE_INTEGER,
       policy: { limit: 1, window },
     });
@@ -137,7 +143,7 @@ it("vector: expiry is half-open, just before, at and after the end", () => {
 
   const take = (at: number) => {
     const result = applyCell<Model, Msg, Cmd>(Rate.machine, state, {
-      type: "take",
+      ...Tag.cases.take.make({}),
       at,
       policy: { limit: 1, window: 60 },
     });

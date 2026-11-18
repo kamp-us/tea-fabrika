@@ -37,11 +37,19 @@ export type Handle = {
  *
  * @internal
  */
-export type DialMsg =
-  | { readonly type: "socket_opened"; readonly dial: number; readonly at: number }
-  | { readonly type: "frame"; readonly dial: number; readonly text: string; readonly at: number; readonly ms?: number }
-  | { readonly type: "socket_closed"; readonly dial: number; readonly code: number; readonly at: number }
-  | { readonly type: "socket_failure"; readonly dial: number; readonly op: "connect"; readonly error: ErrorClass };
+export const DialMsg = Schema.TaggedUnion({
+  socket_opened: { dial: Schema.Finite, at: Schema.Finite },
+  frame: { dial: Schema.Finite, text: Schema.String, at: Schema.Finite, ms: Schema.optionalKey(Schema.Finite) },
+  socket_closed: { dial: Schema.Finite, code: Schema.Finite, at: Schema.Finite },
+  socket_failure: { dial: Schema.Finite, op: Schema.Literal("connect"), error: ErrorClass },
+});
+
+/**
+ * One dial's socket event, as a value.
+ *
+ * @internal
+ */
+export type DialMsg = typeof DialMsg.Type;
 
 /** The id of a frame that answers a call, read only to time the answer. */
 const answerId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Finite })));
@@ -137,10 +145,10 @@ export const dialer =
               const at = yield* Clock.currentTimeMillis;
 
               if (error.reason._tag !== "SocketCloseError") {
-                emit({ type: "socket_failure", dial, op: "connect", error: openFailure(error) });
+                emit(DialMsg.cases.socket_failure.make({ dial, op: "connect", error: openFailure(error) }));
               }
 
-              emit({ type: "socket_closed", dial, code: closeCode(error), at });
+              emit(DialMsg.cases.socket_closed.make({ dial, code: closeCode(error), at }));
 
               return yield* Effect.never;
             }),
@@ -153,7 +161,7 @@ export const dialer =
           Effect.sync(() => options.handles.set(dial, { writer, key, written })),
           () => Effect.sync(() => options.handles.delete(dial)),
         );
-        emit({ type: "socket_opened", dial, at: yield* Clock.currentTimeMillis });
+        emit(DialMsg.cases.socket_opened.make({ dial, at: yield* Clock.currentTimeMillis }));
 
         return yield* pull.pipe(
           Effect.flatMap((texts) =>
@@ -168,13 +176,14 @@ export const dialer =
                   return at;
                 });
 
-                emit({
-                  type: "frame",
-                  dial,
-                  text,
-                  at,
-                  ...Option.match(sent, { onNone: () => ({}), onSome: (t) => ({ ms: Math.max(0, at - t) }) }),
-                });
+                emit(
+                  DialMsg.cases.frame.make({
+                    dial,
+                    text,
+                    at,
+                    ...Option.match(sent, { onNone: () => ({}), onSome: (t) => ({ ms: Math.max(0, at - t) }) }),
+                  }),
+                );
               }
             }),
           ),
@@ -182,7 +191,9 @@ export const dialer =
           Effect.catch((error) =>
             Effect.gen(function* () {
               options.handles.delete(dial);
-              emit({ type: "socket_closed", dial, code: closeCode(error), at: yield* Clock.currentTimeMillis });
+              emit(
+                DialMsg.cases.socket_closed.make({ dial, code: closeCode(error), at: yield* Clock.currentTimeMillis }),
+              );
 
               return yield* Effect.never;
             }),

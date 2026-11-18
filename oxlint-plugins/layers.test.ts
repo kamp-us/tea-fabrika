@@ -681,6 +681,7 @@ describe("the real rule file on planted trees", () => {
       "next-client": 7, // P18: the window client, beside the door
       "next-door": 7,
       "next-runtime": 6,
+      "next-email": 6, // P36's approved plan: email sits beside the runtime, above access
       "next-access": 5,
       "next-tezgah": 5, // Desk S2a: above `processes/`, whose `ProcessName` it takes, and below the client
       "next-processes": 4,

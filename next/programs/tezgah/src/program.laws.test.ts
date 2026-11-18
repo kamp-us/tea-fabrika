@@ -65,6 +65,17 @@ class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: uniq
 const promised = <A>(run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  attach: {},
+  did: {},
+  start_child_err: {},
+  start_child_ok: {},
+  stop_child_err: {},
+  stop_child_ok: {},
+});
+
 const SEED = 119120;
 
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -172,7 +183,7 @@ const near = (a: Rect | undefined, b: Rect, label: string) => {
   }
 };
 
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
+type Cmd = { readonly _tag: string; readonly [key: string]: unknown };
 
 type Waiting =
   | { readonly _tag: "attach"; readonly workspace: number; readonly tile: string; readonly cmd: Cmd }
@@ -246,7 +257,7 @@ const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
     // SAFETY: a stepped answer's cmds are the tea Cmds tezgah's update
     // handed out, JSON objects each with a string `type`.
     const cmds = s.cmds as ReadonlyArray<Cmd>;
-    w.stops.push(...Arr.filter(cmds, (c) => c.type === "stop_child"));
+    w.stops.push(...Arr.filter(cmds, (c) => c._tag === "stop_child"));
 
     return { before, after: w.view, result: { _tag: "stepped" }, cmds };
   }
@@ -257,7 +268,7 @@ const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
 
 const via = { _tag: "key", keys: "ctrl+b %" };
 
-const starts = (cmds: ReadonlyArray<Cmd>) => Arr.filter(cmds, (c) => c.type === "start_child");
+const starts = (cmds: ReadonlyArray<Cmd>) => Arr.filter(cmds, (c) => c._tag === "start_child");
 
 /** The answer a start gets: `started`, or for an attach maybe the boot list's `already_started`. */
 const started = (cmd: Cmd, kind: "started" | "already_started", w: World) => {
@@ -305,7 +316,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       }
 
       const tile = typeId("tile", w.next++);
-      const e = take(p, w, { type: "attach", workspace: n, tile }, false);
+      const e = take(p, w, { ...Tag.cases.attach.make({}), workspace: n, tile }, false);
       const cmd = starts(e.cmds)[0];
 
       if (cmd !== undefined) {
@@ -325,7 +336,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
 
       const dir: Dir = kind === "split_right" ? "right" : "down";
       const tile = typeId("tile", w.next++);
-      const e = take(p, w, { type: "did", does: DOES[dir], from, via, tile }, false);
+      const e = take(p, w, { ...Tag.cases.did.make({}), does: DOES[dir], from, via, tile }, false);
       const cmd = starts(e.cmds)[0];
       const space = spaceWith(w.view, from)?.id ?? "";
 
@@ -348,7 +359,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
 
       return {
         move: `reattach ${n}`,
-        ...take(p, w, { type: "attach", workspace: n, tile: typeId("tile", w.next++) }, false),
+        ...take(p, w, { ...Tag.cases.attach.make({}), workspace: n, tile: typeId("tile", w.next++) }, false),
       };
     }
 
@@ -361,7 +372,11 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
         return null;
       }
 
-      return { move: `close ${from}`, ...take(p, w, { type: "did", does: "tezgah.close", from, via }, false), from };
+      return {
+        move: `close ${from}`,
+        ...take(p, w, { ...Tag.cases.did.make({}), does: "tezgah.close", from, via }, false),
+        from,
+      };
     }
 
     case "answer":
@@ -379,7 +394,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
 
         return {
           move: `refuse ${waiting.tile}`,
-          ...take(p, w, { type: "start_child_err", cmd: waiting.cmd, error, at: w.at }, true),
+          ...take(p, w, { ...Tag.cases.start_child_err.make({}), cmd: waiting.cmd, error, at: w.at }, true),
           waiting,
           answer: "refused",
         };
@@ -390,7 +405,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
 
       return {
         move: `${answer} ${waiting.tile}`,
-        ...take(p, w, { type: "start_child_ok", cmd: waiting.cmd, value, at: w.at }, true),
+        ...take(p, w, { ...Tag.cases.start_child_ok.make({}), cmd: waiting.cmd, value, at: w.at }, true),
         waiting,
         answer,
       };
@@ -407,8 +422,8 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
 
       const msg =
         pick % 3 === 0
-          ? { type: "stop_child_err", cmd, error: { _tag: "noproc" }, at: w.at }
-          : { type: "stop_child_ok", cmd, value: null, at: w.at };
+          ? { ...Tag.cases.stop_child_err.make({}), cmd, error: { _tag: "noproc" }, at: w.at }
+          : { ...Tag.cases.stop_child_ok.make({}), cmd, value: null, at: w.at };
 
       return { move: `stop answer ${String(cmd["name"])}`, ...take(p, w, msg, true) };
     }
@@ -433,7 +448,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
 
       return {
         move: `attach ${n} reusing ${pick % 2 === 0 ? "live" : "waiting"} ${reused}`,
-        ...take(p, w, { type: "attach", workspace: n, tile: reused }, false),
+        ...take(p, w, { ...Tag.cases.attach.make({}), workspace: n, tile: reused }, false),
       };
     }
 
@@ -449,7 +464,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
 
       return {
         move: `split reusing ${reused}`,
-        ...take(p, w, { type: "did", does, from, via, tile: reused }, false),
+        ...take(p, w, { ...Tag.cases.did.make({}), does, from, via, tile: reused }, false),
         from,
       };
     }
@@ -459,7 +474,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       const does = (["tezgah.split_right", "tezgah.split_down", "tezgah.close"] as const)[pick % 3];
 
       const msg = {
-        type: "did",
+        ...Tag.cases.did.make({}),
         does,
         from,
         via,
@@ -713,7 +728,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
             tape(["attach", "answer", "split_right", "split_down", "answer", "close", "close", "stop"], 30),
             (cmds) => {
               for (const e of walk(p, cmds)) {
-                const stops = Arr.filter(e.cmds, (c) => c.type === "stop_child");
+                const stops = Arr.filter(e.cmds, (c) => c._tag === "stop_child");
 
                 if (!Str.startsWith("close")(e.move) || e.from === undefined || e.result._tag !== "stepped") {
                   expect(stops, `L8: ${e.move} stops nothing`).toEqual([]);
@@ -742,25 +757,28 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
 });
 
 /** L9's blind draw: which kind of move, and which target the fold picks in the state it reached. */
-const Pick = fc.record({
-  type: fc.constant("pick" as const),
-  kind: fc.constantFrom<Kind>(
-    "attach",
-    "reattach",
-    "reattach",
-    "attach_reused",
-    "attach_reused",
-    "split_right",
-    "split_down",
-    "answer",
-    "close",
-    "reused",
-    "reused",
-    "unknown",
-    "unknown",
-  ),
-  pick: fc.nat(),
-});
+const PickTag = Schema.TaggedStruct("pick", {});
+
+const Pick = fc
+  .record({
+    kind: fc.constantFrom<Kind>(
+      "attach",
+      "reattach",
+      "reattach",
+      "attach_reused",
+      "attach_reused",
+      "split_right",
+      "split_down",
+      "answer",
+      "close",
+      "reused",
+      "reused",
+      "unknown",
+      "unknown",
+    ),
+    pick: fc.nat(),
+  })
+  .map((fields) => ({ ...PickTag.make({}), ...fields }));
 
 describe("Desk S2a L9: tezgah refuses what names nothing", () => {
   it.live(
@@ -899,27 +917,28 @@ const Cursor = fc.oneof(
 
 const VIAS = [{ _tag: "key", keys: "ctrl+b o" }, { _tag: "click" }, { _tag: "key", keys: "f6" }] as const;
 
-const FocusPick = fc.record({
-  type: fc.constant("pick" as const),
-  kind: fc.constantFrom(
-    "split_right",
-    "split_down",
-    "answer",
-    "answer",
-    "attach",
-    "close",
-    "focus",
-    "focus",
-    "focus",
-    "focus",
-    "focus_far",
-    "split_cursor",
-    "split_cursor",
-  ),
-  pick: fc.nat(),
-  cursor: Cursor,
-  sentAt: fc.integer({ min: 0, max: 10_000_000 }),
-});
+const FocusPick = fc
+  .record({
+    kind: fc.constantFrom(
+      "split_right",
+      "split_down",
+      "answer",
+      "answer",
+      "attach",
+      "close",
+      "focus",
+      "focus",
+      "focus",
+      "focus",
+      "focus_far",
+      "split_cursor",
+      "split_cursor",
+    ),
+    pick: fc.nat(),
+    cursor: Cursor,
+    sentAt: fc.integer({ min: 0, max: 10_000_000 }),
+  })
+  .map((fields) => ({ ...PickTag.make({}), ...fields }));
 
 type FocusPick = typeof FocusPick extends fc.Arbitrary<infer A> ? A : never;
 
@@ -954,7 +973,7 @@ const focusMove = (
   const name = does[(c.pick >> 2) % does.length]!;
 
   const msg = {
-    type: "did",
+    ...Tag.cases.did.make({}),
     does: name,
     from,
     to,
@@ -981,7 +1000,7 @@ const splitMove = (p: Stepper, w: World, c: FocusPick) => {
   const tile = typeId("tile", w.next++);
   const space = spaceWith(w.view, from)?.id ?? "";
   w.at++;
-  const e = take(p, w, { type: "did", does: DOES[dir], from, via, tile, cursor: c.cursor }, false);
+  const e = take(p, w, { ...Tag.cases.did.make({}), does: DOES[dir], from, via, tile, cursor: c.cursor }, false);
   const cmd = starts(e.cmds)[0];
 
   if (cmd !== undefined) {
@@ -1059,7 +1078,14 @@ describe("Desk S3: focus moves at the program", () => {
               const e = take(
                 p,
                 w,
-                { type: "did", does, from: a, to: b, via: { _tag: "key", keys: "ctrl+b o" }, cursor: null },
+                {
+                  ...Tag.cases.did.make({}),
+                  does,
+                  from: a,
+                  to: b,
+                  via: { _tag: "key", keys: "ctrl+b o" },
+                  cursor: null,
+                },
                 false,
               );
 
@@ -1202,7 +1228,7 @@ describe("Desk S3: focus moves at the program", () => {
                   p,
                   w,
                   {
-                    type: "did",
+                    ...Tag.cases.did.make({}),
                     does: name,
                     from,
                     to,

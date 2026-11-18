@@ -78,6 +78,13 @@ export const supervision = Supervision;
 
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
 
+const Msg = Schema.TaggedUnion({
+  inc: { text: Schema.optionalKey(Schema.String) },
+  work: {},
+  schedule: { at: Schema.Finite },
+  throw: {},
+});
+
 const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
 
 const Cell = Schema.Struct({ pick: Nat, amount: Nat, reopen: Schema.Boolean });
@@ -112,7 +119,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
         Effect.scoped(
           Effect.gen(function* () {
             const w = yield* open(defaults);
-            yield* w.input("alpha:1", "first", { type: "inc" });
+            yield* w.input("alpha:1", "first", Msg.cases.inc.make({}));
             yield* w.drain("alpha:1");
             const encode = Schema.encodeEffect(Schema.fromJsonString(Checkpoint));
             let previous = yield* Schema.decodeUnknownEffect(Checkpoint)(yield* w.checkpoint("alpha:1"));
@@ -156,7 +163,13 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
 
             for (const [n, c] of tape.entries()) {
               const name = required(names[c.pick % names.length]);
-              const m = required([{ type: "inc" }, { type: "work" }, { type: "schedule", at: 1001 + n }][c.amount % 3]);
+
+              const m = required(
+                [Msg.cases.inc.make({}), Msg.cases.work.make({}), Msg.cases.schedule.make({ at: 1001 + n })][
+                  c.amount % 3
+                ],
+              );
+
               expect(yield* w.input(name, `healthy:${n}`, m)).toHaveProperty("_tag", "placed");
               yield* w.drain(name);
               yield* call(w, name, (r) => r.due(1001 + n));
@@ -179,7 +192,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             const used = yield* w.program("sample/alpha");
             w.limits({ ...defaults, writes: used.writes });
             const before = yield* w.snapshot;
-            expect(yield* w.input("alpha:1", "never-admitted", { type: "inc" })).toEqual(
+            expect(yield* w.input("alpha:1", "never-admitted", Msg.cases.inc.make({}))).toEqual(
               Appended.cases.refused.make({ reason: "quota" }),
             );
             expect(yield* w.snapshot).toEqual(before);
@@ -201,7 +214,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               yield* TestClock.setTime(1_000 + n * 60_001);
               const name = required(names[c.pick % 2]);
               const before = yield* w.program("sample/alpha");
-              expect(yield* w.input(name, `pair:${n}`, { type: "inc" })).toHaveProperty("_tag", "placed");
+              expect(yield* w.input(name, `pair:${n}`, Msg.cases.inc.make({}))).toHaveProperty("_tag", "placed");
               const admitted = yield* w.program("sample/alpha");
               expect(admitted.writes).toBe(2);
               expect(admitted.ahead.writes).toBe(before.ahead.writes + 1);
@@ -214,7 +227,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
                 Arr.filter(yield* w.entries, (e) => e._tag === "stepped" && e.id === `step:pair:${n}`),
               ).toHaveLength(1);
               const saved = yield* w.snapshot;
-              expect(yield* w.input(name, `refused:${n}`, { type: "inc" })).toEqual(
+              expect(yield* w.input(name, `refused:${n}`, Msg.cases.inc.make({}))).toEqual(
                 Appended.cases.refused.make({ reason: "quota" }),
               );
               expect(yield* w.snapshot).toEqual(saved);
@@ -238,7 +251,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             const initial = yield* w.program("sample/alpha");
 
             for (const [n, c] of tape.entries()) {
-              expect(yield* w.msg(required(names[c.pick % 2]), `healthy:${n}`, { type: "inc" })).toHaveProperty(
+              expect(yield* w.msg(required(names[c.pick % 2]), `healthy:${n}`, Msg.cases.inc.make({}))).toHaveProperty(
                 "_tag",
                 "accepted",
               );
@@ -256,7 +269,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
                 yield* w.drain(name);
               } else if (!terminal) {
                 w.cut(c.amount % 8);
-                const result = yield* Effect.result(w.msg(name, "poison", { type: "throw" }));
+                const result = yield* Effect.result(w.msg(name, "poison", Msg.cases.throw.make({})));
                 w.cut(null);
                 terminal =
                   result._tag === "Success" &&
@@ -274,7 +287,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             // Finish the saved delivery limit after the generated cuts, then replay the accepted history.
             for (let retry = 0; retry < 3 && !terminal; retry++) {
               yield* w.drain(name);
-              const result = yield* Effect.result(w.msg(name, "poison", { type: "throw" }));
+              const result = yield* Effect.result(w.msg(name, "poison", Msg.cases.throw.make({})));
               terminal =
                 result._tag === "Success" &&
                 Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
@@ -311,7 +324,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               true,
             );
             expect(yield* w.checkpoint(name)).not.toBeNull();
-            expect(yield* w.input("beta:1", "other", { type: "inc" })).toHaveProperty("_tag", "placed");
+            expect(yield* w.input("beta:1", "other", Msg.cases.inc.make({}))).toHaveProperty("_tag", "placed");
             yield* w.drain("beta:1");
           }),
         ),
@@ -326,7 +339,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
           Effect.gen(function* () {
             const w = yield* open(defaults);
             yield* TestClock.setTime(1_000);
-            expect(yield* w.msg("alpha:1", "healthy", { type: "inc" })).toHaveProperty("_tag", "accepted");
+            expect(yield* w.msg("alpha:1", "healthy", Msg.cases.inc.make({}))).toHaveProperty("_tag", "accepted");
             const old = yield* w.program("sample/alpha");
             const location = required(tape[0]).pick % 3;
             const resource = required(tape[0]).amount % 2 === 0 ? "writes" : "storage";
@@ -348,7 +361,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
                 process: location === 1 ? defaults.recovery.process : tighten(defaults.recovery.process),
               },
             });
-            const failure = yield* Effect.result(w.msg("alpha:1", "pending", { type: "throw" }));
+            const failure = yield* Effect.result(w.msg("alpha:1", "pending", Msg.cases.throw.make({})));
             expect(failure).toHaveProperty("_tag", "Failure");
             const fits = location === 1 && resource === "writes" && spare === 1;
             const later = fits && (yield* w.local("alpha:1")).fault === null;
@@ -402,7 +415,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               expect(yield* w.journal("alpha:1")).toEqual(saved);
               expect(yield* w.checkpoint("alpha:1")).toEqual(checkpoint);
               expect(yield* w.entries).toEqual(entries);
-              const repeated = yield* Effect.result(w.msg("alpha:1", "pending", { type: "throw" }));
+              const repeated = yield* Effect.result(w.msg("alpha:1", "pending", Msg.cases.throw.make({})));
               expect(repeated).toHaveProperty("_tag", "Failure");
               expect(repeated).toHaveProperty("failure._tag", "QuotasError");
               expect(repeated).toHaveProperty("failure.reason._tag", "RecoveryReserveExhausted");
@@ -418,7 +431,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             yield* w.drain("alpha:1");
             expect((yield* w.local("alpha:1")).fault).toBeNull();
             expect((yield* w.program("sample/alpha")).bytes).toBe(old.bytes);
-            expect(yield* w.input("beta:1", "unaffected", { type: "inc" })).toHaveProperty("_tag", "placed");
+            expect(yield* w.input("beta:1", "unaffected", Msg.cases.inc.make({}))).toHaveProperty("_tag", "placed");
           }),
         ),
       options,
@@ -440,7 +453,12 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
 
               for (let j = 0; j < length; j++) {
                 const id = `history:${n}:${j}`;
-                const m = j === length - 1 ? { type: "inc", text: Str.repeat(c.amount % 256)("é😀") } : { type: "inc" };
+
+                const m =
+                  j === length - 1
+                    ? Msg.cases.inc.make({ text: Str.repeat(c.amount % 256)("é😀") })
+                    : Msg.cases.inc.make({});
+
                 expect(yield* w.input("alpha:1", id, m)).toHaveProperty("_tag", "placed");
                 messages.push(id);
               }
@@ -504,7 +522,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             for (const [n, c] of tape.entries()) {
               const at = 1_000 + n * 120_002;
               yield* TestClock.setTime(at);
-              const m = c.pick % 2 === 0 ? { type: "work" } : { type: "schedule", at: at + 1 };
+              const m = c.pick % 2 === 0 ? Msg.cases.work.make({}) : Msg.cases.schedule.make({ at: at + 1 });
               expect(yield* w.input("alpha:1", `deferred:${n}`, m)).toHaveProperty("_tag", "placed");
               yield* w.drain("alpha:1");
               const saved = yield* w.checkpoint("alpha:1");

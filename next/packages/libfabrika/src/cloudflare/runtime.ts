@@ -90,7 +90,7 @@ import * as Audit from "../runtime/Audit.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import { BuiltProgram } from "../runtime/Built.ts";
 import type { Selected } from "../runtime/Code.ts";
-import { code as codeMachine, CodeEvent, Install, Installed } from "../runtime/Code.ts";
+import { code as codeMachine, CodeEvent, CodeMsg, Install, Installed } from "../runtime/Code.ts";
 import { CodeStore, type CodeStoreError } from "../runtime/CodeStore.ts";
 import * as CodeStoreSql from "../runtime/CodeStoreSql.ts";
 import { Alarm, CheckedWriter, Recording, type Incoming } from "../runtime/Entry.ts";
@@ -1013,7 +1013,11 @@ const projectLogic = Effect.fn("project.init")(function* (
   const decodeCode = Schema.decodeUnknownOption(CodeEvent);
 
   const select = (fact: (typeof CodeEvent.cases)["code.loaded"]["Type"], id: string) => {
-    selected = applyCell(codeMachine, selected, { type: "loaded", id, program: fact.program, hash: fact.hash })[0];
+    selected = applyCell(
+      codeMachine,
+      selected,
+      CodeMsg.cases.loaded.make({ id, program: fact.program, hash: fact.hash }),
+    )[0];
 
     // An open fact is the move of a home saved before the code store: its old build, and the code
     // that took that build's place (0529).
@@ -1704,12 +1708,12 @@ const projectLogic = Effect.fn("project.init")(function* (
       typeof selected,
       Parameters<typeof codeMachine.update.checked>[1],
       ReturnType<typeof codeMachine.update.checked>[1][number]
-    >(codeMachine, selected, { type: "checked", ...input });
+    >(codeMachine, selected, CodeMsg.cases.checked.make({ ...input }));
 
     const swaps: Array<{ load: string; program: string; hash: string }> = [];
 
     for (const cmd of cmds) {
-      if (cmd.type === "append") {
+      if (cmd._tag === "append") {
         const placed = yield* ledger.append("gateway/code", cmd.id, lineFor(yield* from(), cmd.event));
 
         if (placed._tag === "refused") {
@@ -1733,17 +1737,20 @@ const projectLogic = Effect.fn("project.init")(function* (
           typeof selected,
           Parameters<typeof codeMachine.update.loaded>[1],
           ReturnType<typeof codeMachine.update.loaded>[1][number]
-        >(codeMachine, selected, {
-          type: "loaded",
-          id: cmd.id,
-          program: fact.program,
-          hash: fact.hash,
-        });
+        >(
+          codeMachine,
+          selected,
+          CodeMsg.cases.loaded.make({
+            id: cmd.id,
+            program: fact.program,
+            hash: fact.hash,
+          }),
+        );
 
         selected = next;
 
         for (const swap of commands) {
-          if (swap.type === "swap") {
+          if (swap._tag === "swap") {
             swaps.push(swap);
           }
         }

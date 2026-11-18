@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-port-unknown-model-regression",
+  "ticket": "766",
+  "pr": "kamp-us/tea-fabrika#1517",
+  "started": "2026-11-17T04:26:52-08:00",
+  "ended": "2026-11-17T04:30:46-08:00",
+  "parent": "2026-11-17-port-input-source-fixes",
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Distinct F3 after the same auditor accepted F1/F2: today's fieldrow port treats inherited Object prototype keys as known model prices. Extended the existing generated row law with prototype-key and unknown model labels. The independent oracle now stores the same known price pairs in a Map, avoiding its own inherited lookup; every existing row/price/reason assertion remains. Required coverage reaches both known prices and prototype/ordinary unknown labels with and without usage, in the same100 cases and seed119120. On exact unchanged27d64 source, the row law failed at an intended assertion and the coverage test passed. Normal format passed. No compiler, full API, full lint, protected law or CI ran.",
+  "plants": [
+    {
+      "law": "The Codex row's fields, sums and list price match fieldrow.py's for the same events file",
+      "plant": "old27d64 model lookup reads inherited Object prototype properties as rates",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 3.9,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}

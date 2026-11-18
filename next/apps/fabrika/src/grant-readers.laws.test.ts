@@ -1,12 +1,25 @@
 // P12, next/. The real command is captured at its NodeRuntime edge; no process or socket starts.
+import { it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { runsFor } from "@kampus/vitest";
-import { Cause, DateTime, Effect, Exit, Layer, Match, Option, Schema, Sink, Stream, Record as Rec } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  DateTime,
+  Effect,
+  Exit,
+  Layer,
+  Match,
+  Option,
+  Schema,
+  Sink,
+  Stream,
+  Record as Rec,
+} from "effect";
 import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-
-import * as fc from "fast-check";
-import { expect, it, vi } from "vitest";
+import { TestClock, TestConsole } from "effect/testing";
+import { expect, vi } from "vitest";
 
 const cli = vi.hoisted(() => ({
   // SAFETY: work starts unset; the CLI mock stores the Effect it was handed.
@@ -33,11 +46,42 @@ vi.mock("@effect/platform-node", async (original) => {
   };
 });
 
+/** One `fetch` call as the law's stand-in saw it: the address and the options. */
+type Sent = readonly [url: string, options: RequestInit | undefined];
+
 /**
- * Runs the captured command with this run's `fetch` stub as the client's `fetch`. A fresh process
- * reads the global once; here one process runs many laws, and the client would keep the first stub.
+ * A stand-in for Effect's `FetchHttpClient.Fetch` reference that keeps each call it is handed, in
+ * order, and answers with `answer`. The law owns the list, since `fetch` is a function reference and
+ * not an Effect service the Recorder could watch.
  */
-const run = () => Effect.runPromiseExit(cli.work!.pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)));
+const fetches = (answer: (url: string, options: RequestInit | undefined) => Promise<Response>) => {
+  const sent: Array<Sent> = [];
+
+  const fetch: typeof globalThis.fetch = (url, options) => {
+    sent.push([String(url), options]);
+
+    return answer(String(url), options);
+  };
+
+  return { sent, fetch };
+};
+
+/** A stand-in that refuses every call, for a law that expects none. */
+const refused = () => fetches(() => Promise.reject(new Error("must not fetch")));
+
+/**
+ * Runs the captured command with the law's `fetch` as the client's `fetch`, and Effect's
+ * `TestConsole` as the `Console` it prints to, since grant.ts does not provide one of its own.
+ * Answers the exit and every line printed with `Console.log`.
+ */
+const run = Effect.fnUntraced(function* (fetch: typeof globalThis.fetch) {
+  // Keep the old wall-clock bounds on the grant's timestamp.
+  const exit = yield* Effect.exit(
+    TestClock.withLive(cli.work!).pipe(Effect.provideService(FetchHttpClient.Fetch, fetch)),
+  );
+
+  return { exit, logged: yield* TestConsole.logLines };
+}, Effect.provide(TestConsole.layer));
 
 /** What one `fetch` call puts on the wire: its method, every header, and its body as text. */
 const wire = (options: RequestInit | undefined) => ({
@@ -58,47 +102,59 @@ const typed = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Option.getOrUndefined(error)).toBeInstanceOf(Error);
 };
 
-it("grant command rejects malformed outside URLs as GrantError before fetching or signing", async () => {
-  const invalid = fc.oneof(
-    fc.string().map((s) => `relative-${encodeURIComponent(s)}`),
-    fc.constantFrom("http://[", "http://%", "http://[::1", "https://"),
-  );
+// fc.string's default alphabet is printable ASCII. Keep that domain when moving its runner.
+const text = Schema.String.check(Schema.isPattern(/^[\x20-\x7e]*$/));
 
-  await fc.assert(
-    fc.asyncProperty(invalid, async (url) => {
-      const argv = process.argv;
-      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
-      process.argv = [
-        process.execPath,
-        "grant.ts",
-        "client",
-        url,
-        "public-fingerprint",
-        "--code=made-up",
-        "--key=unused-key-path",
-      ];
+it.effect.prop(
+  "grant command rejects malformed outside URLs as GrantError before fetching or signing",
+  { text, broken: Schema.Literals(["http://[", "http://%", "http://[::1", "https://"]) },
+  ({ text, broken }) =>
+    Effect.forEach(
+      ["http://[", `relative-${encodeURIComponent(text)}`, broken],
+      (url) =>
+        Effect.gen(function* () {
+          yield* Effect.acquireRelease(
+            Effect.sync(() => process.argv),
+            (argv) =>
+              Effect.sync(() => {
+                process.argv = argv;
+                cli.work = undefined;
+              }),
+          );
+          const f = refused();
+          process.argv = [
+            process.execPath,
+            "grant.ts",
+            "client",
+            url,
+            "public-fingerprint",
+            "--code=made-up",
+            "--key=unused-key-path",
+          ];
 
-      try {
-        cli.work = undefined;
-        vi.resetModules();
-        await import("../grant.ts");
-        expect(cli.work).toBeDefined();
-        typed(await run(), "bad_url");
-        expect(fetch).not.toHaveBeenCalled();
-      } finally {
-        process.argv = argv;
-        fetch.mockRestore();
-      }
-    }),
-    { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }), examples: [["http://["]] },
-  );
-});
+          cli.work = undefined;
+          vi.resetModules();
+          yield* Effect.tryPromise({
+            try: () => import("../grant.ts"),
+            catch: (cause: unknown) => new Error("grant import failed", { cause }),
+          });
+          expect(cli.work).toBeDefined();
+          // Plant (run once): in grant.ts, fetch the target before parsing the URL; `sent` is not [].
+          typed((yield* run(f.fetch)).exit, "bad_url");
+          expect(f.sent).toEqual([]);
+        }).pipe(Effect.scoped),
+      { concurrency: 1, discard: true },
+    ),
+  { arbitrary: { size: 100, runs: runsFor({ fast: 3, full: 20 }) } },
+);
 
 const usage = "usage: grant.ts client URL KEY --code=CODE --key=PATH";
 
-it("grant usage guard names the error for each missing argument or flag", async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.string(), fc.integer({ min: 0, max: 4 }), async (text, missing) => {
+it.effect.prop(
+  "grant usage guard names the error for each missing argument or flag",
+  { text, missing: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })) },
+  ({ text, missing }) =>
+    Effect.gen(function* () {
       const args = ["client", "http://127.0.0.1:18787", "public-fingerprint", `--code=${text}`, "--key=unused-path"];
 
       if (missing === 0) {
@@ -110,52 +166,68 @@ it("grant usage guard names the error for each missing argument or flag", async 
       }
 
       // Removing the URL also removes its following positional argument so the CLI cannot shift it.
-      const argv = process.argv;
-      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
+      yield* Effect.acquireRelease(
+        Effect.sync(() => process.argv),
+        (argv) =>
+          Effect.sync(() => {
+            process.argv = argv;
+            cli.work = undefined;
+          }),
+      );
+      const f = refused();
       process.argv = [process.execPath, "grant.ts", ...args];
 
-      try {
-        vi.resetModules();
-        await import("../grant.ts");
-        typed(await run(), usage);
-        expect(fetch).not.toHaveBeenCalled();
-      } finally {
-        process.argv = argv;
-        fetch.mockRestore();
-      }
+      vi.resetModules();
+      yield* Effect.tryPromise({
+        try: () => import("../grant.ts"),
+        catch: (cause: unknown) => new Error("grant import failed", { cause }),
+      });
+      // Plant (run once): in grant.ts, fetch before the usage check; `sent` is not [].
+      typed((yield* run(f.fetch)).exit, usage);
+      expect(f.sent).toEqual([]);
     }),
-    { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) },
-  );
+  { arbitrary: { size: 100, runs: runsFor({ fast: 3, full: 25 }) } },
+);
+
+const target = Schema.Struct({
+  key: text,
+  for: text,
+  to: text,
+  code: text,
+  label: text,
 });
 
-const generated = fc.record({
-  fingerprint: fc.string(),
-  code: fc.string(),
-  label: fc.option(fc.string(), { nil: undefined }),
-  target: fc.record({
-    key: fc.string(),
-    for: fc.string(),
-    to: fc.string(),
-    code: fc.string(),
-    label: fc.string(),
-  }),
-  armored: fc.string(),
-  exit: fc.integer({ min: 1, max: 255 }),
-  badTarget: fc.jsonValue().filter(
-    (raw) =>
-      raw !== null &&
-      !Schema.is(
-        Schema.Struct({
-          key: Schema.String,
-          for: Schema.String,
-          to: Schema.String,
-          code: Schema.String,
-          label: Schema.String,
-        }),
-      )(raw),
+const generated = {
+  fingerprint: text,
+  code: text,
+  label: Schema.UndefinedOr(text),
+  target,
+  armored: text,
+  exit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 255 })),
+  badTarget: Arbitrary.schema(Schema.Json).pipe(
+    Arbitrary.filter(
+      (raw) =>
+        raw !== null &&
+        !Schema.is(
+          Schema.Struct({
+            key: Schema.String,
+            for: Schema.String,
+            to: Schema.String,
+            code: Schema.String,
+            label: Schema.String,
+          }),
+        )(raw),
+    ),
+    // Keep the old smallest failing JSON case while retaining every rejected JSON value.
+    (invalid) => Arbitrary.array(invalid, { maxLength: 1 }),
+    Arbitrary.map((values) => (values.length === 0 ? {} : values[0]!)),
   ),
-  badReply: fc.jsonValue().filter((raw) => !Schema.is(Schema.Record(Schema.String, Schema.Json))(raw)),
-});
+  badReply: Arbitrary.schema(Schema.Json).pipe(
+    Arbitrary.filter((raw) => !Schema.is(Schema.Record(Schema.String, Schema.Json))(raw)),
+    (invalid) => Arbitrary.array(invalid, { maxLength: 1 }),
+    Arbitrary.map((values) => (values.length === 0 ? [] : values[0]!)),
+  ),
+};
 
 const results = {
   get: "unreachable",
@@ -173,9 +245,20 @@ const results = {
 
 // SAFETY: results is a const object literal, so its own keys are exactly its declared keys.
 for (const mode of Rec.keys(results) as Array<keyof typeof results>) {
-  it(`grant ${mode} path preserves the signed fields and exact error reason`, async () => {
-    await fc.assert(
-      fc.asyncProperty(generated, async (data) => {
+  it.effect.prop(
+    `grant ${mode} path preserves the signed fields and exact error reason`,
+    generated,
+    (data) =>
+      Effect.gen(function* () {
+        yield* Effect.acquireRelease(
+          Effect.sync(() => process.argv),
+          (argv) =>
+            Effect.sync(() => {
+              process.argv = argv;
+              cli.layer = undefined;
+              cli.work = undefined;
+            }),
+        );
         const commands: Array<ChildProcess.Command> = [];
         const signed: Array<string> = [];
         cli.layer = Layer.succeed(
@@ -207,160 +290,160 @@ for (const mode of Rec.keys(results) as Array<keyof typeof results>) {
             }),
           ),
         );
-        const calls: Array<[string, RequestInit | undefined]> = [];
 
-        const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-          calls.push([String(url), options]);
-
+        const { sent: calls, fetch } = fetches((_url, options) => {
           if (options?.method === "POST") {
             if (mode === "post") {
-              throw new Error("post unavailable");
+              return Promise.reject(new Error("post unavailable"));
             }
 
             if (mode === "status") {
-              return new Response("refused", { status: 403 });
+              return Promise.resolve(new Response("refused", { status: 403 }));
             }
 
             if (mode === "replyJson") {
-              return new Response("{");
+              return Promise.resolve(new Response("{"));
             }
 
-            return Response.json(
-              mode === "reply" ? data.badReply : { _tag: mode === "refused" ? "refused" : "applied" },
+            return Promise.resolve(
+              Response.json(mode === "reply" ? data.badReply : { _tag: mode === "refused" ? "refused" : "applied" }),
             );
           }
 
           if (mode === "get") {
-            throw new Error("get unavailable");
+            return Promise.reject(new Error("get unavailable"));
           }
 
           if (mode === "json") {
-            return new Response("{");
+            return Promise.resolve(new Response("{"));
           }
 
-          return Response.json(
-            Match.value(mode).pipe(
-              Match.when("target", () => data.badTarget),
-              Match.when("waiting", () => null),
-              Match.orElse(() => data.target),
+          return Promise.resolve(
+            Response.json(
+              Match.value(mode).pipe(
+                Match.when("target", () => data.badTarget),
+                Match.when("waiting", () => null),
+                Match.orElse(() => data.target),
+              ),
             ),
           );
         });
 
-        const argv = process.argv;
-        const log = vi.spyOn(console, "log").mockImplementation(() => {});
         process.argv = [
           process.execPath,
           "grant.ts",
-          "client",
-          "http://127.0.0.1:18787/ignored?q=ignored",
-          data.fingerprint,
           `--code=${data.code}`,
           "--key=unused-signing-path",
           ...(data.label === undefined ? [] : [`--label=${data.label}`]),
+          // A generated fingerprint may start with "-". It is a positional value, not a flag.
+          "--",
+          "client",
+          "http://127.0.0.1:18787/ignored?q=ignored",
+          data.fingerprint,
         ];
 
-        try {
-          vi.resetModules();
-          await import("../grant.ts");
-          const before = DateTime.toEpochMillis(DateTime.nowUnsafe());
-          const exit = await run();
-          const reason = results[mode];
+        vi.resetModules();
+        yield* Effect.tryPromise({
+          try: () => import("../grant.ts"),
+          catch: (cause: unknown) => new Error("grant import failed", { cause }),
+        });
+        const before = DateTime.toEpochMillis(DateTime.nowUnsafe());
+        const { exit, logged } = yield* run(fetch);
+        const reason = results[mode];
 
-          if (reason === null) {
-            expect(Exit.isSuccess(exit)).toBe(true);
-          } else {
-            typed(exit, reason);
-          }
-
-          // The address as `fetch` itself parses the string the command builds, and nothing beside
-          // it: a plain GET with no body and no header at all, so no `traceparent` and no `b3`.
-          expect(calls[0]?.[0]).toBe(
-            new URL(
-              `http://127.0.0.1:18787/grant/client/${encodeURIComponent(data.fingerprint)}?code=${encodeURIComponent(data.code)}`,
-            ).href,
-          );
-          expect(wire(calls[0]?.[1])).toEqual({ method: "GET", headers: {}, body: undefined });
-          const signs = !["get", "json", "target", "waiting"].includes(mode);
-          expect(commands).toHaveLength(signs ? 1 : 0);
-
-          if (signs) {
-            expect(commands[0]).toMatchObject({
-              command: "ssh-keygen",
-              args: ["-Y", "sign", "-n", "fabrika-client", "-f", "unused-signing-path"],
-            });
-            const text = signed[0]!;
-            const change = JSON.parse(text);
-            expect(change._tag).toBe("granted");
-            const grant = change.grant;
-            expect(grant).toEqual({
-              id: expect.stringMatching(/^[0-9a-f-]{36}$/),
-              key: data.target.key,
-              for: data.target.for,
-              to: data.target.to,
-              as: "window",
-              saw: {
-                code: data.target.code,
-                label: data.label ?? data.target.label,
-                location: "local",
-                method: "command",
-                check: "none",
-                has: [],
-              },
-              sentAt: expect.any(String),
-            });
-            expect(Date.parse(grant.sentAt)).toBeGreaterThanOrEqual(before);
-            expect(Date.parse(grant.sentAt)).toBeLessThanOrEqual(DateTime.toEpochMillis(DateTime.nowUnsafe()));
-            expect(text).toBe(grantText(grant));
-          }
-
-          const posts = signs && mode !== "sign";
-          expect(calls).toHaveLength(posts ? 2 : 1);
-
-          if (posts) {
-            // The one header is the content type: no trace header rides along to an outside address.
-            expect(calls[1]?.[0]).toBe("http://127.0.0.1:18787/grant");
-            expect(wire(calls[1]?.[1])).toEqual({
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ text: signed[0], armored: data.armored }),
-            });
-          }
-
-          if (mode === "applied") {
-            expect(log).toHaveBeenCalledWith(`Granted ${data.fingerprint} to ${data.target.for}`);
-          } else {
-            expect(log).not.toHaveBeenCalled();
-          }
-        } finally {
-          process.argv = argv;
-          cli.layer = undefined;
-          fetch.mockRestore();
-          log.mockRestore();
+        if (reason === null) {
+          expect(Exit.isSuccess(exit)).toBe(true);
+        } else {
+          typed(exit, reason);
         }
+
+        // The address as `fetch` itself parses the string the command builds, and nothing beside
+        // it: a plain GET with no body and no header at all, so no `traceparent` and no `b3`.
+        expect(calls[0]?.[0]).toBe(
+          new URL(
+            `http://127.0.0.1:18787/grant/client/${encodeURIComponent(data.fingerprint)}?code=${encodeURIComponent(data.code)}`,
+          ).href,
+        );
+        expect(wire(calls[0]?.[1])).toEqual({ method: "GET", headers: {}, body: undefined });
+        const signs = !["get", "json", "target", "waiting"].includes(mode);
+        expect(commands).toHaveLength(signs ? 1 : 0);
+
+        if (signs) {
+          expect(commands[0]).toMatchObject({
+            command: "ssh-keygen",
+            args: ["-Y", "sign", "-n", "fabrika-client", "-f", "unused-signing-path"],
+          });
+          const text = signed[0]!;
+          const change = JSON.parse(text);
+          expect(change._tag).toBe("granted");
+          const grant = change.grant;
+          expect(grant).toEqual({
+            id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+            key: data.target.key,
+            for: data.target.for,
+            to: data.target.to,
+            as: "window",
+            saw: {
+              code: data.target.code,
+              label: data.label ?? data.target.label,
+              location: "local",
+              method: "command",
+              check: "none",
+              has: [],
+            },
+            sentAt: expect.any(String),
+          });
+          expect(Date.parse(grant.sentAt)).toBeGreaterThanOrEqual(before);
+          expect(Date.parse(grant.sentAt)).toBeLessThanOrEqual(DateTime.toEpochMillis(DateTime.nowUnsafe()));
+          expect(text).toBe(grantText(grant));
+        }
+
+        const posts = signs && mode !== "sign";
+        expect(calls).toHaveLength(posts ? 2 : 1);
+
+        if (posts) {
+          // The one header is the content type: no trace header rides along to an outside address.
+          expect(calls[1]?.[0]).toBe("http://127.0.0.1:18787/grant");
+          expect(wire(calls[1]?.[1])).toEqual({
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text: signed[0], armored: data.armored }),
+          });
+        }
+
+        // The whole log, so a second line printed beside the one it names is red too.
+        // Plant (run once): in grant.ts, print the line on `refused` too, or print a second line;
+        // `logged` differs.
+        expect(logged).toEqual(mode === "applied" ? [`Granted ${data.fingerprint} to ${data.target.for}`] : []);
       }),
-      { seed: 119120, numRuns: runsFor({ fast: 3, full: 12 }) },
-    );
-  });
+    { arbitrary: { size: 100, runs: runsFor({ fast: 3, full: 12 }) } },
+  );
 }
 
-it("grant reports bad_args when the CLI refuses unknown flags", async () => {
-  await fc.assert(
-    fc.asyncProperty(fc.uuid(), async (flag) => {
-      const argv = process.argv;
-      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
+it.effect.prop(
+  "grant reports bad_args when the CLI refuses unknown flags",
+  { flag: Schema.String.check(Schema.isUUID()) },
+  ({ flag }) =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() => process.argv),
+        (argv) =>
+          Effect.sync(() => {
+            process.argv = argv;
+            cli.work = undefined;
+          }),
+      );
+      const f = refused();
       process.argv = [process.execPath, "grant.ts", `--unknown-${flag}`];
 
-      try {
-        vi.resetModules();
-        await import("../grant.ts");
-        typed(await run(), "bad_args");
-        expect(fetch).not.toHaveBeenCalled();
-      } finally {
-        process.argv = argv;
-        fetch.mockRestore();
-      }
+      vi.resetModules();
+      yield* Effect.tryPromise({
+        try: () => import("../grant.ts"),
+        catch: (cause: unknown) => new Error("grant import failed", { cause }),
+      });
+      // Plant (run once): in grant.ts, fetch in the ShowHelp handler; `sent` is not [].
+      typed((yield* run(f.fetch)).exit, "bad_args");
+      expect(f.sent).toEqual([]);
     }),
-    { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
-  );
-});
+  { arbitrary: { size: 100, runs: runsFor({ fast: 3, full: 10 }) } },
+);

@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-build",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-15T23:42:21-08:00",
+  "ended": "2026-11-16T00:06:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "The build step for porting scripts/typecheck.sh to scripts/typecheck.ts (docs/plan/quests/port-typecheck-PLAN.md), in today's tooling. Wrote the entry, the program and the four services with their real layers (Look, Locks and LocksFile, Commands and CommandsProcess, Processes and ProcessesPs, NodeModules and NodeModulesFs), named the new files in .agents/tsconfig.json's include, edited the SKILL.md lines, drive.ts's comment and the direction note, and removed scripts/typecheck.sh with git rm. Every vitest law is green: N1 to N6, E1 to E6, I1 to I6, C0 and C4, S1. pnpm lint passes whole. Law T1 is not green: with the new files in the .agents program, the package's tsc ends with exit 1 on warnings alone, since a warning fails tsc here. Two kinds are left, and neither is in a file the plan gives the build. TS377051 duplicatePackage fires on every scripts/ file, because the one allowance for two @demlik/tea versions is scoped to .agents/** globs and oxlint-plugins/duplicate-packages.test.ts (law E3 of the tea-msg-tag plan) holds it there. TS377021 unknownInEffectCatch fires on the tests step's own files, scripts/typecheck.test.ts:241 and scripts/typecheck-lock.test.ts:539.",
+  "plants": [
+    { "law": "scripts/typecheck-lock.test.ts N4", "plant": "break without .break (link of .break replaced by success)", "result": "red" },
+    { "law": "scripts/typecheck.integration.test.ts N5", "plant": "detached: true, Effect's default", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "note": "Ran in a Linux box with CLAUDE_CODE_REMOTE=true; the 0178 guard refused none of the reached integration laws. scripts/typecheck.integration.test.ts ran three times green (twice before the last ProcessesPs change, once after); caps.test.ts ran once whole (29 green, 173 s). A local --changed origin/main run is refused by the test config as broad, since the branch changes the root package.json, so narrow paths ran instead. One pnpm typecheck ran through the new script: it took the lock, ran the patch and pnpm -r typecheck, and ended with exit 1 when the .agents package failed on type errors in LocksFile.ts and Typecheck.ts, since fixed; the package's own tsc then shows only the two warning kinds above. The two plants were run once each by copy and restore and are not committed; the tests step's other plants were not run again here.",
+  "step": "build"
+}

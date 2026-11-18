@@ -67,12 +67,19 @@ import { ProcessManager } from "../processes/ProcessManager.ts";
 import { type Grants, ProgramMail } from "../processes/ProgramMail.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
-import { childStarter, Model } from "./internal/childStarter.test-support.ts";
+import { childStarter, Model, Msg as ChildMsg } from "./internal/childStarter.test-support.ts";
 import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Program } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
 import * as StartChild from "./StartChild.ts";
+
+/** The key of each input these laws hand a starter or a stopper, and of the raw Cmd and answer they
+ *  read back, made by its schema (0569, 0562). A law sets the other fields, as the program's own
+ *  schema then judges them. */
+const Tag = Schema.TaggedUnion({ start: {}, end: {}, stop: {}, start_child: {}, exit_err: {} });
+
+const ping = ChildMsg.cases.ping.make({});
 
 /** Real stores. `sql(part)` is one database per part; `probe.open` counts the handles still open. */
 export type Store = {
@@ -222,11 +229,7 @@ const encodeSender = Schema.encodeSync(Sender);
  *  as `childStarter` does. Built on first use: `stopChild` is the build's. */
 const stopper = (name: string) => {
   const Ask = Schema.Struct({ program: Schema.String, name: Schema.String });
-
-  const Msg = Schema.Union([
-    Schema.Struct({ type: Schema.Literal("start"), ask: Ask }),
-    Schema.Struct({ type: Schema.Literal("stop"), name: Schema.String }),
-  ]);
+  const Msg = Schema.TaggedUnion({ start: { ask: Ask }, stop: { name: Schema.String } });
 
   const answer = (type: string, outcome: unknown) =>
     Schema.decodeUnknownSync(Schema.Json)({ type, outcome: outcome ?? null });
@@ -996,13 +999,13 @@ const walk = (
           const ask: Ask = {
             program: "merger",
             name: target,
-            ...(cell.shape % 2 === 0 ? {} : { input: { type: "ping" } }),
+            ...(cell.shape % 2 === 0 ? {} : { input: ping }),
           };
 
           const before = (yield* answers(name)).length;
 
           if (move === "door_start") {
-            yield* door(name, { type: "start", ask });
+            yield* door(name, { ...Tag.cases.start.make({}), ask });
           } else {
             // Another live process's letter: the requester must still be the life that steps it.
             // SAFETY: sender:1 is one of the processes every world starts with.
@@ -1014,7 +1017,7 @@ const walk = (
                   command: `${sender.pid}/${++world.n}/0`,
                   source: { name: "sender:1", process: sender.pid },
                   to: name,
-                  m: { type: "start", ask },
+                  m: { ...Tag.cases.start.make({}), ask },
                   from: { ...brainFrom(), by: "SHA256:sender", for: PERSON },
                 }),
               ),
@@ -1060,7 +1063,7 @@ const walk = (
           const target = fresh();
           const extra = Rec.fromEntries(Arr.map(cell.extra, (field) => [field, forged(field, world)]));
           const before = (yield* answers(name)).length;
-          yield* door(name, { type: "start", ask: { program: "merger", name: target, extra } });
+          yield* door(name, { ...Tag.cases.start.make({}), ask: { program: "merger", name: target, extra } });
           expect(yield* lastAnswer(name, before), "L5, L8: a Cmd with fields beyond its operands").toEqual({
             type: "start_child_err",
             outcome: "bad_cmd",
@@ -1116,7 +1119,7 @@ const walk = (
 
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
-          yield* door(name, { type: "start", ask: bad.ask });
+          yield* door(name, { ...Tag.cases.start.make({}), ask: bad.ask });
           expect(yield* lastAnswer(name, before), `L6: ${bad.tag}`).toEqual({
             type: "start_child_err",
             outcome: bad.reason,
@@ -1134,7 +1137,7 @@ const walk = (
 
         case "undeclared": {
           const target = fresh();
-          yield* door("plain:1", { type: "start", ask: { program: "merger", name: target } });
+          yield* door("plain:1", { ...Tag.cases.start.make({}), ask: { program: "merger", name: target } });
           expect(yield* registered(target), "L6, L8: a Cmd the program never declared writes nothing").toBe(false);
           seen.add("undeclared");
           break;
@@ -1144,7 +1147,7 @@ const walk = (
           // SAFETY: plain:1 is one of the processes every world starts with.
           const held = world.names.get("plain:1") as Name;
           const before = yield* head;
-          yield* door("plain:1", { type: "end", before: [], after: [], twice: false });
+          yield* door("plain:1", { ...Tag.cases.end.make({}), before: [], after: [], twice: false });
           const rows = yield* all();
           expect(
             Arr.filter(rows, (row) => row.rev > before && Str.startsWith("processes")(row.stream)),
@@ -1152,7 +1155,7 @@ const walk = (
           ).toEqual([]);
           expect(yield* exitedRows(held.pid), "L8: an undeclared exit leaves its life live").toEqual([]);
           const replies = Arr.filter(rows, (row) => Str.endsWith("/answer")(row.id) && row.stream === "plain:1/inbox");
-          expect(body(replies.at(-1))["m"]).toMatchObject({ type: "exit_err", reason: "bad_cmd" });
+          expect(body(replies.at(-1))["m"]).toMatchObject({ ...Tag.cases.exit_err.make({}), reason: "bad_cmd" });
           seen.add("undeclared_exit");
           break;
         }
@@ -1166,14 +1169,14 @@ const walk = (
           const held = world.names.get(name) as Name;
           const before = Array.from({ length: 1 + (cell.shape % 3) }, () => ({ program: "merger", name: fresh() }));
           const after = Array.from({ length: 1 + (cell.alt % 3) }, () => ({ program: "merger", name: fresh() }));
-          const ending = { type: "end", before, after, twice: true };
-          const late = { type: "start", ask: { program: "merger", name: fresh() } };
+          const ending = { ...Tag.cases.end.make({}), before, after, twice: true };
+          const late = { ...Tag.cases.start.make({}), ask: { program: "merger", name: fresh() } };
           const pid = held.pid;
           world.worker = Str.startsWith("worker_")(move);
           // The public withLoader path has the Worker's declaration and execution, with no pure stepper.
           let current = yield* host(store, world, next.next, scope);
           let runner = yield* current.runner(name);
-          yield* call(runner.msg(letter({ type: "ping" })), "initial letter");
+          yield* call(runner.msg(letter(ping)), "initial letter");
           const initialSteps = (yield* inContext(savedModel(store, name, pid)))?.stepped ?? 0;
 
           if (move === "queued_exit") {
@@ -1255,7 +1258,7 @@ const walk = (
 
           const stepped = (yield* inContext(savedModel(store, name, pid)))?.stepped;
           expect(stepped, "L7: exit is the last letter stepped, including mail already waiting").toBe(initialSteps + 1);
-          yield* call(runner.msg(letter({ type: "ping" })), "late letter after recovery");
+          yield* call(runner.msg(letter(ping)), "late letter after recovery");
           expect(
             (yield* inContext(savedModel(store, name, pid)))?.stepped,
             "L7: ended life steps no later letter",
@@ -1277,12 +1280,13 @@ const walk = (
           const ask = { program: BOUNDARY_PROGRAM, name: target, inputBytes };
           const encoder = new TextEncoder();
           expect(
-            encoder.encode(Formatter.formatJson({ type: "start_child", program: ask.program, name: target, input }))
-              .length,
+            encoder.encode(
+              Formatter.formatJson({ ...Tag.cases.start_child.make({}), program: ask.program, name: target, input }),
+            ).length,
             "L6: this full Cmd exceeds the row limit",
           ).toBeGreaterThan(ROW_LIMIT);
           const before = (yield* answers(name)).length;
-          yield* door(name, { type: "start", ask });
+          yield* door(name, { ...Tag.cases.start.make({}), ask });
           const rows = yield* all([target]);
           const starts = Arr.filter(rows, (row) => row._tag === "started" && body(row)["name"] === target);
           const letters = Arr.filter(rows, (row) => row.stream === `${target}/inbox`);
@@ -1337,7 +1341,7 @@ const walk = (
 
           // The door letter holds sizes only. Its step emits individually valid Cmds whose sum
           // crosses the platform's row limit before any of them can be performed.
-          yield* door(name, { type: "end", before: asks, after: [], twice: false });
+          yield* door(name, { ...Tag.cases.end.make({}), before: asks, after: [], twice: false });
           const rows = yield* all(Arr.map(asks, (ask) => ask.name));
           expect((yield* answers(name)).length, "L6: every valid start answers across a large checkpoint").toBe(
             before + asks.length,
@@ -1375,7 +1379,7 @@ const walk = (
             world.fault.exited = true;
           }
 
-          yield* door(name, { type: "end", before, after, twice });
+          yield* door(name, { ...Tag.cases.end.make({}), before, after, twice });
 
           if (move === "cut_exit") {
             const hit = !world.fault.exited;
@@ -1392,7 +1396,7 @@ const walk = (
               }
 
               yield* call(runner.due((yield* Clock.currentTimeMillis) + 1_000 * (round + 1)), `${name}'s retry`);
-              yield* call(runner.msg(letter({ type: "ping" })), `${name}'s nudge`);
+              yield* call(runner.msg(letter(ping)), `${name}'s nudge`);
             }
 
             seen.add(hit ? "cut_exit" : "cut_missed");
@@ -1479,7 +1483,7 @@ const walk = (
               : { [`x${cell.shape % 4}`]: cell.m };
 
           const before = (yield* answers(name)).length;
-          yield* door(name, { type: "end", before: [], after: [], twice: false, extra });
+          yield* door(name, { ...Tag.cases.end.make({}), before: [], after: [], twice: false, extra });
           expect(yield* lastAnswer(name, before), "L8: exit's input takes no field").toEqual({
             type: "exit_err",
             outcome: "bad_cmd",
@@ -1497,7 +1501,7 @@ const walk = (
 
           const stepped = (yield* inContext(savedModel(store, name, held.pid)))?.stepped;
           const runner = yield* life.runner(name);
-          yield* call(runner.msg(letter({ type: "ping" })), `${name}'s late letter`);
+          yield* call(runner.msg(letter(ping)), `${name}'s late letter`);
           expect(
             (yield* inContext(savedModel(store, name, held.pid)))?.stepped,
             "L7: no letter is stepped after exit",
@@ -1542,7 +1546,7 @@ const walk = (
           const was = world.names.get(target) as Name;
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
-          yield* door(name, { type: "start", ask: { program: was.program, name: target } });
+          yield* door(name, { ...Tag.cases.start.make({}), ask: { program: was.program, name: target } });
           expect(
             yield* lastAnswer(name, before),
             "L7: an unsaved id for an ended child answers already_present",
@@ -1573,7 +1577,7 @@ const walk = (
           const target = fresh(program);
           const label = `${role} ${sender} asks ${name} for ${program}`;
           const before = (yield* answers(name)).length;
-          yield* door(name, { type: "start", ask: { program, name: target } }, memberWriter(sender));
+          yield* door(name, { ...Tag.cases.start.make({}), ask: { program, name: target } }, memberWriter(sender));
           const told = yield* lastAnswer(name, before);
           expect(told, `L1: ${label}: the start is allowed`).toMatchObject({ type: "start_child_ok" });
           expect(Schema.decodeUnknownOption(Started)(told.outcome)._tag, `L1: ${label}: Started's shape`).toBe("Some");
@@ -1608,7 +1612,7 @@ const walk = (
           const label = `${kind} ${by.for} asks ${name} for ${program}`;
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
-          yield* door(name, { type: "start", ask: { program, name: target } }, by);
+          yield* door(name, { ...Tag.cases.start.make({}), ask: { program, name: target } }, by);
           expect(yield* lastAnswer(name, before), `L1, L2: ${label}: refused`).toEqual({
             type: "start_child_err",
             outcome: "forbidden",
@@ -1634,7 +1638,7 @@ const walk = (
           const held = world.names.get(name) as Name;
           const target = fresh();
           const before = (yield* answers(name)).length;
-          yield* door(name, { type: "start", ask: { program: "merger", name: target } });
+          yield* door(name, { ...Tag.cases.start.make({}), ask: { program: "merger", name: target } });
           expect(tagged((yield* lastAnswer(name, before)).outcome), "L3: a stopper starts its child").toBe("started");
           yield* sync([{ name: target, requester: held.pid }]);
           seen.add("stopper_started");
@@ -1648,7 +1652,7 @@ const walk = (
           const name = world.parents.get(target) as string;
           const before = (yield* answers(name)).length;
           const was = yield* states();
-          yield* door(name, { type: "stop", name: target });
+          yield* door(name, { ...Tag.cases.stop.make({}), name: target });
           expect(yield* lastAnswer(name, before), "L3: a stop of its own child answers null").toEqual({
             type: "stop_child_ok",
             outcome: null,
@@ -1709,7 +1713,7 @@ const walk = (
           const [target, held] = choose(others, cell.alt);
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
-          yield* door(name, { type: "stop", name: target });
+          yield* door(name, { ...Tag.cases.stop.make({}), name: target });
           expect(yield* lastAnswer(name, before), `L3: ${name} may not stop ${target}`).toEqual({
             type: "stop_child_err",
             outcome: "not_child",
@@ -1726,7 +1730,7 @@ const walk = (
           const name = world.parents.get(target) as string;
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
-          yield* door(name, { type: "stop", name: target });
+          yield* door(name, { ...Tag.cases.stop.make({}), name: target });
           expect(yield* lastAnswer(name, before), "L3: a stop of an ended child").toEqual({
             type: "stop_child_err",
             outcome: "noproc",
@@ -1996,7 +2000,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
             ? runner.msg({
                 ...ask.incoming,
                 id: `letter-${++world.n}`,
-                envelope: { ...ask.incoming.envelope, id: inputId(world.n), input: { type: "ping" } },
+                envelope: { ...ask.incoming.envelope, id: inputId(world.n), input: ping },
               })
             : runner.due((yield* Clock.currentTimeMillis) + 60_000)
         ).pipe(Effect.withTracer(seenBy.tracer), Effect.provide(Logger.layer([seenBy.logger])), Effect.exit);
@@ -2024,13 +2028,13 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
 
         const input =
           move === "storage"
-            ? { type: "end", before: [], after: [], twice: false }
+            ? { ...Tag.cases.end.make({}), before: [], after: [], twice: false }
             : {
-                type: "start",
+                ...Tag.cases.start.make({}),
                 ask: {
                   program: move === "refusal" ? `nope-${secret}` : "merger",
                   name: `merger:${n}`,
-                  ...(move === "refusal" ? {} : { input: { type: "ping", token: secret, nested: cell.m } }),
+                  ...(move === "refusal" ? {} : { input: { ...ping, token: secret, nested: cell.m } }),
                 },
               };
 
@@ -2162,7 +2166,7 @@ const lifetimeLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           yield* runner
             .msg({
               id: "letter-1",
-              envelope: { id: inputId(1), by: person, arrivedAt: 1794099600001, input: { type: "ping" } },
+              envelope: { id: inputId(1), by: person, arrivedAt: 1794099600001, input: ping },
               sentAt: "2026-11-11T01:00:00Z",
               seen: 0,
               span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },

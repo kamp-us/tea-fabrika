@@ -42,6 +42,13 @@ import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
 import { type Dev, grant, type Home, PERSON, reader, type Waiting } from "./p14.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  press: {},
+});
+
 /** The registered name of the checklist's process: the headless tile shows it, and its streams are
  *  read by it. */
 const PROCESS = "checklist:1";
@@ -224,7 +231,14 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       ).pipe(Effect.orDie),
       live: Effect.map(state, (s) => s.link._tag === "online"),
       add: (name) =>
-        run.dispatch({ type: "press", tile: "tile_1", m: { type: "add", name }, via: "button" }).pipe(Effect.orDie),
+        run
+          .dispatch({
+            ...Tag.cases.press.make({}),
+            tile: "tile_1",
+            m: { ...Tag.cases.add.make({}), name },
+            via: "button",
+          })
+          .pipe(Effect.orDie),
       shown: Effect.map(state, (s) => {
         const pid = s.tiles[0]?.last;
         const view = pid !== null && pid !== undefined && pid !== "" ? s.client.views[pid]?.view : undefined;

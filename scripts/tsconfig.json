@@ -1,0 +1,8 @@
+{
+  // The typecheck's port (0113, ticket 766), lead tooling, in a program of its own. It imports no
+  // @demlik/tea (lint holds that, .oxlintrc.json), so it needs no duplicate-package allowance: the
+  // base's one is `.agents/**` alone (oxlint-plugins/duplicate-packages.test.ts). The other scripts
+  // here are not checked yet.
+  "extends": "../tsconfig.base.json",
+  "include": ["typecheck.ts", "typecheck/*.ts", "typecheck.test.ts", "typecheck-lock.test.ts"]
+}

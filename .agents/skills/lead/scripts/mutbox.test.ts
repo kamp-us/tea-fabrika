@@ -121,6 +121,8 @@ describe("mutbox, the pure parts", () => {
           build: fc.stringMatching(/^[0-9a-f]{40}$/),
           related: fc.array(testPath, { minLength: 1, maxLength: 3 }),
           lock: fc.string(),
+          // The marker CI hands in, or none (decision 0600, slice 2): Q18 holds what it does.
+          ci: fc.constant(null),
         }),
         (ask) => {
           const args = runArgs(ask);
@@ -168,6 +170,40 @@ describe("mutbox, the pure parts", () => {
   });
 
   // Plant: let a comma through, so `--mount` reads the rest of the path as its own options.
+  // Q18, slice 2 of docs/plan/quests/kalfa-quality-stryker-PLAN.md (decision 0600): `CI` crosses into the container only
+  // from CI. The hourly run on GitHub's runner sets `CI`, and the container's host guard (vitest.hostrun.ts)
+  // lets `.integration.` laws start there; on the laptop mutbox has no `CI`, passes none, and the guard still
+  // refuses. Plants: always pass `CI=true`, or pass the whole environment.
+  it("Q18: the run line carries --env CI=<value> exactly when the ask has one, and no other variable of the host", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          name: segment,
+          image: segment,
+          input: fc.string(),
+          output: fc.string(),
+          ticket: fc.stringMatching(/^[0-9]{1,5}$/),
+          build: fc.stringMatching(/^[0-9a-f]{40}$/),
+          related: fc.array(testPath, { minLength: 1, maxLength: 3 }),
+          lock: fc.string(),
+          ci: fc.option(fc.stringMatching(/^[A-Za-z0-9._-]{1,12}$/), { nil: null }),
+        }),
+        (ask) => {
+          const args = runArgs(ask);
+          const envs = args.flatMap((a, i) => (args[i - 1] === "--env" ? [a] : []));
+
+          expect(envs).toEqual([
+            `T=${ask.ticket}`,
+            `BUILD=${ask.build}`,
+            `RELATED=${ask.related.join(",")}`,
+            ...(ask.ci === null ? [] : [`CI=${ask.ci}`]),
+          ]);
+        },
+      ),
+      options,
+    );
+  });
+
   it("a path docker --mount cannot take is refused, and a path with spaces is fine", () => {
     fc.assert(
       fc.property(fc.array(segment, { minLength: 1, maxLength: 4 }), fc.constantFrom(",", '"', "\n"), (parts, bad) => {
@@ -736,6 +772,34 @@ describe("mutbox, the run against a stand-in docker", () => {
     expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("build ")))).toBe(false);
   });
 
+  // Q18's edge, through the real script and the stand-in docker: the host's own `CI`, when set and not
+  // empty, is the one variable that reaches the container, and no other variable of the host does.
+  // Plants: always pass `CI=true`; read the marker from another name; pass the host's whole environment.
+  it("Q18: the script forwards the host's CI when it is set and not empty, and no other host variable", () => {
+    const value = fc.oneof(fc.constant(undefined), fc.constant(""), fc.stringMatching(/^[A-Za-z0-9._-]{1,12}$/));
+
+    const others = fc.dictionary(fc.stringMatching(/^HOSTVAR_[A-Z]{3,8}$/), fc.stringMatching(/^[a-z0-9]{1,10}$/), {
+      maxKeys: 6,
+    });
+
+    fc.assert(
+      fc.property(value, others, (ci, rest) => {
+        const got = run({ env: { ...rest, ...(ci === undefined ? {} : { CI: ci }) } });
+        expect(got.code, got.text).toBe(0);
+        const call = got.calls.find((c) => c.startsWith("run "))!;
+        const envs = [...call.matchAll(/--env (\S+)/g)].map((m) => m[1]);
+
+        expect(envs).toEqual([
+          "T=483",
+          `BUILD=${got.build}`,
+          "RELATED=src/a.test.ts",
+          ...(ci === undefined || ci === "" ? [] : [`CI=${ci}`]),
+        ]);
+      }),
+      { seed: 483, numRuns: 20 },
+    );
+  });
+
   // Plant: run the sample on the host when docker is missing.
   it("with Docker missing, stopped or on another platform the step is stuck and nothing runs", () => {
     for (const [setup, reason] of [
@@ -1189,6 +1253,7 @@ const server = net.createServer((s) => s.end("hello")).listen(() => {
       build: "0",
       related: [],
       lock: "probe",
+      ci: null,
     });
 
     const from = /^FROM (\S+)$/m.exec(dockerfile)?.[1] ?? "";

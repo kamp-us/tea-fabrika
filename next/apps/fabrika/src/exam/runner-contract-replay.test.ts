@@ -33,6 +33,12 @@ import {
   world,
 } from "./runner-contract.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const replayRefuse = (spy: { calls: number }): never => {
   spy.calls++;
   throw new Error("refuse must not run on accepted history");
@@ -132,7 +138,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
       schema: Msg,
       personOnly: [],
       raw: [],
-      name: (m) => m.type,
+      name: (m) => m._tag,
     },
     events: { personOnly: [] },
   }).pipe(Layer.provide(env));
@@ -309,7 +315,7 @@ it.effect.prop(
       const request = {
         pid: process,
         letter: id("letter", 1),
-        m: { type: "save", body, base: 0, work: false },
+        m: { ...Tag.cases.save.make({}), body, base: 0, work: false },
         sentAt: "2030-01-01T00:00:00Z",
         seen: 0,
       };

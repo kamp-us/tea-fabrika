@@ -1,4 +1,5 @@
 import * as Arr from "effect/Array";
+import * as WebCrypto from "effect/crypto/WebCrypto";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Option from "effect/Option";
@@ -101,7 +102,7 @@ export const subtle = Effect.fn("transport.crypto")(function* <M extends CryptoM
   method: M,
   ...args: CryptoArgs[M]
 ): Effect.fn.Return<CryptoResult[M], WebCryptoError> {
-  const api: CryptoApi = crypto.subtle;
+  const api: CryptoApi = (yield* WebCrypto.WebCrypto).subtle;
   const fail = (cause: unknown) => WebCryptoError.make({ cause });
 
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise

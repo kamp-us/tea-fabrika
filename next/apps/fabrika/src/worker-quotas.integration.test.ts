@@ -18,6 +18,8 @@ import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
+const Msg = Schema.TaggedUnion({ inc: { text: Schema.String }, throw: {} });
+
 const PROJECT = "quota-workers";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -144,10 +146,7 @@ import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {Program} from "@kampus/libfabrika/runtime/Program";
 const Model = Schema.Struct({count: Schema.Int});
-const Msg = Schema.Union([
-  Schema.Struct({type: Schema.Literal("inc"), text: Schema.String}),
-  Schema.Struct({type: Schema.Literal("throw")})
-]);
+const Msg = Schema.TaggedUnion({inc: {text: Schema.String}, throw: {}});
 const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: s => [s ?? {count: 0}, []], update: {
   inc: s => [{count: s.count + 1}, []],
   throw: () => {throw new TypeError("quota fixture failure");}
@@ -314,7 +313,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
           const ordinary = mode === "writes" ? 21 : 3;
 
           for (let n = 0; n < ordinary; n++) {
-            expect(yield* w.send(alpha, `healthy:${n}`, { type: "inc", text: "é😀" })).toMatchObject({
+            expect(yield* w.send(alpha, `healthy:${n}`, Msg.cases.inc.make({ text: "é😀" }))).toMatchObject({
               result: { _tag: "accepted" },
             });
           }
@@ -324,14 +323,16 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
           expect(before.process).toHaveProperty("recovery.total", { writes: 0, bytes: 0 });
 
           if (mode === "storage") {
-            expect(yield* w.send(alpha, "too-large", { type: "inc", text: Str.repeat(6000)("😀") })).toMatchObject({
+            expect(
+              yield* w.send(alpha, "too-large", Msg.cases.inc.make({ text: Str.repeat(6000)("😀") })),
+            ).toMatchObject({
               error: { data: { reason: "quota" } },
             });
             expect(yield* w.facts("alpha:1/inbox")).toHaveLength(ordinary);
           }
 
           // The last admitted message can still fail and be recovered with the program at its write cap.
-          yield* w.send(alpha, "poison", { type: "throw" });
+          yield* w.send(alpha, "poison", Msg.cases.throw.make({}));
 
           if (mode === "reserve") {
             yield* until(
@@ -364,7 +365,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
               )(yield* rpc(() => w.project.info()));
 
               const successor = info.find((r) => r.name === "alpha:1")!.process;
-              expect(yield* w.send(successor, "fill-cap", { type: "inc", text: "" })).toMatchObject({
+              expect(yield* w.send(successor, "fill-cap", Msg.cases.inc.make({ text: "" }))).toMatchObject({
                 result: { _tag: "accepted" },
               });
               yield* rpc(() =>
@@ -387,13 +388,13 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
               )(yield* rpc(() => w.project.info()))).find((r) => r.name === "alpha:1")!.process;
 
               // Plant: a restart that loses the program's quota state answers this input accepted.
-              expect(yield* w.send(current, "excess", { type: "inc", text: "" })).toMatchObject({
+              expect(yield* w.send(current, "excess", Msg.cases.inc.make({ text: "" }))).toMatchObject({
                 error: { data: { reason: "quota" } },
               });
             }
           }
 
-          expect(yield* w.send(beta, "other", { type: "inc", text: "" })).toMatchObject({
+          expect(yield* w.send(beta, "other", Msg.cases.inc.make({ text: "" }))).toMatchObject({
             result: { _tag: "accepted" },
           });
         }),

@@ -47,7 +47,7 @@ import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
-import { type Runs, runsFor } from "@kampus/vitest";
+import { Recorder, type Runs, runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import {
   Arbitrary,
@@ -80,6 +80,12 @@ import { TestClock } from "effect/testing";
 
 import * as fc from "fast-check";
 import { vi } from "vitest";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  comment: {},
+});
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -538,7 +544,7 @@ const world = Effect.fnUntraced(function* (
         // Encoding the value just decoded cannot fail unless the schema is broken, so that is a defect.
         return checked._tag === "approve"
           ? yield* Effect.orDie(Schema.encodeEffect(Schema.toCodecJson(Input))(checked))
-          : { type: checked._tag };
+          : Schema.TaggedStruct(checked._tag, {}).make({});
       }),
     inputs: {
       schema: Input,
@@ -674,9 +680,9 @@ const world = Effect.fnUntraced(function* (
 
 type World = Effect.Success<ReturnType<typeof world>>;
 
-const AuditMessage = Schema.Struct({ type: Schema.Literal("comment"), ticket: Schema.String, body: Schema.String });
+const AuditMessage = Schema.TaggedStruct("comment", { ticket: Schema.String, body: Schema.String });
 
-const AuditMetadata = Schema.Struct({ type: Schema.Literal("comment"), ticket: Schema.String });
+const AuditMetadata = Schema.TaggedStruct("comment", { ticket: Schema.String });
 
 const failedSelection = (body: string): never => {
   throw new Error(body);
@@ -722,10 +728,10 @@ describe("P13 selected input recording", () => {
                 }
 
                 if (mode === "output") {
-                  return { type: "comment", ticket: 1n };
+                  return { ...Tag.cases.comment.make({}), ticket: 1n };
                 }
 
-                return { type: "comment", ticket: m.ticket };
+                return { ...Tag.cases.comment.make({}), ticket: m.ticket };
               });
 
               const execution = nodeExecution(program);
@@ -734,7 +740,7 @@ describe("P13 selected input recording", () => {
                 const checked = Schema.decodeUnknownSync(Input.cases.comment)(input);
 
                 return execution.audit({
-                  type: "comment",
+                  ...Tag.cases.comment.make({}),
                   ticket: mode === "decode" ? 1 : checked.ticket.id,
                   body: checked.text,
                 });
@@ -814,7 +820,7 @@ describe("P13 selected input recording", () => {
                   expect(
                     yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(String(row.body)),
                   ).toMatchObject({
-                    input: { type: "comment", ticket: "ticket-7" },
+                    input: { ...Tag.cases.comment.make({}), ticket: "ticket-7" },
                   });
                 }
 
@@ -3356,20 +3362,10 @@ describe("P10 signed membership changes", () => {
           (value) =>
             Effect.gen(function* () {
               const w = yield* world();
-              const called = vi.fn();
 
-              const clients = Layer.effect(
-                ClientManager,
-                ClientManager.pipe(
-                  Effect.map((real: typeof ClientManager.Service) => ({
-                    ...real,
-                    write: (...args: Parameters<typeof real.write>) => {
-                      called();
-
-                      return real.write(...args);
-                    },
-                  })),
-                ),
+              // The real ClientManager, recorded: every method still runs the real code.
+              const clients = Layer.unwrap(
+                ClientManager.pipe(Effect.map((real) => Recorder.layer(ClientManager, real))),
               ).pipe(Layer.provide(w.env));
 
               yield* Effect.gen(function* () {
@@ -3417,13 +3413,15 @@ describe("P10 signed membership changes", () => {
                   _tag: "refused",
                   reason: "wrong_ledger",
                 });
-                expect(called).not.toHaveBeenCalled();
+                // Plant (run once, on a scratch copy): in Gateway.ts, write the client before the
+                // ledger check; the recorded `write` list is not [].
+                expect(yield* Recorder.calls(ClientManager, "write")).toEqual([]);
                 expect(yield* entries("gateway/access")).toEqual([]);
               }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, clients)))));
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
+      { arbitrary: { runs: runsFor({ fast: 3, full: 12 }) } },
     );
   }
 

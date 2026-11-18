@@ -27,6 +27,13 @@ import type { QuotasError } from "../processes/Quotas.ts";
 import type { Sql } from "../Sql.ts";
 import { Checkpoint as CheckpointSchema, Placed, ProcessStore, RuntimeRecord } from "./ProcessStore.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  save: {},
+});
+
 // fast-check 4.10.2's default JSON has no hard depth bound. Effect 4.1.1's
 // recursive Schema.Json spends one shared size budget, so no finite size
 // preserves that range. Keep the old generator for this input only.
@@ -241,7 +248,7 @@ describe("P11 process storage", () => {
           turn: {
             _tag: "prepared",
             id: "letter-a",
-            input: { type: "add", n: 3 },
+            input: { ...Tag.cases.add.make({}), n: 3 },
             parent: `in-${PROCESS}-2`,
             span: { traceId: from.traceId, spanId: "00f067aa0ba902b7" },
             sentAt: from.sentAt,
@@ -249,7 +256,9 @@ describe("P11 process storage", () => {
             next: { ...checkpoint.saved, model: { count: 5 } },
             cmds: [],
           },
-          cmds: [{ id: "stable-cmd", _tag: "dispatched", input: { type: "save", n: 2 }, build: "build-a" }],
+          cmds: [
+            { id: "stable-cmd", _tag: "dispatched", input: { ...Tag.cases.save.make({}), n: 2 }, build: "build-a" },
+          ],
         };
 
         yield* Effect.gen(function* () {

@@ -26,6 +26,15 @@ import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  crash: {},
+  letter: {},
+  start: {},
+});
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const SENT = "2026-11-09T04:00:00.000Z";
@@ -46,17 +55,12 @@ import {Schema} from "effect";
 import {Program} from "@kampus/libfabrika/runtime/Program";
 import {send} from "@kampus/libfabrika/runtime/Send";
 const Model = Schema.Struct({phase: Schema.Literals(["idle", "waiting", "answered", "failed"]), ref: Schema.String, value: Schema.Int, count: Schema.Int, reason: Schema.String});
-const Msg = Schema.Union([
- Schema.Struct({type: Schema.Literal("start"), ref: Schema.String, value: Schema.Int}),
- Schema.Struct({type: Schema.Literal("request"), ref: Schema.String, value: Schema.Int, reply: Schema.String}),
- Schema.Struct({type: Schema.Literal("answer"), ref: Schema.String, value: Schema.Int}),
- Schema.Struct({type: Schema.Literal("crash")})
-]);
+const Msg = Schema.TaggedUnion({ start: { ref: Schema.String, value: Schema.Int }, request: { ref: Schema.String, value: Schema.Int, reply: Schema.String }, answer: { ref: Schema.String, value: Schema.Int }, crash: {} });
 const machine = Machine.make({model: Model, msg: Msg, cmds: [send],
  init: (loaded) => [loaded ?? {phase: "idle", ref: "", value: 0, count: 0, reason: ""}, []],
  update: {
-  start: (s,m) => [{...s, phase: "waiting", ref: m.ref}, [send({to: "responder:${pair}", m: {type: "request", ref: m.ref, value: m.value, reply: "requester:${pair}"}})]],
-  request: (s,m) => [{...s, count: s.count+1}, [send({to: m.reply, m: {type: "answer", ref: m.ref, value: m.value+1}})]],
+  start: (s,m) => [{...s, phase: "waiting", ref: m.ref}, [send({to: "responder:${pair}", m: {_tag: "request", ref: m.ref, value: m.value, reply: "requester:${pair}"}})]],
+  request: (s,m) => [{...s, count: s.count+1}, [send({to: m.reply, m: {_tag: "answer", ref: m.ref, value: m.value+1}})]],
   answer: (s,m) => s.phase === "waiting" && s.ref === m.ref ? [{...s, phase: "answered", value: m.value}, []] : [s, []],
   send_ok: (s) => [s, []],
   send_err: (s,m) => s.phase === "waiting" ? [{...s, phase: "failed", reason: m.error._tag}, []] : [s, []],
@@ -478,7 +482,7 @@ const facts = async (instance: Instance, stream: string) =>
 const request = (pid: string, ref: string) => ({
   pid,
   letter: `start-${ref}`,
-  m: { type: "start", ref, value: 7 },
+  m: { ...Tag.cases.start.make({}), ref, value: 7 },
   sentAt: SENT,
   seen: 0,
 });
@@ -487,7 +491,7 @@ const answer = async (instance: Instance, name = "requester:1", ref = "exchange"
   until(
     "answer letter",
     () => facts(instance, `${name}/inbox`),
-    (rows) => Arr.some(rows, (r) => r.m?.type === "answer" && r.m.ref === ref),
+    (rows) => Arr.some(rows, (r) => r.m?._tag === "answer" && r.m.ref === ref),
   );
 
 // Read the view notifications; polling view.open would itself drain the requester's inbox.
@@ -561,9 +565,9 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
         await answer(instance, "requester:1", "eviction");
         expect(Arr.filter(await facts(instance, "requester:1/outbox"), (r) => r.ref === "eviction")).toHaveLength(1);
         const inbox = await facts(instance, "responder:1/inbox");
-        expect(Arr.filter(inbox, (r) => r.m?.type === "request" && r.m.ref === "eviction")).toHaveLength(1);
+        expect(Arr.filter(inbox, (r) => r.m?._tag === "request" && r.m.ref === "eviction")).toHaveLength(1);
         const answers = await facts(instance, "requester:1/inbox");
-        expect(Arr.filter(answers, (r) => r.m?.type === "answer" && r.m.ref === "eviction")).toHaveLength(1);
+        expect(Arr.filter(answers, (r) => r.m?._tag === "answer" && r.m.ref === "eviction")).toHaveLength(1);
         await until(
           "the requester has drained its answer",
           () => instance.process(requester).savedAlarm(),
@@ -618,7 +622,7 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
         await client.call("process.send", {
           pid: responder,
           letter: `crash-${n}`,
-          m: { type: "crash" },
+          m: Tag.cases.crash.make({}),
           sentAt: SENT,
           seen: 0,
         });
@@ -648,14 +652,14 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
 
       const healthy = Arr.filter(
         await answer(instance, "requester:2", "healthy"),
-        (r) => r.m?.type === "answer" && r.m.ref === "healthy",
+        (r) => r.m?._tag === "answer" && r.m.ref === "healthy",
       );
 
       expect(healthy).toHaveLength(1);
       expect(healthy[0].m.value).toBe(8);
       expect(down.rev).toBeLessThan(healthy[0].rev);
       expect(Arr.filter(await facts(instance, "responder:1/inbox"), (r) => r.m?.ref === "braked")).toHaveLength(1);
-      expect(Arr.filter(await facts(instance, "requester:1/inbox"), (r) => r.m?.type === "answer")).toEqual([]);
+      expect(Arr.filter(await facts(instance, "requester:1/inbox"), (r) => r.m?._tag === "answer")).toEqual([]);
       expect(await client.call("view.open", { pid: requester })).toMatchObject({
         result: { view: { phase: "waiting", ref: "braked" } },
       });
@@ -779,7 +783,7 @@ it("scenario: H1, two checklist adds with an immediate wake both land on the sam
       await client.call("process.send", {
         pid,
         letter: "add-first",
-        m: { type: "add", name: "first item" },
+        m: { ...Tag.cases.add.make({}), name: "first item" },
         sentAt: SENT,
         seen: 0,
       }),
@@ -788,7 +792,7 @@ it("scenario: H1, two checklist adds with an immediate wake both land on the sam
       await client.call("process.send", {
         pid,
         letter: "add-second",
-        m: { type: "add", name: "second item" },
+        m: { ...Tag.cases.add.make({}), name: "second item" },
         sentAt: SENT,
         seen: 0,
       }),
@@ -821,12 +825,12 @@ import {Program} from "@kampus/libfabrika/runtime/Program";
 import {send} from "@kampus/libfabrika/runtime/Send";
 const Answer = Schema.Struct({n: Schema.Int, answer: Schema.String});
 const Model = Schema.Struct({answers: Schema.Array(Answer)});
-const Msg = Schema.Struct({type: Schema.Literal("letter"), n: Schema.Int});
+const Msg = Schema.TaggedStruct("letter", { n: Schema.Int });
 const nOf = (cmd) => cmd.m.n;
 const machine = Machine.make({model: Model, msg: Msg, cmds: [send],
  init: (loaded) => [loaded ?? {answers: []}, []],
  update: {
-  letter: (s, m) => [s, [send({to: "reader:1", m: {type: "letter", n: m.n}})]],
+  letter: (s, m) => [s, [send({to: "reader:1", m: {_tag: "letter", n: m.n}})]],
   send_ok: (s, m) => [{answers: [...s.answers, {n: nOf(m.cmd), answer: "queued"}]}, []],
   send_err: (s, m) => [{answers: [...s.answers, {n: nOf(m.cmd), answer: m.error._tag}]}, []]
  }});
@@ -838,7 +842,7 @@ import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 import {Program} from "@kampus/libfabrika/runtime/Program";
 const Model = Schema.Struct({read: Schema.Array(Schema.Int)});
-const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("letter"), n: Schema.Int}), Schema.Struct({type: Schema.Literal("crash")})]);
+const Msg = Schema.TaggedUnion({ letter: { n: Schema.Int }, crash: {} });
 const machine = Machine.make({model: Model, msg: Msg, cmds: [],
  init: (loaded) => [loaded ?? {read: []}, []],
  update: { letter: (s, m) => [{read: [...s.read, m.n]}, []], crash: () => { throw new TypeError("fixture crash"); } }});
@@ -974,7 +978,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
             await client.call("process.send", {
               pid: writer,
               letter: `letter-${sent}`,
-              m: { type: "letter", n },
+              m: { ...Tag.cases.letter.make({}), n },
               sentAt: SENT,
               seen: 0,
             }),
@@ -993,7 +997,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
 
         const letters = async () =>
           Arr.map(
-            Arr.filter(await facts(instance, "reader:1/inbox"), (r) => r.m?.type === "letter"),
+            Arr.filter(await facts(instance, "reader:1/inbox"), (r) => r.m?._tag === "letter"),
             (r) => r.m.n,
           );
 
@@ -1014,7 +1018,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
             await client.call("process.send", {
               pid: reader,
               letter: "crash",
-              m: { type: "crash" },
+              m: Tag.cases.crash.make({}),
               sentAt: SENT,
               seen: 0,
             })

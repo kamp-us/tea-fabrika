@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-port-s3-tests-round3",
+  "ticket": "766",
+  "pr": "kamp-us/tea-fabrika#1517",
+  "started": "2026-11-18T08:14:00-08:00",
+  "ended": "2026-11-18T08:21:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "claude-sonnet",
+  "effort": "high",
+  "outcome": "done",
+  "why": "The coverage scenario for fieldrow.ts was red at the branch head: with seed 119120 and 100 runs the generator never reached the marks empty effort from env and unprofiled model, which commit f40d0a62 added without a generator for them. Added one generator branch, events files with turns and skipped lines but no requested profile, so the flags and the older CODEX_MODEL and CODEX_EFFORT values decide the row. The oracle was checked against main's fieldrow.py for these cases (empty flag stays a value and counts as requested, empty env reads as unset, a profile bound to the stream suppresses env) and is right, so it is unchanged. No mark, seed, run count or assertion was touched. Requested model claude-sonnet and effort high; effective API context unknown. No compiler or full lint beyond pnpm lint ran.",
+  "plants": [
+    {
+      "law": "scenario: the Codex row law's generator reaches every case the plan names",
+      "plant": "generator change reverted: marks empty effort from env and unprofiled model are never reached",
+      "result": "red"
+    },
+    {
+      "law": "The Codex row's fields, sums and list price match fieldrow.py's for the same events file",
+      "plant": "fieldrow.ts reads an empty CODEX_EFFORT as a value instead of unset",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 7.0,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}

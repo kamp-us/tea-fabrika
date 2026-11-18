@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-gateway-processes-telemetry-s1-build1",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-15T23:49:09-08:00",
+  "ended": "2026-11-16T00:07:36-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Build step for slice 1 of the mock sweep in gateway, processes and telemetry (decision 0555, plan mock-gateway-processes-telemetry-PLAN.md at 14e9b3134), in next/, from the tests step's head 2e533fa49. Archive.ts's sha256 and Gateway.ts's fingerprint and hash now read Effect's WebCrypto.WebCrypto reference and hash under the same Effect.tryPromise, whose catch keeps SinkError storage and LedgerError crypto; each fabrika/no-promises edge comment stays directly above its tryPromise line. The pattern doc effect-crypto-through-services.md was re-grounded with the write-pattern skill: Digest and SecureRandom have a never error channel, so a hash whose failure must stay typed reads crypto.subtle through the WebCrypto reference; the gateway hashes and Archive.ts left Not yet; the vi lock and its laws went under Holds it; every cited line was re-read on effect 4.1.3. Green, one file at a time: telemetry/ErrorCause.test.ts (red before the build, on C1), gateway/GatewayRevocation.integration.test.ts, oxlint-plugins/plants.test.ts, oxlint-plugins/modules.test.ts, and the narrow files that read Archive.ts, Gateway.ts or layer-rules.json. vitest --changed was refused, because the branch changes .oxlintrc.json, a force-rerun trigger. pnpm lint was killed for lack of memory in four parts; each part then passed alone. The ratchet exits 0. The one pnpm typecheck fails in the tests step's file crypto.test-support.ts (globalErrorInEffectCatch at line 34, cryptoRandomUUID at line 49), which the build may not touch, so the build sends the slice back to the tests step (send tests).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "The step rules ask for a merge of origin/main. That merge conflicts in oxlint-plugins/builtin-plants.ts and plants.test.ts, which are the tests step's files (main added TAGGED_ERROR beside this branch's VI_METHODS). It was aborted, so the branch still holds 1366 but is behind main. packages/pipeline's typecheck was killed by SIGKILL in the same run, so its result is unknown.",
+  "step": "build"
+}

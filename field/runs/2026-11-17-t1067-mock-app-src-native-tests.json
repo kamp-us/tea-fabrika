@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1067-mock-app-src-native-tests",
+  "ticket": 1067,
+  "pr": 1526,
+  "started": "2026-11-17T04:34:22-08:00",
+  "ended": "2026-11-17T04:48:11-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "send",
+  "why": "Bounded next/ tests repair from published e8031962fc43d2542eebc271e48fc6a7c018c6f5. The three app laws now use the approved native runner where rewritten; the shared seed setup is copied from main. Grant laws pass at fast and full depth. A3 remains blocked: a direct console.log before NodeRuntime.runMain still leaves the refused-mode law green, so equivalent raw-console coverage is not proved. No product change or lint rule is committed.",
+  "laws": [
+    {
+      "law": "A1: dev refuses every invalid parent with reason parent_gone before touching settings",
+      "result": "Written with Schema inputs, the same four integer/string classes and bounds, 4/30 cases, and both old examples 1 and 1.5. Each generated case now visits all four classes. Existing 0178 guard refused the selected local run before execution. Baseline and plant proof remain owed on an eligible runner."
+    },
+    {
+      "law": "A2: grant command rejects malformed outside URLs as GrantError before fetching or signing",
+      "result": "Green at fast 3 and full 20 cases. Keeps relative printable-ASCII strings, all four malformed URL literals and the http://[ example; both input classes run per case. The before-args fetch plant is red at the unchanged empty-fetch assertion. The first effective failing URL remains http://[."
+    },
+    {
+      "law": "A2: grant usage guard names the error for each missing argument or flag",
+      "result": "Green at fast 3 and full 25 cases. Keeps printable-ASCII text and missing index 0 through 4. The before-args fetch plant is red. Its reported counterexample remains empty text and index 0."
+    },
+    {
+      "law": "A2: grant reports bad_args when the CLI refuses unknown flags",
+      "result": "Green at fast 3 and full 10 cases. Keeps UUID flags. ShowHelp fetch plant is red. The reported counterexample remains 00000000-0000-1000-8000-000000000000."
+    },
+    {
+      "law": "A3: grant get/json/target/waiting/sign/post/status/replyJson/reply/refused/applied path preserves the signed fields and exact error reason",
+      "result": "All eleven laws are green at fast 3 and full 12 cases. All old strings, optional label, malformed JSON classes and signer exit 1 through 255 remain. Native size 100 exceeds the old default generated string length 10. The old empty-object badTarget and empty-array badReply shrinking witnesses remain reachable at zero size. Refused Effect log and second applied Effect log plants are red, and their full reported shrunk counterexamples equal those from the published raw runner. Direct top-level console.log remains a green missed fault. Named flags precede -- and the positional inputs, so a generated leading-minus fingerprint is tested as a value rather than parsed as a flag."
+    },
+    {
+      "law": "A4: p27 granted/revoked/added wrong-to never calls ClientManager.write or founds",
+      "result": "Only the per-law seed is removed. Schema, project-b pinned input, wrong-ledger refusal, empty recorded write list, empty ledger and 3/12 counts remain byte-for-byte. Its real SQLite world and cleanup were read; no integration run or plant was attempted after the file-services guard refusal."
+    }
+  ],
+  "plants": [
+    {
+      "law": "A2 malformed URLs and usage",
+      "plant": "grant.ts handler performs a stand-in HttpClient GET before validating arguments and parsing URL",
+      "result": "red"
+    },
+    {
+      "law": "A2 unknown flags",
+      "plant": "grant.ts ShowHelp handler performs a stand-in HttpClient GET before returning bad_args",
+      "result": "red"
+    },
+    {
+      "law": "A3 refused mode",
+      "plant": "grant.ts prints the Granted line through Effect Console before refusing the reply",
+      "result": "red"
+    },
+    {
+      "law": "A3 applied mode",
+      "plant": "grant.ts prints a second line through Effect Console after Granted",
+      "result": "red"
+    },
+    {
+      "law": "A3 refused mode raw-console coverage",
+      "plant": "grant.ts calls direct console.log before NodeRuntime.runMain; this is an unresolved missed fault, not accepted equivalent coverage",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 13.82,
+  "note": "Every expect expression is unchanged ignoring whitespace: 23 in grant-readers, 52 in file-services, 458 in door. All plants were restored by copy; no product path remains changed. Frozen installation belongs to this worktree. Scoped format and oxlint were used; no whole lint, typed-API lint, compiler, typecheck, socket, Electron, real signal, workerd, CI, push or merge ran. Type proof, A1/A4 runtime and plant proof, full first-generated-input equivalence and final whole-PR review remain with the lead. The existing raw-console coverage gap is returned to the lead under ticket 1067. No new export is needed.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}

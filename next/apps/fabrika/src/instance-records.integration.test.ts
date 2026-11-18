@@ -38,6 +38,17 @@ import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { tree } from "./workerd.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  cancel: {},
+  inc: {},
+  prepare: {},
+  schedule: {},
+  throw: {},
+  timer: {},
+});
+
 // The local instance exposes Promise calls; RecordManager takes Effect calls.
 type RecordCalls = ReturnType<Parameters<typeof RecordManager.remote>[0]>;
 
@@ -138,7 +149,7 @@ const world = async (
           'import {Schema} from "effect";',
           'const noted = Schema.TaggedStruct("noted", {n: Schema.Int});',
           "const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
-          'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("prepare")}), Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
+          "const Msg = Schema.TaggedUnion({ throw: {}, prepare: {}, schedule: { at: Schema.Number }, timer: { at: Schema.Number } });",
           'const write = Cmd.make("write", {input: Schema.Struct({stream: Schema.String, write: Schema.Json}), ok: Schema.Json, err: ["not_delivered"]});',
           'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-events",write:{_tag:"own",event:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
           'const declaration = {machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{throw:{_tag:"write",schema:Msg,description:"Fail",personOnly:false},prepare:{_tag:"write",schema:Msg,description:"Prepare",personOnly:false},schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false}},outputs:{},writes:{noted:{schema:noted,personOnly:false}},wake:s=>s.wake};',
@@ -160,7 +171,7 @@ const world = async (
             'let outbound = "blocked";',
             `try { await fetch("http://127.0.0.1:${destination.port}"); outbound = "allowed"; } catch {}`,
             "const Model = Schema.Struct({bindings: Schema.Array(Schema.String), outbound: Schema.String});",
-            'const Msg = Schema.Struct({type: Schema.Literal("read")});',
+            'const Msg = Schema.TaggedStruct("read", {});',
             "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{bindings:Object.keys(env),outbound},[]],update:{read:s=>[s,[]]}});",
             'export const program = {name:"p12/sealed-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};',
           ],
@@ -176,7 +187,7 @@ const world = async (
           [
             'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
             "const Model = Schema.Struct({fired: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
-            'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("cancel")}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
+            "const Msg = Schema.TaggedUnion({ schedule: { at: Schema.Number }, cancel: {}, timer: { at: Schema.Number } });",
             "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{fired:0,wake:null},[]],update:{schedule:(s,m)=>[{...s,wake:m.at},[]],cancel:s=>[{...s,wake:null},[]],timer:s=>[{fired:s.fired+1,wake:null},[]]}});",
             'export const program = {name:"p12/alarm-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false},cancel:{_tag:"write",schema:Msg,description:"Cancel",personOnly:false}},outputs:{},writes:{},wake:s=>s.wake};',
           ],
@@ -619,7 +630,7 @@ describe("P12 real object adapters", () => {
           const reply = await routed(p, client, "process.send", {
             pid,
             letter: `after-${mode}`,
-            m: { type: "inc" },
+            m: Tag.cases.inc.make({}),
             sentAt: SENT,
             seen: 0,
           });
@@ -649,7 +660,7 @@ describe("P12 real object adapters", () => {
 
       try {
         await process.testHold();
-        const params = { pid, letter: "busy-once", m: { type: "inc" }, sentAt: SENT, seen: 0 };
+        const params = { pid, letter: "busy-once", m: Tag.cases.inc.make({}), sentAt: SENT, seen: 0 };
 
         const pending = c.call("process.send", params).then(
           (answer) => ({ answer }),
@@ -866,7 +877,7 @@ describe("P12 real object adapters", () => {
       const input = {
         pid,
         letter: "recorded",
-        m: { type: "inc" },
+        m: Tag.cases.inc.make({}),
         sentAt: SENT,
         seen: 0,
         traceId: TRACE,
@@ -880,7 +891,7 @@ describe("P12 real object adapters", () => {
           ...input,
           pid: broken.process,
           letter: "failed",
-          m: { type: "throw", body: "private raw frame P12" },
+          m: { ...Tag.cases.throw.make({}), body: "private raw frame P12" },
         }),
       ).rejects.toThrow();
       const manager = RecordManager.remote((name) => recordCalls(instance.record("p12-records", name)));
@@ -917,7 +928,7 @@ describe("P12 real object adapters", () => {
         const delivered = await routed(p, client, "process.send", {
           pid,
           letter: "cause",
-          m: { type: "prepare" },
+          m: Tag.cases.prepare.make({}),
           sentAt: SENT,
           seen: 0,
           traceId: TRACE,
@@ -992,7 +1003,7 @@ describe("P12 real object adapters", () => {
         await routed(p, client, "process.send", {
           pid: start.process,
           letter: "schedule",
-          m: { type: "schedule", at: 42 },
+          m: { ...Tag.cases.schedule.make({}), at: 42 },
           sentAt: SENT,
           seen: 0,
         }),
@@ -1002,7 +1013,7 @@ describe("P12 real object adapters", () => {
       await process.due(42);
       await process.due(42);
       const inbox = await p.read("timer:1/inbox", 0, "audit");
-      expect(inbox.filter((r: any) => r.body.m?.type === "timer")).toHaveLength(1);
+      expect(inbox.filter((r: any) => r.body.m?._tag === "timer")).toHaveLength(1);
       expect(await process.open("audit")).toMatchObject({ view: { count: 1, replies: 1 } });
       expect(await process.alarm()).toBe(52);
       // Durable Activity belongs to P33/P11. A wake must report it instead of counting constructors.
@@ -1030,7 +1041,7 @@ describe("P12 real object adapters", () => {
       const send = (letter: string, m: Schema.Json) =>
         routed(p, client, "process.send", { pid: started.process, letter, m, sentAt: SENT, seen: 0 });
 
-      expect(await send("arm", { type: "schedule", at: far })).toMatchObject({
+      expect(await send("arm", { ...Tag.cases.schedule.make({}), at: far })).toMatchObject({
         _tag: "ok",
         result: { _tag: "accepted" },
       });
@@ -1047,7 +1058,10 @@ describe("P12 real object adapters", () => {
       expect((await p.info()).find((row: any) => row.name === "sleeper:1").process).toBe(started.process);
       expect(await object.testAlarms()).toEqual({ delivered: 0, failed: 0 });
       // The woken instance still takes a letter, and drops the wake it kept.
-      expect(await send("drop", { type: "cancel" })).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+      expect(await send("drop", Tag.cases.cancel.make({}))).toMatchObject({
+        _tag: "ok",
+        result: { _tag: "accepted" },
+      });
       expect(await object.alarm()).toBeNull();
     }, true);
   }, 120_000);
@@ -1066,12 +1080,12 @@ describe("P12 real object adapters", () => {
         routed(p, client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 });
 
       const timers = async (name: string) =>
-        (await p.read(`${name}/inbox`, 0, "audit")).filter((row: any) => row.body.m?.type === "timer");
+        (await p.read(`${name}/inbox`, 0, "audit")).filter((row: any) => row.body.m?._tag === "timer");
 
       // 1. A saved alarm fires once: one timer letter for the wake, and the wake is spent.
       const once = await fixture.start("once:1", "p12/alarm-fixture");
       const first = now() + 1_000;
-      expect(await send(once.process, "arm", { type: "schedule", at: first })).toMatchObject(accepted);
+      expect(await send(once.process, "arm", { ...Tag.cases.schedule.make({}), at: first })).toMatchObject(accepted);
       expect(await instance.process(once.process).alarm()).toBe(first);
       await until(
         "the saved alarm's timer letter",
@@ -1082,7 +1096,7 @@ describe("P12 real object adapters", () => {
       await pause(1_500);
       const fired = await timers("once:1");
       expect(fired).toHaveLength(1);
-      expect(fired[0].body.m).toMatchObject({ type: "timer", at: first });
+      expect(fired[0].body.m).toMatchObject({ ...Tag.cases.timer.make({}), at: first });
       expect(await instance.process(once.process).open("audit")).toMatchObject({ view: { fired: 1, wake: null } });
       expect(await instance.process(once.process).alarm()).toBeNull();
       const counted = await instance.process(once.process).testAlarms();
@@ -1092,9 +1106,9 @@ describe("P12 real object adapters", () => {
       // 2. A deleted alarm never fires: the platform delivers nothing after the wake is dropped.
       const never = await fixture.start("never:1", "p12/alarm-fixture");
       const second = now() + 2_000;
-      expect(await send(never.process, "arm", { type: "schedule", at: second })).toMatchObject(accepted);
+      expect(await send(never.process, "arm", { ...Tag.cases.schedule.make({}), at: second })).toMatchObject(accepted);
       expect(await instance.process(never.process).alarm()).toBe(second);
-      expect(await send(never.process, "drop", { type: "cancel" })).toMatchObject(accepted);
+      expect(await send(never.process, "drop", Tag.cases.cancel.make({}))).toMatchObject(accepted);
       expect(await instance.process(never.process).alarm()).toBeNull();
       await pause(Math.max(0, second - now()) + 1_500);
       expect(await timers("never:1")).toEqual([]);
@@ -1105,7 +1119,7 @@ describe("P12 real object adapters", () => {
       // delivered, once, by a later try after the descriptor is back.
       const retried = await fixture.start("retry:1", "p12/alarm-fixture");
       const third = now() + 2_000;
-      expect(await send(retried.process, "arm", { type: "schedule", at: third })).toMatchObject(accepted);
+      expect(await send(retried.process, "arm", { ...Tag.cases.schedule.make({}), at: third })).toMatchObject(accepted);
       // Both exam calls end in a platform abort, which rejects the call that asked for it.
       await instance
         .process(retried.process)
@@ -1129,7 +1143,7 @@ describe("P12 real object adapters", () => {
       await pause(1_500);
       const late = await timers("retry:1");
       expect(late).toHaveLength(1);
-      expect(late[0].body.m).toMatchObject({ type: "timer", at: third });
+      expect(late[0].body.m).toMatchObject({ ...Tag.cases.timer.make({}), at: third });
       const seen = await instance.process(retried.process).testAlarms();
       expect(seen.failed).toBeGreaterThanOrEqual(1);
       expect(seen.delivered).toBeGreaterThan(seen.failed);
@@ -1147,7 +1161,7 @@ describe("P12 real object adapters", () => {
       expect(probe.hits()).toBe(0);
       const counter = await loader.load("fabrika/counter", processId());
       expect(await counter.init(null)).toMatchObject({ _tag: "stepped", view: { count: 0 } });
-      expect(await counter.step({ count: 0 }, { type: "inc" })).toMatchObject({
+      expect(await counter.step({ count: 0 }, Tag.cases.inc.make({}))).toMatchObject({
         _tag: "stepped",
         view: { count: 1 },
       });

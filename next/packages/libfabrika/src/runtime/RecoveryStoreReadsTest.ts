@@ -20,6 +20,12 @@ import { property } from "../Testing.test-support.ts";
 import { Receipt } from "./internal/recovery.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const NAME = "writer:1";
 
 const PROCESS = "process_0000000000e008000000000001";
@@ -37,7 +43,7 @@ type Journal = typeof Journal.Type;
 
 const receipt = (letter: string, value: number, pad = ""): Receipt => ({
   letter,
-  input: { type: "save", value, pad },
+  input: { ...Tag.cases.save.make({}), value, pad },
   errors: [],
   tries: 1,
   result: null,

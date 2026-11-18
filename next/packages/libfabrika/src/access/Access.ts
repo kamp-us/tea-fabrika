@@ -338,7 +338,12 @@ export type Folded = typeof Model.Type;
 
 type Founded = typeof Model.cases.founded.Type;
 
-const Msg = Schema.Struct({ type: Schema.Literal("fold"), event: MemberEvent });
+/**
+ * Schema for the access machine's one Msg: fold one member event.
+ *
+ * @category schemas
+ */
+export const Fold = Schema.TaggedStruct("fold", { event: MemberEvent });
 
 /**
  * Returns the id an event is kept under: its own, and the fixed `founded` for the founding.
@@ -633,7 +638,7 @@ const fold = (model: Folded, event: MemberEvent): Folded => {
  */
 export const access = Machine.make({
   model: Model,
-  msg: Msg,
+  msg: Fold,
   cmds: [],
   init: (loaded) => [loaded ?? Model.cases.unfounded.make({ reply: ACCEPTED }), []],
   update: {

@@ -11,6 +11,12 @@ import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox, type From } from "./Mailbox.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+});
+
 // Each world's own scope closes its database (0061).
 const memory = Effect.acquireRelease(
   Effect.sync(() => new DatabaseSync(":memory:")),
@@ -92,9 +98,14 @@ describe("P11 richer mailbox history", () => {
         const original = { ...from, ...over };
         const mailbox = yield* Mailbox;
         const ledger = yield* Ledger;
-        yield* mailbox.send("counter:1", "a", { type: "add", n: 1 }, original);
+        yield* mailbox.send("counter:1", "a", { ...Tag.cases.add.make({}), n: 1 }, original);
         yield* ledger.append("elsewhere", "noise", lineFor(from, { _tag: "noise" }));
-        yield* mailbox.send("counter:1", "b", { type: "add", n: 2 }, { ...original, seen: 2, build: "build-later" });
+        yield* mailbox.send(
+          "counter:1",
+          "b",
+          { ...Tag.cases.add.make({}), n: 2 },
+          { ...original, seen: 2, build: "build-later" },
+        );
         const entries = yield* Stream.runCollect(ledger.read("counter:1/inbox", 0));
         const rich = yield* Stream.runCollect(mailbox.read("counter:1", 0));
         const plain = yield* Stream.runCollect(mailbox.receive("counter:1", 0));
@@ -125,11 +136,11 @@ describe("P11 richer mailbox history", () => {
     check(metadata, [{ build: "retry-build", sentAt: "later" }], (retry) =>
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
-        const first = yield* mailbox.send("counter:1", "a", { type: "add", n: 1 }, from);
+        const first = yield* mailbox.send("counter:1", "a", { ...Tag.cases.add.make({}), n: 1 }, from);
         const before = yield* Stream.runCollect(mailbox.read("counter:1", 0));
-        expect(yield* mailbox.send("counter:1", "a", { type: "add", n: 1 }, { ...from, ...retry, seen: 1 })).toEqual(
-          first,
-        );
+        expect(
+          yield* mailbox.send("counter:1", "a", { ...Tag.cases.add.make({}), n: 1 }, { ...from, ...retry, seen: 1 }),
+        ).toEqual(first);
         expect(yield* Stream.runCollect(mailbox.read("counter:1", 0))).toEqual(before);
       }).pipe(Effect.provide(world())),
     ),

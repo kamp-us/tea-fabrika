@@ -1,0 +1,57 @@
+{
+  "name": "@kalfa/quality",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Our testing, linting and formatting tooling, one subpath per tool (decision 0600). So far /stryker: the plant runner, a Stryker-made mutant named by its code shape, with the law that must kill it.",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    "./stryker": "./src/stryker/index.ts",
+    "./stryker/Run": "./src/stryker/Run.ts",
+    "./stryker/Settings": "./src/stryker/Settings.ts",
+    "./stryker/Target": "./src/stryker/Target.ts",
+    "./stryker/Mutants": "./src/stryker/Mutants.ts",
+    "./stryker/Guard": "./src/stryker/Guard.ts",
+    "./stryker/Report": "./src/stryker/Report.ts",
+    "./stryker/node/MutantsStryker": "./src/stryker/node/MutantsStryker.ts",
+    "./cli": "./src/cli.ts",
+    "./package.json": "./package.json"
+  },
+  "kalfa": {
+    "cli": "./cli"
+  },
+  "peerDependencies": {
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/instrumenter": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
+    "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@stryker-mutator/core": {
+      "optional": true
+    },
+    "@stryker-mutator/instrumenter": {
+      "optional": true
+    },
+    "@stryker-mutator/vitest-runner": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@stryker-mutator/core": "catalog:",
+    "@stryker-mutator/instrumenter": "catalog:",
+    "@stryker-mutator/vitest-runner": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

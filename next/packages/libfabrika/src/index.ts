@@ -98,6 +98,9 @@ export * as Chunk from "./runtime/Chunk.ts";
 
 export * as StartChild from "./runtime/StartChild.ts";
 
+/** The Effect Schema for tea 0.29's `MalformedResult` type: the failure every settled error can carry. */
+export { MalformedResult } from "./runtime/MalformedResult.ts";
+
 export { Started } from "./processes/Children.ts";
 
 export * as Monitor from "./runtime/Monitor.ts";

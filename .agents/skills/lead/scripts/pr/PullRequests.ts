@@ -1,10 +1,7 @@
 // PullRequests: what the lead tooling asks GitHub about pull requests, and the few writes it makes
 // (0134: a draft at a branch's first commit, marked ready when its steps passed; 0162: one pinned
 // squash that adds it to GitHub's merge queue; 0530: merge when ready, which pr/Arm.ts turns on;
-// 0183 and 0532: an admin merge, which pr/Merge.ts alone asks; ticket 1115: a native stack's
-// merge, which pr/Stack.ts alone asks, after its layer gates pass).
-// This file is the
-// contract only (0095): `PullRequestsGh.layer` asks GitHub through `gh`, `PullRequestsTest.layer`
+// 0183 and 0532: an admin merge, which pr/Merge.ts alone asks). This file is the contract only (0095): `PullRequestsGh.layer` asks GitHub through `gh`, `PullRequestsTest.layer`
 // answers from a list in memory. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect, Option } from "effect";
@@ -50,54 +47,6 @@ export const Patch = Schema.Struct({ path: Schema.String, patch: Schema.NullOr(S
 
 export type Patch = typeof Patch.Type;
 
-/** A pull request head as GitHub lists it in a native stack, in bottom-first order. */
-const StackHead = Schema.Struct({ number: Schema.Finite, oid: Schema.String });
-
-/**
- * One native stack as GitHub's stacks list gives it (`GET repos/{repo}/stacks`): its number, which
- * shares the pull requests' number sequence, the branch it lands on, and each pull request's head,
- * bottom first.
- */
-export const Stack = Schema.Struct({
-  number: Schema.Finite,
-  base: Schema.String,
-  prs: Schema.Array(StackHead),
-});
-
-export type Stack = typeof Stack.Type;
-
-/** The selected stack prefix, with the exact PR facts each layer's gates read. */
-export const StackSelection = Schema.Struct({
-  number: Schema.Finite,
-  base: Schema.String,
-  layers: Schema.Array(Detail),
-});
-
-export type StackSelection = typeof StackSelection.Type;
-
-/** What GitHub says happened to an async native stack merge request. */
-export const StackMerge = Schema.TaggedUnion({
-  merged: { commit: Schema.String },
-  enqueued: {},
-  pending: {
-    uuid: Schema.String,
-    expectedHeadSha: Schema.String,
-    mergeAction: Schema.Literals(["direct_merge", "merge_queue"]),
-    mergeMethod: Schema.Literals(["default", "squash"]),
-  },
-});
-
-export type StackMerge = typeof StackMerge.Type;
-
-/** A branch's effective merge queue, as GitHub's branch queue object and any queue rule agree. */
-export const MergeQueue = Schema.Struct({
-  build: Schema.Finite,
-  merge: Schema.Finite,
-  method: Schema.Literals(["MERGE", "SQUASH", "REBASE"]),
-});
-
-export type MergeQueue = typeof MergeQueue.Type;
-
 /** What a new or edited pull request says: its title and its description. */
 export type Text = { readonly title: string; readonly body: string };
 
@@ -135,17 +84,5 @@ export class PullRequests extends Context.Service<
      * merge, which only pr/Merge.ts asks, for a docs-only pull request (0183) or a sev0 fix (0532).
      */
     readonly admin: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
-    /** The open native stack pull request `number` is in; none when it is in none. */
-    readonly stack: (number: number) => Effect.Effect<Option.Option<Stack>, PullRequestsError>;
-    /** The merge queue the rules on `branch` turn on; none when the branch has no queue. */
-    readonly mergeQueue: (branch: string) => Effect.Effect<Option.Option<MergeQueue>, PullRequestsError>;
-    /**
-     * Asks GitHub to merge the exact selected native stack prefix after rereading its identity,
-     * links and heads. It rereads layer readiness and text immediately before submission. GitHub
-     * pins only the top SHA; lower heads still need source, queue and writer coordination through
-     * submission. The result says whether GitHub merged it, queued it, or left it pending. Only
-     * pr/Stack.ts asks, after each open layer passed its gates.
-     */
-    readonly mergeStack: (selection: StackSelection) => Effect.Effect<StackMerge, PullRequestsError>;
   }
 >()("lead/pr/PullRequests") {}
