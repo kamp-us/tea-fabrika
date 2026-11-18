@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body c5e918655a56
+Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body dbe42cb23e78
 Plancheck-Version: 3
 
 # Plan: no `Reflect.get`, `Reflect.set` or `Reflect.has` is left in `next/` and our tooling, and a lint rule holds it
@@ -1290,6 +1290,68 @@ commit's body names them), slice 13 and slice 15 are judgment, and get the one r
 - Whether the owner's look at 1312 changes `tezgah-focus.visual.test.ts` more than lines. Its
   later merge tells.
 - Whether the visual files' laws pass in a cloud box with no `ssh-keygen`. CI's visual job tells.
+
+#### 9. Slice 15 leaves this pull request and lands from main on its own, 2026-11-18 (lead, on the owner's answer)
+
+**The answer first.** Slice 15, the fold, comes out of pull request
+https://github.com/kamp-us/tea-fabrika/pull/1494 by a plain revert (`5c9f7a977`). So that pull
+request lands slices 9 to 14 and 13, with the four list blocks and L4 as they stand on main and
+slice 13's `e2e/*` line added. The fold lands later, in its own pull request cut from main once 1494
+has merged. Ticket 1056 stays open until then. The owner picked this through fabrikaa: it stops six
+good slices waiting on the one that kept missing. Landing the fold with a known gap was ruled out.
+
+**Why it came out.** After the fold, L4 missed the same fault three times. In each case one glob added
+to the `JSON.parse` warn block stripped `client/`'s retry entries, or turned `JSON.parse` into advice
+where it blocks, and every law stayed green. The rows are
+`field/runs/2026-11-18-reflect-ban-s13-s15-review1.json`, `-review2.json` and `-review3.json`.
+
+**Why each miss happened.**
+
+- **The common cause.** An override replaces a rule's options, and a file takes the last override
+  whose globs match it.
+- **Before the fold.** The Reflect list blocks came last in `.oxlintrc.json`, so they decided every
+  listed folder's final options. They also recorded, apart from the warn block, which folders block.
+  The old L4 checked one against the other.
+- **What the fold changed.** It put the entries into the base blocks, which keep main's order:
+  `next/**/*`, then `client/**`, then the warn block last. So the warn block now wins for any file
+  its globs reach, `client/` included, and nothing else in the file records which folders block.
+- **Miss 1, a glob for the whole library package.** L4 read each block's own entries, never the setting a
+  file ends with.
+- **Miss 2, a glob for the app's whole e2e folder.** L4 read the final setting, but it judged "this folder still
+  has a `JSON.parse` fire" at a coarser folder than the glob reaches. The warn block names only the
+  files directly in the e2e folder, yet its `node` subfolder was counted with them.
+- **Miss 3, a glob for the library's test files only.** L4 planted one made-up file name per
+  folder, but a glob matches a file's path and name. A glob for one kind of file never met the sample.
+- **What the three share.** Each version of L4 modeled oxlint's matching itself, first by block, then
+  by folder, then by one name per folder, instead of asking oxlint about the real files. Meanwhile
+  the block order left `client/` and the `JSON.parse` level decided by whichever glob came last.
+
+**What the fold's own pull request builds.** The fix goes at both causes:
+
+```jsonc
+// .oxlintrc.json after the fold, a sketch: client/** goes back after the warn block, so its
+// entries win by order for every client/ file, whatever glob the warn block gains.
+{ "files": ["next/**/*"], "rules": { "eslint/no-restricted-properties": ["error", /* Data.TaggedError, JSON.parse, the four */] } },
+{ "files": [/* the JSON.parse warn block's folders */], "rules": { "eslint/no-restricted-properties": ["warn", /* Data.TaggedError, JSON.parse, the four */] } },
+{ "files": ["next/packages/libfabrika/src/client/**"], "rules": { "eslint/no-restricted-properties": ["error", /* Data.TaggedError, JSON.parse, Effect.retry, Stream.retry, the four */] } }
+```
+
+- **The sample.** L4 plants its sample at every tracked `next/` code file's own path and name,
+  inside a temp copy of the repo. It reads what each real file ends with, and groups the results by
+  folder for the fire check, as review 3 proposed.
+- **Its laws and plants.**
+  - L10's expected block order follows the move.
+  - Each of the three misses' globs stays a plant that must be red.
+  - The paragraph above goes in that pull request's description and in a finding row.
+- **Steps.** It runs its own steps: an amendment with the recount, tests, the `next/AGENTS.md` build
+  row and one review.
+
+**What this amendment cannot tell us.**
+
+- Whether sampling every tracked file is fast enough for the lint suite. Today's L4 takes about 16 s
+  for 66 folders; the fold pull request's tests step measures it.
+- Whether a glob for a file kind no tracked file has could still pass. That is the stated limit of
+  any sample of the real tree.
 
 ## Open questions
 
