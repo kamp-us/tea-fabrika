@@ -24,7 +24,7 @@ All three slices land after PR 1562, which changes every file they touch (see "W
 | Flake | Cause | How sure | What would settle the doubt |
 |---|---|---|---|
 | tezgah focus L28/L30 | snapshot then a waiting per-name read | 90% | the plant law below hangs on today's `drawn` and passes on the fixed one |
-| L13 | heavy guard bundle against a 5 s bound | 75% for the bundle; 95% that the wait is guard.ready | `guardMs` recorded in `runs/p19/host.json` on host runs before and after the split |
+| L13 (ticket 1167) | heavy guard bundle against a 5 s bound | 75% for the bundle; 95% that the wait is guard.ready | `guardMs` recorded in `runs/p19/host.json` on host runs before and after the split |
 | L15 | gateway knock after the grant drain | 60% that this is what hit run 44216670632; 90% that the race exists in the code | the gateway law below goes red on today's `Gateway.ts`; the L15 failure message names the tab and shows whether it still shows a code |
 
 ## Records
@@ -134,6 +134,9 @@ sleeps 250 ms, and the next read agrees. Under today's code, if t2 leaves betwee
 and its `boundingBox`, the read blocks for 30 s and the law fails.
 
 ## Flake 2: L13, the launchd host law
+
+Tracker ticket 1167. The coordinator reports a third sighting on PR 1583's host run tonight; I have not
+read that job's log.
 
 **Cause.** On PR 1562's head the 5 s `TimeoutError` comes from `P19Host.wait` at
 `P19Launchd.test-support.ts:526`, called from `P19Host.check`. That line is
