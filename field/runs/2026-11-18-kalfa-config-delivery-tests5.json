@@ -1,0 +1,92 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-kalfa-config-delivery-tests5",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": "kamp-us/tea-fabrika#1589",
+  "started": "2026-11-18T07:16:00-08:00",
+  "ended": "2026-11-18T07:41:00-08:00",
+  "parent": "2026-11-18-kalfa-config-delivery-tests4",
+  "active": null,
+  "driver_caused": false,
+  "role": "step",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Part 2 of the 0602 amendment (plan body 3e7221f27992), on main with ticket 1161 (#1623): scheduled.yaml's tests job gains a package receipt step after vitest and a package archive upload after it, guarded by a new SC22 (1623 already took the plan's SC21) and one new SC9 command. 1623's lines are unchanged.",
+  "note": "10 plants on the guard, one clause dropped at a time: 9 red at first. Dropping the archive-position check stayed green, because the receipt-position clause also caught the existing case; an isolating case was added, and it is then red. SC13's 3-minute backstop is unchanged; the steps after the test step now hold 4 minutes of limits, which the guard does not sum. Typecheck found a TS2571 in the first commit, fixed in the second.",
+  "base": "5103a76ee9760e159c29319532551b11a3a208c4",
+  "head": "282028eced5691e5e639f930c1c9b27368b24469",
+  "sourceHashes": {
+    ".github/ci/workflow-lint/scheduled.test.ts": "48fa2f846d1bf9afc6f778ddf0fe94a72377f65a2a3e185fd1e29c92a0ea2b30",
+    ".github/ci/workflow-lint/scheduled.ts": "4dba299570986d9d81395eda3686ead7395a9488556bc1f048e0c0145007d4d4",
+    ".github/workflows/scheduled.yaml": "d30abfa028b8f479d228a2c23cabe5c34eb2fa623f78fd45cce95cdd9c43da3e"
+  },
+  "plants": [
+    {
+      "law": "SC22 the real scheduled.yaml keeps the archive in tests alone",
+      "plant": "drop the keptArchive call",
+      "result": "red"
+    },
+    {
+      "law": "SC22 the archive upload fails on missing files",
+      "plant": "drop the if-no-files-found: error check",
+      "result": "red"
+    },
+    {
+      "law": "SC22 the receipt sits right after vitest",
+      "plant": "drop the receipt-position check",
+      "result": "red"
+    },
+    {
+      "law": "SC22 no other step names the delivery folder or a kalfa-config- upload",
+      "plant": "drop the other-step rule",
+      "result": "red"
+    },
+    {
+      "law": "SC22 the receipt has exactly its own keys",
+      "plant": "drop the receipt's exact-keys check",
+      "result": "red"
+    },
+    {
+      "law": "SC22 the upload runs only when the receipt kept",
+      "plant": "drop the archive's if check",
+      "result": "red"
+    },
+    {
+      "law": "SC9 only the declared commands run",
+      "plant": "admit a command that runs P2 alone",
+      "result": "red"
+    },
+    {
+      "law": "SC22 the retention is a whole number of days",
+      "plant": "drop the whole-number check",
+      "result": "red"
+    },
+    {
+      "law": "SC22 reads the receipt's if in either spelling",
+      "plant": "drop compact from the receipt's if",
+      "result": "red"
+    },
+    {
+      "law": "SC22 the archive sits right after the receipt",
+      "plant": "drop the archive-position check",
+      "result": "green"
+    },
+    {
+      "law": "SC22 the archive sits right after the receipt, the isolating case",
+      "plant": "drop the archive-position check, run again",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 24.8,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billed": null,
+  "billing": null
+}

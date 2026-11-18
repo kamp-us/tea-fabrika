@@ -9,6 +9,11 @@
 //   hold its value, its origin (a file's name and line, a flag's or environment variable's name),
 //   its default and its doc. `all` changes which rows show, never what a shown row says.
 import { describe, expect, it } from "@effect/vitest";
+import * as Print from "@kalfa/config/Print";
+import * as Reference from "@kalfa/config/Reference";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import { Toml } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Rec from "effect/Record";
@@ -18,11 +23,6 @@ import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Setting from "./Fabrika.ts";
 import * as Sources from "./Fabrika.ts";
-import * as Print from "./Print.ts";
-import * as Reference from "./Reference.ts";
-import * as Snapshot from "./Snapshot.ts";
-import { Toml } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 

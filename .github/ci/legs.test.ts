@@ -1,11 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, expect, it } from "@effect/vitest";
-import { Effect, Record as Rec, Schema, Config } from "effect";
-
+import { Config, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { readers } from "./changes.mjs";
 import {
@@ -617,4 +616,189 @@ it("property: global rerun selection never narrows owed visual files a second ti
     }),
     options,
   );
+});
+
+// T1076 O1 and O2. The size step's main, run as CI runs it, over a stand-in for `vitest list`: the
+// stand-in follows Vitest's own filter (a positional argument keeps the files whose path holds it,
+// `--changed` keeps the files the change reaches), so a positional `next/` left in the call drops
+// Kalfa's ordinary laws, which `--project next` holds beside next/'s. The real Vitest filter is held
+// in related.test.ts, on the real configured discovery. Each run starts a process, so the count is
+// small. Plants, each run once on legs.ts and restored: put the positional `next/` back in `list`
+// (red, the Kalfa laws are missing from the sized set); read any filter but the exact readers as the
+// readers (red, a changed run lists only the readers).
+const FULL = "next/ kalfa/";
+
+const READER_FILTER = readers.join(" ");
+
+/** A git repository the child reads through GIT_DIR: `base` and its child `head`, which adds one next/ file. */
+const repository = () => {
+  const dir = mkdtempSync(join(tmpdir(), "legs-repo-"));
+
+  const git = (args: readonly string[]) => {
+    const done = spawnSync(
+      "git",
+      ["-c", "user.name=ci", "-c", "user.email=ci@example.com", "-c", "commit.gpgsign=false", ...args],
+      { cwd: dir, encoding: "utf8", env: { PATH: process.env["PATH"], HOME: dir, GIT_CONFIG_NOSYSTEM: "1" } },
+    );
+
+    expect(done.status, done.stderr).toBe(0);
+
+    return done.stdout.trim();
+  };
+
+  git(["init", "-q", "-b", "main"]);
+  writeFileSync(join(dir, "seed.txt"), "seed\n");
+  git(["add", "."]);
+  git(["commit", "-q", "-m", "base"]);
+
+  const base = git(["rev-parse", "HEAD"]);
+
+  mkdirSync(join(dir, "next/apps/a/src"), { recursive: true });
+  writeFileSync(join(dir, "next/apps/a/src/changed.ts"), "export {};\n");
+  git(["add", "."]);
+  git(["commit", "-q", "-m", "change"]);
+
+  return { gitDir: join(dir, ".git"), base, home: dir };
+};
+
+const STAND_IN = (node: string) => `#!${node}
+const { appendFileSync, readFileSync, writeFileSync } = require("node:fs");
+const model = JSON.parse(readFileSync(process.env.STAND_IN_MODEL, "utf8"));
+const args = process.argv.slice(2);
+const at = args.indexOf("--project");
+const project = args[at + 1];
+const out = args.find((arg) => arg.startsWith("--json=")).slice("--json=".length);
+const changed = args.some((arg) => arg.startsWith("--changed="));
+const filters = args
+  .slice(args.indexOf("list") + 1)
+  .filter((arg, i, all) => !arg.startsWith("--") && all[i - 1] !== "--project");
+const files = (model.universe[project] ?? []).filter(
+  (file) => (!changed || model.reach.includes(file)) && (filters.length === 0 || filters.some((filter) => file.includes(filter))),
+);
+writeFileSync(out, JSON.stringify(files.map((file) => ({ file: model.root + "/" + file }))));
+`;
+
+const git = repository();
+
+const bin = join(git.home, "bin");
+
+mkdirSync(bin);
+
+writeFileSync(join(bin, "pnpm"), STAND_IN(process.execPath));
+
+chmodSync(join(bin, "pnpm"), 0o755);
+
+const Stem = Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/));
+
+/** Kalfa's ordinary laws, next/'s, and the reader tests, as one `next` project holds them. */
+const OrdinaryFiles = Schema.Struct({
+  kalfa: Schema.UniqueArray(Stem).check(Schema.isMinLength(1), Schema.isMaxLength(4)),
+  other: Schema.UniqueArray(Stem).check(Schema.isMaxLength(4)),
+  readers: Schema.UniqueArray(Stem).check(Schema.isMinLength(1), Schema.isMaxLength(3)),
+});
+
+type Ordinary = typeof OrdinaryFiles.Type;
+
+// What the filter may be: the two roots, the exact readers, the legacy one root, and anything else.
+const RunFilter = Schema.Union([
+  Schema.Literals([
+    FULL,
+    READER_FILTER,
+    "next/",
+    "",
+    "next",
+    "kalfa/",
+    "kalfa/ next/",
+    "next/ ",
+    readers[0]!,
+    readers.toReversed().join(" "),
+  ]),
+  Schema.Undefined,
+  Schema.String.check(Schema.isMaxLength(12)),
+]);
+
+/** One run of the size step's main over a stand-in project, and what it must list. */
+const expectOrdinary = (files: Ordinary, mask: readonly boolean[], filter: string | undefined, readable: boolean) => {
+  const universe = [
+    ...files.kalfa.map((w) => `kalfa/config/src/${w}.test.ts`),
+    ...files.other.map((w) => `next/packages/libfabrika/src/${w}.test.ts`),
+    ...files.readers.map((w) => `next/apps/fabrika/src/exam/${w}.test.ts`),
+  ];
+
+  // A Kalfa law is always among the changed files' reach, so a changed run must list it.
+  const reach = universe.filter((_, i) => i === 0 || mask[i % mask.length]);
+
+  const dir = mkdtempSync(join(tmpdir(), "legs-run-"));
+  const model = join(dir, "model.json");
+  const output = join(dir, "out");
+
+  writeFileSync(model, JSON.stringify({ root: ROOT.replace(/\/$/, ""), universe: { next: universe }, reach }));
+
+  const done = spawnSync(process.execPath, [fileURLToPath(new URL("./legs.ts", import.meta.url))], {
+    encoding: "utf8",
+    env: {
+      PATH: `${bin}:${process.env["PATH"]}`,
+      HOME: git.home,
+      GIT_DIR: git.gitDir,
+      GIT_CONFIG_NOSYSTEM: "1",
+      EVENT: "merge_group",
+      ...(filter === undefined ? {} : { FILTER: filter }),
+      // An unreadable base, a valid commit name Git does not have, is the run of everything.
+      BASE: readable ? git.base : "b".repeat(40),
+      BUDGET: String(budget),
+      GITHUB_OUTPUT: output,
+      STAND_IN_MODEL: model,
+    },
+  });
+
+  expect(done.status, done.stderr).toBe(0);
+
+  const printed = readFileSync(output, "utf8")
+    .split("\n")
+    .find((line) => line.startsWith("files="))
+    ?.slice("files=".length);
+
+  const readerFiles = universe.filter((path) => readers.some((reader) => path.includes(reader)));
+
+  // The readers alone narrow, and only when the filter is exactly theirs and the change is readable;
+  // anything else is every ordinary file, or the changed ones.
+  const picked = !readable ? universe : filter === READER_FILTER ? [] : reach;
+
+  const expected = [...new Set([...picked, ...readerFiles])].toSorted();
+
+  const listed = (printed ?? "").split(" ").filter(Boolean);
+
+  expect(new Set(listed).size).toBe(listed.length);
+  expect(listed.toSorted()).toEqual(expected);
+};
+
+// Each run starts a process, about a second, so the property is a dozen runs: a hundred would pass the
+// 60 s test limit. The routes it may miss are each pinned below as a scenario.
+it.prop(
+  "property: the size step lists the whole ordinary project, Kalfa's laws included, full or changed, and narrows to the readers only for the exact reader filter",
+  {
+    files: OrdinaryFiles,
+    mask: Schema.Array(Schema.Boolean).check(Schema.isMinLength(16), Schema.isMaxLength(16)),
+    filter: RunFilter,
+    readable: Schema.Boolean,
+  },
+  ({ files, mask, filter, readable }) => expectOrdinary(files, mask, filter, readable),
+  { arbitrary: { seed: 119120, runs: 12, size: 100 } },
+);
+
+const pinned: Ordinary = {
+  kalfa: ["a"],
+  other: [],
+  readers: ["b"],
+};
+
+it.each([
+  // pinned: the one-root spelling a run printed before Kalfa joined the `next` project, which is all.
+  ["the legacy one root", "next/"],
+  ["the two roots", FULL],
+  ["the exact reader filter", READER_FILTER],
+  ["no filter at all", undefined],
+])("scenario: the size step on a readable and an unreadable change, with %s", (_name, filter) => {
+  expectOrdinary(pinned, [true], filter, true);
+  expectOrdinary(pinned, [true], filter, false);
 });

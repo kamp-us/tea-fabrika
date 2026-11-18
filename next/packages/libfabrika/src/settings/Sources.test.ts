@@ -10,6 +10,8 @@
 //   decoded values, and per dotted path the Origin of the source that supplied it, or `default`.
 //   A source that fails to read, or a winning value that fails its schema, fails the whole resolve.
 import { describe, expect, it } from "@effect/vitest";
+import { Toml } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -20,8 +22,6 @@ import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Setting from "./Fabrika.ts";
 import * as Sources from "./Fabrika.ts";
-import { Toml } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 

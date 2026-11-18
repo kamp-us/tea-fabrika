@@ -938,7 +938,12 @@ describe("trusted config files", () => {
         { "glob": "apps/fabrika/src/window/colors.test.ts", "why": "the app's color laws" },
         { "glob": "apps/fabrika/src/pipes.test.ts", "why": "the pipe color laws" },
         { "glob": "apps/fabrika/e2e.ts", "why": "today's app's keyboard focus laws and capture stages" },
-        { "glob": "apps/fabrika/aria/**", "why": "the approved ARIA snapshots" }
+        { "glob": "apps/fabrika/aria/**", "why": "the approved ARIA snapshots" },
+        { "glob": "kalfa/**/*.test.ts", "why": "Tooling package laws." },
+        { "glob": "kalfa/**/*Test.ts", "why": "Tooling package shared suites." },
+        { "glob": "kalfa/**/*.test-support.ts", "why": "Tooling package test support." },
+        { "glob": "kalfa/**/tsconfig*.json", "why": "Tooling package compiler and declaration checks." },
+        { "glob": "kalfa/config/test/**", "why": "Installed config consumer inputs." }
       ]
       "
     `);

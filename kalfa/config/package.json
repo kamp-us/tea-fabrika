@@ -1,0 +1,104 @@
+{
+  "name": "@kalfa/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rslib build",
+    "prepack": "node Pnpm.ts && rslib build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@kampus/vitest": "workspace:*",
+    "@rslib/core": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "files": [
+    "dist",
+    "!dist/.rsbuild"
+  ],
+  "exports": {
+    "./App": "./src/App.ts",
+    "./Setting": "./src/Setting.ts",
+    "./Sources": "./src/Sources.ts",
+    "./Toml": "./src/Toml.ts",
+    "./TomlParser": "./src/TomlParser.ts",
+    "./Codec": "./src/Codec.ts",
+    "./Files": "./src/Files.ts",
+    "./JsonSchema": "./src/JsonSchema.ts",
+    "./Reference": "./src/Reference.ts",
+    "./Print": "./src/Print.ts",
+    "./Snapshot": "./src/Snapshot.ts",
+    "./Load": "./src/Load.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      "./App": {
+        "types": "./dist/App.d.ts",
+        "default": "./dist/App.js"
+      },
+      "./Setting": {
+        "types": "./dist/Setting.d.ts",
+        "default": "./dist/Setting.js"
+      },
+      "./Sources": {
+        "types": "./dist/Sources.d.ts",
+        "default": "./dist/Sources.js"
+      },
+      "./Toml": {
+        "types": "./dist/Toml.d.ts",
+        "default": "./dist/Toml.js"
+      },
+      "./TomlParser": {
+        "types": "./dist/TomlParser.d.ts",
+        "default": "./dist/TomlParser.js"
+      },
+      "./Codec": {
+        "types": "./dist/Codec.d.ts",
+        "default": "./dist/Codec.js"
+      },
+      "./Files": {
+        "types": "./dist/Files.d.ts",
+        "default": "./dist/Files.js"
+      },
+      "./JsonSchema": {
+        "types": "./dist/JsonSchema.d.ts",
+        "default": "./dist/JsonSchema.js"
+      },
+      "./Reference": {
+        "types": "./dist/Reference.d.ts",
+        "default": "./dist/Reference.js"
+      },
+      "./Print": {
+        "types": "./dist/Print.d.ts",
+        "default": "./dist/Print.js"
+      },
+      "./Snapshot": {
+        "types": "./dist/Snapshot.d.ts",
+        "default": "./dist/Snapshot.js"
+      },
+      "./Load": {
+        "types": "./dist/Load.d.ts",
+        "default": "./dist/Load.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "dependencies": {
+    "@decimalturn/toml-patch": "3.3.2",
+    "toml-eslint-parser": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  }
+}

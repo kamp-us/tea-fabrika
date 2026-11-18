@@ -258,4 +258,90 @@ describe("next workflow coverage", () => {
       ),
       options,
     ));
+
+  // T1076 O1 and O2, on the real configured discovery: Vitest's own filter, over the real config, with
+  // no test run. Both fallbacks of the workflow (the size step's and the next job's) are the filters
+  // `$FILTER` hands Vitest when nothing narrows it, so they must reach exactly the `next` project,
+  // Kalfa's ordinary laws beside next/'s, and the shards must still partition them once each.
+  // Plants, each run once on check.yaml and restored: put `next/` back in either fallback (red, the
+  // Kalfa laws are missing from the reached set); copy an ordinary Kalfa file into the integration
+  // project's include (red, it joins `related`).
+  const fallbackOf = (expression: unknown): string[] =>
+    (/\|\|\s*'([^']*)'\s*\}\}\s*$/.exec(String(expression))?.[1] ?? "").split(" ").filter(Boolean);
+
+  const fallbacks = (): Record<string, string[]> => {
+    const parsed = parse(workflow);
+
+    return {
+      "the size step's": fallbackOf(
+        parsed.jobs.changes.steps.find((step: { id?: string }) => step.id === "size")?.env.FILTER,
+      ),
+      "the next job's": fallbackOf(
+        parsed.jobs.next.steps.find((step: { run?: string }) =>
+          step.run?.startsWith("pnpm exec vitest run --project next $FILTER "),
+        )?.env.FILTER,
+      ),
+    };
+  };
+
+  /** Kalfa's ordinary laws, as the package's folder holds them: its test files that are not integration laws. */
+  const ordinaryKalfa = () =>
+    readdirSync(join(root, "kalfa/config/src"), { recursive: true })
+      .map(String)
+      .filter((name) => name.endsWith(".test.ts") && !name.endsWith(".integration.test.ts"))
+      .map((name) => `kalfa/config/src/${name}`)
+      .toSorted();
+
+  const named = (specs: TestSpecification[], project: string) =>
+    specs
+      .filter((spec) => spec.project.name === project)
+      .map(repoPath)
+      .toSorted();
+
+  it("scenario: each fallback filter reaches exactly the configured next project, Kalfa's ordinary laws included, and no ordinary Kalfa law joins related", async () => {
+    const configured = named(await contexts[0]!.globTestSpecifications(), "next");
+
+    const kalfa = ordinaryKalfa();
+
+    expect(kalfa.length).toBeGreaterThan(0);
+    expect(configured).toEqual(expect.arrayContaining(kalfa));
+
+    for (const [which, filters] of Object.entries(fallbacks())) {
+      expect(filters.length, `${which} fallback names its roots`).toBeGreaterThan(0);
+      expect(named(await contexts[0]!.globTestSpecifications(filters), "next"), `${which} fallback`).toEqual(
+        configured,
+      );
+    }
+
+    // The two fallbacks are one filter, so a sized run and the unsized one never disagree.
+    const [sizing, running] = Object.values(fallbacks());
+
+    expect(sizing).toEqual(running);
+
+    // `related` runs the integration and tooling projects: no ordinary Kalfa law is among them.
+    const all = await contexts[0]!.globTestSpecifications();
+
+    const related = [...named(all, "next-integration"), ...named(all, "tooling")];
+
+    expect(related.filter((path) => kalfa.includes(path))).toEqual([]);
+  });
+
+  it("scenario: the fallback's shards partition the configured next project once each, Kalfa's ordinary laws included", async () => {
+    const [filters] = Object.values(fallbacks());
+
+    const universe = named(await contexts[0]!.globTestSpecifications(), "next");
+
+    expect(universe.length).toBeGreaterThan(0);
+
+    const kept: string[][] = [];
+
+    for (const context of contexts.slice(1)) {
+      const specs = (await context.globTestSpecifications(filters)).filter((spec) => spec.project.name === "next");
+      const Sequencer = context.config.sequence.sequencer;
+      kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
+    }
+
+    complete(kept, universe);
+    expect(kept.flat()).toEqual(expect.arrayContaining(ordinaryKalfa()));
+  });
 });

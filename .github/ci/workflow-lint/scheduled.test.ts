@@ -75,6 +75,30 @@ const step = (w: Workflow, job: string, name: string): Step => {
   return found[0]!;
 };
 
+// SC22 (the 0602 amendment): the two steps of `tests` that keep the tested @kalfa/config archive.
+const RECEIPT = "node .github/ci/related.ts --receipt";
+
+const FOLDER = `\${{ runner.temp }}/kalfa-config-package`;
+
+const ARCHIVE_PATHS = `${FOLDER}/kalfa-config-0.0.0.tgz\n${FOLDER}/receipt.json`;
+
+const ON_E2E = "startsWith(matrix.shard, 'e2e-')";
+
+const ON_TOOLING = "startsWith(matrix.shard, 'tooling-')";
+
+const ON_NUMBERED = `!${ON_E2E} && !${ON_TOOLING}`;
+
+const receipt = (w: Workflow): Step => step(w, "tests", "package receipt");
+
+const archive = (w: Workflow): Step => step(w, "tests", "package archive");
+
+/** Moves the step named `name` of `tests` to the place of the step named `before`, ahead of it. */
+const put = (w: Workflow, name: string, before: string) => {
+  const list = w.jobs["tests"]!.steps;
+  const [moved] = list.splice(list.indexOf(step(w, "tests", name)), 1);
+  list.splice(list.indexOf(step(w, "tests", before)), 0, moved!);
+};
+
 // What may change without changing what the full run does: the catch-up's minute (0581 fixes the
 // cron hourly, and its minute stays a choice), the gap (a setting, 0069, an hour at least), the
 // workflow group's case and spacing, how many legs run at once within the cap, and the spacing in an `if`,
@@ -1296,6 +1320,104 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC21: the law input is missing", (w) => Reflect.deleteProperty(hand(w), "law")],
   ["SC21: the law is required", (w) => (hand(w)["law"]!["required"] = true)],
   ["SC21: the law has a default of a path", (w) => (hand(w)["law"]!["default"] = ".github/ci/proof.test.ts")],
+  // SC22, the 0602 amendment: main's full run keeps the tested @kalfa/config archive, once, on the leg
+  // that ran the package law. Each plant is applied to the real file alone, and was run once on
+  // scheduled.ts with SC22's rule it breaks dropped, and that turned its case red.
+  ["SC22: the receipt on the visual legs", (w) => (receipt(w)["if"] = `success() && ${REF} && !${ON_TOOLING}`)],
+  ["SC22: the receipt on the tooling legs", (w) => (receipt(w)["if"] = `success() && ${REF} && !${ON_E2E}`)],
+  ["SC22: the receipt on every ref", (w) => (receipt(w)["if"] = `success() && ${ON_NUMBERED}`)],
+  [
+    "SC22: the receipt on a branch's proof run only",
+    (w) => (receipt(w)["if"] = `success() && github.ref != 'refs/heads/main' && ${ON_NUMBERED}`),
+  ],
+  ["SC22: the receipt without success()", (w) => (receipt(w)["if"] = `${REF} && ${ON_NUMBERED}`)],
+  ["SC22: the receipt even after a red step", (w) => (receipt(w)["if"] = `always() && ${REF} && ${ON_NUMBERED}`)],
+  ["SC22: the receipt before the vitest step", (w) => put(w, "package receipt", "vitest")],
+  ["SC22: the receipt soft", (w) => (receipt(w)["continue-on-error"] = true)],
+  ["SC22: the receipt with a token", (w) => (receipt(w)["env"] = { GITHUB_TOKEN: `\${{ github.token }}` })],
+  [
+    "SC22: the receipt with an env key that points it at another commit",
+    (w) => (receipt(w)["env"] = { GITHUB_SHA: "0000000" }),
+  ],
+  ["SC22: the receipt with a two minute limit", (w) => (receipt(w)["timeout-minutes"] = 2)],
+  ["SC22: the receipt with no limit", (w) => Reflect.deleteProperty(receipt(w), "timeout-minutes")],
+  ["SC22: the receipt's id renamed", (w) => (receipt(w)["id"] = "delivery")],
+  ["SC22: the receipt with no id", (w) => Reflect.deleteProperty(receipt(w), "id")],
+  ["SC22: the receipt renamed", (w) => (receipt(w)["name"] = "check package")],
+  ["SC22: a second receipt step", (w) => w.jobs["tests"]!.steps.splice(5, 0, structuredClone(receipt(w)))],
+  [
+    "SC22: a step between the vitest step and the receipt",
+    (w) => w.jobs["tests"]!.steps.splice(w.jobs["tests"]!.steps.indexOf(receipt(w)), 0, { uses: "actions/cache@v4" }),
+  ],
+  ["SC22: the receipt in the report job", (w) => w.jobs["report"]!.steps.push({ run: RECEIPT })],
+  ["SC22: the receipt in the changed job", (w) => w.jobs["changed"]!.steps.push({ run: RECEIPT })],
+  ["SC22: the archive without the receipt's kept", (w) => (archive(w)["if"] = `success() && ${REF}`)],
+  [
+    "SC22: the archive on the receipt's outcome, not its output",
+    (w) => (archive(w)["if"] = `success() && ${REF} && steps.receipt.outcome == 'success'`),
+  ],
+  ["SC22: the archive without success()", (w) => (archive(w)["if"] = `${REF} && steps.receipt.outputs.kept == 'true'`)],
+  ["SC22: the archive on every ref", (w) => (archive(w)["if"] = "success() && steps.receipt.outputs.kept == 'true'")],
+  [
+    "SC22: the archive even after a red step",
+    (w) => (archive(w)["if"] = `always() && ${REF} && steps.receipt.outputs.kept == 'true'`),
+  ],
+  ["SC22: the archive with a wildcard path", (w) => (archive(w).with!["path"] = `${FOLDER}/*`)],
+  ["SC22: the archive with a third path", (w) => (archive(w).with!["path"] = `${ARCHIVE_PATHS}\n${FOLDER}/extra.json`)],
+  ["SC22: the archive of the whole folder", (w) => (archive(w).with!["path"] = FOLDER)],
+  ["SC22: the archive of one path", (w) => (archive(w).with!["path"] = `${FOLDER}/receipt.json`)],
+  [
+    "SC22: the archive's paths swapped",
+    (w) => (archive(w).with!["path"] = `${FOLDER}/receipt.json\n${FOLDER}/kalfa-config-0.0.0.tgz`),
+  ],
+  ["SC22: a missing file only warns", (w) => (archive(w).with!["if-no-files-found"] = "warn")],
+  ["SC22: a missing file is ignored", (w) => (archive(w).with!["if-no-files-found"] = "ignore")],
+  ["SC22: no word on a missing file", (w) => Reflect.deleteProperty(archive(w).with!, "if-no-files-found")],
+  ["SC22: the archive before the receipt", (w) => put(w, "package archive", "package receipt")],
+  [
+    "SC22: a step between the receipt and the archive",
+    (w) => w.jobs["tests"]!.steps.splice(w.jobs["tests"]!.steps.indexOf(archive(w)), 0, { uses: "actions/cache@v4" }),
+  ],
+  ["SC22: the archive with no retention", (w) => Reflect.deleteProperty(archive(w).with!, "retention-days")],
+  ["SC22: the archive kept for no days", (w) => (archive(w).with!["retention-days"] = 0)],
+  ["SC22: the archive kept for part of a day", (w) => (archive(w).with!["retention-days"] = 0.5)],
+  ["SC22: the archive kept for days as text", (w) => (archive(w).with!["retention-days"] = "90")],
+  [
+    "SC22: the archive's name without the attempt",
+    (w) => (archive(w).with!["name"] = `kalfa-config-\${{ github.sha }}`),
+  ],
+  [
+    "SC22: the archive under another name",
+    (w) => (archive(w).with!["name"] = `package-\${{ github.sha }}-attempt-\${{ github.run_attempt }}`),
+  ],
+  ["SC22: the archive with a third input", (w) => (archive(w).with!["compression-level"] = 0)],
+  ["SC22: the archive soft", (w) => (archive(w)["continue-on-error"] = true)],
+  ["SC22: the archive with a token", (w) => (archive(w)["env"] = { GITHUB_TOKEN: `\${{ github.token }}` })],
+  ["SC22: the archive with a two minute limit", (w) => (archive(w)["timeout-minutes"] = 2)],
+  ["SC22: the archive with no limit", (w) => Reflect.deleteProperty(archive(w), "timeout-minutes")],
+  ["SC22: the archive renamed", (w) => (archive(w)["name"] = "upload")],
+  [
+    "SC22: a second archive upload in tests",
+    (w) => w.jobs["tests"]!.steps.push({ ...structuredClone(archive(w)), name: "again" }),
+  ],
+  ["SC22: a kalfa-config upload in the changed job", (w) => w.jobs["changed"]!.steps.push(structuredClone(archive(w)))],
+  ["SC22: a kalfa-config upload in the report job", (w) => w.jobs["report"]!.steps.push(structuredClone(archive(w)))],
+  [
+    "SC22: another kalfa-config upload in the select job",
+    (w) =>
+      w.jobs["select"]!.steps.push({ uses: "actions/upload-artifact@v7", with: { name: "kalfa-config-x", path: "x" } }),
+  ],
+  ["SC22: a step that names the delivery folder", (w) => w.jobs["changed"]!.steps.push({ run: `ls ${FOLDER}` })],
+  // SC9: the receipt is the one new command, and no step narrows a test command to the package law.
+  [
+    "SC9: a step runs the package law alone",
+    (w) =>
+      w.jobs["tests"]!.steps.splice(5, 0, {
+        run: "pnpm exec vitest run --project next-integration kalfa/config/src/Package.integration.test.ts",
+      }),
+  ],
+  ["SC9: the receipt takes another flag", (w) => (receipt(w)["run"] = `${RECEIPT} --fault`)],
+  ["SC9: the receipt is a second command", (w) => (receipt(w)["run"] = `${RECEIPT} && pnpm test`)],
   // SC18, 0590: a changed set's legs. Plants, each run once on scheduled.ts and restored: SC18's
   // `if` check dropped (red on the first two); its command checks dropped (red on the next four);
   // its limit checks dropped (red on the three limits).
@@ -1521,6 +1643,41 @@ it.each(plants)("rejects the schedule's plant: %s", (plant, mutate) => {
     }),
     { ...options, numRuns: 20 },
   );
+});
+
+// SC22's retention is a setting (0069): any whole number of days from 1 is held, and nothing else.
+// Plant, run once on scheduled.ts and restored: SC22's whole-number check dropped (red: 0, a part of
+// a day and text pass).
+it("SC22 property: the archive's retention is any whole number of days from 1, and no zero, part of a day or text", () => {
+  fc.assert(
+    fc.property(
+      scheduled,
+      fc.oneof(
+        fc.record({ days: fc.integer({ min: 1, max: 365 }), held: fc.constant(true) }),
+        fc.record({ days: fc.integer({ min: -365, max: 0 }), held: fc.constant(false) }),
+        fc.record({ days: fc.double({ min: 0.01, max: 365, noInteger: true }), held: fc.constant(false) }),
+        fc.record({ days: fc.integer({ min: 1, max: 365 }).map(String), held: fc.constant(false) }),
+      ),
+      (w, { days, held }) => {
+        archive(w).with!["retention-days"] = days;
+        const errors = lint(w);
+        expect(errors, JSON.stringify({ days, errors })).toEqual(
+          held ? [] : [expect.stringMatching(/^scheduled\.yaml: SC22:/)],
+        );
+      },
+    ),
+    options,
+  );
+});
+
+// SC22 reads each `if` as an expression: spacing and the `${{ }}` wrapper change nothing, as for the
+// test steps' own. Plant, run once on scheduled.ts and restored: `compact` dropped from the two `if`
+// checks (red: a wrapped `if` is named).
+it("SC22 scenario: the real scheduled.yaml's two ifs read the same wrapped in an expression", () => {
+  const w = real();
+  receipt(w)["if"] = `\${{ ${String(receipt(w)["if"])} }}`;
+  archive(w)["if"] = `\${{ ${String(archive(w)["if"])} }}`;
+  expect(lint(w)).toEqual([]);
 });
 
 // Where a read of the hand start's inputs may be put, and the forms a read takes (ticket 1161).
