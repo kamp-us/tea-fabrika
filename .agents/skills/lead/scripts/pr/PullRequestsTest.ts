@@ -167,7 +167,15 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
             }),
           );
 
-          return Effect.succeed(w.stackResult ?? StackMerge.cases.pending.make({ uuid: "fixture-merge-request" }));
+          return Effect.succeed(
+            w.stackResult ??
+              StackMerge.cases.pending.make({
+                uuid: "fixture-merge-request",
+                expectedHeadSha: top.oid,
+                mergeAction: "merge_queue",
+                mergeMethod: "default",
+              }),
+          );
         }),
     }),
   );

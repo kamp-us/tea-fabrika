@@ -109,6 +109,9 @@ describe("Stack.land: gates and pins the selected native stack prefix (ticket 11
             base: "main",
             prs: [11, 12, 13],
             uuid: "fixture-merge-request",
+            expectedHeadSha: head(13),
+            mergeAction: "merge_queue",
+            mergeMethod: "default",
           }),
         }),
       );
@@ -128,6 +131,9 @@ describe("Stack.land: gates and pins the selected native stack prefix (ticket 11
             base: "main",
             prs: [11, 12],
             uuid: "fixture-merge-request",
+            expectedHeadSha: head(12),
+            mergeAction: "merge_queue",
+            mergeMethod: "default",
           }),
         }),
       );

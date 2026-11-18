@@ -51,9 +51,7 @@ export const Patch = Schema.Struct({ path: Schema.String, patch: Schema.NullOr(S
 export type Patch = typeof Patch.Type;
 
 /** A pull request head as GitHub lists it in a native stack, in bottom-first order. */
-export const StackHead = Schema.Struct({ number: Schema.Finite, oid: Schema.String });
-
-export type StackHead = typeof StackHead.Type;
+const StackHead = Schema.Struct({ number: Schema.Finite, oid: Schema.String });
 
 /**
  * One native stack as GitHub's stacks list gives it (`GET repos/{repo}/stacks`): its number, which
@@ -81,12 +79,17 @@ export type StackSelection = typeof StackSelection.Type;
 export const StackMerge = Schema.TaggedUnion({
   merged: { commit: Schema.String },
   enqueued: {},
-  pending: { uuid: Schema.String },
+  pending: {
+    uuid: Schema.String,
+    expectedHeadSha: Schema.String,
+    mergeAction: Schema.Literals(["direct_merge", "merge_queue"]),
+    mergeMethod: Schema.Literals(["default", "squash"]),
+  },
 });
 
 export type StackMerge = typeof StackMerge.Type;
 
-/** A branch's merge queue, as its ruleset's `merge_queue` rule sets it. */
+/** A branch's effective merge queue, as GitHub's branch queue object and any queue rule agree. */
 export const MergeQueue = Schema.Struct({
   build: Schema.Finite,
   merge: Schema.Finite,
@@ -138,8 +141,10 @@ export class PullRequests extends Context.Service<
     readonly mergeQueue: (branch: string) => Effect.Effect<Option.Option<MergeQueue>, PullRequestsError>;
     /**
      * Asks GitHub to merge the exact selected native stack prefix after rereading its identity,
-     * links and heads. The result says whether GitHub merged it, queued it, or left it pending.
-     * Only pr/Stack.ts asks, after each open layer passed its gates.
+     * links and heads. It rereads layer readiness and text immediately before submission. GitHub
+     * pins only the top SHA; lower heads still need source, queue and writer coordination through
+     * submission. The result says whether GitHub merged it, queued it, or left it pending. Only
+     * pr/Stack.ts asks, after each open layer passed its gates.
      */
     readonly mergeStack: (selection: StackSelection) => Effect.Effect<StackMerge, PullRequestsError>;
   }

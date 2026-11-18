@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
 import { Effect, Layer, Schema, Sink, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { PullRequests, type StackSelection } from "./PullRequests.ts";
+import { PullRequests, type Detail, type MergeQueue, type StackSelection } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 
 const text = { title: 'T1131: exact "title"', body: "First line.\n\nSecond line." };
@@ -53,11 +53,13 @@ const selection = (numbers: ReadonlyArray<number> = [11, 12, 13]): StackSelectio
 type StackFixture = {
   readonly selected?: StackSelection;
   readonly held?: ReadonlyArray<{ readonly number: number; readonly oid: string }>;
-  readonly queue?: {
-    readonly build: number;
-    readonly merge: number;
-    readonly method: "MERGE" | "SQUASH" | "REBASE";
-  } | null;
+  readonly queue?: MergeQueue | null;
+  readonly branchQueue?: MergeQueue | null;
+  readonly branchQueueFails?: boolean;
+  readonly duringQueue?: {
+    readonly number: number;
+    readonly change: Partial<Omit<Detail, "number">>;
+  };
   readonly reply: string;
   readonly after?: ReadonlyMap<number, { readonly state: "OPEN" | "MERGED"; readonly mergeCommit: string | null }>;
 };
@@ -65,9 +67,12 @@ type StackFixture = {
 const stackLayer = (fixture: StackFixture) => {
   const selected = fixture.selected ?? selection();
   const held = fixture.held ?? selected.layers.map(({ number, oid: head }) => ({ number, oid: head }));
-  const queue = fixture.queue === undefined ? { build: 2, merge: 3, method: "SQUASH" as const } : fixture.queue;
+  const queue: MergeQueue | null =
+    fixture.queue === undefined ? { build: 2, merge: 3, method: "SQUASH" } : fixture.queue;
+  const branchQueue = fixture.branchQueue === undefined ? queue : fixture.branchQueue;
   const views = new Map<number, number>();
   let mergeAsked = false;
+  let queueLookedUp = false;
   const spawner = Recorder.layer(ChildProcessSpawner.ChildProcessSpawner, {
     spawn: (command) => {
       if (!ChildProcess.isStandardCommand(command)) {
@@ -86,16 +91,18 @@ const stackLayer = (fixture: StackFixture) => {
         views.set(number, count + 1);
         const after = mergeAsked && count > 0 ? fixture.after?.get(number) : undefined;
         const found = selected.layers.find((layer) => layer.number === number) ?? detail(number);
-        const mergeCommit = after === undefined ? found.mergeCommit : after.mergeCommit;
+        const late = queueLookedUp && fixture.duringQueue?.number === number ? fixture.duringQueue.change : undefined;
+        const current = late === undefined ? found : { ...found, ...late };
+        const mergeCommit = after === undefined ? current.mergeCommit : after.mergeCommit;
         const body = {
           number,
-          headRefName: found.head,
-          headRefOid: found.oid,
-          baseRefName: found.base,
-          state: after?.state ?? found.state,
-          isDraft: found.draft,
-          title: found.title,
-          body: found.body,
+          headRefName: current.head,
+          headRefOid: current.oid,
+          baseRefName: current.base,
+          state: after?.state ?? current.state,
+          isDraft: current.draft,
+          title: current.title,
+          body: current.body,
           mergeCommit: mergeCommit === null ? null : { oid: mergeCommit },
         };
 
@@ -111,11 +118,23 @@ const stackLayer = (fixture: StackFixture) => {
       }
 
       if (args.some((part) => part.includes("/rules/branches/"))) {
+        queueLookedUp = true;
+
         return Effect.succeed(
           handle(
             0,
             queue === null ? "" : JSON.stringify({ build: queue.build, merge: queue.merge, method: queue.method }),
           ),
+        );
+      }
+
+      if (args[0] === "api" && args[1] === "graphql") {
+        queueLookedUp = true;
+
+        return Effect.succeed(
+          fixture.branchQueueFails === true
+            ? handle(1, "branch queue lookup failed\n")
+            : handle(0, JSON.stringify({ queue: branchQueue })),
         );
       }
 
@@ -132,14 +151,18 @@ const stackLayer = (fixture: StackFixture) => {
   return Layer.merge(spawner, PullRequestsGh.layer("owner/repo", ".").pipe(Layer.provide(spawner)));
 };
 
-const runStack = (fixture: StackFixture) =>
-  Effect.gen(function* () {
-    const prs = yield* PullRequests;
+const runStack = Effect.fnUntraced(function* (fixture: StackFixture) {
+  const prs = yield* PullRequests;
 
-    return yield* prs.mergeStack(fixture.selected ?? selection());
-  }).pipe(Effect.provide(stackLayer(fixture)));
+  return yield* prs.mergeStack(fixture.selected ?? selection());
+});
 
-const asyncRequest = (calls: ReadonlyArray<readonly [unknown, unknown]>) => {
+const withStack = <A, E, R>(fixture: StackFixture, effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.provide(stackLayer(fixture)));
+
+type SpawnCalls = ReadonlyArray<readonly [ChildProcess.Command]>;
+
+const asyncRequest = (calls: SpawnCalls): ChildProcess.StandardCommand | undefined => {
   for (const [command] of calls) {
     if (ChildProcess.isStandardCommand(command) && command.args.some((part) => part.endsWith("/merge-async"))) {
       return command;
@@ -149,11 +172,7 @@ const asyncRequest = (calls: ReadonlyArray<readonly [unknown, unknown]>) => {
   return undefined;
 };
 
-const asyncBody = (command: unknown) => {
-  if (!ChildProcess.isStandardCommand(command)) {
-    return Effect.die("merge request must be a standard command");
-  }
-
+const asyncBody = (command: ChildProcess.StandardCommand) => {
   const input = command.options.stdin;
 
   if (!Stream.isStream(input)) {
@@ -230,153 +249,375 @@ describe("PullRequestsGh draft actor selection", () => {
 });
 
 describe("PullRequestsGh native stack merge", () => {
-  it.effect("scenario: queue mode sends the pinned top SHA and leaves SQUASH to the queue", () =>
-    Effect.gen(function* () {
-      const answer = yield* runStack({
-        reply: JSON.stringify({ status: "enqueued" }),
-        queue: { build: 2, merge: 3, method: "SQUASH" },
-      });
-      const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
-      const request = asyncRequest(calls);
+  it.effect("scenario: queue mode sends the pinned top SHA and leaves SQUASH to the queue", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "enqueued" }),
+      queue: { build: 2, merge: 3, method: "SQUASH" },
+    };
 
-      expect(answer._tag).toBe("enqueued");
-      expect(request?.args).toEqual(["api", "-X", "PUT", "repos/owner/repo/pulls/13/merge-async", "--input", "-"]);
-      expect(request === undefined ? "" : JSON.parse(yield* asyncBody(request))).toEqual({
-        sha: oid(13),
-        merge_action: "merge_queue",
-      });
-    }),
-  );
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* runStack(fixture);
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+        const request = asyncRequest(calls);
 
-  it.effect("scenario: an open child retargeted after its parent squash is checked from the squash commit", () =>
-    Effect.gen(function* () {
-      const parentCommit = "a".repeat(40);
-      const selected: StackSelection = {
+        expect(answer._tag).toBe("enqueued");
+        expect(request?.args).toEqual(["api", "-X", "PUT", "repos/owner/repo/pulls/13/merge-async", "--input", "-"]);
+        expect(request === undefined ? "" : JSON.parse(yield* asyncBody(request))).toEqual({
+          sha: oid(13),
+          merge_action: "merge_queue",
+        });
+      }),
+    );
+  });
+
+  it.effect("scenario: a classic branch queue uses its effective queue object without ruleset rows", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "enqueued" }),
+      queue: null,
+      branchQueue: { build: 2, merge: 3, method: "SQUASH" },
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* runStack(fixture);
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+        const request = asyncRequest(calls);
+
+        expect(answer._tag).toBe("enqueued");
+        expect(request === undefined ? "" : JSON.parse(yield* asyncBody(request))).toMatchObject({
+          merge_action: "merge_queue",
+        });
+      }),
+    );
+  });
+
+  it.effect("scenario: an open child retargeted after its parent squash is checked from the squash commit", () => {
+    const parentCommit = "a".repeat(40);
+    const fixture: StackFixture = {
+      selected: {
         ...selection(),
         layers: [detail(11, "MERGED", parentCommit), { ...detail(12), base: "main" }, detail(13)],
-      };
-      const answer = yield* runStack({
-        selected,
-        reply: JSON.stringify({ status: "enqueued" }),
-      });
+      },
+      reply: JSON.stringify({ status: "enqueued" }),
+    };
 
-      expect(answer._tag).toBe("enqueued");
-    }),
-  );
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* runStack(fixture);
 
-  it.effect("scenario: a direct request names the exact SHA and explicit squash action", () =>
-    Effect.gen(function* () {
-      const answer = yield* runStack({
-        reply: JSON.stringify({
-          status: "pending",
-          details: {
-            uuid: "9fb26355-cb81-4596-bce0-4097e262e8e4",
-            expected_head_sha: oid(13),
-            merge_action: "direct_merge",
-            merge_method: "squash",
-            bypass_rules: false,
-          },
-        }),
-        queue: null,
-      });
-      const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
-      const request = asyncRequest(calls);
+        expect(answer._tag).toBe("enqueued");
+      }),
+    );
+  });
 
-      expect(answer).toEqual({ _tag: "pending", uuid: "9fb26355-cb81-4596-bce0-4097e262e8e4" });
-      expect(request === undefined ? "" : JSON.parse(yield* asyncBody(request))).toEqual({
-        sha: oid(13),
-        merge_action: "direct_merge",
-        merge_method: "squash",
-      });
-    }),
-  );
+  it.effect("scenario: direct pending accepts an omitted false bypass field and keeps its identity", () => {
+    const uuid = "9fb26355-cb81-4596-bce0-4097e262e8e4";
+    const fixture: StackFixture = {
+      reply: JSON.stringify({
+        status: "pending",
+        details: {
+          uuid,
+          expected_head_sha: oid(13),
+          merge_action: "direct_merge",
+          merge_method: "squash",
+        },
+      }),
+      queue: null,
+    };
 
-  it.effect("scenario: an unexpected queue method fails without a direct merge fallback", () =>
-    Effect.gen(function* () {
-      const answer = yield* Effect.flip(
-        runStack({
-          reply: JSON.stringify({ status: "enqueued" }),
-          queue: { build: 2, merge: 3, method: "MERGE" },
-        }),
-      );
-      const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* runStack(fixture);
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+        const request = asyncRequest(calls);
 
-      expect(answer.reason).toContain("configured for MERGE, not SQUASH");
-      expect(asyncRequest(calls)).toBeUndefined();
-    }),
-  );
+        expect(answer).toEqual({
+          _tag: "pending",
+          uuid,
+          expectedHeadSha: oid(13),
+          mergeAction: "direct_merge",
+          mergeMethod: "squash",
+        });
+        expect(request === undefined ? "" : JSON.parse(yield* asyncBody(request))).toEqual({
+          sha: oid(13),
+          merge_action: "direct_merge",
+          merge_method: "squash",
+        });
+      }),
+    );
+  });
 
-  it.effect("scenario: a moved lower head refuses before the async request", () =>
-    Effect.gen(function* () {
-      const held = selection().layers.map(({ number, oid: head }) => ({
-        number,
-        oid: number === 11 ? oid(9) : head,
-      }));
-      const answer = yield* Effect.flip(runStack({ held, reply: JSON.stringify({ status: "enqueued" }) }));
-      const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+  it.effect("scenario: official queue pending response keeps its UUID and request identity", () => {
+    const uuid = "630b9d5e-3f2a-4f7e-8b0c-2d5f9a8c1e42";
+    const fixture: StackFixture = {
+      reply: JSON.stringify({
+        status: "pending",
+        details: {
+          message: "Merge request is in progress.",
+          uuid,
+          merge_method: "default",
+          merge_action: "merge_queue",
+          expected_head_sha: oid(13),
+        },
+      }),
+    };
 
-      expect(answer.reason).toContain("selected stack head changed");
-      expect(asyncRequest(calls)).toBeUndefined();
-    }),
-  );
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* runStack(fixture);
 
-  it.effect("scenario: an inserted lower layer refuses before the async request", () =>
-    Effect.gen(function* () {
-      const held = [
-        { number: 10, oid: oid(0) },
-        ...selection().layers.map(({ number, oid: head }) => ({ number, oid: head })),
-      ];
-      const answer = yield* Effect.flip(runStack({ held, reply: JSON.stringify({ status: "enqueued" }) }));
-      const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+        expect(answer).toEqual({
+          _tag: "pending",
+          uuid,
+          expectedHeadSha: oid(13),
+          mergeAction: "merge_queue",
+          mergeMethod: "default",
+        });
+      }),
+    );
+  });
 
-      expect(answer.reason).toContain("selected stack prefix changed");
-      expect(asyncRequest(calls)).toBeUndefined();
-    }),
-  );
+  it.effect("scenario: pending explicit bypass is refused", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({
+        status: "pending",
+        details: {
+          uuid: "request-id",
+          expected_head_sha: oid(13),
+          merge_action: "merge_queue",
+          merge_method: "default",
+          bypass_rules: true,
+        },
+      }),
+    };
 
-  it.effect("scenario: a failed async result stays a failure", () =>
-    Effect.gen(function* () {
-      const answer = yield* Effect.flip(
-        runStack({
-          reply: JSON.stringify({ status: "failed", details: { message: "merge group failed checks" } }),
-        }),
-      );
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
 
-      expect(answer.reason).toContain("merge group failed checks");
-    }),
-  );
+        expect(answer.reason).toContain("did not match the pinned squash request");
+        expect(asyncRequest(calls)).toBeDefined();
+      }),
+    );
+  });
 
-  it.effect("scenario: a merged reply with only the bottom landed is not reported as merged", () =>
-    Effect.gen(function* () {
-      const commit = "f".repeat(40);
-      const answer = yield* Effect.flip(
-        runStack({
-          reply: JSON.stringify({ status: "merged", details: { sha: commit } }),
-          after: new Map<number, { readonly state: "OPEN" | "MERGED"; readonly mergeCommit: string | null }>([
-            [11, { state: "MERGED", mergeCommit: "a".repeat(40) }],
-            [12, { state: "OPEN", mergeCommit: null }],
-            [13, { state: "OPEN", mergeCommit: null }],
-          ]),
-        }),
-      );
+  it.effect("scenario: pending response for another head is refused", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({
+        status: "pending",
+        details: {
+          uuid: "request-id",
+          expected_head_sha: oid(12),
+          merge_action: "merge_queue",
+          merge_method: "default",
+        },
+      }),
+    };
 
-      expect(answer.reason).toContain("selected layers did not all report merged");
-    }),
-  );
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
 
-  it.effect("scenario: a merged reply is reported only after every selected layer reports merged", () =>
-    Effect.gen(function* () {
-      const commit = "f".repeat(40);
-      const answer = yield* runStack({
-        reply: JSON.stringify({ status: "merged", details: { sha: commit } }),
-        after: new Map<number, { readonly state: "OPEN" | "MERGED"; readonly mergeCommit: string | null }>([
-          [11, { state: "MERGED", mergeCommit: "a".repeat(40) }],
-          [12, { state: "MERGED", mergeCommit: "b".repeat(40) }],
-          [13, { state: "MERGED", mergeCommit: commit }],
-        ]),
-      });
+        expect(answer.reason).toContain("did not match the pinned squash request");
+        expect(asyncRequest(calls)).toBeDefined();
+      }),
+    );
+  });
 
-      expect(answer).toEqual({ _tag: "merged", commit });
-    }),
-  );
+  it.effect("scenario: an unexpected queue method fails without a direct merge fallback", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "enqueued" }),
+      queue: { build: 2, merge: 3, method: "MERGE" },
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+
+        expect(answer.reason).toContain("configured for MERGE, not SQUASH");
+        expect(asyncRequest(calls)).toBeUndefined();
+      }),
+    );
+  });
+
+  it.effect("scenario: disagreeing branch queue sources fail closed", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "enqueued" }),
+      queue: { build: 2, merge: 3, method: "SQUASH" },
+      branchQueue: { build: 2, merge: 3, method: "MERGE" },
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+
+        expect(answer.reason).toContain("rule and effective branch queue");
+        expect(asyncRequest(calls)).toBeUndefined();
+      }),
+    );
+  });
+
+  it.effect("scenario: an unavailable branch queue source never falls back to a direct merge", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "enqueued" }),
+      branchQueueFails: true,
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+
+        expect(answer.reason).toContain("gh api graphql exited 1");
+        expect(asyncRequest(calls)).toBeUndefined();
+      }),
+    );
+  });
+
+  it.effect("scenario: a moved lower head refuses before the async request", () => {
+    const held = selection().layers.map(({ number, oid: head }) => ({
+      number,
+      oid: number === 11 ? oid(9) : head,
+    }));
+    const fixture: StackFixture = { held, reply: JSON.stringify({ status: "enqueued" }) };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+
+        expect(answer.reason).toContain("selected stack head changed");
+        expect(asyncRequest(calls)).toBeUndefined();
+      }),
+    );
+  });
+
+  it.effect("scenario: an inserted lower layer refuses before the async request", () => {
+    const held = [
+      { number: 10, oid: oid(0) },
+      ...selection().layers.map(({ number, oid: head }) => ({ number, oid: head })),
+    ];
+    const fixture: StackFixture = { held, reply: JSON.stringify({ status: "enqueued" }) };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+
+        expect(answer.reason).toContain("selected stack prefix changed");
+        expect(asyncRequest(calls)).toBeUndefined();
+      }),
+    );
+  });
+
+  it.effect("scenario: a lower head that moves during queue lookup refuses even if ancestry checks passed", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "enqueued" }),
+      duringQueue: { number: 11, change: { oid: oid(9) } },
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        // The compare fixture accepts both P1 and P2 as ancestors; the final pin still must match.
+        const answer = yield* Effect.flip(runStack(fixture));
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+
+        expect(answer.reason).toContain("selected stack head changed during queue discovery");
+        expect(asyncRequest(calls)).toBeUndefined();
+      }),
+    );
+  });
+
+  it.effect("scenario: lower PR text that changes during queue lookup refuses the request", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "enqueued" }),
+      duringQueue: { number: 11, change: { body: "changed after its name gate" } },
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+
+        expect(answer.reason).toContain("selected pull requests changed during queue discovery (11)");
+        expect(asyncRequest(calls)).toBeUndefined();
+      }),
+    );
+  });
+
+  it.effect("scenario: a failed async result stays a failure", () => {
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "failed", details: { message: "merge group failed checks" } }),
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+
+        expect(answer.reason).toContain("merge group failed checks");
+      }),
+    );
+  });
+
+  it.effect("scenario: a merged reply with only the bottom landed is not reported as merged", () => {
+    const commit = "f".repeat(40);
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "merged", details: { sha: commit } }),
+      after: new Map<number, { readonly state: "OPEN" | "MERGED"; readonly mergeCommit: string | null }>([
+        [11, { state: "MERGED", mergeCommit: "a".repeat(40) }],
+        [12, { state: "OPEN", mergeCommit: null }],
+        [13, { state: "OPEN", mergeCommit: null }],
+      ]),
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* Effect.flip(runStack(fixture));
+
+        expect(answer.reason).toContain("selected layers did not all report merged");
+      }),
+    );
+  });
+
+  it.effect("scenario: a merged reply is reported only after every selected layer reports merged", () => {
+    const commit = "f".repeat(40);
+    const fixture: StackFixture = {
+      reply: JSON.stringify({ status: "merged", details: { sha: commit } }),
+      after: new Map<number, { readonly state: "OPEN" | "MERGED"; readonly mergeCommit: string | null }>([
+        [11, { state: "MERGED", mergeCommit: "a".repeat(40) }],
+        [12, { state: "MERGED", mergeCommit: "b".repeat(40) }],
+        [13, { state: "MERGED", mergeCommit: commit }],
+      ]),
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* runStack(fixture);
+
+        expect(answer).toEqual({ _tag: "merged", commit });
+      }),
+    );
+  });
 });

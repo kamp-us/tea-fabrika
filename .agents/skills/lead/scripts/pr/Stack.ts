@@ -7,7 +7,7 @@
 //          its words -> each layer's new exported names are named under `## New names`
 //          (Names.ts, 0587) -> `ci-required` is a success at each open layer's head, read once as
 //          `land.ts queue` reads it (ticket 1119) -> reread the selected stack prefix and ask GitHub
-//          to merge it, pinned to the selected top head
+//          to merge it, pinned to the selected top head; GitHub cannot pin lower heads
 //
 // Merge when ready is not offered for a stacked pull request (github/gh-stack#591), so `land.ts arm`
 // cannot land one, and the stack merge runs past `arm`'s gates unless this module runs them first.
@@ -62,7 +62,15 @@ export type Ask = {
 /** What GitHub says happened to the stack merge request, or that the top was merged already. */
 export const Landed = Schema.TaggedUnion({
   enqueued: { top: Schema.Finite, base: Schema.String, prs: Schema.Array(Schema.Finite) },
-  pending: { top: Schema.Finite, base: Schema.String, prs: Schema.Array(Schema.Finite), uuid: Schema.String },
+  pending: {
+    top: Schema.Finite,
+    base: Schema.String,
+    prs: Schema.Array(Schema.Finite),
+    uuid: Schema.String,
+    expectedHeadSha: Schema.String,
+    mergeAction: Schema.Literals(["direct_merge", "merge_queue"]),
+    mergeMethod: Schema.Literals(["default", "squash"]),
+  },
   already: { top: Schema.Finite, commit: Schema.String },
   merged: { top: Schema.Finite, commit: Schema.String },
 });
@@ -158,7 +166,15 @@ export const land = Effect.fn("Stack.land")(function* (a: Ask) {
     ? Landed.cases.merged.make({ top: a.top, commit: result.commit })
     : result._tag === "enqueued"
       ? Landed.cases.enqueued.make({ top: a.top, base: stack.value.base, prs: numbers })
-      : Landed.cases.pending.make({ top: a.top, base: stack.value.base, prs: numbers, uuid: result.uuid });
+      : Landed.cases.pending.make({
+          top: a.top,
+          base: stack.value.base,
+          prs: numbers,
+          uuid: result.uuid,
+          expectedHeadSha: result.expectedHeadSha,
+          mergeAction: result.mergeAction,
+          mergeMethod: result.mergeMethod,
+        });
 });
 
 /** One line for a log: what `land` did. */
@@ -166,8 +182,8 @@ export const line = (landed: Landed): string =>
   Landed.match(landed, {
     enqueued: ({ top, base, prs }) =>
       `stack of pr ${top}: GitHub added ${prs.join(", ")} to the ${base} merge queue; they are not merged yet`,
-    pending: ({ top, base, prs, uuid }) =>
-      `stack of pr ${top}: GitHub merge request ${uuid} for ${prs.join(", ")} into ${base} is pending; they are not merged yet`,
+    pending: ({ top, base, prs, uuid, expectedHeadSha, mergeAction, mergeMethod }) =>
+      `stack of pr ${top}: GitHub merge request ${uuid} for ${prs.join(", ")} into ${base} is pending for head ${expectedHeadSha} (${mergeAction}, ${mergeMethod}); they are not merged yet`,
     already: ({ top, commit }) => `stack of pr ${top}: already merged at ${commit}`,
     merged: ({ top, commit }) => `stack of pr ${top}: GitHub merged the selected prefix at ${commit}`,
   });

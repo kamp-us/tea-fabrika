@@ -67,6 +67,15 @@ const QueueRow = Schema.fromJsonString(MergeQueue);
 const QUEUE_JQ =
   '.[] | select(.type == "merge_queue") | .parameters | {build: .max_entries_to_build, merge: .max_entries_to_merge, method: .merge_method}';
 
+/** GitHub's effective branch queue, including classic branch protection queues. */
+const BRANCH_QUEUE = `query($owner:String!,$name:String!,$branch:String!){repository(owner:$owner,name:$name){mergeQueue(branch:$branch){configuration{maximumEntriesToBuild maximumEntriesToMerge mergeMethod}}}}`;
+
+/** Keep GraphQL errors and an unreadable repository from looking like a branch with no queue. */
+const BRANCH_QUEUE_JQ =
+  'if ((.errors // []) | length) > 0 then error("GitHub branch queue query failed") else .data.repository | if . == null then error("GitHub branch queue is unavailable") else {queue: (if .mergeQueue == null then null else {build: .mergeQueue.configuration.maximumEntriesToBuild, merge: .mergeQueue.configuration.maximumEntriesToMerge, method: .mergeQueue.configuration.mergeMethod} end)} end end';
+
+const BranchQueueRow = Schema.fromJsonString(Schema.Struct({ queue: Schema.NullOr(MergeQueue) }));
+
 /**
  * The result of GitHub's async merge request. Details are optional because queued and failed replies
  * have different fields; each status checks the fields it needs before it is trusted.
@@ -80,7 +89,7 @@ const MergeReply = Schema.fromJsonString(
         sha: Schema.optional(Schema.String),
         uuid: Schema.optional(Schema.String),
         merge_action: Schema.optional(Schema.Literals(["default", "direct_merge", "merge_queue"])),
-        merge_method: Schema.optional(Schema.Literals(["merge", "squash", "rebase"])),
+        merge_method: Schema.optional(Schema.Literals(["default", "merge", "squash", "rebase"])),
         expected_head_sha: Schema.optional(Schema.String),
         bypass_rules: Schema.optional(Schema.Boolean),
       }),
@@ -89,6 +98,9 @@ const MergeReply = Schema.fromJsonString(
 );
 
 const Compared = Schema.fromJsonString(Schema.Struct({ mergeBase: Schema.NullOr(Schema.String) }));
+
+const sameQueue = (left: typeof MergeQueue.Type, right: typeof MergeQueue.Type): boolean =>
+  left.build === right.build && left.merge === right.merge && left.method === right.method;
 
 /** The selected open prefix must still hold the same ordered heads, stack identity and base. */
 const prefixMoved = (
@@ -407,26 +419,74 @@ export const layer = (
         );
 
       const mergeQueue = Effect.fn("PullRequestsGh.mergeQueue")(function* (branch: string) {
-        const out = yield* gh(["api", "--paginate", `repos/${repo}/rules/branches/${branch}`, "--jq", QUEUE_JQ]);
-        const rows = out.split("\n").filter((line) => line !== "");
+        const [owner = "", name = ""] = repo.split("/");
 
-        if (rows.length > 1) {
+        if (owner === "" || name === "") {
+          return yield* PullRequestsError.make({ reason: "the repository name is unreadable; nothing was merged" });
+        }
+
+        const [rulesOut, branchQueueOut] = yield* Effect.all(
+          [
+            gh(["api", "--paginate", `repos/${repo}/rules/branches/${branch}`, "--jq", QUEUE_JQ]),
+            gh([
+              "api",
+              "graphql",
+              "-F",
+              `owner=${owner}`,
+              "-F",
+              `name=${name}`,
+              "-F",
+              `branch=${branch}`,
+              "-f",
+              `query=${BRANCH_QUEUE}`,
+              "--jq",
+              BRANCH_QUEUE_JQ,
+            ]),
+          ],
+          { concurrency: "unbounded" },
+        );
+        const rules = rulesOut.split("\n").filter((line) => line !== "");
+
+        if (rules.length > 1) {
           return yield* PullRequestsError.make({
             reason: `the merge_queue rules on ${branch} are ambiguous; nothing was merged`,
           });
         }
 
-        const row = rows[0];
-
-        return row === undefined
-          ? Option.none()
-          : Option.some(
-              yield* Schema.decodeEffect(QueueRow)(row).pipe(
+        const rule = rules[0];
+        const ruledQueue =
+          rule === undefined
+            ? null
+            : yield* Schema.decodeEffect(QueueRow)(rule).pipe(
                 Effect.mapError(() =>
                   PullRequestsError.make({ reason: `the merge_queue rule on ${branch} has a shape we do not read` }),
                 ),
-              ),
-            );
+              );
+        const branchQueue = yield* Schema.decodeEffect(BranchQueueRow)(branchQueueOut).pipe(
+          Effect.mapError(() =>
+            PullRequestsError.make({
+              reason: `GitHub's effective merge queue on ${branch} has a shape we do not read`,
+            }),
+          ),
+        );
+
+        if (branchQueue.queue === null) {
+          if (ruledQueue !== null) {
+            return yield* PullRequestsError.make({
+              reason: `the merge_queue rule on ${branch} has no matching effective branch queue; nothing was merged`,
+            });
+          }
+
+          return Option.none();
+        }
+
+        if (ruledQueue !== null && !sameQueue(branchQueue.queue, ruledQueue)) {
+          return yield* PullRequestsError.make({
+            reason: `the merge_queue rule and effective branch queue on ${branch} disagree; nothing was merged`,
+          });
+        }
+
+        return Option.some(branchQueue.queue);
       });
 
       const compare = Effect.fn("PullRequestsGh.compare")(function* (parent: Detail, parentOid: string, child: Detail) {
@@ -550,6 +610,57 @@ export const layer = (
           action = "direct_merge";
         }
 
+        // GitHub pins only the top head in merge-async. Recheck the full selected prefix and every
+        // gated layer after queue discovery, immediately before asking it to merge.
+        const finalHeld = yield* holding(top.number);
+
+        if (Option.isNone(finalHeld)) {
+          return yield* PullRequestsError.make({
+            reason: `pr ${top.number} left its open stack before submission; nothing was merged`,
+          });
+        }
+
+        const finalTopAt = finalHeld.value.prs.findIndex((layer) => layer.number === top.number);
+
+        if (finalTopAt === -1) {
+          return yield* PullRequestsError.make({
+            reason: `pr ${top.number} left its stack before submission; nothing was merged`,
+          });
+        }
+
+        const finalPrefix = finalHeld.value.prs.slice(0, finalTopAt + 1);
+        const finalPrefixViews = yield* Effect.forEach(finalPrefix, (layer) => view(layer.number), {
+          concurrency: "unbounded",
+        });
+        const finalOffPin = finalPrefix.filter((pin, index) => finalPrefixViews[index]?.oid !== pin.oid);
+
+        if (finalOffPin.length > 0) {
+          return yield* PullRequestsError.make({
+            reason: "a selected stack head changed during queue discovery; nothing was merged",
+          });
+        }
+
+        const finalPrefixProblem = prefixMoved(finalHeld.value, selection, finalPrefix, finalPrefixViews);
+
+        if (finalPrefixProblem !== null) {
+          return yield* PullRequestsError.make({ reason: finalPrefixProblem });
+        }
+
+        const finalLayers = yield* Effect.forEach(selection.layers, (layer) => view(layer.number), {
+          concurrency: "unbounded",
+        });
+        const finalChanged = selection.layers.filter((layer, index) => {
+          const actual = finalLayers[index];
+
+          return actual === undefined || layerMoved(actual, layer);
+        });
+
+        if (finalChanged.length > 0) {
+          return yield* PullRequestsError.make({
+            reason: `selected pull requests changed during queue discovery (${finalChanged.map((layer) => layer.number).join(", ")}); nothing was merged`,
+          });
+        }
+
         const request = mergeRequest(repo, top, action);
         const raw = yield* gh(request.args, { stdin: JSON.stringify(request.body) });
         const reply = yield* Schema.decodeEffect(MergeReply)(raw).pipe(
@@ -576,14 +687,18 @@ export const layer = (
 
         if (reply.status === "pending") {
           const details = reply.details;
+          const method = action === "merge_queue" ? "default" : "squash";
 
           if (
             details?.uuid === undefined ||
             details.uuid === "" ||
+            details.expected_head_sha === undefined ||
             details.expected_head_sha !== top.oid ||
+            details.merge_action === undefined ||
             details.merge_action !== action ||
-            details.merge_method !== "squash" ||
-            details.bypass_rules !== false
+            details.merge_method === undefined ||
+            details.merge_method !== method ||
+            details.bypass_rules === true
           ) {
             return yield* PullRequestsError.make({
               reason:
@@ -591,7 +706,12 @@ export const layer = (
             });
           }
 
-          return StackMerge.cases.pending.make({ uuid: details.uuid });
+          return StackMerge.cases.pending.make({
+            uuid: details.uuid,
+            expectedHeadSha: details.expected_head_sha,
+            mergeAction: action,
+            mergeMethod: method,
+          });
         }
 
         const commit = reply.details?.sha;
