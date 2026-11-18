@@ -74,6 +74,15 @@ assigns the ten existing cases once across the existing integration legs, after 
 source and actual tested merge separately while preserving exact image and dependency checks.
 Actual runtime, fault evidence and final review remain due.
 
+Today's scheduled CI, serving both versions, keeps the last observed test activity when a test
+step is cut off before Vitest writes its final JSON, ticket 1144
+([PR 1567](https://github.com/kamp-us/tea-fabrika/pull/1567)). A progress reporter appends one
+metadata line per lifecycle callback to `RUNNER_TEMP/vitest-progress.ndjson`, and the time table
+shows the unmatched modules, tests and hooks as last observed, never as hung. Each leg's timing
+artifact also records its job queue wait. The P8 kill proof and its buffer-until-end plant ran on
+a cloud box; on real tests the reporter cost about 3% of wall time. A faster append is a
+follow-up. The first full run after merge settles that cost on `next/` legs.
+
 In `next/`, ticket 1153 reuses the Node quota fixture's admission services within one World
 and one limits generation. Every input still sends; each limits setter creates a fresh cache key,
 and failed setup remains retryable. Existing laws, workloads, SQL operations, seeds and timeouts

@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0250, 0587, 0594; body dfceb2a78bbd
+Approved by the lead agent, builds 0250, 0587, 0594; body 6e0238ad71d8
 Plancheck-Version: 3
 # Keep CI progress when a test run is cut short
 
@@ -94,7 +94,7 @@ The per-event time, exact run identity and unfinished-operation ID are facts los
 
 ## Existing tools
 
-- `readQueueWait` in `.github/ci/time-table.ts`: checked the existing `readSteps` decoder and timing collection. Reuse the same [GitHub Actions job response](https://docs.github.com/en/rest/actions/workflow-jobs?apiVersion=2022-11-28#get-a-job-for-a-workflow-run) and Effect Schema decoding. The response gives the job timestamps and runner identity. The steps decoder reads step timestamps. This helper checks the job timestamps and skips entries without an actual runner.
+- `readQueueWait` in `.github/ci/time-table.ts`: checked the existing `readSteps` decoder and timing collection. Reuse the same [GitHub Actions job response](https://docs.github.com/en/rest/actions/workflow-jobs?apiVersion=2022-11-28#get-a-job-for-a-workflow-run) and Effect Schema decoding. The response gives the job timestamps and runner identity. The steps decoder reads step timestamps. This helper checks the job timestamps and skips entries without an actual runner. Effect's `Schema.DateTimeUtcFromString` was checked and does not fit: it accepts an impossible day such as `2026-02-30T09:59:56Z` (as March 2) and a time with no zone, so a small timestamp check stays.
 - `.github/ci/progress.ts`: searched the existing time-table reader, plant reporter, Vitest JSON/blob reporters and installed Effect NDJSON and Schema tools. Reuse Effect decoding and the existing Leg identity. No installed reporter saves this restricted metadata before run end and supplies it to our existing timings artifact. New projection and replay helpers stay here, rather than copying the final JSON reader.
 - `.github/ci/progress-reporter.ts`: searched installed Vitest Reporter callbacks and the existing plant reporter. Reuse Reporter and ManagedRuntime plus Effect FileSystem, Path and Clock. Do not extend PlantReporter, which owns causal fault witnesses and has another active owner. No native filesystem helper or service is needed.
 - Progress projection: searched Vitest task ID, relative module ID and source location. Use its deterministic ID and validated repository-relative path. Do not invent a second test naming scheme.
@@ -104,7 +104,7 @@ The per-event time, exact run identity and unfinished-operation ID are facts los
 
 ## Laws
 
-New generated laws use the existing installed @effect/vitest it.prop runner with Effect Schema inputs and shared package seed, 100 runs per generated law. CallbackEvents is a Schema.Array of closed safe events. Interleavings draws bounded matching start/end keys. InterruptedReports adds missing/broken final reports. DamagedJournals draws valid prefixes plus arbitrary corruption and closed identity mutations. PrivateCallbacks draws Schema.String canaries into excluded fields. WriteAnswers draws append success/failure sequences. Do not migrate unrelated existing time-table properties as part of this patch. Run counts below remain explicit. Each planned temporary fault is run once, followed by exact restoration and a green law.
+New generated laws use the existing installed @effect/vitest it.prop runner with Effect Schema inputs and shared package seed, 100 runs per generated law. CallbackEvents is a Schema.Array of closed safe events. Interleavings draws bounded matching start/end keys. InterruptedReports adds missing/broken final reports. DamagedJournals draws valid prefixes plus arbitrary corruption and closed identity mutations. PrivateCallbacks draws Schema.String canaries into excluded fields. WriteAnswers draws append success/failure sequences. QueueJobs draws a job's status, conclusion, runner and two times, each from a weighted table of real and broken forms. Do not migrate unrelated existing time-table properties as part of this patch. Run counts below remain explicit. Each planned temporary fault is run once, followed by exact restoration and a green law.
 
 | Law | Kind | Generator or reason | Check | Plant |
 | --- | --- | --- | --- | --- |
@@ -117,6 +117,7 @@ New generated laws use the existing installed @effect/vitest it.prop runner with
 | P7 scheduled commands keep the progress reporter beside every existing reporter and exact selection/depth | lint | lint | Existing scheduled rule rejects removed/substituted reporter while preserving prior source/queue/verdict constraints | Drop custom argument from one of the four commands |
 | P8 installed callback ordering survives a real child cutoff before final JSON | test | scenario: a real Vitest child and process termination are needed to prove kernel-visible records survive without the final callback | See remote proof below | Write only in onTestRunEnd, then terminate after ready |
 | P9 metadata writes cost one append per accepted callback, with no replay per callback | test | Effect Arbitrary: CallbackEvents | Recorder observes one append each and no extra read, scan or growing serialization of old records | Serialize the whole accumulated journal after every event |
+| TT8 a queue wait exists exactly for a started, non-skipped job with a runner and valid ordered times | test | Effect Arbitrary: QueueJobs | An oracle built from the draw agrees with readQueueWait, the artifact and the Markdown on every draw; real jobs stay as a vector | Narrow the status gate, drop the runner check, drop the calendar check, or accept a time with no zone |
 
 ## Validation and proof
 
