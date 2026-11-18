@@ -1,11 +1,16 @@
 // P36, next/. Scoped Alchemy runtime and real Electron. No live sender or account.
 import { Effect, FileSystem, Path, Schema } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import type { Page } from "playwright";
 import { launch as launchWindow, type TestWindow } from "../test-window.ts";
 import { startWorker, type EmailFixture } from "./email-worker.test-support.ts";
 
 class PromiseFailed extends Schema.TaggedError<PromiseFailed, { readonly brand: unique symbol }>()("PromiseFailed", {
   cause: Schema.Defect(),
+}) {}
+
+class ExamFailed extends Schema.TaggedError<ExamFailed, { readonly brand: unique symbol }>()("ExamFailed", {
+  message: Schema.String,
 }) {}
 
 export const EPOCH = 1_800_000_000_000;
@@ -67,39 +72,28 @@ const request = Effect.fn("emailExam.request")(function* <A>(
     outputs.urls.push(target.href);
   }
 
-  // oxlint-disable-next-line fabrika/no-promises -- edge: the HTTP fetch boundary returns a Promise
-  const response = yield* Effect.tryPromise({
-    try: () =>
-      fetch(
-        target,
-        body === undefined
-          ? undefined
-          : {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(body),
-            },
-      ),
-    catch: (cause) => new PromiseFailed({ cause }),
-  });
+  const response = yield* (
+    body === undefined
+      ? HttpClient.get(target)
+      : HttpClientRequest.post(target).pipe(HttpClientRequest.bodyJson(body), Effect.flatMap(HttpClient.execute))
+  ).pipe(Effect.provide(FetchHttpClient.layer));
 
   // Inspect bytes before decoding or refusing, so a raw error body cannot escape the law.
-  // oxlint-disable-next-line fabrika/no-promises -- edge: a web Response reads text through a Promise
-  const raw = yield* Effect.tryPromise({ try: () => response.text(), catch: (cause) => new PromiseFailed({ cause }) });
+  const raw = yield* response.text;
 
   if (publicReply) {
     outputs.replies.push(raw);
   }
 
-  if (!response.ok) {
+  if (response.status < 200 || response.status >= 300) {
     if (publicReply) {
       outputs.errors.push(raw);
     }
 
-    return yield* Effect.fail(new Error("P36 instance refused request"));
+    return yield* ExamFailed.make({ message: "P36 instance refused request" });
   }
 
-  const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(raw);
+  const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(raw);
 
   // SAFETY: the P36 test instance answers each `/__test/*` path with the shape its caller names in `A`.
   return value as A;
@@ -124,13 +118,13 @@ export const mailCode = Effect.fn("emailExam.mailCode")(function* (instance: Ins
   const mail = mails.at(-1);
 
   if (mail === undefined) {
-    return yield* Effect.fail(new Error("Stand-in sender received no mail"));
+    return yield* ExamFailed.make({ message: "Stand-in sender received no mail" });
   }
 
   const match = /(?:^|\D)(\d{6})(?:\D|$)/.exec(mail.raw);
 
   if (match === null || match[1] === undefined) {
-    return yield* Effect.fail(new Error("Stand-in sender received no six-digit code"));
+    return yield* ExamFailed.make({ message: "Stand-in sender received no six-digit code" });
   }
 
   return match[1];
@@ -181,7 +175,7 @@ type Window = TestWindow;
 
 export const play = <A>(action: () => PromiseLike<A>) =>
   // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright exposes renderer operations through Promise APIs
-  Effect.tryPromise({ try: () => action(), catch: (cause) => new PromiseFailed({ cause }) });
+  Effect.tryPromise({ try: () => action(), catch: (cause) => PromiseFailed.make({ cause }) });
 
 export const visible = (page: Page, text: string) =>
   play(() => page.getByText(text, { exact: false }).waitFor({ state: "visible" }));

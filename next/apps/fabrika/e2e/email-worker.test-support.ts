@@ -1,6 +1,8 @@
 // next/. Alchemy owns the local runtime, as in src/instance.ts.
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { testKey } from "@kampus/libfabrika/email/Email.test-support";
+import * as Load from "@kampus/libfabrika/node/settings/Load";
+import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
@@ -9,6 +11,7 @@ import { deploy } from "alchemy/Deploy";
 import * as Interaction from "alchemy/Interaction";
 import { localState } from "alchemy/State/LocalState";
 import { Effect, FileSystem, Layer, Path } from "effect";
+import { Digest } from "effect/crypto";
 import { build } from "../src/build.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import { Settings } from "../src/settings.ts";
@@ -128,14 +131,20 @@ export const startWorker = Effect.fn("emailExam.startWorker")(function* (
   yield* fs.writeFileString(main, wrapper(built.brain, fixture, emailKey.line));
   const founder = yield* testKey(Array.from({ length: 32 }, (_, n) => n));
 
+  const loaded = yield* Load.load({
+    person: { path: path.join(home, "fabrika.toml"), name: "fabrika.toml" },
+    flags: { "instance.port": String(port.port), "gateway.limit": "100000", "gateway.window": "60000" },
+    env: {},
+    version: "0.0.0",
+  }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto]));
+
   const settings = Settings.make({
-    name: "p36-test",
-    person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-    founder: founder.line,
-    window: null,
-    port: port.port,
+    settings: loaded.snapshot,
+    start: "p36-test-start",
     build: built.build,
-    rateLimit: { limit: 100_000, window: 60_000 },
+    repo: null,
+    founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: founder.line, window: null },
+    name: "p36-test",
   });
 
   const stack = Alchemy.Stack(

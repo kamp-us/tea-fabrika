@@ -11,8 +11,7 @@ import {
   started,
   testKey,
 } from "@kampus/libfabrika/email/Email.test-support";
-import { Effect, Exit, Schema } from "effect";
-import * as Arbitrary from "effect/Arbitrary";
+import { Arbitrary, Effect, Exit, Schema } from "effect";
 import {
   EPOCH,
   INTEGRATION,

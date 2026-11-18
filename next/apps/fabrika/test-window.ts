@@ -56,12 +56,12 @@ export const launch = Effect.fn("testWindow.launch")(function* (options: {
 
   const executablePath: string = createRequire(import.meta.url)("electron");
 
-  const options = { executablePath, args: ["-r", guard, entry], env };
-  const fail = (cause: unknown) => new WindowFailed({ cause });
+  const launchOptions = { executablePath, args: ["-r", guard, entry], env };
+  const fail = (cause: unknown) => WindowFailed.make({ cause });
 
   const app = yield* Effect.acquireRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright launches Electron through a Promise API
-    Effect.tryPromise({ try: () => _electron.launch(options), catch: fail }),
+    Effect.tryPromise({ try: () => _electron.launch(launchOptions), catch: fail }),
     (app) =>
       // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright closes the Electron process through a Promise API
       Effect.tryPromise({ try: () => app.close(), catch: fail }).pipe(Effect.orDie),
