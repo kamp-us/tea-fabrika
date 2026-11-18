@@ -42,16 +42,26 @@ const TOOLING_INTEGRATION = TOOLING.map((glob) => glob.replace(/\.test\.ts$/, ".
 // beside the module it tests. Every other `next/` test runs on our interfaces' in-memory layers.
 // The lint rule `fabrika/integration-test-name` holds the names (oxlint-plugins/README.md).
 const NEXT = [
+  "kalfa/*/src/**/*.test.{ts,tsx}",
   "next/packages/*/src/**/*.test.{ts,tsx}",
   "next/programs/*/src/**/*.test.{ts,tsx}",
   "next/apps/*/src/**/*.test.{ts,tsx}",
 ];
 
-const INTEGRATION = ["next/**/*.integration.test.{ts,tsx}"];
+const INTEGRATION = ["next/**/*.integration.test.{ts,tsx}", "kalfa/**/*.integration.test.{ts,tsx}"];
 const VISUAL = ["next/**/*.visual.test.{ts,tsx}"];
+// A visual file under kalfa/ is in no vitest project yet: the `next` project's `kalfa/` glob would
+// take it, so that project leaves it out. `INTEGRATION` cannot reach one: its names end in
+// `.integration.test`, a visual file's in `.visual.test`.
+const KALFA_VISUAL = ["kalfa/**/*.visual.test.{ts,tsx}"];
 
 // A toy repo's tests under a skill's scripts are its subject, as with `fixtures/` above.
-const EXCLUDE = [...configDefaults.exclude, ".agents/skills/*/scripts/**/fixtures/**", "next/**/dist/**"];
+const EXCLUDE = [
+  ...configDefaults.exclude,
+  ".agents/skills/*/scripts/**/fixtures/**",
+  "next/**/dist/**",
+  "kalfa/**/dist/**",
+];
 
 // What every project shares. Importing it never runs the local CLI guard.
 const shared = {
@@ -248,7 +258,10 @@ export const projects = [
   { extends: true, test: { name: "today", include: [...TODAY], exclude: [...EXCLUDE] } },
   { extends: true, test: { name: "tooling", include: [...TOOLING], exclude: [...EXCLUDE, ...TOOLING_INTEGRATION] } },
   { extends: true, test: { name: "tooling-integration", include: [...TOOLING_INTEGRATION], exclude: [...EXCLUDE] } },
-  { extends: true, test: { name: "next", include: [...NEXT], exclude: [...EXCLUDE, ...INTEGRATION, ...VISUAL] } },
+  {
+    extends: true,
+    test: { name: "next", include: [...NEXT], exclude: [...EXCLUDE, ...INTEGRATION, ...VISUAL, ...KALFA_VISUAL] },
+  },
   { extends: true, test: { name: "next-integration", include: [...INTEGRATION], exclude: [...EXCLUDE] } },
   {
     extends: false,

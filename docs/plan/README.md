@@ -74,6 +74,20 @@ agreed rule scopes while keeping program code, comments and literal contents. Th
 uses its native stack. The PRs link their independent reviews and CI evidence. This slice supplies
 neither the later package move nor the CLI.
 
+*2026-11-17, extraction source:* ticket 1076 slice 2 moves the engine into
+`kalfa/config/` as private `@kalfa/config`, used by `next/`. Source at
+`85919fe41730cdc48ba3fbe4bfa53e93e1ba9fbf` passed its independent source recheck.
+The existing tests moved unchanged. The package consumer law is authored, but has not run.
+The independent cache entry is applied. CI discovery and archive delivery remain private
+while the shared CI repair finishes. The approved ordinary-test routing has not run.
+[The extraction draft](https://github.com/kamp-us/tea-fabrika/pull/1583) keeps merge automation off.
+Ordinary draft checks supply no consumer or archive proof.
+No tested archive is available yet. Its
+[approved amendment](./quests/kalfa-config-package-amendment-PLAN.md) keeps the CLI in slice 3.
+After successful CI and landing, another project installs the tested archive with
+`npm install ./kalfa-config-0.0.0.tgz effect@4.1.3`.
+The prerequisite settings and spacing pair lands first.
+
 Today's CI, serving both versions, adds automatic related tooling checks for ready pull requests
 and queue groups, ticket 1155. Since [decision 0602](../../.decisions/0602-integration-laws-leave-merge-line.md)
 those checks run only the plain tooling laws a change reaches: no `.integration.` law, of next/
