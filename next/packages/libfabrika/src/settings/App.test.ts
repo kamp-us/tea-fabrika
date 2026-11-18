@@ -18,7 +18,7 @@
 //   and `Print` keep the signatures they have today, and read the app from the declarations.
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder, runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Match, Path, PlatformError, Schema } from "effect";
+import { Effect, Exit, FileSystem, Layer, Match, Path, PlatformError, Predicate, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as App from "./App.ts";
 import * as Files from "./Files.ts";
@@ -537,7 +537,7 @@ const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), 
 
 /** A value as searchable text: a bigint prints as its digits, every other value as JSON does. */
 const printed = (value: unknown) =>
-  JSON.stringify(value, (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v));
+  JSON.stringify(value, (_key, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v));
 
 const HIDDEN = ["b-env", "b-repo", "b-person", "a-table", "a-array", "a-scalar", "a-unknown"] as const;
 
