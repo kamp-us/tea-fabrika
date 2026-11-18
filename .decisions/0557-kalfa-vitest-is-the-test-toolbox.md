@@ -1,7 +1,7 @@
 ---
 id: 0557
 title: "Our test package is named @kalfa/vitest, its exports are the whole list of test tooling, and a mechanism it does not export is built in it, never reached around it"
-status: accepted
+status: amended-in-part by [0600](0600-kalfa-quality-holds-test-lint-format.md)
 date: 2026-11-15
 tags: [tests, vitest, kalfa, package, exports, mocks, next, tooling]
 ---
