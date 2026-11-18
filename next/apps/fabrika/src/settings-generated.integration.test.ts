@@ -15,12 +15,11 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
+import * as Setting from "@kampus/libfabrika/settings/Fabrika";
 import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
 import * as Reference from "@kampus/libfabrika/settings/Reference";
-import * as Setting from "@kampus/libfabrika/settings/Setting";
 import { Array as Arr, String as Str, Effect, FileSystem, Option, Path, Result, Schema, Record as Rec } from "effect";
-
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 

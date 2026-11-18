@@ -25,10 +25,10 @@ import * as Tracer from "effect/Tracer";
 
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
+import * as Setting from "./Fabrika.ts";
+import * as Sources from "./Fabrika.ts";
 import * as Files from "./Files.ts";
-import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
-import * as Sources from "./Sources.ts";
 import * as StartsTest from "./StartsTest.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";

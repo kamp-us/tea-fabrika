@@ -157,15 +157,10 @@ export const legsOf = (w: { jobs: { next: { strategy: { matrix: { shard: string 
   JSON.parse(/&& '(.*?)' \|\|/s.exec(w.jobs.next.strategy.matrix.shard)?.[1] ?? "[]");
 
 export const setLegs = (
-  w: { jobs: { next: { strategy: { matrix: { shard: string } }; concurrency?: unknown } } },
+  w: { jobs: { next: { strategy: { matrix: { shard: string } } } } },
   legs: readonly unknown[],
 ) => {
   w.jobs.next.strategy.matrix.shard = sizedLegs(legs);
-  w.jobs.next.concurrency = {
-    group: `scheduled-test-\${{ fromJSON('${JSON.stringify(Object.fromEntries(legs.map((leg, index) => [leg, String(index + 1)])))}')[matrix.shard] || '1' }}`,
-    queue: "max",
-    "cancel-in-progress": false,
-  };
 };
 
 // A leg's `--shard`: its own kind's count from changes' size step, else the full matrix's.
@@ -393,7 +388,6 @@ const valid = (label: string, extra: string) => ({
     select: structuredClone(automatic.jobs.select),
     related: structuredClone(automatic.jobs.related),
     next: {
-      concurrency: structuredClone(automatic.jobs.next.concurrency),
       needs: "changes" as string | string[],
       if: guard("next"),
       "timeout-minutes": 17,

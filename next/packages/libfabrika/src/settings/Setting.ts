@@ -7,6 +7,7 @@
  */
 import { Config, Schema, String as Str } from "effect";
 import * as Rec from "effect/Record";
+import type { App } from "./App.ts";
 
 /**
  * The two settings files: the person's own, and the repo's.
@@ -41,7 +42,7 @@ export type Format = "json" | "text";
  *
  * **Details**
  *
- * `path` is the dotted key, `segments` its parts, and `env` the environment name derived from it. `schema` and `default` define the value, `format` says how a file spells it, `doc` is the sentence shown to a person, and `scope`, `reload` and `since` say where it may be set, when a change applies and which release introduced it.
+ * `app` is the app that declared it, `path` the dotted key, `segments` its parts, and `env` the environment name derived from both. `schema` and `default` define the value, `format` says how a file spells it, `doc` is the sentence shown to a person, and `scope`, `reload` and `since` say where it may be set, when a change applies and which release introduced it.
  *
  * @category settings
  */
@@ -50,6 +51,8 @@ export interface Setting<
   S extends Scope = Scope,
   C extends Schema.Codec<A, unknown> = Schema.Codec<A, unknown>,
 > extends Config.Config<A> {
+  /** The app that declared it, which every name it has comes from. */
+  readonly app: App;
   /** The dotted path a person writes, as `instance.port`. */
   readonly path: string;
   /** The path's segments, as `["instance", "port"]`: what a provider is asked for. */
@@ -67,15 +70,16 @@ export interface Setting<
 }
 
 /**
- * Declares one setting at a dotted path.
+ * Declares one setting of an app at a dotted path. An app's own `Setting.make` is this one with the app given.
  *
  * **Details**
  *
- * The environment name is `FABRIKA_` and the constant-cased segments, and `format` defaults to `json`. Reading the result gives the default only when no source holds the key. A value that is present but refused by the schema, an empty container included, fails and never falls back to the default. A failure of the source itself also fails.
+ * The environment name is the app's prefix and the constant-cased segments, as `FABRIKA_INSTANCE_PORT`, and `format` defaults to `json`. Reading the result gives the default only when no source holds the key. A value that is present but refused by the schema, an empty container included, fails and never falls back to the default. A failure of the source itself also fails.
  *
  * @category constructors
  */
 export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope>(
+  app: App,
   path: string,
   options: {
     readonly schema: C;
@@ -89,7 +93,7 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
 ): Setting<C["Type"], S, C> => {
   // Effect reads a string path as one key, so the dotted path is split here.
   const segments = Str.split(path, ".");
-  const env = ["FABRIKA", ...segments.map(Str.configCase)].join("_");
+  const env = [app.prefix, ...segments.map(Str.configCase)].join("_");
   // Config treats a container supplied to a scalar schema as absent. Before defaulting,
   // check every provider shape so a present value, including [], stays a failure.
   const present = Schema.Union([Schema.String, Schema.Array(Schema.Never), Schema.Struct({})]);
@@ -107,7 +111,7 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
     }),
   );
 
-  return Object.assign(config, { ...options, format: options.format ?? "json", path, segments, env });
+  return Object.assign(config, { ...options, format: options.format ?? "json", app, path, segments, env });
 };
 
 /**
@@ -115,7 +119,7 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
  *
  * **Details**
  *
- * `settings` keeps each declaration under the name it has in the record, and `declarations` lists them as plain declarations.
+ * `app` is the one app every declaration belongs to, `settings` keeps each declaration under the name it has in the record, and `declarations` lists them as plain declarations.
  *
  * @category settings
  */
@@ -123,6 +127,8 @@ export interface Group<
   A,
   R extends Record<string, Setting<any>> = Record<string, Setting<any>>,
 > extends Config.Config<A> {
+  /** The app every declaration in the group belongs to. */
+  readonly app: App;
   /** Each declaration by the name its value has in the group's record. */
   readonly settings: R;
   readonly declarations: ReadonlyArray<Setting<unknown>>;
@@ -131,7 +137,16 @@ export interface Group<
 const segment = /^[a-z0-9][a-z0-9-]*$/;
 
 /** Why a set of declarations cannot be read together, or undefined when it can. */
-const conflict = (declarations: ReadonlyArray<Setting<unknown>>) => {
+const conflict = (app: App, declarations: ReadonlyArray<Setting<unknown>>) => {
+  const stranger = declarations.find((d) => d.app !== app);
+
+  if (stranger !== undefined) {
+    const own = declarations.find((d) => d.app === app);
+    return own === undefined
+      ? `${stranger.path} belongs to ${stranger.app.name}, not ${app.name}`
+      : `${own.path} and ${stranger.path} belong to two apps, ${app.name} and ${stranger.app.name}`;
+  }
+
   for (const [n, a] of declarations.entries()) {
     if (!a.segments.every((s) => segment.test(s))) {
       return `${a.path} is not a setting path`;
@@ -165,21 +180,21 @@ const conflict = (declarations: ReadonlyArray<Setting<unknown>>) => {
 export type Values<R extends Record<string, Setting<any>>> = Readonly<Config.Success<ReturnType<typeof Config.all<R>>>>;
 
 /**
- * Joins a record of settings into one group.
+ * Joins a record of one app's settings into one group. An app's own `Setting.group` is this one with the app given.
  *
  * **Gotchas**
  *
- * Throws an `Error` when the declarations cannot be read together: a path segment that is empty, or is not a lowercase letter or digit followed by lowercase letters, digits and hyphens, a default its own schema refuses, two paths that are equal or where one is a table of the other, or two paths with the same environment name.
+ * Throws an `Error` when the declarations cannot be read together: a declaration of another app, a path segment that is empty, or is not a lowercase letter or digit followed by lowercase letters, digits and hyphens, a default its own schema refuses, two paths that are equal or where one is a table of the other, or two paths with the same environment name.
  *
  * @category constructors
  */
-export const group = <const R extends Record<string, Setting<any>>>(settings: R): Group<Values<R>, R> => {
+export const group = <const R extends Record<string, Setting<any>>>(app: App, settings: R): Group<Values<R>, R> => {
   const declarations = Rec.values(settings);
-  const refused = conflict(declarations);
+  const refused = conflict(app, declarations);
 
   if (refused !== undefined) {
     throw new Error(`Settings cannot be declared: ${refused}.`);
   }
 
-  return Object.assign(Config.all(settings), { settings, declarations });
+  return Object.assign(Config.all(settings), { app, settings, declarations });
 };

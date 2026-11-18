@@ -105,6 +105,36 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
 - **Tell the owner:** one line at open (the fixes, in order), one at each fix that goes red, one at
   close (how many pull requests to walk, and the level now).
 
+## Many agents at once
+
+A sev often runs agents in several places at once: the lead's machine, cloud sessions, another
+tool's sessions. What kept the work moving on 2026-11-17, and what slowed it:
+
+- **The critical-path fix runs on the lead's machine,** with the lead's own step agents, and the lead
+  makes its judgment calls on the spot. On 2026-11-17 a cloud child spent an hour on one fix's
+  tests; a laptop agent finished the rest in 15 minutes.
+- **Owners stay fixed until their work lands.** Three handovers in one evening cost about an hour of
+  stopping, pushing, receipts and restarts. A new owner only takes work nobody holds.
+- **GitHub is the coordination layer.** A pull request is its own report: draft is working, ready
+  is reviewed, its checks are its progress. The lead watches pull request state, not messages; a
+  message is only for a decision, a conflict an agent cannot resolve, or the owner's yes. A
+  coordinator that relays status adds a wait to every question; it fills slots and keeps one
+  writer per file instead.
+- **No agent waits on CI or on a reply.** It keeps building, reviews, and arms its own pull request
+  when the checks are green and the leak grep is clean. Only what needs the lead's machine waits.
+- **A stack lands whole, from its top,** with `land.ts stack <top>`, which makes one merge pinned to
+  the top's head ([0599](../../../.decisions/0599-native-stacks-link-whole-and-merge-children-current.md)).
+  Never one layer at a time: on 2026-11-17 the lead landed a stack's bottom alone. GitHub refuses
+  auto-merge and enqueue for a stack member, so an agent never arms one; it marks the layer ready.
+  Children stay current by merging their parent's head in, never by a rebase.
+- **Lead tooling and CI fixes take the fast track:** no plan step, one builder, one review.
+- **Proof comes from the automatic changed and related CI.** A hand-started proof run that the
+  automatic CI already covers takes shared slots from every other pull request.
+- **The code-quality sweeps count as sev work:** lint rules, Effect checks, mock and exam sweeps. Bad
+  code on main poisons every later agent's context.
+- **A leak grep checks only a branch's own commits,** from its merge base. In a shallow clone it
+  reaches the base or refuses; it never scans main's old history.
+
 ## The write-up
 
 When a sev0 or a sev1 ends, write one note under `field/notes/` the same day. It holds: what broke;

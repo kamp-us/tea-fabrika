@@ -15,8 +15,8 @@ import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
+import * as Setting from "./Fabrika.ts";
 import * as Files from "./Files.ts";
-import * as Setting from "./Setting.ts";
 import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 

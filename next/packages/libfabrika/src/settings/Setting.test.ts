@@ -21,7 +21,7 @@ import * as Schema from "effect/Schema";
 
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
-import * as Setting from "./Setting.ts";
+import * as Setting from "./Fabrika.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
 class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {

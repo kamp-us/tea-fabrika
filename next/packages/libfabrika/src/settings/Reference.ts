@@ -19,7 +19,7 @@ import { Origin } from "./Sources.ts";
  *
  * **Details**
  *
- * `value` and `default` are JSON-encoded. `scope`, `reload` and `since` copy the declaration.
+ * `value` and `default` are JSON-encoded. `scope`, `reload` and `since` copy the declaration, and `app` names the app that declared it and the command that lists its settings.
  *
  * @category models
  */
@@ -32,6 +32,7 @@ export const Row = Schema.Struct({
   scope: Schema.Array(Schema.Literals(["person", "repo"])),
   reload: Schema.Literals(["live", "restart"]),
   since: Schema.String,
+  app: Schema.Struct({ name: Schema.String, list: Schema.String }),
 });
 
 /**
@@ -42,11 +43,11 @@ export const Row = Schema.Struct({
 export type Row = typeof Row.Type;
 
 /**
- * A key set explicitly that was introduced after the repo's stated minimum fabrika release.
+ * A key set explicitly that was introduced after the repo's stated minimum release of its app.
  *
  * **Details**
  *
- * `since` is the release that introduced the key, and `minimum` is the repo's stated minimum.
+ * `since` is the release that introduced the key, `minimum` is the repo's stated minimum, and `app` is the name of the app both releases belong to.
  *
  * @category models
  */
@@ -54,6 +55,7 @@ export interface Warning {
   readonly path: string;
   readonly since: string;
   readonly minimum: string;
+  readonly app: string;
 }
 
 const encoded = (d: Setting.Setting<unknown>): Schema.Json =>
@@ -80,6 +82,7 @@ export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row>
     scope: d.scope,
     reload: d.reload,
     since: d.since,
+    app: { name: d.app.name, list: d.app.list },
   }));
 
 /**
@@ -94,7 +97,7 @@ export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row>
 export const warnings = (rows: ReadonlyArray<Row>, minimum: string): Array<Warning> =>
   rows
     .filter((row) => row.origin._tag !== "default" && newer(row.since, minimum))
-    .map((row) => ({ path: row.path, since: row.since, minimum }));
+    .map((row) => ({ path: row.path, since: row.since, minimum, app: row.app.name }));
 
 /** Words as Markdown shows them as written: every character Markdown reads is escaped. */
 const escape = (text: string) =>

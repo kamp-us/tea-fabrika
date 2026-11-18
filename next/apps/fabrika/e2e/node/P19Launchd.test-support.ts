@@ -17,8 +17,8 @@ import * as ServiceLaunchd from "@kampus/libfabrika/node/launchd/BrainServiceLau
 import * as LaunchdStatus from "@kampus/libfabrika/node/launchd/LaunchdStatus";
 import * as ProcessGroups from "@kampus/libfabrika/node/launchd/ProcessGroups.test-support";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
+import * as Sources from "@kampus/libfabrika/settings/Fabrika";
 import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
-import * as Sources from "@kampus/libfabrika/settings/Sources";
 import { Written } from "@kampus/libfabrika/telemetry/Records";
 import {
   Array as Arr,

@@ -12,8 +12,8 @@ import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
+import * as Sources from "./Fabrika.ts";
 import * as Files from "./Files.ts";
-import * as Sources from "./Sources.ts";
 import type { TomlDocument } from "./Toml.ts";
 
 const KIB = 1_024;

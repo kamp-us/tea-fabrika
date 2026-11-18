@@ -28,11 +28,11 @@ import * as Str from "effect/String";
 
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
+import * as Setting from "./Fabrika.ts";
+import * as Sources from "./Fabrika.ts";
 import * as Files from "./Files.ts";
 import * as Reference from "./Reference.ts";
-import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
-import * as Sources from "./Sources.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
@@ -248,6 +248,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
               scope: d.scope,
               reload: d.reload,
               since: d.since,
+              app: { name: "fabrika", list: "fabrika settings" },
             },
           ]);
         }

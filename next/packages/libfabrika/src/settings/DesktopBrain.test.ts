@@ -11,9 +11,9 @@ import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 
 import * as Declarations from "./Declarations.ts";
+import * as Sources from "./Fabrika.ts";
 import * as Files from "./Files.ts";
 import * as Snapshot from "./Snapshot.ts";
-import * as Sources from "./Sources.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 

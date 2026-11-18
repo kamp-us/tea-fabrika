@@ -5,7 +5,7 @@ import { ByteSize, Exit, Schema } from "effect";
 import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
-import * as Setting from "./Setting.ts";
+import * as Setting from "./Fabrika.ts";
 
 const check = { seed: 119120, numRuns: 100 };
 

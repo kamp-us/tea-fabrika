@@ -14,6 +14,7 @@ import * as Path from "effect/Path";
 import * as Rec from "effect/Record";
 import * as Str from "effect/String";
 import * as Declarations from "../../settings/Declarations.ts";
+import { Fabrika } from "../../settings/Fabrika.ts";
 import * as Print from "../../settings/Print.ts";
 import * as Reference from "../../settings/Reference.ts";
 import * as Load from "./Load.ts";
@@ -57,13 +58,13 @@ export const make = (options: { readonly version: string }) =>
     (flags) =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
-        const fabrikaHome = yield* optional("FABRIKA_HOME");
-        const home = fabrikaHome ?? path.join(yield* Config.String("HOME"), ".fabrika");
+        const moved = yield* optional(Fabrika.home);
+        const home = moved ?? path.join(yield* Config.String("HOME"), `.${Fabrika.name}`);
 
-        // A person reads their file's name from ~ or FABRIKA_HOME, never as this machine's path.
+        // A person reads their file's name from ~ or the app's home variable, never as this machine's path.
         const person = {
-          path: path.join(home, "fabrika.toml"),
-          name: `${fabrikaHome === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
+          path: path.join(home, `${Fabrika.name}.toml`),
+          name: moved === undefined ? Fabrika.person : `$${Fabrika.home}/${Fabrika.name}.toml`,
         };
 
         const env: Array<readonly [string, string | undefined]> = [];

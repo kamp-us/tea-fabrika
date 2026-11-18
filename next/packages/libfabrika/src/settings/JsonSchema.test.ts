@@ -29,9 +29,9 @@ import * as Str from "effect/String";
 
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
+import * as Setting from "./Fabrika.ts";
 import * as Files from "./Files.ts";
 import * as JsonSchema from "./JsonSchema.ts";
-import * as Setting from "./Setting.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 

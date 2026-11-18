@@ -131,11 +131,12 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
 /**
  * What the select step gives the next jobs: `scope`, `full` or `changed`; `legs`, the `changed`
  * job's matrix, a JSON list, `[]` when it starts no leg; and `files`, each leg's files as one line of
- * words, a JSON map by leg; and `slots`, the nine shared groups rotated by the workflow run number.
+ * words, a JSON map by leg; and `slots`, the proof groups rotated by the workflow run number. `count`
+ * is how many proof groups there are, MOST and PROOF_SLOTS (0598).
  */
-export const outputs = (proof: Proof, run: number): string[] => {
+export const outputs = (proof: Proof, run: number, count: number): string[] => {
   const legs = proof._tag === "changed" ? proof.legs : {};
-  const groups = slots(run);
+  const groups = slots(run, count);
 
   return [
     `scope=${proof._tag}`,
@@ -145,20 +146,32 @@ export const outputs = (proof: Proof, run: number): string[] => {
   ];
 };
 
-const Run = Schema.Int.check(Schema.isGreaterThan(0));
+const Positive = Schema.Int.check(Schema.isGreaterThan(0));
 
-/** A full permutation of 0595's nine groups. A retry keeps its workflow run number. */
-export const slots = (run: number): Record<string, string> => {
-  const parsed = Schema.decodeUnknownResult(Run)(run);
+/**
+ * A full permutation of the `count` proof groups (0598), turned by the workflow run number, so
+ * `count` runs in a row send every leg to every group. A retry keeps its workflow run number.
+ */
+const slots = (run: number, count: number): Record<string, string> => {
+  const parsed = Schema.decodeUnknownResult(Positive)(run);
 
   if (Result.isFailure(parsed)) {
     throw new Error("proof: RUN_NUMBER must be a positive safe whole number");
   }
 
-  const offset = parsed.success % 9;
+  const groups = Schema.decodeUnknownResult(Positive)(count);
+
+  if (Result.isFailure(groups)) {
+    throw new Error("proof: MOST must be a positive safe whole number");
+  }
+
+  const offset = parsed.success % groups.success;
 
   return Object.fromEntries(
-    Array.from({ length: 9 }, (_, index) => [String(index + 1), String(((index + offset) % 9) + 1)]),
+    Array.from({ length: groups.success }, (_, index) => [
+      String(index + 1),
+      String(((index + offset) % groups.success) + 1),
+    ]),
   );
 };
 
@@ -229,7 +242,8 @@ if (import.meta.main) {
   );
 
   const run = whole("RUN_NUMBER", env.run);
-  const groups = slots(run);
+  const most = whole("MOST", env.most);
+  const groups = slots(run, most);
   const root = fileURLToPath(new URL("../../", import.meta.url));
 
   const git = (args: readonly string[]) => {
@@ -267,7 +281,7 @@ if (import.meta.main) {
         );
 
   const sizing: Sizing = {
-    most: whole("MOST", env.most),
+    most,
     limit: room(whole("LIMIT", env.limit), E2E_SETUP),
     table: rowsAt("full"),
   };
@@ -279,7 +293,7 @@ if (import.meta.main) {
     sizing,
   );
 
-  const lines = outputs(proof, run);
+  const lines = outputs(proof, run, most);
   const said = summary(proof);
   console.log(said);
   console.log(lines.join("\n"));

@@ -23,11 +23,11 @@ import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 
 import * as fc from "fast-check";
+import * as Setting from "./Fabrika.ts";
+import * as Sources from "./Fabrika.ts";
 import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
-import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
-import * as Sources from "./Sources.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
