@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0600; body 9aab9cf07b3a
+Approved by the lead agent, builds 0600; body 69d77d25e2b5
 Plancheck-Version: 3
 
 # Plan: @kalfa/quality/stryker, the plant runner on Stryker, and libfabrika's laws in the hourly mutation run (decision 0600's first build; ticket to be filed)
@@ -522,7 +522,7 @@ runner (0594), never on the owner's laptop.
 | .github/ci/plant-errors.ts | tests | tests | no change, for the same reason |
 | .github/workflows/plant.yaml | tests | tests | no change, for the same reason |
 | vitest.config.ts | tests | tests | no change: pull request 1589 adds `kalfa/` to its globs (open question 1) |
-| .github/workflows/check.yaml | tests | tests | no change (lead amendment): the workflow guard wants a `kalfa/*` tsc cache path once the workspace lists `kalfa/*`, and pull request 1583 adds exactly that line. This pull request puts its `kalfa/*` workspace line where 1583 does, so workflow-lint is red here until 1583 is on main, which comes before this pull request is armed anyway |
+| .github/workflows/check.yaml | tests | tests | slice 1 (lead amendment, on the landing operator's call): one line, `kalfa/*/node_modules/.cache/tsc` right after `packages/*/node_modules/.cache/tsc` in the `&tsc` path list, the place the `kalfa/*` workspace line holds. Pull request 1583 adds the same line; the second to land keeps one |
 | .github/ci/changes.mjs | tests | tests | no change: pull request 1589 routes `kalfa/` |
 | next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | no change: checklist-pid's law file, read by Q12 |
 | .agents/skills/mutation/scripts/scope.ts | build | 30 | slice 2: `related(changed, tracked)`, the `--tracked` flag at its edge |
