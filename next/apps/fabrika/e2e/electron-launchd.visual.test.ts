@@ -2,7 +2,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, Config, Effect, FileSystem, Option, Path, Formatter, Schema } from "effect";
+import { Arbitrary, Array as Arr, Config, Effect, FileSystem, Option, Path, Formatter, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 
@@ -134,6 +134,94 @@ it.live.prop(
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 10 }) } },
 );
 
+const Ms = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 120_000 }));
+
+const G4Case = Schema.Struct({
+  guardMs: Ms,
+  run: Schema.Array(Schema.Struct({ phase: Host.Phase, ms: Ms })),
+  stalled: Schema.Boolean,
+});
+
+const G4Runs = runsFor({ fast: 100, full: 100 });
+
+// scenario: G4's coverage, the cases its generator draws at its own seed and count. A property that never
+// begins a stalled phase, or never ends a start, a stop and the replacement, would pass on what it drew.
+it.effect("scenario: G4's generator reaches a stalled phase and the end of a start, a stop and the replacement", () =>
+  Effect.gen(function* () {
+    const cases = yield* Arbitrary.sampleEffect(Arbitrary.schema(G4Case), { count: G4Runs, seed: 119120 });
+    const phases = Arr.flatMap(cases, ({ run }) => run.map(({ phase }) => phase));
+    expect(cases.some(({ run, stalled }) => stalled && run.length > 0)).toBe(true);
+    expect(phases.some((phase) => phase.startsWith("start"))).toBe(true);
+    expect(phases.some((phase) => phase.startsWith("stop"))).toBe(true);
+    expect(phases).toContain("replacement");
+    expect(phases).toContain("fixture");
+  }),
+);
+
+// Plant (G4, run once and undone): `begin` and `end` write nothing and `done` alone writes the file, so
+// the record is there only at the end; the file after the first begin is missing and the law fails.
+it.effect.prop(
+  "G4: after every begin and end the host record names the phase in progress or none, holds each finished phase's time in order, and keeps guardMs",
+  G4Case.fields,
+  ({ guardMs, run, stalled }) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem,
+        path = yield* Path.Path;
+
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "p19-phases-" });
+      const file = path.join(home, "runs/p19/host.json");
+      const progress = yield* Host.phases(file, guardMs);
+
+      const read = fs
+        .readFileString(file)
+        .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Host.Progress))));
+
+      const model: { starts: Array<number>; stops: Array<number>; replacementMs: number } = {
+        starts: [],
+        stops: [],
+        replacementMs: 0,
+      };
+
+      for (const [n, { phase, ms }] of run.entries()) {
+        yield* progress.begin(phase);
+        expect(yield* read).toEqual({ guardMs, phase, ...model });
+
+        if (stalled && n === run.length - 1) {
+          break;
+        }
+
+        yield* progress.end(ms);
+
+        if (phase.startsWith("start")) {
+          model.starts = [...model.starts, ms];
+        } else if (phase.startsWith("stop")) {
+          model.stops = [...model.stops, ms];
+        } else if (phase === "replacement") {
+          model.replacementMs = ms;
+        }
+
+        expect(yield* read).toEqual({ guardMs, phase: null, ...model });
+      }
+
+      if (!stalled) {
+        // The final record names no phase and keeps the rest it is given.
+        const final = yield* progress.done({ groups: [1] });
+        expect(final).toEqual({ guardMs, phase: null, ...model });
+        const written = yield* fs
+          .readFileString(file)
+          .pipe(
+            Effect.flatMap(
+              Schema.decodeUnknownEffect(
+                Schema.fromJsonString(Schema.Struct({ groups: Schema.Array(Schema.Int), phase: Schema.Null })),
+              ),
+            ),
+          );
+        expect(written).toEqual({ groups: [1], phase: null });
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  { arbitrary: { seed: 119120, runs: G4Runs } },
+);
+
 it.live.skipIf(!enabled)(
   "scenario: L13 unsigned Electron's real brain survives controller death, restarts and fully stops",
   () =>
@@ -154,12 +242,13 @@ it.live.skipIf(!enabled)(
 
         return yield* fs
           .readFileString(path.resolve(import.meta.dirname, "../../../../runs/p19/host.json"))
-          .pipe(
-            Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ guardMs: Schema.Int })))),
-          );
+          .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Host.Progress))));
       }).pipe(Effect.provide(NodeServices.layer));
 
       expect(recorded.guardMs).toBe(result.guardMs);
+      // G4's other half: a passing run's final record names no phase in progress, and holds its starts.
+      expect(recorded.phase).toBeNull();
+      expect(recorded.starts).toEqual(result.starts);
       expect(result.starts).toHaveLength(4);
       expect(result.replacement).toBe(true);
       expect(result.controllerDeath).toBe(true);

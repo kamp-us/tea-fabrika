@@ -244,6 +244,74 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
   }
 });
 
+/** The phases of one check, in the order it runs them: the host record names the one in progress. */
+export const Phase = Schema.Literals([
+  "start 1",
+  "start 2",
+  "start 3",
+  "start 4",
+  "replacement",
+  "stop 1",
+  "stop 2",
+  "stop 3",
+  "stop 4",
+  "fixture",
+]);
+
+type Phase = typeof Phase.Type;
+
+/** What `runs/p19/host.json` holds from the first phase on: the final record adds its other fields. */
+export const Progress = Schema.Struct({
+  guardMs: Schema.Int,
+  phase: Schema.NullOr(Phase),
+  starts: Schema.Array(Schema.Int),
+  stops: Schema.Array(Schema.Int),
+  replacementMs: Schema.Int,
+});
+
+/**
+ * The record a check writes around each phase, so a run that stalls leaves the phase it stalled in.
+ * `begin` names the phase before it runs, `end` takes its time and names none, and `done` writes the
+ * final record with the rest of its fields. The fixture's time has no list of its own, so `end` drops it.
+ */
+export const phases = Effect.fn("P19Host.phases")(function* (file: string, guardMs: number) {
+  const fs = yield* FileSystem.FileSystem,
+    path = yield* Path.Path;
+
+  let record: typeof Progress.Type = { guardMs, phase: null, starts: [], stops: [], replacementMs: 0 };
+
+  const write = (rest: Record<string, unknown>) =>
+    fs
+      .makeDirectory(path.dirname(file), { recursive: true })
+      .pipe(Effect.andThen(fs.writeFileString(file, Formatter.formatJson({ ...record, ...rest }))));
+
+  return {
+    begin: Effect.fnUntraced(function* (phase: Phase) {
+      record = { ...record, phase };
+      yield* write({});
+    }),
+    end: Effect.fnUntraced(function* (ms: number) {
+      const phase = record.phase;
+      yield* checked(phase !== null, "phase-not-begun");
+
+      record = {
+        ...record,
+        phase: null,
+        ...(phase?.startsWith("start") === true ? { starts: [...record.starts, ms] } : {}),
+        ...(phase?.startsWith("stop") === true ? { stops: [...record.stops, ms] } : {}),
+        ...(phase === "replacement" ? { replacementMs: ms } : {}),
+      };
+      yield* write({});
+    }),
+    done: Effect.fnUntraced(function* (rest: Record<string, unknown>) {
+      record = { ...record, phase: null };
+      yield* write(rest);
+
+      return record;
+    }),
+  };
+});
+
 export const check = Effect.fn("P19Host.check")(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
@@ -418,15 +486,20 @@ export const check = Effect.fn("P19Host.check")(function* () {
     );
   });
 
-  const starts: Array<number> = [],
-    stops: Array<number> = [];
+  const progress = yield* phases(hostFile, guardMs);
 
-  let replacementMs = 0;
+  const rounds = [
+    { start: "start 1", stop: "stop 1" },
+    { start: "start 2", stop: "stop 2" },
+    { start: "start 3", stop: "stop 3" },
+    { start: "start 4", stop: "stop 4" },
+  ] as const;
 
-  for (let n = 0; n < 4; n++) {
+  for (const [n, round] of rounds.entries()) {
+    yield* progress.begin(round.start);
     const at = yield* Clock.currentTimeMillis;
     const client = yield* launch();
-    starts.push((yield* Clock.currentTimeMillis) - at);
+    yield* progress.end((yield* Clock.currentTimeMillis) - at);
     yield* acknowledgedGroups;
     const first = yield* status(config.target);
     yield* checked(first._tag === "loaded" && first.pid !== null, "no-running-brain");
@@ -442,6 +515,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     );
 
     if (n === 0) {
+      yield* progress.begin("replacement");
       const crashed = yield* Clock.currentTimeMillis;
       yield* command("launchctl", ["kill", "SIGKILL", config.target]);
       yield* wait(
@@ -465,13 +539,14 @@ export const check = Effect.fn("P19Host.check")(function* () {
         }),
         Number(settings.values["desktop.brain-start-timeout"]),
       );
-      replacementMs = (yield* Clock.currentTimeMillis) - crashed;
+      yield* progress.end((yield* Clock.currentTimeMillis) - crashed);
       yield* acknowledgedGroups;
     }
 
+    yield* progress.begin(round.stop);
     const stopAt = yield* Clock.currentTimeMillis;
     yield* launch("--stop");
-    stops.push((yield* Clock.currentTimeMillis) - stopAt);
+    yield* progress.end((yield* Clock.currentTimeMillis) - stopAt);
     yield* checked(
       (yield* status(config.target))._tag === "absent" &&
         !(yield* listening(url)) &&
@@ -481,6 +556,8 @@ export const check = Effect.fn("P19Host.check")(function* () {
   }
 
   // The small job proves a successful exit is not restarted. The four starts above used the real brain.
+  yield* progress.begin("fixture");
+  const fixtureAt = yield* Clock.currentTimeMillis;
   const fixture = `${home}/fixture.mjs`;
   yield* bundle(
     `import ${Formatter.formatJson(path.join(root, "fixtures/next/p19-launchd/brain.ts"))};`,
@@ -509,6 +586,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
 
     return (yield* Clock.currentTimeMillis) >= until;
   }).pipe(Effect.repeat({ schedule: Schedule.spaced(`${config.poll} millis`), until: (done) => done }));
+  yield* progress.end((yield* Clock.currentTimeMillis) - fixtureAt);
   yield* launch("--stop");
 
   const owned = yield* fs
@@ -525,25 +603,17 @@ export const check = Effect.fn("P19Host.check")(function* () {
   yield* wait(fs.exists(`${home}/guard.result`), config.stopTimeout * 3);
   yield* checked((yield* watcher.exitCode) === 0, "guard-reported-leftovers");
   const ready = yield* fs.readFileString(`${home}/ready.json`);
-  yield* fs.makeDirectory(path.dirname(hostFile), { recursive: true });
-  yield* fs.writeFileString(
-    hostFile,
-    Formatter.formatJson({
-      guardMs,
-      starts,
-      stops,
-      replacementMs,
-      // The groups the guard saved, each decoded as above 1, so a reader sees what a signal could reach.
-      groups: owned,
-      normalExitObservationMs: throttle * 3,
-      executable,
-      versions: yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(ready),
-      settings,
-    }),
-  );
+  const record = yield* progress.done({
+    // The groups the guard saved, each decoded as above 1, so a reader sees what a signal could reach.
+    groups: owned,
+    normalExitObservationMs: throttle * 3,
+    executable,
+    versions: yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(ready),
+    settings,
+  });
   const leftovers: ReadonlyArray<string> = [];
 
-  return { starts, guardMs, replacement: true, controllerDeath: true, normalExit: true, leftovers };
+  return { starts: record.starts, guardMs, replacement: true, controllerDeath: true, normalExit: true, leftovers };
 });
 
 if (process.argv[2] === "p19:controller") {
