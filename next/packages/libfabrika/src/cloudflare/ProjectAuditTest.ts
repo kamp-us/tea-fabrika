@@ -1,5 +1,6 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
 import { Machine } from "@demlik/tea/effect";
+import { Stub } from "@kampus/vitest";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
 
 import * as Digest from "effect/crypto/Digest";
@@ -151,32 +152,23 @@ const projectWalk = Effect.fnUntraced(function* (
   let accepted = 0;
   const bound = new Map<unknown, typeof Props.Type>();
 
-  // The driver wires Gateway; project routing, audit and box calls stay real.
-  const unused = vi.fn((): never => {
-    throw new Error("unused platform call");
-  });
+  // The driver wires Gateway; project routing, audit and box calls stay real. Every platform member
+  // the driver did not wire fails the law the moment it is read (`Stub.make`'s `rest`).
+  // M7 (mock sweep slice 1). Plant, run once: `projectLayer` reads `ctx.storage.get`, which the driver
+  // did not wire (red: the guard throws `unused platform call: get`).
+  const unexpected = (member: string): never => {
+    throw new Error(`unused platform call: ${member}`);
+  };
 
-  const ctx: Parameters<typeof projectLayer>[0] = {
-    id: { name: "p13-project", equals: unused, toString: unused },
-    storage: {
-      sql: { exec: vi.fn().mockImplementation(sql.exec), databaseSize: 0, Cursor: unused, Statement: unused },
+  // SAFETY: the SQL cursor workerd answers is read as rows by `Array.from`, which the rows of node's SQLite also answer.
+  const exec = (value: object): SqlStorage["exec"] => value as SqlStorage["exec"];
+
+  const ctx: Parameters<typeof projectLayer>[0] = Stub.make<DurableObjectState>(unexpected, {
+    id: Stub.make<DurableObjectId>(unexpected, { name: "p13-project" }),
+    storage: Stub.make<DurableObjectStorage>(unexpected, {
+      sql: Stub.make<SqlStorage>(unexpected, { exec: exec(sql.exec), databaseSize: 0 }),
       transactionSync: sql.transaction,
-      get: unused,
-      list: unused,
-      put: unused,
-      delete: unused,
-      deleteAll: unused,
-      transaction: unused,
-      getAlarm: unused,
-      setAlarm: unused,
-      deleteAlarm: unused,
-      sync: unused,
-      getCurrentBookmark: unused,
-      getBookmarkForTime: unused,
-      onNextSessionRestoreBookmark: unused,
-      kv: { get: unused, list: unused, put: unused, delete: unused },
-    },
-    waitUntil: unused,
+    }),
     exports: {
       IsolateTail: ({ props }: { props: typeof Props.Type }) => {
         const tail = harness.tail();
@@ -186,18 +178,7 @@ const projectWalk = Effect.fnUntraced(function* (
       },
     },
     props: undefined,
-    facets: { get: unused, delete: unused, abort: unused, clone: unused },
-    blockConcurrencyWhile: unused,
-    acceptWebSocket: unused,
-    getWebSockets: unused,
-    setWebSocketAutoResponse: unused,
-    getWebSocketAutoResponse: unused,
-    getWebSocketAutoResponseTimestamp: unused,
-    setHibernatableWebSocketEventTimeout: unused,
-    getHibernatableWebSocketEventTimeout: unused,
-    getTags: unused,
-    abort: unused,
-  };
+  });
 
   const loads = new Map<string, unknown>();
   const reported: Array<{ object: string; rows: ReadonlyArray<typeof IsolateUsage.Usage.Type> }> = [];
