@@ -496,11 +496,8 @@ describe("each rule refuses what it is there to refuse", () => {
 
     // The two plants hold the same lines in the same order, so one line number is one line of each.
     expect(viMethods.text).toEqual(viProperties.text);
-    expect(held).toEqual(
-      Arr.flatMap(Arr.zip(VI_METHODS.lines, VI_PROPERTIES.lines), ([[, byVitest], [, byProperties]], at) =>
-        byVitest || byProperties ? [VI_METHODS.prelude.length + at + 1] : [],
-      ),
-    );
+    // Each plant's `want` is the lines it marks refused; the lock holds the union of the two.
+    expect(held).toEqual([...new Set([...viMethods.want, ...viProperties.want])].sort((a, b) => a - b));
   });
 
   it("built in, on with 0 hits: import(no-self-import)", () => {
