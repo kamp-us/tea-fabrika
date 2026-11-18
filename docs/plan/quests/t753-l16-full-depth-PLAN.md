@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0122; body b4cf6a0abbba
+Approved by the lead agent, builds 0122; body 635a36fa6321
 Plancheck-Version: 3
 # T753 L16 fits its 60 s bound at full depth, next/
 
@@ -461,6 +461,53 @@ steps are many times longer, so the figure below is a budget estimate scaled by 
 measured spend. It assumes tests, build, one review and one likely send-back.
 
 Estimate: 4 steps, $60
+
+## Amendment 1, 2026-11-18, by the lead
+
+The build met the doubt this plan opened with, and stopped as "Doubt first" asks. These are the lead's
+calls on what came back. None is a new design call, and none loosens a law.
+
+**Measured.** L16 at full depth, the 4-core cloud box, Node 26.13.0, one worker, five runs each:
+
+| Cell | Runs (s) | Median |
+|---|---|---|
+| Before, alone (main's L16 code, head d54d299ba) | 37.2, 38.4, 39.5, 37.3, 38.3 | 38.3 |
+| Before, alone (a6761bce) | 38.3, 37.9, 37.9, 38.1, 38.5 | 38.1 |
+| Before, loaded (a6761bce) | 39.7, 40.7, 39.3, 38.0, 38.3 | 39.3 |
+| After A only, alone (the build) | 37.3, 36.0, 34.0, 34.7 | 35.4 |
+| After A and B, alone (9c6598413) | 28.2, 29.6, 29.2, 28.2, 28.8 | 28.8 |
+| After A and B, loaded (9c6598413) | 30.6, 28.7, 28.4, 30.1, 30.8 | 30.1 |
+
+"Loaded" is the law started beside a second vitest process running `entry-flows.laws.test.ts`,
+`readers.laws.test.ts` and `reload.laws.test.ts` at full depth with two workers, three workers in all,
+as "Validation" says. After the fix, L16 is about 25% faster alone and 23% faster loaded.
+
+**The guess that was wrong.** "Doubt first" put A's saving between a few seconds and 14 s. It saved about
+3 s: the per-span transaction was not the cost, the per-row work is (a validated `SpanRow.make`, a JSON
+encode and two inserts, about 47 microseconds per span). B saved about 8 s, twice the hack's 4 s.
+
+**The bar.** The 25 s alone bar was this plan's own margin guess, set before anything was measured. It is
+replaced by the two cells that decide the bound: loaded at most 40 s (met, 30.1 s median, max 30.8 s) and
+the PR's own `related` job at most 45 s. The `related` job runs only once the PR is out of draft, so that
+time is checked after the review, before the PR is armed. If it is over 45 s, the PR goes back for a
+further cut (the per-row sink work, the Quotas SQL, the ledger fold), which is a new amendment.
+
+**The build's deviations, accepted.**
+
+- `batch` also installs a collecting tracer that wraps the running one. The reference-only shape lost
+  every span of a batch run with no sink tracer installed, which broke U3 and the desktop brain. A span
+  the running tracer already made through this sink is kept as it is, so the wrappers' tags stay. A3
+  holds that.
+- The step's snapshot is dropped on the runner's `start`, `exit` and `down` writes only. `ack`, `dead`,
+  `monitor` and `demonitor` write lines the process table's `status` does not read.
+- The snapshot belongs to the fiber that holds the permit (a `Context.Reference`), with an epoch that a
+  write moves, so an answer a write overtook is not kept. A read outside a step is always fresh.
+- `ensure` reads `status` fresh while `supervision` is null, and from the step's snapshot after that.
+  The review checks that `at` still comes from a fresh read where the referee needs one.
+- `publish` gets a batch that commits nothing today: its spans are not made by the sink's tracer.
+
+**Sent back.** B2's three snapshot plants stay green on the build, so B2 does not bite. The tests step
+strengthens it, so that each named plant turns it red, before the review.
 
 ## Ready tracker ticket
 
