@@ -68,12 +68,21 @@ export const measured: Readonly<Record<string, number>> = readTable(join(import.
  * rows above, one leg of scheduled runs 43723335863 and 43771306886 got about 2100 s of files where
  * the others had 1000 to 1500 s, started watch.laws last, and ran into the job's limit.
  *
- * Each row is the median of the file's seconds in attempt 1 of the three green scheduled runs on
- * main 43726565395 (at 27512b5f7), 43734956911 (at d795d772e) and 43765797242 (at f3313803f), or the
- * larger of those in hand when a run did not hold the file, rounded to one decimal, read from each
- * leg's Vitest report (the `results-next-1` to `-5` artifacts) as `shard-times` reads one. A file
- * with no row here falls back to its row above, then to the median. Refresh a row from the report a
- * scheduled run's leg uploads, or from the leg's time table, which lists its slowest files.
+ * Each row is the median of the file's seconds in attempt 1 of three runs, or the larger of those in
+ * hand when a run did not hold the file, rounded to one decimal. The runs are the pull request check
+ * run 44201566907 (the related legs and the two end-to-end legs) and the scheduled full runs on main
+ * 44155250216 and 44077224612 (the five next legs, the two tooling legs and the two end-to-end legs).
+ * A sample is the file's seconds in its leg's time table, which lists the leg's ten slowest files and
+ * prints the report's `(endTime - startTime) / 1000` to one decimal, as `shard-times` reads it. The
+ * 93 files that were among a leg's ten slowest in at least one run are set here: next/ files,
+ * end-to-end (visual) files and tooling files alike, since every test leg runs at full depth. Each
+ * sample's run, leg and job id are kept in `fullSamples` in vitest.shards.test.ts, which holds each
+ * row to this rule, because GitHub drops job logs after 90 days. A file that was in no leg's ten
+ * slowest keeps the row an older run gave it, which may be stale, and a file seen in one run only
+ * leans heavy. The two Toml settings files under next/packages/libfabrika/src/settings are in no
+ * sample and keep their rows, which pull request 1583 moves. A file with no row here falls back to
+ * its row above, then to the median. Refresh a row from the report a scheduled run's leg uploads, or
+ * from the leg's time table.
  */
 export const full: Readonly<Record<string, number>> = readTable(join(import.meta.dirname, "vitest.shards.full.json"));
 
