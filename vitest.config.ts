@@ -44,6 +44,10 @@ const NEXT = [
 
 const INTEGRATION = ["next/**/*.integration.test.{ts,tsx}", "kalfa/**/*.integration.test.{ts,tsx}"];
 const VISUAL = ["next/**/*.visual.test.{ts,tsx}"];
+// A visual file under kalfa/ is in no vitest project yet: the `next` project's `kalfa/` glob would
+// take it, so that project leaves it out. `INTEGRATION` cannot reach one: its names end in
+// `.integration.test`, a visual file's in `.visual.test`.
+const KALFA_VISUAL = ["kalfa/**/*.visual.test.{ts,tsx}"];
 
 // A toy repo's tests under a skill's scripts are its subject, as with `fixtures/` above.
 const EXCLUDE = [
@@ -246,7 +250,10 @@ const VISUAL_LIMIT = 120_000;
 export const projects = [
   { extends: true, test: { name: "today", include: [...TODAY], exclude: [...EXCLUDE] } },
   { extends: true, test: { name: "tooling", include: [...TOOLING], exclude: [...EXCLUDE] } },
-  { extends: true, test: { name: "next", include: [...NEXT], exclude: [...EXCLUDE, ...INTEGRATION, ...VISUAL] } },
+  {
+    extends: true,
+    test: { name: "next", include: [...NEXT], exclude: [...EXCLUDE, ...INTEGRATION, ...VISUAL, ...KALFA_VISUAL] },
+  },
   { extends: true, test: { name: "next-integration", include: [...INTEGRATION], exclude: [...EXCLUDE] } },
   {
     extends: false,
