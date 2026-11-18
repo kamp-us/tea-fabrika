@@ -110,6 +110,8 @@ export const summary = (entries: ReadonlyArray<Level.Entry>): ReadonlyArray<stri
         canceled.add(e.run.branch);
         break;
       case "failed":
+      case "refused":
+      case "limited":
         failed += 1;
         break;
       case "closed":

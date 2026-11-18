@@ -28,6 +28,12 @@
 // not count. With no matching automatic route, the branch's newest older scheduled run counts: a green full run arms with
 // the note; a changed-set run, or one red or not ended, refuses. Read through its module:
 // `Arm.arm(...)`.
+//
+// Neither route asks for an `.integration.` law (0602): a branch's proof run runs none, on a full
+// set or a changed one (proof.ts, scheduled.yaml's `PROJECTS`), and a ready run's related legs are
+// the plain tooling laws its change reaches (related.ts's `onMergeLine`). Only main's full run runs
+// them, after the merge. Arm reads each job's name and how it ended, never which laws it ran, so
+// nothing here names a project.
 import { Effect, Option, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import { Job, type Run, Runs } from "../ci/Runs.ts";
@@ -127,7 +133,7 @@ const judge = Effect.fn("Arm.judge")(function* (run: Run) {
     : Verdict.cases.red.make({ run: run.id, jobs: bad });
 });
 
-/** Ready CI's required check covers both the existing matrix and the new related matrix. */
+/** Ready CI's required check covers both the existing next matrix and the related tooling matrix. */
 const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head: string) {
   const runs = yield* Runs;
   const { at } = pick(head, yield* runs.on(AUTOMATIC, branch));
@@ -171,7 +177,7 @@ const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head
 
   const related = jobs.filter((job) => job.name.startsWith("related"));
 
-  // A legacy or draft run never stands in for ready CI's new resource coverage.
+  // A legacy or draft run never stands in for ready CI's related coverage, its plain tooling laws.
   if (
     (!jobs.some((job) => job.name === "select") && related.length === 0) ||
     jobs.some((job) => job.name === "ci-required (draft)" || job.name === "lint")

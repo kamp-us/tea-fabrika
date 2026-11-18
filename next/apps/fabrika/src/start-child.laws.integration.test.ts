@@ -2,7 +2,7 @@
 // Outside only: real workerd,
 // sockets, object storage, alarms and the private local instance capability, set up as ticket 402's
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
-import { it as effectIt } from "@effect/vitest";
+import { it as effectIt, layer } from "@effect/vitest";
 
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
@@ -17,6 +17,7 @@ import {
   Array as Arr,
   String as Str,
   Clock,
+  Context,
   DateTime,
   Effect,
   Exit,
@@ -41,6 +42,8 @@ import {
   type Key,
   letter,
   PROJECT,
+  type ProjectTemplate,
+  projectTemplate,
   SENT,
 } from "./start-child.test-support.ts";
 
@@ -559,13 +562,14 @@ type StorageCut = { path: StoragePath; operation: number; statement: string };
 
 const storageCall = Effect.fnUntraced(function* (
   path: StoragePath,
+  template: ProjectTemplate,
   inspect: (
     fixture: Effect.Success<ReturnType<typeof childProject>>,
     call: Effect.Effect<unknown, Rejected>,
     reopen: Effect.Effect<void>,
   ) => Effect.Effect<void, unknown, Scope.Scope>,
 ) {
-  const fixture = yield* childProject();
+  const fixture = yield* childProject(template);
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   let runtime = yield* Scope.provide(scope)(fixture.acquire());
@@ -705,26 +709,51 @@ const storageCall = Effect.fnUntraced(function* (
   return printed;
 });
 
-const storageSecrets = Effect.fnUntraced(function* () {
-  const remaining: Array<StorageCut> = [];
+/** One booted Project, and every storage operation of every flow in inventory order. */
+class StorageInventory extends Context.Service<
+  StorageInventory,
+  { readonly template: ProjectTemplate; readonly inventory: ReadonlyArray<StorageCut> }
+>()("p42/StartChildLaws.StorageInventory") {}
 
-  for (const path of StoragePath) {
-    yield* Effect.scoped(
-      storageCall(path, (fixture, call) =>
-        Effect.gen(function* () {
-          fixture.observe();
-          yield* call;
-          const statements = fixture.observed();
-          expect(statements.length, `L11: ${path} reached storage`).toBeGreaterThan(0);
-          Arr.forEach(statements, (statement, operation) => {
-            remaining.push({ path, operation, statement });
-          });
-        }),
-      ),
-    );
-  }
+// Built once for all 16 parts. Every cut, the inventory's included, restarts its own copy of one
+// booted Project. A cold boot of its own per cut was about half of this law's time: 16.5 ms and
+// 264 statements, against about 10 ms and 99 statements for a restart (profiled on 2026-11-17).
+const StorageInventoryLive = Layer.effect(
+  StorageInventory,
+  Effect.gen(function* () {
+    const template = yield* projectTemplate();
+    const inventory: Array<StorageCut> = [];
 
-  const inventory = [...remaining];
+    for (const path of StoragePath) {
+      yield* Effect.scoped(
+        storageCall(path, template, (fixture, call) =>
+          Effect.gen(function* () {
+            fixture.observe();
+            yield* call;
+            const statements = fixture.observed();
+            expect(statements.length, `L11: ${path} reached storage`).toBeGreaterThan(0);
+            Arr.forEach(statements, (statement, operation) => {
+              inventory.push({ path, operation, statement });
+            });
+          }),
+        ),
+      );
+    }
+
+    return { template, inventory };
+  }),
+);
+
+/**
+ * One flow's part of the storage law. Every part walks the same 100 walks at seed 119120, with the
+ * same picks and the same list of operations still to cut, so every part chooses exactly the cuts
+ * the whole law chose, in the same order. A part runs only the cuts in its own flow; the others it
+ * only marks as chosen. The 16 parts' cuts are the whole law's cuts, each run once.
+ */
+const storageSecrets = Effect.fnUntraced(function* (part: StoragePath) {
+  const { template, inventory } = yield* StorageInventory;
+  const remaining = [...inventory];
+  const own = Arr.filter(inventory, (cut) => cut.path === part);
   const reached = new Set<string>();
   const leaks = new Set<string>();
   const perWalk = Math.max(4, Math.ceil(inventory.length / 100));
@@ -748,13 +777,23 @@ const storageSecrets = Effect.fnUntraced(function* () {
     let moves = 0;
 
     const step = Effect.fnUntraced(function* (pick: SecretPick) {
-      // The model records completed cuts only. Pick an unvisited operation that its prepared
-      // process state can reach, or repeat a visited one once the whole inventory is covered.
+      // Pick an operation no walk has chosen yet, or repeat one once the whole inventory has been
+      // chosen. Every part makes this same choice; only the part that owns the cut's flow runs it.
       const available = remaining.length > 0 ? remaining : inventory;
       const cut = available[pick.point % available.length];
 
       if (cut === undefined) {
         return yield* Effect.die("empty storage inventory");
+      }
+
+      moves++;
+
+      if (remaining.length > 0) {
+        remaining.splice(remaining.indexOf(cut), 1);
+      }
+
+      if (cut.path !== part) {
+        return;
       }
 
       const marker = forms(secret)[pick.encoding] ?? secret;
@@ -768,7 +807,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
       const outputs: Record<ChildOutput, Array<string>> = { reply: [], row: [], span: [], log: [] };
 
       const printed = yield* Effect.scoped(
-        storageCall(cut.path, (fixture, call, reopen) =>
+        storageCall(cut.path, template, (fixture, call, reopen) =>
           Effect.gen(function* () {
             fixture.observe(cut.operation, fault);
             const outcome = yield* call.pipe(Effect.result);
@@ -806,12 +845,6 @@ const storageSecrets = Effect.fnUntraced(function* () {
       }
 
       reached.add(`${cut.path}/${cut.operation}`);
-
-      if (remaining.length > 0) {
-        remaining.splice(remaining.indexOf(cut), 1);
-      }
-
-      moves++;
     });
 
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), commands));
@@ -826,18 +859,22 @@ const storageSecrets = Effect.fnUntraced(function* () {
     ),
   );
   expect(remaining, "L11: every storage operation in every flow was cut").toEqual([]);
-  expect(reached.size).toBe(inventory.length);
+  expect(reached.size, `L11: every ${part} operation was cut`).toBe(own.length);
   expect(
     [...leaks].sort(),
-    `L11: ${reached.size} storage operations were cut; storage text or metadata reached these outputs`,
+    `L11: ${reached.size} ${part} storage operations were cut; storage text or metadata reached these outputs`,
   ).toEqual([]);
 });
 
 describe("P42 slice 1: a code start on the real Worker path", () => {
-  effectIt.effect(
-    "L11: every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs",
-    storageSecrets,
-  );
+  layer(StorageInventoryLive)("L11 storage walk, one part per flow", (storage) => {
+    for (const path of StoragePath) {
+      storage.effect(
+        `L11: every storage read and write in the ${path} flow keeps error text and metadata out of outputs`,
+        () => storageSecrets(path),
+      );
+    }
+  });
 
   for (const path of ["descriptor", "recovery", "configuration", "exit"] as const) {
     for (const output of ["reply", "span", "row", "log"] as const) {

@@ -3,10 +3,9 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeAll, it as laws } from "@effect/vitest";
+import { beforeAll, expect, it } from "@effect/vitest";
 import { Config, Effect, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
 import { readers } from "./changes.mjs";
 import {
   budgetOf,
@@ -59,7 +58,8 @@ const pr: Run = { event: "pull_request", scope: "all", base, visual: true };
 const plainPr: Run = { ...pr, visual: false };
 
 // A merge line run that tests all of next/ from a base commit, the runs legs.ts sizes (0534), with
-// the visual flag either way: only a pull request's counts (0536).
+// the visual flag either way: only a pull request's counts, and a push to main runs the visual files
+// it reaches without one (0536).
 const line = fc
   .tuple(fc.constantFrom("pull_request", "merge_group", "push"), fc.stringMatching(/^[a-f0-9]{40}$/), fc.boolean())
   .filter(([, sha]) => !/^0+$/.test(sha))
@@ -173,10 +173,12 @@ it("scenario: every next/ file selected, with today's table, gives exactly today
 // 0534 narrowed this law: the merge queue and a push to main left it. They size their legs as a pull
 // request does, so none of the three runs the whole suite; the schedule does. Ticket 997 narrowed it
 // again: a run of the reader tests alone left it, and is sized (the law below).
-it("property: a run of all of next/ with no base commit, or an event off the merge line, gives the full vitest legs, and visual legs only where asked", () => {
-  // Plant: drop the base check (red on no base). 0536, plants, each run once on legs.ts and
-  // restored: `visual` always true (red: the merge queue got e2e legs); `visual` without the pull
-  // request check (red: a push with the flag got them).
+it("property: a run of all of next/ with no base commit, or an event off the merge line, gives the full vitest legs, and visual legs only on a push to main or a pull request that asked", () => {
+  // Plant: drop the base check (red on no base). 0536 and the owner's ruling of 2026-11-18, plants,
+  // each run once on legs.ts and restored: `visual` always true (red: the merge queue got e2e legs);
+  // `visual` without the pull request check (red: a queue group with the flag got them); PR 1581's
+  // `LINE.has(run.event) || run.visual` back (red: a pull request without the label and the merge
+  // queue got them); the push dropped (red: a first push to main lost them).
   fc.assert(
     fc.property(
       picked(),
@@ -197,7 +199,7 @@ it("property: a run of all of next/ with no base commit, or an event off the mer
           .map(([event, scope, visual]): Run => ({ event, scope, base, visual })),
       ),
       ({ selected, table }, run) => {
-        const asked = ["pull_request", "merge_group", "push"].includes(run.event) || run.visual;
+        const asked = run.event === "push" || (run.event === "pull_request" && run.visual);
         expect(size(run, selected, full, limit, table)).toEqual({ vitest: full.vitest, e2e: asked ? full.e2e : 0 });
       },
     ),
@@ -219,18 +221,19 @@ it("property: a run of all of next/ with no base commit, or an event off the mer
   );
 });
 
-it("property: a merge queue group and a push to main size their legs as a pull request without the visual label does", () => {
+it("property: a merge queue group sizes its legs as a pull request without the visual label does, and a push to main as one with it", () => {
   // Plant: the old `run.event === "pull_request"` in `sizes` (red on merge_group and push). 0536,
-  // plant, run once on legs.ts and restored: `visual` without the pull request check (red: a queue
-  // group with the flag got e2e legs).
+  // plants, each run once on legs.ts and restored: `visual` without the pull request check (red: a
+  // queue group with the flag got e2e legs); the push dropped (red: a push lost its e2e legs).
   fc.assert(
     fc.property(
       picked(),
       line.filter((run) => run.event !== "pull_request"),
       ({ selected, table }, run) => {
-        expect(size(run, selected, full, limit, table)).toEqual(size(plainPr, selected, full, limit, table));
+        const like = run.event === "push" ? pr : plainPr;
+        expect(size(run, selected, full, limit, table)).toEqual(size(like, selected, full, limit, table));
         expect(outputs(run, size(run, selected, full, limit, table), selected)).toEqual(
-          outputs({ ...plainPr, base: run.base }, size(plainPr, selected, full, limit, table), selected),
+          outputs({ ...like, base: run.base }, size(like, selected, full, limit, table), selected),
         );
       },
     ),
@@ -247,18 +250,51 @@ it("property: a merge queue group and a push to main size their legs as a pull r
   );
 });
 
-it("property: a sized pull request selects related visual files without requiring a label", () => {
-  // 0536. Plant, run once on legs.ts and restored: size e2e as if every pull request asked (red).
+// A sized merge queue group, with the visual flag either way: no label reaches the queue.
+const group = line.filter((run) => run.event === "merge_group");
+
+it("property: a sized pull request without the visual label, and every merge queue group, start no end-to-end leg, whatever they selected", () => {
+  // 0536 and the owner's ruling of 2026-11-18: a visual law needs a browser or Electron, so it stays
+  // off the pull request and the merge queue unless a pull request asks. Plants, each run once on
+  // legs.ts and restored: size e2e as if every pull request asked (red); PR 1581's
+  // `LINE.has(run.event) || run.visual` back (red: both got e2e legs).
   fc.assert(
-    fc.property(picked(), ({ selected, table }) => {
-      const legs = size(plainPr, selected, full, limit, table);
-      expect(legs.e2e).toBe(size(pr, selected, full, limit, table).e2e);
+    fc.property(picked(), fc.oneof(fc.constant(plainPr), group), ({ selected, table }, run) => {
+      const legs = size(run, selected, full, limit, table);
+      expect(legs.e2e).toBe(0);
       expect(legs.vitest).toBe(size(pr, selected, full, limit, table).vitest);
-      expect(shards(legs).filter((leg) => leg.startsWith("e2e-")).length).toBe(legs.e2e);
+      expect(shards(legs).some((leg) => leg.startsWith("e2e-"))).toBe(false);
     }),
     options,
   );
 });
+
+it.prop(
+  "property: a sized pull request with the visual label, and a push to main, start the end-to-end legs their visual files need",
+  {
+    event: Schema.Literals(["pull_request", "push"]),
+    flag: Schema.Boolean,
+    rows: Schema.Array(
+      Schema.Tuple([
+        Schema.String.check(Schema.isPattern(/^next\/[a-z]{1,8}\.visual\.test\.ts$/)),
+        Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 600 })),
+      ]),
+    ).check(Schema.isMaxLength(12)),
+  },
+  ({ event, flag, rows }) => {
+    // The label still asks, and a push to main keeps the visual files its change reaches. No label
+    // reaches a push, so its flag is either way. Plants, each run once on legs.ts and restored:
+    // `visual` false on every run (red: both lost their e2e legs); the push dropped (red: a push
+    // lost them).
+    const run: Run = { event, scope: "all", base, visual: event === "pull_request" || flag };
+    const files = rows.map(([path]) => path);
+    const table = Rec.fromEntries(rows);
+    expect(size(run, { vitest: [], e2e: files }, full, limit, table).e2e).toBe(
+      fewest(files, full.e2e, limit.e2e, table),
+    );
+  },
+  { arbitrary: { runs: 100 } },
+);
 
 it("property: every selected file lands on exactly one leg, on any count up to the full one", () => {
   // `split` is the cut `Shards` keeps on each leg (vitest.shards.test.ts, E6). Plant: keep a file on
@@ -424,27 +460,33 @@ it("property: the size step's BUDGET is a positive number of seconds, and anythi
   );
 });
 
-it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queue with no base commit, with no list", () => {
-  // scenario: no BASE, so nothing to diff with; the list step would need git and an install.
-  const output = join(mkdtempSync(join(tmpdir(), "legs-test-")), "out");
+// 0536: the merge queue never starts the visual legs; a push to main keeps them.
+it.each([
+  ["the merge queue", "merge_group", 'shards=["1","2","3","4","5"]\nvitest=5\ne2e=0\nnext=true\n'],
+  ["a push to main", "push", 'shards=["e2e-1","e2e-2","1","2","3","4","5"]\nvitest=5\ne2e=2\nnext=true\n'],
+])(
+  "scenario: the main prints the full matrix to GITHUB_OUTPUT in %s with no base commit, with no list",
+  (_, event, printed) => {
+    // scenario: no BASE, so nothing to diff with; the list step would need git and an install.
+    // Plants, each run once on legs.ts and restored: PR 1581's `LINE.has(run.event) || run.visual`
+    // back (red: the queue printed e2e legs); the push dropped (red: the push printed none).
+    const output = join(mkdtempSync(join(tmpdir(), "legs-test-")), "out");
 
-  const done = spawnSync(process.execPath, [fileURLToPath(new URL("./legs.ts", import.meta.url))], {
-    encoding: "utf8",
-    env: {
-      PATH: Effect.runSync(Config.String("PATH")),
-      EVENT: "merge_group",
-      FILTER: "next/",
-      BUDGET: String(budget),
-      GITHUB_OUTPUT: output,
-    },
-  });
+    const done = spawnSync(process.execPath, [fileURLToPath(new URL("./legs.ts", import.meta.url))], {
+      encoding: "utf8",
+      env: {
+        PATH: Effect.runSync(Config.String("PATH")),
+        EVENT: event,
+        FILTER: "next/",
+        BUDGET: String(budget),
+        GITHUB_OUTPUT: output,
+      },
+    });
 
-  expect(done.status).toBe(0);
-  // 0536: the merge queue never starts the visual legs.
-  expect(readFileSync(output, "utf8")).toBe(
-    'shards=["e2e-1","e2e-2","1","2","3","4","5"]\nvitest=5\ne2e=2\nnext=true\n',
-  );
-});
+    expect(done.status).toBe(0);
+    expect(readFileSync(output, "utf8")).toBe(printed);
+  },
+);
 
 // PR 1235: the reader tests (changes.mjs's `readers`) read source as text, so `--changed` misses
 // them. A sized run adds them to the vitest files, each once, and every vitest leg runs that list.
@@ -732,7 +774,7 @@ const expectOrdinary = (files: Ordinary, mask: readonly boolean[], filter: strin
 
 // Each run starts a process, about a second, so the property is a dozen runs: a hundred would pass the
 // 60 s test limit. The routes it may miss are each pinned below as a scenario.
-laws.prop(
+it.prop(
   "property: the size step lists the whole ordinary project, Kalfa's laws included, full or changed, and narrows to the readers only for the exact reader filter",
   {
     files: OrdinaryFiles,

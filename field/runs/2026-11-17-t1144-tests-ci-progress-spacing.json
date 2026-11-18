@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1144-tests-ci-progress-spacing",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567",
+  "started": "2026-11-17T08:05:42-08:00",
+  "ended": "2026-11-17T08:07:35-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "driver_caused": false,
+  "billed": null,
+  "why": "Today's CI tooling, tracker 1144. Repaired the ordinary PR lint failure in check run 44117068607. Exact-source scoped lint reproduced anti-slop(require-readable-spacing) at progress-reporter.integration.test.ts:366: a blank line was missing after the new multiline journal declaration. Added exactly one blank line. Every non-whitespace source token and every other tracked file stayed unchanged before this row. No assertion, count, schema, guard, timeout, output, measurement or journal behavior changed.",
+  "note": "The earlier measurement-construction row and report incorrectly called final scoped lint green. Its last command batch ended with a successful syntax check and masked the prior lint exit 1; the final log was not inspected. This row records that correction without editing the immutable earlier row. The full failed step and all ten check annotations were read; annotations contained only a generic exit failure, warnings and self-cancellation. Exact-source owned scoped lint then exposed the actual blocking line. Its red log is retained privately. After the one-line fix, strict exit handling confirms formatting, all eight owned source files scoped lint at zero blocking/advice, and syntax checks pass. No whole compiler, full lint, real child/signal law, CI action, signing, push or Arm ran for this repair. All four prior scheduled runs, four latest P8 receipts, all nine historical overhead pairs and all six new paired measurements remain unchanged. Root reads this new head before further CI or publication.",
+  "base": "10c453d6aa3d3e6d142ba0924eebe8ebbc3f0775",
+  "sourceHashes": {
+    ".github/ci/progress-reporter.integration.test.ts": "e74369f01fd21cf161d42728c49f0a46c85c7708380f03603fa9bf4470dcefa3"
+  },
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44117068607/job/134158085142",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44117144227"
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 1.88,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}
