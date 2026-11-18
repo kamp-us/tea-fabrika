@@ -1,5 +1,5 @@
 /**
- * What the four checks report, one union for all of them (decisions 0605 to 0608). Each case is one
+ * What the four checks report, one union for all of them (decisions 0605 to 0607, and 0610 for the map). Each case is one
  * place that breaks one rule; the words that teach the rule are in `cli.ts`.
  */
 import { Schema } from "effect";
@@ -19,7 +19,7 @@ export const DecisionId = Schema.String.check(Schema.isPattern(/^\d{4}$/));
  * - `status` (0606): the decision's `id`, `status` or `successor` is not what its file and the two statuses say. `raw` is the value as written.
  * - `patch` (0605): a decision that patches another, in one of the three forms.
  * - `link` (0607): a link to a superseded record, `target`, whose successor `live` is the record to link.
- * - `map` (advice, never a failure): the instruction file `path` has more `lines` than `max`.
+ * - `map` (0610; advice, never a failure): the instruction file `path` has more `lines` than `max`.
  *
  * `line` counts from 1.
  *

@@ -7,7 +7,7 @@
  * `check` runs all four checks, or the one named, in the folder it is run in (the repo's root). It prints
  * each finding as a line that starts with its place, and may go on in indented lines that say what to
  * do instead and which decision says so, then the count. A status, patch or link finding fails the
- * command, so `pnpm lint` fails. A map finding is advice: its last line ends in "(advice)" and it never
+ * command, so `pnpm lint` fails. A map finding is advice (0610): its last line ends in "(advice)" and it never
  * fails the command. With nothing to say, `check` prints nothing and succeeds.
  */
 import { Console, Effect, Option, Path, Schema } from "effect";
@@ -56,7 +56,7 @@ const words = (finding: Finding) =>
     link: ({ path, line, target, live }) =>
       `${path}:${line}  links ${target}, which is superseded.\n  Link ${live}, or the rule's home (0607).`,
     map: ({ path, lines, max }) =>
-      `${path}  ${lines} lines, over ${max}.\n  A shorter map is followed better: move text to its home (advice)`,
+      `${path}  ${lines} lines, over ${max}.\n  A shorter map is followed better: move text to its home, as 0610 says (advice)`,
   });
 
 /** Path order: the place a finding starts at, then its line. A map finding has no line. */
@@ -118,6 +118,6 @@ const check = Command.make(
  * @category utils
  */
 export const records = Command.make("records").pipe(
-  Command.withDescription("The checks on our records (decisions 0605 to 0608)"),
+  Command.withDescription("The checks on our records (decisions 0605 to 0607, and 0610 for the map)"),
   Command.withSubcommands([check]),
 );

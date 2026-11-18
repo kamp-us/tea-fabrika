@@ -33,30 +33,45 @@ const Written = Schema.Struct({
  *
  * **Details**
  *
- * `accepted` has no successor and `superseded` has one, four digits. Anything else is one `status` finding at `at`, with the status as it was written (`""` when it is missing or not text).
+ * `accepted` has no successor and `superseded` has one, four digits. Anything else is one `status` finding, with the value as it was written (`""` when it is missing or not text). A status that is not one of the two, and a `superseded` with no successor, are reported at `at.line`, the status line, with the status as `raw`. A successor that is wrong, one that is not four digits or one that an `accepted` record has, is reported at `at.successor`, the `successor:` line, with the successor as `raw`; with no `at.successor`, at `at.line`.
  *
  * @category constructors
  */
 export const decodeStatus = (
   frontmatter: unknown,
-  at: { readonly path: string; readonly line: number },
+  at: { readonly path: string; readonly line: number; readonly successor?: number },
 ): Result.Result<Status, Finding> => {
   const written = Schema.decodeUnknownResult(Written)(frontmatter);
 
-  const raw =
-    Predicate.hasProperty(frontmatter, "status") && Predicate.isString(frontmatter.status) ? frontmatter.status : "";
+  const value = (key: string) => (Predicate.hasProperty(frontmatter, key) ? frontmatter[key] : undefined);
 
-  const wrong = Result.fail(Finding.cases.status.make({ path: at.path, line: at.line, raw }));
+  const text = (key: string) => {
+    const written = value(key);
+
+    return Predicate.isString(written) ? written : "";
+  };
+
+  const wrong = (key: "status" | "successor") =>
+    Result.fail(
+      Finding.cases.status.make({
+        path: at.path,
+        line: key === "successor" ? (at.successor ?? at.line) : at.line,
+        raw: text(key),
+      }),
+    );
+
+  const status = value("status");
+  const named = status === "accepted" || status === "superseded";
 
   if (Result.isFailure(written)) {
-    return wrong;
+    return wrong(named && value("successor") !== undefined ? "successor" : "status");
   }
 
-  const { status, successor } = written.success;
+  const { successor } = written.success;
 
-  if (status === "accepted") {
-    return successor === undefined ? Result.succeed(Status.cases.accepted.make({})) : wrong;
+  if (written.success.status === "accepted") {
+    return successor === undefined ? Result.succeed(Status.cases.accepted.make({})) : wrong("successor");
   }
 
-  return successor === undefined ? wrong : Result.succeed(Status.cases.superseded.make({ successor }));
+  return successor === undefined ? wrong("status") : Result.succeed(Status.cases.superseded.make({ successor }));
 };

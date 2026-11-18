@@ -4,25 +4,16 @@
  * still holds, and no sentence that says a rule is carried forward. Fenced and inline code are not read,
  * since 0605 and its neighbors quote the forms they forbid.
  *
- * The heading is read line by line. The two sentences are read as a block, because a sentence breaks
- * across lines and its links hold dots: the prose of a paragraph or list item is joined with single
- * spaces, and each Markdown link is replaced by its text, before the patterns match.
+ * The record is read as Markdown (`Markdown.ts`): each heading, paragraph, list item's paragraph and
+ * table cell is a block, with its links replaced by their text. The two sentences are read one sentence
+ * at a time, since a sentence breaks across lines and its links hold dots, and only a sentence that holds
+ * a record reference is a patch: plain English that says "the rest holds" or "carried forward" about a
+ * note, a count or a date is not.
  */
 import { Effect } from "effect";
 import { Finding } from "./Finding.ts";
 import { decisions } from "./Frontmatter.ts";
-import { prose } from "./Prose.ts";
-
-/** One prose line, as `prose` reads it. */
-type Line = ReturnType<typeof prose>[number];
-
-const HEADING = /^## Amendments\s*$/;
-
-/** A line that ends the block before it and stands alone: a Markdown heading. */
-const TITLE = /^\s{0,3}#{1,6}(\s|$)/;
-
-/** A line that starts a list item, and so a block of its own. */
-const ITEM = /^\s*([-*+]|\d+\.)\s/;
+import { markdown } from "./Markdown.ts";
 
 /** The words each form is, with `rest` or `carried` captured: where the finding's line is. */
 const SENTENCES = [
@@ -30,79 +21,27 @@ const SENTENCES = [
   { form: "carried-forward", pattern: /\b(carried) forward\b/dgi },
 ] as const;
 
-/** `[text](target)` and `[text][reference]`, with its text captured. */
-const LINK = /\[([^\]]*)\]\([^)]*\)|\[([^\]]*)\]\[[^\]]*\]/g;
+/** A date, which holds a four-digit number that is a year and not a record. */
+const DATE = /\b\d{4}-\d{2}-\d{2}\b/g;
 
-/** A block of prose: its text, and the file line of each character of it. */
-interface Block {
-  readonly text: string;
-  readonly lines: ReadonlyArray<number>;
-}
+/** A record's number: four digits on their own. */
+const NUMBER = /\b\d{4}\b/;
 
-/** Consecutive prose lines as blocks: a blank line, a heading, a list item's start or a fence ends one. */
-const blocks = (all: ReadonlyArray<Line>): ReadonlyArray<ReadonlyArray<Line>> => {
-  const found: Array<Array<Line>> = [];
-  let open: Array<Line> | undefined;
+/** The ranges of a block's text that are one sentence each: one ends at `.`, `!` or `?` and a space, or the block's end. */
+const sentences = (text: string): ReadonlyArray<{ readonly start: number; readonly end: number }> => {
+  const found: Array<{ start: number; end: number }> = [];
+  let start = 0;
 
-  for (const each of all) {
-    const last = open?.[open.length - 1];
+  for (let i = 0; i < text.length; i += 1) {
+    const end = ".!?".includes(text[i] ?? "") && (i + 1 === text.length || /\s/.test(text[i + 1] ?? ""));
 
-    if (each.text.trim() === "" || TITLE.test(each.text)) {
-      open = undefined;
-    } else if (open === undefined || last === undefined || each.line !== last.line + 1 || ITEM.test(each.text)) {
-      open = [each];
-      found.push(open);
-    } else {
-      open.push(each);
+    if (end || i + 1 === text.length) {
+      found.push({ start, end: i + 1 });
+      start = i + 1;
     }
   }
 
   return found;
-};
-
-/** The lines joined with single spaces, and each link replaced by its text, keeping the line of every character. */
-const joined = (lines: ReadonlyArray<Line>): Block => {
-  const text: Array<string> = [];
-  const at: Array<number> = [];
-
-  lines.forEach(({ line, text: each }, index) => {
-    const trimmed = each.trim();
-
-    if (index > 0) {
-      text.push(" ");
-      at.push(line);
-    }
-
-    for (const char of trimmed) {
-      text.push(char);
-      at.push(line);
-    }
-  });
-
-  const flat = text.join("");
-  const out: Array<string> = [];
-  const lineAt: Array<number> = [];
-  let from = 0;
-
-  const keep = (start: number, end: number) => {
-    for (let i = start; i < end; i += 1) {
-      out.push(flat[i] ?? "");
-      lineAt.push(at[i] ?? 0);
-    }
-  };
-
-  for (const link of flat.matchAll(LINK)) {
-    const label = link[1] ?? link[2] ?? "";
-    const start = link.index + 1;
-
-    keep(from, link.index);
-    keep(start, start + label.length);
-    from = link.index + link[0].length;
-  }
-
-  keep(from, flat.length);
-
-  return { text: out.join(""), lines: lineAt };
 };
 
 /**
@@ -116,22 +55,31 @@ export const check = Effect.fnUntraced(function* (root: string) {
   return all.flatMap(({ path, text }) => {
     const lines = text.split("\n");
     const end = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
-    const read = prose(text, end + 1);
 
-    const headings = read
-      .filter(({ text: each }) => HEADING.test(each))
-      .map(({ line }) => Finding.cases.patch.make({ path, line, form: "amendments" }));
+    return markdown(text, end + 1).blocks.flatMap((block) => {
+      const heading =
+        block.heading === 2 && block.text.trim() === "Amendments"
+          ? [Finding.cases.patch.make({ path, line: block.line, form: "amendments" })]
+          : [];
 
-    const sentences = blocks(read).flatMap((block) => {
-      const { text: flat, lines: at } = joined(block);
+      const found = sentences(block.text).flatMap(({ start, end: stop }) => {
+        const sentence = block.text.slice(start, stop);
+        const referenced = NUMBER.test(sentence.replace(DATE, "")) || block.refs.slice(start, stop).includes(true);
 
-      return SENTENCES.flatMap(({ form, pattern }) =>
-        [...flat.matchAll(pattern)].map((match) =>
-          Finding.cases.patch.make({ path, line: at[match.indices?.[1]?.[0] ?? 0] ?? 0, form }),
-        ),
-      );
+        return referenced
+          ? SENTENCES.flatMap(({ form, pattern }) =>
+              [...sentence.matchAll(pattern)].map((match) =>
+                Finding.cases.patch.make({
+                  path,
+                  line: block.lines[start + (match.indices?.[1]?.[0] ?? 0)] ?? 0,
+                  form,
+                }),
+              ),
+            )
+          : [];
+      });
+
+      return [...heading, ...found];
     });
-
-    return [...headings, ...sentences];
   });
 });

@@ -1,5 +1,5 @@
 /**
- * The map size check (advice, never a failure): an agent reads the root `AGENTS.md`, then the one of the
+ * The map size check (decision 0610; advice, never a failure): an agent reads the root `AGENTS.md`, then the one of the
  * folder it works in, and follows a short file better than a long one. A finding comes for each of those
  * files that has more than `maxLines` lines: the root, and each tracked `AGENTS.md` one folder down.
  */
@@ -8,7 +8,7 @@ import { Finding } from "./Finding.ts";
 import { read, Tracked } from "./Tracked.ts";
 
 /**
- * The most lines an `AGENTS.md` should have: Claude Code's memory guide says to keep each file "under 200 lines per file" (https://code.claude.com/docs/en/memory). It is a constant, not a setting.
+ * The most lines an `AGENTS.md` should have: Claude Code's memory guide says to keep each file "under 200 lines per file" (https://code.claude.com/docs/en/memory), as 0610 says. It is a constant, not a setting.
  *
  * @category constants
  */

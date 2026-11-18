@@ -136,7 +136,11 @@ const problems = (record: DecisionFile, known: ReadonlySet<string>): ReadonlyArr
     found.push(status(record.path, lineOf("id"), Predicate.isString(id) ? id : ""));
   }
 
-  const decoded = decodeStatus(values, { path: record.path, line: lineOf("status") });
+  const decoded = decodeStatus(values, {
+    path: record.path,
+    line: lineOf("status"),
+    successor: lineOf("successor"),
+  });
 
   if (Result.isFailure(decoded)) {
     found.push(decoded.failure);
