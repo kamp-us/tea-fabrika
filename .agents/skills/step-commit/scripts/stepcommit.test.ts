@@ -1028,25 +1028,32 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
           if (fault === "missing-page") {
             pages.pop();
           }
+
           if (fault === "wrong-count") {
             pages[0]!.total_commits -= 1;
           }
+
           if (fault === "wrong-ahead") {
             pages[0]!.ahead_by -= 1;
           }
+
           if (fault === "wrong-base") {
             pages[0]!.base_commit.sha = sha(5001);
           }
+
           if (fault === "duplicate") {
             pages[1]!.commits[0]!.sha = pages[0]!.commits[0]!.sha;
           }
+
           if (fault === "invalid-sha") {
             pages[0]!.commits[0]!.sha = "not-a-sha";
           }
+
           if (fault === "wrong-tip") {
             const lastPage = pages[pages.length - 1]!;
             lastPage.commits[lastPage.commits.length - 1]!.sha = sha(6000);
           }
+
           if (fault === "replaced-listed") {
             pages[0]!.commits[0]!.sha = sha(10000);
           }
@@ -1058,9 +1065,11 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
 
           expect(got.code, got.text).toBe(5);
           expect(got.text).toContain("open PRs cannot be read");
+
           if (fault === "replaced-listed") {
             expect(got.text).toContain("PR 609 compare omitted a listed PR commit");
           }
+
           expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
           expect(r.git("diff", "--cached", "--name-only")).toBe("");
           expect(r.signs()).toEqual([]);
