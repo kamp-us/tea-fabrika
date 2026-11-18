@@ -490,8 +490,14 @@ it.effect.prop(
 // the status gate narrowed to `status === "pending"`; the `runner_id == null` check dropped; the
 // calendar check in `timestamp` dropped; the zone part of `timestamp`'s regex dropped.
 const statuses = [
-  ...Array.from({ length: 4 }, () => "in_progress"),
-  ...Array.from({ length: 4 }, () => "completed"),
+  "in_progress",
+  "in_progress",
+  "in_progress",
+  "in_progress",
+  "completed",
+  "completed",
+  "completed",
+  "completed",
   "queued",
   "waiting",
   "requested",
@@ -505,7 +511,10 @@ const conclusions = [null, null, "success", "success", "failure", "cancelled", "
 const runnerPicks = 8;
 
 const timeKinds = [
-  ...Array.from({ length: 4 }, () => "z"),
+  "z",
+  "z",
+  "z",
+  "z",
   "z",
   "fraction",
   "fraction",
