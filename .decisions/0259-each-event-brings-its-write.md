@@ -1,7 +1,7 @@
 ---
 id: 0259
 title: In next/, a fact is an Event, each event brings its own write Cmd made by libfabrika and names its stream once, and Program.make reads the events off the machine's cmds
-status: accepted
+status: amended-in-part by [0601](0601-program-make-with-optional-pipes.md)
 date: 2026-11-08
 tags: [programs, program-shape, events, cmds, streams, next]
 ---

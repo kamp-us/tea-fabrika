@@ -1,7 +1,7 @@
 ---
 id: 0598
 title: The merge line leaves the scheduled job groups, and main's full run and branch proofs get their own groups inside the ten-job budget
-status: accepted
+status: amended-in-part by [0602](0602-integration-laws-leave-merge-line.md)
 date: 2026-11-17
 tags: [ci, concurrency, schedule, proof, runners, merge-line]
 ---

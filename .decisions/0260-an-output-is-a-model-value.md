@@ -1,7 +1,7 @@
 ---
 id: 0260
 title: In next/, a program's output is a value picked from its model and sent when it changes, never a Cmd, and null means nothing to send
-status: accepted
+status: amended-in-part by [0601](0601-program-make-with-optional-pipes.md)
 date: 2026-11-08
 tags: [programs, program-shape, outputs, pipes, next]
 ---

@@ -20,6 +20,7 @@ import { runsFor } from "@kampus/vitest";
 import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
@@ -36,8 +37,10 @@ import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
 
 import * as fc from "fast-check";
+import { type Expression, parseSync, type SpreadElement, Visitor } from "oxc-parser";
 import { assert, describe, expect, vi } from "vitest";
 import { expectTypeOf } from "vitest";
+import { hash } from "../../runtime/Built.ts";
 import type * as Dev from "./dev.ts";
 import { watchPrograms } from "./watch.ts";
 
@@ -220,6 +223,155 @@ const fixture = Effect.gen(function* () {
     })),
   };
 });
+
+const fixtureValue = (source: string) => {
+  const parsed = parseSync("watcher-fixture.mjs", source);
+
+  const top = new Set(
+    parsed.program.body.flatMap((statement) =>
+      statement.type === "ExpressionStatement" && statement.expression.type === "AssignmentExpression"
+        ? [statement.expression]
+        : [],
+    ),
+  );
+
+  const assignments: Array<{ right: Expression; nested: boolean }> = [];
+  const declarations: Array<{ name: string; init: Expression | null; nested: boolean; grouped: boolean }> = [];
+  let shadowed = false;
+  let writes = 0;
+  let depth = 0;
+  const enter = () => depth++;
+  const leave = () => depth--;
+
+  const bind = (node: { readonly type: string; readonly name?: string } | null) => {
+    if (node?.type === "Identifier" && node.name === "globalThis") {
+      shadowed = true;
+    }
+  };
+
+  new Visitor({
+    FunctionDeclaration(node) {
+      enter();
+      bind(node.id);
+      node.params.forEach(bind);
+    },
+    "FunctionDeclaration:exit": leave,
+    FunctionExpression(node) {
+      enter();
+      bind(node.id);
+      node.params.forEach(bind);
+    },
+    "FunctionExpression:exit": leave,
+    ArrowFunctionExpression(node) {
+      enter();
+      node.params.forEach(bind);
+    },
+    "ArrowFunctionExpression:exit": leave,
+    ClassDeclaration(node) {
+      bind(node.id);
+    },
+    ClassExpression(node) {
+      bind(node.id);
+    },
+    ImportDeclaration(node) {
+      for (const specifier of node.specifiers) {
+        bind(specifier.local);
+      }
+    },
+    CatchClause(node) {
+      bind(node.param);
+    },
+    ObjectPattern(node) {
+      for (const property of node.properties) {
+        bind(property.type === "RestElement" ? property.argument : property.value);
+      }
+    },
+    ArrayPattern(node) {
+      node.elements.forEach(bind);
+    },
+    AssignmentPattern(node) {
+      bind(node.left);
+    },
+    RestElement(node) {
+      bind(node.argument);
+    },
+    VariableDeclaration(node) {
+      for (const declaration of node.declarations) {
+        bind(declaration.id);
+
+        if (declaration.id.type === "Identifier") {
+          declarations.push({
+            name: declaration.id.name,
+            init: declaration.init,
+            nested: depth > 0,
+            grouped: node.declarations.length > 1,
+          });
+        }
+      }
+    },
+    AssignmentExpression(node) {
+      const left = node.left;
+      bind(left);
+
+      if (
+        left.type === "MemberExpression" &&
+        left.object.type === "Identifier" &&
+        left.object.name === "globalThis" &&
+        ((!left.computed && left.property.type === "Identifier" && left.property.name === "__p15") ||
+          (left.computed && left.property.type === "Literal" && left.property.value === "__p15") ||
+          (left.computed &&
+            left.property.type === "TemplateLiteral" &&
+            left.property.expressions.length === 0 &&
+            left.property.quasis[0]?.value.cooked === "__p15"))
+      ) {
+        writes++;
+
+        if (node.operator === "=" && !left.computed) {
+          assignments.push({ right: node.right, nested: !top.has(node) });
+        }
+      }
+    },
+  }).visit(parsed.program);
+
+  const kind = (node: Expression | SpreadElement | null | undefined) =>
+    node === null || node === undefined
+      ? "absent"
+      : node.type === "ArrayExpression" ||
+          node.type === "Identifier" ||
+          node.type === "Literal" ||
+          node.type === "UnaryExpression"
+        ? node.type
+        : "other";
+
+  const number = (node: Expression | SpreadElement | null | undefined) =>
+    node?.type === "Literal" && typeof node.value === "number" && Number.isFinite(node.value) ? node.value : null;
+
+  return {
+    errors: parsed.errors.length,
+    assignments: writes,
+    facts: (shadowed ? [] : assignments.slice(0, 4)).map(({ right, nested }) => {
+      const own = right.type === "ArrayExpression" ? right.elements[1] : undefined;
+
+      const bindings =
+        own?.type === "Identifier" ? declarations.filter((declaration) => declaration.name === own.name) : [];
+
+      return {
+        right: kind(right),
+        length: right.type === "ArrayExpression" ? right.elements.length : null,
+        nested,
+        own: kind(own),
+        value: number(own),
+        bindings: bindings.length,
+        candidates: bindings.slice(0, 4).map((declaration) => ({
+          init: kind(declaration.init),
+          value: number(declaration.init),
+          nested: declaration.nested,
+          grouped: declaration.grouped,
+        })),
+      };
+    }),
+  };
+};
 
 /** The brain as the watcher sees it: it answers `same` for a hash a program already runs. */
 const brain = Effect.gen(function* () {
@@ -444,156 +596,376 @@ describe("P15 slice 1: the watcher", () => {
     300_000,
   );
 
-  it.live(
-    "L17/L18: save-driven rebuilds record success and ERROR outcomes and close every acquired result",
-    () =>
-      Effect.gen(function* () {
-        const seen = new Set<string>();
-        yield* promised(() =>
-          fc.assert(
-            fc.asyncProperty(fc.gen(), (g) =>
-              Effect.runPromise(
-                Effect.scoped(
-                  Effect.gen(function* () {
-                    const fs = yield* FileSystem.FileSystem;
-                    const path = yield* Path.Path;
-                    const { home, programs } = yield* fixture;
-                    const selected = programs[g(fc.nat, { max: programs.length - 1 })]!;
-                    const file = path.join(home, "programs", Str.split(selected.name, "/")[1]!, "own.ts");
-                    const b = yield* brain;
-                    const answers = yield* Queue.unbounded<unknown>();
-                    const spans: Array<Tracer.NativeSpan> = [];
+  // R1-R5. Plants: next-answer assertion; stale source; dropped rebuild/span; leaked input.
+  const saveWalk = Effect.fnUntraced(function* (options: {
+    readonly program: number;
+    readonly edits: number;
+    readonly next: (broken: boolean) => { move: "edit" | "syntax" | "fix"; value: number; sentinel: string };
+    readonly seen: Set<string>;
+    readonly hold: boolean;
+  }) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { home, programs } = yield* fixture;
+    const selected = programs[options.program % programs.length]!;
+    const relative = path.join("programs", selected.name.split("/")[1]!, "own.ts");
+    const file = path.join(home, relative);
+    const b = yield* brain;
 
-                    const tracer = Tracer.make({
-                      span(options) {
-                        const span = new Tracer.NativeSpan(options);
-                        spans.push(span);
+    type Reply = Stream.Success<ReturnType<typeof watchPrograms>>;
 
-                        return span;
-                      },
-                    });
+    const answers = yield* Queue.unbounded<Reply>();
+    const completed = yield* Queue.unbounded<Tracer.NativeSpan>();
 
-                    const firstResult = opened.results.length;
-                    yield* Effect.forkScoped(
-                      Stream.runForEach(
-                        watchPrograms({
-                          root: home,
-                          entry: path.join(home, "brain.ts"),
-                          programs: [selected],
-                          install: b.install,
-                          failed: b.failed,
-                        }),
-                        (answer) => Queue.offer(answers, answer),
-                      ).pipe(Effect.withTracer(tracer)),
-                    );
-                    yield* Queue.take(answers).pipe(
-                      Effect.timeoutOrElse({
-                        duration: "10 seconds",
-                        orElse: () => Effect.die(new Error("the watcher did not report its initial rebuild")),
-                      }),
-                    );
-                    let value = 0;
-                    let broken = false;
-                    const edits = g(fc.integer, { min: 2, max: 5 });
+    const gates = yield* Queue.unbounded<{
+      held: Deferred.Deferred<Reply>;
+      release: Deferred.Deferred<void>;
+    }>();
 
-                    for (let n = 0; n < edits; n++) {
-                      // Pick from the reached module's current state, then generate a distinct edit.
-                      const moves: ReadonlyArray<"fix" | "syntax" | "edit"> = broken
-                        ? ["fix", "syntax"]
-                        : ["edit", "syntax"];
+    const replies: Array<Reply> = [];
+    const checked = new Set<Reply>();
+    const spans: Array<Tracer.NativeSpan> = [];
+    const checkedSpans = new Set<Tracer.NativeSpan>();
+    const changedSpans: Array<Tracer.NativeSpan> = [];
+    const installs = new Map<string, Install>();
+    const sentinels: Array<string> = [];
+    const failures: Array<Failed> = [];
+    const required: Array<"loaded" | "failed"> = ["loaded"];
+    const firstResult = opened.results.length;
+    const firstWatcher = opened.watchers.length;
+    let previousBytes = 0;
+    let broken = false;
 
-                      const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
-                      value += g(fc.integer, { min: 1, max: 99 });
-                      broken = move === "syntax";
-                      const sentinel = `P15SECRET${g(() => fc.stringMatching(/^[A-Z]{12}$/))}`;
-                      const before = spans.length;
-                      const results = opened.results.length;
-                      yield* fs.writeFileString(
-                        file,
-                        broken
-                          ? `export const own = ${Formatter.formatJson(sentinel)} +; // ${value}\n`
-                          : `export const own = ${value};\n`,
-                      );
+    const tracer = Tracer.make({
+      span(settings) {
+        const span = new Tracer.NativeSpan(settings);
+        const end = span.end.bind(span);
+        span.end = (at, exit) => {
+          end(at, exit);
 
-                      const answer = yield* Queue.take(answers).pipe(
-                        Effect.timeoutOrElse({
-                          duration: "3 seconds",
-                          orElse: () => Effect.die(new Error("the watcher did not report the saved module's rebuild")),
-                        }),
-                      );
+          if (span.name === "watch.rebuild") {
+            spans.push(span);
+            Queue.offerUnsafe(completed, span);
+          }
+        };
 
-                      expect(answer).toMatchObject(broken ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" });
-                      const acquired = opened.results.slice(results);
-                      expect(Arr.some(acquired, (result) => result.code === (broken ? "ERROR" : "BUNDLE_END"))).toBe(
-                        true,
-                      );
-                      expect(Arr.every(opened.results.slice(firstResult), (result) => result.closed)).toBe(true);
-                      // A late graph notification can retry unchanged bytes. L2 permits `same`, never a second failure fact.
-                      const late = yield* drain(answers, 300);
+        return span;
+      },
+    });
 
-                      for (const repeated of late) {
-                        expect(repeated, "one save produced a second change or failure answer").toMatchObject({
-                          _tag: "same",
-                        });
-                      }
+    const duplicate = Effect.fnUntraced(function* (answer: Reply) {
+      expect(answer.program).toBe(selected.name);
+      expect(answer).toMatchObject({ _tag: "same" });
+      expect(answer.hash !== null && installs.has(answer.hash), "same names a previously loaded hash").toBe(true);
+      const code = yield* Queue.take(b.installs).pipe(Effect.timeout("3 seconds"));
+      const loaded = installs.get(answer.hash ?? "");
+      assert(loaded !== undefined, "the duplicate has an earlier successful install");
+      expect(code).toMatchObject({ program: loaded.program, hash: loaded.hash, source: loaded.source, from: "watch" });
+      checked.add(answer);
+    });
 
-                      // The plan lets one save run more than one rebuild: "on each END the watcher runs
-                      // buildPrograms for that program", "Rolldown's `buildDelay`: left at its default; the
-                      // same-hash answer absorbs repeated events", and a save that "changes nothing in the
-                      // bundle's bytes (macOS late event ...)" gives "Same hash: no fact, no swap, no view
-                      // notice". So per save: exactly one rebuild that changed or failed, plus any `same`.
-                      const saved = () => Arr.filter(spans.slice(before), (span) => span.name === "watch.rebuild");
-                      yield* Effect.sleep("20 millis").pipe(
-                        Effect.repeat({
-                          until: () => Arr.every(saved(), (rebuild) => rebuild.status._tag === "Ended"),
-                        }),
-                        Effect.timeoutOrElse({
-                          duration: "10 seconds",
-                          orElse: () => Effect.die(new Error("a rebuild for the save never ended")),
-                        }),
-                      );
-                      const rebuilds = saved();
-                      const changed = Arr.filter(rebuilds, (rebuild) => rebuild.attributes.get("outcome") !== "same");
-                      expect(changed, "one save records exactly one rebuild that changed or failed").toHaveLength(1);
-                      const span = changed[0]!;
-                      expect(span.status._tag).toBe("Ended");
-                      expect(span.attributes.get("program")).toBe(selected.name);
-                      expect(span.attributes.get("outcome")).toBe(broken ? "failed" : "loaded");
-                      expect(span.attributes.get("bytes")).toEqual(expect.any(Number));
-                      expect(Number(span.attributes.get("bytes"))).toBeGreaterThanOrEqual(broken ? 0 : 1);
-                      expect(Number(span.attributes.get("ms"))).toBeGreaterThanOrEqual(0);
+    const checkSpan = (span: Tracer.NativeSpan) => {
+      expect(checkedSpans.has(span), "each completed span is accounted for once").toBe(false);
+      checkedSpans.add(span);
+      assert(span.status._tag === "Ended", "the recorded span has ended");
+      expect(Exit.isSuccess(span.status.exit), "an answered rebuild completed normally").toBe(true);
+      expect(span.attributes.get("program")).toBe(selected.name);
+      expect(span.attributes.get("bytes")).toEqual(expect.any(Number));
+      expect(Number(span.attributes.get("bytes"))).toBeGreaterThanOrEqual(0);
+      expect(span.attributes.get("ms")).toEqual(expect.any(Number));
+      expect(Number(span.attributes.get("ms"))).toBeGreaterThanOrEqual(0);
+    };
 
-                      for (const rebuild of rebuilds) {
-                        expect(rebuild.attributes.get("program")).toBe(selected.name);
-                      }
+    const sameSpan = (span: Tracer.NativeSpan) => {
+      checkSpan(span);
+      expect(span.attributes.get("outcome")).toBe("same");
+      expect(span.attributes.get("bytes")).toBe(previousBytes);
+    };
 
-                      const failures = yield* Queue.clear(b.failures);
-                      expect(failures, "one failed save writes one code.failed fact").toHaveLength(broken ? 1 : 0);
+    // The outer timeout belongs to the save, so a duplicate cannot renew it.
+    const receiveChange = Effect.fnUntraced(function* (value: number, syntax: boolean) {
+      while (true) {
+        const answer = yield* Queue.take(answers);
 
-                      for (const output of [
-                        Formatter.formatJson([...span.attributes]),
-                        Formatter.formatJson(answer),
-                        Formatter.formatJson(late),
-                        Formatter.formatJson(failures),
-                      ]) {
-                        for (const forbidden of [sentinel, home]) {
-                          expect(Function.pipe(output, Str.includes(forbidden))).toBe(false);
-                        }
-                      }
-
-                      seen.add(move);
-                    }
-                  }),
-                ).pipe(Effect.provide(NodeServices.layer)),
-              ),
-            ),
-            { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
-          ),
+        const same = Match.value(answer).pipe(
+          Match.tag("same", () => true),
+          Match.tag("loaded", "failed", () => false),
+          Match.exhaustive,
         );
-        expect(seen).toEqual(new Set(["edit", "syntax", "fix"]));
+
+        if (same) {
+          yield* duplicate(answer);
+          continue;
+        }
+
+        expect(answer.program).toBe(selected.name);
+        expect(answer).toMatchObject(syntax ? { _tag: "failed", reason: "bundle", hash: null } : { _tag: "loaded" });
+        checked.add(answer);
+        let bytes = 0;
+        yield* Match.value(answer).pipe(
+          Match.tag("loaded", (loaded) =>
+            Effect.gen(function* () {
+              expect(installs.has(loaded.hash), "a distinct save changes the installed hash").toBe(false);
+              const code = yield* Queue.take(b.installs);
+              expect(code).toMatchObject({
+                program: selected.name,
+                hash: loaded.hash,
+                from: required.length === 1 ? "boot" : "watch",
+              });
+              expect(code.hash).toBe(yield* hash(code.source));
+
+              expect(
+                fixtureValue(code.source),
+                "the installed bundle's fixture assignment contains this save's module value",
+              ).toEqual({
+                errors: 0,
+                assignments: 1,
+                facts: [
+                  {
+                    right: "ArrayExpression",
+                    length: 2,
+                    nested: false,
+                    own: "Literal",
+                    value,
+                    bindings: 0,
+                    candidates: [],
+                  },
+                ],
+              });
+              installs.set(loaded.hash, code);
+              bytes = new TextEncoder().encode(code.source).byteLength;
+            }),
+          ),
+          Match.tag("failed", (failed) =>
+            Effect.gen(function* () {
+              const fact = yield* Queue.take(b.failures);
+              expect(fact).toMatchObject({ program: selected.name, reason: "bundle", hash: null });
+              expect(fact.path).toBe(relative);
+              expect(fact.line).toBeGreaterThanOrEqual(1);
+              expect(failed.path).toBe(fact.path);
+              expect(failed.line).toBe(fact.line);
+              failures.push(fact);
+            }),
+          ),
+          Match.tag("same", () => Effect.die(new Error("a duplicate completed the save"))),
+          Match.exhaustive,
+        );
+
+        while (true) {
+          const span = yield* Queue.take(completed);
+
+          if (span.attributes.get("outcome") === "same") {
+            sameSpan(span);
+            continue;
+          }
+
+          checkSpan(span);
+          expect(span.attributes.get("outcome")).toBe(answer._tag);
+          expect(span.attributes.get("bytes")).toBe(bytes);
+          changedSpans.push(span);
+          previousBytes = bytes;
+
+          return answer;
+        }
+      }
+    });
+
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* Effect.forkScoped(
+          Stream.runForEach(
+            watchPrograms({
+              root: home,
+              entry: path.join(home, "brain.ts"),
+              programs: [selected],
+              install: b.install,
+              failed: b.failed,
+            }),
+            (answer) =>
+              Effect.gen(function* () {
+                yield* Match.value(answer).pipe(
+                  Match.tag("same", () =>
+                    Effect.gen(function* () {
+                      const gate = yield* Queue.poll(gates);
+
+                      if (Option.isSome(gate)) {
+                        yield* Deferred.succeed(gate.value.held, answer);
+                        yield* Deferred.await(gate.value.release);
+                      }
+                    }),
+                  ),
+                  Match.tag("loaded", "failed", () => Effect.void),
+                  Match.exhaustive,
+                );
+                replies.push(answer);
+                yield* Queue.offer(answers, answer);
+              }),
+          ).pipe(Effect.withTracer(tracer)),
+        );
+        yield* receiveChange(0, false).pipe(Effect.timeout("10 seconds"));
+
+        for (let n = 0; n < options.edits; n++) {
+          const edit = options.next(broken);
+          const held = yield* Deferred.make<Reply>();
+          const release = yield* Deferred.make<void>();
+          const gate = options.hold && !broken;
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              if (gate) {
+                yield* Effect.acquireRelease(Effect.void, () => Deferred.succeed(release, undefined));
+                yield* Queue.offer(gates, { held, release });
+                yield* opened.watchers[firstWatcher]!.repeat;
+                const answer = yield* Deferred.await(held).pipe(Effect.timeout("3 seconds"));
+                expect(answer).toMatchObject({ _tag: "same" });
+              }
+
+              broken = edit.move === "syntax";
+              required.push(broken ? "failed" : "loaded");
+              const sentinel = `P15SECRET${edit.sentinel}`;
+              sentinels.push(sentinel);
+              const results = opened.results.length;
+              yield* fs.writeFileString(
+                file,
+                broken
+                  ? `export const own = ${JSON.stringify(sentinel)} +; // ${edit.value}\n`
+                  : `export const own = ${edit.value};\n`,
+              );
+              yield* Deferred.succeed(release, undefined);
+              yield* receiveChange(edit.value, broken).pipe(
+                Effect.timeoutOrElse({
+                  duration: "3 seconds",
+                  orElse: () => Effect.die(new Error("the watcher did not report the saved module's rebuild")),
+                }),
+              );
+              expect(
+                opened.results.slice(results).some((result) => result.code === (broken ? "ERROR" : "BUNDLE_END")),
+              ).toBe(true);
+              expect(opened.results.slice(firstResult).every((result) => result.closed)).toBe(true);
+
+              if (gate) {
+                expect(
+                  checked.has(yield* Deferred.await(held)),
+                  "the held duplicate was checked before the changed reply",
+                ).toBe(true);
+              }
+
+              yield* opened.watchers[firstWatcher]!.repeat;
+              yield* Queue.take(completed).pipe(
+                Effect.tap((span) => Effect.sync(() => sameSpan(span))),
+                Effect.timeout("10 seconds"),
+              );
+              const late = yield* drain(answers, 300);
+
+              for (const answer of late) {
+                yield* duplicate(answer);
+              }
+
+              expect(yield* Queue.clear(b.failures), "unchanged failures write no additional fact").toEqual([]);
+              options.seen.add(edit.move);
+            }),
+          );
+        }
       }),
-    300_000,
-  );
+    );
+
+    for (const answer of yield* Queue.clear(answers)) {
+      yield* duplicate(answer);
+    }
+
+    for (const span of yield* Queue.clear(completed)) {
+      const status = span.status;
+
+      if (status._tag === "Ended" && Exit.isSuccess(status.exit)) {
+        sameSpan(span);
+      }
+    }
+
+    const normal = spans.filter((span) => span.status._tag === "Ended" && Exit.isSuccess(span.status.exit));
+    expect(
+      normal.every((span) => checkedSpans.has(span)),
+      "every normally completed rebuild is checked",
+    ).toBe(true);
+    expect(
+      replies.every((reply) => checked.has(reply)),
+      "every delivered reply is checked",
+    ).toBe(true);
+    expect(replies.filter((reply) => reply._tag !== "same").map((reply) => reply._tag)).toEqual(required);
+    expect(changedSpans.map((span) => span.attributes.get("outcome"))).toEqual(required);
+    expect(failures).toHaveLength(required.filter((outcome) => outcome === "failed").length);
+    expect(yield* Queue.clear(b.failures)).toEqual([]);
+    expect(opened.watchers.slice(firstWatcher).every((watcher) => watcher.closed)).toBe(true);
+    expect(opened.results.slice(firstResult).every((result) => result.closed)).toBe(true);
+
+    for (const output of [
+      JSON.stringify(replies),
+      JSON.stringify(failures),
+      ...spans.map((span) => JSON.stringify([...span.attributes])),
+    ]) {
+      for (const forbidden of [home, ...sentinels]) {
+        for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
+          expect(output.includes(form), "a rebuild output copied private input").toBe(false);
+        }
+      }
+    }
+  });
+
+  it("L17/L18: save-driven rebuilds record success and ERROR outcomes and close every acquired result", async () => {
+    const seen = new Set<string>();
+    await fc.assert(
+      fc.asyncProperty(fc.gen(), (g) => {
+        const program = g(fc.nat, { max: 1 });
+        const edits = g(fc.integer, { min: 2, max: 5 });
+        let value = 0;
+
+        return Effect.runPromise(
+          Effect.scoped(
+            saveWalk({
+              program,
+              edits,
+              seen,
+              hold: true,
+              next: (broken) => {
+                const moves: ReadonlyArray<"fix" | "syntax" | "edit"> = broken ? ["fix", "syntax"] : ["edit", "syntax"];
+                const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
+                value += g(fc.integer, { min: 1, max: 99 });
+
+                return { move, value, sentinel: g(() => fc.stringMatching(/^[A-Z]{12}$/)) };
+              },
+            }),
+          ).pipe(Effect.provide(NodeServices.layer)),
+        );
+      }),
+      { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
+    );
+    expect(seen).toEqual(new Set(["edit", "syntax", "fix"]));
+  }, 300_000);
+
+  // scenario: R1 gates a real unchanged reply from boot and a preceding save, before good and broken saves.
+  // Plant: replace receiveChange's loop with the original next-answer assertion.
+  it("scenario: R1 a held same reply from boot or a preceding save cannot complete a good or broken save", async () => {
+    for (const preceding of [false, true]) {
+      for (const syntax of [false, true]) {
+        let value = 0;
+        const edits = preceding ? 2 : 1;
+        await Effect.runPromise(
+          Effect.scoped(
+            saveWalk({
+              program: 0,
+              edits,
+              seen: new Set(),
+              hold: true,
+              next: () => {
+                value++;
+
+                return { move: value === edits && syntax ? "syntax" : "edit", value, sentinel: "AAAAAAAAAAAA" };
+              },
+            }),
+          ).pipe(Effect.provide(NodeServices.layer)),
+        );
+      }
+    }
+  }, 300_000);
 
   // L10, p77. Plant: hash the entry file only; push the swap to every process.
   it.live(

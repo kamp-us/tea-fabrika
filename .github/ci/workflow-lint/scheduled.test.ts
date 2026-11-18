@@ -3,7 +3,7 @@ import { it as effectIt } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Array as Arr, Predicate, Record as Rec, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintScheduled } from "./scheduled.ts";
 
@@ -30,8 +30,11 @@ type Job = Record<string, unknown> & {
   needs?: unknown;
 };
 
+/** The hand start's inputs (ticket 1161): each one's type, whether it is required, its default and the rest. */
+type Inputs = Record<string, Record<string, unknown>>;
+
 type Workflow = Record<string, unknown> & {
-  on: Record<string, unknown>;
+  on: Record<string, unknown> & { workflow_dispatch: { inputs: Inputs } };
   env?: Record<string, unknown>;
   concurrency: Record<string, unknown>;
   permissions: unknown;
@@ -39,6 +42,9 @@ type Workflow = Record<string, unknown> & {
 };
 
 const real = (): Workflow => parse(read("scheduled.yaml"));
+
+/** The hand start's two inputs, `scope` and `law`, as a plant reaches them. */
+const hand = (w: Workflow): Inputs => w.on.workflow_dispatch.inputs;
 
 /**
  * Moves the legs whose shard `leaves` picks out of the test job into a job of their own, `split`,
@@ -110,6 +116,105 @@ const rotationSlots = (count: number): Record<string, string> =>
 const rotationGroup = (slots: unknown, gap = " ", upper = false) =>
   `${upper ? "SCHEDULED-PROOF-" : "scheduled-proof-"}\${{${gap}fromJSON('${JSON.stringify(slots)}')[fromJSON(needs.select.outputs.slots)[matrix.shard]]${gap}||${gap}'1'${gap}}}`;
 
+/** One draw of what may change: the minute, the gap, the split, the spacing, the tails, the two flags, the two texts. */
+type Variation = readonly [
+  number,
+  number,
+  number,
+  string,
+  readonly number[],
+  readonly number[],
+  boolean,
+  boolean,
+  string,
+  string,
+];
+
+// The same draw as a Schema, for the laws that run as `it.prop` (0579).
+const Varied = Schema.Tuple([
+  Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 59 })),
+  Schema.Int.check(Schema.isBetween({ minimum: 60, maximum: 1440 })),
+  Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
+  Schema.Literals(["", " ", "  "]),
+  Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }))).check(
+    Schema.isMinLength(9),
+    Schema.isMaxLength(9),
+  ),
+  Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }))).check(
+    Schema.isMinLength(9),
+    Schema.isMaxLength(9),
+  ),
+  Schema.Boolean,
+  Schema.Boolean,
+  // S11: the two inputs' descriptions, any text, since what they say changes nothing.
+  Schema.String.check(Schema.isMinLength(1)),
+  Schema.String.check(Schema.isMinLength(1)),
+]);
+
+const vary = ([minute, minutes, main, gap, mainTail, proofTail, numeric, upper, scopeText, lawText]: Variation) => {
+  const proof = 9 - main;
+  const w = real();
+  // SAFETY: the branch is taken only when `schedule` is a list, and each GitHub schedule entry is a map.
+  const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
+
+  for (const cron of crons) {
+    if (Predicate.isString(cron.cron)) {
+      cron.cron = cron.cron.replace(/^\d+ /, `${minute} `);
+    }
+  }
+
+  w.env = { GAP_MINUTES: minutes, MAIN_SLOTS: main, PROOF_SLOTS: proof };
+
+  w.concurrency["group"] = `${upper ? "SCHEDULED" : "scheduled"}-\${{${gap}github.ref${gap}}}`;
+  // The count of groups is a setting, and `max-parallel` of the test job and MOST are its copies (0598).
+  w.jobs["tests"]!.strategy!["max-parallel"] = spaced(`\${{ ${REF} && ${main} || ${proof} }}`, gap);
+  w.jobs["changed"]!.strategy!["max-parallel"] = proof;
+  step(w, "select", "set").env!["MOST"] = proof;
+  // S11: the set step reads the two inputs with the spacing of the rest of the file.
+  step(w, "select", "set").env!["SCOPE"] = `\${{${gap}inputs.scope${gap}}}`;
+  step(w, "select", "set").env!["LAW"] = `\${{${gap}inputs.law${gap}}}`;
+  hand(w)["scope"]!["description"] = scopeText;
+  hand(w)["law"]!["description"] = lawText;
+
+  const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
+
+  const asValue = (pins: Record<string, string>): Record<string, string | number> =>
+    numeric ? Rec.fromEntries(Arr.map(Rec.toEntries(pins), ([leg, group]) => [leg, Number(group)])) : pins;
+
+  const pins = (count: number, tail: readonly number[]) => {
+    const all = asValue(pinned(shards, count, tail));
+
+    return upper ? Rec.fromEntries(Arr.reverse(Rec.toEntries(all))) : all;
+  };
+
+  w.jobs["tests"]!.concurrency!["group"] = spaced(
+    groupOf(pins(main, mainTail), pins(proof, proofTail), gap, upper),
+    gap,
+  );
+
+  w.jobs["changed"]!.concurrency!["group"] = rotationGroup(rotationSlots(proof), gap, upper);
+
+  for (const job of Rec.values(w.jobs)) {
+    if (upper && typeof job.concurrency?.["group"] === "string") {
+      job.concurrency["group"] = Str.replace(/^scheduled-/, "SCHEDULED-")(job.concurrency["group"]);
+    }
+  }
+
+  for (const job of Rec.values(w.jobs)) {
+    if ("if" in job) {
+      job["if"] = spaced(job["if"], gap);
+    }
+
+    for (const s of job.steps) {
+      if ("if" in s) {
+        s["if"] = spaced(s["if"], gap);
+      }
+    }
+  }
+
+  return w;
+};
+
 const scheduled = fc
   .tuple(
     fc.integer({ min: 1, max: 59 }),
@@ -120,65 +225,11 @@ const scheduled = fc
     fc.array(fc.integer({ min: 0, max: 1000 }), { minLength: 9, maxLength: 9 }),
     fc.boolean(),
     fc.boolean(),
+    // S11: the two inputs' descriptions, any text, since what they say changes nothing.
+    fc.string({ minLength: 1 }),
+    fc.string({ minLength: 1 }),
   )
-  .map(([minute, minutes, main, gap, mainTail, proofTail, numeric, upper]) => {
-    const proof = 9 - main;
-    const w = real();
-    // SAFETY: the branch is taken only when `schedule` is a list, and each GitHub schedule entry is a map.
-    const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
-
-    for (const cron of crons) {
-      if (Predicate.isString(cron.cron)) {
-        cron.cron = cron.cron.replace(/^\d+ /, `${minute} `);
-      }
-    }
-
-    w.env = { GAP_MINUTES: minutes, MAIN_SLOTS: main, PROOF_SLOTS: proof };
-
-    w.concurrency["group"] = `${upper ? "SCHEDULED" : "scheduled"}-\${{${gap}github.ref${gap}}}`;
-    // The count of groups is a setting, and `max-parallel` of the test job and MOST are its copies (0598).
-    w.jobs["tests"]!.strategy!["max-parallel"] = spaced(`\${{ ${REF} && ${main} || ${proof} }}`, gap);
-    w.jobs["changed"]!.strategy!["max-parallel"] = proof;
-    step(w, "select", "set").env!["MOST"] = proof;
-
-    const shards = w.jobs["tests"]!.strategy!.matrix.shard as string[];
-
-    const asValue = (pins: Record<string, string>): Record<string, string | number> =>
-      numeric ? Rec.fromEntries(Arr.map(Rec.toEntries(pins), ([leg, group]) => [leg, Number(group)])) : pins;
-
-    const pins = (count: number, tail: readonly number[]) => {
-      const all = asValue(pinned(shards, count, tail));
-
-      return upper ? Rec.fromEntries(Arr.reverse(Rec.toEntries(all))) : all;
-    };
-
-    w.jobs["tests"]!.concurrency!["group"] = spaced(
-      groupOf(pins(main, mainTail), pins(proof, proofTail), gap, upper),
-      gap,
-    );
-
-    w.jobs["changed"]!.concurrency!["group"] = rotationGroup(rotationSlots(proof), gap, upper);
-
-    for (const job of Rec.values(w.jobs)) {
-      if (upper && typeof job.concurrency?.["group"] === "string") {
-        job.concurrency["group"] = Str.replace(/^scheduled-/, "SCHEDULED-")(job.concurrency["group"]);
-      }
-    }
-
-    for (const job of Rec.values(w.jobs)) {
-      if ("if" in job) {
-        job["if"] = spaced(job["if"], gap);
-      }
-
-      for (const s of job.steps) {
-        if ("if" in s) {
-          s["if"] = spaced(s["if"], gap);
-        }
-      }
-    }
-
-    return w;
-  });
+  .map(vary);
 
 const lint = (w: Workflow) => lintScheduled(JSON.stringify(w), check);
 
@@ -1210,6 +1261,41 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   ["SC17: a red select loses its record", (w) => (step(w, "select", "record")["if"] = "success()")],
   ["SC17: the record takes another name", (w) => (step(w, "select", "record").with!["name"] = "results-set")],
+  // SC17's two reads, ticket 1161. Plants, each run once on scheduled.ts and restored: SC17's key list
+  // admits any extra key (red on the seventh key); SC17's two value checks dropped (red on the other
+  // seven: the literal, the two bare names, the two swapped and the github.event.inputs read).
+  ["SC17: select's step has no SCOPE", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "SCOPE")],
+  ["SC17: select's step has no LAW", (w) => Reflect.deleteProperty(step(w, "select", "set").env!, "LAW")],
+  ["SC17: SCOPE is the literal full", (w) => (step(w, "select", "set").env!["SCOPE"] = "full")],
+  // A bare name is text, not a read: the step would get the words `inputs.scope`, not the input.
+  ["SC17: SCOPE is the bare text inputs.scope", (w) => (step(w, "select", "set").env!["SCOPE"] = "inputs.scope")],
+  ["SC17: LAW is the bare text inputs.law", (w) => (step(w, "select", "set").env!["LAW"] = "inputs.law")],
+  [
+    "SC17: SCOPE reads github.event.inputs",
+    (w) => (step(w, "select", "set").env!["SCOPE"] = `\${{ github.event.inputs.scope }}`),
+  ],
+  [
+    "SC17: SCOPE and LAW are swapped",
+    (w) => {
+      const env = step(w, "select", "set").env!;
+      [env["SCOPE"], env["LAW"]] = [env["LAW"], env["SCOPE"]];
+    },
+  ],
+  ["SC17: select's step gets a seventh env key", (w) => (step(w, "select", "set").env!["EXTRA"] = "x")],
+  // SC21, ticket 1161: the hand start's two inputs. Plants, each run once on scheduled.ts and restored:
+  // SC21's input check dropped (red on each of these).
+  ["SC21: the scope default is full", (w) => (hand(w)["scope"]!["default"] = "full")],
+  ["SC21: the scope has no default", (w) => Reflect.deleteProperty(hand(w)["scope"]!, "default")],
+  ["SC21: the scope options gain readers", (w) => (hand(w)["scope"]!["options"] = ["changed", "full", "readers"])],
+  ["SC21: the scope options lose full", (w) => (hand(w)["scope"]!["options"] = ["changed"])],
+  ["SC21: the scope is a string", (w) => (hand(w)["scope"]!["type"] = "string")],
+  ["SC21: the scope is not required", (w) => (hand(w)["scope"]!["required"] = false)],
+  ["SC21: the scope has no description", (w) => Reflect.deleteProperty(hand(w)["scope"]!, "description")],
+  ["SC21: the law has no description", (w) => Reflect.deleteProperty(hand(w)["law"]!, "description")],
+  ["SC21: a third input", (w) => (hand(w)["extra"] = { type: "string", required: false, default: "" })],
+  ["SC21: the law input is missing", (w) => Reflect.deleteProperty(hand(w), "law")],
+  ["SC21: the law is required", (w) => (hand(w)["law"]!["required"] = true)],
+  ["SC21: the law has a default of a path", (w) => (hand(w)["law"]!["default"] = ".github/ci/proof.test.ts")],
   // SC18, 0590: a changed set's legs. Plants, each run once on scheduled.ts and restored: SC18's
   // `if` check dropped (red on the first two); its command checks dropped (red on the next four);
   // its limit checks dropped (red on the three limits).
@@ -1435,6 +1521,152 @@ it.each(plants)("rejects the schedule's plant: %s", (plant, mutate) => {
     }),
     { ...options, numRuns: 20 },
   );
+});
+
+// Where a read of the hand start's inputs may be put, and the forms a read takes (ticket 1161).
+const JOBS = ["gate", "tests", "select", "changed", "report"] as const;
+
+const places: [string, (w: Workflow, read: string, at: number) => void][] = [
+  ...JOBS.flatMap((job): [string, (w: Workflow, read: string, at: number) => void][] => [
+    [`${job}'s if`, (w, read) => (w.jobs[job]!["if"] = `\${{ ${read} == 'x' }}`)],
+    [`${job}'s group`, (w, read) => (w.jobs[job]!.concurrency!["group"] = `scheduled-\${{ ${read} }}`)],
+    [
+      `${job}'s step env`,
+      (w, read, at) => {
+        const target = w.jobs[job]!.steps[at % w.jobs[job]!.steps.length]!;
+        target.env = { ...target.env, FROM_INPUTS: `\${{ ${read} }}` };
+      },
+    ],
+  ]),
+  ["the workflow's group", (w, read) => (w.concurrency["group"] = `scheduled-\${{ ${read} }}`)],
+  ["tests's max-parallel", (w, read) => (w.jobs["tests"]!.strategy!["max-parallel"] = `\${{ ${read} }}`)],
+];
+
+// The forms a read takes: the `inputs` context in dot and bracket form, `github.event.inputs`, the whole
+// `github` context or its `event` as JSON, in any form of the dot, the index and the `*` filter, and the
+// same in capitals, since GitHub's context and function names do not tell the case.
+const READS = [
+  "inputs.scope",
+  "inputs.law",
+  "inputs['scope']",
+  "github.event.inputs.scope",
+  "toJSON(github)",
+  "toJSON(github.*)",
+  "toJSON(github['*'])",
+  "toJSON(github.event)",
+  "toJSON(github['event'])",
+  "toJSON(github.event.*)",
+  "toJSON(github['event']['*'])",
+  "INPUTS.SCOPE",
+  "TOJSON(GITHUB)",
+  "TOJSON(GITHUB.*)",
+  "TOJSON(GITHUB.EVENT)",
+  "toJson(GitHub['Event'])",
+];
+
+const reachedS9 = new Set<string>();
+
+effectIt.prop(
+  "S9 property: a read of the hand start's inputs anywhere but select's set step is named by SC21, whatever the place and the form",
+  {
+    varied: Varied,
+    place: Schema.Literals(places.map(([name]) => name)),
+    read: Schema.Literals(READS),
+    at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 })),
+  },
+  ({ varied, place, read, at }) => {
+    // Plants, each run once on scheduled.ts and restored: SC21's read check scans only `tests`'s `if`
+    // (red: the gate's env reading `inputs.scope` passes); READS_INPUTS drops its `i` flag (red: the
+    // capital forms pass); a bracket read is not taken as a dot read (red: `github['event']` passes);
+    // a whole `github` or `github.event` read is not counted (red: the `toJSON` and `.*` forms pass).
+    const broken = vary(varied);
+    places.find(([name]) => name === place)![1](broken, read, at);
+    reachedS9.add(`${place} reads ${read}`);
+    const errors = lint(broken);
+    expect(
+      errors.some((error) => error.startsWith("scheduled.yaml: SC21:")),
+      `${place} reads ${read}: ${JSON.stringify(errors)}`,
+    ).toBe(true);
+  },
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } },
+);
+
+// What is not a read of the inputs: any other property of `github` or of its event, in the dot form, the
+// index form and capitals. A lint that names these would reject the real workflow's own `github.ref`.
+const OTHER_PROPERTIES = [
+  "github.ref",
+  "github['ref']",
+  "github.event_name",
+  "GITHUB['Event_Name']",
+  "github.run_number",
+  "github.event.schedule",
+  "github['event']['schedule']",
+  "github.event['schedule']",
+  "GitHub.Event.Pull_Request.Head.SHA",
+];
+
+const reachedS9Other = new Set<string>();
+
+afterAll(() => {
+  // Each S9 law reached every place and every form it names. Nothing reached means the law was
+  // filtered out of this run, not that it missed one.
+  const found = [...reachedS9].map((reached) => reached.split(" reads "));
+
+  expect(reachedS9.size === 0 ? [] : [...new Set(found.map(([place]) => place))].toSorted()).toEqual(
+    reachedS9.size === 0 ? [] : places.map(([place]) => place).toSorted(),
+  );
+
+  expect(reachedS9.size === 0 ? [] : [...new Set(found.map(([, read]) => read))].toSorted()).toEqual(
+    reachedS9.size === 0 ? [] : READS.toSorted(),
+  );
+
+  expect(reachedS9Other.size === 0 ? [] : [...reachedS9Other].toSorted()).toEqual(
+    reachedS9Other.size === 0 ? [] : OTHER_PROPERTIES.toSorted(),
+  );
+});
+
+effectIt.prop(
+  "S9 property: a read of another property of github or of its event is not named by SC21, in any place and form",
+  {
+    varied: Varied,
+    place: Schema.Literals(places.map(([name]) => name)),
+    read: Schema.Literals(OTHER_PROPERTIES),
+    at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 })),
+  },
+  ({ varied, place, read, at }) => {
+    // Plant, run once on scheduled.ts and restored: an index with a quoted name is not read as a dot
+    // (red: `github['ref']` reads as the whole `github` context).
+    const w = vary(varied);
+    places.find(([name]) => name === place)![1](w, read, at);
+    reachedS9Other.add(read);
+    const errors = lint(w);
+    expect(
+      errors.some((error) => error.startsWith("scheduled.yaml: SC21:")),
+      `${place} reads ${read}: ${JSON.stringify(errors)}`,
+    ).toBe(false);
+  },
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } },
+);
+
+it("S12 scenario: on the real scheduled.yaml the only reads of the inputs are select's SCOPE and LAW, and a read added to tests's if is named by SC15 and SC21", () => {
+  // Plant, run once on scheduled.ts and restored: SC21's read check dropped (red: the plant gives
+  // SC15's error alone).
+  const w = real();
+  expect(lint(w)).toEqual([]);
+  expect(JSON.stringify(w.jobs).match(/\binputs\b/g)).toHaveLength(2);
+  expect(step(w, "select", "set").env!["SCOPE"]).toContain("inputs.scope");
+  expect(step(w, "select", "set").env!["LAW"]).toContain("inputs.law");
+
+  w.jobs["tests"]!["if"] = `${String(w.jobs["tests"]!["if"]).replace(/ \}\}$/, "")} && inputs.scope != 'changed' }}`;
+  const errors = lint(w);
+  expect(
+    errors.some((error) => error.startsWith("scheduled.yaml: SC15:")),
+    JSON.stringify(errors),
+  ).toBe(true);
+  expect(
+    errors.some((error) => error.startsWith("scheduled.yaml: SC21:")),
+    JSON.stringify(errors),
+  ).toBe(true);
 });
 
 it("SC1 and SC16 property: a cron at any minute from 1 to 59 every hour, and any whole gap of an hour or more, pass; minute 0 and a gap under an hour do not", () => {
