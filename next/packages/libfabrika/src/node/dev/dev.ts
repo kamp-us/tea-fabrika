@@ -84,10 +84,10 @@ type ProjectDoor = LedgerCalls &
     readonly challenge: (client: ConnectionId) => unknown;
     readonly initialize: (
       client: ConnectionId,
-      input: unknown,
+      input: Schema.Json | undefined,
       trusted: { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string },
     ) => unknown;
-    readonly route: (client: ConnectionId, method: string, params: unknown, reader?: string) => unknown;
+    readonly route: (client: ConnectionId, method: string, params: Schema.Json | undefined, reader?: string) => unknown;
     readonly grant: (input: unknown) => unknown;
     readonly start: (request: Start, from: From) => unknown;
     readonly info: () => unknown;
