@@ -32,6 +32,8 @@ import {
   type Env,
   type ProjectOptions,
 } from "./runtime.ts";
+import { Waits } from "./Waits.ts";
+import * as WaitsLive from "./WaitsLive.ts";
 
 /** The method each kind of view update is sent under, keyed by the update's own `type`. */
 const METHOD = { whole: "view.whole", patch: "view.patch" } as const satisfies Record<Published["type"], string>;
@@ -63,9 +65,9 @@ const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Ty
 // One wait the gateway asks its project for, read from the project's answer: `ready` at a rev, or
 // `parked`. A hands key's own `target:` stream is asked again as its `tasks.wait`: it may not call
 // `ledger.wait`, and the gateway names that stream from its key alone. Either way the ring goes to
-// `reader`, the object where the socket is. A ready answer whose rev does not decode is a
-// `LedgerError` of reason `bad_row`, in the typed channel.
-const waitOn = (p: ProjectClient["Service"]) =>
+// `reader`, the object where the socket is. A ready answer is decoded by `Waits`: one whose rev does
+// not decode is a `LedgerError` of reason `bad_row`, in the typed channel.
+const waitOn = (p: ProjectClient["Service"], waits: Waits["Service"]) =>
   Effect.fnUntraced(function* (client: ConnectionId, stream: string, after: number, reader: string) {
     const asked = Str.startsWith(targetStream(""))(stream)
       ? p.route(client, "tasks.wait", { after }, reader)
@@ -81,17 +83,14 @@ const waitOn = (p: ProjectClient["Service"]) =>
       return yield* Effect.fail(answer);
     }
 
-    const ready = yield* Schema.decodeUnknownEffect(Schema.Struct({ rev: Schema.Int }))(answer.result).pipe(
-      Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-    );
-
-    return Waited.cases.ready.make(ready);
+    return yield* waits.ready(answer.result);
   });
 
 /**
  * The gateway's waits on its project: `wait(client, stream, after, reader)` asks the project for one
  * wait and answers `ready` at a rev or `parked`. A ready answer that does not decode fails with a
- * `LedgerError` of reason `bad_row`. `GatewayWaits.layer` asks through the gateway's own `ProjectClient`.
+ * `LedgerError` of reason `bad_row`. `GatewayWaits.layer` asks through the gateway's own `ProjectClient`
+ * and decodes through `Waits`.
  *
  * @category services
  */
@@ -109,7 +108,7 @@ export class GatewayWaits extends Context.Service<
   static readonly layer = Layer.effect(
     GatewayWaits,
     Effect.gen(function* () {
-      return { wait: waitOn(yield* ProjectClient) };
+      return { wait: waitOn(yield* ProjectClient, yield* Waits) };
     }),
   );
 }
@@ -471,4 +470,4 @@ export const connectionRuntime = (
   env: Env,
   config?: BrainOptions,
   input?: ProjectOptions["input"],
-) => SettingsRuntime.runtime(connectionLayer(ctx, env, config, input));
+) => SettingsRuntime.runtime(connectionLayer(ctx, env, config, input).pipe(Layer.provide(WaitsLive.layer)));
