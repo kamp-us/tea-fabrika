@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-make-on-untrusted-watchers-open",
+  "date": "2026-11-18",
+  "by": "make-audit",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/WatchersSql.ts",
+    "line": 116
+  },
+  "says": "Opening a watch makes `Msg.open` with Schema `make` from a client id that arrives over the object's `open` call with no decode.",
+  "proof": "In: next/packages/libfabrika/src/cloudflare/runtime.ts:2650 `open: (client: string) => attributed(runner.open(client))` takes the id over RPC and decodes nothing. Make: next/packages/libfabrika/src/runtime/WatchersSql.ts:116 `step(Msg.cases.open.make({ watch: { client, at, position: whole.rev } }))`, whose `client` is `Schema.NonEmptyString.check(Schema.isMaxLength(256))` (next/packages/libfabrika/src/runtime/internal/watchers.ts:5).",
+  "cost": "An empty or overlong client id is refused as a typed `WatchersError` with reason `Storage`, because the make runs inside `stored`'s `Effect.try`, not as a defect. The cost is the wrong reason: decision 0215 wants a decode that answers bad input as bad input. This was the same before #1619.",
+  "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
+  "ticket": null,
+  "pr": null
+}

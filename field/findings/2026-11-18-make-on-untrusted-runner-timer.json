@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-make-on-untrusted-runner-timer",
+  "date": "2026-11-18",
+  "by": "make-audit",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 2949
+  },
+  "says": "The runner makes the wake `Timer` with Schema `make` from a time that arrives over the object's `due` call or is read back from storage, with no decode.",
+  "proof": "In: next/packages/libfabrika/src/cloudflare/runtime.ts:2651 `due: (at: number) => attributed(runner.due(at))` takes the time over RPC, and next/packages/libfabrika/src/cloudflare/runtime.ts:2663 reads the stored wake with `storage.get<number>(\"wake\")`; neither decodes. Make: next/packages/libfabrika/src/runtime/Runner.ts:2949 `Timer.make({ at: time, arrivedAt })`, whose `at` is `Schema.Number` (next/packages/libfabrika/src/runtime/Runner.ts:457).",
+  "cost": "A stored or sent wake that is not a number makes the timer letter throw a defect. Before #1619 the literal was sent as JSON and never checked at all, so the cost is small; the call still breaks decision 0215 for storage read back.",
+  "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
+  "ticket": null,
+  "pr": null
+}

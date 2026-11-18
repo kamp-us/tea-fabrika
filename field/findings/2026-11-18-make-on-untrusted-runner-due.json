@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-make-on-untrusted-runner-due",
+  "date": "2026-11-18",
+  "by": "make-audit",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 1285
+  },
+  "says": "The runner makes `due` with Schema `make` from the Project's undecoded status answer, the loosely decoded descriptor and the writer meta.",
+  "proof": "In: next/packages/libfabrika/src/cloudflare/runtime.ts:553-556 `processValue` returns the Project's `ok` answer as it came (`if (reply._tag === \"ok\") { return reply.value; }`), and `manager.start` and `manager.status` (next/packages/libfabrika/src/cloudflare/runtime.ts:2487-2493) go through it, so `started` and `status` are never decoded on the Process side; next/packages/libfabrika/src/cloudflare/runtime.ts:162-168 decodes the stored descriptor as `SavedDescriptor`, whose `id`, `name`, `program` and `build` are only `Schema.String`; and `from()` at next/packages/libfabrika/src/runtime/Runner.ts:725-733 copies `process.owner.key` and `for` (only `Schema.String` in `Writer`, next/packages/libfabrika/src/access/SessionManager.ts:26-29) and the span's trace id into a `From`, whose `by`, `for` and `build` are `Text` and whose `traceId` is a 32-hex `TraceId` (next/packages/libfabrika/src/ledger/Log.ts:29-56). Make: next/packages/libfabrika/src/runtime/Runner.ts:1285 `SupervisorMsg.cases.due.make({ at: status.at, program: process.program, from: meta })`, whose fields are `Millis`, `Text` and `From` (next/packages/libfabrika/src/runtime/internal/supervisor.ts:184).",
+  "cost": "A value that fails the made schema, from a Project answer or the stored descriptor, now dies as a defect in the runner's generator. Before #1619 the plain literal went into `send` or `complete`, whose `Effect.try` (next/packages/libfabrika/src/runtime/Runner.ts:771-774) turned the supervisor's own make into a typed `bad_row`. Every producer today is fabrika's own code, so it takes version skew between objects or a corrupt row.",
+  "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
+  "ticket": null,
+  "pr": null
+}

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-make-on-untrusted-connection-observed",
+  "date": "2026-11-18",
+  "by": "make-audit",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/transport/Connection.ts",
+    "line": 97
+  },
+  "says": "`connection` makes `Msg.observed` with Schema `make` from the saved attachment its caller's `read` returns, typed as the decoded `Attached` while the schema checks `Schema.Int` and `Schema.NonEmptyString` fields the type cannot express.",
+  "proof": "In: next/packages/libfabrika/src/transport/Connection.ts:40 the public option `read: () => typeof Attached.Type | Effect...` hands back saved state, and `Attached` has `version: Schema.Int` and `build: Schema.NonEmptyString` (next/packages/libfabrika/src/transport/Wire.ts:133-146). Make: next/packages/libfabrika/src/transport/Connection.ts:97 `step(unloaded, State.Msg.cases.observed.make({ attached }))`, so a caller whose `read` returns its stored attachment without decoding it reaches a make that can throw.",
+  "cost": "A caller that reads its attachment back without decoding gets a defect on a bad saved row. The one in-tree caller decodes first (next/packages/libfabrika/src/cloudflare/connection.ts:157), and the same value threw before #1619 in `loaded()` (next/packages/libfabrika/src/transport/internal/connection.ts:63-74); this is decision 0215's saved-state case.",
+  "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
+  "ticket": null,
+  "pr": null
+}

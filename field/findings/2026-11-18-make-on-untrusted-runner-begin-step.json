@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-make-on-untrusted-runner-begin-step",
+  "date": "2026-11-18",
+  "by": "make-audit",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Runner.ts",
+    "line": 1330
+  },
+  "says": "The runner makes `begin` with Schema `make` from the loosely decoded descriptor and the Project's undecoded status answer.",
+  "proof": "In: next/packages/libfabrika/src/cloudflare/runtime.ts:162-168 decodes the stored descriptor as `SavedDescriptor`, whose `id`, `name`, `program` and `build` are only `Schema.String`; and next/packages/libfabrika/src/cloudflare/runtime.ts:553-556 `processValue` returns the Project's `ok` answer as it came (`if (reply._tag === \"ok\") { return reply.value; }`), and `manager.start` and `manager.status` (next/packages/libfabrika/src/cloudflare/runtime.ts:2487-2493) go through it, so `started` and `status` are never decoded on the Process side. Make: next/packages/libfabrika/src/runtime/Runner.ts:1330 `SupervisorMsg.cases.begin.make({ process: process.id, letter, build: process.build, phase, at: status.at })`, whose fields are `ProcessId`, `Text`, `Text` and `Millis` (next/packages/libfabrika/src/runtime/internal/supervisor.ts:171).",
+  "cost": "A value that fails the made schema, from a Project answer or the stored descriptor, now dies as a defect in the runner's generator. Before #1619 the plain literal went into `send` or `complete`, whose `Effect.try` (next/packages/libfabrika/src/runtime/Runner.ts:771-774) turned the supervisor's own make into a typed `bad_row`. Every producer today is fabrika's own code, so it takes version skew between objects or a corrupt row.",
+  "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
+  "ticket": null,
+  "pr": null
+}
