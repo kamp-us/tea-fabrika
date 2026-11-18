@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-related-guard-names-nine-groups",
+  "date": "2026-11-18",
+  "by": "plan",
+  "model": null,
+  "rule": "doc_drift",
+  "location": {
+    "path": ".github/ci/related.ts",
+    "line": 52
+  },
+  "says": "related.ts's leg guard still says the selection must fit 'the existing nine shared test groups', which 0598 removes from the merge line; the cap of nine is now check.yaml's related max-parallel.",
+  "proof": "related.ts:51-52 reads `if (Object.keys(legs).length > 9) { throw new Error(\"related: the existing nine shared test groups cannot hold this selection\")`; decision 0598 (pull request 1586) says next, select and related drop job-level concurrency, and check.yaml:586 keeps `max-parallel: 9`. The coordinator's grant for this lane covers only related.ts's import and use of proof.ts slots, so the plan leaves the line as it is.",
+  "cost": "A reader of a failed related selection is told about groups that no longer exist; the limit it enforces is still right.",
+  "head": "955a82d987cb8583a0a693681c756054e836bf33",
+  "ticket": "kamp-us/tea-fabrika#1333",
+  "pr": null
+}
