@@ -1,8 +1,8 @@
 ---
 id: 0598
 title: The merge line leaves the scheduled job groups, and main's full run and branch proofs get their own groups inside the ten-job budget
-status: proposed
-date: 2026-11-18
+status: accepted
+date: 2026-11-17
 tags: [ci, concurrency, schedule, proof, runners, merge-line]
 ---
 
@@ -152,9 +152,9 @@ control group shared.**
 - No gate loosens: main's full run runs every leg at full depth; a proof runs 0590's selected set
   at full depth; required checks, timeouts, fail-fast and the report stay as they are.
 - No cancellation to clear a queue, no new infrastructure, paid runner or token grant (0595).
-- `check.yaml`, `.github/ci/related.ts` and the workflow-lint files are held by another lane's
-  planned batch for issue 1333. The build is arranged after that batch; this record only sets the
-  rule. Nothing is built before the owner says yes.
+- `check.yaml`, `.github/ci/related.ts` and the workflow-lint files are held by the kalfa
+  delivery lane for issue 1333, so the build's edits to them are sequenced with that lane: one
+  writer of `check.yaml` at a time.
 
 ## Consequences
 
@@ -180,8 +180,7 @@ The pull request p90 of 6.2 minutes should fall toward the run time of its longe
 the queue part goes; how far depends on how many runs met a busy group, which lane 1's per-job
 data can say once rerun after the build.
 
-- 0595's status line becomes `amended-in-part by [0598](0598-merge-line-leaves-scheduled-groups.md)`
-  when the owner accepts this record; this draft does not edit 0595.
+- 0595's status line is `amended-in-part by [0598](0598-merge-line-leaves-scheduled-groups.md)`.
 - The glossary's `full run` row names the `scheduled` group and 0595's cutover; it gets the
   main and proof groups in the build's pull request. No new term is coined here.
 - How sure: about 75% that this split is right. The doubt is the organization's limit: since
