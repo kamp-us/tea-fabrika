@@ -731,9 +731,6 @@ importers:
 
   kalfa/records:
     dependencies:
-      '@kalfa/config':
-        specifier: workspace:*
-        version: link:../config
       yaml:
         specifier: 'catalog:'
         version: 2.9.1

@@ -18,7 +18,6 @@
     "cli": "./cli"
   },
   "dependencies": {
-    "@kalfa/config": "workspace:*",
     "yaml": "catalog:"
   },
   "peerDependencies": {

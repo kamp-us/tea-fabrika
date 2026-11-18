@@ -19,7 +19,7 @@ export const DecisionId = Schema.String.check(Schema.isPattern(/^\d{4}$/));
  * - `status` (0606): the decision's `id`, `status` or `successor` is not what its file and the two statuses say. `raw` is the value as written.
  * - `patch` (0605): a decision that patches another, in one of the three forms.
  * - `link` (0607): a link to a superseded record, `target`, whose successor `live` is the record to link.
- * - `map` (0608): the instruction files an agent reads in one chain, `chain`, hold more `bytes` than `max`.
+ * - `map` (advice, never a failure): the instruction file `path` has more `lines` than `max`.
  *
  * `line` counts from 1.
  *
@@ -33,7 +33,7 @@ export const Finding = Schema.TaggedUnion({
     form: Schema.Literals(["amendments", "still-holds", "carried-forward"]),
   },
   link: { path: Schema.String, line: Schema.Int, target: DecisionId, live: DecisionId },
-  map: { chain: Schema.Array(Schema.String), bytes: Schema.Int, max: Schema.Int },
+  map: { path: Schema.String, lines: Schema.Int, max: Schema.Int },
 });
 
 /**

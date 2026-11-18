@@ -1,42 +1,45 @@
 /**
- * The map size check (decision 0608): an agent reads the root `AGENTS.md`, then the one of the folder
- * it works in, and stops adding files once the bytes reach its limit. A finding comes for each chain
- * of those files that holds more bytes than the limit: the root alone, and the root with each
- * folder's file one folder down.
+ * The map size check (advice, never a failure): an agent reads the root `AGENTS.md`, then the one of the
+ * folder it works in, and follows a short file better than a long one. A finding comes for each of those
+ * files that has more than `maxLines` lines: the root, and each tracked `AGENTS.md` one folder down.
  */
 import { Effect } from "effect";
 import { Finding } from "./Finding.ts";
 import { read, Tracked } from "./Tracked.ts";
 
-const ROOT = "AGENTS.md";
+/**
+ * The most lines an `AGENTS.md` should have: Claude Code's memory guide says to keep each file "under 200 lines per file" (https://code.claude.com/docs/en/memory). It is a constant, not a setting.
+ *
+ * @category constants
+ */
+export const maxLines = 200;
 
-const FOLDER = /^[^/]+\/AGENTS\.md$/;
+const MAP = /^([^/]+\/)?AGENTS\.md$/;
 
-const utf8 = new TextEncoder();
+/** The lines of a text as `wc -l` counts them: its newlines, and one more for a last line with none. */
+const linesOf = (text: string) => {
+  const pieces = text.split("\n").length;
+
+  return text.endsWith("\n") || text === "" ? pieces - 1 : pieces;
+};
 
 /**
- * The `map` findings for a limit of `max` bytes. A file's size is its UTF-8 bytes, as an agent's reader counts them.
+ * The `map` findings: each tracked, regular `AGENTS.md` at the root or one folder down that has more than `maxLines` lines.
  *
  * @category constructors
  */
-export const check = Effect.fnUntraced(function* (root: string, max: number) {
+export const check = Effect.fnUntraced(function* (root: string) {
   const tracked = yield* Tracked;
 
   const paths = (yield* tracked.files)
-    .filter((entry) => !entry.symlink && (entry.path === ROOT || FOLDER.test(entry.path)))
+    .filter((entry) => !entry.symlink && MAP.test(entry.path))
     .map((entry) => entry.path);
 
-  const sizes = (yield* read(root, paths)).map(({ path, text }) => [path, utf8.encode(text).length] as const);
-  const bytes = new Map(sizes);
-  const rootBytes = bytes.get(ROOT);
-  const base = rootBytes === undefined ? [] : [ROOT];
+  const files = yield* read(root, paths);
 
-  const chains = [
-    ...(rootBytes === undefined ? [] : [{ chain: [ROOT], bytes: rootBytes }]),
-    ...[...bytes.keys()]
-      .filter((each) => each !== ROOT)
-      .map((each) => ({ chain: [...base, each], bytes: (rootBytes ?? 0) + (bytes.get(each) ?? 0) })),
-  ];
+  return files.flatMap(({ path, text }) => {
+    const lines = linesOf(text);
 
-  return chains.filter((each) => each.bytes > max).map((each) => Finding.cases.map.make({ ...each, max }));
+    return lines > maxLines ? [Finding.cases.map.make({ path, lines, max: maxLines })] : [];
+  });
 });
